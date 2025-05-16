@@ -1,0 +1,71 @@
+# Default values for opensearch-init-security-config.
+# This is a YAML-formatted file.
+
+securityConfigFiles:
+  oidcConfig:
+    enabled: false
+    oidcUrl: ""
+    oidcClientId: ""
+    oidcClientSecret: ""
+    oidcRolesKey: ""
+  users:
+    admin:
+      password: ""
+    editor:
+      password: ""
+    viewer:
+      password: ""
+  rolesMapping:
+    enabled: true
+    content: |
+      _meta:
+        type: "rolesmapping"
+        config_version: 2
+      admin_role:
+        reserved: false
+        users:
+          - "admin"
+        backend_roles:
+          - "admin_role_from_idp"
+      rw_role:
+        reserved: false
+        users:
+          - "editor"
+        backend_roles:
+          - "rw_role_from_idp"
+      ro_role:
+        reserved: false
+        users:
+          - "viewer"
+        backend_roles:
+          - "ro_role_from_idp"
+  roles:
+    enabled: true
+    content: |
+      _meta:
+        type: "roles"
+        config_version: 2
+      admin_role:
+        cluster_permissions:
+          - "cluster_all"
+        tenant_permissions:
+          - tenant_patterns:
+            - "global_tenant"
+        index_permissions:
+          - index_patterns:
+              - "*"
+            allowed_actions:
+              - "indices_all"
+      rw_role:
+        index_permissions:
+          - index_patterns:
+              - "*"
+            allowed_actions:
+              - "read"
+              - "write"
+      ro_role:
+        index_permissions:
+          - index_patterns:
+              - "*"
+            allowed_actions:
+              - "read"

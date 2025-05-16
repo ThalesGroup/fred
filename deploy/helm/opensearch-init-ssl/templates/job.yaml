@@ -1,0 +1,58 @@
+{{ if .Values.job.enabled }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: opensearch-gen-certificates
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
+    app.kubernetes.io/instance: {{ .Release.Name | quote }}
+    app.kubernetes.io/version: {{ .Chart.AppVersion }}
+    helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+  annotations:
+    meta.helm.sh/release-name: {{ .Release.Name | quote }}
+    meta.helm.sh/release-namespace: {{ .Release.Namespace }}
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      annotations:
+        {{- with .Values.job.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- with .Values.job.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: opensearch-gen-certificates
+        image: "{{ .Values.job.repository }}/{{ .Values.job.image }}:{{ .Values.job.tag }}"
+        imagePullPolicy: {{ .Values.job.pullPolicy }}
+        stdin: true
+        stdinOnce: true
+        command:
+          - /bin/sh
+        args:
+          - -c
+          - |
+            apk add --no-cache bash openssl kubectl
+            opensearch-gen-certificates.sh
+        volumeMounts:
+          - name: usr-local-bin-dir
+            mountPath: /usr/local/bin/
+{{ if .Values.proxy.enable }}
+        envFrom:
+          - configMapRef:
+              name: proxy-env
+{{- end }}
+      volumes:
+        - name: usr-local-bin-dir
+          configMap:
+            name: opensearch-certificate-script
+            defaultMode: 0755
+{{- end }}

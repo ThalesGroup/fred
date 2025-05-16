@@ -1,0 +1,6 @@
+acme:
+  server: https://acme-v02.api.letsencrypt.org/directory
+  # server: https://acme-staging-v02.api.letsencrypt.org/directory
+issuer:
+  name: acme-cluster-issuer
+  secret: acme-cluster-issuer-secret

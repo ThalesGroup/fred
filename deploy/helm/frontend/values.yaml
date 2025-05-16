@@ -1,0 +1,34 @@
+replicaCount: 1
+
+image:
+  repository: registry.thalesdigital.io/tsn/innovation/projects/fred/frontend
+  tag: 0.1
+  pullPolicy: IfNotPresent
+  imagePullSecretName: "gitlab-registry-creds"
+service:
+  type: ClusterIP
+  port: 80
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations: {}
+  hosts:
+    - host: fred.dev.local
+      paths:
+        - path: /
+  tls:
+    - secretName: fred-frontend-crt
+      hosts:
+        - fred.dev.local
+config:
+  backendUrlApi: "https://api.dev.local"
+  websocketUrl: "ws://api.dev.local/fred/chatbot/query"
+oidc:
+  enabled: true
+  config:
+    realm: "my-realm"
+    authServerUrl: "https://keycloak/"
+    clientId: "fred"
+
+resources: {}
+podAnnotations: {}

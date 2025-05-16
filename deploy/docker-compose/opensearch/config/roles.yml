@@ -1,0 +1,18 @@
+_meta:
+  type: "roles"
+  config_version: 2
+
+fred_ro_role:
+  index_permissions:
+    - index_patterns:
+        - "fred-dev-metadata"
+      allowed_actions:
+        - "read"
+
+fred_rw_role:
+  index_permissions:
+    - index_patterns:
+        - "fred-dev-metadata"
+      allowed_actions:
+        - "read"
+        - "write"

@@ -1,0 +1,92 @@
+"""
+Module to represent advanced informations about a workload knowing its commercial off-the-shelf
+software nature.
+"""
+
+from typing import Optional, Union
+
+from langfuse.callback import CallbackHandler
+from pydantic import BaseModel, Field
+
+from services.ai.structure.workload_id import WorkloadId
+from services.ai.structure.workload_context import WorkloadContext
+
+from services.ai.structure.workload_advanced.punchline import PunchlineAdvanced
+from services.ai.structure.workload_advanced.opensearch import OpenSearchAdvanced
+
+from services.ai.structure.workload_advanced.kafka import KafkaAdvanced
+from services.ai.structure.workload_advanced.opensearch_dashboard import (
+    OpenSearchDashboardAdvanced,
+)
+
+class WorkloadAdvanced(BaseModel):
+    """
+    Represents advanced informations about a workload knowing its commercial off-the-shelf software
+    nature.
+    """
+    data: Union[
+            KafkaAdvanced, OpenSearchDashboardAdvanced,
+            OpenSearchAdvanced, PunchlineAdvanced,
+            None
+        ] = Field(discriminator="type")
+
+    def __init__(self, data: Union[
+            KafkaAdvanced, OpenSearchDashboardAdvanced,
+            OpenSearchAdvanced, PunchlineAdvanced
+        ]):
+        super().__init__(data=data)
+
+    @classmethod
+    def from_workload_id_and_context(
+        cls,
+        workload_id: WorkloadId,
+        workload_context: WorkloadContext,
+        langfuse_handler: Optional[CallbackHandler] = None,
+    ) -> Optional['WorkloadAdvanced']:
+        """
+        Return an advanced workload instance based on its context and its commercial off-the-shelf
+        software name.
+
+        Args:
+            workload_id (WorkloadId): The workload id.
+            workload_context (WorkloadContext): The workload context.
+            langfuse_handler (Optional[CallbackHandler]): The Langfuse callback handler.
+        """
+        # Get the lowercase commercial off-the-shelf software name.
+        workload_name = workload_id.workload_id.lower()
+
+        # Return the appropriate advanced workload instance based on the workload name.
+        # Import classes inside to avoid circular imports.
+        if 'kafka' in workload_name:
+            return cls(
+                data=KafkaAdvanced.from_workload_context(
+                    workload_context,
+                    langfuse_handler
+                )
+            )
+
+        if 'opensearch' in workload_name and 'dashboard' in workload_name:
+            return cls(
+                data=OpenSearchDashboardAdvanced.from_workload_context(
+                    workload_context,
+                    langfuse_handler,
+                )
+            )
+
+        if 'opensearch' in workload_name:
+            return cls(
+                data=OpenSearchAdvanced.from_workload_context(
+                    workload_context,
+                    langfuse_handler,
+                )
+            )
+
+        if 'punchline' in workload_name:
+            return cls(
+                data=PunchlineAdvanced.from_workload_context(
+                    workload_context,
+                    langfuse_handler,
+                )
+            )
+
+        return cls(data=None)

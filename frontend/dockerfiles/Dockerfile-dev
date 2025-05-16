@@ -1,0 +1,34 @@
+# -----------------------------------------------------------------------------
+# Frontend development image
+# -----------------------------------------------------------------------------
+FROM mirror.gcr.io/node:22.13.0
+
+ARG USER_NAME=fred-user
+ARG USER_ID=1000
+ARG GROUP_ID=1000
+
+# Install dependencies
+RUN apt-get update && \
+    apt-get install -y make git
+
+# Copy project files
+COPY .. /app
+
+# Setup user
+RUN userdel node && \
+    groupadd -g ${GROUP_ID} ${USER_NAME} && \
+    useradd -u ${USER_ID} -g ${GROUP_ID} -m ${USER_NAME}  && \
+    chown -R ${USER_ID}:${GROUP_ID} /app
+
+# Change user
+USER ${USER_NAME}
+
+# Move to project directory
+WORKDIR /app
+
+# Expose vite default port
+EXPOSE 5173
+
+# Make run
+ENTRYPOINT ["make"]
+CMD ["run"]

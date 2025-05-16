@@ -1,0 +1,43 @@
+# Default values for opensearch-post-install.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+job:
+  enabled: true
+  image: opensearch
+  repository: mirror.gcr.io/opensearchproject
+  tag: 2.18.0
+  pullPolicy: IfNotPresent
+  podAnnotations: {}
+  podLabels: {}
+
+scripts:
+  cluster:
+    hostname: opensearch-cluster-master
+    port: 9200
+  updateSecurityConfig:
+    execute: true
+    bin: /usr/share/opensearch/plugins/opensearch-security/tools/securityadmin.sh
+    configDir: /usr/share/opensearch/config/opensearch-security
+    certs:
+      cacert: /usr/share/opensearch/config/certs/ca.crt
+      adminCert: /usr/share/opensearch/config/certs/admin.crt
+      adminKey: /usr/share/opensearch/config/certs/admin.key
+  createIndice:
+    execute: true
+    indice:
+      name: "my-indice"
+      definition: |
+        {
+          "settings": {
+            "number_of_shards": 1,
+            "number_of_replicas": 1,
+            "knn.algo_param": {
+              "ef_search": "512"
+            },  
+            "knn": "true"
+          }
+        }
+    user:
+      name: ""
+      password: ""

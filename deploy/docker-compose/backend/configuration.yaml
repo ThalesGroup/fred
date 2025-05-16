@@ -1,0 +1,151 @@
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+database:
+  type: csv
+  csv_files:
+    # Can be absolute paths or relative paths to the main
+    energy_mix: '/app/fred/services/cluster_consumption/data/simulated_energy_mix.csv'
+    carbon_footprint: '/app/fred/services/cluster_consumption/data/simulated_cluster_consumption_gco2_sep_to_feb.csv'
+    energy_footprint: '/app/fred/services/cluster_consumption/data/simulated_cluster_consumption_wh_sep_to_feb.csv'
+    financial_footprint: '/app/fred/services/cluster_consumption/data/simulated_cluster_consumption_usd_sep_to_feb.csv'
+
+#  type: elasticsearch
+#  host: hostname
+#  port: 9200
+#  scheme: https
+#  username: admin
+#  password: Azerty123_
+#  # Index prefix where to read the data
+#  index_prefix:
+#    energy_mix: 'energy_mix'
+#    carbon_footprint: 'carbon_footprint'
+#    energy_footprint: 'energy_footprint'
+#    financial_footprint: 'financial_footprint'
+
+kubernetes:
+  kube_config: '~/.kube/config'
+  aws_config: '~/.aws/config' # Optional, needed for aws EKS clusters.
+  # Timeout settings for the client
+  timeout:
+    connect: 5  # Time to wait for a connection in seconds
+    read: 15    # Time to wait for a response in seconds
+
+ai:
+  # Timeout settings for the client
+  timeout:
+    connect: 5  # Time to wait for a connection in seconds
+    read: 15    # Time to wait for a response in seconds
+  agents:
+    GeneralistExpert:
+      enabled: true
+      model:
+        model_type: "openai"
+        model: "gpt-4o"
+        temperature: 0
+        #model_type: "azure"
+        #azure_deployment: "fred-gpt-4o"
+        #api_version: "2024-05-01-preview"
+        #temperature: 0
+        #max_retries: 2
+    DocumentsExpert:
+      enabled: true
+      categories:
+        - "eco-conception"
+      settings:
+        document_directory: "./resources/knowledge/imported"
+        chunk_size: 512
+        chunk_overlap: 64
+      model:
+        model_type: "openai"
+        model: "gpt-4o"
+        temperature: 0
+    TechnicalKubernetesExpert:
+      enabled: false
+      categories:
+        - "kubernetes"
+        - "namespaces"
+        - "workloads"
+        - "architecture"
+        - "security"
+        - "networking"
+        - "storage"
+        - "configuration"
+        - "scaling"
+        - "deployment"
+      model:
+        model_type: "openai"
+        model: "gpt-4o"
+        temperature: 0
+        #model_type: "azure"
+        #azure_deployment: "fred-gpt-4o"
+        #api_version: "2024-05-01-preview"
+        #temperature: 0
+        #max_retries: 2
+    MonitoringExpert:
+      enabled: false
+      categories:
+        - "monitoring"
+        - "observability"
+        - "logging"
+        - "metrics"
+        - "tracing"
+        - "alerting"
+        - "dashboards"
+        - "events"
+        - "alarms"
+        - "notifications"
+      model:
+        model_type: "openai"
+        model: "gpt-4o"
+        temperature: 0
+    K8SOperatorExpert:
+      enabled: true
+      categories:
+        - "kubectl"
+        - "observability"
+        - "logging"
+        - "metrics"
+        - "tracing"
+        - "alerting"
+        - "pods"
+        - "docker"
+        - "container"
+        - "custom resources"
+        - "CRD"
+        - "kubernetes"
+        - "events"
+        - "notifications"
+      model:
+        model_type: "openai"
+        model: "gpt-4o"
+        temperature: 0
+
+# Where to save fred produced resources like Essentials or Score
+# and external resources like Kubernetes Workload descriptions
+dao:
+  type: "file"  # Currently the only one supported
+  base_path: "~/.fred/fred-backend-cache"
+  max_cached_delay_seconds: 10  # Cache delay in seconds. Use 0 for no cache or a negative value for limitless cache.
+
+# Where to store user feedback
+feedback:
+  type: postgres
+  db_host: fred-postgres
+  db_port: 5432
+  db_name: fred_db
+  user: admin
+  password: Azerty123_
+
+# Enable or disable the security layer
+security:
+  enabled: false
+  keycloak_url: "http://fred-keycloak:8080/realms/fred"

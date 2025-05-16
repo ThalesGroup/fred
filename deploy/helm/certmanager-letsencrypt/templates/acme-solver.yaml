@@ -1,0 +1,13 @@
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: {{ .Values.issuer.name }}
+spec:
+  acme:
+    server: {{ .Values.acme.server }}
+    privateKeySecretRef:
+      name: {{ .Values.issuer.secret }}
+    solvers:
+      - http01:
+          ingress:
+            ingressClassName: nginx

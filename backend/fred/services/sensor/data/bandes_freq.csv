@@ -1,0 +1,30 @@
+﻿Fréquence minimum (MHz);Fréquence maximum (MHz);Utilisations
+30;50;Communications maritimes (VHF, services divers)
+50;54;Communication marine (VHF, radiocommunications de courte portée)
+54;108;Services de radiodiffusion FM (radio, divers) et services mobiles
+108;137;Aviation civile (y compris ATIS, services aériens)
+150;162;Communication maritime (VHF, y compris le canal 16 et autres canaux de sécurité)
+156;162;Système d'Identification Automatique (AIS) - Voie A (161.975 MHz) et Voie B (162.025 MHz)
+174;216;Télévision terrestre (UHF)
+216;223;Radio amateur (bande 1.25 m)
+225;400;Utilisation générale pour les communications militaires (incluant STANAG 4204).
+230;300;Services de communication sans fil (ex: radios numériques, dispositifs IoT)
+300;400;Réseaux de communication militaires, radar, ainsi que des applications civiles (telles que les services de sécurité publique et certaines radios professionnelles)
+406;420;Communications militaires et applications diverses (ex : système de communication par satellite).
+400;470;Services de sécurité publique, radios professionnelles (UHF simplex)
+470;506;Télévision, communication mobile (UHF)
+506;790;Télévision numérique terrestre (TNT)
+790;862;Télévision numérique terrestre (TNT)
+850;960;Utilisations de communication militaire mobile
+868;870;Réseaux de communication sans fil (IoT, appareils connectés)
+915;928;Réseaux de communication pour dispositifs sans fil (communément utilisé en RFID)
+1300;1350;Applications de recherche et communication par satellite
+1350;1400;Réseaux de communication (ex: satellites, radioastronomie)
+1400;1500;Bandes de communication pour les systèmes militaires spécifiques.
+1427;1518;Services de communication mobile (ex : 1.5 GHz)
+1525;1670;Communications par satellite (services mobiles)
+1670;1710;Services de communication pour dispositifs IoT
+1710;1785;Communication mobile (bandes 3G, LTE)
+1805;1880;Communication mobile (bandes 2G, 3G, LTE)
+1900;2100;Communication mobile (réseaux 3G et LTE)
+2400;2483;Réseaux de communication sans fil (Wi-Fi, Bluetooth, Zigbee)

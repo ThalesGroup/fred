@@ -1,0 +1,15 @@
+/* Bootstrap */
+@import "bootstrap/dist/css/bootstrap.min.css";
+
+/* React RRule Generator */
+@import "react-rrule-generator/build/styles.css";
+
+.btn-group {
+  position: relative;
+  display: block;
+}
+// Use this to override the default theme
+.default-text-color {
+  color: white;
+}
+

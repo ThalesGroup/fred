@@ -1,0 +1,131 @@
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
+frontend_settings:
+  feature_flags:
+    # If true acuivate the backend and frontend modules in charge of K8 
+    # and frugality monitoring
+    enableK8Features: false
+    # If true activate support for an electronic warfare demonstration
+    enableElecWarfare: false
+  properties:
+    logoName: "fred"
+
+database:
+  type: csv
+  csv_files:
+    # Can be absolute paths or relative paths to the main
+    energy_mix: './services/cluster_consumption/data/simulated_energy_mix.csv'
+    carbon_footprint: './services/cluster_consumption/data/simulated_cluster_consumption_gco2_sep_to_feb.csv'
+    energy_footprint: './services/cluster_consumption/data/simulated_cluster_consumption_wh_sep_to_feb.csv'
+    financial_footprint: './services/cluster_consumption/data/simulated_cluster_consumption_usd_sep_to_feb.csv'
+    # Guerre elec & ship identification service
+    frequencies: './services/sensor/data/bandes_freq.csv'
+    sensors_test_new: './services/theater_analysis/data/detections-capteur-donnees-test_new_scenario.csv'
+    mission: './services/mission/data/mission.csv'
+    radio: './services/theater_analysis/data/radio-maritime-donnees-tests_excel_light_militaire.csv'
+    signal_identification_guide: './services/theorical_radio/data/Signal_identification_guide_new.csv'
+
+kubernetes:
+  kube_config: '~/.kube/config'
+  aws_config: '~/.aws/config' # Optional, needed for aws EKS clusters.
+  # Timeout settings for the client
+  timeout:
+    connect: 5  # Time to wait for a connection in seconds
+    read: 15    # Time to wait for a response in seconds
+
+ai:
+  # Timeout settings for the client
+  timeout:
+    connect: 5  # Time to wait for a connection in seconds
+    read: 15    # Time to wait for a response in seconds
+  default_model:
+    #provider: "ollama"
+    #name: "llama2"
+    provider: "openai"
+    name: "gpt-4o"
+    #provider: "azure"
+    #name: "fred-gpt-4o"
+    api_version: "2024-05-01-preview"
+    temperature: 0.0
+  leader:
+    name: "Fred"
+    class_path: "leader.leader.Leader"
+    enabled: true
+    model: {}
+  services:
+    - name: "kubernetes"
+      enabled: true
+      model: {}
+  agents:
+    - name: "GeneralistExpert"
+      class_path: "agents.generalist.generalist_expert.GeneralistExpert"
+      enabled: true
+      model: {}
+    - name: "DocumentsExpert"
+      class_path: "agents.documents.documents_expert.DocumentsExpert"
+      enabled: true
+      categories:
+        - "eco-conception"
+      settings:
+        chunk_size: 512
+        chunk_overlap: 64
+        knowledge_flow_url: "http://localhost:8111/knowledge/v1" 
+      model: {}
+      
+# Where to save fred produced resources like Essentials or Score
+# and external resources like Kubernetes Workload descriptions
+dao:
+  type: "file"  # Currently the only one supported
+  base_path: "~/.fred/dao-cache"
+  max_cached_delay_seconds: 300  # Cache delay in seconds. Use 0 for no cache or a negative value for limitless cache.
+
+# Where to store user feedback
+feedback:
+   type: postgres
+#  db_host: fred-postgres
+#  db_port: 5432
+#  db_name: fred_db
+#  user: admin
+#  password: Azerty123_
+
+# Enable or disable the security layer
+security:
+  enabled: false
+  keycloak_url: "http://fred-keycloak:8080/realms/fred"
+
+# Environment variables for the application
+
+# AZURE
+azure:
+  tenant_id: ""
+  client_id: ""
+  client_secret: ""
+  client_scope: ""
+  apim_key: ""
+  api_version: ""
+  deployment:
+    llm: ""
+    embedding: ""
+
+# KEYCLOAK
+keycloak:
+  server_url: "https://localhost:8080"
+  realm_name: "fred"
+  client_id: "fred"
+
+# CONTEXT STORAGE CONFIGURATION
+context_storage:
+  type: "local"
+  options:
+    path: "~/.fred/context-store"

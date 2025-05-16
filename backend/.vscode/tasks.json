@@ -1,0 +1,13 @@
+{
+    "tasks": [
+      {
+        "type": "shell",
+        "label": "setup-venv",
+        "command": "make",
+        "args": [
+          "dev"
+        ],
+        "problemMatcher": []
+      }
+    ]
+  }
