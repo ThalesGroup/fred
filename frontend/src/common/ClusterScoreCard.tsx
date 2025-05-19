@@ -1,6 +1,6 @@
 import {Box, Button, Typography} from "@mui/material";
 import {ImageComponent} from "../utils/image.tsx";
-import {ClusterOverview} from "../slices/api.tsx";
+import {ClusterOverview} from "../frugalit/slices/api.tsx";
 
 export const ClusterScoreCard = (props: {
     scope: ClusterOverview,

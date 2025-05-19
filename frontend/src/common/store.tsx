@@ -1,5 +1,5 @@
 import { combineReducers, configureStore, createReducer, isFulfilled, isPending, isRejected } from "@reduxjs/toolkit";
-import { apiSlice } from "../slices/api.tsx";
+import { apiSlice } from "../frugalit/slices/api.tsx";
 import { chatApiSlice } from "../slices/chatApi"; // ✅ Import your chatApi slice
 import { documentApiSlice } from "../slices/documentApi.tsx";
 import { agentContextApiSlice } from "../slices/agentContextApi.tsx";

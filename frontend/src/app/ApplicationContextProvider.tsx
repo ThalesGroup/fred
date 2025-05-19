@@ -5,7 +5,7 @@ import {
   useGetNamespaceListMutation,
   useGetClusterDescriptionMutation,
   ClusterDescription
-} from "../slices/api.tsx";
+} from "../frugalit/slices/api.tsx";
 import { NamespaceList } from "../utils/namespace.tsx";
 import { DurationPrecision } from "../utils/period.tsx";
 import { ApplicationContextStruct } from "./ApplicationContextStruct.tsx";

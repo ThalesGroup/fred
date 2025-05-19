@@ -1,7 +1,3 @@
-// Description: Document Library page for uploading and managing documents
-// This page allows users to upload documents, search for documents, and filter documents by agent.
-// It also provides a drawer for uploading documents and a card view for displaying document information.
-
 import { PageBodyWrapper } from "../common/PageBodyWrapper";
 import { useDropzone } from "react-dropzone";
 import {
@@ -35,17 +31,79 @@ import { KeyCloakService } from "../security/KeycloakService";
 import {
   KnowledgeDocument,
   useDeleteDocumentMutation,
+  useGetDocumentMarkdownPreviewMutation,
   useGetDocumentsWithFilterMutation,
-  useGetFullDocumentMutation
+  useLazyGetDocumentRawContentQuery
 } from "../slices/documentApi";
+
 import { useGetChatBotAgenticFlowsMutation } from "../slices/chatApi";
 import { streamProcessDocument } from "../slices/streamDocumentUpload";
 import { useToast } from "../components/ToastProvider";
 import { ProgressStep, ProgressStepper } from "../components/ProgressStepper";
 import { DocumentTable } from "../components/documents/DocumentTable";
 import { DocumentDrawerTable } from "../components/documents/DocumentDrawerTable";
-import DocumentViewer from "../components/chatbot/DocumentViewer";
+import DocumentViewer from "../components/documents/DocumentViewer";
 
+/**
+ * DocumentLibrary.tsx
+ *
+ * This component renders the **Document Library** page, which enables users to:
+ * - View and search documents in the knowledge base
+ * - Filter documents by responsible agent
+ * - Upload new documents via drag & drop or manual file selection
+ * - Delete existing documents (with permission)
+ * - Preview documents (Markdown-only for now) in a Drawer-based viewer
+ *
+ * ## Key Features:
+ *
+ * 1. **Search & Filter**:
+ *    - Users can type keywords to search filenames.
+ *    - A dropdown lets users filter documents by agent (if available).
+ *
+ * 2. **Pagination**:
+ *    - Document list is paginated with user-selectable rows per page (10, 20, 50).
+ *
+ * 3. **Upload Drawer**:
+ *    - Only visible to users with "admin" or "editor" roles.
+ *    - Allows upload of multiple documents.
+ *    - Supports real-time streaming feedback (progress steps).
+ *    - Requires selecting an agent before upload.
+ *
+ * 4. **DocumentTable Integration**:
+ *    - Displays a table of documents with actions like:
+ *      - Select/delete multiple documents
+ *      - Preview documents in a Markdown viewer
+ *      - Toggle retrievability (for admins)
+ *
+ * 5. **DocumentViewer Integration**:
+ *    - When a user clicks "preview", the backend is queried using the document UID.
+ *    - If Markdown content is available, it’s shown in a Drawer viewer with proper rendering.
+ *
+ * ## Backend Communication:
+ *
+ * - Uses **RTK Query** to talk to the `knowledge` backend:
+ *    - `useGetDocumentsWithFilterMutation()` – to list/search documents
+ *    - `useDeleteDocumentMutation()` – to delete a document
+ *    - `useGetDocumentMarkdownPreviewMutation()` – to fetch markdown preview
+ * - Integrates with `streamProcessDocument()` utility for upload streaming
+ *
+ * ## User Roles:
+ *
+ * - Admins/Editors:
+ *   - Can upload/delete documents
+ *   - See upload drawer
+ * - Viewers:
+ *   - Can search and preview only
+ *
+ * ## Design Considerations:
+ *
+ * - Emphasis on **separation of concerns**:
+ *   - Temporary (to-be-uploaded) files are stored separately from backend ones
+ *   - Uploading does not interfere with the main list view
+ * - React `useCallback` and `useEffect` hooks used to manage state consistency
+ * - Drawer and transitions are animated for smooth UX
+ * - Responsive layout using MUI's Grid2 and Breakpoints
+ */
 export const DocumentLibrary = () => {
   const { showInfo, showError, showWarning } = useToast();
 
@@ -53,7 +111,10 @@ export const DocumentLibrary = () => {
   const [deleteDocument] = useDeleteDocumentMutation();
   const [getDocumentsWithFilter] = useGetDocumentsWithFilterMutation();
   const [getAgenticFlows] = useGetChatBotAgenticFlowsMutation();
-  const [getDocumentContent] = useGetFullDocumentMutation()
+  const [getDocumentMarkdownContent] = useGetDocumentMarkdownPreviewMutation()
+  const [selectedDocument, setSelectedDocument] = useState<any>(null);
+  const [triggerDownload] = useLazyGetDocumentRawContentQuery();
+
 
   const theme = useTheme();
 
@@ -97,8 +158,6 @@ export const DocumentLibrary = () => {
   const [currentAgenticFlow, setCurrentAgenticFlow] = useState(null); // Currently selected agent flow object
 
   const [documentViewerOpen, setDocumentViewerOpen] = useState<boolean>(false);
-  const [fullDocument, setFullDocument] = useState<any>(null);
-  const [loading, setLoading] = useState<boolean>(false);
 
   // userInfo:
   // Stores information about the currently authenticated user.
@@ -161,6 +220,27 @@ export const DocumentLibrary = () => {
     setAgentFilter(event.target.value);
   };
 
+  const handleDownload = async (document_uid: string, file_name: string) => {
+    try {
+      const { data: blob } = await triggerDownload({ document_uid });
+      if (blob) {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = file_name || "document";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      }
+    } catch (err) {
+      showError({
+        summary: "Download failed",
+        detail: `Could not download document: ${err?.data?.detail || err.message}`,
+      });
+    }
+  };
+
   const handleDelete = async (document_uid: string) => {
     try {
       await deleteDocument(document_uid).unwrap();
@@ -190,6 +270,26 @@ export const DocumentLibrary = () => {
   const handleDeleteTemp = (index) => {
     const newFiles = tempFiles.filter((_, i) => i !== index);
     setTempFiles(newFiles);
+  };
+
+  const handleDocumentMarkdownPreview = async (document_uid: string, file_name: string) => {
+    try {
+      const response = await getDocumentMarkdownContent({ document_uid }).unwrap();
+      const { content } = response;
+
+      setSelectedDocument({
+        document_uid,
+        file_name,
+        content,
+      });
+
+      setDocumentViewerOpen(true);
+    } catch (error) {
+      showError({
+        summary: "Preview Error",
+        detail: `Could not load document content: ${error?.data?.detail || error.message}`,
+      });
+    }
   };
 
   const fetchFiles = useCallback(async () => {
@@ -267,32 +367,8 @@ export const DocumentLibrary = () => {
   );
   const currentDocuments = filteredFiles.slice(indexOfFirstDocument, indexOfLastDocument);
 
-  // Fetch the full document when the user clicks on "View Full Document"
-  // and open the DocumentViewer component
-  const handleViewDocument = async (document_uid: string) => {
-    setLoading(true);
-    try {
-      let response;
-      // Vérifier si nous avons un agent_name à filtrer
-      response = await getDocumentContent({ document_uid: document_uid }).unwrap();
-
-      if (response.documents && response.documents[0]) {
-        const doc = response.documents[0];
-        setFullDocument(doc);
-        setDocumentViewerOpen(true);
-      } else {
-        console.error("Document not found in response:", response);
-      }
-    } catch (error) {
-      console.error("Error fetching document:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleCloseDocumentViewer = () => {
     setDocumentViewerOpen(false);
-    setFullDocument(null);
   };
 
   return (
@@ -465,12 +541,13 @@ export const DocumentLibrary = () => {
                     setSelectedFiles(checked ? currentDocuments.map(f => f.document_uid) : []);
                   }}
                   onDelete={handleDelete}
+                  onDownload={handleDownload}
                   onToggleRetrievable={(file) => {
                     // You can reuse the same logic as in DocumentCard or hook into update mutation here
                     console.warn("Retrievable toggle not implemented in table view yet", file);
                   }}
                   isAdmin={userInfo.canManageDocuments}
-                  onOpen={handleViewDocument} // ✅
+                  onOpen={(document_uid, file_name) => handleDocumentMarkdownPreview(document_uid, file_name)}
 
                 />
                 <Box display="flex" alignItems="center" mt={3} justifyContent="space-between">
@@ -660,10 +737,9 @@ export const DocumentLibrary = () => {
         </Drawer>
       )}
       <DocumentViewer
-        document={fullDocument}
+        document={selectedDocument}
         open={documentViewerOpen}
         onClose={handleCloseDocumentViewer}
-        loading={loading}
       />
     </PageBodyWrapper>
   );

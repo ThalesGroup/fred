@@ -14,16 +14,8 @@ export interface KnowledgeDocument {
   [key: string]: any; // If your metadata is flexible
 }
 
-export interface FullDocument {
-  documents: {
-    agent_name: string
-    content: string
-    content_type: string
-    document_uid: string
-    file_name: string
-    file_url: string
-    has_binary_content: boolean
-  }
+export interface MarkdownDocumentPreview {
+  content: string;
 }
 
 export const documentApiSlice = createApi({
@@ -34,10 +26,17 @@ export const documentApiSlice = createApi({
 export const { reducer: documentApiReducer, middleware: documenApiMiddleware } = documentApiSlice;
 const extendedDocumentApi = documentApiSlice.injectEndpoints({
   endpoints: (builder) => ({
-    getFullDocument: builder.mutation<FullDocument, { document_uid: string }>({
+    getDocumentMarkdownPreview: builder.mutation<MarkdownDocumentPreview, { document_uid: string }>({
       query: ({ document_uid }) => ({
-        url: `/knowledge/v1/fullDocument/${document_uid}`,
+        url: `/knowledge/v1/markdown/${document_uid}`,
         method: 'GET',
+      }),
+    }),
+    getDocumentRawContent: builder.query<Blob, { document_uid: string }>({
+      query: ({ document_uid }) => ({
+        url: `/knowledge/v1/raw_content/${document_uid}`,
+        method: 'GET',
+        responseHandler: async (response) => await response.blob(),
       }),
     }),
     getDocumentMetadata: builder.mutation<Metadata, { document_uid: string }>({
@@ -73,6 +72,7 @@ export const {
   useGetDocumentMetadataMutation,
   usePutDocumentMetadataMutation,
   useGetDocumentsWithFilterMutation,
-  useGetFullDocumentMutation,
   useDeleteDocumentMutation,
+  useGetDocumentMarkdownPreviewMutation,
+  useLazyGetDocumentRawContentQuery,
 } = extendedDocumentApi;

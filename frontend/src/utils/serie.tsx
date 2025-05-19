@@ -1,4 +1,4 @@
-import {ClusterConsumption} from "../slices/api.tsx";
+import {ClusterConsumption} from "../frugalit/slices/api.tsx";
 
 export interface SeriePoint {
   date: string;

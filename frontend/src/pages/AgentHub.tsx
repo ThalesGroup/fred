@@ -25,7 +25,7 @@ import { LoadingSpinner } from "../utils/loadingSpinner";
 import { getAgentBadge } from "../utils/avatar";
 import Grid2 from "@mui/material/Grid2";
 import { KeyCloakService } from "../security/KeycloakService";
-import ContextManagementModal from "../components/ContextManagementModal";
+import ContextManagementModal from "../components/chatbot/ContextManagementModal";
 import LocalOfferIcon from '@mui/icons-material/LocalOffer';
 import { useGetChatBotAgenticFlowsMutation } from "../slices/chatApi";
 

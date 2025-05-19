@@ -9,7 +9,7 @@ import {
     useGetCarbonConsumptionMutation,
     useGetEnergyConsumptionMutation,
     useGetFinopsCostMutation,
-} from "../slices/api.tsx";
+} from "../frugalit/slices/api.tsx";
 import { ApplicationContext } from "./ApplicationContextProvider.tsx";
 import { useToast } from "../components/ToastProvider.tsx";
 import { extractHttpErrorMessage } from "../utils/extractHttpErrorMessage.tsx";

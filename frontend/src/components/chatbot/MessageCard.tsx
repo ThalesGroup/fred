@@ -6,15 +6,15 @@ import ThumbUpIcon from '@mui/icons-material/ThumbUp';
 import ThumbDownIcon from '@mui/icons-material/ThumbDown';
 import VolumeUpIcon from '@mui/icons-material/VolumeUp';
 import ClearIcon from "@mui/icons-material/Clear";
-import { usePostSpeechTextMutation } from "../../slices/api.tsx";
-import MarkdownRenderer from "./MarkdownRenderer.tsx";
+import { usePostSpeechTextMutation } from "../../frugalit/slices/api.tsx";
 import { AgenticFlow } from "../../pages/Chat.tsx";
 import { getAgentBadge } from "../../utils/avatar.tsx";
-import { FeedbackDialog } from "../FeedbackDialog.tsx";
+import { FeedbackDialog } from "../../frugalit/component/FeedbackDialog.tsx";
 import { useToast } from "../ToastProvider.tsx";
 import { extractHttpErrorMessage } from "../../utils/extractHttpErrorMessage.tsx";
 import { usePostFeedbackMutation } from "../../slices/chatApi.tsx";
 import { ChatMessagePayload } from "../../slices/chatApiStructures.ts";
+import MarkdownRenderer from "../markdown/MarkdownRenderer.tsx";
 
 export default function Message(
     {
@@ -124,12 +124,14 @@ export default function Message(
                                     paddingLeft: side === 'right' ? 2 : 0,
                                     paddingRight: side === 'right' ? 2 : 0,
                                     marginTop: side === 'right' ? 1 : 0,
-                                    color: theme.palette.text.primary,
                                     borderRadius: 3,
                                     wordBreak: 'break-word',
-                                    borderColor: theme.palette.primary.light,
                                 }}>
-                                <MarkdownRenderer content={message.content as string} />
+                                <MarkdownRenderer
+                                    content={message.content as string}
+                                    size="large"
+                                    enableEmojiSubstitution={side === "left"} // only apply for assistant replies
+                                />
                             </Box>
                         </Grid2>
                         {side === "left" ?

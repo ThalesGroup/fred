@@ -1,4 +1,4 @@
-import {apiSlice} from "./api"
+import {apiSlice} from "../frugalit/slices/api"
 
 export interface LoginConfiguration {
   openId: string

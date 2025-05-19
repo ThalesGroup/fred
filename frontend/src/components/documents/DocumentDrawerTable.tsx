@@ -8,7 +8,7 @@ import {
   ListItemText
 } from "@mui/material";
 import DeleteIcon from "@mui/icons-material/Delete";
-import { getFileIcon } from "./DocumentIcon";
+import { getDocumentIcon } from "./DocumentIcon";
 
 interface TempFile {
   name: string;
@@ -34,7 +34,7 @@ export const DocumentDrawerTable: React.FC<TempFileTableProps> = ({ files, onDel
           }
         >
           <ListItemIcon sx={{ minWidth: 32 }}>
-            {getFileIcon(file.name)}
+            {getDocumentIcon(file.name)}
           </ListItemIcon>
           <ListItemText primary={<Typography variant="body2" noWrap sx={{ textAlign: 'left' }}>{file.name}</Typography>} />
         </ListItem>

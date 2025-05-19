@@ -1,5 +1,5 @@
 import {Period} from "../utils/period.tsx";
-import {ClusterConsumption, ClusterFootprint} from "../slices/api.tsx";
+import {ClusterConsumption, ClusterFootprint} from "../frugalit/slices/api.tsx";
 /**
  * Interface representing the structure of the Footprint Context.
  * 

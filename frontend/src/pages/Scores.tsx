@@ -1,8 +1,8 @@
 import { useParams, useLocation } from 'react-router-dom';
 import { Typography } from '@mui/material';
 import { PageBodyWrapper } from '../common/PageBodyWrapper';
-import { ResourceScoreDetailRadarChart } from '../components/ResourceScoreDetailRadarChart';
-import { WorkloadScores } from '../slices/scoresStructures';
+import { ResourceScoreDetailRadarChart } from '../frugalit/component/ResourceScoreDetailRadarChart';
+import { WorkloadScores } from '../frugalit/slices/scoresStructures';
 
 const mapScoresToAttributes = (scores: WorkloadScores) => {
     return Object.entries(scores).map(([key, { score, reason }]) => ({

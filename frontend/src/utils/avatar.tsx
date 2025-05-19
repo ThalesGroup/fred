@@ -1,7 +1,7 @@
 // utils/getUserAvatar.tsx
 import { Avatar, Badge, Box, Typography, useTheme } from "@mui/material";
 import { red, blue, green, purple, orange, teal, yellow } from "@mui/material/colors";
-import { Fact } from "../slices/factsStructures";
+import { Fact } from "../frugalit/slices/factsStructures";
 import AppsIcon from '@mui/icons-material/Apps';
 import AssignmentIcon from '@mui/icons-material/Assignment';
 import AttachMoneyIcon from '@mui/icons-material/AttachMoney';

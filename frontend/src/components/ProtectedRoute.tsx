@@ -1,6 +1,11 @@
 import { Outlet } from "react-router-dom";
 
-export const ProtectedRoute = ({ permission }: { permission: string }) => {
+type ProtectedRouteProps = {
+  permission: string;
+  children?: React.ReactNode;
+};
+
+export const ProtectedRoute = ({ permission, children }: ProtectedRouteProps) => {
   console.debug(`⚠️ ProtectedRoute check skipped. Allowed all access for now. (Requested: ${permission})`);
-  return <Outlet />; // Allows access to all routes for now
+  return <>{children ?? <Outlet />}</>;
 };

@@ -1,8 +1,8 @@
 import { Workload } from "../utils/resource.tsx";
-import { WorkloadAdvanced, WorkloadId, WorkloadEssentials } from "../slices/api.tsx";
-import { FactList } from "../slices/factsStructures.tsx";
-import { WorkloadSummary } from "../slices/workloadSummaryStructures.tsx";
-import { WorkloadScores } from "../slices/scoresStructures.tsx";
+import { WorkloadAdvanced, WorkloadId, WorkloadEssentials } from "../frugalit/slices/api.tsx";
+import { FactList } from "../frugalit/slices/factsStructures.tsx";
+import { WorkloadSummary } from "../frugalit/slices/workloadSummaryStructures.tsx";
+import { WorkloadScores } from "../frugalit/slices/scoresStructures.tsx";
 
 /**
  * The ExplainContextStruct contains the current resource that are being explained. 

@@ -1,5 +1,5 @@
 import { useTheme } from "@mui/material";
-import Mermaid from "../Mermaid.tsx";
+import Mermaid from "../markdown/Mermaid.tsx";
 import ReactMarkdown from "react-markdown";
 
 function replaceStageDirectionsWithEmoji(text: string): string {

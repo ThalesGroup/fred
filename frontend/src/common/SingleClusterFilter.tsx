@@ -5,7 +5,7 @@ import timezone from 'dayjs/plugin/timezone';
 import 'dayjs/locale/en-gb';
 import {ApplicationContext} from "../app/ApplicationContextProvider.tsx";
 import {useContext} from "react";
-import {ClusterOverview} from "../slices/api.tsx";
+import {ClusterOverview} from "../frugalit/slices/api.tsx";
 import {ClusterScoreCard} from "./ClusterScoreCard.tsx";
 
 dayjs.extend(utc);

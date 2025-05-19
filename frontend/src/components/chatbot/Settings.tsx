@@ -352,71 +352,67 @@ export const Settings = ({
                    </ClickAwayListener>
                  ) : (
                    // Mode normal
-                   <Button
-                     sx={{
-                       display: 'flex',
-                       justifyContent: 'space-between',
-                       alignItems: 'center',
-                       width: '100%',
-                       height: '100%',
-                       textTransform: 'none',
-                       fontWeight: 400,
-                       color: isSelected ? activeItemTextColor : 'text.secondary',
-                       padding: '0 12px',
-                       borderRadius: '8px',
-                     }}
-                     onClick={() => onSelectSession(session)}
-                   >
-                     <Box
-                       sx={{
-                         display: 'flex',
-                         flexDirection: 'column',
-                         flexGrow: 1,
-                         overflow: 'hidden',
-                         textAlign: 'left',
-                       }}
-                     >
-                       <Typography
-                         component="span"
-                         variant="body2"
-                         sx={{
-                           overflow: 'hidden',
-                           textOverflow: 'ellipsis',
-                           whiteSpace: 'nowrap',
-                           flexGrow: 1,
-                         }}
-                       >
-                         {session.title}
-                       </Typography>
-                       <Typography
-                         component="span"
-                         variant="caption"
-                         sx={{
-                           color: 'text.disabled',
-                         }}
-                       >
-                         {new Date(session.updated_at).toLocaleDateString()}
-                       </Typography>
-                     </Box>
-                     <IconButton
-                       size="small"
-                       sx={{
-                         padding: 0,
-                         color: 'inherit',
-                         opacity: 0.7,
-                         '&:hover': {
-                           opacity: 1,
-                           backgroundColor: 'transparent',
-                         }
-                       }}
-                       onClick={(e) => {
-                         e.stopPropagation();
-                         openMenu(e, session);
-                       }}
-                     >
-                       <MoreHorizIcon fontSize='small' />
-                     </IconButton>
-                   </Button>
+                   <Box
+  sx={{
+    display: 'flex',
+    alignItems: 'center',
+    width: '100%',
+    justifyContent: 'space-between',
+    padding: '0 12px',
+    borderRadius: '8px',
+    height: '100%',
+    backgroundColor: 'transparent',
+    cursor: 'pointer',
+    color: isSelected ? activeItemTextColor : 'text.secondary',
+    '&:hover': {
+      backgroundColor: hoverColor,
+    },
+  }}
+  onClick={() => onSelectSession(session)}
+>
+  <Box
+    sx={{
+      display: 'flex',
+      flexDirection: 'column',
+      flexGrow: 1,
+      overflow: 'hidden',
+      textAlign: 'left',
+    }}
+  >
+    <Typography
+      variant="body2"
+      sx={{
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {session.title}
+    </Typography>
+    <Typography variant="caption" sx={{ color: 'text.disabled' }}>
+      {new Date(session.updated_at).toLocaleDateString()}
+    </Typography>
+  </Box>
+  <IconButton
+    size="small"
+    sx={{
+      padding: 0,
+      color: 'inherit',
+      opacity: 0.7,
+      '&:hover': {
+        opacity: 1,
+        backgroundColor: 'transparent',
+      },
+    }}
+    onClick={(e) => {
+      e.stopPropagation();
+      openMenu(e, session);
+    }}
+  >
+    <MoreHorizIcon fontSize="small" />
+  </IconButton>
+</Box>
+
                  )}
                </ListItem>
              );

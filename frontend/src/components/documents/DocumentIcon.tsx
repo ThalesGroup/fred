@@ -1,6 +1,6 @@
 // utils/DocumentIcon.tsx
 import { PdfIcon, WordIcon, ExcelIcon } from "../../utils/icons";
-export const getFileIcon = (filename: string): JSX.Element | null => {
+export const getDocumentIcon = (filename: string): JSX.Element | null => {
   const ext = filename.split('.').pop()?.toLowerCase();
   switch (ext) {
     case 'pdf':

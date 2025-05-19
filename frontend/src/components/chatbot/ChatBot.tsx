@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Box, Grid2, Typography, useTheme } from '@mui/material';
 import { AgenticFlow } from "../../pages/Chat.tsx";
-import { usePostTranscribeAudioMutation } from "../../slices/api.tsx";
+import { usePostTranscribeAudioMutation } from "../../frugalit/slices/api.tsx";
 import { useToast } from "../ToastProvider.tsx";
 import UserInput, { UserInputContent } from "./UserInput.tsx";
 import DotsLoader from "../../common/DotsLoader.tsx";

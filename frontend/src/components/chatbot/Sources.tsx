@@ -3,9 +3,7 @@ import { useTheme } from "@mui/material/styles";
 import {
     Button,
     Card,
-    CardContent,
     Collapse,
-    Tooltip,
     Typography,
     Modal,
     Box,
@@ -22,165 +20,29 @@ import CloseIcon from "@mui/icons-material/Close";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import LibraryBooksIcon from '@mui/icons-material/LibraryBooks';
 import PersonOutlineIcon from '@mui/icons-material/PersonOutline';
-import HistoryIcon from '@mui/icons-material/History';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
-import { ExcelIcon, PdfIcon, WordIcon } from "../../utils/icons.tsx";
-import DocumentIcon from '@mui/icons-material/Description';
-import dayjs from "dayjs";
-import DocumentViewer from "./DocumentViewer";
-import { useGetFullDocumentMutation } from "../../slices/documentApi.tsx";
+import DocumentViewer from "../documents/DocumentViewer.tsx";
 import { ChatSource } from "../../slices/chatApiStructures.ts";
-import MarkdownRenderer from "../../common/MarkdownRenderer.tsx";
+import MarkdownRenderer from "../markdown/MarkdownRenderer.tsx";
+import { SourceCard } from "./SourceCard.tsx";
+import { getDocumentIcon } from "../documents/DocumentIcon.tsx";
 
-const getIcon = (fileName) => {
-    if (!fileName) return <DocumentIcon />;
-    const fileType = fileName.split('.').pop()?.toLowerCase();
-    switch (fileType) {
-        case 'pdf':
-            return <PdfIcon />;
-        case 'docx':
-        case 'doc':
-            return <WordIcon />;
-        case 'xlsx':
-        case 'xls':
-            return <ExcelIcon />;
-        default:
-            return <DocumentIcon />;
-    }
-};
-
-// Card component for displaying source information
-const SourceCard = ({ source, onCardClick, onViewDocument, loading }) => {
-    const theme = useTheme();
-
-    const formatDate = (dateString) => {
-        return dateString ? dayjs(dateString).format('DD/MM/YYYY') : 'N/A';
-    };
-
-    console.log("Source", source);
-    return (
-        <Card
-            sx={{
-                width: 220,
-                height: 180,
-                cursor: "pointer",
-                transition: "transform 0.2s, box-shadow 0.2s",
-                "&:hover": {
-                    transform: "translateY(-4px)",
-                    boxShadow: 3
-                },
-                display: 'flex',
-                flexDirection: 'column',
-                position: 'relative',
-                overflow: 'visible'
-            }}
-            onClick={onCardClick}
-        >
-            {/* Icon on top left corner */}
-            <Box
-                sx={{
-                    position: 'absolute',
-                    top: -10,
-                    left: 10,
-                    bgcolor: theme.palette.background.paper,
-                    borderRadius: '50%',
-                    p: 1,
-                    boxShadow: 1,
-                    display: 'flex',
-                    zIndex: 1
-                }}
-            >
-                {getIcon(source.file_name)}
-            </Box>
-
-            <CardContent sx={{ p: 2, pt: 3, flex: 1, display: 'flex', flexDirection: 'column' }}>
-                {/* Document name */}
-                <Typography
-                    variant="subtitle1"
-                    sx={{
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        fontWeight: 'medium',
-                        mb: 1,
-                        mt: 1
-                    }}
-                >
-                    {source.file_name}
-                </Typography>
-
-                <Divider sx={{ my: 1 }} />
-
-                {/* Informations sous le titre */}
-                <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                    {/* Titre du document */}
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                        <InfoOutlinedIcon fontSize="small" color="action" sx={{ fontSize: '0.9rem' }} />
-                        <Typography
-                            variant="body2"
-                            sx={{
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                                display: '-webkit-box',
-                                WebkitLineClamp: 1,
-                                WebkitBoxOrient: 'vertical'
-                            }}
-                        >
-                            {source.title ?? "Title unavailable"}
-                        </Typography>
-                    </Box>
-
-                    {/* Date de modification */}
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                        <HistoryIcon fontSize="small" color="action" sx={{ fontSize: '0.9rem' }} />
-                        <Typography variant="body2" color="text.secondary">
-                            {formatDate(source.modified)}
-                        </Typography>
-                    </Box>
-
-                    {/* Nom de l'agent */}
-                    {source.agent_name && (
-                        <Chip
-                            icon={<PersonOutlineIcon sx={{ fontSize: '0.9rem' }} />}
-                            label={source.agent_name}
-                            size="small"
-                            sx={{
-                                height: 24,
-                                '& .MuiChip-label': { px: 1, fontSize: '0.75rem' },
-                                alignSelf: 'flex-start',
-                                mt: 0.5
-                            }}
-                        />
-                    )}
-                </Box>
-
-                <Tooltip title="Preview the document">
-                    <IconButton
-                        onClick={onViewDocument}
-                        sx={{
-                            position: 'absolute',
-                            bottom: 8,
-                            right: 8,
-                            padding: '8px',
-                            bgcolor: theme.palette.background.paper,
-                            boxShadow: 1,
-                            '&:hover': {
-                                bgcolor: theme.palette.primary.light,
-                                color: theme.palette.primary.contrastText
-                            },
-                            transition: 'all 0.2s'
-                        }}
-                        disabled={loading}
-                        size="small"
-                    >
-                        <VisibilityIcon fontSize="small" />
-                    </IconButton>
-                </Tooltip>
-            </CardContent>
-        </Card>
-    );
-};
-
+/**
+ * Sources Component
+ *
+ * This component displays a section for document sources related to a chat interaction.
+ *
+ * Features:
+ * - Collapsible source panel with preview of top 3 sources
+ * - Modal popup to quickly preview a document summary
+ * - Drawer panel to list and open all sources
+ * - DocumentViewer integration to render full content of a selected markdown document
+ *
+ * Props:
+ * - sources: List of ChatSource objects
+ * - expandSources: Whether to start with sources expanded
+ * - enableSources: Whether to display the sources section at all
+ */
 export default function Sources({
     sources,
     expandSources = false,
@@ -191,13 +53,13 @@ export default function Sources({
     enableSources: boolean
 }) {
     const theme = useTheme();
+
+    // Local UI state
     const [openSources, setOpenSources] = useState<boolean>(expandSources);
     const [selectedSource, setSelectedSource] = useState<ChatSource | null>(null);
     const [drawerOpen, setDrawerOpen] = useState<boolean>(false);
     const [documentViewerOpen, setDocumentViewerOpen] = useState<boolean>(false);
     const [fullDocument, setFullDocument] = useState<any>(null);
-    const [loading, setLoading] = useState<boolean>(false);
-    const [getDocument] = useGetFullDocumentMutation();
 
     const handleOpenModal = (source: ChatSource) => {
         setSelectedSource(source);
@@ -220,34 +82,27 @@ export default function Sources({
         setFullDocument(null);
     };
 
-    // Fetch the full document when the user clicks on "View Full Document"
-    // and open the DocumentViewer component
-    const handleViewFullDocument = async (source: ChatSource, event: React.MouseEvent) => {
+    /**
+     * When the user clicks on "Preview Full Document",
+     * extract the basic metadata and open the full DocumentViewer.
+     * The DocumentViewer will handle the rest (fetching, decoding, etc.)
+     * @param source The source object containing document metadata
+     * @param event The click event
+     */
+    const handleViewFullDocument = (source: ChatSource, event: React.MouseEvent) => {
         event.stopPropagation();
-        setLoading(true);
-        setSelectedSource(null); // ❗ Close the modal before drawer opens
-
-        try {
-            const response = await getDocument({ document_uid: source.document_uid }).unwrap();
-
-            if (response.documents && response.documents[0]) {
-                const doc = response.documents[0];
-                setFullDocument(doc); setTimeout(() => {
-                    setDocumentViewerOpen(true);
-                }, 100);
-
-            } else {
-                console.error("Document not found in response:", response);
-            }
-        } catch (error) {
-            console.error("Error fetching document:", error);
-        } finally {
-            setLoading(false);
-        }
+        setFullDocument({
+            document_uid: source.document_uid,
+            file_name: source.file_name,
+            file_url: source.file_url, // Optional, can be null
+            content: null, // Content is not needed here, DocumentViewer will fetch it
+        });
+        setDocumentViewerOpen(true);
     };
 
     return (
         <>
+            {/* Top-level button to expand/collapse source view */}
             <Grid2 container marginBottom={1}>
                 {enableSources && sources.length > 0 &&
                     <Grid2 paddingTop={2}>
@@ -297,7 +152,7 @@ export default function Sources({
                                                 source={source}
                                                 onCardClick={() => handleOpenModal(source)}
                                                 onViewDocument={(e) => handleViewFullDocument(source, e)}
-                                                loading={loading}
+                                                loading={false}
                                             />
                                         </Grid2>
                                     ))}
@@ -336,7 +191,7 @@ export default function Sources({
                 }
             </Grid2>
 
-            {/* Modal pour l'aperçu du document */}
+            {/* Modal preview (quick summary) */}
             <Modal
                 open={!!selectedSource}
                 onClose={handleCloseModal}
@@ -349,12 +204,14 @@ export default function Sources({
                     left: '50%',
                     transform: 'translate(-50%, -50%)',
                     width: '50%',
-                    maxHeight: '80vh',
+                    height: '80vh',
+                    display: 'flex',
+                    flexDirection: 'column',
                     bgcolor: theme.palette.background.paper,
                     boxShadow: 24,
-                    p: 3,
                     borderRadius: 2,
-                    overflow: 'auto',
+                    padding: 3,
+                    boxSizing: 'border-box',
                 }}>
                     <IconButton
                         aria-label="close"
@@ -371,7 +228,7 @@ export default function Sources({
 
                     <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                         <Box sx={{ mr: 2, p: 1, bgcolor: theme.palette.background.default, borderRadius: '50%' }}>
-                            {selectedSource && getIcon(selectedSource.file_name)}
+                            {selectedSource && getDocumentIcon(selectedSource.file_name)}
                         </Box>
                         <Box>
                             <Typography id="modal-title" variant="h6" component="h2">
@@ -399,13 +256,17 @@ export default function Sources({
                         </Box>
                     )}
 
-                    <Box sx={{ maxHeight: '60vh', overflowY: 'auto', pr: 1 }}>
-                        <MarkdownRenderer content={selectedSource?.content} />
-                        {/* <Typography variant="body1" component="div">
-                            {selectedSource?.content.split('\n\n').map((paragraph, index) => (
-                                <p key={index}>{paragraph}</p>
-                            ))}
-                        </Typography> */}
+                    <Box sx={{
+                        flexGrow: 1,
+                        overflowY: 'auto',
+                        minHeight: 0,
+                        pr: 1,
+                    }}>
+                        <MarkdownRenderer
+                            content={selectedSource?.content}
+                            size="large"
+                            enableEmojiSubstitution={true}
+                        />
                     </Box>
 
                     <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 3 }}>
@@ -414,13 +275,13 @@ export default function Sources({
                             variant="contained"
                             startIcon={<VisibilityIcon />}
                         >
-                            View Full Document
+                            Preview Full Document
                         </Button>
                     </Box>
                 </Box>
             </Modal>
 
-            {/* Drawer pour tous les documents */}
+            {/* Drawer to list all sources */}
             <Drawer
                 anchor="right"
                 open={drawerOpen}
@@ -441,11 +302,7 @@ export default function Sources({
                                 All Sources ({sources.length})
                             </Typography>
                         </Box>
-
-                        <IconButton
-                            onClick={handleCloseDrawer}
-                            aria-label="close"
-                        >
+                        <IconButton onClick={handleCloseDrawer} aria-label="close">
                             <CloseIcon />
                         </IconButton>
                     </Box>
@@ -460,7 +317,7 @@ export default function Sources({
                                         source={source}
                                         onCardClick={() => handleOpenModal(source)}
                                         onViewDocument={(e) => handleViewFullDocument(source, e)}
-                                        loading={loading}
+                                        loading={false}
                                     />
                                 </Grid2>
                             ))}
@@ -469,12 +326,11 @@ export default function Sources({
                 </Box>
             </Drawer>
 
-            {/* Utilisation du nouveau composant DocumentViewer */}
+            {/* Drawer-based full markdown viewer */}
             <DocumentViewer
                 document={fullDocument}
                 open={documentViewerOpen}
                 onClose={handleCloseDocumentViewer}
-                loading={loading}
             />
         </>
     );

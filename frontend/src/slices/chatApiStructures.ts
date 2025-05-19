@@ -17,6 +17,7 @@ export interface ChatTokenUsage {
 
 export interface ChatSource {
   document_uid: string;
+  file_url?: string;
   file_name: string;
   agent_name: string;
   title: string;

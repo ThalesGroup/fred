@@ -18,7 +18,7 @@ import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import { ImageComponent } from "../utils/image.tsx";
 import { useContext } from "react";
 import { ApplicationContext } from "./ApplicationContextProvider.tsx";
-import { SideBarClusterSelector } from "../components/SideBarClusterSelector.tsx";
+import { SideBarClusterSelector } from "../frugalit/component/SideBarClusterSelector.tsx";
 import { FeatureFlagKey, getProperty, isFeatureEnabled } from "../common/config.tsx";
 
 export default function SideBar({ darkMode, onThemeChange }) {

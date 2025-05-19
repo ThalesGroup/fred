@@ -318,16 +318,19 @@ const lightTypography = {
   body2: { fontSize: '0.875rem', fontWeight: 300, fontFamily: 'Roboto, sans-serif' },
   markdown: {
     h1: {
-      // color: darkPalette.success.main, 
+      color: lightPalette.text.primary,
       lineHeight: 1.5, fontWeight: 500, fontSize: '1.2rem', marginBottom: '0.6rem', fontFamily: 'Roboto, sans-serif'
     },
     h2: {
+       color: lightPalette.text.primary,
       lineHeight: 1.5, fontWeight: 500, fontSize: '1.15rem', marginBottom: '0.6rem', fontFamily: 'Roboto, sans-serif'
     },
     h3: {
+       color: lightPalette.text.primary,
       lineHeight: 1.5, fontWeight: 400, fontSize: '1.10rem', marginBottom: '0.6rem', fontFamily: 'Roboto, sans-serif'
     },
     h4: {
+       color: lightPalette.text.primary,
       lineHeight: 1.5, fontWeight: 400, fontSize: '1.05rem', marginBottom: '0.6rem', fontFamily: 'Roboto, sans-serif'
     },
     p: {
@@ -338,16 +341,21 @@ const lightTypography = {
       fontFamily: 'Roboto, sans-serif'
     },
     code: {
+       color: lightPalette.text.primary,
       lineHeight: 1.5,
       fontSize: '0.9rem',
       borderRadius: '4px'
     },
     a: {
-      color: lightPalette.primary.main,
+       color: lightPalette.text.primary,
       textDecoration: 'underline', lineHeight: 1.6, fontWeight: 400, fontSize: '0.9rem', fontFamily: 'Roboto, sans-serif'
     },
-    ul: { marginLeft: '0.2rem', lineHeight: 1.4, fontWeight: 400, fontSize: '0.9rem', fontFamily: 'Roboto, sans-serif' },
-    li: { marginBottom: '0.5rem', lineHeight: 1.4, fontSize: '0.9rem', fontFamily: 'Roboto, sans-serif' },
+    ul: { 
+      color: lightPalette.text.primary,
+      marginLeft: '0.2rem', lineHeight: 1.4, fontWeight: 400, fontSize: '0.9rem', fontFamily: 'Roboto, sans-serif' },
+    li: {
+      color: lightPalette.text.primary,
+      marginBottom: '0.5rem', lineHeight: 1.4, fontSize: '0.9rem', fontFamily: 'Roboto, sans-serif' },
   },
 };
 const darkTypography = {
@@ -359,19 +367,23 @@ const darkTypography = {
   body2: { fontSize: '0.875rem', fontWeight: 300, fontFamily: 'Roboto, sans-serif' },
   markdown: {
     h1: {
-      // color: darkPalette.success.main, 
+      color: darkPalette.text.primary,
       lineHeight: 1.5, fontWeight: 500, fontSize: '1.2rem', marginBottom: '0.6rem', fontFamily: 'Roboto, sans-serif'
     },
     h2: {
+      color: darkPalette.text.primary,
       lineHeight: 1.5, fontWeight: 500, fontSize: '1.15rem', marginBottom: '0.6rem', fontFamily: 'Roboto, sans-serif'
     },
     h3: {
+      color: darkPalette.text.primary,
       lineHeight: 1.5, fontWeight: 400, fontSize: '1.10rem', marginBottom: '0.6rem', fontFamily: 'Roboto, sans-serif'
     },
     h4: {
+      color: darkPalette.text.primary,
       lineHeight: 1.5, fontWeight: 400, fontSize: '1.05rem', marginBottom: '0.6rem', fontFamily: 'Roboto, sans-serif'
     },
     p: {
+      color: darkPalette.text.primary,
       lineHeight: 1.8,
       fontWeight: 300,
       fontSize: '1.0rem',
@@ -379,16 +391,21 @@ const darkTypography = {
       fontFamily: 'Roboto, sans-serif'
     },
     code: {
+      color: darkPalette.text.primary,
       lineHeight: 1.5,
       fontSize: '0.9rem',
       borderRadius: '4px'
     },
     a: {
-      color: darkPalette.primary.main,
+      color: darkPalette.text.primary,
       textDecoration: 'underline', lineHeight: 1.6, fontWeight: 300, fontSize: '0.9rem', fontFamily: 'Roboto, sans-serif'
     },
-    ul: { marginLeft: '0.2rem', lineHeight: 1.4, fontWeight: 300, fontSize: '0.9rem', fontFamily: 'Roboto, sans-serif' },
-    li: { marginBottom: '0.5rem', lineHeight: 1.4, fontSize: '0.9rem', fontFamily: 'Roboto, sans-serif' },
+    ul: { 
+      color: darkPalette.text.primary,
+      marginLeft: '0.2rem', lineHeight: 1.4, fontWeight: 300, fontSize: '0.9rem', fontFamily: 'Roboto, sans-serif' },
+    li: { 
+      color: darkPalette.text.primary,
+      marginBottom: '0.5rem', lineHeight: 1.4, fontSize: '0.9rem', fontFamily: 'Roboto, sans-serif' },
   },
 };
 

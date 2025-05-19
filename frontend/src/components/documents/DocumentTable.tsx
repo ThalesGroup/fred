@@ -18,7 +18,7 @@ import {
 import EventAvailableIcon from "@mui/icons-material/EventAvailable";
 import dayjs from "dayjs";
 import { getAgentBadge } from "../../utils/avatar";
-import { getFileIcon } from "./DocumentIcon";
+import { getDocumentIcon } from "./DocumentIcon";
 import { DocumentTableRowActionsMenu } from "./DocumentTableRowActionsMenu";
 
 export interface FileRow {
@@ -34,9 +34,10 @@ interface FileTableProps {
   selected: string[];
   onToggleSelect: (uid: string) => void;
   onToggleAll: (checked: boolean) => void;
-  onDelete: (uid: string) => void;
+  onDelete: (uid: string, file_name: string) => void | Promise<void>;
+  onDownload: (uid: string, file_name: string) => void | Promise<void>;
   onToggleRetrievable?: (file: FileRow) => void;
-  onOpen: (uid: string) => void;
+  onOpen: (uid: string, file_name: string) => void | Promise<void>;
   isAdmin?: boolean;
 }
 
@@ -46,6 +47,7 @@ export const DocumentTable: React.FC<FileTableProps> = ({
   onToggleSelect,
   onToggleAll,
   onDelete,
+  onDownload,
   onToggleRetrievable,
   onOpen,
   isAdmin = false,
@@ -102,7 +104,7 @@ export const DocumentTable: React.FC<FileTableProps> = ({
               variant="outlined"
               color="error"
               onClick={() => {
-                selected.forEach((uid) => onDelete(uid));
+                selected.forEach((uid) => onDelete(uid, ""));
               }}
             >
               Delete Selected
@@ -188,7 +190,7 @@ export const DocumentTable: React.FC<FileTableProps> = ({
                 </TableCell>
                 <TableCell>
                   <Box display="flex" alignItems="center" gap={1}>
-                    {getFileIcon(file.document_name)}
+                    {getDocumentIcon(file.document_name)}
                     <Typography variant="body2" noWrap>
                       {file.document_name}
                     </Typography>
@@ -218,16 +220,9 @@ export const DocumentTable: React.FC<FileTableProps> = ({
                 <TableCell align="right">
                   {isAdmin && (
                     <DocumentTableRowActionsMenu
-                      onDelete={() => onDelete(file.document_uid)}
-                      onDownload={() => {
-                        const link = document.createElement("a");
-                        link.href = `/knowledge/v1/fullDocument/${file.document_uid}`;
-                        link.download = '';
-                        document.body.appendChild(link);
-                        link.click();
-                        document.body.removeChild(link);
-                      }}
-                      onOpen={() => onOpen(file.document_uid)}
+                      onDelete={() => onDelete(file.document_uid, file.document_name)}
+                      onDownload={() => onDownload(file.document_uid, file.document_name)}
+                      onOpen={() => onOpen(file.document_uid, file.document_name)}
                     />
                   )}
                 </TableCell>

@@ -5,11 +5,11 @@ import { useContext, useEffect, useState } from "react";
 import { useSearchParams } from 'react-router-dom';
 import LoadingWithProgress from '../components/LoadingWithProgress.tsx';
 import { Box } from "@mui/material";
-import { useGetClusterScoresMutation } from "../slices/api.tsx";
+import { useGetClusterScoresMutation } from "../frugalit/slices/api.tsx";
 import { useToast } from "../components/ToastProvider.tsx";
 import { extractHttpErrorMessage } from "../utils/extractHttpErrorMessage.tsx";
-import { ClusterScore } from "../slices/scoresStructures.tsx";
-import ClusterScoresTable from "../components/ScoreTable.tsx";
+import { ClusterScore } from "../frugalit/slices/scoresStructures.tsx";
+import ClusterScoresTable from "../frugalit/component/ScoreTable.tsx";
 import { TopBar } from "../common/TopBar.tsx";
 
 export const Audit = () => {

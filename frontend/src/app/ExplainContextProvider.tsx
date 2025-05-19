@@ -10,11 +10,11 @@ import {
     useGetWorkloadAdvancedMutation,
     useGetWorkloadEssentialsMutation,
     useGetWorkloadIdMutation,
-} from "../slices/api.tsx";
+} from "../frugalit/slices/api.tsx";
 import { Workload } from "../utils/resource.tsx";
-import { createFactList, FactList } from "../slices/factsStructures.tsx";
-import { WorkloadSummary } from "../slices/workloadSummaryStructures.tsx";
-import { WorkloadScores } from "../slices/scoresStructures.tsx";
+import { createFactList, FactList } from "../frugalit/slices/factsStructures.tsx";
+import { WorkloadSummary } from "../frugalit/slices/workloadSummaryStructures.tsx";
+import { WorkloadScores } from "../frugalit/slices/scoresStructures.tsx";
 
 export const ExplainContext = createContext<ExplainContextStruct>(null!);
 

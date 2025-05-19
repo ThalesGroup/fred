@@ -1,4 +1,4 @@
-import {ClusterDescription, ClusterOverview} from "../slices/api.tsx";
+import {ClusterDescription, ClusterOverview} from "../frugalit/slices/api.tsx";
 import {DurationPrecision} from "../utils/period.tsx";
 
 /**

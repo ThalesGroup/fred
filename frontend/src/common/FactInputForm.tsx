@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Typography, Paper, Button, TextField, Box, Select, MenuItem, FormControl, InputLabel } from "@mui/material";
-import { Fact, FactType } from '../slices/factsStructures';
+import { Fact, FactType } from '../frugalit/slices/factsStructures';
 
 interface FactInputFormProps {
   isOpen: boolean;
