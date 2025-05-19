@@ -91,11 +91,12 @@ export default function Sources({
      */
     const handleViewFullDocument = (source: ChatSource, event: React.MouseEvent) => {
         event.stopPropagation();
+        setSelectedSource(null); // Close the Modal first
         setFullDocument({
             document_uid: source.document_uid,
             file_name: source.file_name,
-            file_url: source.file_url, // Optional, can be null
-            content: null, // Content is not needed here, DocumentViewer will fetch it
+            file_url: source.file_url,
+            content: null,
         });
         setDocumentViewerOpen(true);
     };
