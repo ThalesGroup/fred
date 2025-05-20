@@ -1,0 +1,32 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Run Fred Backend",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/backend/fred/main.py",
+      "console": "integratedTerminal",
+      "justMyCode": false,
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/backend/fred",
+        "PATH": "${workspaceFolder}/backend/.venv/bin:${env:PATH}",
+        "LOG_LEVEL": "DEBUG"
+      },
+      "args": [
+        "--server.configurationPath",
+        "${workspaceFolder}/backend/config/configuration.yaml",
+        "--server.baseUrlPath",
+        "/fred"
+      ],
+      "python": "${workspaceFolder}/backend/.venv/bin/python",
+    },
+    {
+      "name": "Run Fred Frontend",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "npm run dev",
+      "cwd": "${workspaceFolder}/frontend"
+    }
+  ]
+}
