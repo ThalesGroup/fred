@@ -17,17 +17,16 @@ import pathlib
 from threading import Lock
 from typing import Dict, List, Type, Any
 from pydantic import BaseModel
+from context.setting.context_store_minio_settings import ContextStoreMinioSettings
+from context.setting.context_store_local_settings import ContextStoreLocalSettings
+from context.store.local_context_store import LocalContextStore
+from context.store.minio_context_store import MinIOContextStore
 from model_factory import get_structured_chain
 from fred.common.structure import AgentSettings, Configuration, ServicesSettings
 from fred.model_factory import get_model
 from langchain_core.language_models.base import BaseLanguageModel
 from flow import AgentFlow, Flow  # Base class for all agent flows
 import logging
-from config.minio_settings import minio_settings
-from fred.context.context_storage_settings import context_storage_settings
-from context.context_service import ContextService
-from config.minio_settings import minio_settings
-from minio import Minio
 
 logger = logging.getLogger(__name__)
 
@@ -169,16 +168,32 @@ def get_all_agent_classes() -> Dict[str, Type[AgentFlow]]:
     return get_app_context().agent_classes
 
 
-def get_context_service() -> Any:
+def _create_context_service():
     """
-    Get a context service based on configuration.
-    Always creates a new service instance to ensure consistent storage.
-    
-    Returns:
-        A context service instance (local or MinIO based)
+    Factory function to create the appropriate ContextStore implementation
+    based on configuration or environment variables.
+    """
+    storage_backend = os.getenv("CONTEXT_STORAGE_BACKEND", "local").lower()
+
+    if storage_backend == "minio":
+        settings = ContextStoreMinioSettings()
+        client = MinIOContextStore(
+            endpoint=settings.minio_endpoint,
+            access_key=settings.minio_access_key,
+            secret_key=settings.minio_secret_key,
+            secure=settings.minio_secure
+        )
+        return MinIOContextStore(client, settings.minio_bucket_name)
+
+    settings = ContextStoreLocalSettings()
+    return LocalContextStore(settings.root_path)
+
+
+def get_context_service():
+    """
+    Public accessor for the context service instance.
     """
     return get_app_context().get_context_service()
-
 
 # -------------------------------
 # Runtime status class
@@ -207,7 +222,6 @@ class RuntimeStatus:
         with self._lock:
             self._offline = False
 
-
 # -------------------------------
 # Application context singleton
 # -------------------------------
@@ -224,6 +238,7 @@ class ApplicationContext:
 
     _instance = None
     _lock = Lock()
+    context_service = _create_context_service()
 
     def __new__(cls, configuration: Configuration = None):
         with cls._lock:
@@ -237,7 +252,7 @@ class ApplicationContext:
                 cls._instance.status = RuntimeStatus()
                 cls._instance._service_instances = {}  # Cache for service instances
                 cls._instance.apply_default_models()
-
+                cls._instance.context_service = _create_context_service()
                 cls._instance._build_indexes()
 
                 # ✅ Dynamically load agent classes based on configuration
@@ -411,108 +426,8 @@ class ApplicationContext:
         """
         return list(self.agent_classes.keys())
         
-    def get_context_service(self) -> Any:
+    def get_context_service(self):
         """
-        Get a context service based on configuration.
-        Always creates a new service instance to ensure consistent storage.
+        Returns the singleton ContextService instance.
         """
-        # Clear any cached service to ensure fresh configuration
-        if "context_service" in self._service_instances:
-            del self._service_instances["context_service"]
-            
-        # Ensure we have a safe default path for fallback
-        default_path = os.path.expanduser("~/.fred/context-store")
-        
-        # Get storage type from settings
-        storage_type = context_storage_settings.type.lower()
-        
-        try:
-            # ----- HANDLE LOCAL STORAGE -----
-            if storage_type == "local":
-                # Get expanded storage path, ensure we have a valid path
-                try:
-                    local_path = pathlib.Path(context_storage_settings.get_storage_path())
-                except Exception as e:
-                    logger.error(f"Error getting local storage path: {e}")
-                    local_path = pathlib.Path(default_path)
-                
-                # Create service with explicit None for minio_client to enforce local storage
-                service = ContextService(minio_client=None, local_base_dir=local_path)
-                self._service_instances["context_service"] = service
-                logger.info(f"Created local context service with path: {local_path}")
-                return service
-                
-            # ----- HANDLE MINIO STORAGE -----
-            elif storage_type == "minio":
-                try:
-                    # Log the MinIO configuration (without credentials)
-                    logger.info(f"Attempting to connect to MinIO at {minio_settings.minio_endpoint} (secure={minio_settings.minio_secure})")
-                    
-                    # Create MinIO client directly using MinioSettings from environment variables
-                    minio_client = Minio(
-                        endpoint=minio_settings.minio_endpoint,
-                        access_key=minio_settings.minio_access_key,
-                        secret_key=minio_settings.minio_secret_key,
-                        secure=minio_settings.minio_secure
-                    )
-                    
-                    # Test the connection before proceeding (try to list buckets)
-                    try:
-                        minio_client.list_buckets()
-                        logger.info("MinIO connection test successful")
-                    except Exception as e:
-                        logger.error(f"MinIO connection test failed: {e}")
-                        raise
-                    
-                    # Get bucket name directly from MinioSettings
-                    bucket_name = minio_settings.minio_bucket_context_name
-                    
-                    # Create service with MinIO client
-                    service = ContextService(
-                        minio_client=minio_client, 
-                        bucket_name=bucket_name
-                    )
-                    
-                    self._service_instances["context_service"] = service
-                    logger.info(f"Created MinIO context service with bucket: {bucket_name}")
-                    return service
-                    
-                except Exception as e:
-                    logger.error(f"Failed to create MinIO service: {e}")
-                    logger.warning("Falling back to local storage")
-                    
-                    # Fall back to local storage with default path
-                    try:
-                        local_path = pathlib.Path(context_storage_settings.get_storage_path())
-                    except Exception:
-                        local_path = pathlib.Path(default_path)
-                    
-                    service = ContextService(minio_client=None, local_base_dir=local_path)
-                    self._service_instances["context_service"] = service
-                    return service
-                    
-            # ----- HANDLE UNKNOWN STORAGE TYPE -----
-            else:
-                # Unknown storage type - use local as fallback
-                logger.warning(f"Unknown storage type '{storage_type}', falling back to local storage")
-                
-                # Ensure we have a valid path
-                try:
-                    local_path = pathlib.Path(context_storage_settings.get_storage_path())
-                except Exception:
-                    local_path = pathlib.Path(default_path)
-                    
-                service = ContextService(minio_client=None, local_base_dir=local_path)
-                self._service_instances["context_service"] = service
-                return service
-                
-        except Exception as e:
-            # Catch-all for any unexpected errors - we must return a valid service
-            logger.error(f"Unexpected error creating context service: {e}")
-            logger.warning("Using emergency local storage fallback")
-            
-            # Absolute last resort - use hardcoded path
-            local_path = pathlib.Path(default_path)
-            service = ContextService(minio_client=None, local_base_dir=local_path)
-            self._service_instances["context_service"] = service
-            return service
+        return self.context_service

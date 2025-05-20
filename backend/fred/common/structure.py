@@ -241,6 +241,10 @@ class FrontendSettings(BaseModel):
     feature_flags: FrontendFlags
     properties: Properties
 
+
+class ContextStorageConfig(BaseModel):
+    type: str = Field(..., description="The storage backend to use (e.g., 'local', 'minio')")
+    
 class Configuration(BaseModel):
     frontend_settings: FrontendSettings
     database: DatabaseConfiguration
@@ -249,7 +253,7 @@ class Configuration(BaseModel):
     dao: DAOConfiguration
     security: Security
     feedback: FeedbackDatabase
-
+    context_storage: ContextStorageConfig = Field(..., description="Content Storage configuration")
 
 class OfflineStatus(BaseModel):
     is_offline: bool
