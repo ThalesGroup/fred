@@ -18,9 +18,12 @@ PROJECT_ID="74328"
 ##@ Build
 
 .PHONY: check-node
-check-node: ## Check if Node.js version matches the required version
-	@if ! node -v | grep -q "^v$(NODE_VERSION)"; then \
-		echo "Node.js v$(NODE_VERSION) is required, but found $$(node -v). Please use the correct version."; \
+check-node: ## Check if Node.js version is at least the required version
+	@REQUIRED=$(NODE_VERSION); \
+	CURRENT=$$(node -v | sed 's/^v//'); \
+	verlte() { [ "$$1" = "$$2" ] && return 0 || [  "$$(printf '%s\n' "$$1" "$$2" | sort -V | head -n1)" = "$$1" ]; }; \
+	if ! verlte "$$REQUIRED" "$$CURRENT"; then \
+		echo "Node.js v$$REQUIRED or higher is required, but found v$$CURRENT. Please use the correct version."; \
 		exit 1; \
 	fi
 
