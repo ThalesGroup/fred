@@ -1,0 +1,83 @@
+# -----------------------------------------------------------------------------
+# Frontend builder image
+# -----------------------------------------------------------------------------
+FROM mirror.gcr.io/node:22.13.0-slim AS frontend
+
+# Install dependencies
+RUN apt-get update && \
+    apt-get install -y make
+
+# Copy project files
+COPY frontend /app/frontend
+
+# Move to workdir
+WORKDIR /app/frontend
+
+# Install node deps
+RUN make node_modules
+
+# -----------------------------------------------------------------------------
+# backend builder image
+# -----------------------------------------------------------------------------
+FROM mirror.gcr.io/python:3.12.8-slim AS backend
+
+# Set the poetry env
+ENV POETRY_VIRTUALENVS_CREATE=true
+ENV POETRY_VIRTUALENVS_IN_PROJECT=true
+ENV POETRY_CACHE_DIR=/tmp/poetry_cache
+
+# Install dependencies
+RUN apt-get update && \
+    apt-get install -y make
+
+# Copy project files
+COPY backend /app/backend
+
+# Install poetry
+RUN pip install poetry==1.7.1
+
+# Move to workdir
+WORKDIR /app/backend
+
+# Install dependancies for bid_gpt
+RUN make dev
+
+# -----------------------------------------------------------------------------
+# Dev container image
+# -----------------------------------------------------------------------------
+FROM mirror.gcr.io/debian:12-slim
+
+ARG USER_NAME=fred-user
+ARG USER_ID=1000
+ARG GROUP_ID=1000
+
+# Install dependencies
+RUN apt-get update && \
+    apt-get install -y make git libsqlite3-0
+
+# Setup user
+RUN groupadd -g ${GROUP_ID} ${USER_NAME} && \
+    useradd -s /bin/bash -u ${USER_ID} -g ${GROUP_ID} -m ${USER_NAME} && \
+    mkdir /app /opt/python && \
+    chown -R ${USER_ID}:${GROUP_ID} /app /opt/python
+
+# Copy bin and lib node and python
+COPY --from=frontend /usr/local /usr/local
+COPY --from=backend /usr/local /usr/local
+
+# Copy  deps lib node and python
+COPY --from=frontend --chown=${USER_ID}:${GROUP_ID} /app/frontend/node_modules /app/frontend/node_modules
+COPY --from=backend --chown=${USER_ID}:${GROUP_ID} /app/backend/.venv /app/backend/.venv
+COPY --from=backend --chown=${USER_ID}:${GROUP_ID} /app/backend/target /app/backend/target
+
+# Change user
+USER ${USER_NAME}
+
+# Move to workdir
+WORKDIR /app
+
+# Expose default ports
+EXPOSE 8000
+EXPOSE 5173
+
+ENTRYPOINT ["/bin/bash", "-c"]

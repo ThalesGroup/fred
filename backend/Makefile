@@ -28,6 +28,8 @@ PROJECT_ID="74328"
 ENV_DIR?=$(CURDIR)
 ENV_FILE?=$(ENV_DIR)/config/.env
 
+LOG_LEVEL ?= INFO
+
 ##@ Build
 
 .PHONY: build
@@ -134,7 +136,7 @@ clean-test: ## Clean tests
 run: dev ## Run in foreground using the root path '/fred'
 	@echo "Using env file: $(ENV_FILE)"
 	@[ -f $(ENV_FILE) ] && echo "Env file exists" || echo "Warning: Env file not found at $(ENV_FILE)"
-	LOG_LEVEL=INFO \
+	LOG_LEVEL=$(LOG_LEVEL) \
 	ENV_FILE=$(ENV_FILE) \
 	$(PYTHON) ${PY_PACKAGE}/main.py --server.configurationPath ./config/configuration.yaml --server.baseUrlPath /fred
 
@@ -143,14 +145,14 @@ run: dev ## Run in foreground using the root path '/fred'
 run-config: dev ## Run with a specific env file (ENV_DIR=/path/to/dir)
 	@echo "Using env file: $(ENV_FILE)"
 	@[ -f $(ENV_FILE) ] && echo "Env file exists" || echo "Warning: Env file not found at $(ENV_FILE)"
-	LOG_LEVEL=INFO \
+	LOG_LEVEL=$(LOG_LEVEL) \
 	ENV_FILE=$(ENV_FILE) \
 	$(PYTHON) ${PY_PACKAGE}/main.py --server.configurationPath ./config/configuration.yaml --server.baseUrlPath /fred
 
 .PHONY: run-local
 
 run-local: dev ## Run with local storage only
-	LOG_LEVEL=INFO $(PYTHON) ${PY_PACKAGE}/main.py --server.configurationPath ./config/configuration.yaml --server.baseUrlPath /fred
+	LOG_LEVEL=$(LOG_LEVEL) $(PYTHON) ${PY_PACKAGE}/main.py --server.configurationPath ./config/configuration.yaml --server.baseUrlPath /fred
 
 .PHONY: docker-run
 

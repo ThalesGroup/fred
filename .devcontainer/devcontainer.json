@@ -1,0 +1,22 @@
+{
+    "name": "Fred Dev",
+    "dockerComposeFile": [
+      "../deploy/docker-compose/docker-compose.yml",
+      "docker-compose-devcontainer.yml"
+    ],
+    "service": "devcontainer",
+    "shutdownAction": "stopCompose",
+    "workspaceFolder": "/app",
+    "customizations": {
+      "vscode": {
+        "extensions": [
+          "ms-python.python",
+          "ms-python.vscode-pylance",
+          "esbenp.prettier-vscode",
+          "dbaeumer.vscode-eslint",
+          "ms-vscode.vscode-typescript-next"
+        ]
+      }
+    },
+    "remoteUser": "fred-user"
+  }
