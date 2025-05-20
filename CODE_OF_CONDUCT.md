@@ -2,7 +2,7 @@
 
 ## Our Pledge
 
-We as contributors and maintainers of the **XXX repository** pledge to make participation in our project a harassment-free experience for everyone, regardless of age, body size, disability, ethnicity, gender identity and expression, level of experience, nationality, personal appearance, race, religion, or sexual identity and orientation.
+We as contributors and maintainers of the fred repository pledge to make participation in our project a harassment-free experience for everyone, regardless of age, body size, disability, ethnicity, gender identity and expression, level of experience, nationality, personal appearance, race, religion, or sexual identity and orientation.
 
 We are committed to providing a welcoming and inspiring environment for all contributors, where constructive and respectful collaboration is prioritized.
 
