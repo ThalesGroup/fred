@@ -16,21 +16,21 @@ import ContextCard from "./ContexteCard";
 import { useState, useEffect } from "react";
 import ContextCardDialog from "./ContexteCardDialog";
 import DeleteConfirmationDialog from "../DeleteConfirmationDialog";
-import { useDeleteAgentContextMutation, useGetAgentContextsMutation, useSaveAgentContextMutation } from "../../slices/chatApi";
+import { useDeleteAgentContextMutation, useGetAgentContextsMutation, useSaveAgentContextMutation } from "../../slices/agentContextApi";
 
 
 /**
  * Modal component for managing context cards of an agent using Minio backend
  */
-const ContextManagementModal = ({ 
-  open, 
-  onClose, 
+const ContextManagementModal = ({
+  open,
+  onClose,
   agent,
   getAgentBadge
 }) => {
   const theme = useTheme();
   const isDarkTheme = theme.palette.mode === "dark";
-  
+
   const [contexts, setContexts] = useState([]);
   const [error, setError] = useState(null);
   const [successMessage, setSuccessMessage] = useState(null);
@@ -53,17 +53,22 @@ const ContextManagementModal = ({
     }
   }, [open, agent]);
 
-  // Load contexts from API
   const loadContexts = async () => {
     if (!agent) return;
-    
+
     try {
       const response = await getAgentContexts(agent.name).unwrap();
-      setContexts(response);
+
+      // Transform { id: { title, content } } in [{ id, title, content }]
+      const entries = Object.entries(response.context || {}).map(
+        ([id, data]) => ({ id, ...(data as { title?: string; content?: string }) })
+      );
+
+      setContexts(entries);
       setError(null);
     } catch (err) {
       console.error('Error loading contexts:', err);
-      setError('Failed to load context cards. Please try again.');
+      setError('Failed to load context. Please try again.');
     }
   };
 
@@ -88,25 +93,18 @@ const ContextManagementModal = ({
   // Save context to backend
   const saveContext = async (cardData) => {
     if (!agent) return;
-    
+
     try {
-      const response = await saveAgentContext({ 
-        agentName: agent.name, 
-        context: cardData 
+      const { title, content } = cardData;
+
+      const response = await saveAgentContext({
+        agentName: agent.name,
+        context: { title, content }
       }).unwrap();
-      
-      // Update local state for immediate feedback
-      if (cardData.id) {
-        // Update existing card
-        setContexts(contexts.map(c => c.id === cardData.id ? response : c));
-        setSuccessMessage("Context card updated successfully");
-      } else {
-        // Add new card
-        setContexts([...contexts, response]);
-        setSuccessMessage("New context card added successfully");
-      }
-      
-      // Clear success message after 3 seconds
+
+      setContexts([...contexts, response]);
+      setSuccessMessage("New context card added successfully");
+
       setTimeout(() => setSuccessMessage(null), 3000);
       setCardDialogOpen(false);
     } catch (err) {
@@ -119,17 +117,17 @@ const ContextManagementModal = ({
   // Delete context from backend
   const deleteContext = async () => {
     if (!agent || !cardToDelete) return;
-    
+
     try {
       await deleteAgentContext({
         agentName: agent.name,
         contextId: cardToDelete.id
       }).unwrap();
-      
+
       // Update local state for immediate feedback
       setContexts(contexts.filter(c => c.id !== cardToDelete.id));
       setSuccessMessage("Context card deleted successfully");
-      
+
       // Clear success message after 3 seconds
       setTimeout(() => setSuccessMessage(null), 3000);
       setDeleteDialogOpen(false);
@@ -149,14 +147,14 @@ const ContextManagementModal = ({
         open={open}
         onClose={onClose}
         aria-labelledby="agent-context-modal"
-        aria-describedby="manage-agent-context-cards"
+        aria-describedby="manage-agent-context"
       >
         <Box sx={{
           position: 'absolute',
           top: '50%',
           left: '50%',
           transform: 'translate(-50%, -50%)',
-          width: {xs: '95%', sm: '85%', md: '75%', lg: '65%'},
+          width: { xs: '95%', sm: '85%', md: '75%', lg: '65%' },
           maxHeight: '90vh',
           bgcolor: 'background.paper',
           boxShadow: 24,
@@ -171,7 +169,7 @@ const ContextManagementModal = ({
               </Box>
               <Box>
                 <Typography variant="h5" component="h2">
-                  {agent.nickname} Context Cards
+                  {agent.nickname} Context
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
                   Add context information to enhance this agent's knowledge and capabilities
@@ -179,8 +177,8 @@ const ContextManagementModal = ({
               </Box>
             </Box>
 
-            <IconButton 
-              aria-label="close" 
+            <IconButton
+              aria-label="close"
               onClick={onClose}
               sx={{ color: 'text.secondary' }}
             >
@@ -209,30 +207,30 @@ const ContextManagementModal = ({
               sx={{ borderRadius: 2 }}
               disabled={isLoading}
             >
-              Add Context Card
+              Add Context
             </Button>
           </Box>
 
           {isLoading && contexts.length === 0 ? (
-            <Box sx={{ 
-              py: 6, 
-              display: 'flex', 
-              flexDirection: 'column', 
+            <Box sx={{
+              py: 6,
+              display: 'flex',
+              flexDirection: 'column',
               alignItems: 'center',
               justifyContent: 'center',
               minHeight: '200px'
             }}>
               <CircularProgress sx={{ mb: 2 }} />
               <Typography variant="body2" color="text.secondary">
-                Loading context cards...
+                Loading context...
               </Typography>
             </Box>
           ) : (
             <Grid2 container spacing={2}>
               {contexts.length > 0 ? (
                 contexts.map(card => (
-                  <Grid2 size={{xs: 12, sm: 6, md: 4}} key={card.id}>
-                    <ContextCard 
+                  <Grid2 size={{ xs: 12, sm: 6, md: 4 }} key={card.id}>
+                    <ContextCard
                       card={card}
                       onEdit={() => handleEditCard(card)}
                       onDelete={() => handleDeleteCard(card)}
@@ -240,11 +238,11 @@ const ContextManagementModal = ({
                   </Grid2>
                 ))
               ) : (
-                <Grid2 size={{xs: 12}}>
-                  <Box sx={{ 
-                    py: 6, 
-                    display: 'flex', 
-                    flexDirection: 'column', 
+                <Grid2 size={{ xs: 12 }}>
+                  <Box sx={{
+                    py: 6,
+                    display: 'flex',
+                    flexDirection: 'column',
                     alignItems: 'center',
                     backgroundColor: isDarkTheme ? theme.palette.chart.alterningBgColor1 : theme.palette.chart.alterningBgColor2,
                     borderRadius: 2

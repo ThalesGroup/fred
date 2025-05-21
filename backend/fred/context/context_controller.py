@@ -4,7 +4,7 @@ from typing import Optional
 from context.context_service import ContextService
 
 class ContextEntry(BaseModel):
-    titre: Optional[str] = None
+    title: Optional[str] = None
     content: Optional[str] = None
 
 class ContextController:

@@ -16,14 +16,14 @@ const extendedAgentContextApi = agentContextApiSlice.injectEndpoints({
   endpoints: (builder) => ({
     getAgentContexts: builder.mutation({
       query: (agentName) => ({
-        url: `/fred/contexts/${agentName}`,
+        url: `/fred/context/${agentName}`,
         method: 'GET',
       }),
     }),
 
     saveAgentContext: builder.mutation({
       query: ({ agentName, context }) => ({
-        url: `/fred/contexts/${agentName}`,
+        url: `/fred/context/${agentName}`,
         method: 'POST',
         body: context,
       }),
@@ -31,7 +31,7 @@ const extendedAgentContextApi = agentContextApiSlice.injectEndpoints({
 
     deleteAgentContext: builder.mutation({
       query: ({ agentName, contextId }) => ({
-        url: `/fred/contexts/${agentName}/${contextId}`,
+        url: `/fred/context/${agentName}/${contextId}`,
         method: 'DELETE',
       }),
     }),

@@ -350,7 +350,7 @@ class SessionManager:
             
         try:
             # Retrieve contexts from the service
-            contexts = self.context_service.get_contexts(agent_name)
+            contexts = self.context_service.get_context(agent_name)
             logger.info(f"Retrieved {len(contexts)} contexts for agent '{agent_name}'")
             
             # Cache it

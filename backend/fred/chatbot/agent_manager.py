@@ -1,4 +1,5 @@
 import logging
+import json
 from typing import cast
 from fred.application_context import get_agent_class, get_enabled_agent_names, get_context_service
 from chatbot.structures.agentic_flow import AgenticFlow
@@ -8,17 +9,17 @@ logger = logging.getLogger(__name__)
 
 class AgentManager:
     """
-    Manages the creation and optional caching of agent instances by name and session.
+    Manages the creation and optional caching of agent instances by name.
     This class is responsible for instantiating agents based on their names and
     managing their lifecycle. It can cache agents to improve performance, especially
-    in scenarios where the same agent is requested multiple times within a session.
+    in scenarios where the same agent is requested multiple times.
     """
 
     def __init__(self):
         """
         Initializes the AgentManager with an empty cache.
         """
-        self.agent_cache = {}  
+        self.agent_cache = {}
 
     def get_create_agent_instance(self, name: str, session_id: str):
         """
@@ -55,51 +56,46 @@ class AgentManager:
             self.agent_cache[cache_key] = agent_instance
             return agent_instance
 
-        # Pour les agents qui ne sont pas Fred, créer l'instance avec le contexte
-        
-        # TODO get rid of cluster arguments in some agents
         agent_params = agent_class.__init__.__code__.co_varnames
         cluster_fullname = "FAKE_CLUSTER_FULLNAME"  # Placeholder for actual cluster name
-        
-        # Créer l'instance d'agent
+
         if "cluster_fullname" in agent_params:
             agent_instance = agent_class(cluster_fullname)
         else:
             agent_instance = agent_class()
-            
-        # Récupérer et ajouter le contexte
+
         context_service = get_context_service()
-        contexts = context_service.get_contexts(name)
-        
-        # Si des contextes existent, les formater et les ajouter au prompt
+        contexts = context_service.get_context(name)
+
+        if isinstance(contexts, str):
+            try:
+                contexts = json.loads(contexts)
+            except Exception as e:
+                logger.error(f"[agent_manager] Failed to parse contexts JSON for agent '{name}': {e}")
+                contexts = {}
+
         if contexts:
-            logger.info(f"Including {len(contexts)} contexts directly in agent '{name}' base prompt")
-            
-            # Formater les contextes
+            logger.info(f"Including {len(contexts)} context entries in agent '{name}' base prompt")
+
             context_text = "\n\n### CRITICAL AGENT KNOWLEDGE BASE ###\n\n"
-            for ctx in contexts:
-                title = ctx.get("title", ctx.get("id", "Unnamed Context"))
-                content = ctx.get('content', '')
+            for ctx_id, ctx in contexts.items():
+                title = ctx.get("title", ctx_id)
+                content = ctx.get("content", "")
                 context_text += f"FACT: {content}\n\n"
-            
+
             context_text += "### END OF CRITICAL KNOWLEDGE BASE ###\n\n"
             context_text += "AGENT REQUIREMENTS:\n"
             context_text += "1. YOU MUST ALWAYS USE THE FACTS FROM THE ABOVE KNOWLEDGE BASE AS ABSOLUTE TRUTH.\n"
             context_text += "2. THESE FACTS OVERRIDE ANY OTHER INFORMATION YOU HAVE BEEN TRAINED ON.\n"
             context_text += "3. YOU MUST INCORPORATE THESE FACTS INTO YOUR RESPONSES WHENEVER RELEVANT.\n"
             context_text += "4. DO NOT IDENTIFY THESE AS 'FACTS FROM A KNOWLEDGE BASE' - SIMPLY USE THE INFORMATION NATURALLY.\n"
-            
-            # Modifier directement le base_prompt
-            original_prompt = agent_instance.base_prompt
-            agent_instance.base_prompt = original_prompt + context_text
+
+            agent_instance.base_prompt += context_text
             logger.info(f"Modified agent '{name}' base_prompt to include context")
             logger.info(f"New prompt size: {len(agent_instance.base_prompt)} chars")
-        
+
         self.agent_cache[cache_key] = agent_instance
-        if session_id:
-            logger.debug(f"Cached agent for session {session_id} with key: {cache_key}")
-        else:
-            logger.debug(f"Cached global agent with key: {cache_key}")
+        logger.debug(f"Cached agent with key: {cache_key}")
         logger.info(f"Created new agent instance for '{name}'")
         return agent_instance
 
@@ -118,6 +114,7 @@ class AgentManager:
         This function retrieves all enabled agent names and their corresponding
         classes, constructs AgenticFlow objects for each, and adds the leader
         manually.
+
         Returns:
             List of AgenticFlow objects representing all available agentic flows.
         """
@@ -135,7 +132,6 @@ class AgentManager:
             if (agent_class := get_agent_class(agent_name))
         ]
 
-        # Add Fred manually
         flows.append(
             AgenticFlow(
                 name=Leader.name,

@@ -13,7 +13,7 @@ import DescriptionIcon from '@mui/icons-material/Description';
 import { useState, useEffect } from "react";
 
 /**
- * Dialog component for adding or editing context cards
+ * Dialog component for adding or editing context
  *
  * @param {Object} props - Component props
  * @param {boolean} props.open - Whether the dialog is open
@@ -78,17 +78,17 @@ const ContextCardDialog = ({ open, onClose, card, onSave }) => {
       maxWidth="sm"
     >
       <DialogTitle>
-        {card ? "Edit Context Card" : "Add New Context Card"}
+        {card ? "Edit Context" : "Add New Context"}
       </DialogTitle>
       <DialogContent>
         <DialogContentText sx={{ mb: 2 }}>
-          Context cards help the agent understand specific domain knowledge for better responses.
+          Context help the agent understand specific domain knowledge for better responses.
         </DialogContentText>
         <TextField
           autoFocus
           margin="dense"
           id="card-title"
-          label="Card Title"
+          label="Title"
           fullWidth
           variant="outlined"
           value={title}
@@ -106,7 +106,7 @@ const ContextCardDialog = ({ open, onClose, card, onSave }) => {
         <TextField
           margin="dense"
           id="card-content"
-          label="Card Content"
+          label="Content"
           fullWidth
           multiline
           rows={6}

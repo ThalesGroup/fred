@@ -8,7 +8,7 @@ import {
 } from '@mui/material';
 
 /**
- * DeleteConfirmationDialog component for confirming deletion of context cards
+ * DeleteConfirmationDialog component for confirming deletion of context
  * 
  * @param {Object} props - Component props
  * @param {boolean} props.open - Whether the dialog is open
