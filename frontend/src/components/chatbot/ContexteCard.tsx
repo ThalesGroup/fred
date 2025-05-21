@@ -35,11 +35,31 @@ const ContextCard = ({ card, onEdit, onDelete }) => {
       flexDirection: 'column'
     }}>
       <CardContent sx={{ flexGrow: 1 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-          <Typography variant="subtitle1" component="h3" sx={{ fontWeight: 600 }}>
+        <Box
+          sx={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'flex-start',
+            gap: 1,
+            mb: 1
+          }}
+        >
+          <Typography
+            variant="subtitle1"
+            component="h3"
+            sx={{
+              fontWeight: 600,
+              flexGrow: 1,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              display: '-webkit-box',
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: 'vertical'
+            }}
+          >
             {card.title || "Untitled background information"}
           </Typography>
-          <Box>
+          <Box sx={{ display: 'flex', flexShrink: 0 }}>
             <IconButton size="small" onClick={() => onEdit(card)} sx={{ color: 'primary.main' }}>
               <EditIcon fontSize="small" />
             </IconButton>
@@ -48,7 +68,9 @@ const ContextCard = ({ card, onEdit, onDelete }) => {
             </IconButton>
           </Box>
         </Box>
+
         <Divider sx={{ mb: 2 }} />
+
         <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
           {card.content || "(empty background)"}
         </Typography>

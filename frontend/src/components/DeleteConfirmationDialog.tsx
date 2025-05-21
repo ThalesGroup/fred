@@ -26,11 +26,11 @@ const DeleteConfirmationDialog = ({ open, onClose, card, onConfirm }) => {
       aria-describedby="delete-dialog-description"
     >
       <DialogTitle id="delete-dialog-title">
-        Delete Context Card
+        Delete Context
       </DialogTitle>
       <DialogContent>
         <DialogContentText id="delete-dialog-description">
-          Are you sure you want to delete the context card "{card?.title}"?
+          Are you sure you want to delete the context "{card?.title}"?
           This action cannot be undone.
         </DialogContentText>
       </DialogContent>
