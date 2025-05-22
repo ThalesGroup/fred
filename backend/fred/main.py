@@ -180,6 +180,7 @@ def main():
         host=args.server_address,
         port=args.server_port,
         log_level=args.server_log_level,
+        loop="asyncio"
     )
 
 def configure_logging():

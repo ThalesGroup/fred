@@ -21,6 +21,7 @@ from model_factory import get_structured_chain
 from fred.common.structure import AgentSettings, Configuration, ServicesSettings
 from fred.model_factory import get_model
 from langchain_core.language_models.base import BaseLanguageModel
+from langchain_mcp_adapters.client import MultiServerMCPClient
 from flow import AgentFlow, Flow  # Base class for all agent flows
 import logging
 from config.minio_settings import minio_settings
@@ -30,6 +31,8 @@ from config.minio_settings import minio_settings
 from minio import Minio
 
 logger = logging.getLogger(__name__)
+
+SUPPORTED_TRANSPORTS = ["sse", "streamable_http", "websocket"] # No STDIO transport as we need a URL in the mcp_servers configuration
 
 # -------------------------------
 # Public access helper functions
@@ -179,7 +182,17 @@ def get_context_service() -> Any:
     """
     return get_app_context().get_context_service()
 
+def get_mcp_client_for_agent(agent_name: str) -> None:
+    """
+    Retrieves the AI MCP client configuration instance for a given agent.
 
+    Args:
+        agent_name (str): The name of the agent.
+
+    Returns:
+        MultiServerMCPClient: A connection to a multi MCP server
+    """
+    return get_app_context().get_mcp_client_for_agent(agent_name)
 # -------------------------------
 # Runtime status class
 # -------------------------------
@@ -350,6 +363,31 @@ class ApplicationContext:
         agent_settings = self.get_agent_settings(agent_name)
         return get_model(agent_settings.model)
 
+    def get_mcp_client_for_agent(self, agent_name) -> None:
+        import asyncio
+        import nest_asyncio
+        nest_asyncio.apply() # required to allow nested event loops @TODO Maybe find a more clever way to handle it
+        
+        mcp_client = MultiServerMCPClient()
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(self.connect_to_mcp_server(agent_name, mcp_client))
+        return mcp_client
+        
+    async def connect_to_mcp_server(self, agent_name: str, mcp_client: MultiServerMCPClient) -> MultiServerMCPClient:
+        agent_settings = self.get_agent_settings(agent_name)
+        for server in agent_settings.mcp_servers:
+            if server.transport in SUPPORTED_TRANSPORTS:
+                try:
+                    await mcp_client.connect_to_server(server_name=server.name,
+                                                    url=server.url,
+                                                    transport=server.transport,
+                                                    sse_read_timeout=server.sse_read_timeout)
+                except Exception as e:
+                    logger.error(f"Error when connecting to the {server.name} MCP server: {e}. Make sure it is up and running.")
+            else:
+                logger.error(f"Unsupported transport: must be one of {SUPPORTED_TRANSPORTS}")
+        return mcp_client
+      
     # --- Agent classes ---
 
     def get_enabled_agent_names(self) -> List[str]:
