@@ -15,7 +15,7 @@ frontend_settings:
   feature_flags:
     # If true acuivate the backend and frontend modules in charge of K8 
     # and frugality monitoring
-    enableK8Features: true
+    enableK8Features: false
     # If true activate support for an electronic warfare demonstration
     enableElecWarfare: false
   properties:
@@ -94,7 +94,7 @@ ai:
     # The Monitoring expert requires you activate the 'enableK8Features' flags above
     - name: "MonitoringExpert"
       class_path: "agents.monitoring.monitoring_expert.MonitoringExpert"
-      enabled: true
+      enabled: false
       categories:
         - "monitoring"
         - "observability"
