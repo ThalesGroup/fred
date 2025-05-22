@@ -28,7 +28,7 @@ langchain-ollama = "^0.3.0"
 minio = "^7.2.15"
 pytest-asyncio = "^0.26.0"
 python-multipart = "^0.0.20"
-
+nest-asyncio="^1.6.0"
 
 [tool.poetry.group.dev.dependencies]
 pylint = "^3.3.1"
