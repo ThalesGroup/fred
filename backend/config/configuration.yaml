@@ -15,7 +15,7 @@ frontend_settings:
   feature_flags:
     # If true acuivate the backend and frontend modules in charge of K8 
     # and frugality monitoring
-    enableK8Features: false
+    enableK8Features: true
     # If true activate support for an electronic warfare demonstration
     enableElecWarfare: false
   properties:
@@ -70,7 +70,7 @@ ai:
   agents:
     - name: K8SOperatorExpert
       class_path: "agents.kubernetes_monitoring.k8s_operator_expert.K8SOperatorExpert"
-      enabled: true
+      enabled: false
       mcp_servers:
         - name: k8s-mcp-server
           transport: sse
@@ -91,8 +91,16 @@ ai:
         chunk_overlap: 64
         knowledge_flow_url: "http://localhost:8111/knowledge/v1" 
       model: {}
+    # The Monitoring expert requires you activate the 'enableK8Features' flags above
+    - name: "MonitoringExpert"
+      class_path: "agents.monitoring.monitoring_expert.MonitoringExpert"
+      enabled: true
+      categories:
+        - "monitoring"
+        - "observability"
+      model: {}
       
-# Where to save fred produced resources like Essentials or Score
+# Where to save fred produced resources like Essentials or Scores
 # and external resources like Kubernetes Workload descriptions
 dao:
   type: "file"  # Currently the only one supported

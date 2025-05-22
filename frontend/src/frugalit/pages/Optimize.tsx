@@ -21,7 +21,6 @@ import {
 import { OptimizeGainCard } from "../../common/OptimizeGainCard.tsx";
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
-import { DateRangePicker } from '@mui/x-date-pickers-pro/DateRangePicker';
 import { ElectricityMixChart } from "../../common/energy/ElectricityMixChart.tsx";
 import { ElectricityGco2 } from "../../common/energy/ElectricityGco2.tsx";
 import { useSearchParams } from "react-router-dom";
@@ -159,12 +158,12 @@ export const Optimize = () => {
     }
   };
 
-  const handleDateChange = (newRange: [Dayjs | null, Dayjs | null]) => {
+  /* const handleDateChange = (newRange: [Dayjs | null, Dayjs | null]) => {
     setStart(undefined);
     setEnd(undefined);
     setStart(newRange[0]);
     setEnd(newRange[1]);
-  };
+  }; */
   
   // Check if the current cluster overview is available and the alias matches the clusterName
     // If not, navigate to the correct cluster overview page. This is typically used to sync the URL
@@ -208,10 +207,12 @@ export const Optimize = () => {
           <Grid2 size={{ xs: 3, sm: 3, md: 3, lg: 3, xl: 3 }} display="flex" justifyContent="flex-start">
             {/* First item (aligned to the left) */}
             <LocalizationProvider dateAdapter={AdapterDayjs}>
+            {/* 
               <DateRangePicker
                 value={[start, end]}
                 onChange={handleDateChange}
               />
+              */}
             </LocalizationProvider>
           </Grid2>
 
