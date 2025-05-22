@@ -56,7 +56,7 @@ logger = logging.getLogger(__name__)
 
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(dotenv_path="./config/.env")
 
 
 def usage():

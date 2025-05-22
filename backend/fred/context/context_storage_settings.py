@@ -14,7 +14,7 @@ class ContextStorageSettings(BaseModel):
     options: Dict[str, Any] = Field(default_factory=dict, description="Storage backend options")
     
     @classmethod
-    def from_yaml(cls, config_path: str = "config/configuration.yaml") -> "ContextStorageSettings":
+    def from_yaml(cls, config_path: str = "./config/configuration.yaml") -> "ContextStorageSettings":
         """
         Load settings from YAML configuration file.
         """
