@@ -68,6 +68,15 @@ ai:
       enabled: true
       model: {}
   agents:
+    - name: K8SOperatorExpert
+      class_path: "agents.kubernetes_monitoring.k8s_operator_expert.K8SOperatorExpert"
+      enabled: true
+      mcp_servers:
+        - name: k8s-mcp-server
+          transport: sse
+          url: http://localhost:8081/sse
+          sse_read_timeout: 600 # 10 minutes. It is 5 minutes by default but it is too short.
+      model: {}
     - name: "GeneralistExpert"
       class_path: "agents.generalist.generalist_expert.GeneralistExpert"
       enabled: true

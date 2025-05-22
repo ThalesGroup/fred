@@ -105,6 +105,11 @@ class ModelConfiguration(BaseModel):
     temperature: Optional[float] = Field(0.0, description="Temperature setting for the model.")
     provider_settings: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Additional provider-specific settings, e.g., Azure deployment name.")
 
+class MCPServerConfiguration(BaseModel):
+    name: str = Field(None, description="Name of the MCP server")
+    transport: Optional[str] = Field("sse", description="MCP server transport. Can be sse, websocket or streamable_http")
+    url: str = Field(None, description="URL and endpoint of the MCP server")
+    sse_read_timeout: int = Field(60 * 5, description="How long (in seconds) the client will wait for a new event before disconnecting")
 
 class PathOrIndexPrefix(BaseModel):
     energy_mix: str
@@ -166,6 +171,7 @@ class AgentSettings(BaseModel):
     settings: Dict[str, Any] = Field(default_factory=dict, description="Agent-specific settings (e.g., document directory, chunk size).")
     model: ModelConfiguration = Field(default_factory=ModelConfiguration, description="AI model configuration for this agent.")
     tag: Optional[str] = Field(None, description="Tag of the agent")
+    mcp_servers: List[MCPServerConfiguration] = Field(default_factory=list, description="List of MCP servers associated to an agent.")
 
 
 class AIConfig(BaseModel):

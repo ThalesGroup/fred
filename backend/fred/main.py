@@ -56,7 +56,7 @@ logger = logging.getLogger(__name__)
 
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(dotenv_path="./config/.env")
 
 
 def usage():
@@ -180,6 +180,7 @@ def main():
         host=args.server_address,
         port=args.server_port,
         log_level=args.server_log_level,
+        loop="asyncio"
     )
 
 def configure_logging():
