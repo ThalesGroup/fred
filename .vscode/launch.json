@@ -5,6 +5,7 @@
       "name": "Run Fred Backend",
       "type": "debugpy",
       "request": "launch",
+      "cwd": "${workspaceFolder}/backend",
       "program": "${workspaceFolder}/backend/fred/main.py",
       "console": "integratedTerminal",
       "justMyCode": false,
