@@ -22,7 +22,7 @@ This project is maintained by a core team at **Thales**, in collaboration with e
 
 ### Communication
 
-- Internal team coordination is handled via Thales tools (email, Slack, GitLab).
+- Internal team coordination is handled via Thales tools (email, GitLab).
 - External collaboration happens via **GitHub issues and pull requests**.
 
 ---
@@ -87,7 +87,8 @@ All contributions must be compatible with the project’s open source license (s
 - Follow the existing formatting and structure.
 - Write **clear, consistent, and maintainable** code.
 - Prefer readability and clarity over cleverness.
-- Use tools like `black`, `ruff`, and `mypy` if configured.
+- We recommend using tools such as `prettier` in Javascript or `black` in Python to format your code.
+- Please respect the conventions in effect for the following languages : PEP8 in Python and ECMAScript in Javascript
 
 ---
 
@@ -117,6 +118,48 @@ Ensure tests pass **before** opening a pull request.
   - Motivation and expected behavior (if a feature)
 
 ---
+
+## Commit Writing
+
+### Common Types
+
+| Type       | Description                                                        |
+|------------|--------------------------------------------------------------------|
+| `feat`     | Introduces a new feature                                           |
+| `fix`      | Fixes a bug                                                        |
+| `docs`     | Documentation-only changes                                         |
+| `style`    | Code style changes (formatting, missing semi-colons, etc.)         |
+| `refactor` | Code changes that neither fix a bug nor add a feature              |
+| `test`     | Adding or modifying tests                                          |
+| `chore`    | Routine tasks (build scripts, dependencies, etc.)                  |
+| `perf`     | Performance improvements                                           |
+| `build`    | Changes that affect the build system or dependencies               |
+| `ci`       | Changes to CI configuration files and scripts                      |
+| `revert`   | Reverts a previous commit                                          |
+
+### Examples
+
+- `feat: add login page`
+- `fix(auth): handle token expiration correctly`
+- `docs(readme): update installation instructions`
+- `refactor(core): simplify validation logic`
+- `chore: update eslint to v8`
+
+### Resources
+
+- [Conventional Commits Specification](https://www.conventionalcommits.org/)
+
+### VSCode
+
+- Extension for easier commit writing : [VSCode Conventional Commits](https://marketplace.visualstudio.com/items?itemName=vivaxy.vscode-conventional-commits)
+
+### Clean Commit History
+
+If your branch has a messy or noisy commit history (e.g. "fix typo", "oops", "test again", etc.), we encourage you to squash your commits before merging.
+
+Squashing helps keep the main branch history clean, readable, and easier to debug.
+
+Tip: Use git rebase -i or select "Squash and merge" when merging the PR.
 
 ## 📬 Contact
 
