@@ -1,3 +1,17 @@
+// Copyright Thales 2025
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 import {
   createBrowserRouter,
   RouteObject,
@@ -21,6 +35,9 @@ import { FootprintContextProvider } from "./FootprintContextProvider";
 import { ExplainContextProvider } from "./ExplainContextProvider";
 import { FeatureFlagKey, isFeatureEnabled } from "../common/config";
 import { LayoutWithSidebar } from "./LayoutWithSidebar";
+import { Explain } from "../frugalit/pages/Explain";
+import { Facts } from "../frugalit/pages/Facts";
+import { Audit } from "../pages/Audit";
 
 const RootLayout = () => (
   <ProtectedRoute permission="viewer">
@@ -46,6 +63,14 @@ export const routes: RouteObject[] = [
         element: <Scores />,
       },
       isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES) && {
+        path: "audit",
+        element: <Audit />,
+      },
+      isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES) && {
+        path: "facts",
+        element: <Facts />,
+      },
+      isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES) && {
         path: "facts-workload",
         element: <FactsWorkload />,
       },
@@ -56,6 +81,10 @@ export const routes: RouteObject[] = [
       isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES) && {
         path: "facts-namespace",
         element: <FactsNamespace />,
+      },
+      isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES) && {
+        path: "explain",
+        element: <Explain />,
       },
       isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES) && {
         path: "explain-cluster",

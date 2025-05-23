@@ -1,3 +1,17 @@
+// Copyright Thales 2025
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 import {
   Box, FormControl,
   Grid2, InputLabel,
@@ -21,7 +35,6 @@ import {
 import { OptimizeGainCard } from "../../common/OptimizeGainCard.tsx";
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
-import { DateRangePicker } from '@mui/x-date-pickers-pro/DateRangePicker';
 import { ElectricityMixChart } from "../../common/energy/ElectricityMixChart.tsx";
 import { ElectricityGco2 } from "../../common/energy/ElectricityGco2.tsx";
 import { useSearchParams } from "react-router-dom";
@@ -36,20 +49,22 @@ enum Delta {
 }
 
 // Function to get the start and end date of the previous month
-const getPreviousMonthDateRange = (): [Dayjs, Dayjs] => {
+/* const getPreviousMonthDateRange = (): [Dayjs, Dayjs] => {
   const now = dayjs();
   const startOfPreviousMonth = now.subtract(1, 'month').startOf('month');
   const endOfPreviousMonth = now.subtract(1, 'month').endOf('month');
   return [startOfPreviousMonth, endOfPreviousMonth];
-};
+}; */
 export const Optimize = () => {
   const [searchParams] = useSearchParams();
   const clusterFullName = searchParams.get("cluster");
   const theme = useTheme();
   const application_context = useContext(ApplicationContext);
   const currentClusterOverview = application_context.currentClusterOverview;
-  const [start, setStart] = useState<Dayjs | null>(getPreviousMonthDateRange()[0]);
-  const [end, setEnd] = useState<Dayjs | null>(getPreviousMonthDateRange()[1]);
+  const now = dayjs();
+  const oneMonthAgo = now.subtract(1, 'month');
+  const start = oneMonthAgo;
+  const end = now;
   const [selectedDelta, setSelectedDelta] = useState<string>(Delta.MONTH);
   const [chartRange, setChartRange] = useState<'current' | 'previous'>('current');  // New state for selecting chart range
 
@@ -159,12 +174,12 @@ export const Optimize = () => {
     }
   };
 
-  const handleDateChange = (newRange: [Dayjs | null, Dayjs | null]) => {
+  /* const handleDateChange = (newRange: [Dayjs | null, Dayjs | null]) => {
     setStart(undefined);
     setEnd(undefined);
     setStart(newRange[0]);
     setEnd(newRange[1]);
-  };
+  }; */
   
   // Check if the current cluster overview is available and the alias matches the clusterName
     // If not, navigate to the correct cluster overview page. This is typically used to sync the URL
@@ -208,10 +223,12 @@ export const Optimize = () => {
           <Grid2 size={{ xs: 3, sm: 3, md: 3, lg: 3, xl: 3 }} display="flex" justifyContent="flex-start">
             {/* First item (aligned to the left) */}
             <LocalizationProvider dateAdapter={AdapterDayjs}>
+            {/* 
               <DateRangePicker
                 value={[start, end]}
                 onChange={handleDateChange}
               />
+              */}
             </LocalizationProvider>
           </Grid2>
 
