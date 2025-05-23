@@ -49,20 +49,22 @@ enum Delta {
 }
 
 // Function to get the start and end date of the previous month
-const getPreviousMonthDateRange = (): [Dayjs, Dayjs] => {
+/* const getPreviousMonthDateRange = (): [Dayjs, Dayjs] => {
   const now = dayjs();
   const startOfPreviousMonth = now.subtract(1, 'month').startOf('month');
   const endOfPreviousMonth = now.subtract(1, 'month').endOf('month');
   return [startOfPreviousMonth, endOfPreviousMonth];
-};
+}; */
 export const Optimize = () => {
   const [searchParams] = useSearchParams();
   const clusterFullName = searchParams.get("cluster");
   const theme = useTheme();
   const application_context = useContext(ApplicationContext);
   const currentClusterOverview = application_context.currentClusterOverview;
-  const [start, setStart] = useState<Dayjs | null>(getPreviousMonthDateRange()[0]);
-  const [end, setEnd] = useState<Dayjs | null>(getPreviousMonthDateRange()[1]);
+  const now = dayjs();
+  const oneMonthAgo = now.subtract(1, 'month');
+  const start = oneMonthAgo;
+  const end = now;
   const [selectedDelta, setSelectedDelta] = useState<string>(Delta.MONTH);
   const [chartRange, setChartRange] = useState<'current' | 'previous'>('current');  // New state for selecting chart range
 
