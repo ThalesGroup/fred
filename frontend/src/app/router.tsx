@@ -35,6 +35,9 @@ import { FootprintContextProvider } from "./FootprintContextProvider";
 import { ExplainContextProvider } from "./ExplainContextProvider";
 import { FeatureFlagKey, isFeatureEnabled } from "../common/config";
 import { LayoutWithSidebar } from "./LayoutWithSidebar";
+import { Explain } from "../frugalit/pages/Explain";
+import { Facts } from "../frugalit/pages/Facts";
+import { Audit } from "../pages/Audit";
 
 const RootLayout = () => (
   <ProtectedRoute permission="viewer">
@@ -60,6 +63,14 @@ export const routes: RouteObject[] = [
         element: <Scores />,
       },
       isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES) && {
+        path: "audit",
+        element: <Audit />,
+      },
+      isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES) && {
+        path: "facts",
+        element: <Facts />,
+      },
+      isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES) && {
         path: "facts-workload",
         element: <FactsWorkload />,
       },
@@ -70,6 +81,10 @@ export const routes: RouteObject[] = [
       isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES) && {
         path: "facts-namespace",
         element: <FactsNamespace />,
+      },
+      isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES) && {
+        path: "explain",
+        element: <Explain />,
       },
       isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES) && {
         path: "explain-cluster",

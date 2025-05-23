@@ -55,48 +55,49 @@ export default function SideBar({ darkMode, onThemeChange }) {
 
   // Éléments de menu du premier fichier
   const menuItems = [
-    
+
     ...(isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES) ? [
-    {
-      key: 'explain',
-      label: 'Cluster',
-      icon: <AssistantIcon />,
-      url: `/explain?cluster=${currentClusterFullname}`,
-      canBeDisabled: true,
-      tooltip: 'Explain the cluster'
-    },
-    {
-      key: 'facts',
-      label: 'Facts',
-      icon: <AssistantIcon />,
-      url: `/facts?cluster=${currentClusterFullname}`,
-      canBeDisabled: true,
-      tooltip: 'Checkout the business and usage facts associated with the cluster'
-    },
-    {
-      key: 'audit',
-      label: 'Scores',
-      icon: <AssessmentIcon />,
-      url: `/audit?cluster=${currentClusterFullname}`,
-      canBeDisabled: true,
-      tooltip: 'View a complete eco-score audit of the selected cluster'
-    },{
-      key: 'chat',
-      label: 'Chat',
-      icon: <ChatIcon />,
-      url: `/chat?cluster=${currentClusterFullname}`,
-      canBeDisabled: false,
-      tooltip: 'Chat with the AI assistant team'
-    }
+      {
+        key: 'explain',
+        label: 'Cluster',
+        icon: <AssistantIcon />,
+        url: `/explain?cluster=${currentClusterFullname}`,
+        canBeDisabled: true,
+        tooltip: 'Explain the cluster'
+      },
+      {
+        key: 'facts',
+        label: 'Facts',
+        icon: <AssistantIcon />,
+        url: `/facts?cluster=${currentClusterFullname}`,
+        canBeDisabled: true,
+        tooltip: 'Checkout the business and usage facts associated with the cluster'
+      },
+      {
+        key: 'audit',
+        label: 'Audit',
+        icon: <AssessmentIcon />,
+        url: `/audit?cluster=${currentClusterFullname}`,
+        canBeDisabled: true,
+        tooltip: 'View a complete eco-score audit of the selected cluster'
+      }
+      , {
+        key: 'chat',
+        label: 'Chat',
+        icon: <ChatIcon />,
+        url: `/chat?cluster=${currentClusterFullname}`,
+        canBeDisabled: false,
+        tooltip: 'Chat with the AI assistant team'
+      }
     ] : [
       {
-      key: 'chat',
-      label: 'Chat',
-      icon: <ChatIcon />,
-      url: `/chat`,
-      canBeDisabled: false,
-      tooltip: 'Chat with the AI assistant team'
-    },
+        key: 'chat',
+        label: 'Chat',
+        icon: <ChatIcon />,
+        url: `/chat`,
+        canBeDisabled: false,
+        tooltip: 'Chat with the AI assistant team'
+      },
     ]),
     /*
     {
@@ -115,7 +116,7 @@ export default function SideBar({ darkMode, onThemeChange }) {
       canBeDisabled: true,
       tooltip: 'Check the optimization gains on the selected cluster'
     },*/
-     {
+    {
       key: 'agent',
       label: 'Agent Hub',
       icon: <GroupIcon />,
@@ -139,14 +140,14 @@ export default function SideBar({ darkMode, onThemeChange }) {
       canBeDisabled: false,
       tooltip: 'View your profile'
     },
-   
+
   ];
 
   const { isSidebarCollapsed, toggleSidebar } = applicationContext;
   const isSidebarSmall = smallScreen || isSidebarCollapsed;
   const sidebarWidth = isSidebarCollapsed
-  ? theme.layout.sidebarCollapsedWidth
-  : theme.layout.sidebarWidth;
+    ? theme.layout.sidebarCollapsedWidth
+    : theme.layout.sidebarWidth;
   // Vérifier si un élément de menu est actif
   const isActive = (path) => {
     // Extraire le chemin de base sans les paramètres de requête
@@ -258,7 +259,7 @@ export default function SideBar({ darkMode, onThemeChange }) {
         </Box>
       )}
 
-      {!isSidebarSmall && isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES) &&  (
+      {!isSidebarSmall && isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES) && (
         <Box sx={{ pt: 3, px: 2 }}>
           <SideBarClusterSelector
             currentClusterOverview={applicationContext.currentClusterOverview}
