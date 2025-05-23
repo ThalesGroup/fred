@@ -11,21 +11,15 @@ Describe here all the security policies in place on this repository to help your
 
 ## Supported Versions
 
-Use this section to tell people about which versions of your project are currently being supported with security updates.
+No versions of this project is currently being supported with security updates. 
+This will only occur when a first official 0.1 release is reached.
 
-| Version | Supported          |
-| ------- | ------------------ |
-| 5.1.x   | :white_check_mark: |
-| 5.0.x   | :x:                |
-| 4.0.x   | :white_check_mark: |
-| < 4.0   | :x:                |
 
 ## Reporting a Vulnerability
 
-Use this section to tell people how to report a vulnerability.
-Tell them where to go, how often they can expect to get an update on a reported vulnerability, what to expect if the vulnerability is accepted or declined, etc.
-
-You can ask for support by contacting security@opensource.thalesgroup.com
+This said do not hesitate to report security issues. The github project (and gitlab mirrors) are equiped with dependabots.
+Feel free to use your own tooling to analyse the code. We will be prompt to remove the vulnerabilities. Fell free to 
+propose update on your own that we will happily integrate. 
 
 ## Disclosure policy
 
