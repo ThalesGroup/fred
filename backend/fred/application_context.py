@@ -31,6 +31,12 @@ import pathlib
 from threading import Lock
 from typing import Dict, List, Type, Any
 from pydantic import BaseModel
+from feedback.setting.feedback_store_opensearch_settings import FeedbackStoreOpenSearchSettings
+from feedback.feedback_service import FeedbackService
+from feedback.setting.feedback_store_local_settings import FeedbackStoreLocalSettings
+from feedback.setting.feedback_store_minio_settings import FeedbackStoreMinioSettings
+from feedback.store.local_feedback_store import LocalFeedbackStore
+from feedback.store.opensearch_feedback_store import OpenSearchFeedbackStore
 from context.setting.context_store_minio_settings import ContextStoreMinioSettings
 from context.setting.context_store_local_settings import ContextStoreLocalSettings
 from context.store.local_context_store import LocalContextStore
@@ -97,6 +103,7 @@ def get_app_context() -> "ApplicationContext":
     Raises:
         RuntimeError: If the context has not been initialized yet.
     """
+    print("[DEBUG] >>> get_app_context called, instance =", ApplicationContext._instance)
     if ApplicationContext._instance is None:
         raise RuntimeError("ApplicationContext is not yet initialized")
     return ApplicationContext._instance
@@ -206,11 +213,37 @@ def _create_context_service():
     return LocalContextStore(settings.root_path)
 
 
+
+def _create_feedback_service():
+    storage_backend = os.getenv("FEEDBACK_STORAGE_BACKEND", "local").lower()
+    if storage_backend == "opensearch":
+        settings = FeedbackStoreOpenSearchSettings()
+        store = OpenSearchFeedbackStore(
+            host=settings.opensearch_host,
+            port=9200,  # You can make this configurable too
+            index=settings.opensearch_feedback_index,
+            user=settings.opensearch_user,
+            password=settings.opensearch_password,
+            use_ssl=settings.opensearch_secure
+        )
+
+    else:
+        settings = FeedbackStoreLocalSettings()
+        store = LocalFeedbackStore(settings.root_path)
+
+    return FeedbackService(store)
+
+
+
 def get_context_service():
     """
     Public accessor for the context service instance.
     """
     return get_app_context().get_context_service()
+
+def get_feedback_service():
+    return get_app_context().get_feedback_service()
+
 
 def get_mcp_client_for_agent(agent_name: str) -> None:
     """
@@ -268,8 +301,10 @@ class ApplicationContext:
     _instance = None
     _lock = Lock()
     context_service = _create_context_service()
+    feedback_service = _create_feedback_service()
 
     def __new__(cls, configuration: Configuration = None):
+        print("[DEBUG] >>> Initializing ApplicationContext with config")
         with cls._lock:
             if cls._instance is None:
                 if configuration is None:
@@ -282,6 +317,7 @@ class ApplicationContext:
                 cls._instance._service_instances = {}  # Cache for service instances
                 cls._instance.apply_default_models()
                 cls._instance.context_service = _create_context_service()
+                cls._instance.feedback_service = _create_feedback_service()
                 cls._instance._build_indexes()
 
                 # ✅ Dynamically load agent classes based on configuration
@@ -485,3 +521,6 @@ class ApplicationContext:
         Returns the singleton ContextService instance.
         """
         return self.context_service
+
+    def get_feedback_service(self):
+        return self.feedback_service

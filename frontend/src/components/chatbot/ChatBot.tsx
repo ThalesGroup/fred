@@ -351,7 +351,8 @@ const ChatBot = (
                     <MessagesArea
                         key={currentChatBotSession?.id}
                         messages={messages}
-                        agenticFlows={agenticFlows} />
+                        agenticFlows={agenticFlows}
+                        currentAgenticFlow={currentAgenticFlow} />
                     {waitResponse && (
                         <Grid2 size='grow' marginTop={5}>
                             <DotsLoader dotColor={theme.palette.text.primary} />

@@ -16,8 +16,7 @@ import { Box, Grid2, IconButton, Tooltip, Chip } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import { useState } from "react";
-import ThumbUpIcon from '@mui/icons-material/ThumbUp';
-import ThumbDownIcon from '@mui/icons-material/ThumbDown';
+import RateReviewIcon from '@mui/icons-material/RateReview';
 import VolumeUpIcon from '@mui/icons-material/VolumeUp';
 import ClearIcon from "@mui/icons-material/Clear";
 import { usePostSpeechTextMutation } from "../../frugalit/slices/api.tsx";
@@ -37,14 +36,16 @@ export default function Message(
         side,
         enableCopy = false,
         enableThumbs = false,
-        enableAudio = false
+        enableAudio = false,
+        currentAgenticFlow
     }: {
         message: ChatMessagePayload
         agenticFlow: AgenticFlow
         side: string,
         enableCopy?: boolean,
         enableThumbs?: boolean,
-        enableAudio?: boolean
+        enableAudio?: boolean,
+        currentAgenticFlow: AgenticFlow
     }) {
 
     const theme = useTheme();
@@ -55,25 +56,23 @@ export default function Message(
 
     const [audioToSpeech, setAudioToSpeech] = useState<HTMLAudioElement>(null);
     const [feedbackOpen, setFeedbackOpen] = useState(false);
-    const [feedbackType, setFeedbackType] = useState<'up' | 'down'>('up');
-    const handleFeedbackSubmit = (rating: number, reason: string) => {
-        postFeedback({ rating, reason, feedbackType }).then((result) => {
+    const handleFeedbackSubmit = (rating: number, comment?: string) => {
+        postFeedback({
+            rating,
+            comment,
+            messageId: message.id,
+            sessionId: message.session_id,
+            agentName: currentAgenticFlow.name ?? "unknown"
+        }).then((result) => {
             if (result.error) {
-                showError({
-                    summary: 'Error submitting feedback',
-                    detail: extractHttpErrorMessage(result.error)
-                });
-                console.error("Failed to submit feedback:", result.error);
+                showError({ summary: 'Error submitting feedback', detail: extractHttpErrorMessage(result.error) });
             } else {
-                showInfo({
-                    summary: 'Feedback submitted',
-                    detail: 'Thank you for your feedback!'
-                });
-                console.log("Feedback submitted successfully:", result.data);
+                showInfo({ summary: 'Feedback submitted', detail: 'Thank you!' });
             }
         });
         setFeedbackOpen(false);
     };
+    
 
     // Function to start speaking the message content
     const handleStartSpeaking = (message: string) => {
@@ -158,16 +157,9 @@ export default function Message(
                                 }
                                 {enableThumbs && <>
                                     <IconButton aria-label="thumb up" size="small" onClick={() => {
-                                        setFeedbackType('up');
                                         setFeedbackOpen(true);
                                     }}>
-                                        <ThumbUpIcon fontSize="medium" color="inherit" />
-                                    </IconButton>
-                                    <IconButton aria-label="thumb down" size="small" onClick={() => {
-                                        setFeedbackType('down');
-                                        setFeedbackOpen(true);
-                                    }}>
-                                        <ThumbDownIcon fontSize="medium" color="inherit" />
+                                        <RateReviewIcon fontSize="medium" color="inherit" />
                                     </IconButton>
                                 </>
                                 }
@@ -209,7 +201,6 @@ export default function Message(
                 open={feedbackOpen}
                 onClose={() => setFeedbackOpen(false)}
                 onSubmit={handleFeedbackSubmit}
-                feedbackType={feedbackType}
             />
         </>
     )
