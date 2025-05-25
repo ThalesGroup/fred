@@ -44,7 +44,9 @@ class ChatMessagePayload(BaseModel):
     session_id: str
     rank: Optional[int] = None
     metadata: Optional[Dict[str, Union[str, int, float, dict, list]]] = Field(default_factory=dict)
-
+    subtype: Optional[Literal[
+        "final", "thought", "tool_result", "plan", "execution", "observation", "error"
+    ]] = None
     def with_metadata(
         self,
         model: Optional[str] = None,

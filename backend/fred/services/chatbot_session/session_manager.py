@@ -41,6 +41,7 @@ CallbackType = Union[Callable[[Dict], None], Callable[[Dict], Awaitable[None]]]
 _session_counter = 0
 
 
+
 class SessionManager:
     """
     Manages user sessions and interactions with the chatbot.
@@ -59,6 +60,51 @@ class SessionManager:
         self.context_cache = {}  # Cache for agent contexts
         self.temp_files: dict[str, list[str]] = defaultdict(list)
         self.attachement_processing = AttachementProcessing()
+
+    def _infer_message_subtype2(self, metadata: dict, message_type: str | None = None) -> Optional[str]:
+        """
+        Infers the semantic subtype of a message based on its metadata and optionally its message type.
+        """
+        finish_reason = metadata.get("finish_reason")
+        if finish_reason == "stop":
+            return "final"
+        if finish_reason == "tool_calls":
+            return "tool_result"
+
+        # Handle system/tool messages even if finish_reason is missing
+        if message_type == "tool":
+            return "tool_result"
+
+        if metadata.get("thought") is True:
+            fred = metadata.get("fred", {})
+            node = fred.get("node")
+            if node == "plan":
+                return "plan"
+            if node == "execute":
+                return "execution"
+            return "thought"
+
+        if metadata.get("error"):
+            return "error"
+
+        return None
+
+    def _infer_message_subtype(self,
+                               metadata: dict) -> Optional[str]:
+        if metadata.get("finish_reason") == "stop":
+            return "final"
+        if metadata.get("finish_reason") == "tool_calls":
+            return "tool_result"
+        if metadata.get("thought") is True:
+            fred = metadata.get("fred", {})
+            if fred.get("node") == "plan":
+                return "plan"
+            elif fred.get("node") == "execute":
+                return "execution"
+            return "thought"
+        if metadata.get("error"):
+            return "error"
+        return None
 
     def _get_or_create_session(self, 
                                user_id: str, 
@@ -124,6 +170,8 @@ class SessionManager:
             agent_name=agent_name
         )
         assistant_id = str(uuid4())
+
+        # Step 2: Run agent and stream back enriched ChatMessagePayloads
         all_messages = await self._stream_agent_response(
             compiled_graph=agent.get_compiled_graph(),
             input_messages=history,
@@ -131,17 +179,17 @@ class SessionManager:
             callback=callback,
             assistant_id=assistant_id,
         )
-        # Update session
+
+        # Step 3: Save session metadata
         session.updated_at = datetime.now()
         self.storage.save_session(session)
-           # Generate ChatMessagePayloads
-           # Count only user messages in prior history
+
+        # Step 4: Create the user message payload
         user_turn_index = sum(1 for m in history if isinstance(m, HumanMessage))
         base_rank = user_turn_index * 10
-        #user_turn_index = (len(history) - 1) // 2  # Human/AI alternating, so user turns index = floor(n / 2)
-        #base_rank = user_turn_index * 10  # Leave room for multiple AI thoughts
         timestamp = datetime.now().isoformat()
-
+        metadata = clean_agent_metadata(getattr(message, "response_metadata", getattr(message, "metadata", {})) or {})
+        subtype = self._infer_message_subtype2(metadata, message.type if isinstance(message, BaseMessage) else None)
         user_payload = ChatMessagePayload(
             id=assistant_id,
             type="human",
@@ -150,41 +198,22 @@ class SessionManager:
             timestamp=timestamp,
             session_id=session.id,
             rank=base_rank,
+            subtype=subtype
         )
-        # Create assistant/system payloads
-        response_payloads = []
-        for i, msg in enumerate(all_messages):
-            msg_type = "ai" if isinstance(msg, AIMessage) else "system"
-            payload = ChatMessagePayload(
-                id=str(uuid4()),
-                type=msg_type,
-                sender="assistant" if isinstance(msg, AIMessage) else "system",
-                content=msg.content,
-                timestamp=timestamp,
-                session_id=session.id,
-                rank=base_rank  + 1 + i,  # you can adjust this as needed
-            )
-            metadata = clean_agent_metadata(
-                getattr(msg, "response_metadata", getattr(msg, "metadata", {})) or {}
-            )
-            metadata["token_usage"] = ChatTokenUsage(input_tokens=0, output_tokens=0, total_tokens=0).model_dump()
-            payload.metadata = metadata
 
-            """ if isinstance(msg, AIMessage):
-                payload = payload.with_metadata(
-                model=msg.response_metadata.get("model_name"),
-                sources=msg.response_metadata.get("sources", []),
-                token_usage=ChatTokenUsage(input_tokens=0, output_tokens=0, total_tokens=0),
+        # Step 5: Re-rank streamed assistant messages
+        for i, m in enumerate(all_messages):
+            m.rank = base_rank + 1 + i  # Incremental rank after user message
+            logger.info(
+                f"[SAVING] type={m.type} | content={m.content[:60]} | subtype={m.subtype} | fred.task={m.metadata.get('fred', {}).get('task')}"
             )
-            else:
-                payload = payload.with_metadata(
-                token_usage=ChatTokenUsage(input_tokens=0, output_tokens=0, total_tokens=0)
-            ) """
-            logger.info(f"[SAVING] type={msg_type} | content={msg.content[:60]} | thought={payload.metadata.get('thought')} | fred.task={payload.metadata.get('fred', {}).get('task')}")
-            response_payloads.append(payload)
-                
-        # Save messages to storage
-        all_payloads = [user_payload] + response_payloads
+
+        logger.info(
+            f"[SAVING] type={user_payload.type} | content={user_payload.content[:60]} | subtype={user_payload.subtype} | fred.task={user_payload.metadata.get('fred', {}).get('task') if user_payload.metadata else None}"
+        )
+
+        # Step 6: Save everything
+        all_payloads = [user_payload] + all_messages
         self.storage.save_messages(session.id, all_payloads)
         return session, all_payloads
 
@@ -216,7 +245,7 @@ class SessionManager:
             messages = self.get_session_history(session.id)
 
             for msg in messages:
-                logger.info(f"[RESTORED] id={msg.id} | type={msg.type} | thought={msg.metadata.get('thought')} | fred.task={msg.metadata.get('fred', {}).get('task')}")
+                logger.info(f"[RESTORED] id={msg.id} | type={msg.type} | subtype={msg.subtype} | fred.task={msg.metadata.get('fred', {}).get('task')}")
                 if msg.type == "human":
                     history.append(HumanMessage(content=msg.content))
                 elif msg.type == "ai":
@@ -309,6 +338,11 @@ class SessionManager:
                 key = next(iter(event))
                 message_block = event[key].get("messages", [])
                 for message in message_block:
+                    raw_metadata = getattr(message, "response_metadata", {}) or {}
+                    cleaned_metadata = clean_agent_metadata(raw_metadata)
+                    # If LangChain returns type='tool', force subtype to 'tool_result'
+                    #subtype = self._infer_message_subtype(cleaned_metadata)
+                    subtype = self._infer_message_subtype2(cleaned_metadata, message.type if isinstance(message, BaseMessage) else None)
                     enriched = ChatMessagePayload(
                         id=assistant_id or str(uuid4()),
                         type=message.type,
@@ -316,7 +350,8 @@ class SessionManager:
                         content=message.content,
                         timestamp=datetime.now().isoformat(),
                         session_id=session_id,
-                        metadata=clean_agent_metadata(getattr(message, "response_metadata", {}) or {})
+                        metadata=cleaned_metadata,
+                        subtype=subtype
                     )
 
                     all_payloads.append(enriched)  # ✅ collect all messages
@@ -330,10 +365,10 @@ class SessionManager:
                         "metadata": clean_agent_metadata(getattr(message, "response_metadata", {}) or {})
                     } """
                     logger.info(
-                        "[STREAMED] %s\n         type=%s | thought=%s | fred.task=%s",
+                        "[STREAMED] %s\n         type=%s | subtype=%s | fred.task=%s",
                         enriched.id,
                         enriched.type,
-                        enriched.metadata.get("thought"),
+                        enriched.subtype,
                         enriched.metadata.get("fred", {}).get("task") if isinstance(enriched.metadata.get("fred"), dict) else None
                     )
 

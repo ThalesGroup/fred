@@ -13,12 +13,13 @@
 # limitations under the License.
 
 from IPython.display import Image
-from abc import ABC, abstractmethod
 import logging
+from langgraph.graph import MessagesState
 from langgraph.graph.state import CompiledStateGraph, StateGraph
 from langgraph.checkpoint.memory import MemorySaver
 from langchain_core.tools import BaseToolkit
 from langchain_core.messages import SystemMessage
+
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +62,17 @@ class Flow:
 
 class AgentFlow:
     """
-    Base class for all agent flows.
+    Represents a specialized LangGraph agent.
+
+    Key Concepts:
+    - Agents are stateful flows that use an LLM to make decisions or return outputs.
+    - Each agent can optionally use LangChain Toolkits to invoke external tools.
+    - A compiled LangGraph is built from a `StateGraph` which defines logic via nodes and edges.
+
+    Typical Usage:
+    - Subclass this to create a domain-specific expert (e.g., MonitoringExpert).
+    - Define a graph (flow), a base prompt, and optional tools.
+    - Use the built-in `reasoner()` to implement the thinking node.
     
     Attributes:
         name (str): The name of the agent.
@@ -73,6 +84,7 @@ class AgentFlow:
         base_prompt (str): The base prompt used by the agent.
         categories (list): Categories the agent belongs to.
         tag (str): Tag for the agent.
+        toolkit: the agent toolkit
     """
     
     # Class attributes for documentation/metadata
@@ -93,10 +105,12 @@ class AgentFlow:
         graph,
         base_prompt: str,
         categories=None,
-        tag=None
+        tag=None,
+        toolkit: BaseToolkit | None = None,
     ):
         """
-        Initialize the agent with its core properties.
+        Initialize the agent with its core properties. This method creates the model,
+        binds the toolkit if any.
         
         Args:
             name: The name of the agent.
@@ -120,7 +134,16 @@ class AgentFlow:
         self.tag = tag
         self.streaming_memory = MemorySaver()
         self.compiled_graph = None
-        self._context_enrichment = None  # Pour stocker le contexte temporaire
+        self._context_enrichment = None
+        self.toolkit = toolkit
+        # Import here to avoid circular import
+        from fred.application_context import get_model_for_agent
+        self.model = get_model_for_agent(self.name)
+        if self.toolkit:
+            self.model = self.model.bind_tools(self.toolkit.get_tools())
+    
+    def get_tools(self):
+        return self.toolkit.get_tools() if self.toolkit else []
     
     def get_compiled_graph(self) -> CompiledStateGraph:
         """
@@ -144,10 +167,6 @@ class AgentFlow:
         Returns:
             dict: The updated state with the expert's response.
         """
-        # Import here to avoid circular import
-        from fred.application_context import get_model_for_agent
-        
-        model = get_model_for_agent(self.name)
         
         # Build prompt including context enrichment if available
         prompt_content = self.base_prompt
@@ -161,7 +180,7 @@ class AgentFlow:
             logger.info(f"Agent '{self.name}' using standard prompt without context")
             
         prompt = SystemMessage(content=prompt_content)
-        response = await model.ainvoke([prompt] + state["messages"])
+        response = await self.model.ainvoke([prompt] + state["messages"])
         return {"messages": [response]}
     
     def set_context_enrichment(self, context_text: str):
@@ -199,3 +218,17 @@ class AgentFlow:
     def __str__(self) -> str:
         """String representation of the agent."""
         return f"{self.name} ({self.nickname}): {self.description}"
+    
+    async def reasoner(self, state: MessagesState):
+        prompt_content = self.base_prompt
+        if self._context_enrichment:
+            prompt_content += f"\n\n{self._context_enrichment}"
+            logger.info(f"[{self.name}] Using enriched prompt with context.")
+        else:
+            logger.info(f"[{self.name}] Using standard prompt.")
+
+        prompt = SystemMessage(content=prompt_content)
+        response = await self.model.ainvoke([prompt] + state["messages"])
+        return {"messages": [response]}
+
+

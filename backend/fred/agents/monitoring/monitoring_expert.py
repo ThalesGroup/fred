@@ -46,9 +46,6 @@ class MonitoringExpert(AgentFlow):
         self.current_date = datetime.now().strftime("%Y-%m-%d")
         self.toolkit = MonitoringToolkit()
         self.cluster_fullname = cluster_fullname
-        self.model = get_model_for_agent(self.name)
-        self.model_with_tools = self.model.bind_tools(self.toolkit.get_tools())
-        self.llm = self.model_with_tools
         self.agent_settings = get_agent_settings(self.name)
         self.categories = self.agent_settings.categories if self.agent_settings.categories else ["Monitoring"]
         # On conserve le tag de classe si agent_settings.tag est None ou vide
@@ -113,11 +110,6 @@ class MonitoringExpert(AgentFlow):
                 "  - Include a breakdown by components (e.g., compute, storage, network).\n"
                 "  - Present results in a structured and concise format."
             )
-
-    async def reasoner(self, state: MessagesState):
-        response = self.llm.invoke([self.base_prompt] + state["messages"])
-
-        return {"messages": [response]}
 
     def get_graph(self):
         builder = StateGraph(MessagesState)

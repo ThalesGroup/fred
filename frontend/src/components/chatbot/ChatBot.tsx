@@ -92,14 +92,14 @@ const ChatBot = (
             console.warn("[🔄 ChatBot] WebSocket was closed or closing. Resetting...");
             webSocketRef.current = null;
         }
-        console.log("[📩 ChatBot] initiate new connection:");
+        console.debug("[📩 ChatBot] initiate new connection:");
 
         return new Promise((resolve, reject) => {
             const wsUrl = `${getConfig().backend_url_api || 'ws://localhost'}/fred/chatbot/query/ws`;
             const socket = new WebSocket(wsUrl);
 
             socket.onopen = () => {
-                console.log("[✅ ChatBot] WebSocket connected");
+                console.debug("[✅ ChatBot] WebSocket connected");
                 webSocketRef.current = socket;
                 setMessages([]); // reset temporary buffer
                 resolve(socket);
@@ -112,7 +112,7 @@ const ChatBot = (
                         case "stream": {
                             const streamed = response as StreamEvent;
                             const msg = streamed.message;
-                            console.log(`receive stream event id: ${msg.id}, session_id: ${msg.session_id}, content: ${msg.content.slice(0, 200)}...`);
+                            console.debug(`receive stream event id: ${msg.id}, session_id: ${msg.session_id}, content: ${msg.content.slice(0, 200)}...`);
                             addMessage(msg);
                             break;
                         }
@@ -168,7 +168,7 @@ const ChatBot = (
                     summary: "Closed",
                     detail: "Chat connection closed after unmount."
                 });
-                console.log("Closing WebSocket before unmounting...");
+                console.debug("Closing WebSocket before unmounting...");
                 socket.close();
             }
             setWebSocket(null);
@@ -199,10 +199,10 @@ const ChatBot = (
                     console.log(`Total: ${serverMessages.length}`);
                     for (const msg of serverMessages) {
                         console.log({
-                            id: msg.id,
-                            type: msg.type,
-                            sender: msg.sender,
-                            isThought: msg.metadata?.thought || false,
+                            id: msg.id, // Unique identifier for the message
+                            type: msg.type, // e.g. "human", "assistant", "system"
+                            subtype: msg.subtype, // e.g. "thought", "execution", "tool_result"
+                            sender: msg.sender, // e.g. "user", "assistant"
                             task: msg.metadata?.fred?.task || null,
                             content: msg.content?.slice(0, 120),
                         });
