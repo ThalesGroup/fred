@@ -18,14 +18,17 @@ import Thoughts from "./Thoughts.tsx";
 import { AgenticFlow } from "../../pages/Chat.tsx";
 import Sources from "./Sources.tsx";
 import { ChatMessagePayload, FredMetadata } from '../../slices/chatApiStructures.ts';
+import { current } from '@reduxjs/toolkit';
 
 function Area(
     {
         messages,
         agenticFlows,
+        currentAgenticFlow
     }: {
         messages: ChatMessagePayload[],
-        agenticFlows: AgenticFlow[]
+        agenticFlows: AgenticFlow[],
+        currentAgenticFlow: AgenticFlow
 
     }) {
 
@@ -109,6 +112,7 @@ function Area(
                     <Message
                         message={message}
                         agenticFlow={agenticFlow}
+                        currentAgenticFlow={currentAgenticFlow}
                         side={el.sender === "user" ? "right" : "left"}
                         enableCopy={true}
                         enableThumbs={true}

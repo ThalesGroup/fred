@@ -13,63 +13,85 @@
 // limitations under the License.
 
 import React, { useState } from 'react';
-import { 
-  Button, 
-  Dialog, 
-  DialogActions, 
-  DialogContent, 
-  DialogTitle, 
-  TextField, 
-  Rating 
+import {
+  Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  TextField,
+  Rating,
+  Box,
+  Typography,
+  useTheme
 } from '@mui/material';
 
 interface FeedbackDialogProps {
   open: boolean;
   onClose: () => void;
-  onSubmit: (rating: number, reason: string) => void;
-  feedbackType: 'up' | 'down';
+  onSubmit: (rating: number, comment?: string) => void;
 }
 
-export const FeedbackDialog: React.FC<FeedbackDialogProps> = ({ open, onClose, onSubmit, feedbackType }) => {
+export const FeedbackDialog: React.FC<FeedbackDialogProps> = ({ open, onClose, onSubmit }) => {
   const [rating, setRating] = useState<number | null>(null);
-  const [reason, setReason] = useState('');
+  const [comment, setComment] = useState('');
+  const theme = useTheme();
 
   const handleSubmit = () => {
     if (rating !== null) {
-      onSubmit(rating, reason);
-      // Reset local state after submission if needed
+      onSubmit(rating, comment?.trim() || undefined);
       setRating(null);
-      setReason('');
+      setComment('');
+      onClose();
     }
   };
 
   return (
-    <Dialog open={open} onClose={onClose}>
-      <DialogTitle>
-        {feedbackType === 'up' ? 'Positive Feedback' : 'Negative Feedback'}
-      </DialogTitle>
+    <Dialog
+      open={open}
+      onClose={onClose}
+      maxWidth="md"
+      fullWidth
+      PaperProps={{
+        sx: {
+          borderRadius: 3,
+          p: 2,
+          backgroundColor: theme.palette.background.default,
+          width: '600px'  // Forcera une largeur confortable
+        }
+      }}
+    >
+      <DialogTitle sx={{ pb: 1 }}>How was this response?</DialogTitle>
       <DialogContent>
-        <Rating
-          name="feedback-rating"
-          value={rating}
-          onChange={(_, newValue) => setRating(newValue)}
-          max={5}
-        />
+        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+          <Typography sx={{ mr: 2 }}>Your rating</Typography>
+          <Rating
+            name="feedback-rating"
+            value={rating}
+            onChange={(_, newValue) => setRating(newValue)}
+            size="large"
+          />
+        </Box>
         <TextField
-          autoFocus
-          margin="dense"
-          label="Reason"
-          type="text"
+          label="Leave a comment (optional)"
+          multiline
+          rows={4}
           fullWidth
-          variant="standard"
-          value={reason}
-          onChange={(e) => setReason(e.target.value)}
-          placeholder="Tell us why..."
+          variant="outlined"
+          value={comment}
+          onChange={(e) => setComment(e.target.value)}
+          placeholder="Tell us what you liked or what could be improved..."
         />
       </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose}>Cancel</Button>
-        <Button onClick={handleSubmit} disabled={rating === null}>
+      <DialogActions sx={{ justifyContent: 'space-between', px: 3 }}>
+        <Button onClick={onClose} color="secondary" variant="text">
+          Cancel
+        </Button>
+        <Button
+          onClick={handleSubmit}
+          disabled={rating === null}
+          variant="contained"
+        >
           Submit
         </Button>
       </DialogActions>

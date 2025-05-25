@@ -15,9 +15,7 @@
 from context.store.context_storage_factory import get_context_store
 import json
 import uuid
-from typing import Optional, Dict, Any
-import os
-from pathlib import Path
+from typing import Dict, Any
 
 class ContextService:
     def __init__(self):

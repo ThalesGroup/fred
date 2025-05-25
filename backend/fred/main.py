@@ -27,6 +27,7 @@ from copy import deepcopy
 import uvicorn
 from fastapi import FastAPI, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
+from feedback.feedback_controller import FeedbackController
 from context.context_controller import ContextController
 from rich.logging import RichHandler
 
@@ -48,9 +49,7 @@ from services.mission.mission_controller import MissionController
 from services.theorical_radio.theorical_radio_controller import TheoricalRadioController
 from services.sensor.sensor_controller import SensorController
 from services.sensor.sensor_controller import SensorConfigurationController
-from services.frontend.feedback_router import router as feedback_router
 from common.connectors.database import get_engine, initialize_feedback_db
-from services.frontend.feedback_router import Base  # This Base is your declarative base for models
 
 logger = logging.getLogger(__name__)
 
@@ -171,8 +170,8 @@ def main():
     UiController(router, kube_service, ai_service)
     ChatbotController(router, ai_service)
     ContextController(router)
+    FeedbackController(router)
     app.include_router(router)
-    app.include_router(feedback_router)
 
     # Run the server.
     uvicorn.run(
