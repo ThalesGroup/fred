@@ -26,7 +26,7 @@ import { getAgentBadge } from '../../utils/avatar.tsx';
 import { getConfig } from "../../common/config.tsx";
 import { useGetChatBotMessagesMutation } from '../../slices/chatApi.tsx';
 import { KeyCloakService } from '../../security/KeycloakService.ts';
-import { StreamEvent, ChatMessagePayload, SessionSchema } from '../../slices/chatApiStructures.ts';
+import { StreamEvent, ChatMessagePayload, SessionSchema, FinalEvent } from '../../slices/chatApiStructures.ts';
 
 export interface ChatBotError {
     session_id: string | null;
@@ -99,7 +99,7 @@ const ChatBot = (
             const socket = new WebSocket(wsUrl);
 
             socket.onopen = () => {
-                console.debug("[✅ ChatBot] WebSocket connected");
+                console.log("[✅ ChatBot] WebSocket connected");
                 webSocketRef.current = socket;
                 setMessages([]); // reset temporary buffer
                 resolve(socket);
@@ -112,11 +112,23 @@ const ChatBot = (
                         case "stream": {
                             const streamed = response as StreamEvent;
                             const msg = streamed.message;
-                            console.debug(`receive stream event id: ${msg.id}, session_id: ${msg.session_id}, content: ${msg.content.slice(0, 200)}...`);
+                            console.log(`receive stream event id: ${msg.id}, session_id: ${msg.session_id}, content: ${msg.content.slice(0, 200)}...`);
                             addMessage(msg);
                             break;
                         }
                         case "final": {
+                            const finalEvent = response as FinalEvent;
+                            for (const finalMsg of finalEvent.messages) {
+                                const alreadyExists = messagesRef.current.some(
+                                    (m) => m.id === finalMsg.id && m.subtype === finalMsg.subtype
+                                );
+                                if (!alreadyExists) {
+                                    console.log(`receive final event id: ${finalMsg.id}, session_id: ${finalMsg.session_id}, content: ${finalMsg.content.slice(0, 200)}...`);
+                                    //addMessage(finalMsg);
+                                } else {
+                                    console.log(`SKIPPING final event id: ${finalMsg.id}, session_id: ${finalMsg.session_id}, content: ${finalMsg.content.slice(0, 200)}...`);
+                                }
+                            }
                             if (response.session.id !== currentChatBotSession?.id) {
                                 onUpdateOrAddSession(response.session);
                             }

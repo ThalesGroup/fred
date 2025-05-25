@@ -81,7 +81,7 @@ function Area(
                 const task = fred?.task || "Task";
                 elements.push({ [task]: [message] });
                 // 💬 Fallback: treat as a standalone message (user or assistant final answer)
-            } else if (subtype === "final" && index === messages.length - 1) {
+            } else if (subtype === "final") {
                 // ✅ Show only the very last final message in the main chat view
                 elements.push(message);
             } else if (!["plan", "execution", "thought", "tool_result", "final"].includes(subtype || "")) {
@@ -93,7 +93,7 @@ function Area(
             }
         })
 
-
+        
         const rendered = elements.map((el, index) => {
             if (!("type" in el)) {
                 return (
@@ -108,10 +108,10 @@ function Area(
             const message = el as ChatMessagePayload;
             const agenticFlow = agenticFlows.find(flow => flow.name === message.metadata?.agentic_flow);
             const sources = message.metadata?.sources;
-
+            
             return (
                 <React.Fragment
-                    key={`message-${el.id}-${message.metadata?.partial ? 'stream' : 'final'}`}>
+                    key={`message-${message.id}-${message.subtype}`}>
                     {sources && (
                         <Sources
                             sources={sources}
