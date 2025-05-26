@@ -8,6 +8,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
 class FeedbackPayload(BaseModel):
     rating: int
     comment: Optional[str] = None
@@ -16,7 +17,8 @@ class FeedbackPayload(BaseModel):
     agent_name: str = Field(..., alias="agentName")
 
     class Config:
-        allow_population_by_field_name = True
+        populate_by_name = True
+
 class FeedbackController:
     def __init__(self, router: APIRouter):
         settings = FeedbackStoreLocalSettings()

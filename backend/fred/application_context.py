@@ -27,14 +27,12 @@ Includes:
 
 import importlib
 import os
-import pathlib
 from threading import Lock
 from typing import Dict, List, Type, Any
 from pydantic import BaseModel
 from feedback.setting.feedback_store_opensearch_settings import FeedbackStoreOpenSearchSettings
 from feedback.feedback_service import FeedbackService
 from feedback.setting.feedback_store_local_settings import FeedbackStoreLocalSettings
-from feedback.setting.feedback_store_minio_settings import FeedbackStoreMinioSettings
 from feedback.store.local_feedback_store import LocalFeedbackStore
 from feedback.store.opensearch_feedback_store import OpenSearchFeedbackStore
 from context.setting.context_store_minio_settings import ContextStoreMinioSettings
@@ -103,7 +101,6 @@ def get_app_context() -> "ApplicationContext":
     Raises:
         RuntimeError: If the context has not been initialized yet.
     """
-    print("[DEBUG] >>> get_app_context called, instance =", ApplicationContext._instance)
     if ApplicationContext._instance is None:
         raise RuntimeError("ApplicationContext is not yet initialized")
     return ApplicationContext._instance
@@ -304,7 +301,6 @@ class ApplicationContext:
     feedback_service = _create_feedback_service()
 
     def __new__(cls, configuration: Configuration = None):
-        print("[DEBUG] >>> Initializing ApplicationContext with config")
         with cls._lock:
             if cls._instance is None:
                 if configuration is None:
