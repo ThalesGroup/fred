@@ -1,11 +1,12 @@
 import os
 import logging
 from pathlib import Path
-from feedback.service.feedback_service import FeedbackService
+from main_utils import validate_settings_or_exit
+from config.feedback_store_local_settings import FeedbackStoreLocalSettings
+from config.feedback_store_opensearch_settings import FeedbackStoreOpenSearchSettings
+from feedback.feedback_service import FeedbackService
 from feedback.store.local_feedback_store import LocalFeedbackStore
-from feedback.setting.feedback_store_local_settings import FeedbackStoreLocalSettings
 from feedback.store.opensearch_feedback_store import OpenSearchFeedbackStore
-from feedback.setting.feedback_store_opensearch_settings import FeedbackStoreOpenSearchSettings
 
 logger = logging.getLogger(__name__)
 
@@ -18,10 +19,10 @@ def _create_feedback_service():
     config = get_configuration().feedback_storage
 
     if config.type == "local":
-        settings = FeedbackStoreLocalSettings()
+        settings = validate_settings_or_exit(FeedbackStoreLocalSettings)
         store = LocalFeedbackStore(Path(settings.root_path).expanduser())
     elif config.type == "opensearch":
-        settings = FeedbackStoreOpenSearchSettings().validate_or_exit()
+        settings = validate_settings_or_exit(FeedbackStoreOpenSearchSettings)
         store = OpenSearchFeedbackStore(
             host=settings.opensearch_host,
             username=settings.opensearch_user,
