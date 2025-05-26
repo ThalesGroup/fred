@@ -26,7 +26,7 @@ import { getAgentBadge } from '../../utils/avatar.tsx';
 import { getConfig } from "../../common/config.tsx";
 import { useGetChatBotMessagesMutation } from '../../slices/chatApi.tsx';
 import { KeyCloakService } from '../../security/KeycloakService.ts';
-import { StreamEvent, ChatMessagePayload, SessionSchema } from '../../slices/chatApiStructures.ts';
+import { StreamEvent, ChatMessagePayload, SessionSchema, FinalEvent } from '../../slices/chatApiStructures.ts';
 
 export interface ChatBotError {
     session_id: string | null;
@@ -92,7 +92,7 @@ const ChatBot = (
             console.warn("[🔄 ChatBot] WebSocket was closed or closing. Resetting...");
             webSocketRef.current = null;
         }
-        console.log("[📩 ChatBot] initiate new connection:");
+        console.debug("[📩 ChatBot] initiate new connection:");
 
         return new Promise((resolve, reject) => {
             const wsUrl = `${getConfig().backend_url_api || 'ws://localhost'}/fred/chatbot/query/ws`;
@@ -117,6 +117,18 @@ const ChatBot = (
                             break;
                         }
                         case "final": {
+                            const finalEvent = response as FinalEvent;
+                            for (const finalMsg of finalEvent.messages) {
+                                const alreadyExists = messagesRef.current.some(
+                                    (m) => m.id === finalMsg.id && m.subtype === finalMsg.subtype
+                                );
+                                if (!alreadyExists) {
+                                    console.log(`receive final event id: ${finalMsg.id}, session_id: ${finalMsg.session_id}, content: ${finalMsg.content.slice(0, 200)}...`);
+                                    //addMessage(finalMsg);
+                                } else {
+                                    console.log(`SKIPPING final event id: ${finalMsg.id}, session_id: ${finalMsg.session_id}, content: ${finalMsg.content.slice(0, 200)}...`);
+                                }
+                            }
                             if (response.session.id !== currentChatBotSession?.id) {
                                 onUpdateOrAddSession(response.session);
                             }
@@ -168,7 +180,7 @@ const ChatBot = (
                     summary: "Closed",
                     detail: "Chat connection closed after unmount."
                 });
-                console.log("Closing WebSocket before unmounting...");
+                console.debug("Closing WebSocket before unmounting...");
                 socket.close();
             }
             setWebSocket(null);
@@ -199,10 +211,10 @@ const ChatBot = (
                     console.log(`Total: ${serverMessages.length}`);
                     for (const msg of serverMessages) {
                         console.log({
-                            id: msg.id,
-                            type: msg.type,
-                            sender: msg.sender,
-                            isThought: msg.metadata?.thought || false,
+                            id: msg.id, // Unique identifier for the message
+                            type: msg.type, // e.g. "human", "assistant", "system"
+                            subtype: msg.subtype, // e.g. "thought", "execution", "tool_result"
+                            sender: msg.sender, // e.g. "user", "assistant"
                             task: msg.metadata?.fred?.task || null,
                             content: msg.content?.slice(0, 120),
                         });

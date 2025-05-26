@@ -1,0 +1,23 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Run Agentic Backend",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/fred/main.py",
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/fred",
+        "PATH": "${workspaceFolder}/.venv/bin:${env:PATH}",
+        "LOG_LEVEL": "INFO"
+      },
+      "args": [
+        "--server.configurationPath",
+        "${workspaceFolder}/config/configuration.yaml"
+      ],
+      "python": "${workspaceFolder}/.venv/bin/python",
+    },
+  ]
+}

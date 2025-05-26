@@ -29,6 +29,15 @@ export interface ChatTokenUsage {
   total_tokens: number;
 }
 
+export type ChatMessageSubtype =
+  | "final"
+  | "thought"
+  | "tool_result"
+  | "plan"
+  | "execution"
+  | "observation"
+  | "error";
+
 export interface ChatSource {
   document_uid: string;
   file_url?: string;
@@ -46,6 +55,7 @@ export interface ChatSource {
 export interface ChatMessagePayload {
   id: string;
   type: MessageType;
+  subtype?: ChatMessageSubtype;
   sender: MessageSender;
   content: string;
   timestamp: string;
