@@ -30,13 +30,15 @@ import os
 from threading import Lock
 from typing import Dict, List, Type, Any
 from pydantic import BaseModel
-from feedback.setting.feedback_store_opensearch_settings import FeedbackStoreOpenSearchSettings
+from config.context_store_local_settings import ContextStoreLocalSettings
+from config.context_store_minio_settings import ContextStoreMinioSettings
+from config.feedback_store_local_settings import FeedbackStoreLocalSettings
+from config.feedback_store_opensearch_settings import FeedbackStoreOpenSearchSettings
+from main_utils import validate_settings_or_exit
 from feedback.feedback_service import FeedbackService
-from feedback.setting.feedback_store_local_settings import FeedbackStoreLocalSettings
 from feedback.store.local_feedback_store import LocalFeedbackStore
 from feedback.store.opensearch_feedback_store import OpenSearchFeedbackStore
-from context.setting.context_store_minio_settings import ContextStoreMinioSettings
-from context.setting.context_store_local_settings import ContextStoreLocalSettings
+
 from context.store.local_context_store import LocalContextStore
 from context.store.minio_context_store import MinIOContextStore
 from model_factory import get_structured_chain
@@ -197,7 +199,7 @@ def _create_context_service():
     storage_backend = os.getenv("CONTEXT_STORAGE_BACKEND", "local").lower()
 
     if storage_backend == "minio":
-        settings = ContextStoreMinioSettings()
+        settings = validate_settings_or_exit(ContextStoreMinioSettings)
         client = MinIOContextStore(
             endpoint=settings.minio_endpoint,
             access_key=settings.minio_access_key,
@@ -206,7 +208,7 @@ def _create_context_service():
         )
         return MinIOContextStore(client, settings.minio_bucket_name)
 
-    settings = ContextStoreLocalSettings()
+    settings = validate_settings_or_exit(ContextStoreLocalSettings)
     return LocalContextStore(settings.root_path)
 
 
@@ -214,7 +216,7 @@ def _create_context_service():
 def _create_feedback_service():
     storage_backend = os.getenv("FEEDBACK_STORAGE_BACKEND", "local").lower()
     if storage_backend == "opensearch":
-        settings = FeedbackStoreOpenSearchSettings()
+        settings = validate_settings_or_exit(FeedbackStoreOpenSearchSettings)
         store = OpenSearchFeedbackStore(
             host=settings.opensearch_host,
             port=9200,  # You can make this configurable too
@@ -225,7 +227,7 @@ def _create_feedback_service():
         )
 
     else:
-        settings = FeedbackStoreLocalSettings()
+        settings = validate_settings_or_exit(FeedbackStoreLocalSettings)
         store = LocalFeedbackStore(settings.root_path)
 
     return FeedbackService(store)

@@ -34,8 +34,6 @@ class MinioSettings(BaseSettings):
     
     # Configuration du modèle
     model_config = {
-        "env_file": os.getenv("ENV_FILE", None),
-        "env_file_encoding": "utf-8",
         "extra": "ignore"
     }
 
