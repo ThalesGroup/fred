@@ -112,23 +112,27 @@ const ChatBot = (
                         case "stream": {
                             const streamed = response as StreamEvent;
                             const msg = streamed.message;
-                            console.log(`receive stream event id: ${msg.id}, session_id: ${msg.session_id}, content: ${msg.content.slice(0, 200)}...`);
+                            console.log(`STREAM ${msg.session_id}-${msg.exchange_id}- ${msg.rank} content: ${msg.content.slice(0, 50)}...`);
                             addMessage(msg);
                             break;
                         }
                         case "final": {
                             const finalEvent = response as FinalEvent;
-                            for (const finalMsg of finalEvent.messages) {
-                                const alreadyExists = messagesRef.current.some(
-                                    (m) => m.id === finalMsg.id && m.subtype === finalMsg.subtype
-                                );
-                                if (!alreadyExists) {
-                                    console.log(`receive final event id: ${finalMsg.id}, session_id: ${finalMsg.session_id}, content: ${finalMsg.content.slice(0, 200)}...`);
-                                    //addMessage(finalMsg);
-                                } else {
-                                    console.log(`SKIPPING final event id: ${finalMsg.id}, session_id: ${finalMsg.session_id}, content: ${finalMsg.content.slice(0, 200)}...`);
-                                }
-                            }
+                            const streamedKeys = new Set(messagesRef.current.map(
+                                m => `${m.session_id}-${m.exchange_id}-${m.rank}`
+                            ));
+                            const finalKeys = new Set(finalEvent.messages.map(
+                                m => `${m.session_id}-${m.exchange_id}-${m.rank}`
+                            ));
+
+                            const missing = [...finalKeys].filter(k => !streamedKeys.has(k));
+                            const unexpected = [...streamedKeys].filter(k => !finalKeys.has(k));
+
+                            console.log("[FINAL EVENT SUMMARY]");
+                            console.log("→ Messages in streamed but missing from final:", unexpected);
+                            console.log("→ Messages in final but not in streamed:", missing);
+
+                            console.log("FinalEvent messages:", finalEvent.messages);
                             if (response.session.id !== currentChatBotSession?.id) {
                                 onUpdateOrAddSession(response.session);
                             }
@@ -211,7 +215,7 @@ const ChatBot = (
                     console.log(`Total: ${serverMessages.length}`);
                     for (const msg of serverMessages) {
                         console.log({
-                            id: msg.id, // Unique identifier for the message
+                            id: msg.exchange_id, // Unique identifier for the message
                             type: msg.type, // e.g. "human", "assistant", "system"
                             subtype: msg.subtype, // e.g. "thought", "execution", "tool_result"
                             sender: msg.sender, // e.g. "user", "assistant"
@@ -296,13 +300,14 @@ const ChatBot = (
         const timestamp = new Date().toISOString();
 
         const userMessage: ChatMessagePayload = {
-            id: uuidv4(),
+            exchange_id: uuidv4(),
             type: "human",
             sender: "user",
             content: input,
             timestamp,
             session_id: currentChatBotSession?.id || "unknown",
-            rank: messagesRef.current.length / 2,
+            rank: -1, // -1 for user messages the rank is assigned by the backend
+            subtype: "final", // Default to final for user messages
             metadata: {}
         };
         addMessage(userMessage);

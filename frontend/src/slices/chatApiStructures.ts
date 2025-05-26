@@ -53,14 +53,14 @@ export interface ChatSource {
 }
 
 export interface ChatMessagePayload {
-  id: string;
+  exchange_id: string;
   type: MessageType;
   subtype?: ChatMessageSubtype;
   sender: MessageSender;
   content: string;
   timestamp: string;
   session_id: string;
-  rank?: number;
+  rank: number;
   metadata?: {
     model?: string;
     token_usage?: ChatTokenUsage;

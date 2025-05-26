@@ -127,8 +127,8 @@ export default function Thoughts(
                                 }}>
                                 {Object.entries(messages).map(([key, msgs], index) => {
                                     return (
-                                        <TimelineItem 
-                                            key={`thought-${key}-${index}`} 
+                                        <TimelineItem
+                                            key={`thought-${key}-${index}`}
                                             // key={index}
                                             style={{ minHeight: (index < Object.keys(messages).length - 1 ? "60px" : "0px") }}>
                                             <TimelineSeparator>
@@ -151,7 +151,7 @@ export default function Thoughts(
                                                                     padding: 0
                                                                 }}
                                                                 onClick={() => handleOpenModalThoughtsDetails(msgs)}>
-                                                                <PsychologyAltIcon color="primary" sx={{ fontSize: "1.8rem" }}/>
+                                                                <PsychologyAltIcon color="primary" sx={{ fontSize: "1.8rem" }} />
                                                             </IconButton>
                                                         </Tooltip>
                                                         {/* Display the tool icon if thoughts include a tool message */}
@@ -164,7 +164,7 @@ export default function Thoughts(
                                                                         padding: 0
                                                                     }}
                                                                     onClick={() => handleOpenModalThoughtsToolDetails(msgs.filter((thought) => thought.type === "tool"))}>
-                                                                    <WebhookIcon color="primary" sx={{ fontSize: "1.8rem" }}/>
+                                                                    <WebhookIcon color="primary" sx={{ fontSize: "1.8rem" }} />
                                                                 </IconButton>
                                                             </Tooltip>
                                                         }

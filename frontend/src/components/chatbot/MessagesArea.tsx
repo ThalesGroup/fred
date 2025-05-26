@@ -18,7 +18,6 @@ import Thoughts from "./Thoughts.tsx";
 import { AgenticFlow } from "../../pages/Chat.tsx";
 import Sources from "./Sources.tsx";
 import { ChatMessagePayload, FredMetadata } from '../../slices/chatApiStructures.ts';
-import { current } from '@reduxjs/toolkit';
 
 function Area(
     {
@@ -47,99 +46,160 @@ function Area(
         }
     };
 
+
     // Automatically scroll to the bottom when messages update
     useEffect(() => {
-        const elements: (Record<string, ChatMessagePayload[]> | ChatMessagePayload)[] = []
+        const sorted = [...messages].sort((a, b) => a.rank - b.rank);
+        const grouped = new Map<string, ChatMessagePayload[]>();
 
-        messages.forEach((message, index) => {
-            // Skip messages with no content
-            if (!message.content) return
-
-            // Get the last element added to the render queue
-            const last = elements.length > 0 ? elements[elements.length - 1] : null
-
-            // Determine the type of the last element to understand grouping context
-            // If it has a `type` field, it's a single message (not a grouped task/thought)
-            // If not, it's a thoughts group (like { taskName: [messages] })
-            const lastType = last && "type" in last ? last.type : "thoughts"
-
-            // Extract the message's semantic subtype and agentic task metadata
-            const subtype = message.subtype;
-            const fred = message.metadata?.fred as FredMetadata | undefined;
-
-            // 🧠 Start a new group of thoughts for a specific task
-            // Only when the current message is a plan and follows a user message
-            if (subtype === "plan" && lastType === "human") {
-                elements.push({ [fred?.task || "Plan"]: [message] });
-
-                // 🧠🛠️ Append to the current group of thoughts/tool results if already in a group
-            } else if (["thought", "execution", "tool_result"].includes(subtype || "") && lastType === "thoughts") {
-                const task = fred?.task || "Task";
-                if (last && typeof last === "object" && !("type" in last)) {
-                    if (last[task]) last[task].push(message);
-                    else last[task] = [message];
-                }
-                // 🧠🛠️ Start a new group if no existing group is open
-            } else if (["thought", "execution", "tool_result"].includes(subtype || "")) {
-                const task = fred?.task || "Task";
-                elements.push({ [task]: [message] });
-                // 💬 Fallback: treat as a standalone message (user or assistant final answer)
-            } else if (subtype === "final") {
-                // ✅ Show only the very last final message in the main chat view
-                elements.push(message);
-            } else if (!["plan", "execution", "thought", "tool_result", "final"].includes(subtype || "")) {
-                // ✅ Show human or simple assistant/system messages
-                elements.push(message);
-            } else {
-                // ❌ Ignore intermediate final messages from earlier steps
-                // (they are captured in grouped thoughts)
+        for (const msg of sorted) {
+            const key = `${msg.session_id}-${msg.exchange_id}`;
+            if (!grouped.has(key)) {
+                grouped.set(key, []);
             }
-        })
+            grouped.get(key)!.push(msg);
+        }
 
-        
-        const rendered = elements.map((el, index) => {
-            if (!("type" in el)) {
-                return (
+        const elements: React.ReactNode[] = [];
+
+        for (const [, group] of grouped.entries()) {
+            const thoughtsByTask: Record<string, ChatMessagePayload[]> = {};
+            let userMessage: ChatMessagePayload | undefined;
+            let finalMessages: ChatMessagePayload[] = [];
+            let otherMessages: ChatMessagePayload[] = [];
+
+            for (const msg of group) {
+                const { session_id, exchange_id, rank, type, subtype, sender, content } = msg;
+                const task = (msg.metadata?.fred as FredMetadata)?.task || "Task";
+
+                console.groupCollapsed(
+                    `%c📦 Message %s | %s-%s | rank=%d | subtype=%s | task=%s`,
+                    "color: gray",
+                    session_id,
+                    exchange_id,
+                    type,
+                    rank,
+                    subtype || "–",
+                    task
+                );
+                console.log("Sender:", sender);
+                console.log("Content preview:", content?.slice(0, 120));
+                console.log("Metadata:", msg.metadata);
+                console.groupEnd();
+
+                if (type === "human") {
+                    console.log("👉 Classified as: USER");
+                    userMessage = msg;
+                } else if (["plan", "execution", "thought", "tool_result"].includes(subtype || "")) {
+                    if (!thoughtsByTask[task]) thoughtsByTask[task] = [];
+                    thoughtsByTask[task].push(msg);
+                    console.log("🧠 Classified as: THOUGHT under task:", task);
+                } else if (subtype === "final") {
+                    if (msg.metadata?.fred?.task) {
+                        // Intermediate result for a task — belongs inside the Thoughts block
+                        if (!thoughtsByTask[task]) thoughtsByTask[task] = [];
+                        thoughtsByTask[task].push(msg);
+                        console.log("🧠 Classified as: INTERMEDIATE FINAL in task:", task);
+                    } else {
+                        // Only top-level final message goes as standalone
+                        finalMessages.push(msg);
+                        console.log("✅ Classified as: FINAL RESPONSE");
+                    }
+
+                } else {
+                    otherMessages.push(msg);
+                    console.warn("⚠️ Classified as: OTHER (fallback)");
+                }
+            }
+
+
+            if (userMessage) {
+                elements.push(
+                    <Message
+                        key={`msg-${userMessage.session_id}-${userMessage.exchange_id}-${userMessage.rank}`}
+                        message={userMessage}
+                        currentAgenticFlow={currentAgenticFlow}
+                        agenticFlow={currentAgenticFlow}
+                        side="right"
+                        enableCopy
+                        enableThumbs
+                        enableAudio
+                    />
+                );
+            }
+
+            if (Object.keys(thoughtsByTask).length > 0) {
+                elements.push(
                     <Thoughts
-                        key={`thoughts-${index}`}
-                        messages={el}
-                        expandThoughts={index === elements.length - 1}
+                        key={`thoughts-${group[0].exchange_id}`}
+                        messages={thoughtsByTask}
+                        expandThoughts={true}
                         enableThoughts={true}
                     />
                 );
             }
-            const message = el as ChatMessagePayload;
-            const agenticFlow = agenticFlows.find(flow => flow.name === message.metadata?.agentic_flow);
-            const sources = message.metadata?.sources;
-            
-            return (
-                <React.Fragment
-                    key={`message-${message.id}-${message.subtype}`}>
-                    {sources && (
-                        <Sources
-                            sources={sources}
-                            enableSources={true}
-                            expandSources={index === elements.length - 1}
+            for (const msg of otherMessages) {
+                const agenticFlow = agenticFlows.find(flow => flow.name === msg.metadata?.agentic_flow);
+                const sources = msg.metadata?.sources;
+                elements.push(
+                    <React.Fragment
+                        key={`msg-${msg.session_id}-${msg.exchange_id}-${msg.rank}`}
+                    >
+                        {sources && (
+                            <Sources
+                                sources={sources}
+                                enableSources={true}
+                                expandSources={false}
+                            />
+                        )}
+                        <Message
+                            message={msg}
+                            agenticFlow={agenticFlow}
+                            currentAgenticFlow={currentAgenticFlow}
+                            side={msg.sender === "user" ? "right" : "left"}
+                            enableCopy
+                            enableThumbs
+                            enableAudio
                         />
-                    )}
-                    <Message
-                        message={message}
-                        agenticFlow={agenticFlow}
-                        currentAgenticFlow={currentAgenticFlow}
-                        side={el.sender === "user" ? "right" : "left"}
-                        enableCopy={true}
-                        enableThumbs={true}
-                        enableAudio={true}
-                    />
-                </React.Fragment>
-            );
-        });
-        setEvents(rendered);
+                    </React.Fragment>
+                );
+            }
+
+            for (const msg of finalMessages) {
+                const agenticFlow = agenticFlows.find(flow => flow.name === msg.metadata?.agentic_flow);
+                const sources = msg.metadata?.sources;
+                elements.push(
+                    <React.Fragment
+                        key={`final-${msg.session_id}-${msg.exchange_id}-${msg.rank}`}
+                    >
+                        {sources && (
+                            <Sources
+                                sources={sources}
+                                enableSources={true}
+                                expandSources={true}
+                            />
+                        )}
+                        <Message
+                            message={msg}
+                            agenticFlow={agenticFlow}
+                            currentAgenticFlow={currentAgenticFlow}
+                            side="left"
+                            enableCopy
+                            enableThumbs
+                            enableAudio
+                        />
+                    </React.Fragment>
+                );
+            }
+        }
+
+        setEvents(elements);
     }, [messages]);
 
     useEffect(() => {
         scrollToBottom();
     }, [messages]);
+
     return (
         <div>
             {events}

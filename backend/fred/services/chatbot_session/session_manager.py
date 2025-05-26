@@ -61,7 +61,7 @@ class SessionManager:
         self.temp_files: dict[str, list[str]] = defaultdict(list)
         self.attachement_processing = AttachementProcessing()
 
-    def _infer_message_subtype2(self, metadata: dict, message_type: str | None = None) -> Optional[str]:
+    def _infer_message_subtype(self, metadata: dict, message_type: str | None = None) -> Optional[str]:
         """
         Infers the semantic subtype of a message based on its metadata and optionally its message type.
         """
@@ -87,23 +87,6 @@ class SessionManager:
         if metadata.get("error"):
             return "error"
 
-        return None
-
-    def _infer_message_subtype(self,
-                               metadata: dict) -> Optional[str]:
-        if metadata.get("finish_reason") == "stop":
-            return "final"
-        if metadata.get("finish_reason") == "tool_calls":
-            return "tool_result"
-        if metadata.get("thought") is True:
-            fred = metadata.get("fred", {})
-            if fred.get("node") == "plan":
-                return "plan"
-            elif fred.get("node") == "execute":
-                return "execution"
-            return "thought"
-        if metadata.get("error"):
-            return "error"
         return None
 
     def _get_or_create_session(self, 
@@ -169,7 +152,8 @@ class SessionManager:
             message=message,
             agent_name=agent_name
         )
-        assistant_id = str(uuid4())
+        exchange_id = str(uuid4())
+        base_rank = base_rank = len(history)
 
         # Step 2: Run agent and stream back enriched ChatMessagePayloads
         all_messages = await self._stream_agent_response(
@@ -177,7 +161,8 @@ class SessionManager:
             input_messages=history,
             session_id=session.id,
             callback=callback,
-            assistant_id=assistant_id,
+            exchange_id=exchange_id,
+            base_rank=base_rank,
         )
 
         # Step 3: Save session metadata
@@ -185,13 +170,11 @@ class SessionManager:
         self.storage.save_session(session)
 
         # Step 4: Create the user message payload
-        user_turn_index = sum(1 for m in history if isinstance(m, HumanMessage))
-        base_rank = user_turn_index * 10
         timestamp = datetime.now().isoformat()
         metadata = clean_agent_metadata(getattr(message, "response_metadata", getattr(message, "metadata", {})) or {})
-        subtype = self._infer_message_subtype2(metadata, message.type if isinstance(message, BaseMessage) else None)
+        subtype = self._infer_message_subtype(metadata, message.type if isinstance(message, BaseMessage) else None)
         user_payload = ChatMessagePayload(
-            id=assistant_id,
+            exchange_id=exchange_id,
             type="human",
             sender="user",
             content=message,
@@ -245,7 +228,7 @@ class SessionManager:
             messages = self.get_session_history(session.id)
 
             for msg in messages:
-                logger.info(f"[RESTORED] id={msg.id} | type={msg.type} | subtype={msg.subtype} | fred.task={msg.metadata.get('fred', {}).get('task')}")
+                logger.info(f"[RESTORED] session_id={msg.session_id} exchange_id={msg.exchange_id} rank={msg.rank} | type={msg.type} | subtype={msg.subtype} | fred.task={msg.metadata.get('fred', {}).get('task')}")
                 if msg.type == "human":
                     history.append(HumanMessage(content=msg.content))
                 elif msg.type == "ai":
@@ -305,8 +288,9 @@ class SessionManager:
         compiled_graph: CompiledStateGraph,
         input_messages: List[BaseMessage],
         session_id: str,
+        base_rank: int,
         callback: CallbackType,
-        assistant_id: str,
+        exchange_id: str,
         config: Dict = None,
     ) -> List[BaseMessage]:
         """
@@ -317,7 +301,7 @@ class SessionManager:
             input_messages: List of Human/AI messages.
             session_id: Current session ID (used as thread ID).
             callback: A function that takes a `dict` and handles the streamed message.
-            assistant_id:  ID for the assistant.
+            exchange_id:  the ID of the exchange, used to identify the messages part of a single request-replies group.
             config: Optional LangGraph config dict override.
             
         Returns:
@@ -337,36 +321,29 @@ class SessionManager:
                 # LangGraph returns events like {'end': {'messages': [...]}} or {'next': {...}}
                 key = next(iter(event))
                 message_block = event[key].get("messages", [])
-                for message in message_block:
+                for i, message in enumerate(message_block):
                     raw_metadata = getattr(message, "response_metadata", {}) or {}
                     cleaned_metadata = clean_agent_metadata(raw_metadata)
                     # If LangChain returns type='tool', force subtype to 'tool_result'
                     #subtype = self._infer_message_subtype(cleaned_metadata)
-                    subtype = self._infer_message_subtype2(cleaned_metadata, message.type if isinstance(message, BaseMessage) else None)
+                    subtype = self._infer_message_subtype(cleaned_metadata, message.type if isinstance(message, BaseMessage) else None)
                     enriched = ChatMessagePayload(
-                        id=assistant_id or str(uuid4()),
+                        exchange_id=exchange_id,
                         type=message.type,
                         sender="assistant" if isinstance(message, AIMessage) else "system",
                         content=message.content,
                         timestamp=datetime.now().isoformat(),
+                        rank=base_rank + 1 + i, 
                         session_id=session_id,
                         metadata=cleaned_metadata,
                         subtype=subtype
                     )
 
                     all_payloads.append(enriched)  # ✅ collect all messages
-                    """ enriched_dict = {
-                        "id": assistant_id or str(uuid4()),
-                        "type": message.type,
-                        "sender": "assistant" if isinstance(message, AIMessage) else "system",
-                        "content": message.content,
-                        "timestamp": datetime.now().isoformat(),
-                        "session_id": session_id,
-                        "metadata": clean_agent_metadata(getattr(message, "response_metadata", {}) or {})
-                    } """
                     logger.info(
-                        "[STREAMED] %s\n         type=%s | subtype=%s | fred.task=%s",
-                        enriched.id,
+                        "[STREAMED] session_id=%s exchange_id=%s type=%s | subtype=%s | fred.task=%s",
+                        enriched.session_id,
+                        enriched.exchange_id,
                         enriched.type,
                         enriched.subtype,
                         enriched.metadata.get("fred", {}).get("task") if isinstance(enriched.metadata.get("fred"), dict) else None
@@ -400,7 +377,7 @@ class SessionManager:
         try:
             # Retrieve contexts from the service
             contexts = self.context_service.get_context(agent_name)
-            logger.info(f"Retrieved {len(contexts)} contexts for agent '{agent_name}'")
+            logger.debug(f"Retrieved {len(contexts)} contexts for agent '{agent_name}'")
             
             # Cache it
             self.context_cache[agent_name] = contexts
@@ -422,7 +399,7 @@ class SessionManager:
         """
         if agent_name in self.context_cache:
             del self.context_cache[agent_name]
-            logger.info(f"Context refreshed for agent '{agent_name}'")
+            logger.debug(f"Context refreshed for agent '{agent_name}'")
             return True
         return False
     

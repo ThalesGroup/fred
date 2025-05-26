@@ -60,7 +60,7 @@ export default function Message(
         postFeedback({
             rating,
             comment,
-            messageId: message.id,
+            messageId: message.exchange_id,
             sessionId: message.session_id,
             agentName: currentAgenticFlow.name ?? "unknown"
         }).then((result) => {

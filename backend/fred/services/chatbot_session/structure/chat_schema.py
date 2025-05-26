@@ -36,13 +36,13 @@ class ChatSource(BaseModel):
 
 # --- Unified message structure ---
 class ChatMessagePayload(BaseModel):
-    id: str = Field(..., description="Unique ID for the message")
+    exchange_id: str = Field(..., description="Unique ID for the current question repsonse(s) exchange")
     type: Literal["human", "ai", "system", "tool"]
     sender: Literal["user", "assistant", "system"]
     content: str
     timestamp: str
-    session_id: str
-    rank: Optional[int] = None
+    session_id: str = Field(..., description="Unique ID for the conversation")
+    rank: int = Field(..., description="Monotonically increasing index of the message within the session")
     metadata: Optional[Dict[str, Union[str, int, float, dict, list]]] = Field(default_factory=dict)
     subtype: Optional[Literal[
         "final", "thought", "tool_result", "plan", "execution", "observation", "error"
