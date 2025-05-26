@@ -56,37 +56,38 @@ const extendedChatApi = chatApiSlice.injectEndpoints({
     }),
     getAgentContexts: builder.mutation({
       query: (agentName) => ({
-          url: `/fred/contexts/${agentName}`,
-          method: 'GET',
+        url: `/fred/contexts/${agentName}`,
+        method: 'GET',
       }),
-  }),
+    }),
 
-  // Créer ou mettre à jour un contexte
-  saveAgentContext: builder.mutation({
+    // Créer ou mettre à jour un contexte
+    saveAgentContext: builder.mutation({
       query: ({ agentName, context }) => ({
-          url: `/fred/contexts/${agentName}`,
-          method: 'POST',
-          body: context,
+        url: `/fred/contexts/${agentName}`,
+        method: 'POST',
+        body: context,
       }),
-  }),
+    }),
 
-  // Supprimer un contexte
-  deleteAgentContext: builder.mutation({
+    // Supprimer un contexte
+    deleteAgentContext: builder.mutation({
       query: ({ agentName, contextId }) => ({
-          url: `/fred/contexts/${agentName}/${contextId}`,
-          method: 'DELETE',
+        url: `/fred/contexts/${agentName}/${contextId}`,
+        method: 'DELETE',
       }),
-  }),
+    }),
     postFeedback: builder.mutation<{ success: boolean }, {
       rating: number,
-      reason: string,
-      feedbackType: 'up' | 'down',
-      messageId?: string // Optional: you can pass an identifier for the message
+      comment?: string,
+      messageId: string,
+      sessionId: string,
+      agentName: string
     }>({
-      query: ({ rating, reason, feedbackType, messageId }) => ({
+      query: ({ rating, comment, messageId, sessionId, agentName }) => ({
         url: `/fred/chatbot/feedback`,
         method: 'POST',
-        body: { rating, reason, feedbackType, messageId },
+        body: { rating, comment, messageId, sessionId, agentName },
       }),
     }),
   }),
@@ -99,7 +100,7 @@ export const {
   useDeleteChatbotSessionMutation,
   usePostFeedbackMutation,
   useGetAgentContextsMutation,
-    useSaveAgentContextMutation,
-    useDeleteAgentContextMutation,
+  useSaveAgentContextMutation,
+  useDeleteAgentContextMutation,
 } = extendedChatApi;
 

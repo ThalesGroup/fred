@@ -22,53 +22,53 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import Column, Integer, String, DateTime
 from datetime import datetime
 
-import logging
+# import logging
 
-logger = logging.getLogger(__name__)
+# logger = logging.getLogger(__name__)
 
 # Define a Pydantic model for the feedback payload
-class FeedbackPayload(BaseModel):
-    rating: int
-    reason: str
-    feedbackType: str  # Could use Literal['up', 'down'] for stricter typing
-    messageId: str | None = None
+# class FeedbackPayload(BaseModel):
+#     rating: int
+#     reason: str
+#     feedbackType: str  # Could use Literal['up', 'down'] for stricter typing
+#     messageId: str | None = None
 
-router = APIRouter()
+# router = APIRouter()
 
 
-Base = declarative_base()
+# Base = declarative_base()
 
-class Feedback(Base):
-    __tablename__ = 'feedback'
+# class Feedback(Base):
+#     __tablename__ = 'feedback'
     
-    id = Column(Integer, primary_key=True, index=True)
-    user = Column(String, index=True)
-    rating = Column(Integer, nullable=False)
-    reason = Column(String, nullable=True)
-    feedback_type = Column(String, nullable=False)
-    message_id = Column(String, nullable=True)
-    timestamp = Column(DateTime, default=datetime.utcnow)
+#     id = Column(Integer, primary_key=True, index=True)
+#     user = Column(String, index=True)
+#     rating = Column(Integer, nullable=False)
+#     reason = Column(String, nullable=True)
+#     feedback_type = Column(String, nullable=False)
+#     message_id = Column(String, nullable=True)
+#     timestamp = Column(DateTime, default=datetime.utcnow)
 
-@router.post("/fred/feedback", tags=["Feedback"], summary="Submit user feedback")
-async def post_feedback(
-    feedback: FeedbackPayload, 
-    user: KeycloakUser = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    logger.info(f"Feedback received from {user.username}: {feedback}")
+# @router.post("/fred/feedback", tags=["Feedback"], summary="Submit user feedback")
+# async def post_feedback(
+#     feedback: FeedbackPayload, 
+#     user: KeycloakUser = Depends(get_current_user),
+#     db: Session = Depends(get_db)
+# ):
+#     logger.info(f"Feedback received from {user.username}: {feedback}")
 
-    # TODO FEEDBACK
-    # Create a new feedback record
-    #new_feedback = Feedback(
-    #    user=user.username,
-    #    rating=feedback.rating,
-    #    reason=feedback.reason,
-    #    feedback_type=feedback.feedbackType,
-    #    message_id=feedback.messageId,
-    #    timestamp=datetime.utcnow(),
-    #)
-    #db.add(new_feedback)
-    #db.commit()
-    #db.refresh(new_feedback)
+#     TODO FEEDBACK
+#     Create a new feedback record
+#     new_feedback = Feedback(
+#        user=user.username,
+#        rating=feedback.rating,
+#        reason=feedback.reason,
+#        feedback_type=feedback.feedbackType,
+#        message_id=feedback.messageId,
+#        timestamp=datetime.utcnow(),
+#     )
+#     db.add(new_feedback)
+#     db.commit()
+#     db.refresh(new_feedback)
     
-    return {"success": True, "feedback_id": new_feedback.id}
+#     return {"success": True, "feedback_id": new_feedback.id}

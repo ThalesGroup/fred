@@ -251,6 +251,9 @@ class FrontendSettings(BaseModel):
 class ContextStorageConfig(BaseModel):
     type: str = Field(..., description="The storage backend to use (e.g., 'local', 'minio')")
     
+class FeedbackStorageConfig(BaseModel):
+    type: str = Field(..., description="The storage backend to use (e.g., 'local', 'minio')")
+    
 class Configuration(BaseModel):
     frontend_settings: FrontendSettings
     database: DatabaseConfiguration
@@ -260,6 +263,8 @@ class Configuration(BaseModel):
     security: Security
     feedback: FeedbackDatabase
     context_storage: ContextStorageConfig = Field(..., description="Content Storage configuration")
+    feedback_storage: FeedbackStorageConfig = Field(..., description="Feedback Storage configuration")
+
 
 class OfflineStatus(BaseModel):
     is_offline: bool
