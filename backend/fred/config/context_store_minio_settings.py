@@ -24,7 +24,5 @@ class ContextStoreMinioSettings(BaseSettings):
     minio_secure: bool = Field(False, validation_alias="MINIO_SECURE")
 
     model_config = {
-        "env_file": os.getenv("ENV_FILE", None),
-        "env_file_encoding": "utf-8",
         "extra": "ignore"
     }

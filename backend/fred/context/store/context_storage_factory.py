@@ -13,11 +13,12 @@
 # limitations under the License.
 
 from pathlib import Path
+from config.context_store_local_settings import ContextStoreLocalSettings
+from config.context_store_minio_settings import ContextStoreMinioSettings
+from main_utils import validate_settings_or_exit
 from context.store.base_context_store import BaseContextStore
 from context.store.local_context_store import LocalContextStore
 from context.store.minio_context_store import MinIOContextStore
-from context.setting.context_store_local_settings import ContextStoreLocalSettings
-from context.setting.context_store_minio_settings import ContextStoreMinioSettings
 from fred.application_context import get_configuration
 from minio import Minio
 
@@ -30,11 +31,11 @@ def get_context_store() -> BaseContextStore:
     config = get_configuration().context_storage
 
     if config.type == "local":
-        settings = ContextStoreLocalSettings()
+        settings = validate_settings_or_exit(ContextStoreLocalSettings)
         return LocalContextStore(Path(settings.root_path).expanduser())
 
     elif config.type == "minio":
-        settings = ContextStoreMinioSettings()
+        settings = validate_settings_or_exit(ContextStoreMinioSettings)
         minio_client = Minio(
             endpoint=settings.minio_endpoint,
             access_key=settings.minio_access_key,

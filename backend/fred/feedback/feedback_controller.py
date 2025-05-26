@@ -1,9 +1,9 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from typing import Optional
+from config.feedback_store_local_settings import FeedbackStoreLocalSettings
 from feedback.feedback_service import FeedbackService
 from feedback.store.local_feedback_store import LocalFeedbackStore
-from feedback.setting.feedback_store_local_settings import FeedbackStoreLocalSettings
 import logging
 
 logger = logging.getLogger(__name__)
