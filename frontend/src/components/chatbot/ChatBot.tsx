@@ -145,6 +145,15 @@ const ChatBot = (
                             setWaitResponse(false);
                             break;
                         }
+                        default: {
+                            console.warn("[⚠️ ChatBot] Unknown message type:", response.type);
+                            showError({
+                                summary: "Unknown Message",
+                                detail: `Received unknown message type: ${response.type}`
+                            });
+                            setWaitResponse(false);
+                            break;  
+                        }
                     }
                 } catch (err) {
                     // Only close on fatal parsing error
@@ -349,7 +358,7 @@ const ChatBot = (
             content: input,
             timestamp,
             session_id: currentChatBotSession?.id || "unknown",
-            rank: next_rank, // -1 for user messages the rank is assigned by the backend
+            rank: next_rank, 
             subtype: "final", // Default to final for user messages
             metadata: {}
         };

@@ -200,7 +200,7 @@ class ChatbotController:
                         logger.debug("Client disconnected from chatbot WebSocket")
                         break
                     except Exception as e:
-                        summary = log_exception(e, "Error processing chatbot client query")
+                        summary = log_exception(e, "INTERNAL Error processing chatbot client query")
                         session_id = client_request.get("session_id", "unknown-session") if client_request else "unknown-session"
                         if websocket.client_state == WebSocketState.CONNECTED:
                             await websocket.send_text(
@@ -208,13 +208,19 @@ class ChatbotController:
                                    type="error",
                                     content=summary,
                                     session_id=session_id
-                                ).model_dump()
+                                ).model_dump_json()
                             )
                         else:
                             logger.error("[🔌 WebSocket] Connection closed by client.")
                             break
             except Exception as e:
-                logger.error(f"[🔥 Unexpected Error] during WebSocket session: {e}")
+                summary = log_exception(e, "EXTERNAL Error processing chatbot client query")
+                if websocket.client_state == WebSocketState.CONNECTED:
+                    await websocket.send_text(json.dumps(ErrorEvent(
+                        type="error",
+                        content=summary,
+                        session_id="unknown-session"
+                    ).model_dump_json()))
 
         @app.get(
             "/chatbot/sessions",
