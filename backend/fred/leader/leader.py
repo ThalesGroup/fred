@@ -26,7 +26,7 @@ from leader.structures.plan import Plan
 from leader.structures.state import State
 logger = logging.getLogger(__name__)
 
-MAX_STEPS = 2
+MAX_STEPS = 5
 
 class Leader(Flow):
     """
@@ -111,7 +111,7 @@ class Leader(Flow):
             state: State of the agent.
         """
         if len(state["progress"]) >= MAX_STEPS:
-            logger.warning(f"Max steps ({MAX_STEPS}) reached. Forcing validation.")
+            logger.warning(f"Reached MAX_STEPS={MAX_STEPS}, forcing final answer.")
             return "validate"
         if len(state["progress"]) == len(state["plan"].steps):
             return "validate"
@@ -414,6 +414,13 @@ class Leader(Flow):
             state: State of the agent.
         """
 
+        if len(state["progress"]) >= MAX_STEPS:
+            logger.warning(f"Validation triggered by MAX_STEPS={MAX_STEPS} — skipping LLM validation and forcing respond.")
+            return {
+                "plan_decision": PlanDecision(action="respond"),
+                "traces": [f"Forced respond due to reaching MAX_STEPS={MAX_STEPS}"],
+            }
+        
         objective = state["messages"][0].content
         current_plan = state["plan"]
 
