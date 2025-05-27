@@ -350,7 +350,7 @@ const lightTypography = {
     p: {
       lineHeight: 1.8,
       fontWeight: 400,
-      fontSize: '1.0rem',
+      fontSize: '1.1rem',
       marginBottom: '0.8rem',
       fontFamily: 'Roboto, sans-serif'
     },
@@ -400,7 +400,7 @@ const darkTypography = {
       color: darkPalette.text.primary,
       lineHeight: 1.8,
       fontWeight: 400,
-      fontSize: '1.0rem',
+      fontSize: '1.1rem',
       marginBottom: '0.8rem',
       fontFamily: 'Roboto, sans-serif'
     },

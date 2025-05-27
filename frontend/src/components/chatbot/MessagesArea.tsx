@@ -243,4 +243,4 @@ function Area(
   This design allows the UI to cleanly separate final answers from intermediate reasoning.
 
 */
-export const MessagesArea = memo(Area);
+    export const MessagesArea = memo(Area);

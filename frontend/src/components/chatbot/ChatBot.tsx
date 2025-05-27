@@ -294,11 +294,54 @@ const ChatBot = (
         }
     }
 
-    // Query the chatbot
+   /**
+    * 🔄 Send a new user message to the chatbot agent.
+    *
+    * This function:
+    *  1. Builds a `ChatMessagePayload` for the user input (with correct rank and session ID).
+    *  2. Adds it to the local message list (immediate UI feedback).
+    *  3. Sends the message over WebSocket to trigger agent response.
+    *
+    * Why is this important?
+    * - Ensures the user's message is rendered in correct order (via `rank`).
+    * - Handles file uploads and voice input separately (not covered here).
+    * - Provides a smooth chat experience with real-time streaming via WebSocket.
+    */
     const queryChatBot = async (input: string, agent?: AgenticFlow) => {
         console.log(`[📤 ChatBot] Sending message: ${input}`);
         const timestamp = new Date().toISOString();
 
+        /**
+        * Compute the next rank for a new user message in the current session.
+        *
+        * 💡 Why do we need this?
+        * In our design, each message in a session has:
+        *    - a session_id (conversation)
+        *    - an exchange_id (question-response block)
+        *    - a rank (order of messages within that session)
+        *
+        * The `rank` determines **display order** in the UI.
+        * If we don't assign a correct rank when a user asks a new question,
+         * the message might appear out of order (e.g., at the top or bottom).
+         *
+         * 🧠 Our rule:
+         *     → When sending a new user message (starting a new exchange),
+         *       we assign it the next available rank: (max existing rank + 1)
+         *
+         * This ensures all messages are sorted consistently from top to bottom.
+         */
+        const getNextRankForNewMessage = (): number => {
+            const currentSessionId = currentChatBotSession?.id;
+            if (!currentSessionId) return 1;
+
+            const ranks = messagesRef.current
+                .filter(m => m.session_id === currentSessionId && typeof m.rank === "number" && m.rank >= 0)
+                .map(m => m.rank);
+
+            return ranks.length ? Math.max(...ranks) + 1 : 1;
+        };
+
+        const next_rank = getNextRankForNewMessage();
         const userMessage: ChatMessagePayload = {
             exchange_id: uuidv4(),
             type: "human",
@@ -306,7 +349,7 @@ const ChatBot = (
             content: input,
             timestamp,
             session_id: currentChatBotSession?.id || "unknown",
-            rank: -1, // -1 for user messages the rank is assigned by the backend
+            rank: next_rank, // -1 for user messages the rank is assigned by the backend
             subtype: "final", // Default to final for user messages
             metadata: {}
         };
