@@ -84,12 +84,11 @@ ai:
     - name: "DocumentsExpert"
       class_path: "agents.documents.documents_expert.DocumentsExpert"
       enabled: true
-      categories:
-        - "eco-conception"
-      settings:
-        chunk_size: 512
-        chunk_overlap: 64
-        knowledge_flow_url: "http://localhost:8111/knowledge/v1" 
+      mcp_servers:
+        - name: knowledgeflow-mcp-server
+          transport: sse
+          url: http://localhost:8111/mcp
+          sse_read_timeout: 2000
       model: {}
     # The Monitoring expert requires you activate the 'enableK8Features' flags above
     - name: "MonitoringExpert"
