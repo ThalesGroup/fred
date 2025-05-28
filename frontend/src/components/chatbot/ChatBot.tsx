@@ -14,7 +14,7 @@
 
 
 import { useEffect, useRef, useState } from 'react';
-import { Box, Grid2, Typography, useTheme } from '@mui/material';
+import { Box, Grid2, Tooltip, Typography, useTheme } from '@mui/material';
 import { AgenticFlow } from "../../pages/Chat.tsx";
 import { usePostTranscribeAudioMutation } from "../../frugalit/slices/api.tsx";
 import { useToast } from "../ToastProvider.tsx";
@@ -152,7 +152,7 @@ const ChatBot = (
                                 detail: `Received unknown message type: ${response.type}`
                             });
                             setWaitResponse(false);
-                            break;  
+                            break;
                         }
                     }
                 } catch (err) {
@@ -215,7 +215,7 @@ const ChatBot = (
     // or when the user starts a new conversation.
     useEffect(() => {
         if (currentChatBotSession?.id) {
-            // 👇 Reset internal buffer as well. 
+            // 👇 Reset internal buffer as well.
             setAllMessages([]);
             getChatBotMessages({ session_id: currentChatBotSession.id }).then((response) => {
                 if (response.data) {
@@ -358,7 +358,7 @@ const ChatBot = (
             content: input,
             timestamp,
             session_id: currentChatBotSession?.id || "unknown",
-            rank: next_rank, 
+            rank: next_rank,
             subtype: "final", // Default to final for user messages
             metadata: {}
         };
@@ -399,44 +399,50 @@ const ChatBot = (
         console.log("isCreatingNewConversation", isCreatingNewConversation);
     }, [isCreatingNewConversation]);
 
+    const outputTokenCounts: number = messages && messages.length ? messages.reduce((sum, msg) => sum + (msg.metadata?.token_usage?.output_tokens || 0), 0) : 0;
+    const inputTokenCounts: number = messages && messages.length ? messages.reduce((sum, msg) => sum + (msg.metadata?.token_usage?.input_tokens || 0), 0) : 0;
+
     return (
         messages?.length ?
-            <Grid2 container display="flex" justifyContent="center" height="100vh">
+            <Grid2
+                container
+                display="flex"
+                height="100vh"
+                direction="column"
+                alignItems="center"
+            >
                 {/* Chatbot messages area */}
                 <Grid2
                     display="flex"
                     flexDirection='column'
                     flex='1'
-                    size={{ xs: 8, md: 8, lg: 7 }} m={2} marginBottom={0} p={2} minHeight="80%" maxHeight="80%"
+                    p={2}
+                    width="80%"
                     sx={{
                         overflowY: 'scroll',
                         overflowX: 'hidden',
                         scrollbarWidth: "none",
                         wordBreak: 'break-word',
-                        position: "fixed", // Fix UserInput at the bottom of the viewport
                         alignContent: "center"
 
                     }}>
-                    <MessagesArea
-                        key={currentChatBotSession?.id}
-                        messages={messages}
-                        agenticFlows={agenticFlows}
-                        currentAgenticFlow={currentAgenticFlow} />
-                    {waitResponse && (
-                        <Grid2 size='grow' marginTop={5}>
-                            <DotsLoader dotColor={theme.palette.text.primary} />
-                        </Grid2>
-                    )}
+                        <MessagesArea
+                            key={currentChatBotSession?.id}
+                            messages={messages}
+                            agenticFlows={agenticFlows}
+                            currentAgenticFlow={currentAgenticFlow} />
+                        {waitResponse && (
+                            <Grid2 size='grow' marginTop={5}>
+                                <DotsLoader dotColor={theme.palette.text.primary} />
+                            </Grid2>
+                        )}
                 </Grid2>
+
                 {/* User input area */}
                 <Grid2
                     container
-                    size={{ xs: 8, md: 8, lg: 7 }} m={2} p={2} mb={-2}
-                    sx={{
-                        position: "fixed", // Fix UserInput at the bottom of the viewport
-                        bottom: "3%", // 2% from the bottom of the viewport
-                        alignContent: "center"
-                    }}
+                    width="80%"
+                    alignContent="center"
                 >
                     <UserInput
                         enableFilesAttachment={true}
@@ -445,6 +451,21 @@ const ChatBot = (
                         onSend={handleSend}
                     />
                 </Grid2>
+
+                {/* Conversatiom tokens count */}
+                { outputTokenCounts > 0 &&
+                    <Grid2 container display="fex" width="80%" justifyContent="flex-end" marginTop={.5} marginBottom={1}>
+                        <Tooltip title={`This conversation has used ${inputTokenCounts} prompt tokens and ${outputTokenCounts} response tokens`}>
+                            <Typography
+                                fontSize="0.8rem"
+                                color={theme.palette.text.secondary}
+                                fontStyle="italic"
+                            >
+                                This conversation has used {outputTokenCounts + inputTokenCounts} tokens
+                            </Typography>
+                        </Tooltip>
+                    </Grid2>
+                }
             </Grid2> :
             <Grid2 container display="flex" flexDirection="column" justifyContent="center" height="100vh"
                 alignItems="center" gap={2}>

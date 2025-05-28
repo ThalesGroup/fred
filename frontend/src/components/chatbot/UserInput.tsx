@@ -129,44 +129,43 @@ export default function UserInput(
         <Grid2 container
             sx={{
                 height: '100%',  // Ensure it takes full available height
-                minHeight: '200px',  // Minimum height to avoid truncation
-                maxHeight: '800px',  // Prevent it from growing too large
                 justifyContent: 'flex-end',  // Align input section to the bottom
-                paddingBottom: '16px',  // Bottom padding for spacing
                 overflow: 'hidden',
             }}
             size={12}
             display="flex">
             {/* Display the attachments popover */}
-            <Grid2 container size={12} height="40px" overflow="scroll" paddingBottom={1}
-                display="flex" justifyContent="center" gap={1}>
-                {filesBlob && filesBlob.map((f, i) => {
-                    return <Grid2 size="auto">
-                        <Chip label={(f as File).name.replace(/\.[^/.]+$/, "")}
-                            color="primary"
-                            variant="outlined"
-                            sx={{
-                                height: '32px', // Increase the height
-                                fontSize: '1.0rem', // Adjust the font size
-                            }}
-                            onDelete={() => {
-                                handleRemoveFile(i)
-                            }} />
-                    </Grid2>
-                })}
-                {audioBlob && <Chip
-                    label="Audio record" color="error" variant="outlined"
-                    sx={{
-                        height: '32px', // Increase the height
-                        fontSize: '1.0rem', // Adjust the font size
-                    }}
-                    onClick={() => setDisplayAudioController(true)}
-                    onDelete={() => {
-                        setAudioBlob(null)
+            {((filesBlob && filesBlob.length > 0) || audioBlob) &&
+                <Grid2 container size={12} height="40px" overflow="auto" paddingBottom={1}
+                    display="flex" justifyContent="center" gap={1}>
+                    {filesBlob && filesBlob.map((f, i) => {
+                        return <Grid2 size="auto">
+                            <Chip label={(f as File).name.replace(/\.[^/.]+$/, "")}
+                                color="primary"
+                                variant="outlined"
+                                sx={{
+                                    height: '32px', // Increase the height
+                                    fontSize: '1.0rem', // Adjust the font size
+                                }}
+                                onDelete={() => {
+                                    handleRemoveFile(i)
+                                }} />
+                        </Grid2>
+                    })}
+                    {audioBlob && <Chip
+                        label="Audio record" color="error" variant="outlined"
+                        sx={{
+                            height: '32px', // Increase the height
+                            fontSize: '1.0rem', // Adjust the font size
+                        }}
+                        onClick={() => setDisplayAudioController(true)}
+                        onDelete={() => {
+                            setAudioBlob(null)
+                        }
+                        } />
                     }
-                    } />
-                }
-            </Grid2>
+                </Grid2>
+             }
 
 
             <Grid2
@@ -183,7 +182,7 @@ export default function UserInput(
                 {/* User Input Section */}
                 <Grid2
                     container
-                    size={12} // Take full width 
+                    size={12} // Take full width
                     sx={{
                         display: 'flex',
                         flexDirection: 'column',

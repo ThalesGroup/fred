@@ -364,7 +364,7 @@ const lightTypography = {
        color: lightPalette.text.primary,
       textDecoration: 'underline', lineHeight: 1.6, fontWeight: 400, fontSize: '0.9rem', fontFamily: 'Roboto, sans-serif'
     },
-    ul: { 
+    ul: {
       color: lightPalette.text.primary,
       marginLeft: '0.2rem', lineHeight: 1.4, fontWeight: 400, fontSize: '0.9rem', fontFamily: 'Roboto, sans-serif' },
     li: {
@@ -414,10 +414,10 @@ const darkTypography = {
       color: darkPalette.text.primary,
       textDecoration: 'underline', lineHeight: 1.6, fontWeight: 400, fontSize: '0.9rem', fontFamily: 'Roboto, sans-serif'
     },
-    ul: { 
+    ul: {
       color: darkPalette.text.primary,
       marginLeft: '0.2rem', lineHeight: 1.4, fontWeight: 400, fontSize: '0.9rem', fontFamily: 'Roboto, sans-serif' },
-    li: { 
+    li: {
       color: darkPalette.text.primary,
       marginBottom: '0.5rem', lineHeight: 1.4, fontSize: '0.9rem', fontFamily: 'Roboto, sans-serif' },
   },
@@ -439,8 +439,7 @@ const lightTheme = createTheme({
           fontSize: '1.0rem',       // Adjust font size
           fontWeight: '300',        // Remove bold (use light font weight)
           color: lightPalette.primary.contrastText, // Text color
-          backgroundColor:  lightPalette.primary.main, // Light background color
-         padding: '12px 16px',      // Add comfortable padding
+          padding: '12px 16px',      // Add comfortable padding
           borderRadius: '8px',       // Optional: rounded corners
           boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.1)', // Optional: subtle shadow
         },
@@ -473,7 +472,6 @@ const darkTheme = createTheme({
           fontSize: '1.0rem',       // Adjust font size
           fontWeight: '300',        // Remove bold (use light font weight)
           color: darkPalette.primary.contrastText, // Text color
-          backgroundColor:  darkPalette.primary.main, // Light background color
           padding: '12px 16px',      // Add comfortable padding
           borderRadius: '8px',       // Optional: rounded corners
           boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.1)', // Optional: subtle shadow
