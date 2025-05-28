@@ -453,18 +453,17 @@ const ChatBot = (
                 </Grid2>
 
                 {/* Conversatiom tokens count */}
-                { outputTokenCounts > 0 &&
-                    <Grid2 container display="fex" width="80%" justifyContent="flex-end" marginTop={.5} marginBottom={1}>
-                        <Tooltip title={`This conversation has used ${inputTokenCounts} prompt tokens and ${outputTokenCounts} response tokens`}>
-                            <Typography
-                                fontSize="0.8rem"
-                                color={theme.palette.text.secondary}
-                                fontStyle="italic"
-                            >
-                                This conversation has used {outputTokenCounts + inputTokenCounts} tokens
-                            </Typography>
-                        </Tooltip>
-                    </Grid2>
+                {<Grid2 container display="fex" width="80%" justifyContent="flex-end" marginTop={.5} marginBottom={1}>
+                    <Tooltip title={`This conversation has used ${inputTokenCounts} prompt tokens and ${outputTokenCounts} response tokens`}>
+                        <Typography
+                            fontSize="0.8rem"
+                            color={theme.palette.text.secondary}
+                            fontStyle="italic"
+                        >
+                            This conversation has used {outputTokenCounts + inputTokenCounts} tokens
+                        </Typography>
+                    </Tooltip>
+                </Grid2>
                 }
             </Grid2> :
             <Grid2 container display="flex" flexDirection="column" justifyContent="center" height="100vh"
