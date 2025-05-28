@@ -19,14 +19,12 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, System
 from langgraph.graph.state import END, START, CompiledStateGraph, StateGraph
 
 from flow import AgentFlow, Flow
-from fred.application_context import get_model_for_leader
+from fred.application_context import get_configuration, get_model_for_leader, get_app_context
 from model_factory import get_model
 from leader.structures.decision import ExecuteDecision, PlanDecision
 from leader.structures.plan import Plan
 from leader.structures.state import State
 logger = logging.getLogger(__name__)
-
-MAX_STEPS = 5
 
 class Leader(Flow):
     """
@@ -60,7 +58,10 @@ class Leader(Flow):
         self.experts: dict[str, AgentFlow] = {}
         self.compiled_expert_graphs: dict[str, CompiledStateGraph] =  {}
         self.graph = self.get_graph()
+        config = get_configuration()
+        self.max_steps = config.ai.leader.max_steps
 
+            
     def reset_experts(self):
         """
         Reset the list of experts.
@@ -109,9 +110,9 @@ class Leader(Flow):
 
         Args:
             state: State of the agent.
-        """
-        if len(state["progress"]) >= MAX_STEPS:
-            logger.warning(f"Reached MAX_STEPS={MAX_STEPS}, forcing final answer.")
+        """        
+        if len(state["progress"]) >= self.max_steps:
+            logger.warning(f"Reached max_steps={self.max_steps}, forcing final answer.")
             return "validate"
         if len(state["progress"]) == len(state["plan"].steps):
             return "validate"
@@ -413,12 +414,11 @@ class Leader(Flow):
         Args:
             state: State of the agent.
         """
-
-        if len(state["progress"]) >= MAX_STEPS:
-            logger.warning(f"Validation triggered by MAX_STEPS={MAX_STEPS} — skipping LLM validation and forcing respond.")
+        if len(state["progress"]) >= self.max_steps:
+            logger.warning(f"Validation triggered by max_steps={self.max_steps} — skipping LLM validation and forcing respond.")
             return {
                 "plan_decision": PlanDecision(action="respond"),
-                "traces": [f"Forced respond due to reaching MAX_STEPS={MAX_STEPS}"],
+                "traces": [f"Forced respond due to reaching max_steps={self.max_steps}"],
             }
         
         objective = state["messages"][0].content

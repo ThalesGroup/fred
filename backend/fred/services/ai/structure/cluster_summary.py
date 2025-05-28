@@ -19,7 +19,7 @@ Module for extracting a summary of a cluster based on a condensed representation
 from typing import Optional
 
 from langchain_core.prompts import PromptTemplate
-from fred.application_context import get_model_for_service, get_model_for_service, get_structured_chain_for_service
+from fred.application_context import get_structured_chain_for_service
 
 from langfuse.callback import CallbackHandler
 from pydantic import BaseModel, Field

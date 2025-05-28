@@ -30,7 +30,7 @@ from services.chatbot_session.structure.chat_schema import ChatMessagePayload, C
 from services.chatbot_session.abstract_session_backend import AbstractSessionStorage
 from langchain_core.messages import (BaseMessage, HumanMessage, AIMessage)
 from langgraph.graph.state import CompiledStateGraph
-from fred.application_context import get_context_service, get_default_model
+from fred.application_context import get_app_context, get_configuration, get_context_service, get_default_model
 
 import asyncio
 
@@ -61,6 +61,9 @@ class SessionManager:
         self.temp_files: dict[str, list[str]] = defaultdict(list)
         self.attachement_processing = AttachementProcessing()
 
+        config = get_configuration()
+        self.recursion_limit = config.ai.recursion.recursion_limit
+        
     def _infer_message_subtype(self, metadata: dict, message_type: str | None = None) -> Optional[str]:
         """
         Infers the semantic subtype of a message based on its metadata and optionally its message type.
@@ -307,9 +310,10 @@ class SessionManager:
         Returns:
             The final AIMessage.
         """
+
         config = config or {
             "configurable": {"thread_id": session_id},
-            "recursion_limit": 40
+            "recursion_limit": self.recursion_limit
         }
         all_payloads: list[ChatMessagePayload] = []
         try:

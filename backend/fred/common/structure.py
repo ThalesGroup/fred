@@ -156,6 +156,9 @@ class KubernetesConfiguration(BaseModel):
 # Services and Agents — now as lists!
 # ----------------------------------------------------------------------
 
+class RecursionConfig(BaseModel):
+    recursion_limit: int
+    
 class ServicesSettings(BaseModel):
     name: str = Field(..., description="Service identifier name.")
     enabled: bool = Field(default=True, description="Whether the service is enabled.")
@@ -172,6 +175,7 @@ class AgentSettings(BaseModel):
     model: ModelConfiguration = Field(default_factory=ModelConfiguration, description="AI model configuration for this agent.")
     tag: Optional[str] = Field(None, description="Tag of the agent")
     mcp_servers: List[MCPServerConfiguration] = Field(default_factory=list, description="List of MCP servers associated to an agent.")
+    max_steps: int = Field(None,description="Max step")
 
 
 class AIConfig(BaseModel):
@@ -180,6 +184,8 @@ class AIConfig(BaseModel):
     leader: AgentSettings = Field(default_factory=AgentSettings, description="Settings for the leader agent.")
     services: List[ServicesSettings] = Field(default_factory=list, description="List of AI services.")
     agents: List[AgentSettings] = Field(default_factory=list, description="List of AI agents.")
+    recursion: RecursionConfig = Field(default_factory=int, description="Number of max recursion while using the model")
+
 
     @model_validator(mode='after')
     def validate_unique_names(self):
@@ -264,7 +270,6 @@ class Configuration(BaseModel):
     feedback: FeedbackDatabase
     context_storage: ContextStorageConfig = Field(..., description="Content Storage configuration")
     feedback_storage: FeedbackStorageConfig = Field(..., description="Feedback Storage configuration")
-
 
 class OfflineStatus(BaseModel):
     is_offline: bool

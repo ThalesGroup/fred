@@ -62,11 +62,14 @@ ai:
     name: "Fred"
     class_path: "leader.leader.Leader"
     enabled: true
+    max_steps: 5
     model: {}
   services:
     - name: "kubernetes"
       enabled: false
       model: {}
+  recursion:
+    recursion_limit: 40 #Number or max recursion use by the agents while using the model
   agents:
     - name: K8SOperatorExpert
       class_path: "agents.kubernetes_monitoring.k8s_operator_expert.K8SOperatorExpert"
@@ -98,7 +101,7 @@ ai:
         - "monitoring"
         - "observability"
       model: {}
-      
+
 # Where to save fred produced resources like Essentials or Scores
 # and external resources like Kubernetes Workload descriptions
 dao:
