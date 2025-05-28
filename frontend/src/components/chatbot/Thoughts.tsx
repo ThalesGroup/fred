@@ -15,6 +15,7 @@
 import { useState } from "react";
 import { useTheme } from "@mui/material/styles";
 import { Box, Button, Collapse, Fade, Grid2, IconButton, Modal, Tooltip, Typography } from "@mui/material";
+import Editor from "@monaco-editor/react";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import {
     Timeline,
@@ -200,7 +201,13 @@ export default function Thoughts(
                             boxShadow: 48, // Adds MUI elevation
                             overflowY: 'auto',
                         }}>
-                        {thoughtsDetails && <MarkdownRenderer content={thoughtsDetails} />}
+                        {thoughtsDetails && <Editor 
+                            theme={theme.palette.mode === "dark" ? "vs-dark" : "vs"} 
+                            height="100vh"
+                            defaultLanguage="json"
+                            options={{ readOnly: true }}
+                            defaultValue={thoughtsDetails}
+                        />}
                     </Box>
                 </Fade>
             </Modal>
