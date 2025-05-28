@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Box, Grid2, IconButton, Tooltip, Chip } from "@mui/material";
+import { Box, Grid2, IconButton, Tooltip, Chip, Typography } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import { useState } from "react";
@@ -72,7 +72,7 @@ export default function Message(
         });
         setFeedbackOpen(false);
     };
-    
+
 
     // Function to start speaking the message content
     const handleStartSpeaking = (message: string) => {
@@ -148,7 +148,7 @@ export default function Message(
                             </Box>
                         </Grid2>
                         {side === "left" ?
-                            <Grid2 size={12} height="30px" display="flex" alignItems="center">
+                            <Grid2 size={12} display="flex" alignItems="center" gap={1} flexWrap="wrap">
                                 {enableCopy &&
                                     <IconButton aria-label="delete" size="small"
                                         onClick={() => copyToClipboard(message.content as string)}>
@@ -181,12 +181,16 @@ export default function Message(
                                         }
                                     </IconButton>
                                 }
+                                {message.metadata &&
+                                    <Tooltip title={`This question used ${message.metadata.token_usage.input_tokens} tokens and the response used ${message.metadata.token_usage.output_tokens} tokens`} placement="top">
+                                        <Typography color={theme.palette.text.secondary} fontSize=".7rem" sx={{wordBreak: "normal"}}>{message.metadata.token_usage.output_tokens} tokens</Typography>
+                                    </Tooltip>
+                                }
                                 <Chip
                                     label="AI content may be incorrect, please double-check responses"
                                     size="small"
                                     variant="outlined"
                                     sx={{
-                                        ml: 1.5,
                                         fontSize: '0.7rem',
                                         height: '24px',
                                         borderColor: theme.palette.divider,
