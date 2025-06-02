@@ -13,14 +13,7 @@
 // limitations under the License.
 
 import React from "react";
-import {
-  Typography,
-  IconButton,
-  List,
-  ListItem,
-  ListItemIcon,
-  ListItemText
-} from "@mui/material";
+import { Typography, IconButton, List, ListItem, ListItemIcon, ListItemText } from "@mui/material";
 import DeleteIcon from "@mui/icons-material/Delete";
 import { getDocumentIcon } from "./DocumentIcon";
 
@@ -34,7 +27,6 @@ interface TempFileTableProps {
 }
 
 export const DocumentDrawerTable: React.FC<TempFileTableProps> = ({ files, onDelete }) => {
-
   return (
     <List dense disablePadding>
       {files.map((file, index) => (
@@ -47,10 +39,14 @@ export const DocumentDrawerTable: React.FC<TempFileTableProps> = ({ files, onDel
             </IconButton>
           }
         >
-          <ListItemIcon sx={{ minWidth: 32 }}>
-            {getDocumentIcon(file.name)}
-          </ListItemIcon>
-          <ListItemText primary={<Typography variant="body2" noWrap sx={{ textAlign: 'left' }}>{file.name}</Typography>} />
+          <ListItemIcon sx={{ minWidth: 32 }}>{getDocumentIcon(file.name)}</ListItemIcon>
+          <ListItemText
+            primary={
+              <Typography variant="body2" noWrap sx={{ textAlign: "left" }}>
+                {file.name}
+              </Typography>
+            }
+          />
         </ListItem>
       ))}
     </List>

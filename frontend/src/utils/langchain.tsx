@@ -14,44 +14,44 @@
 
 // Messages are the inputs and outputs of ChatModels.
 export interface BaseMessage {
-    /**
-     * The string contents of the message.
-     */
-    content: string | Array<string> | Record<string, any>;
+  /**
+   * The string contents of the message.
+   */
+  content: string | Array<string> | Record<string, any>;
 
-    /**
-     * Reserved for additional payload data associated with the message.
-     * For example, for a message from an AI, this could include tool calls as
-     * encoded by the model provider.
-     */
-    additional_kwargs: Record<string, any>;
+  /**
+   * Reserved for additional payload data associated with the message.
+   * For example, for a message from an AI, this could include tool calls as
+   * encoded by the model provider.
+   */
+  additional_kwargs: Record<string, any>;
 
-    /**
-     * Response metadata.
-     * For example: response headers, logprobs, token counts.
-     */
-    response_metadata?: Record<string, any>;
+  /**
+   * Response metadata.
+   * For example: response headers, logprobs, token counts.
+   */
+  response_metadata?: Record<string, any>;
 
-    /**
-     * The type of the message. Must be a string that is unique to the message type.
-     * The purpose of this field is to allow for easy identification of the message type
-     * when deserializing messages.
-     */
-    type: string;
+  /**
+   * The type of the message. Must be a string that is unique to the message type.
+   * The purpose of this field is to allow for easy identification of the message type
+   * when deserializing messages.
+   */
+  type: string;
 
-    /**
-     * An optional name for the message.
-     * This can be used to provide a human-readable name for the message.
-     * Usage of this field is optional, and whether it's used or not is up to the
-     * model implementation.
-     */
-    name?: string;
+  /**
+   * An optional name for the message.
+   * This can be used to provide a human-readable name for the message.
+   * Usage of this field is optional, and whether it's used or not is up to the
+   * model implementation.
+   */
+  name?: string;
 
-    /**
-     * An optional unique identifier for the message.
-     * This should ideally be provided by the provider/model which created the message.
-     */
-    id?: string;
+  /**
+   * An optional unique identifier for the message.
+   * This should ideally be provided by the provider/model which created the message.
+   */
+  id?: string;
 }
 
 /**
@@ -59,14 +59,14 @@ export interface BaseMessage {
  * The system message is usually passed in as the first of a sequence of input messages.
  */
 export interface SystemMessage extends BaseMessage {
-    /**
-     * The type of the message (used for serialization). Defaults to "system".
-     */
-    type: "system";
+  /**
+   * The type of the message (used for serialization). Defaults to "system".
+   */
+  type: "system";
 }
 
 export interface ErrorMessage extends BaseMessage {
-    type: "error";
+  type: "error";
 }
 
 /**
@@ -74,42 +74,42 @@ export interface ErrorMessage extends BaseMessage {
  * HumanMessages are messages that are passed in from a human to the model.
  */
 export interface HumanMessage extends BaseMessage {
-    /**
-     * The type of the message (used for serialization). Defaults to "human".
-     */
-    type: "human";
+  /**
+   * The type of the message (used for serialization). Defaults to "human".
+   */
+  type: "human";
 
-    /**
-     * Use to denote that a message is part of an example conversation.
-     * At the moment, this is ignored by most models. Usage is discouraged.
-     * Defaults to False.
-     */
-    example: boolean;
+  /**
+   * Use to denote that a message is part of an example conversation.
+   * At the moment, this is ignored by most models. Usage is discouraged.
+   * Defaults to False.
+   */
+  example: boolean;
 }
 
 // Represents a request to call a tool.
 export interface ToolCall {
-    /**
-     * The name of the tool to be called.
-     */
-    name: string;
+  /**
+   * The name of the tool to be called.
+   */
+  name: string;
 
-    /**
-     * The arguments to the tool call.
-     */
-    args: Record<string, any>;
+  /**
+   * The arguments to the tool call.
+   */
+  args: Record<string, any>;
 
-    /**
-     * An identifier associated with the tool call.
-     * An identifier is needed to associate a tool call request with a tool
-     * call result in events when multiple concurrent tool calls are made.
-     */
-    id?: string;
+  /**
+   * An identifier associated with the tool call.
+   * An identifier is needed to associate a tool call request with a tool
+   * call result in events when multiple concurrent tool calls are made.
+   */
+  id?: string;
 
-    /**
-     * The type of the tool call. Defaults to "tool_call".
-     */
-    type?: "tool_call";
+  /**
+   * The type of the tool call. Defaults to "tool_call".
+   */
+  type?: "tool_call";
 }
 
 /**
@@ -119,30 +119,30 @@ export interface ToolCall {
  * (e.g., invalid JSON arguments.)
  */
 export interface InvalidToolCall {
-    /**
-     * The name of the tool to be called.
-     */
-    name?: string;
+  /**
+   * The name of the tool to be called.
+   */
+  name?: string;
 
-    /**
-     * The arguments to the tool call.
-     */
-    args?: string;
+  /**
+   * The arguments to the tool call.
+   */
+  args?: string;
 
-    /**
-     * An identifier associated with the tool call.
-     */
-    id?: string;
+  /**
+   * An identifier associated with the tool call.
+   */
+  id?: string;
 
-    /**
-     * An error message associated with the tool call.
-     */
-    error?: string;
+  /**
+   * An error message associated with the tool call.
+   */
+  error?: string;
 
-    /**
-     * The type of the invalid tool call. Defaults to "invalid_tool_call".
-     */
-    type?: "invalid_tool_call";
+  /**
+   * The type of the invalid tool call. Defaults to "invalid_tool_call".
+   */
+  type?: "invalid_tool_call";
 }
 
 /**
@@ -159,20 +159,20 @@ export interface InvalidToolCall {
  * }
  */
 export interface UsageMetadata {
-    /**
-     * Count of input (or prompt) tokens.
-     */
-    input_tokens: number;
+  /**
+   * Count of input (or prompt) tokens.
+   */
+  input_tokens: number;
 
-    /**
-     * Count of output (or completion) tokens.
-     */
-    output_tokens: number;
+  /**
+   * Count of output (or completion) tokens.
+   */
+  output_tokens: number;
 
-    /**
-     * Total token count.
-     */
-    total_tokens: number;
+  /**
+   * Total token count.
+   */
+  total_tokens: number;
 }
 
 /**
@@ -185,34 +185,34 @@ export interface UsageMetadata {
  * (e.g., tool calls, usage metadata) added by the LangChain framework.
  */
 export interface AIMessage extends BaseMessage {
-    /**
-     * The type of the message (used for serialization). Defaults to "ai".
-     */
-    type: "ai";
+  /**
+   * The type of the message (used for serialization). Defaults to "ai".
+   */
+  type: "ai";
 
-    /**
-     * Use to denote that a message is part of an example conversation.
-     *
-     * At the moment, this is ignored by most models. Usage is discouraged.
-     */
-    example: boolean;
+  /**
+   * Use to denote that a message is part of an example conversation.
+   *
+   * At the moment, this is ignored by most models. Usage is discouraged.
+   */
+  example: boolean;
 
-    /**
-     * If provided, tool calls associated with the message.
-     */
-    tool_calls?: ToolCall[];
+  /**
+   * If provided, tool calls associated with the message.
+   */
+  tool_calls?: ToolCall[];
 
-    /**
-     * If provided, tool calls with parsing errors associated with the message.
-     */
-    invalid_tool_calls?: InvalidToolCall[];
+  /**
+   * If provided, tool calls with parsing errors associated with the message.
+   */
+  invalid_tool_calls?: InvalidToolCall[];
 
-    /**
-     * If provided, usage metadata for a message, such as token counts.
-     *
-     * This is a standard representation of token usage that is consistent across models.
-     */
-    usage_metadata?: UsageMetadata;
+  /**
+   * If provided, usage metadata for a message, such as token counts.
+   *
+   * This is a standard representation of token usage that is consistent across models.
+   */
+  usage_metadata?: UsageMetadata;
 }
 
 /**
@@ -226,31 +226,31 @@ export interface AIMessage extends BaseMessage {
  * to request multiple tool calls in parallel.
  */
 export interface ToolMessage extends BaseMessage {
-    /**
-     * Tool call that this message is responding to.
-     */
-    tool_call_id: string;
+  /**
+   * Tool call that this message is responding to.
+   */
+  tool_call_id: string;
 
-    /**
-     * The type of the message (used for serialization). Defaults to "tool".
-     */
-    type: "tool";
+  /**
+   * The type of the message (used for serialization). Defaults to "tool".
+   */
+  type: "tool";
 
-    /**
-     * Artifact of the Tool execution which is not meant to be sent to the model.
-     *
-     * Should only be specified if it is different from the message content, e.g., if only
-     * a subset of the full tool output is being passed as message content but the full
-     * output is needed in other parts of the code.
-     *
-     * Version added: 0.2.17
-     */
-    artifact?: any;
+  /**
+   * Artifact of the Tool execution which is not meant to be sent to the model.
+   *
+   * Should only be specified if it is different from the message content, e.g., if only
+   * a subset of the full tool output is being passed as message content but the full
+   * output is needed in other parts of the code.
+   *
+   * Version added: 0.2.17
+   */
+  artifact?: any;
 
-    /**
-     * Status of the tool invocation.
-     *
-     * Version added: 0.2.24
-     */
-    status: "success" | "error";
+  /**
+   * Status of the tool invocation.
+   *
+   * Version added: 0.2.24
+   */
+  status: "success" | "error";
 }

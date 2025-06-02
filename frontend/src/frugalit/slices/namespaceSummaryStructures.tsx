@@ -13,12 +13,12 @@
 // limitations under the License.
 
 export interface NamespaceSummary {
-    namespace_summary: string,
+  namespace_summary: string;
 }
 
 // Define default values for Essentials
 const defaultNamespaceSummary: NamespaceSummary = {
-    namespace_summary: "none",
+  namespace_summary: "none",
 };
 
 /**
@@ -27,5 +27,5 @@ const defaultNamespaceSummary: NamespaceSummary = {
  * @returns An Essentials object with the default values overridden by any provided props.
  */
 export function createNamespaceSummary(props: Partial<NamespaceSummary> = {}): NamespaceSummary {
-    return { ...defaultNamespaceSummary, ...props };
+  return { ...defaultNamespaceSummary, ...props };
 }

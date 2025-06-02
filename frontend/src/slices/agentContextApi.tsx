@@ -12,14 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { createApi } from '@reduxjs/toolkit/query/react';
-import { createDynamicBaseQuery } from '../common/dynamicBaseQuery.tsx';
+import { createApi } from "@reduxjs/toolkit/query/react";
+import { createDynamicBaseQuery } from "../common/dynamicBaseQuery.tsx";
 
 /**
  * 1. API Slice pour le Chat/LLM
  */
 export const agentContextApiSlice = createApi({
-  reducerPath: 'agentContextApi',
+  reducerPath: "agentContextApi",
   baseQuery: createDynamicBaseQuery({ backend: "api" }),
   endpoints: () => ({}),
 });
@@ -31,14 +31,14 @@ const extendedAgentContextApi = agentContextApiSlice.injectEndpoints({
     getAgentContexts: builder.mutation({
       query: (agentName) => ({
         url: `/fred/context/${agentName}`,
-        method: 'GET',
+        method: "GET",
       }),
     }),
 
     saveAgentContext: builder.mutation({
       query: ({ agentName, context }) => ({
         url: `/fred/context/${agentName}`,
-        method: 'POST',
+        method: "POST",
         body: context,
       }),
     }),
@@ -46,16 +46,11 @@ const extendedAgentContextApi = agentContextApiSlice.injectEndpoints({
     deleteAgentContext: builder.mutation({
       query: ({ agentName, contextId }) => ({
         url: `/fred/context/${agentName}/${contextId}`,
-        method: 'DELETE',
+        method: "DELETE",
       }),
     }),
   }),
 });
 
-export const {
-  useGetAgentContextsMutation,
-  useSaveAgentContextMutation,
-  useDeleteAgentContextMutation,
-} = extendedAgentContextApi
-
-
+export const { useGetAgentContextsMutation, useSaveAgentContextMutation, useDeleteAgentContextMutation } =
+  extendedAgentContextApi;

@@ -12,21 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
-
 export interface Ship {
-    frequency: GLfloat
-    bandwidth: GLfloat
-    protocol: string
-    location: string
+  frequency: GLfloat;
+  bandwidth: GLfloat;
+  protocol: string;
+  location: string;
 }
 export interface ShipList {
-    ships: Ship[]
+  ships: Ship[];
 }
 
 const defaultShipList: ShipList = {
-    ships: []
-}
+  ships: [],
+};
 export function createShipList(props: Partial<ShipList> = {}): ShipList {
-    return { ...defaultShipList, ...props };
-}  
+  return { ...defaultShipList, ...props };
+}

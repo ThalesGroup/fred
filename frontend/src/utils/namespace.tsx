@@ -13,6 +13,6 @@
 // limitations under the License.
 
 export interface NamespaceList {
-    cluster: string,
-    namespaces: string[]
+  cluster: string;
+  namespaces: string[];
 }

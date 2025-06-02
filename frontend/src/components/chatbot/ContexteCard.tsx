@@ -12,16 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import {
-  Card,
-  CardContent,
-  Typography,
-  Box,
-  IconButton,
-  Divider
-} from "@mui/material";
-import EditIcon from '@mui/icons-material/Edit';
-import DeleteIcon from '@mui/icons-material/Delete';
+import { Card, CardContent, Typography, Box, IconButton, Divider } from "@mui/material";
+import EditIcon from "@mui/icons-material/Edit";
+import DeleteIcon from "@mui/icons-material/Delete";
 import { useTheme } from "@mui/material";
 
 /**
@@ -36,26 +29,28 @@ const ContextCard = ({ card, onEdit, onDelete }) => {
   const theme = useTheme();
 
   return (
-    <Card sx={{
-      height: '100%',
-      borderRadius: 2,
-      boxShadow: theme.shadows[2],
-      transition: 'transform 0.2s',
-      '&:hover': {
-        transform: 'translateY(-4px)',
-        boxShadow: theme.shadows[4],
-      },
-      display: 'flex',
-      flexDirection: 'column'
-    }}>
+    <Card
+      sx={{
+        height: "100%",
+        borderRadius: 2,
+        boxShadow: theme.shadows[2],
+        transition: "transform 0.2s",
+        "&:hover": {
+          transform: "translateY(-4px)",
+          boxShadow: theme.shadows[4],
+        },
+        display: "flex",
+        flexDirection: "column",
+      }}
+    >
       <CardContent sx={{ flexGrow: 1 }}>
         <Box
           sx={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'flex-start',
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "flex-start",
             gap: 1,
-            mb: 1
+            mb: 1,
           }}
         >
           <Typography
@@ -64,20 +59,20 @@ const ContextCard = ({ card, onEdit, onDelete }) => {
             sx={{
               fontWeight: 600,
               flexGrow: 1,
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              display: '-webkit-box',
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              display: "-webkit-box",
               WebkitLineClamp: 2,
-              WebkitBoxOrient: 'vertical'
+              WebkitBoxOrient: "vertical",
             }}
           >
             {card.title || "Untitled background information"}
           </Typography>
-          <Box sx={{ display: 'flex', flexShrink: 0 }}>
-            <IconButton size="small" onClick={() => onEdit(card)} sx={{ color: 'primary.main' }}>
+          <Box sx={{ display: "flex", flexShrink: 0 }}>
+            <IconButton size="small" onClick={() => onEdit(card)} sx={{ color: "primary.main" }}>
               <EditIcon fontSize="small" />
             </IconButton>
-            <IconButton size="small" onClick={() => onDelete(card)} sx={{ color: 'error.main' }}>
+            <IconButton size="small" onClick={() => onDelete(card)} sx={{ color: "error.main" }}>
               <DeleteIcon fontSize="small" />
             </IconButton>
           </Box>
@@ -85,7 +80,7 @@ const ContextCard = ({ card, onEdit, onDelete }) => {
 
         <Divider sx={{ mb: 2 }} />
 
-        <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
+        <Typography variant="body2" sx={{ whiteSpace: "pre-wrap" }}>
           {card.content || "(empty background)"}
         </Typography>
       </CardContent>

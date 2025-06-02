@@ -13,11 +13,11 @@
 // limitations under the License.
 
 export interface ClusterConsumption {
-  timestamps: string [];
-  values: number [];
+  timestamps: string[];
+  values: number[];
   auc: number;
   unit: string;
-  details?: Detail[]
+  details?: Detail[];
 }
 
 export interface Detail {

@@ -19,9 +19,7 @@ import { ApplicationContext } from "../app/ApplicationContextProvider";
 export const PageBodyWrapper = ({ children }: { children: React.ReactNode }) => {
   const { isSidebarCollapsed } = useContext(ApplicationContext);
   const theme = useTheme();
-  const sidebarWidth = isSidebarCollapsed
-  ? theme.layout.sidebarCollapsedWidth
-  : theme.layout.sidebarWidth;
+  const sidebarWidth = isSidebarCollapsed ? theme.layout.sidebarCollapsedWidth : theme.layout.sidebarWidth;
 
   return (
     <Box

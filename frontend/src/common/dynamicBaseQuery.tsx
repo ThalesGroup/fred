@@ -22,7 +22,7 @@ import { KeyCloakService } from "../security/KeycloakService";
  * Options to select which backend to use for the baseQuery.
  */
 interface DynamicBaseQueryOptions {
-  backend: "api" | "knowledge"; 
+  backend: "api" | "knowledge";
 }
 
 /**
@@ -37,8 +37,8 @@ export const createDynamicBaseQuery = (options: DynamicBaseQueryOptions) => {
     // ❗❗ Only access the config when the request is actually made
     const baseUrl =
       options.backend === "knowledge"
-        ? (import.meta.env.VITE_BACKEND_URL_KNOWLEDGE || getConfig().backend_url_knowledge)
-        : (import.meta.env.VITE_BACKEND_URL_API || getConfig().backend_url_api);
+        ? import.meta.env.VITE_BACKEND_URL_KNOWLEDGE || getConfig().backend_url_knowledge
+        : import.meta.env.VITE_BACKEND_URL_API || getConfig().backend_url_api;
 
     if (!baseUrl) {
       throw new Error(`Backend URL missing for ${options.backend} backend.`);

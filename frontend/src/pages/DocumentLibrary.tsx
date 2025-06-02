@@ -37,17 +37,17 @@ import {
 import ClearIcon from "@mui/icons-material/Clear";
 import { useCallback, useEffect, useState } from "react";
 import { LoadingSpinner } from "../utils/loadingSpinner";
-import UploadIcon from '@mui/icons-material/Upload';
-import SaveIcon from '@mui/icons-material/Save';
-import SearchIcon from '@mui/icons-material/Search';
-import LibraryBooksRoundedIcon from '@mui/icons-material/LibraryBooksRounded';
+import UploadIcon from "@mui/icons-material/Upload";
+import SaveIcon from "@mui/icons-material/Save";
+import SearchIcon from "@mui/icons-material/Search";
+import LibraryBooksRoundedIcon from "@mui/icons-material/LibraryBooksRounded";
 import { KeyCloakService } from "../security/KeycloakService";
 import {
   KnowledgeDocument,
   useDeleteDocumentMutation,
   useGetDocumentMarkdownPreviewMutation,
   useGetDocumentsWithFilterMutation,
-  useLazyGetDocumentRawContentQuery
+  useLazyGetDocumentRawContentQuery,
 } from "../slices/documentApi";
 
 import { useGetChatBotAgenticFlowsMutation } from "../slices/chatApi";
@@ -125,10 +125,9 @@ export const DocumentLibrary = () => {
   const [deleteDocument] = useDeleteDocumentMutation();
   const [getDocumentsWithFilter] = useGetDocumentsWithFilterMutation();
   const [getAgenticFlows] = useGetChatBotAgenticFlowsMutation();
-  const [getDocumentMarkdownContent] = useGetDocumentMarkdownPreviewMutation()
+  const [getDocumentMarkdownContent] = useGetDocumentMarkdownPreviewMutation();
   const [selectedDocument, setSelectedDocument] = useState<any>(null);
   const [triggerDownload] = useLazyGetDocumentRawContentQuery();
-
 
   const theme = useTheme();
 
@@ -163,7 +162,7 @@ export const DocumentLibrary = () => {
   const [documentsPerPage, setDocumentsPerPage] = useState(10); // Number of documents shown per page
   const [currentPage, setCurrentPage] = useState(1); // Current page in the pagination component
   const [agentFilter, setAgentFilter] = useState(null); // Selected agent for filtering document list
-  const [currentAgent, setCurrentAgent] = useState(''); // Selected agent in the upload drawer
+  const [currentAgent, setCurrentAgent] = useState(""); // Selected agent in the upload drawer
   const [openSide, setOpenSide] = useState(false); // Whether the upload drawer is open
   const [showElements, setShowElements] = useState(false); // Controls whether page elements are faded in
 
@@ -178,14 +177,13 @@ export const DocumentLibrary = () => {
   // - name: username retrieved from Keycloak
   // - canManageDocuments: boolean, true if user has admin/editor role
   // - roles: list of user's assigned roles
-  // 
+  //
   // This allows the UI to adjust behavior (e.g., show/hide upload button) based on user permissions.
   const [userInfo, setUserInfo] = useState({
     name: KeyCloakService.GetUserName(),
     canManageDocuments: hasDocumentManagementPermission(),
-    roles: KeyCloakService.GetUserRoles()
+    roles: KeyCloakService.GetUserRoles(),
   });
-
 
   const { getInputProps, open } = useDropzone({
     noClick: true,
@@ -195,13 +193,12 @@ export const DocumentLibrary = () => {
     },
   });
 
-
   useEffect(() => {
     setShowElements(true);
     setUserInfo({
       name: KeyCloakService.GetUserName(),
       canManageDocuments: hasDocumentManagementPermission(),
-      roles: KeyCloakService.GetUserRoles()
+      roles: KeyCloakService.GetUserRoles(),
     });
   }, []);
 
@@ -272,7 +269,6 @@ export const DocumentLibrary = () => {
       /* setFilteredFiles((prev) =>
         prev.filter((file) => file.document_uid !== document_uid)
       ); */
-
     } catch (error) {
       showError({
         summary: "Delete Failed",
@@ -288,7 +284,9 @@ export const DocumentLibrary = () => {
 
   const handleDocumentMarkdownPreview = async (document_uid: string, file_name: string) => {
     try {
-      const response = await getDocumentMarkdownContent({ document_uid }).unwrap();
+      const response = await getDocumentMarkdownContent({
+        document_uid,
+      }).unwrap();
       const { content } = response;
 
       setSelectedDocument({
@@ -309,9 +307,7 @@ export const DocumentLibrary = () => {
   const fetchFiles = useCallback(async () => {
     try {
       setIsLoading(true);
-      const filters = agentFilter?.trim()
-        ? { front_metadata: { agent_name: agentFilter } }
-        : {};
+      const filters = agentFilter?.trim() ? { front_metadata: { agent_name: agentFilter } } : {};
 
       const response = await getDocumentsWithFilter(filters).unwrap();
 
@@ -323,11 +319,11 @@ export const DocumentLibrary = () => {
           document_name: doc.document_name,
           date_added_to_kb: doc.date_added_to_kb,
           retrievable: doc.retrievable,
-          agent_name: doc.front_metadata?.agent_name || "-"
-        }))
+          agent_name: doc.front_metadata?.agent_name || "-",
+        })),
       );
     } catch (error) {
-      console.error('Error fetching files:', error);
+      console.error("Error fetching files:", error);
     } finally {
       setIsLoading(false);
     }
@@ -338,7 +334,10 @@ export const DocumentLibrary = () => {
     setUploadProgressSteps([]);
     try {
       if (!currentAgenticFlow) {
-        showWarning({ summary: 'Agent not selected', detail: 'Please select an agent before uploading documents' });
+        showWarning({
+          summary: "Agent not selected",
+          detail: "Please select an agent before uploading documents",
+        });
         setIsLoading(false);
         return;
       }
@@ -349,17 +348,27 @@ export const DocumentLibrary = () => {
           await streamProcessDocument(file, agent_name, (progress) => {
             setUploadProgressSteps((prev) => [
               ...prev,
-              { step: progress.step, status: progress.status, filename: file.name },
+              {
+                step: progress.step,
+                status: progress.status,
+                filename: file.name,
+              },
             ]);
           });
           uploadCount++;
         } catch (e) {
           console.error("Error uploading file:", e);
-          showError({ summary: 'Upload Failed', detail: `Error uploading ${file.name}: ${e.message}` });
+          showError({
+            summary: "Upload Failed",
+            detail: `Error uploading ${file.name}: ${e.message}`,
+          });
         }
       }
     } catch (error) {
-      showError({ summary: 'Upload Failed', detail: `Error uploading ${error}` });
+      showError({
+        summary: "Upload Failed",
+        detail: `Error uploading ${error}`,
+      });
       console.error("Unexpected error:", error);
     } finally {
       await fetchFiles();
@@ -372,12 +381,11 @@ export const DocumentLibrary = () => {
     fetchFiles();
   }, [agentFilter, fetchFiles]);
 
-
   // Pagination
   const indexOfLastDocument = currentPage * documentsPerPage;
   const indexOfFirstDocument = indexOfLastDocument - documentsPerPage;
-  const filteredFiles = currentAgentFiles.filter(file =>
-    file.document_name.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredFiles = currentAgentFiles.filter((file) =>
+    file.document_name.toLowerCase().includes(searchQuery.toLowerCase()),
   );
   const currentDocuments = filteredFiles.slice(indexOfFirstDocument, indexOfLastDocument);
 
@@ -396,7 +404,7 @@ export const DocumentLibrary = () => {
           py: { xs: 3, md: 4 }, // Reduced padding
           mb: 3, // Reduced margin
           borderRadius: 2,
-          boxShadow: theme.shadows[4]
+          boxShadow: theme.shadows[4],
         }}
       >
         <Container maxWidth="xl">
@@ -418,7 +426,14 @@ export const DocumentLibrary = () => {
               </Grid2>
 
               {userInfo.canManageDocuments && (
-                <Grid2 container size={{ xs: 12, md: 4 }} sx={{ justifyContent: 'flex-end', textAlign: { xs: 'left', md: 'right' } }}>
+                <Grid2
+                  container
+                  size={{ xs: 12, md: 4 }}
+                  sx={{
+                    justifyContent: "flex-end",
+                    textAlign: { xs: "left", md: "right" },
+                  }}
+                >
                   <Button
                     variant="contained"
                     startIcon={<UploadIcon />}
@@ -430,7 +445,7 @@ export const DocumentLibrary = () => {
                     size="medium" // Smaller button
                     sx={{
                       borderRadius: "8px",
-                      mt: { xs: 1, md: 0 }
+                      mt: { xs: 1, md: 0 },
                     }}
                   >
                     Upload a document
@@ -449,7 +464,7 @@ export const DocumentLibrary = () => {
             sx={{
               p: 3,
               borderRadius: 4,
-              border: `1px solid ${theme.palette.divider}`
+              border: `1px solid ${theme.palette.divider}`,
             }}
           >
             <Grid2 container spacing={2} alignItems="center">
@@ -483,11 +498,11 @@ export const DocumentLibrary = () => {
                 />
               </Grid2>
 
-              <Grid2 size={{ xs: 6, md: 3 }}  >
+              <Grid2 size={{ xs: 6, md: 3 }}>
                 <FormControl fullWidth size="small">
                   <InputLabel>Agent</InputLabel>
                   <Select
-                    value={agentFilter || ''}
+                    value={agentFilter || ""}
                     onChange={handleChangeAgentFilter}
                     input={<OutlinedInput label="Agent" />}
                   >
@@ -527,9 +542,9 @@ export const DocumentLibrary = () => {
               p: 3,
               borderRadius: 4,
               mb: 3,
-              minHeight: '500px',
+              minHeight: "500px",
               border: `1px solid ${theme.palette.divider}`,
-              position: 'relative'
+              position: "relative",
             }}
           >
             {isLoading ? (
@@ -545,14 +560,10 @@ export const DocumentLibrary = () => {
                   files={currentDocuments}
                   selected={selectedFiles}
                   onToggleSelect={(uid) => {
-                    setSelectedFiles((prev) =>
-                      prev.includes(uid)
-                        ? prev.filter((id) => id !== uid)
-                        : [...prev, uid]
-                    );
+                    setSelectedFiles((prev) => (prev.includes(uid) ? prev.filter((id) => id !== uid) : [...prev, uid]));
                   }}
                   onToggleAll={(checked) => {
-                    setSelectedFiles(checked ? currentDocuments.map(f => f.document_uid) : []);
+                    setSelectedFiles(checked ? currentDocuments.map((f) => f.document_uid) : []);
                   }}
                   onDelete={handleDelete}
                   onDownload={handleDownload}
@@ -562,7 +573,6 @@ export const DocumentLibrary = () => {
                   }}
                   isAdmin={userInfo.canManageDocuments}
                   onOpen={(document_uid, file_name) => handleDocumentMarkdownPreview(document_uid, file_name)}
-
                 />
                 <Box display="flex" alignItems="center" mt={3} justifyContent="space-between">
                   <Pagination
@@ -571,7 +581,7 @@ export const DocumentLibrary = () => {
                     onChange={(_, value) => setCurrentPage(value)}
                     color="primary"
                     size="small" // Smaller pagination
-                    shape='rounded'
+                    shape="rounded"
                   />
 
                   <FormControl sx={{ minWidth: 80 }}>
@@ -582,7 +592,7 @@ export const DocumentLibrary = () => {
                         setCurrentPage(1);
                       }}
                       input={<OutlinedInput />}
-                      sx={{ height: '32px' }}
+                      sx={{ height: "32px" }}
                       size="small"
                     >
                       <MenuItem value="10">10</MenuItem>
@@ -593,18 +603,12 @@ export const DocumentLibrary = () => {
                 </Box>
               </Box>
             ) : (
-              <Box
-                display="flex"
-                flexDirection="column"
-                alignItems="center"
-                justifyContent="center"
-                minHeight="400px"
-              >
+              <Box display="flex" flexDirection="column" alignItems="center" justifyContent="center" minHeight="400px">
                 <LibraryBooksRoundedIcon
                   sx={{
                     fontSize: 60,
                     color: theme.palette.text.secondary,
-                    mb: 2
+                    mb: 2,
                   }}
                 />
                 <Typography variant="h5" color="textSecondary" align="center">
@@ -637,11 +641,11 @@ export const DocumentLibrary = () => {
           onClose={() => setOpenSide(false)}
           PaperProps={{
             sx: {
-              width: { xs: '100%', sm: 450 },
+              width: { xs: "100%", sm: 450 },
               p: 3,
               borderTopLeftRadius: 16,
               borderBottomLeftRadius: 16,
-            }
+            },
           }}
         >
           <Typography variant="h5" fontWeight="bold" gutterBottom>
@@ -653,17 +657,9 @@ export const DocumentLibrary = () => {
 
           <FormControl fullWidth size="small" sx={{ mb: 3 }}>
             <InputLabel>Agent</InputLabel>
-            <Select
-              value={currentAgent}
-              onChange={handleChangeAgent}
-              input={<OutlinedInput label="Agent" />}
-            >
+            <Select value={currentAgent} onChange={handleChangeAgent} input={<OutlinedInput label="Agent" />}>
               {agenticFlows.map((agent) => (
-                <MenuItem
-                  key={agent.nickname}
-                  value={agent.nickname}
-                  onClick={() => setCurrentAgenticFlow(agent)}
-                >
+                <MenuItem key={agent.nickname} value={agent.nickname} onClick={() => setCurrentAgenticFlow(agent)}>
                   {agent.nickname}
                 </MenuItem>
               ))}
@@ -681,9 +677,7 @@ export const DocumentLibrary = () => {
               minHeight: "180px",
               maxHeight: "400px",
               overflowY: "auto",
-              backgroundColor: isHighlighted
-                ? theme.palette.action.hover
-                : theme.palette.background.paper,
+              backgroundColor: isHighlighted ? theme.palette.action.hover : theme.palette.background.paper,
               transition: "background-color 0.3s",
               display: "block",
               textAlign: "left",
@@ -703,13 +697,7 @@ export const DocumentLibrary = () => {
           >
             <input {...getInputProps()} />
             {!tempFiles.length ? (
-              <Box
-                display="flex"
-                flexDirection="column"
-                justifyContent="center"
-                alignItems="center"
-                height="100%"
-              >
+              <Box display="flex" flexDirection="column" justifyContent="center" alignItems="center" height="100%">
                 <UploadIcon sx={{ fontSize: 40, color: "text.secondary", mb: 2 }} />
                 <Typography variant="body1" color="textSecondary">
                   Drop your files here
@@ -728,12 +716,8 @@ export const DocumentLibrary = () => {
             </Box>
           )}
 
-          <Box sx={{ mt: 3, display: 'flex', justifyContent: 'space-between' }}>
-            <Button
-              variant="outlined"
-              onClick={() => setOpenSide(false)}
-              sx={{ borderRadius: "8px" }}
-            >
+          <Box sx={{ mt: 3, display: "flex", justifyContent: "space-between" }}>
+            <Button variant="outlined" onClick={() => setOpenSide(false)} sx={{ borderRadius: "8px" }}>
               Cancel
             </Button>
 
@@ -745,17 +729,12 @@ export const DocumentLibrary = () => {
               disabled={!currentAgenticFlow || !tempFiles.length || isLoading}
               sx={{ borderRadius: "8px" }}
             >
-              {isLoading ? 'Saving...' : 'Save'}
+              {isLoading ? "Saving..." : "Save"}
             </Button>
           </Box>
         </Drawer>
       )}
-      <DocumentViewer
-        document={selectedDocument}
-        open={documentViewerOpen}
-        onClose={handleCloseDocumentViewer}
-      />
+      <DocumentViewer document={selectedDocument} open={documentViewerOpen} onClose={handleCloseDocumentViewer} />
     </PageBodyWrapper>
   );
 };
-

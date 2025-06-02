@@ -34,10 +34,9 @@ export const useCluster = (clusterName: string | undefined) => {
       setIsFetching(true); // Mark as fetching to avoid multiple fetches
 
       // Call fetchClusterAndNamespaceData and use .finally()
-      global_context.fetchClusterAndNamespaceData(clusterName)
-        .finally(() => {
-          setIsFetching(false); // Reset fetching flag when done
-        });
+      global_context.fetchClusterAndNamespaceData(clusterName).finally(() => {
+        setIsFetching(false); // Reset fetching flag when done
+      });
     }
   }, [clusterName, global_context]); // Ensure the effect only triggers when the clusterName changes
 };

@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import React, { useState } from 'react';
+import React, { useState } from "react";
 import { Typography, Paper, Button, TextField, Box, Select, MenuItem, FormControl, InputLabel } from "@mui/material";
-import { Fact, FactType } from '../frugalit/slices/factsStructures';
+import { Fact, FactType } from "../frugalit/slices/factsStructures";
 
 interface FactInputFormProps {
   isOpen: boolean;
@@ -24,16 +24,22 @@ interface FactInputFormProps {
   existingTitles?: string[];
 }
 
-export const FactInputForm: React.FC<FactInputFormProps> = ({ isOpen, onClose, onSubmit, initialValues, existingTitles }) => {
-  const [content, setContent] = useState(initialValues?.content || '');
-  const [title, setTitle] = useState(initialValues?.title || '');
+export const FactInputForm: React.FC<FactInputFormProps> = ({
+  isOpen,
+  onClose,
+  onSubmit,
+  initialValues,
+  existingTitles,
+}) => {
+  const [content, setContent] = useState(initialValues?.content || "");
+  const [title, setTitle] = useState(initialValues?.title || "");
   const [type, setType] = useState<FactType>(initialValues?.type || FactType.DOMAIN);
-  const currentUser = initialValues?.user || 'current_user';
+  const currentUser = initialValues?.user || "current_user";
   const initialDate = initialValues?.date || new Date().toISOString();
 
   // Validation states
   const [titleError, setTitleError] = useState(false);
-  const [titleErrorMessage, setTitleErrorMessage] = useState('');
+  const [titleErrorMessage, setTitleErrorMessage] = useState("");
 
   const handleTitleChange = (value: string) => {
     setTitle(value);
@@ -41,10 +47,10 @@ export const FactInputForm: React.FC<FactInputFormProps> = ({ isOpen, onClose, o
     // Check for duplicate title
     if (existingTitles?.includes(value.trim()) && !initialValues) {
       setTitleError(true);
-      setTitleErrorMessage('A fact with this title already exists.');
+      setTitleErrorMessage("A fact with this title already exists.");
     } else {
       setTitleError(false);
-      setTitleErrorMessage('');
+      setTitleErrorMessage("");
     }
   };
 
@@ -54,7 +60,7 @@ export const FactInputForm: React.FC<FactInputFormProps> = ({ isOpen, onClose, o
     // Final validation before submission
     if (!title.trim() || titleError) {
       setTitleError(true);
-      setTitleErrorMessage(titleError ? titleErrorMessage : 'Title is required.');
+      setTitleErrorMessage(titleError ? titleErrorMessage : "Title is required.");
       return;
     }
 
@@ -80,7 +86,7 @@ export const FactInputForm: React.FC<FactInputFormProps> = ({ isOpen, onClose, o
     <Paper elevation={3} sx={{ p: 3, mt: 2 }}>
       <form onSubmit={handleSubmit}>
         <Typography variant="h6" gutterBottom>
-          {initialValues ? 'Edit Fact' : 'New Fact'}
+          {initialValues ? "Edit Fact" : "New Fact"}
         </Typography>
 
         <TextField
@@ -91,17 +97,13 @@ export const FactInputForm: React.FC<FactInputFormProps> = ({ isOpen, onClose, o
           onChange={(e) => handleTitleChange(e.target.value)}
           sx={{ mt: 2 }}
           error={titleError}
-          helperText={titleErrorMessage || (titleError ? 'Title is required.' : '')}
+          helperText={titleErrorMessage || (titleError ? "Title is required." : "")}
           disabled={!!initialValues} // Disable title in edit mode
         />
 
         <FormControl fullWidth sx={{ mt: 2 }}>
           <InputLabel>Type</InputLabel>
-          <Select
-            value={type}
-            onChange={(e) => setType(e.target.value as FactType)}
-            label="Type"
-          >
+          <Select value={type} onChange={(e) => setType(e.target.value as FactType)} label="Type">
             <MenuItem value={FactType.DOMAIN}>Domain</MenuItem>
             <MenuItem value={FactType.REQUIREMENT}>Requirement</MenuItem>
             <MenuItem value={FactType.COST}>Cost</MenuItem>
@@ -121,7 +123,7 @@ export const FactInputForm: React.FC<FactInputFormProps> = ({ isOpen, onClose, o
           sx={{ mt: 2 }}
         />
 
-        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 2 }}>
+        <Box sx={{ display: "flex", justifyContent: "flex-end", mt: 2 }}>
           <Button type="submit" variant="contained" color="primary">
             Save
           </Button>

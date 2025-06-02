@@ -18,7 +18,7 @@ import { getMarkdownComponents } from "./GetMarkdownComponents";
 
 export interface MarkdownRendererProps {
   content: string;
-  size?: 'small' | 'medium' | 'large';
+  size?: "small" | "medium" | "large";
   enableEmojiSubstitution?: boolean;
 }
 
@@ -67,8 +67,14 @@ export default function MarkdownRenderer({
   enableEmojiSubstitution = false,
 }: MarkdownRendererProps) {
   const theme = useTheme();
-  const components = getMarkdownComponents({ theme, size, enableEmojiFix: true });
-  const finalContent = enableEmojiSubstitution ? replaceStageDirectionsWithEmoji(content || "") : (content || "No markdown content provided.");
+  const components = getMarkdownComponents({
+    theme,
+    size,
+    enableEmojiFix: true,
+  });
+  const finalContent = enableEmojiSubstitution
+    ? replaceStageDirectionsWithEmoji(content || "")
+    : content || "No markdown content provided.";
 
   return <ReactMarkdown components={components}>{finalContent}</ReactMarkdown>;
 }

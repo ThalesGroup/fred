@@ -28,19 +28,20 @@ import {
   Tabs,
   Tab,
   Tooltip,
-  IconButton} from "@mui/material";
+  IconButton,
+} from "@mui/material";
 import { useState, useEffect, SyntheticEvent } from "react";
 import SearchIcon from "@mui/icons-material/Search";
 import FilterListIcon from "@mui/icons-material/FilterList";
-import StarIcon from '@mui/icons-material/Star';
-import StarOutlineIcon from '@mui/icons-material/StarOutline';
-import DescriptionIcon from '@mui/icons-material/Description';
+import StarIcon from "@mui/icons-material/Star";
+import StarOutlineIcon from "@mui/icons-material/StarOutline";
+import DescriptionIcon from "@mui/icons-material/Description";
 import { LoadingSpinner } from "../utils/loadingSpinner";
 import { getAgentBadge } from "../utils/avatar";
 import Grid2 from "@mui/material/Grid2";
 import { KeyCloakService } from "../security/KeycloakService";
 import ContextManagementModal from "../components/chatbot/ContextManagementModal";
-import LocalOfferIcon from '@mui/icons-material/LocalOffer';
+import LocalOfferIcon from "@mui/icons-material/LocalOffer";
 import { useGetChatBotAgenticFlowsMutation } from "../slices/chatApi";
 
 interface AgentCategory {
@@ -58,10 +59,7 @@ export const AgentHub = () => {
   const [tabValue, setTabValue] = useState(0);
   const [showElements, setShowElements] = useState(false);
   const [favoriteAgents, setFavoriteAgents] = useState<string[]>([]);
-  const [categories, setCategories] = useState<AgentCategory[]>([
-    { name: "all" },
-    { name: "favorites" },
-  ]);
+  const [categories, setCategories] = useState<AgentCategory[]>([{ name: "all" }, { name: "favorites" }]);
 
   // États pour la gestion du contexte
   const [contextModalOpen, setContextModalOpen] = useState(false);
@@ -69,7 +67,7 @@ export const AgentHub = () => {
   const [, setUserInfo] = useState({
     name: KeyCloakService.GetUserName(),
     isAdmin: KeyCloakService.GetUserRoles().includes("admin"),
-    roles: KeyCloakService.GetUserRoles()
+    roles: KeyCloakService.GetUserRoles(),
   });
 
   // API Hooks
@@ -80,7 +78,7 @@ export const AgentHub = () => {
     setUserInfo({
       name: KeyCloakService.GetUserName(),
       isAdmin: KeyCloakService.GetUserRoles().includes("admin"),
-      roles: KeyCloakService.GetUserRoles()
+      roles: KeyCloakService.GetUserRoles(),
     });
 
     // Récupérer les agents
@@ -93,27 +91,27 @@ export const AgentHub = () => {
 
         // Extraire les tags uniques des agents (ignorer les tags vides ou null)
         const tags = response
-          .map(agent => agent.tags)
-          .filter(tag => tag && tag.trim() !== "")
+          .map((agent) => agent.tags)
+          .filter((tag) => tag && tag.trim() !== "")
           .filter((tag, index, self) => self.indexOf(tag) === index);
-        
+
         console.log("Tags uniques trouvés:", tags);
 
         // Mettre à jour les catégories avec les tags
         const updatedCategories = [
           { name: "all" },
           { name: "favorites" },
-          ...tags.map(tag => ({ name: tag, isTag: true }))
+          ...tags.map((tag) => ({ name: tag, isTag: true })),
         ];
         setCategories(updatedCategories);
 
         // Récupérer les favoris du localStorage
-        const savedFavorites = localStorage.getItem('favoriteAgents');
+        const savedFavorites = localStorage.getItem("favoriteAgents");
         if (savedFavorites) {
           setFavoriteAgents(JSON.parse(savedFavorites));
         }
       } catch (error) {
-        console.error('Error fetching agents:', error);
+        console.error("Error fetching agents:", error);
       } finally {
         setIsLoading(false);
       }
@@ -130,14 +128,14 @@ export const AgentHub = () => {
   // Fonction pour filtrer les agents selon l'onglet actif
   const getFilteredAgents = () => {
     if (tabValue === 0) return agenticFlows; // All
-    if (tabValue === 1) return agenticFlows.filter(agent => favoriteAgents.includes(agent.name)); // Favorites
-    
+    if (tabValue === 1) return agenticFlows.filter((agent) => favoriteAgents.includes(agent.name)); // Favorites
+
     // Si on a plus de 2 catégories (all + favorites + tags), on filtre par tag
     if (categories.length > 2 && tabValue >= 2) {
       const tagName = categories[tabValue].name;
-      return agenticFlows.filter(agent => agent.tag === tagName);
+      return agenticFlows.filter((agent) => agent.tag === tagName);
     }
-    
+
     return agenticFlows;
   };
 
@@ -145,14 +143,14 @@ export const AgentHub = () => {
   const toggleFavorite = (agentName: string) => {
     let updatedFavorites;
     if (favoriteAgents.includes(agentName)) {
-      updatedFavorites = favoriteAgents.filter(name => name !== agentName);
+      updatedFavorites = favoriteAgents.filter((name) => name !== agentName);
     } else {
       updatedFavorites = [...favoriteAgents, agentName];
     }
     setFavoriteAgents(updatedFavorites);
-    localStorage.setItem('favoriteAgents', JSON.stringify(updatedFavorites));
+    localStorage.setItem("favoriteAgents", JSON.stringify(updatedFavorites));
   };
-  
+
   // Gérer l'ouverture de la modale de contexte
   const openContextModal = (agent) => {
     setSelectedAgent(agent);
@@ -180,22 +178,18 @@ export const AgentHub = () => {
           py: { xs: 3, md: 4 },
           mb: 3,
           borderRadius: 2,
-          boxShadow: theme.shadows[4]
+          boxShadow: theme.shadows[4],
         }}
       >
         <Container maxWidth="xl">
           <Fade in={showElements} timeout={1000}>
             <Grid2 container alignItems="center" spacing={2}>
-              <Grid2 size={{xs:12, md:8}}>
+              <Grid2 size={{ xs: 12, md: 8 }}>
                 <Box>
                   <Typography variant="h4" fontWeight="bold" gutterBottom>
                     Agent Hub
                   </Typography>
-                  <Typography
-                    variant="body2"
-                    color="textSecondary"
-                    sx={{ maxWidth: "700px" }}
-                  >
+                  <Typography variant="body2" color="textSecondary" sx={{ maxWidth: "700px" }}>
                     Explore and manage all available AI agents to enhance your workflow
                   </Typography>
                 </Box>
@@ -213,7 +207,7 @@ export const AgentHub = () => {
             sx={{
               p: 2,
               borderRadius: 4,
-              border: `1px solid ${theme.palette.divider}`
+              border: `1px solid ${theme.palette.divider}`,
             }}
           >
             <Tabs
@@ -222,17 +216,17 @@ export const AgentHub = () => {
               variant="scrollable"
               scrollButtons="auto"
               sx={{
-                '& .MuiTab-root': {
-                  textTransform: 'none',
-                  fontSize: '0.9rem',
+                "& .MuiTab-root": {
+                  textTransform: "none",
+                  fontSize: "0.9rem",
                   fontWeight: 500,
                   minWidth: 120,
                 },
-                '& .Mui-selected': {
+                "& .Mui-selected": {
                   color: theme.palette.primary.main,
                   fontWeight: 600,
                 },
-                '& .MuiTabs-indicator': {
+                "& .MuiTabs-indicator": {
                   backgroundColor: theme.palette.primary.main,
                   height: 3,
                   borderRadius: 1.5,
@@ -243,11 +237,9 @@ export const AgentHub = () => {
                 <Tab
                   key={`${category.name}-${index}`}
                   label={
-                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                      {category.isTag && (
-                        <LocalOfferIcon fontSize="small" sx={{ mr: 0.5, fontSize: '0.9rem' }} />
-                      )}
-                      <Typography variant="body2" sx={{ textTransform: 'capitalize' }}>
+                    <Box sx={{ display: "flex", alignItems: "center" }}>
+                      {category.isTag && <LocalOfferIcon fontSize="small" sx={{ mr: 0.5, fontSize: "0.9rem" }} />}
+                      <Typography variant="body2" sx={{ textTransform: "capitalize" }}>
                         {category.name}
                       </Typography>
                       {category.name === "favorites" && (
@@ -255,24 +247,24 @@ export const AgentHub = () => {
                           size="small"
                           label={favoriteAgents.length}
                           sx={{
-                            ml: 1, 
-                            height: 20, 
-                            fontSize: '0.7rem',
+                            ml: 1,
+                            height: 20,
+                            fontSize: "0.7rem",
                             bgcolor: theme.palette.primary.main,
-                            color: 'white'
+                            color: "white",
                           }}
                         />
                       )}
                       {category.isTag && (
                         <Chip
                           size="small"
-                          label={agenticFlows.filter(agent => agent.tag === category.name).length}
+                          label={agenticFlows.filter((agent) => agent.tag === category.name).length}
                           sx={{
-                            ml: 1, 
-                            height: 20, 
-                            fontSize: '0.7rem',
+                            ml: 1,
+                            height: 20,
+                            fontSize: "0.7rem",
                             bgcolor: theme.palette.primary.main,
-                            color: 'white'
+                            color: "white",
                           }}
                         />
                       )}
@@ -296,9 +288,9 @@ export const AgentHub = () => {
               p: 3,
               borderRadius: 4,
               mb: 3,
-              minHeight: '500px',
+              minHeight: "500px",
               border: `1px solid ${theme.palette.divider}`,
-              position: 'relative'
+              position: "relative",
             }}
           >
             {isLoading ? (
@@ -307,11 +299,16 @@ export const AgentHub = () => {
               </Box>
             ) : (
               <>
-                <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                    {tabValue === 1 && (
-                      <StarIcon fontSize="small" sx={{ mr: 1, color: theme.palette.warning.main }} />
-                    )}
+                <Box
+                  sx={{
+                    mb: 3,
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                  }}
+                >
+                  <Box sx={{ display: "flex", alignItems: "center" }}>
+                    {tabValue === 1 && <StarIcon fontSize="small" sx={{ mr: 1, color: theme.palette.warning.main }} />}
                     {tabValue >= 2 && categories[tabValue]?.isTag && (
                       <LocalOfferIcon fontSize="small" sx={{ mr: 1, color: theme.palette.text.secondary }} />
                     )}
@@ -319,30 +316,30 @@ export const AgentHub = () => {
                       {getSectionTitle()} ({getFilteredAgents().length})
                     </Typography>
                   </Box>
-                  
-                  <Box sx={{ display: 'flex', gap: 1 }}>
-                    <Button 
-                      startIcon={<SearchIcon />} 
+
+                  <Box sx={{ display: "flex", gap: 1 }}>
+                    <Button
+                      startIcon={<SearchIcon />}
                       size="small"
-                      sx={{ 
-                        borderRadius: '8px',
+                      sx={{
+                        borderRadius: "8px",
                         bgcolor: isDarkTheme ? theme.palette.action.hover : theme.palette.action.selected,
-                        '&:hover': {
+                        "&:hover": {
                           bgcolor: isDarkTheme ? theme.palette.action.selected : theme.palette.action.hover,
-                        }
+                        },
                       }}
                     >
                       Search
                     </Button>
-                    <Button 
-                      startIcon={<FilterListIcon />} 
+                    <Button
+                      startIcon={<FilterListIcon />}
                       size="small"
-                      sx={{ 
-                        borderRadius: '8px',
+                      sx={{
+                        borderRadius: "8px",
                         bgcolor: isDarkTheme ? theme.palette.action.hover : theme.palette.action.selected,
-                        '&:hover': {
+                        "&:hover": {
                           bgcolor: isDarkTheme ? theme.palette.action.selected : theme.palette.action.hover,
-                        }
+                        },
                       }}
                     >
                       Filter
@@ -353,18 +350,18 @@ export const AgentHub = () => {
                 {/* Affichage des agents - Format original pour All, mais avec tags visibles */}
                 <Grid2 container spacing={2}>
                   {getFilteredAgents().map((agent) => (
-                    <Grid2 size={{xs:12, sm:6, md:4, lg:3}} key={agent.name}>
+                    <Grid2 size={{ xs: 12, sm: 6, md: 4, lg: 3 }} key={agent.name}>
                       <Fade in={true} timeout={1500}>
                         <Card
                           sx={{
-                            height: '100%',
-                            display: 'flex',
-                            flexDirection: 'column',
+                            height: "100%",
+                            display: "flex",
+                            flexDirection: "column",
                             borderRadius: 3,
                             boxShadow: theme.shadows[2],
-                            transition: 'transform 0.2s, box-shadow 0.2s',
-                            '&:hover': {
-                              transform: 'translateY(-4px)',
+                            transition: "transform 0.2s, box-shadow 0.2s",
+                            "&:hover": {
+                              transform: "translateY(-4px)",
                               boxShadow: theme.shadows[4],
                             },
                             border: `1px solid ${theme.palette.divider}`,
@@ -374,36 +371,34 @@ export const AgentHub = () => {
                             sx={{
                               p: 2,
                               pb: 0,
-                              display: 'flex',
-                              justifyContent: 'space-between',
-                              alignItems: 'flex-start'
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "flex-start",
                             }}
                           >
-                            <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                              <Box sx={{ mr: 1.5 }}>
-                                {getAgentBadge(agent.nickname)}
-                              </Box>
+                            <Box sx={{ display: "flex", alignItems: "center" }}>
+                              <Box sx={{ mr: 1.5 }}>{getAgentBadge(agent.nickname)}</Box>
                               <Box>
-                                <Typography variant="h6" component="div" sx={{ fontSize: '1rem', fontWeight: 600 }}>
+                                <Typography variant="h6" component="div" sx={{ fontSize: "1rem", fontWeight: 600 }}>
                                   {agent.nickname}
                                 </Typography>
-                                <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                                <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
                                   {agent.role}
                                 </Typography>
                               </Box>
                             </Box>
 
-                            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                            <Box sx={{ display: "flex", alignItems: "center" }}>
                               {agent.tag && agent.tag.trim() !== "" && (
                                 <Tooltip title={`Tagged: ${agent.tag}`}>
                                   <Chip
                                     icon={<LocalOfferIcon fontSize="small" />}
                                     label={agent.tag}
                                     size="small"
-                                    sx={{ 
+                                    sx={{
                                       mr: 1,
-                                      height: 24, 
-                                      fontSize: '0.7rem',
+                                      height: 24,
+                                      fontSize: "0.7rem",
                                     }}
                                   />
                                 </Tooltip>
@@ -412,8 +407,8 @@ export const AgentHub = () => {
                               <IconButton
                                 size="small"
                                 onClick={() => toggleFavorite(agent.name)}
-                                sx={{ 
-                                  color: favoriteAgents.includes(agent.name) ? 'warning.main' : 'text.secondary',
+                                sx={{
+                                  color: favoriteAgents.includes(agent.name) ? "warning.main" : "text.secondary",
                                 }}
                               >
                                 {favoriteAgents.includes(agent.name) ? <StarIcon /> : <StarOutlineIcon />}
@@ -426,19 +421,25 @@ export const AgentHub = () => {
                               variant="body2"
                               color="text.secondary"
                               sx={{
-                                display: '-webkit-box',
+                                display: "-webkit-box",
                                 WebkitLineClamp: 3,
-                                WebkitBoxOrient: 'vertical',
-                                overflow: 'hidden',
+                                WebkitBoxOrient: "vertical",
+                                overflow: "hidden",
                                 mb: 2,
-                                minHeight: '3.6em',
-                                fontSize: '0.85rem'
+                                minHeight: "3.6em",
+                                fontSize: "0.85rem",
                               }}
                             >
                               {agent.description}
                             </Typography>
-                            
-                            <Box sx={{ mt: 2, display: 'flex', alignItems: 'center' }}>
+
+                            <Box
+                              sx={{
+                                mt: 2,
+                                display: "flex",
+                                alignItems: "center",
+                              }}
+                            >
                               <Button
                                 size="small"
                                 startIcon={<DescriptionIcon />}
@@ -446,11 +447,11 @@ export const AgentHub = () => {
                                   e.stopPropagation();
                                   openContextModal(agent);
                                 }}
-                                sx={{ 
+                                sx={{
                                   ml: 1,
-                                  textTransform: 'none',
-                                  fontSize: '0.75rem',
-                                  fontWeight: 'normal',
+                                  textTransform: "none",
+                                  fontSize: "0.75rem",
+                                  fontWeight: "normal",
                                   color: theme.palette.primary.main,
                                 }}
                               >
@@ -460,25 +461,35 @@ export const AgentHub = () => {
 
                             {agent.experts && agent.experts.length > 0 && (
                               <Box sx={{ mt: 2 }}>
-                                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                                <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>
                                   Expert integrations:
                                 </Typography>
-                                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                                  {agent.experts.map(expertName => {
-                                    const expert = agenticFlows.find(a => a.name === expertName);
+                                <Box
+                                  sx={{
+                                    display: "flex",
+                                    flexWrap: "wrap",
+                                    gap: 0.5,
+                                  }}
+                                >
+                                  {agent.experts.map((expertName) => {
+                                    const expert = agenticFlows.find((a) => a.name === expertName);
                                     return expert ? (
                                       <Tooltip key={expertName} title={expert.description}>
                                         <Chip
-                                          avatar={<Avatar sx={{ width: 20, height: 20 }}>{getAgentBadge(expert.nickname)}</Avatar>}
+                                          avatar={
+                                            <Avatar sx={{ width: 20, height: 20 }}>
+                                              {getAgentBadge(expert.nickname)}
+                                            </Avatar>
+                                          }
                                           label={expert.nickname}
                                           size="small"
-                                          sx={{ 
-                                            height: 24, 
-                                            fontSize: '0.7rem',
-                                            '& .MuiChip-avatar': {
+                                          sx={{
+                                            height: 24,
+                                            fontSize: "0.7rem",
+                                            "& .MuiChip-avatar": {
                                               width: 18,
                                               height: 18,
-                                            }
+                                            },
                                           }}
                                         />
                                       </Tooltip>

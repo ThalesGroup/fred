@@ -12,18 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import {
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogContentText,
-  DialogTitle,
-  Button
-} from '@mui/material';
+import { Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Button } from "@mui/material";
 
 /**
  * DeleteConfirmationDialog component for confirming deletion of context
- * 
+ *
  * @param {Object} props - Component props
  * @param {boolean} props.open - Whether the dialog is open
  * @param {Function} props.onClose - Function to call to close the dialog
@@ -39,28 +32,17 @@ const DeleteConfirmationDialog = ({ open, onClose, card, onConfirm }) => {
       aria-labelledby="delete-dialog-title"
       aria-describedby="delete-dialog-description"
     >
-      <DialogTitle id="delete-dialog-title">
-        Delete Context
-      </DialogTitle>
+      <DialogTitle id="delete-dialog-title">Delete Context</DialogTitle>
       <DialogContent>
         <DialogContentText id="delete-dialog-description">
-          Are you sure you want to delete the context "{card?.title}"?
-          This action cannot be undone.
+          Are you sure you want to delete the context "{card?.title}"? This action cannot be undone.
         </DialogContentText>
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 3 }}>
-        <Button
-          onClick={onClose}
-          color="inherit"
-        >
+        <Button onClick={onClose} color="inherit">
           Cancel
         </Button>
-        <Button
-          onClick={() => onConfirm()}
-          variant="contained"
-          color="error"
-          autoFocus
-        >
+        <Button onClick={() => onConfirm()} variant="contained" color="error" autoFocus>
           Delete
         </Button>
       </DialogActions>

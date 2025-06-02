@@ -14,21 +14,30 @@
 
 import { useLocation, useNavigate } from "react-router-dom";
 import {
-  Box, IconButton, Typography, useMediaQuery, useTheme,
-  Avatar, List, ListItem, ListItemIcon, ListItemText, Tooltip
-} from '@mui/material';
-import AssistantIcon from '@mui/icons-material/Assistant';
-import OpenInNewIcon from '@mui/icons-material/OpenInNew';
-import ChatIcon from '@mui/icons-material/Chat';
-import PersonIcon from '@mui/icons-material/Person';
-import MenuIcon from '@mui/icons-material/Menu';
-import AssessmentIcon from '@mui/icons-material/Assessment';
-import GroupIcon from '@mui/icons-material/Group';
-import MenuBookIcon from '@mui/icons-material/MenuBook';
-import LightModeIcon from '@mui/icons-material/LightMode';
-import DarkModeIcon from '@mui/icons-material/DarkMode';
-import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
-import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+  Box,
+  IconButton,
+  Typography,
+  useMediaQuery,
+  useTheme,
+  Avatar,
+  List,
+  ListItem,
+  ListItemIcon,
+  ListItemText,
+  Tooltip,
+} from "@mui/material";
+import AssistantIcon from "@mui/icons-material/Assistant";
+import OpenInNewIcon from "@mui/icons-material/OpenInNew";
+import ChatIcon from "@mui/icons-material/Chat";
+import PersonIcon from "@mui/icons-material/Person";
+import MenuIcon from "@mui/icons-material/Menu";
+import AssessmentIcon from "@mui/icons-material/Assessment";
+import GroupIcon from "@mui/icons-material/Group";
+import MenuBookIcon from "@mui/icons-material/MenuBook";
+import LightModeIcon from "@mui/icons-material/LightMode";
+import DarkModeIcon from "@mui/icons-material/DarkMode";
+import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
+import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import { ImageComponent } from "../utils/image.tsx";
 import { useContext } from "react";
 import { ApplicationContext } from "./ApplicationContextProvider.tsx";
@@ -40,65 +49,66 @@ export default function SideBar({ darkMode, onThemeChange }) {
   const navigate = useNavigate();
   const location = useLocation();
   const applicationContext = useContext(ApplicationContext);
-  const smallScreen = useMediaQuery(theme.breakpoints.down('md'));
+  const smallScreen = useMediaQuery(theme.breakpoints.down("md"));
 
   // Couleurs sobres à la manière du second fichier
-  const sideBarBgColor = theme.palette.sidebar.background
+  const sideBarBgColor = theme.palette.sidebar.background;
 
-  const activeItemBgColor = theme.palette.sidebar.activeItem
+  const activeItemBgColor = theme.palette.sidebar.activeItem;
 
   const activeItemTextColor = theme.palette.primary.main;
 
-  const hoverColor = theme.palette.sidebar.hoverColor
+  const hoverColor = theme.palette.sidebar.hoverColor;
 
   const currentClusterFullname = applicationContext.currentClusterOverview?.fullname;
 
   // Éléments de menu du premier fichier
   const menuItems = [
-
-    ...(isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES) ? [
-      {
-        key: 'explain',
-        label: 'Cluster',
-        icon: <AssistantIcon />,
-        url: `/explain?cluster=${currentClusterFullname}`,
-        canBeDisabled: true,
-        tooltip: 'Explain the cluster'
-      },
-      {
-        key: 'facts',
-        label: 'Facts',
-        icon: <AssistantIcon />,
-        url: `/facts?cluster=${currentClusterFullname}`,
-        canBeDisabled: true,
-        tooltip: 'Checkout the business and usage facts associated with the cluster'
-      },
-      {
-        key: 'audit',
-        label: 'Audit',
-        icon: <AssessmentIcon />,
-        url: `/audit?cluster=${currentClusterFullname}`,
-        canBeDisabled: true,
-        tooltip: 'View a complete eco-score audit of the selected cluster'
-      }
-      , {
-        key: 'chat',
-        label: 'Chat',
-        icon: <ChatIcon />,
-        url: `/chat?cluster=${currentClusterFullname}`,
-        canBeDisabled: false,
-        tooltip: 'Chat with the AI assistant team'
-      }
-    ] : [
-      {
-        key: 'chat',
-        label: 'Chat',
-        icon: <ChatIcon />,
-        url: `/chat`,
-        canBeDisabled: false,
-        tooltip: 'Chat with the AI assistant team'
-      },
-    ]),
+    ...(isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES)
+      ? [
+          {
+            key: "explain",
+            label: "Cluster",
+            icon: <AssistantIcon />,
+            url: `/explain?cluster=${currentClusterFullname}`,
+            canBeDisabled: true,
+            tooltip: "Explain the cluster",
+          },
+          {
+            key: "facts",
+            label: "Facts",
+            icon: <AssistantIcon />,
+            url: `/facts?cluster=${currentClusterFullname}`,
+            canBeDisabled: true,
+            tooltip: "Checkout the business and usage facts associated with the cluster",
+          },
+          {
+            key: "audit",
+            label: "Audit",
+            icon: <AssessmentIcon />,
+            url: `/audit?cluster=${currentClusterFullname}`,
+            canBeDisabled: true,
+            tooltip: "View a complete eco-score audit of the selected cluster",
+          },
+          {
+            key: "chat",
+            label: "Chat",
+            icon: <ChatIcon />,
+            url: `/chat?cluster=${currentClusterFullname}`,
+            canBeDisabled: false,
+            tooltip: "Chat with the AI assistant team",
+          },
+        ]
+      : [
+          {
+            key: "chat",
+            label: "Chat",
+            icon: <ChatIcon />,
+            url: `/chat`,
+            canBeDisabled: false,
+            tooltip: "Chat with the AI assistant team",
+          },
+        ]),
     /*
     {
        key: 'geomap',
@@ -117,98 +127,94 @@ export default function SideBar({ darkMode, onThemeChange }) {
       tooltip: 'Check the optimization gains on the selected cluster'
     },*/
     {
-      key: 'agent',
-      label: 'Agent Hub',
+      key: "agent",
+      label: "Agent Hub",
       icon: <GroupIcon />,
       url: `/agentHub`,
       canBeDisabled: false,
-      tooltip: 'View agents'
+      tooltip: "View agents",
     },
     {
-      key: 'documentLibrary',
-      label: 'Documents',
+      key: "documentLibrary",
+      label: "Documents",
       icon: <MenuBookIcon />,
       url: `/documentLibrary`,
       canBeDisabled: false,
-      tooltip: 'Consult document library'
+      tooltip: "Consult document library",
     },
     {
-      key: 'profile',
-      label: 'Profile',
+      key: "profile",
+      label: "Profile",
       icon: <PersonIcon />,
       url: `/profile?cluster=${currentClusterFullname}`,
       canBeDisabled: false,
-      tooltip: 'View your profile'
+      tooltip: "View your profile",
     },
-
   ];
 
   const { isSidebarCollapsed, toggleSidebar } = applicationContext;
   const isSidebarSmall = smallScreen || isSidebarCollapsed;
-  const sidebarWidth = isSidebarCollapsed
-    ? theme.layout.sidebarCollapsedWidth
-    : theme.layout.sidebarWidth;
+  const sidebarWidth = isSidebarCollapsed ? theme.layout.sidebarCollapsedWidth : theme.layout.sidebarWidth;
   // Vérifier si un élément de menu est actif
   const isActive = (path) => {
     // Extraire le chemin de base sans les paramètres de requête
-    const menuPathBase = path.split('?')[0];
+    const menuPathBase = path.split("?")[0];
     const currentPathBase = location.pathname;
 
     // Vérifier si le chemin de base actuel correspond exactement au chemin de base du menu
     return currentPathBase === menuPathBase;
   };
 
-  const logoName = getProperty('logoName') || "fred";
+  const logoName = getProperty("logoName") || "fred";
 
   return (
     <Box
-      height='100vh'
-      position='fixed'
+      height="100vh"
+      position="fixed"
       width={sidebarWidth}
       sx={{
         bgcolor: sideBarBgColor,
-        color: 'text.primary',
+        color: "text.primary",
         borderRight: `1px solid ${theme.palette.divider}`,
-        transition: theme.transitions.create(['width', 'margin'], {
+        transition: theme.transitions.create(["width", "margin"], {
           easing: theme.transitions.easing.sharp,
           duration: theme.transitions.duration.standard,
         }),
-        boxShadow: 'none',
-        display: 'flex',
-        flexDirection: 'column',
+        boxShadow: "none",
+        display: "flex",
+        flexDirection: "column",
         zIndex: theme.zIndex.drawer,
-        '& > *': { backgroundColor: sideBarBgColor },
-        '& > * > *': { backgroundColor: sideBarBgColor }
+        "& > *": { backgroundColor: sideBarBgColor },
+        "& > * > *": { backgroundColor: sideBarBgColor },
       }}
     >
       {/* Section du logo */}
-      <Box sx={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: isSidebarSmall ? 'center' : 'space-between',
-        py: 2.5,
-        px: isSidebarSmall ? 1 : 2,
-        borderBottom: `1px solid ${theme.palette.divider}`
-      }}>
-        <Box sx={{
-          display: 'flex',
-          alignItems: 'center',
-          cursor: 'pointer',
+      <Box
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: isSidebarSmall ? "center" : "space-between",
+          py: 2.5,
+          px: isSidebarSmall ? 1 : 2,
+          borderBottom: `1px solid ${theme.palette.divider}`,
         }}
-          onClick={() => navigate('/')}
+      >
+        <Box
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            cursor: "pointer",
+          }}
+          onClick={() => navigate("/")}
         >
           <Avatar
             sx={{
               width: 42,
               height: 42,
-              backgroundColor: 'transparent'
+              backgroundColor: "transparent",
             }}
           >
-            <ImageComponent
-              name={logoName}
-              width="36px"
-              height="36px"
-            />
+            <ImageComponent name={logoName} width="36px" height="36px" />
           </Avatar>
           {!isSidebarSmall && (
             <Typography
@@ -216,7 +222,7 @@ export default function SideBar({ darkMode, onThemeChange }) {
               sx={{
                 ml: 1.5,
                 fontWeight: 500,
-                color: theme.palette.text.primary
+                color: theme.palette.text.primary,
               }}
             >
               {logoName}
@@ -228,30 +234,30 @@ export default function SideBar({ darkMode, onThemeChange }) {
             onClick={toggleSidebar}
             size="small"
             sx={{
-              borderRadius: '8px',
-              '&:hover': {
+              borderRadius: "8px",
+              "&:hover": {
                 backgroundColor: hoverColor,
-              }
+              },
             }}
           >
-            {theme.direction === 'ltr' ? <ChevronLeftIcon /> : <ChevronRightIcon />}
+            {theme.direction === "ltr" ? <ChevronLeftIcon /> : <ChevronRightIcon />}
           </IconButton>
         )}
       </Box>
 
       {isSidebarSmall && (
-        <Box sx={{ display: 'flex', justifyContent: 'center', pt: 2 }}>
+        <Box sx={{ display: "flex", justifyContent: "center", pt: 2 }}>
           <IconButton
             size="small"
             onClick={toggleSidebar}
             sx={{
-              borderRadius: '8px',
+              borderRadius: "8px",
               border: `1px solid ${theme.palette.divider}`,
               width: 28,
               height: 28,
-              '&:hover': {
+              "&:hover": {
                 backgroundColor: hoverColor,
-              }
+              },
             }}
           >
             <MenuIcon fontSize="small" />
@@ -269,47 +275,62 @@ export default function SideBar({ darkMode, onThemeChange }) {
         </Box>
       )}
 
-      <List sx={{
-        pt: 3,
-        px: isSidebarSmall ? 1 : 2,
-        flexGrow: 1,
-      }}>
+      <List
+        sx={{
+          pt: 3,
+          px: isSidebarSmall ? 1 : 2,
+          flexGrow: 1,
+        }}
+      >
         {menuItems.map((item) => {
           const active = isActive(item.url);
           return (
             <Tooltip
               key={item.key}
-              title={isSidebarSmall ? (currentClusterFullname || !item.canBeDisabled ? item.tooltip : 'Please select a cluster first') : ''}
+              title={
+                isSidebarSmall
+                  ? currentClusterFullname || !item.canBeDisabled
+                    ? item.tooltip
+                    : "Please select a cluster first"
+                  : ""
+              }
               placement="right"
               arrow
             >
               <ListItem
                 component="div"
                 sx={{
-                  borderRadius: '8px',
+                  borderRadius: "8px",
                   mb: 0.8,
                   height: 44,
-                  justifyContent: isSidebarSmall ? 'center' : 'flex-start',
-                  backgroundColor: active ? activeItemBgColor : 'transparent',
-                  color: active ? activeItemTextColor : 'text.secondary',
-                  '&:hover': {
-                    backgroundColor: (item.canBeDisabled && !currentClusterFullname) ? 'transparent' : (active ? activeItemBgColor : hoverColor),
-                    color: active ? activeItemTextColor : 'text.primary'
+                  justifyContent: isSidebarSmall ? "center" : "flex-start",
+                  backgroundColor: active ? activeItemBgColor : "transparent",
+                  color: active ? activeItemTextColor : "text.secondary",
+                  "&:hover": {
+                    backgroundColor:
+                      item.canBeDisabled && !currentClusterFullname
+                        ? "transparent"
+                        : active
+                          ? activeItemBgColor
+                          : hoverColor,
+                    color: active ? activeItemTextColor : "text.primary",
                   },
-                  transition: 'all 0.2s',
+                  transition: "all 0.2s",
                   px: isSidebarSmall ? 1 : 2,
-                  position: 'relative',
-                  cursor: item.canBeDisabled && !currentClusterFullname ? 'not-allowed' : 'pointer',
+                  position: "relative",
+                  cursor: item.canBeDisabled && !currentClusterFullname ? "not-allowed" : "pointer",
                   opacity: item.canBeDisabled && !currentClusterFullname ? 0.5 : 1,
-                  pointerEvents: item.canBeDisabled && !currentClusterFullname ? 'none' : 'auto',
+                  pointerEvents: item.canBeDisabled && !currentClusterFullname ? "none" : "auto",
                 }}
                 onClick={item.canBeDisabled && !currentClusterFullname ? undefined : () => navigate(item.url)}
               >
-                <ListItemIcon sx={{
-                  color: 'inherit',
-                  minWidth: isSidebarSmall ? 'auto' : 40,
-                  fontSize: '1.2rem'
-                }}>
+                <ListItemIcon
+                  sx={{
+                    color: "inherit",
+                    minWidth: isSidebarSmall ? "auto" : 40,
+                    fontSize: "1.2rem",
+                  }}
+                >
                   {item.icon}
                 </ListItemIcon>
                 {!isSidebarSmall && (
@@ -317,7 +338,7 @@ export default function SideBar({ darkMode, onThemeChange }) {
                     primary={item.label}
                     primaryTypographyProps={{
                       fontWeight: active ? 500 : 400,
-                      fontSize: '0.9rem'
+                      fontSize: "0.9rem",
                     }}
                   />
                 )}
@@ -328,10 +349,10 @@ export default function SideBar({ darkMode, onThemeChange }) {
                       height: 16,
                       bgcolor: theme.palette.primary.main,
                       borderRadius: 4,
-                      position: 'absolute',
+                      position: "absolute",
                       right: 12,
-                      top: '50%',
-                      transform: 'translateY(-50%)',
+                      top: "50%",
+                      transform: "translateY(-50%)",
                     }}
                   />
                 )}
@@ -342,21 +363,25 @@ export default function SideBar({ darkMode, onThemeChange }) {
       </List>
 
       {/* Pied de page */}
-      <Box sx={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        py: 2,
-        mt: 'auto',
-        borderTop: `1px solid ${theme.palette.divider}`
-      }}>
+      <Box
+        sx={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          py: 2,
+          mt: "auto",
+          borderTop: `1px solid ${theme.palette.divider}`,
+        }}
+      >
         {/* Commutateur de thème */}
-        <Box sx={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          mb: isSidebarSmall ? 0 : 1
-        }}>
+        <Box
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            mb: isSidebarSmall ? 0 : 1,
+          }}
+        >
           {!isSidebarSmall && (
             <Typography variant="caption" color="text.secondary" sx={{ mr: 1 }}>
               {darkMode ? "dark" : "light"} mode
@@ -367,31 +392,34 @@ export default function SideBar({ darkMode, onThemeChange }) {
             onClick={onThemeChange}
             sx={{
               p: 1,
-              '&:hover': {
+              "&:hover": {
                 backgroundColor: hoverColor,
-              }
+              },
             }}
           >
-            {darkMode ?
-              <LightModeIcon sx={{ fontSize: '1rem', color: 'text.secondary' }} /> :
-              <DarkModeIcon sx={{ fontSize: '1rem', color: 'text.secondary' }} />
-            }
+            {darkMode ? (
+              <LightModeIcon sx={{ fontSize: "1rem", color: "text.secondary" }} />
+            ) : (
+              <DarkModeIcon sx={{ fontSize: "1rem", color: "text.secondary" }} />
+            )}
           </IconButton>
         </Box>
 
         {/* Liens externes */}
         {!isSidebarSmall && (
           <>
-            <Box sx={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              py: 1,
-              px: 2,
-              mt: 1,
-              width: '90%',
-              borderRadius: 1,
-            }}>
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                py: 1,
+                px: 2,
+                mt: 1,
+                width: "90%",
+                borderRadius: 1,
+              }}
+            >
               <Typography variant="caption" color="text.secondary">
                 Innovation hub
               </Typography>
@@ -401,20 +429,22 @@ export default function SideBar({ darkMode, onThemeChange }) {
                 onClick={() => window.open("https://paradox-innovation.dev", "_blank", "noopener,noreferrer")}
                 sx={{ p: 0.3 }}
               >
-                <OpenInNewIcon sx={{ fontSize: '0.8rem', color: 'text.secondary' }} />
+                <OpenInNewIcon sx={{ fontSize: "0.8rem", color: "text.secondary" }} />
               </IconButton>
             </Box>
 
-            <Box sx={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              py: 1,
-              px: 2,
-              mt: 1,
-              width: '90%',
-              borderRadius: 1,
-            }}>
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                py: 1,
+                px: 2,
+                mt: 1,
+                width: "90%",
+                borderRadius: 1,
+              }}
+            >
               <Typography variant="caption" color="text.secondary">
                 Website
               </Typography>
@@ -424,7 +454,7 @@ export default function SideBar({ darkMode, onThemeChange }) {
                 onClick={() => window.open("https://fredk8.dev", "_blank", "noopener,noreferrer")}
                 sx={{ p: 0.3 }}
               >
-                <OpenInNewIcon sx={{ fontSize: '0.8rem', color: 'text.secondary' }} />
+                <OpenInNewIcon sx={{ fontSize: "0.8rem", color: "text.secondary" }} />
               </IconButton>
             </Box>
           </>

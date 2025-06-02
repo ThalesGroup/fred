@@ -65,6 +65,12 @@ docker-run: ## Docker run
       --name fred-ui \
       $(IMG)
 
+##@ Dev
+
+.PHONY: format
+format: ## Use prettier to format all codebase
+	npx prettier . --write
+
 ##@ Clean
 
 .PHONY: clean

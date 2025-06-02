@@ -13,20 +13,38 @@
 // limitations under the License.
 
 import { styled, Switch } from "@mui/material";
-import { renderToStaticMarkup } from 'react-dom/server';
+import { renderToStaticMarkup } from "react-dom/server";
 
 // SVG pour la croix rouge
 const RedCrossSVG = ({ theme }) => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <path d="M18 6L6 18" stroke={theme.palette.error.main} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-    <path d="M6 6L18 18" stroke={theme.palette.error.main} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+    <path
+      d="M18 6L6 18"
+      stroke={theme.palette.error.main}
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <path
+      d="M6 6L18 18"
+      stroke={theme.palette.error.main}
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
   </svg>
 );
 
 // SVG pour la coche verte
 const GreenCheckSVG = ({ theme }) => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <path d="M20 6L9 17L4 12" stroke={theme.palette.chart.mediumGreen} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+    <path
+      d="M20 6L9 17L4 12"
+      stroke={theme.palette.chart.mediumGreen}
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
   </svg>
 );
 
@@ -41,85 +59,85 @@ export const IOSSwitch = styled(Switch)(({ theme }) => ({
   width: 62, // Increased width by 20px
   height: 34, // Adjusted height proportionally
   padding: 0,
-  '& .MuiSwitch-track': {
+  "& .MuiSwitch-track": {
     borderRadius: 17, // Adjusted for new height
-    backgroundColor: theme.palette.mode === 'dark' ? theme.palette.primary.dark : theme.palette.primary.light,
+    backgroundColor: theme.palette.mode === "dark" ? theme.palette.primary.dark : theme.palette.primary.light,
     opacity: 1,
-    transition: theme.transitions.create(['background-color', 'opacity'], {
+    transition: theme.transitions.create(["background-color", "opacity"], {
       duration: 500,
     }),
-    '&:before, &:after': {
+    "&:before, &:after": {
       content: '""',
-      position: 'absolute',
-      transform: 'translateY(-50%)',
+      position: "absolute",
+      transform: "translateY(-50%)",
       width: 16,
       height: 16,
-      top: '50%',
-      transition: 'opacity 300ms',
+      top: "50%",
+      transition: "opacity 300ms",
     },
-    '&:before': {
+    "&:before": {
       backgroundImage: convertSvg(<RedCrossSVG theme={theme} />),
       left: 8,
       opacity: 1,
     },
-    '&:after': {
+    "&:after": {
       backgroundImage: convertSvg(<GreenCheckSVG theme={theme} />),
       right: 8,
       opacity: 0,
     },
   },
-  '& .MuiSwitch-thumb': {
-    boxSizing: 'border-box',
+  "& .MuiSwitch-thumb": {
+    boxSizing: "border-box",
     width: 30, // Adjusted thumb size
     height: 30, // Adjusted thumb size
-    '&:before': {
+    "&:before": {
       content: "''",
-      position: 'absolute',
-      width: '100%',
-      height: '100%',
+      position: "absolute",
+      width: "100%",
+      height: "100%",
       left: 0,
       top: 0,
-      backgroundRepeat: 'no-repeat',
-      backgroundPosition: 'center',
+      backgroundRepeat: "no-repeat",
+      backgroundPosition: "center",
       backgroundImage: convertSvg(<RedCrossSVG theme={theme} />),
-      transition: 'background-image 300ms',
+      transition: "background-image 300ms",
     },
   },
-  '& .MuiSwitch-switchBase': {
+  "& .MuiSwitch-switchBase": {
     padding: 0,
     margin: 2,
-    transitionDuration: '300ms',
-    '&.Mui-checked': {
-      transform: 'translateX(28px)', // Adjusted for new width
-      color: '#fff',
-      '& + .MuiSwitch-track': {
-        backgroundColor: theme.palette.mode === 'dark' ? theme.palette.success.main : theme.palette.chart.mediumGreen,
+    transitionDuration: "300ms",
+    "&.Mui-checked": {
+      transform: "translateX(28px)", // Adjusted for new width
+      color: "#fff",
+      "& + .MuiSwitch-track": {
+        backgroundColor: theme.palette.mode === "dark" ? theme.palette.success.main : theme.palette.chart.mediumGreen,
         opacity: 1,
         border: 0,
-        '&:before': {
+        "&:before": {
           opacity: 0,
         },
-        '&:after': {
+        "&:after": {
           opacity: 1,
         },
       },
-      '& .MuiSwitch-thumb:before': {
+      "& .MuiSwitch-thumb:before": {
         content: "''",
-        position: 'absolute',
-        width: '100%',
-        height: '100%',
+        position: "absolute",
+        width: "100%",
+        height: "100%",
         left: 0,
         top: 0,
-        backgroundRepeat: 'no-repeat',
-        backgroundPosition: 'center',
+        backgroundRepeat: "no-repeat",
+        backgroundPosition: "center",
         backgroundImage: convertSvg(<GreenCheckSVG theme={theme} />),
       },
     },
-    '&.Mui-disabled + .MuiSwitch-track': {
+    "&.Mui-disabled + .MuiSwitch-track": {
       opacity: 0.5,
     },
-    '&:not(.Mui-checked) + .MuiSwitch-track': {
-      backgroundColor: theme.palette.mode === 'dark' ? theme.palette.error.main : theme.palette.error.light,
+    "&:not(.Mui-checked) + .MuiSwitch-track": {
+      backgroundColor: theme.palette.mode === "dark" ? theme.palette.error.main : theme.palette.error.light,
     },
   },
 }));

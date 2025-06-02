@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Box, LinearProgress, Typography } from '@mui/material';
+import { Box, LinearProgress, Typography } from "@mui/material";
 
 const LoadingWithProgress = () => {
   return (
@@ -22,10 +22,9 @@ const LoadingWithProgress = () => {
         Loading, please wait...
       </Typography>
       {/* Progress bar */}
-      <LinearProgress color='warning' style={{ width: '100%', maxWidth: '200px' }} />
+      <LinearProgress color="warning" style={{ width: "100%", maxWidth: "200px" }} />
     </Box>
   );
 };
-
 
 export default LoadingWithProgress;

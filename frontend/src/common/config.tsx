@@ -17,11 +17,11 @@
  * This defines the required backend API URLs and WebSocket URL for the frontend to work properly.
  */
 export interface AppConfig {
-    backend_url_api: string;          // Base URL of the backend API
-    backend_url_knowledge: string;    // Base URL of the knowledge service
-    websocket_url: string;            // WebSocket server URL
-    feature_flags?: Record<string, boolean>;
-    properties?: Record<string, string>;
+  backend_url_api: string; // Base URL of the backend API
+  backend_url_knowledge: string; // Base URL of the knowledge service
+  websocket_url: string; // WebSocket server URL
+  feature_flags?: Record<string, boolean>;
+  properties?: Record<string, string>;
 }
 
 export interface FeatureFlags {
@@ -33,7 +33,7 @@ export const FeatureFlagKey = {
   ENABLE_ELEC_WARFARE: "enableElecWarfare",
 } as const;
 
-export type FeatureFlagKeyType = typeof FeatureFlagKey[keyof typeof FeatureFlagKey];
+export type FeatureFlagKeyType = (typeof FeatureFlagKey)[keyof typeof FeatureFlagKey];
 
 let config: AppConfig | null = null;
 
@@ -42,21 +42,21 @@ let config: AppConfig | null = null;
  * Must be called before the app is rendered.
  */
 export const loadConfig = async () => {
-    const response = await fetch("/config.json");
-    if (!response.ok) {
-        throw new Error(`Cannot load config file /config.json: ${response.statusText}`);
-    }
-    const baseConfig = await response.json();
+  const response = await fetch("/config.json");
+  if (!response.ok) {
+    throw new Error(`Cannot load config file /config.json: ${response.statusText}`);
+  }
+  const baseConfig = await response.json();
 
-    // then call backend for dynamic feature flags
-    const response_back = await fetch(`${baseConfig.backend_url_api}/fred/config/frontend_settings`);
-    const frontendSettings = await response_back.json();
-    console.log("Frontend Settings from the backend: ", frontendSettings)
-    config = {
-      ...baseConfig,
-      feature_flags: frontendSettings.feature_flags,
-      properties: frontendSettings.properties,
-    };
+  // then call backend for dynamic feature flags
+  const response_back = await fetch(`${baseConfig.backend_url_api}/fred/config/frontend_settings`);
+  const frontendSettings = await response_back.json();
+  console.log("Frontend Settings from the backend: ", frontendSettings);
+  config = {
+    ...baseConfig,
+    feature_flags: frontendSettings.feature_flags,
+    properties: frontendSettings.properties,
+  };
 };
 
 /**
@@ -64,16 +64,16 @@ export const loadConfig = async () => {
  * Throws an error if config is not loaded yet.
  */
 export const getConfig = (): AppConfig => {
-    if (!config) {
-        throw new Error("Config file /config.json not loaded yet.");
-    }
-    return config;
+  if (!config) {
+    throw new Error("Config file /config.json not loaded yet.");
+  }
+  return config;
 };
 
 /**
  * Checks if a specific feature flag is enabled in the configuration.
- * @param flag 
- * @returns 
+ * @param flag
+ * @returns
  */
 export const isFeatureEnabled = (flag: FeatureFlagKeyType): boolean => {
   return !!getConfig().feature_flags?.[flag];

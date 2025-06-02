@@ -16,11 +16,11 @@ export type MessageSender = "user" | "assistant" | "system";
 export type MessageType = "human" | "ai" | "system" | "tool";
 
 export interface FredMetadata {
-  node?: string,
-  agentic_flow?: string,
-  expert_description?: string,
-  task_number?: string,
-  task?: string,
+  node?: string;
+  agentic_flow?: string;
+  expert_description?: string;
+  task_number?: string;
+  task?: string;
 }
 
 export interface ChatTokenUsage {
@@ -29,14 +29,7 @@ export interface ChatTokenUsage {
   total_tokens: number;
 }
 
-export type ChatMessageSubtype =
-  | "final"
-  | "thought"
-  | "tool_result"
-  | "plan"
-  | "execution"
-  | "observation"
-  | "error";
+export type ChatMessageSubtype = "final" | "thought" | "tool_result" | "plan" | "execution" | "observation" | "error";
 
 export interface ChatSource {
   document_uid: string;

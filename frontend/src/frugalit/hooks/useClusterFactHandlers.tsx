@@ -12,11 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useState, useEffect } from 'react';
-import { FactList, Fact, createFactList } from '../slices/factsStructures.tsx';
+import { useState, useEffect } from "react";
+import { FactList, Fact, createFactList } from "../slices/factsStructures.tsx";
 import { useToast } from "../../components/ToastProvider.tsx";
-import { useConfirmationDialog } from '../../components/ConfirmationDialogProvider.tsx';
-import { useGetClusterFactsMutation, usePostClusterFactsMutation, useDeleteClusterFactsMutation } from '../slices/api.tsx';
+import { useConfirmationDialog } from "../../components/ConfirmationDialogProvider.tsx";
+import {
+  useGetClusterFactsMutation,
+  usePostClusterFactsMutation,
+  useDeleteClusterFactsMutation,
+} from "../slices/api.tsx";
 
 interface UseFactHandlersProps {
   cluster: string;
@@ -26,7 +30,7 @@ export const useClusterFactHandlers = ({ cluster }: UseFactHandlersProps) => {
   const [factList, setFactList] = useState<FactList>(createFactList());
   const [getClusterFacts] = useGetClusterFactsMutation();
   const [postClusterFacts] = usePostClusterFactsMutation();
-  const [deleteClusterFacts] = useDeleteClusterFactsMutation();  
+  const [deleteClusterFacts] = useDeleteClusterFactsMutation();
   const { showError, showSuccess } = useToast();
   const { showConfirmationDialog } = useConfirmationDialog();
 
@@ -40,7 +44,7 @@ export const useClusterFactHandlers = ({ cluster }: UseFactHandlersProps) => {
         .then(setFactList)
         .catch((error) => {
           console.error(error);
-          showError({ summary: 'Error', detail: 'Failed to fetch facts.' });
+          showError({ summary: "Error", detail: "Failed to fetch facts." });
         });
     }
   }, [cluster]);
@@ -58,22 +62,20 @@ export const useClusterFactHandlers = ({ cluster }: UseFactHandlersProps) => {
         fact: newFact,
       }).unwrap();
 
-      showSuccess({ summary: 'Success', detail: 'Fact added successfully.' });
+      showSuccess({ summary: "Success", detail: "Fact added successfully." });
     } catch (error) {
-      showError({ summary: 'Error', detail: 'Failed to add fact.' });
+      showError({ summary: "Error", detail: "Failed to add fact." });
     }
   };
 
   const handleEdit = async (title: string, newContent: string) => {
     try {
-      setFactList(prevFactList => ({
+      setFactList((prevFactList) => ({
         ...prevFactList,
-        facts: prevFactList.facts.map(fact =>
-          fact.title === title ? { ...fact, content: newContent } : fact
-        ),
+        facts: prevFactList.facts.map((fact) => (fact.title === title ? { ...fact, content: newContent } : fact)),
       }));
 
-      const factToUpdate = factList.facts.find(fact => fact.title === title);
+      const factToUpdate = factList.facts.find((fact) => fact.title === title);
       if (factToUpdate) {
         await postClusterFacts({
           cluster,
@@ -81,9 +83,9 @@ export const useClusterFactHandlers = ({ cluster }: UseFactHandlersProps) => {
         }).unwrap();
       }
 
-      showSuccess({ summary: 'Success', detail: 'Fact updated successfully.' });
+      showSuccess({ summary: "Success", detail: "Fact updated successfully." });
     } catch (error) {
-      showError({ summary: 'Error', detail: 'Failed to update fact.' });
+      showError({ summary: "Error", detail: "Failed to update fact." });
     }
   };
 
@@ -93,22 +95,25 @@ export const useClusterFactHandlers = ({ cluster }: UseFactHandlersProps) => {
       message: `Are you sure you want to delete the ${title} fact?`,
       onConfirm: async () => {
         try {
-          const factToDelete = factList.facts.find(fact => fact.title === title);
+          const factToDelete = factList.facts.find((fact) => fact.title === title);
           if (factToDelete) {
             await deleteClusterFacts({
               cluster,
               fact: factToDelete,
             }).unwrap();
 
-            setFactList(prevFactList => ({
+            setFactList((prevFactList) => ({
               ...prevFactList,
-              facts: prevFactList.facts.filter(fact => fact.title !== title),
+              facts: prevFactList.facts.filter((fact) => fact.title !== title),
             }));
 
-            showSuccess({ summary: 'Success', detail: 'Fact deleted successfully.' });
+            showSuccess({
+              summary: "Success",
+              detail: "Fact deleted successfully.",
+            });
           }
         } catch (error) {
-          showError({ summary: 'Error', detail: 'Failed to delete fact.' });
+          showError({ summary: "Error", detail: "Failed to delete fact." });
         }
       },
     });

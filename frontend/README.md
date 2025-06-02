@@ -6,7 +6,6 @@ A makefile is available to help you compile package and run, with or without doc
 Note that the package-lock.json is generated from a dockerfile to avoid macos/linux issues with natives packages. It is then
 committed to ensure all developers share the same configuration.
 
-
 ## UI Architecture Overview
 
 ### High-Level Flow
@@ -40,28 +39,27 @@ index.tsx
 
 ### Key Features
 
-* **Dark/Light Theme**: Toggles dynamically using `ApplicationContext`
-* **Sidebar Toggle**: Can be collapsed or hidden via `isSidebarCollapsed`
-* **Cluster Navigation**: Sidebar reflects cluster state, query params updated
-* **Feature Flags**: Routes are conditionally included via `isFeatureEnabled`
-* **Config Loading**: `/config.json` is loaded before any routing occurs
-* **Clean Routing**: Uses `createBrowserRouter` and `Outlet` pattern for clarity
-* **Fully Modular**: Providers, theme, layout, and routes are decoupled and testable
+- **Dark/Light Theme**: Toggles dynamically using `ApplicationContext`
+- **Sidebar Toggle**: Can be collapsed or hidden via `isSidebarCollapsed`
+- **Cluster Navigation**: Sidebar reflects cluster state, query params updated
+- **Feature Flags**: Routes are conditionally included via `isFeatureEnabled`
+- **Config Loading**: `/config.json` is loaded before any routing occurs
+- **Clean Routing**: Uses `createBrowserRouter` and `Outlet` pattern for clarity
+- **Fully Modular**: Providers, theme, layout, and routes are decoupled and testable
 
 ### Best Practices Followed
 
-* Single source of truth for theme and cluster state via `ApplicationContext`
-* React Router v7 route-centric design using `createBrowserRouter`
-* Dynamic route filtering using feature flags
-* Layout separation (`LayoutWithSidebar`) with context-aware rendering
-* Dynamic import of routes only after config load (avoids runtime crashes)
+- Single source of truth for theme and cluster state via `ApplicationContext`
+- React Router v7 route-centric design using `createBrowserRouter`
+- Dynamic route filtering using feature flags
+- Layout separation (`LayoutWithSidebar`) with context-aware rendering
+- Dynamic import of routes only after config load (avoids runtime crashes)
 
 ---
 
 For teams using this structure, onboarding is faster, testing is easier, and feature gates (like Kubernetes or document-centric workflows) are cleanly separated from core logic.
 
 > ✏️ To extend: add lazy-loading for pages, errorElement routes, or a public-only layout if login is skipped.
-
 
 ## React + TypeScript + Vite
 
@@ -82,12 +80,12 @@ If you are developing a production application, we recommend updating the config
 export default {
   // other rules...
   parserOptions: {
-    ecmaVersion: 'latest',
-    sourceType: 'module',
-    project: ['./tsconfig.json', './tsconfig.node.json'],
+    ecmaVersion: "latest",
+    sourceType: "module",
+    project: ["./tsconfig.json", "./tsconfig.node.json"],
     tsconfigRootDir: __dirname,
   },
-}
+};
 ```
 
 - Replace `plugin:@typescript-eslint/recommended` to `plugin:@typescript-eslint/recommended-type-checked` or `plugin:@typescript-eslint/strict-type-checked`

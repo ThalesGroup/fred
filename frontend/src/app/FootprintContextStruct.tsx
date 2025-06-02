@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import {Period} from "../utils/period.tsx";
-import {ClusterConsumption, ClusterFootprint} from "../frugalit/slices/api.tsx";
+import { Period } from "../utils/period.tsx";
+import { ClusterConsumption, ClusterFootprint } from "../frugalit/slices/api.tsx";
 /**
  * Interface representing the structure of the Footprint Context.
- * 
+ *
  * @interface FootprintContextStruct
- * 
+ *
  * @property {string} period - The current period for which the footprints are being tracked.
  * @property {ClusterFootprint} currentClusterFootprints - The current cluster footprints data.
  * @property {ClusterFootprint[]} selectedClusterFootprints - The selected cluster footprints data.
@@ -31,14 +31,14 @@ import {ClusterConsumption, ClusterFootprint} from "../frugalit/slices/api.tsx";
  * @property {(period: Period) => void} updatePeriod - Function to update the period.
  */
 export interface FootprintContextStruct {
-    period: string;
-    currentClusterFootprints: ClusterFootprint;
-    selectedClusterFootprints: ClusterFootprint[];
-    allClusterFootprints: ClusterFootprint[];
-    currentCarbonConsumption: ClusterConsumption | undefined;
-    currentEnergyConsumption: ClusterConsumption | undefined;
-    currentCostConsumption: ClusterConsumption | undefined;
-    updateClusterFootprints: (fullname: string) => void;
-    updateSelectedClusterFootprints: (clusterFootprints: ClusterFootprint[]) => void;
-    updatePeriod: (period: Period) => void;
+  period: string;
+  currentClusterFootprints: ClusterFootprint;
+  selectedClusterFootprints: ClusterFootprint[];
+  allClusterFootprints: ClusterFootprint[];
+  currentCarbonConsumption: ClusterConsumption | undefined;
+  currentEnergyConsumption: ClusterConsumption | undefined;
+  currentCostConsumption: ClusterConsumption | undefined;
+  updateClusterFootprints: (fullname: string) => void;
+  updateSelectedClusterFootprints: (clusterFootprints: ClusterFootprint[]) => void;
+  updatePeriod: (period: Period) => void;
 }

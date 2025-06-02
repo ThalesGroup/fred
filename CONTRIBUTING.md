@@ -31,10 +31,10 @@ This project is maintained by a core team at **Thales**, in collaboration with e
 
 This project uses two synchronized repositories:
 
-- **Internal GitLab** (for Thales developers):  
+- **Internal GitLab** (for Thales developers):
   [gitlab.thalesdigital.io/tsn/innovation/projects/fred-oss](https://gitlab.thalesdigital.io/tsn/innovation/projects/fred-oss)
 
-- **Public GitHub** (for open source contributions):  
+- **Public GitHub** (for open source contributions):
   [github.com/ThalesGroup/fred](https://github.com/ThalesGroup/fred)
 
 ### Synchronization Policy
@@ -48,7 +48,7 @@ This project uses two synchronized repositories:
 ## 🚀 How to Become a Contributor
 
 1. Fork the [GitHub repository](https://github.com/ThalesGroup/fred)
-2. Clone your fork and create a branch:  
+2. Clone your fork and create a branch:
    ```bash
    git checkout -b your-feature-name
    ```
@@ -89,6 +89,36 @@ All contributions must be compatible with the project’s open source license (s
 - Prefer readability and clarity over cleverness.
 - We recommend using tools such as `prettier` in Javascript or `black` in Python to format your code.
 - Please respect the conventions in effect for the following languages : PEP8 in Python and ECMAScript in Javascript
+
+### Code formatting
+
+#### Frontend
+
+For the frontend part we use the [prettier](https://prettier.io/) code formatter.
+
+With the [prettier vscode extension](https://marketplace.visualstudio.com/items?itemName=esbenp.prettier-vscode) and by adding this to your `.vscode/settings.json` your code will format automaticaly on every file save:
+```json
+{
+    "[typescriptreact]": {
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "[typescript]": {
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "[json]": {
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "esbenp.prettier-vscode"
+    }
+}
+```
+
+You can also run it from the terminal to format all the frontend files in one command:
+```sh
+cd frontend
+make format
+```
 
 ---
 
@@ -165,7 +195,7 @@ Tip: Use git rebase -i or select "Squash and merge" when merging the PR.
 
 For coordination or questions, please contact the internal maintainers:
 
-- romain.perennes@thalesgroup.com  
-- fabien.le-solliec@thalesgroup.com  
-- dimitri.tombroff@thalesgroup.com  
+- romain.perennes@thalesgroup.com
+- fabien.le-solliec@thalesgroup.com
+- dimitri.tombroff@thalesgroup.com
 - alban.capitant@thalesgroup.com

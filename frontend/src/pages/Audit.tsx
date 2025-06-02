@@ -13,11 +13,11 @@
 // limitations under the License.
 
 import { PageBodyWrapper } from "../common/PageBodyWrapper.tsx";
-import 'dayjs/locale/en-gb';
-import { ApplicationContext } from '../app/ApplicationContextProvider.tsx';
+import "dayjs/locale/en-gb";
+import { ApplicationContext } from "../app/ApplicationContextProvider.tsx";
 import { useContext, useEffect, useState } from "react";
-import { useSearchParams } from 'react-router-dom';
-import LoadingWithProgress from '../components/LoadingWithProgress.tsx';
+import { useSearchParams } from "react-router-dom";
+import LoadingWithProgress from "../components/LoadingWithProgress.tsx";
 import { Box } from "@mui/material";
 import { useGetClusterScoresMutation } from "../frugalit/slices/api.tsx";
 import { useToast } from "../components/ToastProvider.tsx";
@@ -31,25 +31,29 @@ export const Audit = () => {
   const clusterFullName = searchParams.get("cluster");
   const application_context = useContext(ApplicationContext);
   const { currentClusterOverview } = useContext(ApplicationContext);
-  const [currentClusterScores, setCurrentClusterScores] = useState<ClusterScore>(undefined)
+  const [currentClusterScores, setCurrentClusterScores] = useState<ClusterScore>(undefined);
   const [getClusterScores] = useGetClusterScoresMutation();
   const { showError } = useToast();
 
   // Fetch the cluster scores. It is not loaded as part of the cluster overview data
   // because it is heavy to compute on the backend and is not needed in most cases.
   useEffect(() => {
-    getClusterScores({ cluster: clusterFullName }).then((response) => {
-      if (response.error) {
-        showError({ summary: 'Error fetching cluster details', detail: extractHttpErrorMessage(response.error) });
-        console.warn("No cluster scores found.", response.error);
-      } else if (response.data) {
-        setCurrentClusterScores(response.data as ClusterScore);
-        console.log("Cluster scores:", response.data);
-      }
-    }
-    ).catch((error) => {
-      console.error('Error fetching cluster scores:', error);
-    });
+    getClusterScores({ cluster: clusterFullName })
+      .then((response) => {
+        if (response.error) {
+          showError({
+            summary: "Error fetching cluster details",
+            detail: extractHttpErrorMessage(response.error),
+          });
+          console.warn("No cluster scores found.", response.error);
+        } else if (response.data) {
+          setCurrentClusterScores(response.data as ClusterScore);
+          console.log("Cluster scores:", response.data);
+        }
+      })
+      .catch((error) => {
+        console.error("Error fetching cluster scores:", error);
+      });
   }, [clusterFullName]);
 
   // Check if the current cluster overview is available and the alias matches the clusterName
@@ -63,19 +67,23 @@ export const Audit = () => {
   }, [clusterFullName, currentClusterOverview?.alias]);
 
   if (!currentClusterOverview || currentClusterOverview?.fullname !== clusterFullName) {
-    return <PageBodyWrapper><LoadingWithProgress /></PageBodyWrapper>;
+    return (
+      <PageBodyWrapper>
+        <LoadingWithProgress />
+      </PageBodyWrapper>
+    );
   }
   if (!currentClusterScores) {
-    return <PageBodyWrapper><LoadingWithProgress /></PageBodyWrapper>;
+    return (
+      <PageBodyWrapper>
+        <LoadingWithProgress />
+      </PageBodyWrapper>
+    );
   }
   console.log("currentClusterScores", currentClusterScores);
   return (
     <PageBodyWrapper>
-      <TopBar
-        title="Resource Scores"
-        description="Review your cluster resource scores"
-        backgroundUrl=""
-      />
+      <TopBar title="Resource Scores" description="Review your cluster resource scores" backgroundUrl="" />
       <Box padding={4} paddingTop={12}>
         <ClusterScoresTable clusterScores={currentClusterScores} />
       </Box>

@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import React, { useEffect, useState } from 'react';
-import mermaid from 'mermaid';
-import { v4 as uuidv4 } from 'uuid';
-import { Box, IconButton, Modal } from '@mui/material';
-import ZoomInIcon from '@mui/icons-material/ZoomIn';
-import SaveIcon from '@mui/icons-material/Save';
+import React, { useEffect, useState } from "react";
+import mermaid from "mermaid";
+import { v4 as uuidv4 } from "uuid";
+import { Box, IconButton, Modal } from "@mui/material";
+import ZoomInIcon from "@mui/icons-material/ZoomIn";
+import SaveIcon from "@mui/icons-material/Save";
 
 interface MermaidProps {
   code: string;
@@ -56,9 +56,9 @@ const Mermaid: React.FC<MermaidProps> = ({ code }) => {
   // Save the SVG by creating an <a> link and triggering a download
   const handleSaveSvg = () => {
     if (svgSrc) {
-      const link = document.createElement('a');
+      const link = document.createElement("a");
       link.href = svgSrc;
-      link.download = 'diagram.svg';
+      link.download = "diagram.svg";
       link.click();
     }
   };
@@ -79,7 +79,12 @@ const Mermaid: React.FC<MermaidProps> = ({ code }) => {
 
       <Box
         id={`${generatedDiagramId}-box-container`}
-        style={{ maxWidth: '100%', maxHeight: '800px', overflow: 'auto', position: 'relative' }}
+        style={{
+          maxWidth: "100%",
+          maxHeight: "800px",
+          overflow: "auto",
+          position: "relative",
+        }}
       >
         {svgSrc ? <img src={svgSrc} alt="Mermaid Diagram" /> : <p>Loading diagram...</p>}
       </Box>
@@ -87,27 +92,31 @@ const Mermaid: React.FC<MermaidProps> = ({ code }) => {
       <Modal open={isModalOpen} onClose={handleCloseModal}>
         <Box
           sx={{
-            position: 'absolute',
-            top: '50%',
-            left: '50%',
-            transform: 'translate(-50%, -50%)',
-            width: '80vw',
-            height: '80vh',
-            bgcolor: 'background.paper',
-            border: '1px solid #000',
+            position: "absolute",
+            top: "50%",
+            left: "50%",
+            transform: "translate(-50%, -50%)",
+            width: "80vw",
+            height: "80vh",
+            bgcolor: "background.paper",
+            border: "1px solid #000",
             borderRadius: 3,
             p: 4,
-            overflow: 'auto',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
+            overflow: "auto",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
           }}
         >
           {svgSrc && (
             <img
               src={svgSrc}
               alt="Enlarged Diagram"
-              style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+              style={{
+                maxWidth: "100%",
+                maxHeight: "100%",
+                objectFit: "contain",
+              }}
             />
           )}
         </Box>

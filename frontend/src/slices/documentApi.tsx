@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { createApi } from '@reduxjs/toolkit/query/react';
-import { Metadata } from '../components/documents/DocumentCard.tsx';
-import { createDynamicBaseQuery } from '../common/dynamicBaseQuery.tsx';
+import { createApi } from "@reduxjs/toolkit/query/react";
+import { Metadata } from "../components/documents/DocumentCard.tsx";
+import { createDynamicBaseQuery } from "../common/dynamicBaseQuery.tsx";
 
 export interface KnowledgeDocument {
   document_uid: string;
@@ -33,7 +33,7 @@ export interface MarkdownDocumentPreview {
 }
 
 export const documentApiSlice = createApi({
-  reducerPath: 'documentApi',
+  reducerPath: "documentApi",
   baseQuery: createDynamicBaseQuery({ backend: "knowledge" }),
   endpoints: () => ({}),
 });
@@ -43,33 +43,33 @@ const extendedDocumentApi = documentApiSlice.injectEndpoints({
     getDocumentMarkdownPreview: builder.mutation<MarkdownDocumentPreview, { document_uid: string }>({
       query: ({ document_uid }) => ({
         url: `/knowledge/v1/markdown/${document_uid}`,
-        method: 'GET',
+        method: "GET",
       }),
     }),
     getDocumentRawContent: builder.query<Blob, { document_uid: string }>({
       query: ({ document_uid }) => ({
         url: `/knowledge/v1/raw_content/${document_uid}`,
-        method: 'GET',
+        method: "GET",
         responseHandler: async (response) => await response.blob(),
       }),
     }),
     getDocumentMetadata: builder.mutation<Metadata, { document_uid: string }>({
       query: ({ document_uid }) => ({
         url: `/knowledge/v1/document/${document_uid}`,
-        method: 'GET',
+        method: "GET",
       }),
     }),
     getDocumentsWithFilter: builder.mutation<{ documents: KnowledgeDocument[] }, Record<string, any>>({
       query: (filters) => ({
         url: `/knowledge/v1/documents/metadata`, // Single endpoint
-        method: 'POST',
+        method: "POST",
         body: filters ?? {}, // If filters are undefined, send empty object
       }),
     }),
     putDocumentMetadata: builder.mutation<Metadata, { document_uid: string; metadata: Metadata }>({
       query: ({ document_uid, metadata }) => ({
         url: `/knowledge/v1/document/${document_uid}`,
-        method: 'PUT',
+        method: "PUT",
         body: metadata,
       }),
     }),

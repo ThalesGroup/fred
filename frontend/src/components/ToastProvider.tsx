@@ -27,34 +27,34 @@ interface ToastMessage {
 const renderDetailLines = (detail: string) => {
   const urlRegex = /(https?:\/\/[^\s]+)/g;
   try {
-  return detail
-    .split(/\r?\n+/) // split by newlines
-    .filter(line => line.trim() !== "")
-    .map((line, idx) => {
-      const parts = line.split(urlRegex); // break into text and links
+    return detail
+      .split(/\r?\n+/) // split by newlines
+      .filter((line) => line.trim() !== "")
+      .map((line, idx) => {
+        const parts = line.split(urlRegex); // break into text and links
 
-      return (
-        <Typography
-          key={idx}
-          variant="body1"
-          sx={{
-            wordBreak: 'break-word',
-            whiteSpace: 'pre-wrap',
-            mb: 0.5
-          }}
-        >
-          {parts.map((part, i) =>
-            urlRegex.test(part) ? (
-              <Link key={i} href={part} target="_blank" rel="noopener noreferrer">
-                {part}
-              </Link>
-            ) : (
-              <React.Fragment key={i}>{part}</React.Fragment>
-            )
-          )}
-        </Typography>
-      );
-    });
+        return (
+          <Typography
+            key={idx}
+            variant="body1"
+            sx={{
+              wordBreak: "break-word",
+              whiteSpace: "pre-wrap",
+              mb: 0.5,
+            }}
+          >
+            {parts.map((part, i) =>
+              urlRegex.test(part) ? (
+                <Link key={i} href={part} target="_blank" rel="noopener noreferrer">
+                  {part}
+                </Link>
+              ) : (
+                <React.Fragment key={i}>{part}</React.Fragment>
+              ),
+            )}
+          </Typography>
+        );
+      });
   } catch (error) {
     console.error("Error rendering detail lines:", error);
     return <Typography variant="body1">MERDE{detail}</Typography>; // Fallback to plain text if error occurs
@@ -74,7 +74,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       summary,
       detail,
       duration,
-      id: new Date().getTime() // Generate a unique ID for each toast
+      id: new Date().getTime(), // Generate a unique ID for each toast
     };
     setToasts((prevToasts) => [...prevToasts, newToast]); // Add the new toast to the list
   };
@@ -95,7 +95,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const showWarn = (message: Omit<ToastMessage, "severity">) => {
-    console.warn(message)
+    console.warn(message);
     showToast("warning", message.summary, message.detail, message.duration);
   };
   return (
@@ -103,7 +103,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       {children}
       {toasts.map((toast, index) => (
         <Snackbar
-          key={toast.id+index}
+          key={toast.id + index}
           open={true}
           autoHideDuration={toast.duration || 8000}
           onClose={() => handleClose(toast.id)}
@@ -123,7 +123,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
               wordBreak: "break-word",
               display: "flex",
               alignItems: "flex-start", // 🔥 Align the icon to the top
-              gap: 1
+              gap: 1,
             }}
           >
             <Box>
@@ -141,7 +141,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
 /**
  * useToast
- * 
+ *
  * Custom hook to access the ToastContext.
  * Provides methods to show informational, error, warning, or success toasts
  * anywhere inside the application.
