@@ -12,14 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import React, { useState } from 'react';
-import { useLocation } from 'react-router-dom';
+import React, { useState } from "react";
+import { useLocation } from "react-router-dom";
 import { useGetWorkloadFactsMutation } from "../slices/api.tsx";
 import { useToast } from "../../components/ToastProvider.tsx";
-import { PageBodyWrapper } from '../../common/PageBodyWrapper.tsx';
-import { useConfirmationDialog } from '../../components/ConfirmationDialogProvider.tsx';
-import { useWorkloadFactHandlers } from '../hooks/useWorkloadFactHandlers.tsx';
-import { FactsPageLayout } from '../component/FactsPageLayout.tsx';
+import { PageBodyWrapper } from "../../common/PageBodyWrapper.tsx";
+import { useConfirmationDialog } from "../../components/ConfirmationDialogProvider.tsx";
+import { useWorkloadFactHandlers } from "../hooks/useWorkloadFactHandlers.tsx";
+import { FactsPageLayout } from "../component/FactsPageLayout.tsx";
 /*
   This component displays a list of facts for a specific workload.
   It allows the user to add, edit, and delete facts at workload level.
@@ -31,7 +31,7 @@ export const FactsWorkload: React.FC = () => {
   const namespace = searchParams.get("namespace");
   const workload = searchParams.get("workload");
   const kind = searchParams.get("kind");
-  
+
   const { factList, handleSubmit, handleEdit, handleDelete } = useWorkloadFactHandlers({
     cluster: clusterFullName!,
     namespace: namespace!,

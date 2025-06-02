@@ -31,35 +31,34 @@ const loggingMiddleware = () => (next) => (action) => {
 
 // Combine reducers
 const combinedReducer = combineReducers({
-  pendingCount: createReducer(0, builder =>
+  pendingCount: createReducer(0, (builder) =>
     builder
-      .addMatcher(isPending, state => state + 1)
-      .addMatcher(isFulfilled, state => state ? state - 1 : state)
-      .addMatcher(isRejected, state => state ? state - 1 : state)
+      .addMatcher(isPending, (state) => state + 1)
+      .addMatcher(isFulfilled, (state) => (state ? state - 1 : state))
+      .addMatcher(isRejected, (state) => (state ? state - 1 : state)),
   ),
-  ignoredRefreshesCount: createReducer(0, builder =>
+  ignoredRefreshesCount: createReducer(0, (builder) =>
     builder
-      .addCase("incrementIgnoredRefresh", state => state + 1)
-      .addCase("decrementIgnoredRefresh", state => state - 1)
+      .addCase("incrementIgnoredRefresh", (state) => state + 1)
+      .addCase("decrementIgnoredRefresh", (state) => state - 1),
   ),
   api: apiSlice.reducer,
   documentApi: documentApiSlice.reducer,
   chatApi: chatApiSlice.reducer,
-  agentContextApi: agentContextApiSlice.reducer 
+  agentContextApi: agentContextApiSlice.reducer,
 });
 
 // Configure store
 export const store = configureStore({
   reducer: combinedReducer,
-  middleware: getDefaultMiddleware =>
-    getDefaultMiddleware()
-      .concat(
-        apiSlice.middleware,
-        documentApiSlice.middleware,
-        chatApiSlice.middleware,
-        agentContextApiSlice.middleware,
-        loggingMiddleware
-      ),
+  middleware: (getDefaultMiddleware) =>
+    getDefaultMiddleware().concat(
+      apiSlice.middleware,
+      documentApiSlice.middleware,
+      chatApiSlice.middleware,
+      agentContextApiSlice.middleware,
+      loggingMiddleware,
+    ),
   devTools: true,
 });
 

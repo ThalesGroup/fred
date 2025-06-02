@@ -27,7 +27,7 @@ import {
   Typography,
   Box,
   TableSortLabel,
-  Button
+  Button,
 } from "@mui/material";
 import EventAvailableIcon from "@mui/icons-material/EventAvailable";
 import dayjs from "dayjs";
@@ -100,18 +100,9 @@ export const DocumentTable: React.FC<FileTableProps> = ({
 
   return (
     <>
-
       {selected.length > 0 && (
-        <Box
-          display="flex"
-          justifyContent="space-between"
-          alignItems="center"
-          px={2}
-          pt={2}
-        >
-          <Typography variant="subtitle2">
-            {selected.length} selected
-          </Typography>
+        <Box display="flex" justifyContent="space-between" alignItems="center" px={2} pt={2}>
+          <Typography variant="subtitle2">{selected.length} selected</Typography>
           <Box display="flex" gap={1}>
             <Button
               size="small"
@@ -130,7 +121,7 @@ export const DocumentTable: React.FC<FileTableProps> = ({
                 selected.forEach((uid) => {
                   const link = document.createElement("a");
                   link.href = `/knowledge/v1/fullDocument/${uid}`;
-                  link.download = '';
+                  link.download = "";
                   document.body.appendChild(link);
                   link.click();
                   document.body.removeChild(link);
@@ -148,10 +139,7 @@ export const DocumentTable: React.FC<FileTableProps> = ({
           <TableHead>
             <TableRow>
               <TableCell padding="checkbox">
-                <Checkbox
-                  checked={allSelected}
-                  onChange={(e) => onToggleAll(e.target.checked)}
-                />
+                <Checkbox checked={allSelected} onChange={(e) => onToggleAll(e.target.checked)} />
               </TableCell>
               <TableCell sx={{ width: 50 }}></TableCell> {/* Avatar column */}
               <TableCell>
@@ -194,9 +182,7 @@ export const DocumentTable: React.FC<FileTableProps> = ({
                     onChange={() => onToggleSelect(file.document_uid)}
                   />
                 </TableCell>
-                <TableCell sx={{ width: 50 }}>
-                  {file.agent_name ? getAgentBadge(file.agent_name) : null}
-                </TableCell>
+                <TableCell sx={{ width: 50 }}>{file.agent_name ? getAgentBadge(file.agent_name) : null}</TableCell>
                 <TableCell>
                   <Typography variant="body2" noWrap>
                     {file.agent_name || "-"}
@@ -220,11 +206,7 @@ export const DocumentTable: React.FC<FileTableProps> = ({
                 </TableCell>
                 <TableCell>
                   {isAdmin && onToggleRetrievable ? (
-                    <Switch
-                      size="small"
-                      checked={file.retrievable}
-                      onChange={() => onToggleRetrievable(file)}
-                    />
+                    <Switch size="small" checked={file.retrievable} onChange={() => onToggleRetrievable(file)} />
                   ) : file.retrievable ? (
                     "Yes"
                   ) : (

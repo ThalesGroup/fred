@@ -19,9 +19,9 @@ import { WorkloadSummary } from "../frugalit/slices/workloadSummaryStructures.ts
 import { WorkloadScores } from "../frugalit/slices/scoresStructures.tsx";
 
 /**
- * The ExplainContextStruct contains the current resource that are being explained. 
+ * The ExplainContextStruct contains the current resource that are being explained.
  * This structure is not perfect it actually is only good to represent a deployment
- * or statefulset. 
+ * or statefulset.
  */
 export interface ExplainContextStruct {
   /**
@@ -65,11 +65,10 @@ export interface ExplainContextStruct {
   factList: FactList;
 
   /**
-* Load the resource data including essentials, advanced, application, score, and facts.
-* @param clusterName The name of the cluster.
-* @param namespace The name of the namespace.
-* @param resourceName The name of the resource.
-*/
+   * Load the resource data including essentials, advanced, application, score, and facts.
+   * @param clusterName The name of the cluster.
+   * @param namespace The name of the namespace.
+   * @param resourceName The name of the resource.
+   */
   loadResource: (clusterName: string, namespace: string, resourceName: string, resourceKind: string) => Promise<void>;
-
 }

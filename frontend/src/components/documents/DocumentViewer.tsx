@@ -13,30 +13,22 @@
 // limitations under the License.
 
 import { useEffect, useState } from "react";
-import {
-  Box,
-  Typography,
-  IconButton,
-  CircularProgress,
-  Drawer,
-  AppBar,
-  Toolbar,
-} from "@mui/material";
+import { Box, Typography, IconButton, CircularProgress, Drawer, AppBar, Toolbar } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
-import DownloadIcon from '@mui/icons-material/Download';
-import MarkdownViewer from '../markdown/MarkdownRenderer.tsx';
+import DownloadIcon from "@mui/icons-material/Download";
+import MarkdownViewer from "../markdown/MarkdownRenderer.tsx";
 import { useGetDocumentMarkdownPreviewMutation } from "../../slices/documentApi.tsx";
 
 // Props definition for the DocumentViewer component
 interface DocumentViewerProps {
   document: {
-    document_uid: string;        // Unique identifier of the document
-    file_name?: string;          // Optional file name (used for display and download)
-    file_url?: string;           // Optional direct URL to fetch content from
-    content?: string;            // Optional inline content (may be base64-encoded)
+    document_uid: string; // Unique identifier of the document
+    file_name?: string; // Optional file name (used for display and download)
+    file_url?: string; // Optional direct URL to fetch content from
+    content?: string; // Optional inline content (may be base64-encoded)
   } | null;
-  open: boolean;                // Controls whether the Drawer is open
-  onClose: () => void;          // Callback when the Drawer should be closed
+  open: boolean; // Controls whether the Drawer is open
+  onClose: () => void; // Callback when the Drawer should be closed
 }
 
 /**
@@ -51,63 +43,60 @@ interface DocumentViewerProps {
  * It encapsulates all logic related to document fetching and rendering.
  * The parent component does **not** need to handle downloading or decoding.
  */
-export const DocumentViewer: React.FC<DocumentViewerProps> = ({
-  document: doc,
-  open,
-  onClose,
-}) => {
-  const [docContent, setDocContent] = useState<string>('');              // Parsed document content (decoded)
-  const [isLoadingDoc, setIsLoadingDoc] = useState<boolean>(false);     // Internal loading state
-  const [getFullDocument] = useGetDocumentMarkdownPreviewMutation();   // API call to fetch full document
+export const DocumentViewer: React.FC<DocumentViewerProps> = ({ document: doc, open, onClose }) => {
+  const [docContent, setDocContent] = useState<string>(""); // Parsed document content (decoded)
+  const [isLoadingDoc, setIsLoadingDoc] = useState<boolean>(false); // Internal loading state
+  const [getFullDocument] = useGetDocumentMarkdownPreviewMutation(); // API call to fetch full document
 
   console.log("DocumentViewer: ", doc);
   // Load markdown content whenever the viewer is opened with a document
   useEffect(() => {
-  if (!open || !doc?.document_uid) return;
+    if (!open || !doc?.document_uid) return;
 
-  const load = async () => {
-    setIsLoadingDoc(true);
+    const load = async () => {
+      setIsLoadingDoc(true);
 
-    try {
-      let content = doc.content;
-      let fileUrl = doc.file_url;
-      let fileName = doc.file_name;
-      console.log("[DocumentViewer] content:", content);
-      console.log("[DocumentViewer] file_url:", fileUrl);
-      console.log("[DocumentViewer] file_name:", fileName);
-      // If content and file_url are missing, try fetching full document
-      if (!content && !fileUrl) {
-        console.log("[DocumentViewer] fetching from API via document_uid:", doc.document_uid);
-        const response = await getFullDocument({ document_uid: doc.document_uid }).unwrap();
-        console.log("[DocumentViewer] GOT :", response);
-        content = response.content;
-      }
-
-      // Try decoding embedded content
-      if (content) {
-        try {
-          setDocContent(atob(content));
-        } catch {
-          setDocContent(content);
+      try {
+        let content = doc.content;
+        let fileUrl = doc.file_url;
+        let fileName = doc.file_name;
+        console.log("[DocumentViewer] content:", content);
+        console.log("[DocumentViewer] file_url:", fileUrl);
+        console.log("[DocumentViewer] file_name:", fileName);
+        // If content and file_url are missing, try fetching full document
+        if (!content && !fileUrl) {
+          console.log("[DocumentViewer] fetching from API via document_uid:", doc.document_uid);
+          const response = await getFullDocument({
+            document_uid: doc.document_uid,
+          }).unwrap();
+          console.log("[DocumentViewer] GOT :", response);
+          content = response.content;
         }
-      } else if (fileUrl) {
-        const res = await fetch(fileUrl);
-        const text = await res.text();
-        setDocContent(text);
-      } else {
-        setDocContent('No content found.');
+
+        // Try decoding embedded content
+        if (content) {
+          try {
+            setDocContent(atob(content));
+          } catch {
+            setDocContent(content);
+          }
+        } else if (fileUrl) {
+          const res = await fetch(fileUrl);
+          const text = await res.text();
+          setDocContent(text);
+        } else {
+          setDocContent("No content found.");
+        }
+      } catch (e) {
+        console.error("[DocumentViewer] Error fetching document:", e);
+        setDocContent("Error loading document.");
+      } finally {
+        setIsLoadingDoc(false);
       }
-    } catch (e) {
-      console.error("[DocumentViewer] Error fetching document:", e);
-      setDocContent("Error loading document.");
-    } finally {
-      setIsLoadingDoc(false);
-    }
-  };
+    };
 
-  load();
-}, [doc, open]);
-
+    load();
+  }, [doc, open]);
 
   // Triggers file download via <a download>
   const handleDownload = () => {
@@ -124,13 +113,19 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
   console.log("DocumentViewer rendering docContent: ", docContent);
   return (
     <Drawer anchor="right" open={open} onClose={onClose}>
-      <Box sx={{ width: '80vw', height: '100vh', display: 'flex', flexDirection: 'column' }}>
-
+      <Box
+        sx={{
+          width: "80vw",
+          height: "100vh",
+          display: "flex",
+          flexDirection: "column",
+        }}
+      >
         {/* Header with title and actions */}
         <AppBar position="static" color="default" elevation={0}>
           <Toolbar>
             <Typography variant="h6" sx={{ flex: 1 }}>
-              {doc?.file_name || 'Markdown Document'}
+              {doc?.file_name || "Markdown Document"}
             </Typography>
             <IconButton onClick={handleDownload} disabled={!doc?.file_url}>
               <DownloadIcon />
@@ -142,9 +137,9 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
         </AppBar>
 
         {/* Main content area */}
-        <Box sx={{ flex: 1, overflow: 'auto', p: 3 }}>
+        <Box sx={{ flex: 1, overflow: "auto", p: 3 }}>
           {isLoadingDoc ? (
-            <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
+            <Box sx={{ display: "flex", justifyContent: "center", mt: 4 }}>
               <CircularProgress />
             </Box>
           ) : (

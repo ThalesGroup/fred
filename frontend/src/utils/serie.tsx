@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import {ClusterConsumption} from "../frugalit/slices/api.tsx";
+import { ClusterConsumption } from "../frugalit/slices/api.tsx";
 
 export interface SeriePoint {
   date: string;
@@ -46,7 +46,10 @@ export const getMaxValue = (series: Serie[]): number => {
 // Returns the minimum value of serie in the given array
 export const getMinValue = (serie: Serie): number => {
   if (!serie.seriePoints) return 0;
-  return serie.seriePoints.reduce((max, { value }) => Math.min(max, value), serie.seriePoints[0] ? serie.seriePoints[0].value : 0)
+  return serie.seriePoints.reduce(
+    (max, { value }) => Math.min(max, value),
+    serie.seriePoints[0] ? serie.seriePoints[0].value : 0,
+  );
 };
 
 // Returns the sum of values in the given array
@@ -68,6 +71,6 @@ export const transformClusterConsumptionToSerie = (
     seriePoints: clusterConsumptionArray.values.map((value, index) => ({
       date: clusterConsumptionArray.timestamps[index],
       value: Math.round(value * 100) / 100,
-    }))
+    })),
   };
 };

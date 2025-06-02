@@ -25,9 +25,9 @@ export async function streamProcessDocument(
   const formData = new FormData();
   formData.append("files", file);
   const metadata = {
-    agent_name
+    agent_name,
   };
-  formData.append('metadata_json', JSON.stringify(metadata));
+  formData.append("metadata_json", JSON.stringify(metadata));
   const backend_url_knowledge = getConfig().backend_url_knowledge;
   if (!backend_url_knowledge) {
     throw new Error("knowledged backend URL is not defined");

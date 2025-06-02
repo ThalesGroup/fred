@@ -13,6 +13,6 @@
 // limitations under the License.
 
 export interface ProcessingProgress {
-    step: string;
-    status: "started" | "completed";
-  }
+  step: string;
+  status: "started" | "completed";
+}

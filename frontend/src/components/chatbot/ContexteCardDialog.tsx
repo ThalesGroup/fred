@@ -21,9 +21,9 @@ import {
   TextField,
   Button,
   InputAdornment,
-  CircularProgress
+  CircularProgress,
 } from "@mui/material";
-import DescriptionIcon from '@mui/icons-material/Description';
+import DescriptionIcon from "@mui/icons-material/Description";
 import { useState, useEffect } from "react";
 
 /**
@@ -39,7 +39,7 @@ const ContextCardDialog = ({ open, onClose, card, onSave }) => {
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  
+
   // Set form values when card changes (for editing)
   useEffect(() => {
     if (card) {
@@ -50,50 +50,43 @@ const ContextCardDialog = ({ open, onClose, card, onSave }) => {
       setContent("");
     }
   }, [card, open]);
-  
+
   const handleSave = async () => {
     if (!title.trim() || !content.trim()) return;
-    
+
     setIsLoading(true);
-    
+
     try {
       const cardData = {
         id: card?.id,
         title: title.trim(),
-        content: content.trim()
+        content: content.trim(),
       };
-      
+
       await onSave(cardData);
-      
+
       // Reset form
       setTitle("");
       setContent("");
       onClose();
     } catch (error) {
-      console.error('Error saving context card:', error);
+      console.error("Error saving context card:", error);
       // Error handling could be improved here
     } finally {
       setIsLoading(false);
     }
   };
-  
+
   const handleClose = () => {
     // Reset form
     setTitle("");
     setContent("");
     onClose();
   };
-  
+
   return (
-    <Dialog
-      open={open}
-      onClose={handleClose}
-      fullWidth
-      maxWidth="sm"
-    >
-      <DialogTitle>
-        {card ? "Edit Context" : "Add New Context"}
-      </DialogTitle>
+    <Dialog open={open} onClose={handleClose} fullWidth maxWidth="sm">
+      <DialogTitle>{card ? "Edit Context" : "Add New Context"}</DialogTitle>
       <DialogContent>
         <DialogContentText sx={{ mb: 2 }}>
           Context help the agent understand specific domain knowledge for better responses.
@@ -132,11 +125,7 @@ const ContextCardDialog = ({ open, onClose, card, onSave }) => {
         />
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 3 }}>
-        <Button
-          onClick={handleClose}
-          color="inherit"
-          disabled={isLoading}
-        >
+        <Button onClick={handleClose} color="inherit" disabled={isLoading}>
           Cancel
         </Button>
         <Button
@@ -145,7 +134,7 @@ const ContextCardDialog = ({ open, onClose, card, onSave }) => {
           disabled={isLoading || !title.trim() || !content.trim()}
           startIcon={isLoading ? <CircularProgress size={20} /> : null}
         >
-          {isLoading ? 'Saving...' : card ? "Update" : "Add"}
+          {isLoading ? "Saving..." : card ? "Update" : "Add"}
         </Button>
       </DialogActions>
     </Dialog>

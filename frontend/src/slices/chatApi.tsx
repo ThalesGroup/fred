@@ -12,16 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { createApi } from '@reduxjs/toolkit/query/react';
+import { createApi } from "@reduxjs/toolkit/query/react";
 import { AgenticFlow } from "../pages/Chat";
-import { createDynamicBaseQuery } from '../common/dynamicBaseQuery.tsx';
-import { ChatMessagePayload, SessionSchema } from './chatApiStructures.ts';
+import { createDynamicBaseQuery } from "../common/dynamicBaseQuery.tsx";
+import { ChatMessagePayload, SessionSchema } from "./chatApiStructures.ts";
 
 /**
  * 1. API Slice pour le Chat/LLM
  */
 export const chatApiSlice = createApi({
-  reducerPath: 'chatApi',
+  reducerPath: "chatApi",
   baseQuery: createDynamicBaseQuery({ backend: "api" }),
   endpoints: () => ({}),
 });
@@ -33,31 +33,31 @@ const extendedChatApi = chatApiSlice.injectEndpoints({
     getChatBotMessages: builder.mutation<ChatMessagePayload[], { session_id: string }>({
       query: ({ session_id }) => ({
         url: `/fred/chatbot/session/${session_id}/history`,
-        method: 'GET',
+        method: "GET",
       }),
     }),
     getChatBotAgenticFlows: builder.mutation<AgenticFlow[], void>({
       query: () => ({
         url: `/fred/chatbot/agenticflows`,
-        method: 'GET',
+        method: "GET",
       }),
     }),
     getChatbotSessions: builder.mutation<SessionSchema[], void>({
       query: () => ({
         url: `/fred/chatbot/sessions`,
-        method: 'GET',
+        method: "GET",
       }),
     }),
     deleteChatbotSession: builder.mutation<{ success: boolean }, { session_id: string }>({
       query: ({ session_id }) => ({
         url: `/fred/chatbot/session/${session_id}`,
-        method: 'DELETE',
+        method: "DELETE",
       }),
     }),
     getAgentContexts: builder.mutation({
       query: (agentName) => ({
         url: `/fred/contexts/${agentName}`,
-        method: 'GET',
+        method: "GET",
       }),
     }),
 
@@ -65,7 +65,7 @@ const extendedChatApi = chatApiSlice.injectEndpoints({
     saveAgentContext: builder.mutation({
       query: ({ agentName, context }) => ({
         url: `/fred/contexts/${agentName}`,
-        method: 'POST',
+        method: "POST",
         body: context,
       }),
     }),
@@ -74,19 +74,22 @@ const extendedChatApi = chatApiSlice.injectEndpoints({
     deleteAgentContext: builder.mutation({
       query: ({ agentName, contextId }) => ({
         url: `/fred/contexts/${agentName}/${contextId}`,
-        method: 'DELETE',
+        method: "DELETE",
       }),
     }),
-    postFeedback: builder.mutation<{ success: boolean }, {
-      rating: number,
-      comment?: string,
-      messageId: string,
-      sessionId: string,
-      agentName: string
-    }>({
+    postFeedback: builder.mutation<
+      { success: boolean },
+      {
+        rating: number;
+        comment?: string;
+        messageId: string;
+        sessionId: string;
+        agentName: string;
+      }
+    >({
       query: ({ rating, comment, messageId, sessionId, agentName }) => ({
         url: `/fred/chatbot/feedback`,
-        method: 'POST',
+        method: "POST",
         body: { rating, comment, messageId, sessionId, agentName },
       }),
     }),
@@ -103,4 +106,3 @@ export const {
   useSaveAgentContextMutation,
   useDeleteAgentContextMutation,
 } = extendedChatApi;
-

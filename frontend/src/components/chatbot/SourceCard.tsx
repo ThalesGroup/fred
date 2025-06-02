@@ -13,16 +13,7 @@
 // limitations under the License.
 
 import { useTheme } from "@mui/material/styles";
-import {
-  Card,
-  CardContent,
-  Tooltip,
-  Typography,
-  Box,
-  IconButton,
-  Divider,
-  Chip,
-} from "@mui/material";
+import { Card, CardContent, Tooltip, Typography, Box, IconButton, Divider, Chip } from "@mui/material";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import PersonOutlineIcon from "@mui/icons-material/PersonOutline";
 import HistoryIcon from "@mui/icons-material/History";
@@ -56,17 +47,11 @@ interface SourceCardProps {
  * - `onCardClick` for full card interaction
  * - `onViewDocument` for explicit preview
  */
-export const SourceCard = ({
-  source,
-  onCardClick,
-  onViewDocument,
-  loading,
-}: SourceCardProps) => {
+export const SourceCard = ({ source, onCardClick, onViewDocument, loading }: SourceCardProps) => {
   const theme = useTheme();
 
   // Formats date strings into DD/MM/YYYY
-  const formatDate = (dateString?: string) =>
-    dateString ? dayjs(dateString).format("DD/MM/YYYY") : "N/A";
+  const formatDate = (dateString?: string) => (dateString ? dayjs(dateString).format("DD/MM/YYYY") : "N/A");
 
   return (
     <Card

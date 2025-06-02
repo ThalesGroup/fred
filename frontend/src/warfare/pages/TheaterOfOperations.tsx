@@ -17,8 +17,8 @@ import { useEffect } from "react";
 import { PageBodyWrapper } from "../../common/PageBodyWrapper.tsx";
 import { TopBar } from "../../common/TopBar.tsx";
 
-import { GeomapLayout } from '../component/Geomap.tsx';
-import { useGetTheaterOfOperationMapDataMutation } from '../../frugalit/slices/api.tsx'; 
+import { GeomapLayout } from "../component/Geomap.tsx";
+import { useGetTheaterOfOperationMapDataMutation } from "../../frugalit/slices/api.tsx";
 
 export const Geomap = () => {
   const [getTheaterOfOperationMapData, { data, isLoading, isError }] = useGetTheaterOfOperationMapDataMutation();

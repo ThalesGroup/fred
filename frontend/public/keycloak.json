@@ -1,8 +1,8 @@
 {
-    "realm": "fred",
-    "auth-server-url": "http://localhost:9080/",
-    "ssl-required": "external",
-    "resource": "fred",
-    "public-client": true,
-    "confidential-port": 0
+  "realm": "fred",
+  "auth-server-url": "http://localhost:9080/",
+  "ssl-required": "external",
+  "resource": "fred",
+  "public-client": true,
+  "confidential-port": 0
 }

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import React, { useState } from 'react';
+import React, { useState } from "react";
 import {
   Button,
   Dialog,
@@ -23,8 +23,8 @@ import {
   Rating,
   Box,
   Typography,
-  useTheme
-} from '@mui/material';
+  useTheme,
+} from "@mui/material";
 
 interface FeedbackDialogProps {
   open: boolean;
@@ -34,14 +34,14 @@ interface FeedbackDialogProps {
 
 export const FeedbackDialog: React.FC<FeedbackDialogProps> = ({ open, onClose, onSubmit }) => {
   const [rating, setRating] = useState<number | null>(null);
-  const [comment, setComment] = useState('');
+  const [comment, setComment] = useState("");
   const theme = useTheme();
 
   const handleSubmit = () => {
     if (rating !== null) {
       onSubmit(rating, comment?.trim() || undefined);
       setRating(null);
-      setComment('');
+      setComment("");
       onClose();
     }
   };
@@ -57,20 +57,15 @@ export const FeedbackDialog: React.FC<FeedbackDialogProps> = ({ open, onClose, o
           borderRadius: 3,
           p: 2,
           backgroundColor: theme.palette.background.default,
-          width: '600px'  // Forcera une largeur confortable
-        }
+          width: "600px", // Forcera une largeur confortable
+        },
       }}
     >
       <DialogTitle sx={{ pb: 1 }}>How was this response?</DialogTitle>
       <DialogContent>
-        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+        <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
           <Typography sx={{ mr: 2 }}>Your rating</Typography>
-          <Rating
-            name="feedback-rating"
-            value={rating}
-            onChange={(_, newValue) => setRating(newValue)}
-            size="large"
-          />
+          <Rating name="feedback-rating" value={rating} onChange={(_, newValue) => setRating(newValue)} size="large" />
         </Box>
         <TextField
           label="Leave a comment (optional)"
@@ -83,15 +78,11 @@ export const FeedbackDialog: React.FC<FeedbackDialogProps> = ({ open, onClose, o
           placeholder="Tell us what you liked or what could be improved..."
         />
       </DialogContent>
-      <DialogActions sx={{ justifyContent: 'space-between', px: 3 }}>
+      <DialogActions sx={{ justifyContent: "space-between", px: 3 }}>
         <Button onClick={onClose} color="secondary" variant="text">
           Cancel
         </Button>
-        <Button
-          onClick={handleSubmit}
-          disabled={rating === null}
-          variant="contained"
-        >
+        <Button onClick={handleSubmit} disabled={rating === null} variant="contained">
           Submit
         </Button>
       </DialogActions>

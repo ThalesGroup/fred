@@ -13,27 +13,24 @@
 // limitations under the License.
 
 export interface ClusterScores {
-    cluster: string,
-    namespaces: NamespaceScore[]
+  cluster: string;
+  namespaces: NamespaceScore[];
 }
 
 export interface NamespaceScore {
-    namespace: string,
-
+  namespace: string;
 }
-
-
 
 // Define the structure for individual resource attributes
 export interface ScoreAttribute {
-    score: number;
-    reason: string;
+  score: number;
+  reason: string;
 }
 
 // Define the Score interface with dynamic keys. A workload score is a mapping of resource attributes to their scores.
 // It is returned by the backend as part of the cluster scores and independently for each workload
 export interface WorkloadScores {
-    [key: string]: ScoreAttribute;  // This allows for dynamic keys (e.g., 'cpu', 'ram', etc.)
+  [key: string]: ScoreAttribute; // This allows for dynamic keys (e.g., 'cpu', 'ram', etc.)
 }
 
 // Define default values for Score
@@ -45,18 +42,18 @@ const defaultWorkloadScores: WorkloadScores = {};
  * @returns A Score object with the default values overridden by any provided props.
  */
 export function createScores(props: Partial<WorkloadScores> = {}): WorkloadScores {
-    return {...defaultWorkloadScores, ...props};
+  return { ...defaultWorkloadScores, ...props };
 }
 
 export interface Workload {
-    name: string;                // Workload name (e.g., "elk-errors-indexing")
-    namespace: string;           // Namespace of the workload (e.g., "applicative")
-    kind: string;                // Workload type (e.g., "Deployment")
-    scores: WorkloadScores;      // Scores for the workload attributes
+  name: string; // Workload name (e.g., "elk-errors-indexing")
+  namespace: string; // Namespace of the workload (e.g., "applicative")
+  kind: string; // Workload type (e.g., "Deployment")
+  scores: WorkloadScores; // Scores for the workload attributes
 }
 
 export interface ClusterScore {
-    cluster: string;             // ARN or identifier for the cluster
-    alias: string;               // Human-readable alias for the cluster
-    workload_scores: Workload[]; // Array of workloads and their associated scores
+  cluster: string; // ARN or identifier for the cluster
+  alias: string; // Human-readable alias for the cluster
+  workload_scores: Workload[]; // Array of workloads and their associated scores
 }

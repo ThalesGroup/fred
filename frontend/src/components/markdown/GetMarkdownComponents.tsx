@@ -12,14 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
-
 import Mermaid from "./Mermaid.tsx"; // adjust path if needed
 import { Theme } from "@mui/material";
 
 interface GetMarkdownComponentsOptions {
   theme: Theme;
-  size: 'small' | 'medium' | 'large';
+  size: "small" | "medium" | "large";
   enableEmojiFix?: boolean;
 }
 
@@ -61,13 +59,8 @@ interface GetMarkdownComponentsOptions {
  *
  * @returns {Object} Components map to be passed to `react-markdown`.
  */
-export function getMarkdownComponents({
-  theme,
-  size,
-  enableEmojiFix = true,
-}: GetMarkdownComponentsOptions) {
-  const baseStyle = (style: any) =>
-    size === "small" ? { ...style, fontSize: "0.85rem" } : style;
+export function getMarkdownComponents({ theme, size, enableEmojiFix = true }: GetMarkdownComponentsOptions) {
+  const baseStyle = (style: any) => (size === "small" ? { ...style, fontSize: "0.85rem" } : style);
 
   return {
     h1: ({ node, ...props }) => <h1 style={baseStyle(theme.typography.markdown.h1)} {...props} />,
@@ -95,9 +88,9 @@ export function getMarkdownComponents({
     ul: ({ node, ...props }) => <ul style={baseStyle(theme.typography.markdown.ul)} {...props} />,
     li: ({ node, ...props }) => <li style={baseStyle(theme.typography.markdown.li)} {...props} />,
     code: ({ node, inline, className, children, ...props }) => {
-      const isMermaid = /language-mermaid/.test(className || '');
+      const isMermaid = /language-mermaid/.test(className || "");
       if (isMermaid && children) {
-        return <Mermaid code={String(children).replace(/\n$/, '')} />;
+        return <Mermaid code={String(children).replace(/\n$/, "")} />;
       }
       return (
         <code style={baseStyle(theme.typography.markdown.code)} {...props}>

@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import React from 'react';
-import { Button, Box, Modal, Typography, Grid2 } from '@mui/material';
-import AddIcon from '@mui/icons-material/Add';
-import CloseIcon from '@mui/icons-material/Close';
-import { FactInputForm } from '../../common/FactInputForm';
-import { Fact, FactList } from '../slices/factsStructures';
-import { FactCard } from './FactCard';
+import React from "react";
+import { Button, Box, Modal, Typography, Grid2 } from "@mui/material";
+import AddIcon from "@mui/icons-material/Add";
+import CloseIcon from "@mui/icons-material/Close";
+import { FactInputForm } from "../../common/FactInputForm";
+import { Fact, FactList } from "../slices/factsStructures";
+import { FactCard } from "./FactCard";
 
 interface FactsPagesLayoutProps {
   title: string;
@@ -42,9 +42,9 @@ export const FactsPageLayout: React.FC<FactsPagesLayoutProps> = ({
   <Box p={6}>
     <Box
       sx={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
         mb: 2,
       }}
     >
@@ -55,13 +55,13 @@ export const FactsPageLayout: React.FC<FactsPagesLayoutProps> = ({
         variant="outlined"
         onClick={toggleForm}
         sx={{
-          backgroundColor: 'background.paper',
-          color: 'text.primary',
-          borderRadius: '50%',
-          minWidth: '40px',
-          width: '40px',
-          height: '40px',
-          '&:hover': { backgroundColor: 'primary.light' },
+          backgroundColor: "background.paper",
+          color: "text.primary",
+          borderRadius: "50%",
+          minWidth: "40px",
+          width: "40px",
+          height: "40px",
+          "&:hover": { backgroundColor: "primary.light" },
         }}
       >
         {showForm ? <CloseIcon /> : <AddIcon />}
@@ -88,14 +88,14 @@ export const FactsPageLayout: React.FC<FactsPagesLayoutProps> = ({
     >
       <Box
         sx={{
-          position: 'absolute',
-          top: '50%',
-          left: '50%',
-          transform: 'translate(-50%, -50%)',
-          bgcolor: 'background.paper',
+          position: "absolute",
+          top: "50%",
+          left: "50%",
+          transform: "translate(-50%, -50%)",
+          bgcolor: "background.paper",
           boxShadow: 24,
           p: 4,
-          width: { xs: '90%', sm: 600 },
+          width: { xs: "90%", sm: 600 },
           borderRadius: 2,
         }}
       >
@@ -103,7 +103,7 @@ export const FactsPageLayout: React.FC<FactsPagesLayoutProps> = ({
           isOpen={showForm}
           onClose={toggleForm}
           onSubmit={onSubmit}
-          existingTitles={factList.facts.map(fact => fact.title)}
+          existingTitles={factList.facts.map((fact) => fact.title)}
         />
       </Box>
     </Modal>

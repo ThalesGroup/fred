@@ -12,51 +12,46 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
-import dayjs from 'dayjs';
-import duration from 'dayjs/plugin/duration';
-
+import dayjs from "dayjs";
+import duration from "dayjs/plugin/duration";
 
 dayjs.extend(duration);
 
-
 function parseDuration(durationString: string): string {
   const units: { [key: string]: string } = {
-    'm': 'minute',
-    'h': 'hour',
-    'd': 'day',
-    'w': 'week',
-    'M': 'month'
+    m: "minute",
+    h: "hour",
+    d: "day",
+    w: "week",
+    M: "month",
   };
 
   const value = parseInt(durationString.slice(0, -1));
   const unit = durationString.slice(-1);
 
   if (isNaN(value) || !units[unit]) {
-    return 'Invalid duration';
+    return "Invalid duration";
   }
 
   const unitName = units[unit];
-  return `${value} ${unitName}${value !== 1 ? 's' : ''}`;
+  return `${value} ${unitName}${value !== 1 ? "s" : ""}`;
 }
 
 export function formatDuration(durationString: string): string {
   const parts = durationString.trim().split(/\s+/);
-  const formattedParts = parts.map(part => parseDuration(part));
-  const validParts = formattedParts.filter(part => part !== 'Invalid duration');
+  const formattedParts = parts.map((part) => parseDuration(part));
+  const validParts = formattedParts.filter((part) => part !== "Invalid duration");
 
   if (validParts.length === 0) {
-    return 'Invalid duration';
+    return "Invalid duration";
   }
   if (validParts.length === 1) {
     return validParts[0];
   } else {
     const lastPart = validParts.pop();
-    return `${validParts.join(', ')} and ${lastPart}`;
+    return `${validParts.join(", ")} and ${lastPart}`;
   }
 }
-
-
 
 export function addDurationToDate(startDate: Date | string, durationString: string): Date {
   const start = dayjs(startDate);
@@ -71,26 +66,28 @@ export function addDurationToDate(startDate: Date | string, durationString: stri
   let durationObject: duration.Duration;
 
   switch (unit) {
-    case 's':
+    case "s":
       durationObject = dayjs.duration({ seconds: parseInt(amount) });
       break;
-    case 'd':
+    case "d":
       durationObject = dayjs.duration({ days: parseInt(amount) });
       break;
-    case 'h':
+    case "h":
       durationObject = dayjs.duration({ hours: parseInt(amount) });
       break;
-    case 'm':
+    case "m":
       durationObject = dayjs.duration({ minutes: parseInt(amount) });
       break;
-    case 'w':
+    case "w":
       durationObject = dayjs.duration({ weeks: parseInt(amount) });
       break;
-    case 'M':
+    case "M":
       durationObject = dayjs.duration({ months: parseInt(amount) });
-      break
+      break;
     default:
-      throw new Error('Invalid duration unit. Use "d" for days, "h" for hours, or "m" for minutes, "w" for weeks, "M" for months.');
+      throw new Error(
+        'Invalid duration unit. Use "d" for days, "h" for hours, or "m" for minutes, "w" for weeks, "M" for months.',
+      );
   }
 
   return start.add(durationObject).toDate();

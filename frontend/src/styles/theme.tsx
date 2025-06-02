@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { createTheme, PaletteMode } from '@mui/material/styles';
+import { createTheme, PaletteMode } from "@mui/material/styles";
 import React from "react";
 
 // Extend MUI theme interface for custom chart colors
-declare module '@mui/material/styles' {
+declare module "@mui/material/styles" {
   interface Palette {
     chart: {
       primary: string;
@@ -46,20 +46,20 @@ declare module '@mui/material/styles' {
       alterningBgColor2: string;
     };
     chip: {
-      mediumGrey: string
-    }
+      mediumGrey: string;
+    };
     sidebar: {
-      background: string,
-      activeItem: string,
-      hoverColor: string
-    }
+      background: string;
+      activeItem: string;
+      hoverColor: string;
+    };
     borderChip: {
-      border: string
-    }
+      border: string;
+    };
     heroBackgroundGrad: {
-      gradientFrom: string,
-      gradientTo: string
-    }
+      gradientFrom: string;
+      gradientTo: string;
+    };
   }
   interface PaletteOptions {
     chart?: {
@@ -130,26 +130,26 @@ declare module '@mui/material/styles' {
 
 // Light Mode Palette
 const lightPalette = {
-  mode: 'light' as PaletteMode,
+  mode: "light" as PaletteMode,
   background: {
-    default: '#ffffff',
-    paper: '#f4f4f4',
+    default: "#ffffff",
+    paper: "#f4f4f4",
   },
   common: {
     white: "#fff",
     black: "#000",
   },
   primary: {
-    contrastText: '#fff',
-    main: '#4F83CC',
-    light: '#879ed9',
-    dark: '#023D54',
+    contrastText: "#fff",
+    main: "#4F83CC",
+    light: "#879ed9",
+    dark: "#023D54",
   },
   secondary: {
-    main: '#9c27b0',
-    light: '#ba68c8',
-    dark: '#7b1fa2',
-    contrastText: '#fff',
+    main: "#9c27b0",
+    light: "#ba68c8",
+    dark: "#7b1fa2",
+    contrastText: "#fff",
   },
   info: {
     main: "#6986D0",
@@ -176,13 +176,13 @@ const lightPalette = {
     contrastText: "#fff",
   },
   chart: {
-    primary: '#08519c',
-    secondary: '#3182bd',
-    green: '#4caf50',
-    blue: '#1976d2',
-    red: '#ef5350',
-    orange: '#ffbb00',
-    purple: '#9c27b0',
+    primary: "#08519c",
+    secondary: "#3182bd",
+    green: "#4caf50",
+    blue: "#1976d2",
+    red: "#ef5350",
+    orange: "#ffbb00",
+    purple: "#9c27b0",
     yellow: "#ffd149",
     veryHighBlue: "#08519c",
     highBlue: "#3182bd",
@@ -199,38 +199,38 @@ const lightPalette = {
     mediumYellow: "#ffbb00",
     lowYellow: "#fed98e",
     veryLowYellow: "#ffffd4",
-    customAreaStyle: '#0080ff4d',
-    alterningBgColor1: '#ffffff1a',
-    alterningBgColor2: '#c8c8c84d',
+    customAreaStyle: "#0080ff4d",
+    alterningBgColor1: "#ffffff1a",
+    alterningBgColor2: "#c8c8c84d",
   },
   text: {
-    primary: '#000',
-    secondary: '#000',
-    disabled: '#BDBDBD',
+    primary: "#000",
+    secondary: "#000",
+    disabled: "#BDBDBD",
   },
   chip: {
-    mediumGrey: "#dedfe0"
+    mediumGrey: "#dedfe0",
   },
   sidebar: {
-    background: '#fafafaf2',
-    activeItem: '#f0f0f5cc',
-    hoverColor: '#00000008'
+    background: "#fafafaf2",
+    activeItem: "#f0f0f5cc",
+    hoverColor: "#00000008",
   },
   borderChip: {
-    border: '#0000004d'
+    border: "#0000004d",
   },
   heroBackgroundGrad: {
-    gradientFrom: '#ffffffd9',
-    gradientTo: '#ffffffe6',
-  }
+    gradientFrom: "#ffffffd9",
+    gradientTo: "#ffffffe6",
+  },
 };
 
 // Dark Mode Palette
 const darkPalette = {
-  mode: 'dark' as PaletteMode,
+  mode: "dark" as PaletteMode,
   background: {
-    default: '#1b1b1b',
-    paper: '#333333',
+    default: "#1b1b1b",
+    paper: "#333333",
 
     //default: '#2a2929',
     //paper: '#1e1e1e',
@@ -240,16 +240,16 @@ const darkPalette = {
     black: "#000",
   },
   primary: {
-    contrastText: '#fff',
-    main: '#6482AD',
-    light: '#879ed9',
-    dark: '#404040',
+    contrastText: "#fff",
+    main: "#6482AD",
+    light: "#879ed9",
+    dark: "#404040",
   },
   secondary: {
-    main: '#f48fb1',
-    light: '#f8bbd0',
-    dark: '#c2185b',
-    contrastText: '#000',
+    main: "#f48fb1",
+    light: "#f8bbd0",
+    dark: "#c2185b",
+    contrastText: "#000",
   },
   info: {
     main: "#81d4fa",
@@ -276,13 +276,13 @@ const darkPalette = {
     contrastText: "#fff",
   },
   chart: {
-    primary: '#de7d39',
-    secondary: '#ffa726',
-    green: '#81c784',
-    blue: '#90caf9',
-    red: '#ef9a9a',
-    orange: '#ffcc80',
-    purple: '#ce93d8',
+    primary: "#de7d39",
+    secondary: "#ffa726",
+    green: "#81c784",
+    blue: "#90caf9",
+    red: "#ef9a9a",
+    orange: "#ffcc80",
+    purple: "#ce93d8",
     yellow: "#ffe082",
     veryHighBlue: "#0d47a1",
     highBlue: "#64b5f6",
@@ -299,133 +299,206 @@ const darkPalette = {
     mediumYellow: "#ffb74d",
     lowYellow: "#ffe082",
     veryLowYellow: "#fff3e0",
-    customAreaStyle: '#0080ff4d',
-    alterningBgColor1: '#ffffff1a',
-    alterningBgColor2: '#c8c8c84d',
+    customAreaStyle: "#0080ff4d",
+    alterningBgColor1: "#ffffff1a",
+    alterningBgColor2: "#c8c8c84d",
   },
   text: {
-    primary: '#fff',
-    secondary: '#bbb',
-    disabled: '#888888'
+    primary: "#fff",
+    secondary: "#bbb",
+    disabled: "#888888",
   },
   sidebar: {
-    background: '#121214f2',
-    activeItem :'#42424db3',
-    hoverColor: '#ffffff0d'
+    background: "#121214f2",
+    activeItem: "#42424db3",
+    hoverColor: "#ffffff0d",
   },
   borderChip: {
-    border: '#ffffff26'
+    border: "#ffffff26",
   },
   heroBackgroundGrad: {
-    gradientFrom: '#191923cc',
-    gradientTo: '#191923e6',
-  }
+    gradientFrom: "#191923cc",
+    gradientTo: "#191923e6",
+  },
 };
 
 // Define typography after palette is initialized
 const lightTypography = {
-  fontFamily: 'Roboto, sans-serif',
+  fontFamily: "Roboto, sans-serif",
   fontSize: 12,
-  h1: { fontSize: '2rem', fontWeight: 600, fontFamily: 'Roboto, sans-serif' },
-  h2: { fontSize: '1.5rem', fontWeight: 500, fontFamily: 'Roboto, sans-serif' },
-  body1: { fontSize: '1rem', fontWeight: 400, fontFamily: 'Roboto, sans-serif' },
-  body2: { fontSize: '0.875rem', fontWeight: 400, fontFamily: 'Roboto, sans-serif' },
+  h1: { fontSize: "2rem", fontWeight: 600, fontFamily: "Roboto, sans-serif" },
+  h2: { fontSize: "1.5rem", fontWeight: 500, fontFamily: "Roboto, sans-serif" },
+  body1: {
+    fontSize: "1rem",
+    fontWeight: 400,
+    fontFamily: "Roboto, sans-serif",
+  },
+  body2: {
+    fontSize: "0.875rem",
+    fontWeight: 400,
+    fontFamily: "Roboto, sans-serif",
+  },
   markdown: {
     h1: {
       color: lightPalette.text.primary,
-      lineHeight: 1.5, fontWeight: 500, fontSize: '1.2rem', marginBottom: '0.6rem', fontFamily: 'Roboto, sans-serif'
+      lineHeight: 1.5,
+      fontWeight: 500,
+      fontSize: "1.2rem",
+      marginBottom: "0.6rem",
+      fontFamily: "Roboto, sans-serif",
     },
     h2: {
-       color: lightPalette.text.primary,
-      lineHeight: 1.5, fontWeight: 500, fontSize: '1.15rem', marginBottom: '0.6rem', fontFamily: 'Roboto, sans-serif'
+      color: lightPalette.text.primary,
+      lineHeight: 1.5,
+      fontWeight: 500,
+      fontSize: "1.15rem",
+      marginBottom: "0.6rem",
+      fontFamily: "Roboto, sans-serif",
     },
     h3: {
-       color: lightPalette.text.primary,
-      lineHeight: 1.5, fontWeight: 400, fontSize: '1.10rem', marginBottom: '0.6rem', fontFamily: 'Roboto, sans-serif'
+      color: lightPalette.text.primary,
+      lineHeight: 1.5,
+      fontWeight: 400,
+      fontSize: "1.10rem",
+      marginBottom: "0.6rem",
+      fontFamily: "Roboto, sans-serif",
     },
     h4: {
-       color: lightPalette.text.primary,
-      lineHeight: 1.5, fontWeight: 400, fontSize: '1.05rem', marginBottom: '0.6rem', fontFamily: 'Roboto, sans-serif'
+      color: lightPalette.text.primary,
+      lineHeight: 1.5,
+      fontWeight: 400,
+      fontSize: "1.05rem",
+      marginBottom: "0.6rem",
+      fontFamily: "Roboto, sans-serif",
     },
     p: {
       lineHeight: 1.8,
       fontWeight: 400,
-      fontSize: '1.1rem',
-      marginBottom: '0.8rem',
-      fontFamily: 'Roboto, sans-serif'
+      fontSize: "1.1rem",
+      marginBottom: "0.8rem",
+      fontFamily: "Roboto, sans-serif",
     },
     code: {
-       color: lightPalette.text.primary,
+      color: lightPalette.text.primary,
       lineHeight: 1.5,
-      fontSize: '0.9rem',
-      borderRadius: '4px'
+      fontSize: "0.9rem",
+      borderRadius: "4px",
     },
     a: {
-       color: lightPalette.text.primary,
-      textDecoration: 'underline', lineHeight: 1.6, fontWeight: 400, fontSize: '0.9rem', fontFamily: 'Roboto, sans-serif'
+      color: lightPalette.text.primary,
+      textDecoration: "underline",
+      lineHeight: 1.6,
+      fontWeight: 400,
+      fontSize: "0.9rem",
+      fontFamily: "Roboto, sans-serif",
     },
     ul: {
       color: lightPalette.text.primary,
-      marginLeft: '0.2rem', lineHeight: 1.4, fontWeight: 400, fontSize: '0.9rem', fontFamily: 'Roboto, sans-serif' },
+      marginLeft: "0.2rem",
+      lineHeight: 1.4,
+      fontWeight: 400,
+      fontSize: "0.9rem",
+      fontFamily: "Roboto, sans-serif",
+    },
     li: {
       color: lightPalette.text.primary,
-      marginBottom: '0.5rem', lineHeight: 1.4, fontSize: '0.9rem', fontFamily: 'Roboto, sans-serif' },
+      marginBottom: "0.5rem",
+      lineHeight: 1.4,
+      fontSize: "0.9rem",
+      fontFamily: "Roboto, sans-serif",
+    },
   },
 };
 const darkTypography = {
-  fontFamily: 'Roboto, sans-serif',
+  fontFamily: "Roboto, sans-serif",
   fontSize: 12,
-  h1: { fontSize: '2rem', fontWeight: 600, fontFamily: 'Roboto, sans-serif' },
-  h2: { fontSize: '1.5rem', fontWeight: 500, fontFamily: 'Roboto, sans-serif' },
-  body1: { fontSize: '1rem', fontWeight: 400, fontFamily: 'Roboto, sans-serif' },
-  body2: { fontSize: '0.875rem', fontWeight: 400, fontFamily: 'Roboto, sans-serif' },
+  h1: { fontSize: "2rem", fontWeight: 600, fontFamily: "Roboto, sans-serif" },
+  h2: { fontSize: "1.5rem", fontWeight: 500, fontFamily: "Roboto, sans-serif" },
+  body1: {
+    fontSize: "1rem",
+    fontWeight: 400,
+    fontFamily: "Roboto, sans-serif",
+  },
+  body2: {
+    fontSize: "0.875rem",
+    fontWeight: 400,
+    fontFamily: "Roboto, sans-serif",
+  },
   markdown: {
     h1: {
       color: darkPalette.text.primary,
-      lineHeight: 1.5, fontWeight: 500, fontSize: '1.2rem', marginBottom: '0.6rem', fontFamily: 'Roboto, sans-serif'
+      lineHeight: 1.5,
+      fontWeight: 500,
+      fontSize: "1.2rem",
+      marginBottom: "0.6rem",
+      fontFamily: "Roboto, sans-serif",
     },
     h2: {
       color: darkPalette.text.primary,
-      lineHeight: 1.5, fontWeight: 500, fontSize: '1.15rem', marginBottom: '0.6rem', fontFamily: 'Roboto, sans-serif'
+      lineHeight: 1.5,
+      fontWeight: 500,
+      fontSize: "1.15rem",
+      marginBottom: "0.6rem",
+      fontFamily: "Roboto, sans-serif",
     },
     h3: {
       color: darkPalette.text.primary,
-      lineHeight: 1.5, fontWeight: 400, fontSize: '1.10rem', marginBottom: '0.6rem', fontFamily: 'Roboto, sans-serif'
+      lineHeight: 1.5,
+      fontWeight: 400,
+      fontSize: "1.10rem",
+      marginBottom: "0.6rem",
+      fontFamily: "Roboto, sans-serif",
     },
     h4: {
       color: darkPalette.text.primary,
-      lineHeight: 1.5, fontWeight: 400, fontSize: '1.05rem', marginBottom: '0.6rem', fontFamily: 'Roboto, sans-serif'
+      lineHeight: 1.5,
+      fontWeight: 400,
+      fontSize: "1.05rem",
+      marginBottom: "0.6rem",
+      fontFamily: "Roboto, sans-serif",
     },
     p: {
       color: darkPalette.text.primary,
       lineHeight: 1.8,
       fontWeight: 400,
-      fontSize: '1.1rem',
-      marginBottom: '0.8rem',
-      fontFamily: 'Roboto, sans-serif'
+      fontSize: "1.1rem",
+      marginBottom: "0.8rem",
+      fontFamily: "Roboto, sans-serif",
     },
     code: {
       color: darkPalette.text.primary,
       lineHeight: 1.5,
-      fontSize: '0.9rem',
-      borderRadius: '4px'
+      fontSize: "0.9rem",
+      borderRadius: "4px",
     },
     a: {
       color: darkPalette.text.primary,
-      textDecoration: 'underline', lineHeight: 1.6, fontWeight: 400, fontSize: '0.9rem', fontFamily: 'Roboto, sans-serif'
+      textDecoration: "underline",
+      lineHeight: 1.6,
+      fontWeight: 400,
+      fontSize: "0.9rem",
+      fontFamily: "Roboto, sans-serif",
     },
     ul: {
       color: darkPalette.text.primary,
-      marginLeft: '0.2rem', lineHeight: 1.4, fontWeight: 400, fontSize: '0.9rem', fontFamily: 'Roboto, sans-serif' },
+      marginLeft: "0.2rem",
+      lineHeight: 1.4,
+      fontWeight: 400,
+      fontSize: "0.9rem",
+      fontFamily: "Roboto, sans-serif",
+    },
     li: {
       color: darkPalette.text.primary,
-      marginBottom: '0.5rem', lineHeight: 1.4, fontSize: '0.9rem', fontFamily: 'Roboto, sans-serif' },
+      marginBottom: "0.5rem",
+      lineHeight: 1.4,
+      fontSize: "0.9rem",
+      fontFamily: "Roboto, sans-serif",
+    },
   },
 };
 
 // Create themes
 const lightTheme = createTheme({
-
   palette: lightPalette,
   typography: lightTypography,
   layout: {
@@ -436,17 +509,17 @@ const lightTheme = createTheme({
     MuiTooltip: {
       styleOverrides: {
         tooltip: {
-          fontSize: '1.0rem',       // Adjust font size
-          fontWeight: '300',        // Remove bold (use light font weight)
+          fontSize: "1.0rem", // Adjust font size
+          fontWeight: "300", // Remove bold (use light font weight)
           color: lightPalette.primary.contrastText, // Text color
-          padding: '12px 16px',      // Add comfortable padding
-          borderRadius: '8px',       // Optional: rounded corners
-          boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.1)', // Optional: subtle shadow
+          padding: "12px 16px", // Add comfortable padding
+          borderRadius: "8px", // Optional: rounded corners
+          boxShadow: "0px 2px 4px rgba(0, 0, 0, 0.1)", // Optional: subtle shadow
         },
         popper: {
-          backdropFilter: 'blur(8px)', // Optional: subtle blur effect
+          backdropFilter: "blur(8px)", // Optional: subtle blur effect
         },
-      }
+      },
     },
     MuiTypography: {
       styleOverrides: {
@@ -469,17 +542,17 @@ const darkTheme = createTheme({
     MuiTooltip: {
       styleOverrides: {
         tooltip: {
-          fontSize: '1.0rem',       // Adjust font size
-          fontWeight: '300',        // Remove bold (use light font weight)
+          fontSize: "1.0rem", // Adjust font size
+          fontWeight: "300", // Remove bold (use light font weight)
           color: darkPalette.primary.contrastText, // Text color
-          padding: '12px 16px',      // Add comfortable padding
-          borderRadius: '8px',       // Optional: rounded corners
-          boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.1)', // Optional: subtle shadow
+          padding: "12px 16px", // Add comfortable padding
+          borderRadius: "8px", // Optional: rounded corners
+          boxShadow: "0px 2px 4px rgba(0, 0, 0, 0.1)", // Optional: subtle shadow
         },
         popper: {
-          backdropFilter: 'blur(8px)', // Optional: subtle blur effect
+          backdropFilter: "blur(8px)", // Optional: subtle blur effect
         },
-      }
+      },
     },
     MuiTypography: {
       styleOverrides: {

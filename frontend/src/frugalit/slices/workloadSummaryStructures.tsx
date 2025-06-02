@@ -13,12 +13,12 @@
 // limitations under the License.
 
 export interface WorkloadSummary {
-    workload_summary: string,
+  workload_summary: string;
 }
 
 // Define default values for Essentials
 const defaultWorkloadSummary: WorkloadSummary = {
-    workload_summary: "none",
+  workload_summary: "none",
 };
 
 /**
@@ -27,5 +27,5 @@ const defaultWorkloadSummary: WorkloadSummary = {
  * @returns An Essentials object with the default values overridden by any provided props.
  */
 export function createWorkloadSummary(props: Partial<WorkloadSummary> = {}): WorkloadSummary {
-    return { ...defaultWorkloadSummary, ...props };
+  return { ...defaultWorkloadSummary, ...props };
 }

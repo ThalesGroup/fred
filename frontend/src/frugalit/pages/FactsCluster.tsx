@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import React, { useState } from 'react';
-import { useLocation } from 'react-router-dom';
-import { PageBodyWrapper } from '../../common/PageBodyWrapper.tsx';
-import { useClusterFactHandlers } from '../hooks/useClusterFactHandlers.tsx';
-import { FactsPageLayout } from '../component/FactsPageLayout.tsx';
+import React, { useState } from "react";
+import { useLocation } from "react-router-dom";
+import { PageBodyWrapper } from "../../common/PageBodyWrapper.tsx";
+import { useClusterFactHandlers } from "../hooks/useClusterFactHandlers.tsx";
+import { FactsPageLayout } from "../component/FactsPageLayout.tsx";
 
 export const FactsCluster: React.FC = () => {
   const location = useLocation();

@@ -1,33 +1,32 @@
 .rbc-allday-cell {
-    display: none;
+  display: none;
 }
 
-
 .rbc-time-slot {
-    align-items: center;
-    min-height: 7px;
+  align-items: center;
+  min-height: 7px;
 }
 
 .rbc-label {
-    font-size: 10px;
+  font-size: 10px;
 }
 
 .rbc-day-slot .rbc-events-container {
-    margin-right: 0px;
+  margin-right: 0px;
 }
 
 .rbc-timeslot-group {
-    min-height: 7px;
+  min-height: 7px;
 }
 
 .rbc-current-time-indicator {
-    display: none;
+  display: none;
 }
 
 body {
-    font-family: 'Roboto', sans-serif;
-    font-size: 12px;
-    margin: 0;
-    padding: 0;
-    background-color: #f0f0f0;
+  font-family: "Roboto", sans-serif;
+  font-size: 12px;
+  margin: 0;
+  padding: 0;
+  background-color: #f0f0f0;
 }

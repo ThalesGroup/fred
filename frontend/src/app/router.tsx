@@ -12,10 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import {
-  createBrowserRouter,
-  RouteObject,
-} from "react-router-dom";
+import { createBrowserRouter, RouteObject } from "react-router-dom";
 import { Chat } from "../pages/Chat";
 import { Profile } from "../pages/Profile";
 import { ExplainWorkload } from "../frugalit/pages/ExplainWorkload";
@@ -135,5 +132,3 @@ export const routes: RouteObject[] = [
 ];
 
 export const router = createBrowserRouter(routes);
-
-

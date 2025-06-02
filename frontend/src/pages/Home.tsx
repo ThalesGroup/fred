@@ -12,19 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import {
-  Box,
-  Typography,
-  useTheme,
-  Container,
-  Paper,
-  Fade,
-  Grid2
-} from "@mui/material";
-import dayjs from 'dayjs';
-import utc from 'dayjs/plugin/utc';
-import timezone from 'dayjs/plugin/timezone';
-import 'dayjs/locale/en-gb';
+import { Box, Typography, useTheme, Container, Paper, Fade, Grid2 } from "@mui/material";
+import dayjs from "dayjs";
+import utc from "dayjs/plugin/utc";
+import timezone from "dayjs/plugin/timezone";
+import "dayjs/locale/en-gb";
 import { PeriodPicker } from "../frugalit/component/PeriodPicker.tsx";
 import { ClusterFilter } from "../common/ClusterFilter.tsx";
 import { useContext, useState, useEffect } from "react";
@@ -34,9 +26,9 @@ import { PageBodyWrapper } from "../common/PageBodyWrapper.tsx";
 import { TopBar } from "../common/TopBar.tsx";
 
 // Import icons
-import Co2Icon from '@mui/icons-material/Co2';
-import EnergyIcon from '@mui/icons-material/BoltOutlined';
-import MoneyIcon from '@mui/icons-material/MonetizationOnOutlined';
+import Co2Icon from "@mui/icons-material/Co2";
+import EnergyIcon from "@mui/icons-material/BoltOutlined";
+import MoneyIcon from "@mui/icons-material/MonetizationOnOutlined";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -76,8 +68,8 @@ export const Home = () => {
               border: `1px solid ${theme.palette.divider}`,
               transition: "all 0.3s ease-in-out",
               "&:hover": {
-                boxShadow: theme.shadows[4]
-              }
+                boxShadow: theme.shadows[4],
+              },
             }}
           >
             <Typography variant="h6" fontWeight="bold" gutterBottom>
@@ -89,22 +81,19 @@ export const Home = () => {
       </TopBar>
 
       {/* Main Section */}
-      <Container
-        maxWidth="xl"
-        sx={{ height: 'calc(100vh - 250px)', overflow: 'auto', pb: 3 }}
-      >
-        <Grid2 container spacing={3} sx={{ height: '100%' }}>
+      <Container maxWidth="xl" sx={{ height: "calc(100vh - 250px)", overflow: "auto", pb: 3 }}>
+        <Grid2 container spacing={3} sx={{ height: "100%" }}>
           {/* Cluster Selection */}
-          <Grid2 size={{ xs: 12, md: 3 }} sx={{ height: '100%' }}>
+          <Grid2 size={{ xs: 12, md: 3 }} sx={{ height: "100%" }}>
             <Paper
               elevation={2}
               sx={{
                 p: 3,
-                height: '100%',
-                width: '100%',
-                display: 'flex',
-                flexDirection: 'column',
-                border: `1px solid ${theme.palette.divider}`
+                height: "100%",
+                width: "100%",
+                display: "flex",
+                flexDirection: "column",
+                border: `1px solid ${theme.palette.divider}`,
               }}
             >
               <Typography variant="h6" fontWeight="bold" mb={2}>
@@ -117,16 +106,16 @@ export const Home = () => {
           </Grid2>
 
           {/* Total Charges */}
-          <Grid2 size={{ xs: 12, md: 3 }} sx={{ height: '100%' }}>
+          <Grid2 size={{ xs: 12, md: 3 }} sx={{ height: "100%" }}>
             <Paper
               elevation={2}
               sx={{
                 p: 3,
-                height: '100%',
-                width: '100%',
-                display: 'flex',
-                flexDirection: 'column',
-                border: `1px solid ${theme.palette.divider}`
+                height: "100%",
+                width: "100%",
+                display: "flex",
+                flexDirection: "column",
+                border: `1px solid ${theme.palette.divider}`,
               }}
             >
               <Box display="flex" alignItems="center" mb={2}>
@@ -139,10 +128,10 @@ export const Home = () => {
                 <InspectCard
                   title=""
                   logo="cost_circle"
-                  clusters={ctx.selectedClusterFootprints?.map(c => ({
+                  clusters={ctx.selectedClusterFootprints?.map((c) => ({
                     alias: c.cluster.alias,
                     fullname: c.cluster.fullname,
-                    value: c.cost.value
+                    value: c.cost.value,
                   }))}
                   unit={costUnit}
                 />
@@ -151,16 +140,16 @@ export const Home = () => {
           </Grid2>
 
           {/* Estimated Carbon Footprint */}
-          <Grid2 size={{ xs: 12, md: 3 }} sx={{ height: '100%' }}>
+          <Grid2 size={{ xs: 12, md: 3 }} sx={{ height: "100%" }}>
             <Paper
               elevation={2}
               sx={{
                 p: 3,
-                height: '100%',
-                width: '100%',
-                display: 'flex',
-                flexDirection: 'column',
-                border: `1px solid ${theme.palette.divider}`
+                height: "100%",
+                width: "100%",
+                display: "flex",
+                flexDirection: "column",
+                border: `1px solid ${theme.palette.divider}`,
               }}
             >
               <Box display="flex" alignItems="center" mb={2}>
@@ -173,10 +162,10 @@ export const Home = () => {
                 <InspectCard
                   title=""
                   logo="carbon_circle"
-                  clusters={ctx.selectedClusterFootprints?.map(c => ({
+                  clusters={ctx.selectedClusterFootprints?.map((c) => ({
                     alias: c.cluster.alias,
                     fullname: c.cluster.fullname,
-                    value: c.carbon.value
+                    value: c.carbon.value,
                   }))}
                   unit={carbonUnit}
                 />
@@ -185,16 +174,16 @@ export const Home = () => {
           </Grid2>
 
           {/* Estimated Energy Footprint */}
-          <Grid2 size={{ xs: 12, md: 3 }} sx={{ height: '100%' }}>
+          <Grid2 size={{ xs: 12, md: 3 }} sx={{ height: "100%" }}>
             <Paper
               elevation={2}
               sx={{
                 p: 3,
-                height: '100%',
-                width: '100%',
-                display: 'flex',
-                flexDirection: 'column',
-                border: `1px solid ${theme.palette.divider}`
+                height: "100%",
+                width: "100%",
+                display: "flex",
+                flexDirection: "column",
+                border: `1px solid ${theme.palette.divider}`,
               }}
             >
               <Box display="flex" alignItems="center" mb={2}>
@@ -207,10 +196,10 @@ export const Home = () => {
                 <InspectCard
                   title=""
                   logo="energy_circle"
-                  clusters={ctx.selectedClusterFootprints?.map(c => ({
+                  clusters={ctx.selectedClusterFootprints?.map((c) => ({
                     alias: c.cluster.alias,
                     fullname: c.cluster.fullname,
-                    value: c.energy.value
+                    value: c.energy.value,
                   }))}
                   unit={energyUnit}
                 />
@@ -219,7 +208,6 @@ export const Home = () => {
           </Grid2>
         </Grid2>
       </Container>
-
     </PageBodyWrapper>
   );
 };

@@ -13,7 +13,7 @@
 // limitations under the License.
 
 export function extractHttpErrorMessage(error: any): string {
-  let httpErrorMsg = 'Unknown error';
+  let httpErrorMsg = "Unknown error";
   if (error.status) {
     if (error.status == 502) {
       httpErrorMsg = `Bad Gateway: ${error.status} : the server is down.`;
@@ -21,9 +21,9 @@ export function extractHttpErrorMessage(error: any): string {
       httpErrorMsg = `Not Found: ${error.status}`;
     } else if (error.status == 401) {
       httpErrorMsg = `Unauthorized: ${error.status}`;
-    } else if (error.status == 403) { 
+    } else if (error.status == 403) {
       httpErrorMsg = `Forbidden: ${error.status}`;
-    } else if (error.status == 500) { 
+    } else if (error.status == 500) {
       httpErrorMsg = `Internal Server Error: ${error.status}`;
     } else if (error.status == 503) {
       httpErrorMsg = `Service Unavailable: ${error.status}`;
@@ -34,5 +34,5 @@ export function extractHttpErrorMessage(error: any): string {
   if (!error.data) {
     return httpErrorMsg;
   }
-  return `HTTP Error: ${httpErrorMsg} - ${error.data?.message || 'Unknown error'}`;
+  return `HTTP Error: ${httpErrorMsg} - ${error.data?.message || "Unknown error"}`;
 }

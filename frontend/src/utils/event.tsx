@@ -13,8 +13,8 @@
 // limitations under the License.
 
 export interface Event {
-    id: number;
-    title: string;
-    start: Date;
-    end: Date;
+  id: number;
+  title: string;
+  start: Date;
+  end: Date;
 }

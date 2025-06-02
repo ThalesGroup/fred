@@ -26,7 +26,9 @@ interface ConfirmationDialogOptions {
 // Create the ConfirmationDialogContext
 const ConfirmationDialogContext = createContext<any>(null);
 
-export const ConfirmationDialogProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+export const ConfirmationDialogProvider: React.FC<{
+  children: React.ReactNode;
+}> = ({ children }) => {
   const [dialogOptions, setDialogOptions] = useState<ConfirmationDialogOptions | null>(null);
 
   // Function to show a confirmation dialog
@@ -42,7 +44,7 @@ export const ConfirmationDialogProvider: React.FC<{ children: React.ReactNode }>
   return (
     <ConfirmationDialogContext.Provider value={{ showConfirmationDialog }}>
       {children}
-      
+
       {dialogOptions && (
         <Dialog open={true} onClose={closeConfirmationDialog}>
           <DialogTitle>{dialogOptions.title}</DialogTitle>
@@ -50,12 +52,14 @@ export const ConfirmationDialogProvider: React.FC<{ children: React.ReactNode }>
             <DialogContentText>{dialogOptions.message}</DialogContentText>
           </DialogContent>
           <DialogActions>
-            <Button onClick={closeConfirmationDialog} color="secondary">Cancel</Button>
-            <Button 
+            <Button onClick={closeConfirmationDialog} color="secondary">
+              Cancel
+            </Button>
+            <Button
               onClick={() => {
                 dialogOptions.onConfirm();
                 closeConfirmationDialog();
-              }} 
+              }}
               color="primary"
               autoFocus
             >

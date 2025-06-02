@@ -14,60 +14,57 @@
 
 import React from "react";
 import Box from "@mui/material/Box";
-import {CircularProgress, Grid2, Typography} from "@mui/material";
-import {Echart} from "./Echart.tsx";
-import {Serie} from "../utils/serie.tsx";
-import {v4 as uuidv4} from "uuid";
+import { CircularProgress, Grid2, Typography } from "@mui/material";
+import { Echart } from "./Echart.tsx";
+import { Serie } from "../utils/serie.tsx";
+import { v4 as uuidv4 } from "uuid";
 import dayjs from "dayjs";
 
 // Element are not required
 export interface ChartOptions {
-  series: Object[],
-  xAxis: Object,
-  yAxis: Object,
-  grid: Object,
-  dataZoom: Object[],
-  tooltip: Object
+  series: Object[];
+  xAxis: Object;
+  yAxis: Object;
+  grid: Object;
+  dataZoom: Object[];
+  tooltip: Object;
 }
 
-export const RiftChart = (props: {
-  series: Serie[],
-  type: string,
-}) => {
+export const RiftChart = (props: { series: Serie[]; type: string }) => {
   const chartId = uuidv4();
-  const maxLength = Math.max(...props.series.map(serie => serie.seriePoints.length));
+  const maxLength = Math.max(...props.series.map((serie) => serie.seriePoints.length));
   const categories = Array.from({ length: maxLength }, (_, i) => i + 1);
   const renderOptions = () => {
     const opt: ChartOptions = {
       xAxis: {
-        type: 'category',
+        type: "category",
         data: categories,
         axisLabel: {
           show: false,
         },
       },
       yAxis: {
-        nameLocation: 'end',
-        type: 'value',
+        nameLocation: "end",
+        type: "value",
         show: true,
         axisLabel: {
           formatter: function (value: number) {
-            return value + ' ' + props.series[0].unit;
+            return value + " " + props.series[0].unit;
           },
         },
       },
       grid: {
-        left: '5%',
-        right: '5%',
-        bottom: '5%',
-        top: '15%',
-        containLabel: true
+        left: "5%",
+        right: "5%",
+        bottom: "5%",
+        top: "15%",
+        containLabel: true,
       },
       dataZoom: [
         {
-          type: 'inside',
+          type: "inside",
           realtime: true,
-        }
+        },
       ],
       tooltip: {
         trigger: "axis",
@@ -78,11 +75,12 @@ export const RiftChart = (props: {
           },
         },
         formatter: (params) => {
-          return params.map(param => {
-            const serie = props.series.find(s => s.name === param.seriesName);
-            const originalDate = dayjs(serie?.seriePoints[param.dataIndex]?.date).format('DD MMM YYYY HH:mm');
-            const value = param.data[1]?.toFixed(1);
-            return `
+          return params
+            .map((param) => {
+              const serie = props.series.find((s) => s.name === param.seriesName);
+              const originalDate = dayjs(serie?.seriePoints[param.dataIndex]?.date).format("DD MMM YYYY HH:mm");
+              const value = param.data[1]?.toFixed(1);
+              return `
               <div>
                 <span style="display:inline-block;width:10px;height:10px;background-color:${serie?.color};margin-right:5px;"></span>
                 <strong>${param.seriesName}</strong><br/>
@@ -90,7 +88,8 @@ export const RiftChart = (props: {
                 Value: ${value} ${serie?.unit}
               </div>
             `;
-          }).join('<br/>');
+            })
+            .join("<br/>");
         },
       },
       series: props.series.map((serie) => ({
@@ -98,38 +97,34 @@ export const RiftChart = (props: {
         name: serie.name,
         type: props.type,
         smooth: 0.2,
-        symbol: 'diamond',
+        symbol: "diamond",
         itemStyle: {
           color: () => {
-            return serie.color
-          }
+            return serie.color;
+          },
         },
         lineStyle: {
           color: serie.color,
           width: 1,
-          shadowColor: serie.color,  // Shadow color
-          shadowBlur: 3,        // Shadow blur size
-          shadowOffsetX: 1,      // Shadow X offset
-          shadowOffsetY: 1
+          shadowColor: serie.color, // Shadow color
+          shadowBlur: 3, // Shadow blur size
+          shadowOffsetX: 1, // Shadow X offset
+          shadowOffsetY: 1,
         },
-        data: serie.seriePoints.map((item, i) => [
-          i,
-          item.value,
-        ]),
+        data: serie.seriePoints.map((item, i) => [i, item.value]),
         animation: true,
         animationDuration: 1000,
-      }))
-    }
+      })),
+    };
     return opt;
-  }
+  };
 
   return (
     <Grid2 height={"100%"} mb={5}>
       <Box height={"100%"}>
         {props.series.length > 0 ? (
           <React.Fragment>
-            <Box height={"100%"}
-              width={"100%"}>
+            <Box height={"100%"} width={"100%"}>
               <Echart id={chartId} options={renderOptions()}></Echart>
             </Box>
           </React.Fragment>
@@ -142,5 +137,4 @@ export const RiftChart = (props: {
       </Box>
     </Grid2>
   );
-}
-
+};

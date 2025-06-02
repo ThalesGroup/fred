@@ -12,47 +12,49 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import {apiSlice} from "../frugalit/slices/api"
+import { apiSlice } from "../frugalit/slices/api";
 
 export interface LoginConfiguration {
-  openId: string
+  openId: string;
 }
 
 export interface UserProfile {
-  name: string,
-  permissions: string[],
-  username: string,
-  email: string
+  name: string;
+  permissions: string[];
+  username: string;
+  email: string;
 }
 
 export interface Credentials {
-  username: string,
-  password: string
+  username: string;
+  password: string;
 }
 
 const extendedApi = apiSlice.injectEndpoints({
-  endpoints: (build => (
-    {
-      getLoginConfiguration: build.query<LoginConfiguration, { redirectUrl: string }>({
-        query: arg => `/login/configuration${arg.redirectUrl ? `?redirectUrl=${encodeURIComponent(arg.redirectUrl)}` : ""}`
+  endpoints: (build) => ({
+    getLoginConfiguration: build.query<LoginConfiguration, { redirectUrl: string }>({
+      query: (arg) =>
+        `/login/configuration${arg.redirectUrl ? `?redirectUrl=${encodeURIComponent(arg.redirectUrl)}` : ""}`,
+    }),
+    getProfile: build.mutation<UserProfile, void>({
+      query: (_) => `/login/profile`,
+    }),
+    loginOAuth: build.mutation<void, { code: string; redirectUrl: string }>({
+      query: (arg) => ({ url: `/login/oauth`, method: "post", body: arg }),
+    }),
+    loginCredentials: build.mutation<void, Credentials>({
+      query: (arg) => ({
+        url: `/login/credentials`,
+        method: "post",
+        body: arg,
       }),
-      getProfile: build.mutation<UserProfile, void>({
-        query: _ => `/login/profile`,
-      }),
-      loginOAuth: build.mutation<void, { code: string, redirectUrl: string }>({
-        query: arg => ({url: `/login/oauth`, method: "post", body: arg}),
-      }),
-      loginCredentials: build.mutation<void, Credentials>({
-        query: arg => ({url: `/login/credentials`, method: "post", body: arg}),
-      }),
-      logout: build.mutation<void, void>({
-        query: _ => ({url: `/login/logout`, method: "post"}),
-      }),
-    }
-  )),
-  overrideExisting: false
-})
-
+    }),
+    logout: build.mutation<void, void>({
+      query: (_) => ({ url: `/login/logout`, method: "post" }),
+    }),
+  }),
+  overrideExisting: false,
+});
 
 export const {
   useGetLoginConfigurationQuery,
@@ -60,4 +62,4 @@ export const {
   useLoginOAuthMutation,
   useLoginCredentialsMutation,
   useLogoutMutation,
-} = extendedApi
+} = extendedApi;
