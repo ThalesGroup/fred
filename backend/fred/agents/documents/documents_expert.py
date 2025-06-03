@@ -15,7 +15,7 @@
 import json
 import logging
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 
 from flow import AgentFlow
 from fred.agents.documents.documents_expert_toolkit import DocumentsToolkit
@@ -50,7 +50,7 @@ class DocumentsExpert(AgentFlow):
     categories: list[str] = []
     tag: str = "documents"
     
-    def __init__(self):
+    def __init__(self, cluster_fullname: Optional[str] = None):     
         """
         Initialize the DocumentsExpert agent with settings and configuration.
         Loads settings from agent configuration and sets up connections to the
@@ -66,6 +66,7 @@ class DocumentsExpert(AgentFlow):
         self.categories = self.agent_settings.categories if self.agent_settings.categories else ["documents"]
         if self.agent_settings.tag:
             self.tag = self.agent_settings.tag
+        self.cluster_fullname=cluster_fullname
 
         super().__init__(
             name=self.name,
@@ -98,6 +99,8 @@ class DocumentsExpert(AgentFlow):
             "2. Aggregate and analyze the data to directly answer the user's query.\n"
             "3. Present the results clearly, with summaries, breakdowns, and trends where applicable.\n\n"
             f"The current date is {self.current_date}.\n\n"
+            f"Your current context involves a Kubernetes cluster named {self.cluster_fullname}.\n" if self.cluster_fullname else ""
+
         )
     
     async def reasoner(self, state: MessagesState):

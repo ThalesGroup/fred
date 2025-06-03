@@ -254,7 +254,7 @@ class KubeService:
 
             logger.debug(
                 "Updating file for the description of the workload, cluster=%s, "
-                "namespace=%s, kind=%, workload_name=%s",
+                "namespace=%s, kind=%s, workload_name=%s",
                 cluster,
                 namespace,
                 kind,
@@ -400,7 +400,7 @@ class KubeService:
                                                                         kind)
             logger.debug(
                 "Updating file for the list of Services associated with the workload, "
-                "cluster=%s, namespace=%s, kind=%, workload_name=%s",
+                "cluster=%s, namespace=%s, kind=%s, workload_name=%s",
                 cluster,
                 namespace,
                 kind,
@@ -447,7 +447,7 @@ class KubeService:
                                                                           kind)
             logger.debug(
                 "Updating file for the list of Ingresses associated with the workload, "
-                "cluster=%s, namespace=%s, kind=%, workload_name=%s",
+                "cluster=%s, namespace=%s, kind=%s, workload_name=%s",
                 cluster,
                 namespace,
                 kind,
@@ -1104,13 +1104,14 @@ def mask_sensitive_data(configmap: Dict[str, Any]) -> Dict[str, Any]:
         "access_log",
     ]
 
-    # Process the 'data' field
-    if "data" in configmap:
-        for key, value in configmap["data"].items():
+    data = configmap.get("data")
+    if isinstance(data, dict):
+        for key, value in data.items():
             if isinstance(value, str):
-                configmap["data"][key] = redact_sensitive_data(
-                    value, sensitive_keywords
-                )
+                configmap["data"][key] = redact_sensitive_data(value, sensitive_keywords)
+    else:
+        logger.debug("Skipping configmap with no or invalid 'data': %s", configmap.get("metadata", {}).get("name"))
+
     return configmap
 
 

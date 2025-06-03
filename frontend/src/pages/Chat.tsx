@@ -26,6 +26,7 @@ import {
   useGetChatbotSessionsMutation,
 } from "../slices/chatApi.tsx";
 import { SessionSchema } from "../slices/chatApiStructures.ts";
+import { useSearchParams } from "react-router-dom";
 
 export interface AgenticFlow {
   name: string;
@@ -38,6 +39,10 @@ export interface AgenticFlow {
 }
 
 export const Chat = () => {
+  const [searchParams] = useSearchParams();
+  const cluster = searchParams.get("cluster");
+  console.log("Cluster from params:", cluster);
+   
   const [getAgenticFlows] = useGetChatBotAgenticFlowsMutation();
   const [agenticFlows, setAgenticFlows] = useState<AgenticFlow[]>([]);
 
@@ -164,6 +169,7 @@ export const Chat = () => {
             agenticFlows={agenticFlows}
             onUpdateOrAddSession={handleUpdateOrAddSession}
             isCreatingNewConversation={isCreatingNewConversation}
+            argument={cluster} // Pass cluster as an argument
           />
         </Grid2>
         <Grid2 size="auto">

@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from datetime import datetime
+from typing import Optional
 
 from common.structure import AgentSettings
 from flow import AgentFlow
@@ -42,7 +43,7 @@ class TheoricalRadioExpert(AgentFlow):
     icon: str = "theorical_radio_agent"
     
     def __init__(self, 
-                 cluster_fullname: str,
+                 cluster_fullname: Optional[str],
                  ):
         self.current_date = datetime.now().strftime("%Y-%m-%d")
         self.toolkit=TheoricalRadioToolkit()
@@ -89,6 +90,7 @@ class TheoricalRadioExpert(AgentFlow):
                 "2. Aggregate and analyze the data to directly answer the user's query.\n"
                 "3. Present the results clearly, with summaries, breakdowns, and trends where applicable.\n\n"
                 f"The current date is {self.current_date}.\n\n"
+                f"Your current context involves a Kubernetes cluster named {self.cluster_fullname}.\n" if self.cluster_fullname else ""
             )
 
     async def reasoner(self, state: MessagesState):

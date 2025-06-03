@@ -181,13 +181,15 @@ class ChatbotController:
                                     message=ChatMessagePayload(**msg)
                              ).model_dump()
                             )
-
+                        if not client_event.argument:
+                            client_event.argument = ""  # Default cluster name
                         session, messages = await self.session_manager.chat_ask_websocket(
                             callback=websocket_callback,
                             user_id=client_event.user_id,
                             session_id=client_event.session_id,
                             message=client_event.message,
-                            agent_name=client_event.agent_name
+                            agent_name=client_event.agent_name,
+                            argument=client_event.argument
                         )
                         await websocket.send_text(
                             FinalEvent(

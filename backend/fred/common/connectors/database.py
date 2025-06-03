@@ -32,7 +32,6 @@ def initialize_feedback_db(config: Configuration):
     """
     global engine
     global SessionLocal
-    logger.debug(config)
     if config.feedback.type == "postgres":
         db_type = "postgresql"
     db_host = config.feedback.db_host

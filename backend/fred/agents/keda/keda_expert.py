@@ -13,7 +13,7 @@
 # limitations under the License.
 
 from datetime import datetime
-from typing import override
+from typing import Optional, override
 
 from langchain_core.messages import HumanMessage
 from langgraph.constants import START, END
@@ -41,7 +41,7 @@ class KedaExpert(AgentFlow):
     categories: list[str] = []
     tag: str = "Frugal IT"  # Défini au niveau de la classe
 
-    def __init__(self, cluster_fullname: str, kube_service):
+    def __init__(self, cluster_fullname: Optional[str], kube_service):
         current_date = datetime.now().strftime("%Y-%m-%d")
         
         # Obtenir les paramètres de configuration de l'agent
@@ -66,7 +66,7 @@ class KedaExpert(AgentFlow):
             ),
             icon=self.icon,
             base_prompt=(
-                f"The cluster you are in charge of is named {cluster_fullname}.\n"
+                f"Your current context involves a Kubernetes cluster named {self.cluster_fullname}.\n" if self.cluster_fullname else ""
                 f"The current date is {current_date}.\n"
                 "You are an assistant that processes functional descriptions to generate "
                 "KEDA cron configurations or KEDA Prometheus-based scaling configurations. "

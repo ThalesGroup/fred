@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from datetime import datetime
+from typing import Optional
 
 from flow import AgentFlow
 from langgraph.graph import MessagesState, StateGraph
@@ -42,7 +43,7 @@ class K8SOperatorExpert(AgentFlow):
     tag: str = "k8s operator"  # Défini au niveau de la classe
     
     def __init__(self, 
-                 cluster_fullname: str
+                 cluster_fullname: Optional[str]
                  ):
         self.current_date = datetime.now().strftime("%Y-%m-%d")
         self.cluster_fullname = cluster_fullname
@@ -80,7 +81,8 @@ class K8SOperatorExpert(AgentFlow):
 
         return (
             "You are a Kubernetes monitoring & operator expert with access to tools for retrieving and analyzing data "
-            f"from the cluster you manage. Your cluster is named {self.cluster_fullname}, and you are equipped with MCP server tools.\n\n"
+            f"Your current context involves a Kubernetes cluster named {self.cluster_fullname}.\n" if self.cluster_fullname else ""
+            f", and you are equipped with MCP server tools.\n\n"
             "### Your Primary Responsibilities:\n"
             "1. **Retrieve Data**: Use the provided tools, including MCP server tools, to fetch data for:\n"
             "   - Pods & containers statuses and logs.\n"

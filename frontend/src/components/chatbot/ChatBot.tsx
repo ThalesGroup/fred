@@ -37,6 +37,7 @@ export interface ChatBotEventSend {
   session_id?: string;
   message: string;
   agent_name: string;
+  argument?: string; // Optional arguments for the agent
 }
 
 interface TranscriptionResponse {
@@ -49,12 +50,14 @@ const ChatBot = ({
   agenticFlows,
   onUpdateOrAddSession,
   isCreatingNewConversation,
+  argument,
 }: {
   currentChatBotSession: SessionSchema;
   currentAgenticFlow: AgenticFlow;
   agenticFlows: AgenticFlow[];
   onUpdateOrAddSession: (session: SessionSchema) => void;
   isCreatingNewConversation: boolean;
+  argument?: string; // Optional argument for the agent
 }) => {
   const theme = useTheme();
   const { showInfo, showError } = useToast();
@@ -359,12 +362,14 @@ const ChatBot = ({
       metadata: {},
     };
     addMessage(userMessage);
+
     console.log("[📤 ChatBot] About to send, session_id =", currentChatBotSession?.id);
     const event: ChatBotEventSend = {
       user_id: KeyCloakService.GetUserMail(),
       message: input,
       agent_name: agent ? agent.name : currentAgenticFlow.name,
       session_id: currentChatBotSession?.id,
+      argument: argument, // Optional argument for the agent
     };
 
     try {
