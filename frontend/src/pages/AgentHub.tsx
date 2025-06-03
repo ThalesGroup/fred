@@ -432,15 +432,9 @@ export const AgentHub = () => {
                             >
                               {agent.description}
                             </Typography>
-
-                            <Box
-                              sx={{
-                                mt: 2,
-                                display: "flex",
-                                alignItems: "center",
-                              }}
-                            >
-                              <Button
+                            
+                            <Box sx={{ mt: 2, display: 'flex', alignItems: 'center' }}>
+                              {/* <Button
                                 size="small"
                                 startIcon={<DescriptionIcon />}
                                 onClick={(e) => {
@@ -456,7 +450,7 @@ export const AgentHub = () => {
                                 }}
                               >
                                 Manage Context
-                              </Button>
+                              </Button> */}
                             </Box>
 
                             {agent.experts && agent.experts.length > 0 && (
