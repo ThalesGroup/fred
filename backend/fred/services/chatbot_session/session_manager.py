@@ -134,7 +134,8 @@ class SessionManager:
         user_id: str,
         session_id: str,
         message: str,
-        agent_name: str
+        agent_name: str,
+        argument: str
     ) -> Tuple[SessionSchema, List[ChatMessagePayload]]:
         """
         Handles a chat request via WebSocket.
@@ -153,7 +154,8 @@ class SessionManager:
             user_id=user_id,
             session_id=session_id,
             message=message,
-            agent_name=agent_name
+            agent_name=agent_name,
+            argument=argument
         )
         exchange_id = str(uuid4())
         base_rank = base_rank = len(history)
@@ -204,7 +206,11 @@ class SessionManager:
         return session, all_payloads
 
     def _prepare_session_and_history(
-        self, user_id: str, session_id: str | None, message: str, agent_name: str
+        self, user_id: str, 
+        session_id: str | None, 
+        message: str,
+        agent_name: str,
+        argument: str
     ) -> Tuple[SessionSchema, List[BaseMessage], AgentFlow, bool]:
         """
         Prepares the session, message history, and agent instance.
@@ -231,7 +237,7 @@ class SessionManager:
             messages = self.get_session_history(session.id)
 
             for msg in messages:
-                logger.info(f"[RESTORED] session_id={msg.session_id} exchange_id={msg.exchange_id} rank={msg.rank} | type={msg.type} | subtype={msg.subtype} | fred.task={msg.metadata.get('fred', {}).get('task')}")
+                logger.debug(f"[RESTORED] session_id={msg.session_id} exchange_id={msg.exchange_id} rank={msg.rank} | type={msg.type} | subtype={msg.subtype} | fred.task={msg.metadata.get('fred', {}).get('task')}")
                 if msg.type == "human":
                     history.append(HumanMessage(content=msg.content))
                 elif msg.type == "ai":
@@ -244,7 +250,7 @@ class SessionManager:
         # Append the new question
         history.append(HumanMessage(message))
 
-        agent = self.agent_manager.get_create_agent_instance(agent_name, session.id)
+        agent = self.agent_manager.get_create_agent_instance(agent_name, session.id, argument=argument)
 
         return session, history, agent, is_new_session
 

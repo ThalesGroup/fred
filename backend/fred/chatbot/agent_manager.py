@@ -35,7 +35,9 @@ class AgentManager:
         """
         self.agent_cache = {}
 
-    def get_create_agent_instance(self, name: str, session_id: str):
+    def get_create_agent_instance(self, name: str, 
+                                  session_id: str,
+                                  argument: str):
         """
         Retrieve an agent instance by name, optionally cached per session.
 
@@ -64,19 +66,14 @@ class AgentManager:
                 if expert_name == "Fred":
                     continue  # Don't add Fred as his own expert
 
-                expert_instance = self.get_create_agent_instance(expert_name, session_id)
+                expert_instance = self.get_create_agent_instance(expert_name, session_id, argument)
                 compiled_graph = expert_instance.graph.compile()
                 agent_instance.add_expert(expert_name, expert_instance, compiled_graph)
             self.agent_cache[cache_key] = agent_instance
             return agent_instance
 
-        agent_params = agent_class.__init__.__code__.co_varnames
-        cluster_fullname = "FAKE_CLUSTER_FULLNAME"  # Placeholder for actual cluster name
+        agent_instance = agent_class(cluster_fullname=argument)
 
-        if "cluster_fullname" in agent_params:
-            agent_instance = agent_class(cluster_fullname)
-        else:
-            agent_instance = agent_class()
 
         context_service = get_context_service()
         contexts = context_service.get_context(name)

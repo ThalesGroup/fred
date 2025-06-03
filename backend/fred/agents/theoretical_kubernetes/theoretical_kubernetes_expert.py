@@ -13,7 +13,7 @@
 # limitations under the License.
 
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 
 from common.structure import AgentSettings
 from flow import AgentFlow
@@ -189,13 +189,14 @@ class TheoreticalKubernetesExpert(AgentFlow):
     categories: list[str] = []
     tag: str = "Frugal IT"
 
-    def __init__(self):
+    def __init__(self, cluster_fullname : Optional[str]):
         """
         Initialize the Theoretical Kubernetes Expert.
         """
         self.current_date = datetime.now().strftime("%Y-%m-%d")
         agent_settings = get_agent_settings(self.name)
         self.categories = agent_settings.categories if agent_settings.categories else ["Kubernetes"]
+        self.cluster_fullname = cluster_fullname
         super().__init__(
             name=self.name,
             role=self.role,
@@ -222,6 +223,7 @@ class TheoreticalKubernetesExpert(AgentFlow):
                 "please provide the source when available.\n"
                 "In case of graphical representation, render mermaid diagrams code.\n\n"
                 f"The current date is {self.current_date}.\n"
+                f"Your current context involves a Kubernetes cluster named {self.cluster_fullname}.\n" if self.cluster_fullname else ""
         )
 
     async def agent(self, state: StateGraph):

@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from datetime import datetime
+from typing import Optional
 
 from flow import AgentFlow
 from langgraph.constants import START
@@ -39,7 +40,7 @@ class TheaterAnalysisExpert(AgentFlow):
     icon: str = "ship_location_agent"
     
     def __init__(self, 
-                 cluster_fullname: str,
+                 cluster_fullname: Optional[str],
                  ):
         self.current_date = datetime.now().strftime("%Y-%m-%d")
         self.toolkit=TheaterAnalysisToolkit()
@@ -87,6 +88,7 @@ class TheaterAnalysisExpert(AgentFlow):
                 "2. Aggregate and analyze the data to directly answer the user's query.\n"
                 "3. Present the results clearly, with summaries, breakdowns, and trends where applicable.\n\n"
                 f"The current date is {self.current_date}.\n\n"
+                f"Your current context involves a Kubernetes cluster named {self.cluster_fullname}.\n" if self.cluster_fullname else ""
             )
 
     async def reasoner(self, state: MessagesState):

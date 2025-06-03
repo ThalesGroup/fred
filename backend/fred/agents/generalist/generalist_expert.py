@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from datetime import datetime
+from typing import Optional
 from langchain_core.messages import SystemMessage
 from langgraph.graph import END, START, MessagesState, StateGraph
 from common.structure import AgentSettings, Configuration
@@ -35,7 +36,7 @@ class GeneralistExpert(AgentFlow):
     categories: list[str] = []
     tag: str = "Warfare"  # Tag défini directement ici
     
-    def __init__(self, cluster_fullname: str):
+    def __init__(self, cluster_fullname: Optional[str] = None):     
         """
         Initializes the Generalist Expert agent.
 
@@ -76,7 +77,7 @@ class GeneralistExpert(AgentFlow):
         return (
             "You are a friendly generalist expert, "
             "skilled at providing guidance on a wide range of topics without deep specialization.\n"
-            f"Your current context involves a Kubernetes cluster named {self.cluster_fullname}.\n"
+            f"Your current context involves a Kubernetes cluster named {self.cluster_fullname}.\n" if self.cluster_fullname else ""
             "Your role is to respond with clarity, "
             "providing accurate and reliable information.\n"
             "When appropriate, highlight elements that could be particularly relevant.\n"

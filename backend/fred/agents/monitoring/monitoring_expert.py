@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from datetime import datetime
+from typing import Optional
 
 from flow import AgentFlow
 from langgraph.constants import START
@@ -41,7 +42,7 @@ class MonitoringExpert(AgentFlow):
     tag: str = "Frugal IT"  # Défini au niveau de la classe
     
     def __init__(self, 
-                 cluster_fullname: str
+                 cluster_fullname: Optional[str]
                  ):
         self.current_date = datetime.now().strftime("%Y-%m-%d")
         self.toolkit = MonitoringToolkit()
@@ -75,7 +76,7 @@ class MonitoringExpert(AgentFlow):
         """
         return (
                 "You are a Kubernetes monitoring expert with access to tools for retrieving and analyzing data "
-                f"from the cluster you manage. Your cluster is named {self.cluster_fullname}.\n\n"
+                f"Your current context involves a Kubernetes cluster named {self.cluster_fullname}.\n" if self.cluster_fullname else ""  
                 "### Your Primary Responsibilities:\n"
                 "1. **Retrieve Data**: Use the provided tools to fetch data for:\n"
                 "   - Energy consumption (grouped by namespace).\n"

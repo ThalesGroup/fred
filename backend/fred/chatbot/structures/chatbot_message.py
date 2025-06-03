@@ -37,6 +37,7 @@ class ChatAskInput(BaseModel):
     session_id: Optional[str] = None
     message: str
     agent_name: str
+    argument: Optional[str]
 
 class ChatBotEvent(BaseModel):
     """

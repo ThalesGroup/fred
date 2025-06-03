@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from datetime import datetime
+from typing import Optional
 from langchain_core.messages import SystemMessage
 from langgraph.prebuilt import ToolNode, tools_condition
 from langgraph.graph import END, START, MessagesState, StateGraph
@@ -40,7 +41,7 @@ class TechnicalKubernetesExpert(AgentFlow):
     tag: str = "Warfare"
 
     def __init__(self, 
-                 cluster_fullname: str
+                 cluster_fullname: Optional[str]
                  ):
         """
         Initializes the Kubernetes expert agent.
@@ -78,7 +79,7 @@ class TechnicalKubernetesExpert(AgentFlow):
         """
         return (
             "You are a friendly technical Kubernetes expert.\n"
-            f"The cluster you are in charge of is named {self.cluster_fullname}.\n"
+            f"Your current context involves a Kubernetes cluster named {self.cluster_fullname}.\n" if self.cluster_fullname else ""
             "Your role is to provide clear and precise technical guidance about this cluster.\n"
             "You have access to a set of tools to retrieve specific information about the cluster.\n"
             "When needed, highlight your technical and operational knowledge in your response.\n"

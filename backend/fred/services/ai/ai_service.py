@@ -1179,12 +1179,9 @@ class AIService:  # pylint: disable=R0904
 
             return workload_scores
         except Exception as e:  # pylint: disable=W0718
-            logger.info(
-                "Failed to retreive Workload Scores from storage for Workload "
-                "'%s': %s",
-                workload_name,
-                e,
-            )
+            logger.debug(
+                f"Failed to retrieve Workload Scores from storage for Workload '{workload_name}': {e}")
+
             if get_app_context().status.offline:
                 raise UnavailableError("AI client") from e
 
@@ -1214,10 +1211,7 @@ class AIService:  # pylint: disable=R0904
         )
 
         logger.info(
-            "Trying to generate Workload Scores for %s '%s' from Namespace '%s'",
-            workload_kind.value,
-            workload_name,
-            namespace,
+            f"Trying to generate Workload Scores for {workload_kind.value} '{workload_name}' from Namespace '{namespace}'"
         )
 
         workload_scores = WorkloadScores.from_workload_context(
@@ -1229,11 +1223,7 @@ class AIService:  # pylint: disable=R0904
             workload_scores, cluster_name, namespace, workload_kind, workload_name
         )
         logger.info(
-            "Generated and stored new Workload Scores for %s '%s' "
-            "from Namespace '%s'",
-            workload_kind.value,
-            workload_name,
-            namespace,
+            f"Generated and stored new Workload Scores for {workload_kind.value} '{workload_name}' from Namespace '{namespace}'"
         )
 
     def get_workload_services_essentials(
