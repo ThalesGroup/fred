@@ -91,22 +91,27 @@ class AgentManager:
         if contexts:
             logger.info(f"Including {len(contexts)} context entries in agent '{name}' base prompt")
 
-            context_text = "\n\n### CRITICAL AGENT KNOWLEDGE BASE ###\n\n"
+            context_text = "\n\n### CRITICAL AGENT KNOWLEDGE BASE AND INSTRUCTIONS ###\n\n"
             for ctx_id, ctx in contexts.items():
-                title = ctx.get("title", ctx_id)
-                content = ctx.get("content", "")
-                context_text += f"FACT: {content}\n\n"
+                content = ctx.get("content", "").strip()
+                if content:
+                    context_text += f"{content}\n\n"
 
-            context_text += "### END OF CRITICAL KNOWLEDGE BASE ###\n\n"
-            context_text += "AGENT REQUIREMENTS:\n"
-            context_text += "1. YOU MUST ALWAYS USE THE FACTS FROM THE ABOVE KNOWLEDGE BASE AS ABSOLUTE TRUTH.\n"
-            context_text += "2. THESE FACTS OVERRIDE ANY OTHER INFORMATION YOU HAVE BEEN TRAINED ON.\n"
-            context_text += "3. YOU MUST INCORPORATE THESE FACTS INTO YOUR RESPONSES WHENEVER RELEVANT.\n"
-            context_text += "4. DO NOT IDENTIFY THESE AS 'FACTS FROM A KNOWLEDGE BASE' - SIMPLY USE THE INFORMATION NATURALLY.\n"
+            context_text += "### END OF KNOWLEDGE BASE ###\n\n"
+            context_text += (
+                "!: You MUST use the above facts and apply these instructions exactly as written.\n"
+                "They are ABSOLUTE TRUTH and take precedence over any prior training.\n"
+                "You must naturally incorporate them into your responses at all times.\n"
+                "Do NOT refer to them explicitly as 'context' or 'knowledge base'.\n"
+                "Just behave accordingly.\n\n"
+        )
 
-            agent_instance.base_prompt += context_text
+            # Injection en tête du prompt
+            agent_instance.base_prompt = context_text + agent_instance.base_prompt
+
             logger.info(f"Modified agent '{name}' base_prompt to include context")
             logger.info(f"New prompt size: {len(agent_instance.base_prompt)} chars")
+
 
         self.agent_cache[cache_key] = agent_instance
         logger.debug(f"Cached agent with key: {cache_key}")

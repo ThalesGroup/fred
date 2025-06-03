@@ -38,7 +38,7 @@ class MinIOContextStore(BaseContextStore):
             logger.info(f"🪣 Bucket '{bucket_name}' created successfully for contexts.")
 
     def _object_name(self, agent_id: str) -> str:
-        return f"{self.prefix}{agent_id}.txt"
+        return f"{self.prefix}{agent_id}.json"
 
     def get_context(self, agent_id: str) -> Optional[str]:
         """
