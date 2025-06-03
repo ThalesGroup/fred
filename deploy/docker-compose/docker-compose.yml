@@ -277,47 +277,6 @@ services:
       kube:
         condition: service_healthy
 
-  kube-metrics-post-install-job:
-    image: mirror.gcr.io/alpine:3.21.3
-    container_name: kube-metrics-post-install-job
-    environment:
-      KUBECONFIG: /kube/config
-    volumes:
-      - vol-kubeconfig:/kube
-    entrypoint: 
-      - /bin/sh
-      - -c
-    command:
-      - |
-        apk update
-        apk add --no-cache helm
-
-        # Install Prometheus Node Exporter
-        helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
-        helm repo update
-        helm upgrade --install prometheus prometheus-community/kube-prometheus-stack \
-            --set prometheus.prometheusSpec.podMonitorSelectorNilUsesHelmValues=false \
-            --set prometheus.prometheusSpec.serviceMonitorSelectorNilUsesHelmValues=false \
-            --set prometheus-node-exporter.hostRootFsMount.enabled=false \
-            --set prometheus-node-exporter.hostRootFsMount.mountPropagation='HostToContainer' \
-            --namespace monitoring \
-            --create-namespace \
-            --wait
-
-        # Install Kepler
-        helm repo add kepler https://sustainable-computing-io.github.io/kepler-helm-chart
-        helm repo update
-        helm upgrade --install kepler kepler/kepler \
-            --namespace kepler \
-            --create-namespace \
-            --set serviceMonitor.enabled=true \
-            --set serviceMonitor.labels.release=prometheus \
-            --set canMount.usrSrc=false
-    depends_on:
-      kube-post-install-job:
-        condition: service_completed_successfully
-    networks:
-      - fred-network
 
 # -----------------------------------------------------------------------------
 # MCP Servers
