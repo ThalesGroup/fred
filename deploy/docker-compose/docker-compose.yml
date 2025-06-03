@@ -286,21 +286,20 @@ services:
     image: node:22-bookworm-slim
     container_name: k8s-mcpserver
     volumes:
-    # mounting default kubeconfig into the container to access kube apis from the MCP server
-    # @TODO: Find a way to use the kubeconfig of the fred configuration.yaml file in .kubernetes.kube_config
-      - ${HOME}/.kube/config:/home/appuser/.kube/config 
+      - vol-kubeconfig:/kube
     environment:
       ALLOW_ONLY_NON_DESTRUCTIVE_TOOLS: true
       ENABLE_UNSAFE_SSE_TRANSPORT: 1
       PORT: 8081
-      KUBECONFIG: /home/appuser/.kube/config
+      KUBECONFIG: /kube/config
     ports:
       - 8081:8081
-    entrypoint: 
-      - /bin/sh
-      - -c
-    command:
-      - npx mcp-server-kubernetes@1.6.2 # Do not take the latest since as of today there is a bug in latest (2.0.0) with kubectl
+    command: >
+      /bin/sh -c "apt update &&
+      apt install -y curl &&
+      curl -LO https://dl.k8s.io/release/$(curl -sL https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl &&
+      install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl &&
+      npx mcp-server-kubernetes@2.2.1"
     networks:
       - fred-network
 
