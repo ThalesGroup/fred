@@ -28,7 +28,6 @@ import {
 } from "@mui/lab";
 import PsychologyAltIcon from "@mui/icons-material/PsychologyAlt";
 import WebhookIcon from "@mui/icons-material/Webhook";
-import MarkdownRenderer from "./MarkdownRenderer.tsx";
 import { ChatMessagePayload } from "../../slices/chatApiStructures.ts";
 
 export default function Thoughts({

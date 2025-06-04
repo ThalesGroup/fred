@@ -35,7 +35,6 @@ import SearchIcon from "@mui/icons-material/Search";
 import FilterListIcon from "@mui/icons-material/FilterList";
 import StarIcon from "@mui/icons-material/Star";
 import StarOutlineIcon from "@mui/icons-material/StarOutline";
-import DescriptionIcon from "@mui/icons-material/Description";
 import { LoadingSpinner } from "../utils/loadingSpinner";
 import { getAgentBadge } from "../utils/avatar";
 import Grid2 from "@mui/material/Grid2";
@@ -63,7 +62,7 @@ export const AgentHub = () => {
 
   // États pour la gestion du contexte
   const [contextModalOpen, setContextModalOpen] = useState(false);
-  const [selectedAgent, setSelectedAgent] = useState(null);
+  const [selectedAgent] = useState(null);
   const [, setUserInfo] = useState({
     name: KeyCloakService.GetUserName(),
     isAdmin: KeyCloakService.GetUserRoles().includes("admin"),
