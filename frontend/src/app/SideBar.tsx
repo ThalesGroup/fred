@@ -29,6 +29,7 @@ import {
 import AssistantIcon from "@mui/icons-material/Assistant";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import ChatIcon from "@mui/icons-material/Chat";
+import TuneIcon from "@mui/icons-material/Tune";
 import PersonIcon from "@mui/icons-material/Person";
 import MenuIcon from "@mui/icons-material/Menu";
 import AssessmentIcon from "@mui/icons-material/Assessment";
@@ -89,6 +90,14 @@ export default function SideBar({ darkMode, onThemeChange }) {
             url: `/audit?cluster=${currentClusterFullname}`,
             canBeDisabled: true,
             tooltip: "View a complete eco-score audit of the selected cluster",
+          },
+          {
+            key: "optimize",
+            label: "Optimize",
+            icon: <TuneIcon />,
+            url: `/optimize?cluster=${currentClusterFullname}`,
+            canBeDisabled: true,
+            tooltip: 'Check the optimization gains on the selected cluster'
           },
           {
             key: "chat",

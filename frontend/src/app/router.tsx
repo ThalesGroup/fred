@@ -35,6 +35,8 @@ import { LayoutWithSidebar } from "./LayoutWithSidebar";
 import { Explain } from "../frugalit/pages/Explain";
 import { Facts } from "../frugalit/pages/Facts";
 import { Audit } from "../pages/Audit";
+import { FrugalIt } from "../pages/FrugalIt";
+import Inspect from "../frugalit/pages/Inspect";
 
 const RootLayout = () => (
   <ProtectedRoute permission="viewer">
@@ -49,12 +51,17 @@ export const routes: RouteObject[] = [
     children: [
       {
         index: true,
-        element: (
+        element: isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES) ? (
+          <FootprintContextProvider>
+            <FrugalIt />
+          </FootprintContextProvider>
+        ) : (
           <FootprintContextProvider>
             <Chat />
           </FootprintContextProvider>
         ),
       },
+
       isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES) && {
         path: "score/:cluster/:namespace/:application",
         element: <Scores />,
@@ -102,6 +109,15 @@ export const routes: RouteObject[] = [
       isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES) && {
         path: "optimize",
         element: <Optimize />,
+      },
+      isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES) && {
+        path: "inspect",
+        element: ( 
+         <FootprintContextProvider>
+
+        
+        <Inspect />
+         </FootprintContextProvider>),
       },
       isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES) && {
         path: "geomap",

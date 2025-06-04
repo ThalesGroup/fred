@@ -35,6 +35,8 @@ import { ElectricityGco2 } from "../../common/energy/ElectricityGco2.tsx";
 import { useSearchParams } from "react-router-dom";
 import LoadingWithProgress from "../../components/LoadingWithProgress.tsx";
 import { TopBar } from "../../common/TopBar.tsx";
+import { DatePicker } from "@mui/x-date-pickers/DatePicker";
+
 
 enum Delta {
   DAY = "day",
@@ -56,11 +58,6 @@ export const Optimize = () => {
   const theme = useTheme();
   const application_context = useContext(ApplicationContext);
   const currentClusterOverview = application_context.currentClusterOverview;
-  const now = dayjs();
-  const oneMonthAgo = now.subtract(1, "month");
-  const start = oneMonthAgo;
-  const end = now;
-  const [selectedDelta, setSelectedDelta] = useState<string>(Delta.MONTH);
   const [chartRange, setChartRange] = useState<"current" | "previous">("current"); // New state for selecting chart range
 
   // Add loading state for each data type
@@ -83,6 +80,18 @@ export const Optimize = () => {
   const [energyMixDetails, setEnergyMixDetails] = useState<Detail[]>([]);
   const [previousEnergyMixTimestamps, setPreviousEnergyMixTimestamps] = useState<string[]>([]);
   const [previousEnergyMixDetails, setPreviousEnergyMixDetails] = useState<Detail[]>([]);
+
+  const today = dayjs();
+  const startOfThisMonth = today.startOf('month');
+
+  // Use last full month as "current", and the one before as "previous"
+  const defaultCurrentMonth = startOfThisMonth.subtract(1, 'month'); // e.g. May if now is June
+  const defaultPreviousMonth = startOfThisMonth.subtract(2, 'month'); // e.g. April if now is June
+
+  const [currentMonth, setCurrentMonth] = useState<Dayjs | null>(defaultCurrentMonth);
+  const [previousMonth, setPreviousMonth] = useState<Dayjs | null>(defaultPreviousMonth);
+
+  const [selectedDelta] = useState<Delta>(Delta.MONTH);
 
   const fetchEnergyMix = async (start: Dayjs, end: Dayjs, delta: Delta) => {
     if (
@@ -127,71 +136,41 @@ export const Optimize = () => {
       }
     }
   };
-  const fetchData = (
+  const fetchData = async (
     start: Dayjs,
     end: Dayjs,
-    delta: Delta,
-    setNewData: (serie: Serie) => void,
-    setLastData: (serie: Serie) => void,
-    newDataColor: string,
-    lastDataColor: string,
-    newDataName: string,
-    lastDataName: string,
+    name: string,
+    color: string,
     getData: (params: {
       start: string;
       end: string;
       cluster: string;
       precision: string;
     }) => Promise<{ data: any } | { error: any }>,
-    setLoading: (loading: boolean) => void, // pass loading state handler
+    setData: (serie: Serie) => void,
+    setLoading: (loading: boolean) => void
   ) => {
     if (
-      application_context &&
       application_context.currentClusterOverview &&
-      start &&
-      end &&
       application_context.currentPrecision
     ) {
-      setNewData(undefined);
-      setLastData(undefined);
-      setLoading(true); // Start loading
-
-      getData({
+      setLoading(true);
+      const response = await getData({
         start: start.toISOString(),
         end: end.toISOString(),
         cluster: application_context.currentClusterOverview.alias,
         precision: application_context.currentPrecision,
-      }).then((response) => {
-        if ("error" in response) {
-          console.error(response.error);
-        } else {
-          setNewData(transformClusterConsumptionToSerie(response.data, newDataName, newDataColor));
-        }
-        setLoading(false); // End loading
       });
 
-      getData({
-        start: start.subtract(1, delta).subtract(end.diff(start, "day"), "day").toISOString(),
-        end: start.subtract(1, delta).toISOString(),
-        cluster: application_context.currentClusterOverview.alias,
-        precision: application_context.currentPrecision,
-      }).then((response) => {
-        if ("error" in response) {
-          console.error(response.error);
-        } else {
-          setLastData(transformClusterConsumptionToSerie(response.data, lastDataName, lastDataColor));
-        }
-        setLoading(false); // End loading
-      });
+      if ("error" in response) {
+        console.error(response.error);
+      } else {
+        setData(transformClusterConsumptionToSerie(response.data, name, color));
+      }
+      setLoading(false);
     }
   };
 
-  /* const handleDateChange = (newRange: [Dayjs | null, Dayjs | null]) => {
-    setStart(undefined);
-    setEnd(undefined);
-    setStart(newRange[0]);
-    setEnd(newRange[1]);
-  }; */
 
   // Check if the current cluster overview is available and the alias matches the clusterName
   // If not, navigate to the correct cluster overview page. This is typically used to sync the URL
@@ -203,53 +182,88 @@ export const Optimize = () => {
   }, [clusterFullName, currentClusterOverview]);
 
   useEffect(() => {
-    if (start && end) {
-      fetchData(
-        start,
-        end,
-        selectedDelta as Delta,
-        setNewFinops,
-        setLastFinops,
-        theme.palette.chart.highBlue,
-        theme.palette.chart.lowBlue,
-        "Current charges",
-        "Previous charges",
-        getFinopsCost,
-        setLoadingFinops,
-      );
-      fetchData(
-        start,
-        end,
-        selectedDelta as Delta,
-        setNewCarbon,
-        setLastCarbon,
-        theme.palette.chart.veryHighGreen,
-        theme.palette.chart.mediumGreen,
-        "Current carbon",
-        "Previous carbon",
-        getCarbonConsumption,
-        setLoadingCarbon,
-      );
-      fetchData(
-        start,
-        end,
-        selectedDelta as Delta,
-        setNewEnergy,
-        setLastEnergy,
-        theme.palette.chart.veryHighYellow,
-        theme.palette.chart.mediumYellow,
-        "Current energy",
-        "Previous energy",
-        getEnergyConsumption,
-        setLoadingEnergy,
-      );
-      fetchEnergyMix(start, end, selectedDelta as Delta);
-    }
-  }, [start, end, application_context.currentClusterOverview, selectedDelta, application_context.currentPrecision]);
+    if (
+      currentMonth &&
+      previousMonth &&
+      application_context.currentClusterOverview &&
+      application_context.currentPrecision
+    ) {
+      const currentStart = currentMonth.startOf("month");
+      const currentEnd = currentMonth.endOf("month");
+      const previousStart = previousMonth.startOf("month");
+      const previousEnd = previousMonth.endOf("month");
 
-  const handleChange = (event) => {
-    setSelectedDelta(event.target.value);
-  };
+      // Current month data
+      fetchData(
+        currentStart,
+        currentEnd,
+        "Current charges",
+        theme.palette.chart.veryHighBlue,
+        getFinopsCost,
+        setNewFinops,
+        setLoadingFinops
+      );
+      fetchData(
+        currentStart,
+        currentEnd,
+        "Current carbon",
+        theme.palette.chart.veryHighGreen,
+        getCarbonConsumption,
+        setNewCarbon,
+        setLoadingCarbon
+      );
+      fetchData(
+        currentStart,
+        currentEnd,
+        "Current energy",
+        theme.palette.chart.veryHighYellow,
+        getEnergyConsumption,
+        setNewEnergy,
+        setLoadingEnergy
+      );
+
+      // Previous month data
+      fetchData(
+        previousStart,
+        previousEnd,
+        "Previous charges",
+        theme.palette.chart.mediumBlue,
+        getFinopsCost,
+        setLastFinops,
+        setLoadingFinops
+      );
+      fetchData(
+        previousStart,
+        previousEnd,
+        "Previous carbon",
+        theme.palette.chart.mediumGreen,
+        getCarbonConsumption,
+        setLastCarbon,
+        setLoadingCarbon
+      );
+      fetchData(
+        previousStart,
+        previousEnd,
+        "Previous energy",
+        theme.palette.chart.mediumYellow,
+        getEnergyConsumption,
+        setLastEnergy,
+        setLoadingEnergy
+      );
+
+      // Energy mix (only for current range)
+      fetchEnergyMix(currentStart, currentEnd, selectedDelta as Delta);
+    }
+  }, [
+    currentMonth,
+    previousMonth,
+    application_context.currentClusterOverview,
+    application_context.currentPrecision,
+  ]);
+
+  //const handleChange = (event) => {
+  //  setSelectedDelta(event.target.value);
+  //};
   if (!currentClusterOverview || currentClusterOverview?.fullname !== clusterFullName) {
     return (
       <PageBodyWrapper>
@@ -261,27 +275,31 @@ export const Optimize = () => {
     <PageBodyWrapper>
       <TopBar title="Optimize" description="Optimize your cloud resources" backgroundUrl="" leftLg={4}>
         <Grid2 container size={12} alignItems="center" justifyContent="space-between">
-          <Grid2 size={{ xs: 3, sm: 3, md: 3, lg: 3, xl: 3 }} display="flex" justifyContent="flex-start">
+          <Grid2 size={{ xs: 4, sm: 6, md: 6, lg: 6, xl: 6 }} display="flex" justifyContent="flex-start">
             {/* First item (aligned to the left) */}
             <LocalizationProvider dateAdapter={AdapterDayjs}>
-              {/* 
-              <DateRangePicker
-                value={[start, end]}
-                onChange={handleDateChange}
-              />
-              */}
+              <Grid2 display="flex" gap={1} alignItems="center">
+                <Grid2>
+                  <DatePicker
+                    label="Current month"
+                    views={['year', 'month']}
+                    value={currentMonth}
+                    onChange={(newValue) => setCurrentMonth(newValue)}
+                    slotProps={{ textField: { size: 'small' } }} // optional for compact styling
+                  />
+                </Grid2>
+                <Grid2>
+                  <DatePicker
+                    label="Previous month"
+                    views={['year', 'month']}
+                    value={previousMonth}
+                    onChange={(newValue) => setPreviousMonth(newValue)}
+                    slotProps={{ textField: { size: 'small' } }}
+                  />
+                </Grid2>
+              </Grid2>
             </LocalizationProvider>
-          </Grid2>
 
-          <Grid2 size={{ xs: 3, sm: 3, md: 3, lg: 3, xl: 3 }} display="flex" justifyContent="center">
-            {/* Second item (centered) */}
-            <Select value={selectedDelta} label="Delta" onChange={handleChange}>
-              {Object.values(Delta).map((delta) => (
-                <MenuItem key={delta} value={delta}>
-                  {delta}
-                </MenuItem>
-              ))}
-            </Select>
           </Grid2>
 
           <Grid2 size={{ xs: 3, sm: 3, md: 3, lg: 3, xl: 2 }} display="flex" justifyContent="flex-end">
@@ -370,10 +388,8 @@ export const Optimize = () => {
               type="bar"
             />
           </Box>
-
           <Grid2 size={{ xs: 12 }}>
             <Box pt={1} width="100%">
-              {/* Conditionally render the ElectricityMixChart based on chartRange selection */}
               {chartRange === "current" ? (
                 <ElectricityMixChart
                   timestamps={energyMixTimestamps}

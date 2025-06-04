@@ -33,7 +33,7 @@ import MoneyIcon from "@mui/icons-material/MonetizationOnOutlined";
 dayjs.extend(utc);
 dayjs.extend(timezone);
 
-export const Home = () => {
+export const FrugalIt = () => {
   const theme = useTheme();
   const [showElements, setShowElements] = useState(false);
   const ctx = useContext(FootprintContext);
