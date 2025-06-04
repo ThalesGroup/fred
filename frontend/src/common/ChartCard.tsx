@@ -203,7 +203,7 @@ export const ChartCard = (props: { data: ChartSeries; height: string; type: stri
             </Box>
           </Grid2>
         </Grid2>
-      </Paper>
+      </Paper> 
     </Grid2>
   );
 };

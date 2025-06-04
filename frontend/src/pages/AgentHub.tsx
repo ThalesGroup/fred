@@ -152,10 +152,6 @@ export const AgentHub = () => {
   };
 
   // Gérer l'ouverture de la modale de contexte
-  const openContextModal = (agent) => {
-    setSelectedAgent(agent);
-    setContextModalOpen(true);
-  };
 
   // Obtenir le titre de la section actuelle
   const getSectionTitle = () => {

@@ -67,7 +67,7 @@
   },
   "devDependencies": {
     "@date-io/dayjs": "^3.0.0",
-    "@mui/x-date-pickers": "^7.16.0",
+    "@mui/x-date-pickers": "^7.29.4",
     "@types/leaflet": "^1.9.17",
     "@vitejs/plugin-react": "^4.2.1",
     "dayjs": "^1.11.13",
