@@ -93,7 +93,7 @@ dev: $(TARGET)/.dev ## Install dependencies in .venv for development
 
 $(TARGET)/.dev: $(TARGET)/.venv-dependencies $(CURDIR)/poetry.lock $(MY_SOURCES)
 	$(info ************  POETRY INSTALL DEV DEPENDENCIES ************)
-	$(POETRY) install
+	$(POETRY) install -vvv
 	touch $@
 
 .PHONY: update
