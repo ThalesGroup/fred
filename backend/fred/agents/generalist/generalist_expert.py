@@ -13,13 +13,14 @@
 # limitations under the License.
 
 from datetime import datetime
+import logging
 from typing import Optional
 from langchain_core.messages import SystemMessage
 from langgraph.graph import END, START, MessagesState, StateGraph
 from common.structure import AgentSettings, Configuration
 from flow import AgentFlow
 from fred.application_context import get_agent_settings, get_model_for_agent
-
+logger = logging.getLogger(__name__)
 class GeneralistExpert(AgentFlow):
     """
     Generalist Expert provides guidance on a wide range of topics 
@@ -46,14 +47,14 @@ class GeneralistExpert(AgentFlow):
         """
         # Set basic properties
         self.cluster_fullname = cluster_fullname
-        self.current_date = datetime.now().strftime("%Y-%m-%d")
         
         # Get agent settings
         agent_settings = get_agent_settings(self.name)
         
         # Extract categories
         self.categories = agent_settings.categories if agent_settings.categories else ["General"]
-        
+        prompt = self._generate_prompt()
+        logger.info(f"MERDE {prompt}")
         # Initialize parent class
         super().__init__(
             name=self.name,
@@ -68,22 +69,20 @@ class GeneralistExpert(AgentFlow):
         )
 
     def _generate_prompt(self) -> str:
-        """
-        Generates the base prompt for the agent.
-
-        Returns:
-            str: A formatted string containing the agent's instructions.
-        """
-        return (
-            "You are a friendly generalist expert, "
-            "skilled at providing guidance on a wide range of topics without deep specialization.\n"
-            f"Your current context involves a Kubernetes cluster named {self.cluster_fullname}.\n" if self.cluster_fullname else ""
-            "Your role is to respond with clarity, "
-            "providing accurate and reliable information.\n"
-            "When appropriate, highlight elements that could be particularly relevant.\n"
-            f"The current date is {self.current_date}.\n"
-            "In case of graphical representation, render mermaid diagrams code.\n\n"
-        )
+        lines = [
+            "You are a friendly generalist expert, skilled at providing guidance on a wide range of topics without deep specialization.",
+        ]
+        if self.cluster_fullname:
+            lines.append(f"Your current context involves a Kubernetes cluster named {self.cluster_fullname}.")
+    
+        lines += [
+            "Your role is to respond with clarity, providing accurate and reliable information.",
+            "When appropriate, highlight elements that could be particularly relevant.",
+            f"The current date is {datetime.now().strftime('%Y-%m-%d')}.",
+            "In case of graphical representation, render mermaid diagrams code.",
+            "",
+        ]
+        return "\n".join(lines)
 
     async def expert(self, state: MessagesState):
         """

@@ -78,25 +78,35 @@ class K8SOperatorExpert(AgentFlow):
         Returns:
             str: A formatted string containing the expert's instructions.
         """
+        lines = [
+            "You are a Kubernetes monitoring & operator expert with access to tools for retrieving and analyzing data.",
+        ]
+        if self.cluster_fullname:
+            lines.append(f"Your current context involves a Kubernetes cluster named {self.cluster_fullname}, and you are equipped with MCP server tools.")
+        else:
+            lines.append("You are equipped with MCP server tools.")
 
-        return (
-            "You are a Kubernetes monitoring & operator expert with access to tools for retrieving and analyzing data "
-            f"Your current context involves a Kubernetes cluster named {self.cluster_fullname}.\n" if self.cluster_fullname else ""
-            f", and you are equipped with MCP server tools.\n\n"
-            "### Your Primary Responsibilities:\n"
-            "1. **Retrieve Data**: Use the provided tools, including MCP server tools, to fetch data for:\n"
-            "   - Pods & containers statuses and logs.\n"
-            "   - The state of the deployed resources and whether they are functioning properly.\n"
-            "   - Retrieve any malfunction in the cluster.\n"
-            "2. **Aggregate Data**: Execute appropriate commands using the MCP server in order to:\n"
-            "   - Get and interpret the logs and the resource statuses.\n"
-            "   - Summarize key insights in a user-friendly manner.\n\n"
-            "### Key Instructions:\n"
-            "1. Always use tools to fetch data before providing answers. Avoid generating generic guidance or assumptions.\n"
-            "2. Aggregate and analyze the data to directly answer the user's query.\n"
-            "3. Present the results clearly, with summaries, breakdowns, and trends where applicable.\n\n"
-            f"The current date is {self.current_date}.\n\n"
-        )
+        lines += [
+            "",
+            "### Your Primary Responsibilities:",
+            "1. **Retrieve Data**: Use the provided tools, including MCP server tools, to fetch data for:",
+            "   - Pods & containers statuses and logs.",
+            "   - The state of the deployed resources and whether they are functioning properly.",
+            "   - Retrieve any malfunction in the cluster.",
+            "2. **Aggregate Data**: Execute appropriate commands using the MCP server in order to:",
+            "   - Get and interpret the logs and the resource statuses.",
+            "   - Summarize key insights in a user-friendly manner.",
+            "",
+            "### Key Instructions:",
+            "1. Always use tools to fetch data before providing answers. Avoid generating generic guidance or assumptions.",
+            "2. Aggregate and analyze the data to directly answer the user's query.",
+            "3. Present the results clearly, with summaries, breakdowns, and trends where applicable.",
+            "",
+            f"The current date is {datetime.now().strftime('%Y-%m-%d')}.",
+            "",
+        ]
+        return "\n".join(lines)
+
     
     async def reasoner(self, state: MessagesState):
         response = self.llm.invoke([self.base_prompt] + state["messages"])
