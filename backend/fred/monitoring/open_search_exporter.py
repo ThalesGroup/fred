@@ -11,7 +11,7 @@ logger = logging.getLogger("llm_monitoring.opensearch")
 OPENSEARCH_HOST = os.getenv("OPENSEARCH_HOST", "https://localhost:9200")
 OPENSEARCH_USER = os.getenv("OPENSEARCH_USER", "admin")
 OPENSEARCH_PASS = os.getenv("OPENSEARCH_PASSWORD", "password")
-DEFAULT_INDEX = "llm-logs-*"
+DEFAULT_INDEX = "llm-logs-monitoring"
 
 logger = logging.getLogger("llm_monitoring.init")
 
