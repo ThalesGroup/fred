@@ -11,12 +11,12 @@ logger = logging.getLogger("llm_monitoring.opensearch")
 OPENSEARCH_HOST = os.getenv("OPENSEARCH_HOST", "https://localhost:9200")
 OPENSEARCH_USER = os.getenv("OPENSEARCH_USER", "admin")
 OPENSEARCH_PASS = os.getenv("OPENSEARCH_PASSWORD", "password")
-DEFAULT_INDEX = "llm-logs-monitoring"
+DEFAULT_INDEX = "llm-monitoring"
 
 logger = logging.getLogger("llm_monitoring.init")
 
 def init_opensearch_index_if_needed(
-    index_name="llm-logs-monitoring",
+    index_name="llm-monitoring",
     host="https://fred-opensearch:9200",
     username="admin",
     password="password"
@@ -36,9 +36,8 @@ def init_opensearch_index_if_needed(
 
     logger.info(f"[Init] Création de l'index '{index_name}'...")
 
+
     mapping = {
-            "index_patterns": ["llm-logs-*"],
-            "template": {
                 "mappings": {
                 "properties": {
                     "timestamp": {
@@ -62,7 +61,6 @@ def init_opensearch_index_if_needed(
                     }
                 }
             }
-        }
 
     response = requests.put(url, auth=auth, headers=headers, json=mapping, verify=False)
     if response.ok:
@@ -75,25 +73,11 @@ init_opensearch_index_if_needed(index_name="llm-monitoring",
     username=OPENSEARCH_USER,
     password=OPENSEARCH_PASS)
 
-def is_opensearch_available() -> bool:
-    try:
-        response = requests.head(
-            f"{OPENSEARCH_HOST}/{DEFAULT_INDEX}",
-            auth=(OPENSEARCH_USER, OPENSEARCH_PASS),
-            verify=False,
-            timeout=2
-        )
-        return response.status_code in [200, 404]  # 404 = index absent mais OS est joignable
-    except Exception as e:
-        logger.warning(f"[OpenSearch] ⚠️ OpenSearch non joignable : {e}")
-        return False
 
-
-def send_to_opensearch(document: dict, index: str = DEFAULT_INDEX) -> None:
-    if not is_opensearch_available():
-        logger.warning("[OpenSearch] ⛔ Connexion impossible — log ignoré.")
-        return
-
+def send_to_opensearch(document: dict, index: str = DEFAULT_INDEX)->None:
+    """
+    Envoie un document vers OpenSearch. Log le résultat de l'opération.
+    """
     url = f"{OPENSEARCH_HOST}/{index}/_doc"
     auth = (OPENSEARCH_USER, OPENSEARCH_PASS)
     headers = {"Content-Type": "application/json"}
@@ -106,4 +90,3 @@ def send_to_opensearch(document: dict, index: str = DEFAULT_INDEX) -> None:
         logger.error(f"[OpenSearch] ❌ HTTP error: {http_err} | Response: {response.text}")
     except Exception as e:
         logger.error(f"[OpenSearch] ❌ Exception: {e}")
-
