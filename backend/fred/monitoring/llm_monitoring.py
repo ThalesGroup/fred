@@ -49,6 +49,7 @@ from langchain_core.messages import BaseMessage
 from langchain_core.outputs import LLMResult
 
 from fred.monitoring.logging_context import get_logging_context
+from fred.monitoring.open_search_exporter import send_to_opensearch
 
 
 logger = logging.getLogger("llm_monitoring")
@@ -153,6 +154,7 @@ class SmartMonitoringWrapper(Runnable):
             "type": self.type,
         })
         logger.info(metadata)
+        send_to_opensearch(metadata)
 
     # Optional passthroughs (if you use it directly as an LLM)
     def predict(self, text: str, stop=None) -> str:
