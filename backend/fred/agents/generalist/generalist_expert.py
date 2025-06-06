@@ -20,6 +20,8 @@ from langgraph.graph import END, START, MessagesState, StateGraph
 from common.structure import AgentSettings, Configuration
 from flow import AgentFlow
 from fred.application_context import get_agent_settings, get_model_for_agent
+from fred.monitoring.llm_monitoring import SmartMonitoringWrapper
+
 logger = logging.getLogger(__name__)
 class GeneralistExpert(AgentFlow):
     """
@@ -94,7 +96,7 @@ class GeneralistExpert(AgentFlow):
         Returns:
             dict: The updated state with the expert's response.
         """
-        model = get_model_for_agent(self.name)
+        model = SmartMonitoringWrapper(target=get_model_for_agent(self.name),name="Generalist Expert")
         prompt = SystemMessage(content=self.base_prompt)
         response = await model.ainvoke([prompt] + state["messages"])
         return {"messages": [response]}
