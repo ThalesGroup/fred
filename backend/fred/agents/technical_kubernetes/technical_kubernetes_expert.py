@@ -54,7 +54,7 @@ class TechnicalKubernetesExpert(AgentFlow):
         self.cluster_fullname = cluster_fullname
         self.current_date = datetime.now().strftime("%Y-%m-%d")
         kube_service = KubeService()
-        ai_service = AIService(cluster_fullname, kube_service)
+        ai_service = AIService(kube_service)
         self.toolkit = TechnicalKubernetesToolkitBuilder(ai_service).build()
         self.categories = self.agent_settings.categories if self.agent_settings.categories else ["Kubernetes"]
         super().__init__(
@@ -70,6 +70,8 @@ class TechnicalKubernetesExpert(AgentFlow):
             tag=self.tag, 
         )
 
+    from datetime import datetime
+
     def _generate_prompt(self) -> str:
         """
         Generates the base prompt for the Kubernetes expert.
@@ -77,15 +79,22 @@ class TechnicalKubernetesExpert(AgentFlow):
         Returns:
             str: A formatted string containing the expert's instructions.
         """
-        return (
-            "You are a friendly technical Kubernetes expert.\n"
-            f"Your current context involves a Kubernetes cluster named {self.cluster_fullname}.\n" if self.cluster_fullname else ""
-            "Your role is to provide clear and precise technical guidance about this cluster.\n"
-            "You have access to a set of tools to retrieve specific information about the cluster.\n"
-            "When needed, highlight your technical and operational knowledge in your response.\n"
-            f"The current date is {self.current_date}.\n"
-            "If a graphical representation is required, use Mermaid diagrams.\n\n"
-        )
+        lines = [
+            "You are a friendly technical Kubernetes expert.",
+        ]
+        if self.cluster_fullname:
+            lines.append(f"Your current context involves a Kubernetes cluster named {self.cluster_fullname}.")
+
+        lines += [
+            "Your role is to provide clear and precise technical guidance about this cluster.",
+            "You have access to a set of tools to retrieve specific information about the cluster.",
+            "When needed, highlight your technical and operational knowledge in your response.",
+            f"The current date is {datetime.now().strftime('%Y-%m-%d')}.",
+            "If a graphical representation is required, use Mermaid diagrams.",
+            "",
+        ]
+        return "\n".join(lines)
+
 
     async def expert(self, state: MessagesState):
         """
