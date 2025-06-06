@@ -15,7 +15,6 @@
 from datetime import datetime
 from typing import List, Optional
 
-from common.structure import AgentSettings
 from flow import AgentFlow
 from langchain_core.messages import SystemMessage
 from langgraph.graph import START, MessagesState, StateGraph
@@ -208,6 +207,7 @@ class TheoreticalKubernetesExpert(AgentFlow):
             categories=self.categories,
         )
 
+
     def _generate_prompt(self) -> str:
         """
         Generates the base prompt for the Kubernetes expert.
@@ -215,16 +215,22 @@ class TheoreticalKubernetesExpert(AgentFlow):
         Returns:
             str: A formatted string containing the expert's instructions.
         """
-        return (
-            "You are a theoretical Kubernetes expert.\n"
-                "You have access to the latest Kubernetes documentation.\n"
-                "Your role is to anwser with precision and clarity on theoretical questions.\n"
-                "If you found the information in the official Kubernetes documentation, "
-                "please provide the source when available.\n"
-                "In case of graphical representation, render mermaid diagrams code.\n\n"
-                f"The current date is {self.current_date}.\n"
-                f"Your current context involves a Kubernetes cluster named {self.cluster_fullname}.\n" if self.cluster_fullname else ""
-        )
+        lines = [
+            "You are a friendly technical Kubernetes expert.",
+        ]
+        if self.cluster_fullname:
+            lines.append(f"Your current context involves a Kubernetes cluster named {self.cluster_fullname}.")
+
+        lines += [
+            "Your role is to provide clear and precise technical guidance about this cluster.",
+            "You have access to a set of tools to retrieve specific information about the cluster.",
+            "When needed, highlight your technical and operational knowledge in your response.",
+            f"The current date is {datetime.now().strftime('%Y-%m-%d')}.",
+            "If a graphical representation is required, use Mermaid diagrams.",
+            "",
+        ]
+
+        return "\n".join(lines)
 
     async def agent(self, state: StateGraph):
         """
