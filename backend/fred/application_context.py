@@ -49,6 +49,7 @@ from langchain_mcp_adapters.client import MultiServerMCPClient
 from flow import AgentFlow, Flow  # Base class for all agent flows
 import logging
 from fred.monitoring.smart_monitoring_wrapper import SmartMonitoringWrapper
+from fred.monitoring.metric_store import MetricStore
 
 logger = logging.getLogger(__name__)
 

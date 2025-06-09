@@ -51,7 +51,7 @@ from datetime import datetime, timezone
 import logging
 import inspect
 from typing import Any, List, Optional
-from pydantic import Field
+from pydantic import Field,PrivateAttr
 
 from langchain_core.language_models import BaseLanguageModel
 from langchain_core.runnables import Runnable
@@ -59,6 +59,8 @@ from langchain_core.messages import BaseMessage
 from langchain_core.outputs import LLMResult
 
 from fred.monitoring.logging_context import get_logging_context
+from fred.monitoring.metric_store import MetricStore
+
 
 
 logger = logging.getLogger("llm_monitoring")
@@ -78,13 +80,19 @@ class SmartMonitoringWrapper(BaseLanguageModel):
     """
     target: Any = Field(...)
     name: str = Field(default="unnamed")
+    _metric_store: MetricStore = PrivateAttr()
+
+    def __init__(self, target: Any, name: str = "unnamed", metric_store: Optional[MetricStore] = None):
+        super().__init__(target=target, name=name)
+        self._metric_store = metric_store or MetricStore()
 
     def _llm_type(self) -> str:
         return "smart_monitoring_wrapper"
 
-    def _log(self, input: Any, result: Any, latency: float) -> None:
+    def _log(self, input: Any, result: Any, latency: float) -> dict:
         """
         Extract and log metadata from the result object.
+        Returns a dict of structured metadata for optional in-memory storage.
         """
         ctx = get_logging_context()
         metadata = getattr(result, "response_metadata", {}) or {}
@@ -97,6 +105,13 @@ class SmartMonitoringWrapper(BaseLanguageModel):
             "model_type": self.name,
         })
         logger.info(metadata)
+        return metadata
+
+    def _store_metric(self, metadata: dict, persist: bool = False):
+        if self._metric_store:
+            self._metric_store.add_metric(metadata)
+            if persist:
+                self._metric_store.save_to_file("fred/monitoring/logs/monitoring_logs.jsonl")
 
     def invoke(self, input: Any, config: Optional[dict] = None, **kwargs: Any) -> Any:
         """
@@ -104,7 +119,8 @@ class SmartMonitoringWrapper(BaseLanguageModel):
         """
         start = time.perf_counter()
         result = self.target.invoke(input, **kwargs)
-        self._log(input, result, time.perf_counter() - start)
+        metadata = self._log(input, result, time.perf_counter() - start)
+        self._store_metric(metadata, persist=True)
         return result
 
     async def ainvoke(self, input: Any, config: Optional[dict] = None, **kwargs: Any) -> Any:
@@ -113,7 +129,8 @@ class SmartMonitoringWrapper(BaseLanguageModel):
         """
         start = time.perf_counter()
         result = await self.target.ainvoke(input, **kwargs)
-        self._log(input, result, time.perf_counter() - start)
+        metadata = self._log(input, result, time.perf_counter() - start)
+        self._store_metric(metadata, persist=True)
         return result
 
     def bind_tools(self, tools: list, *, tool_choice: Optional[str] = None, **kwargs) -> "SmartMonitoringWrapper":
@@ -129,7 +146,8 @@ class SmartMonitoringWrapper(BaseLanguageModel):
         """
         start = time.perf_counter()
         result = self.target.predict(text, stop=stop)
-        self._log(text, result, time.perf_counter() - start)
+        metadata = self._log(text, result, time.perf_counter() - start)
+        self._store_metric(metadata, persist=True)
         return result
 
     async def apredict(self, text: str, stop: Optional[List[str]] = None) -> str:
@@ -138,7 +156,8 @@ class SmartMonitoringWrapper(BaseLanguageModel):
         """
         start = time.perf_counter()
         result = await self.target.apredict(text, stop=stop)
-        self._log(text, result, time.perf_counter() - start)
+        metadata = self._log(text, result, time.perf_counter() - start)
+        self._store_metric(metadata, persist=True)
         return result
 
     def predict_messages(self, messages: List[BaseMessage], stop: Optional[List[str]] = None) -> BaseMessage:
@@ -147,7 +166,8 @@ class SmartMonitoringWrapper(BaseLanguageModel):
         """
         start = time.perf_counter()
         result = self.target.predict_messages(messages, stop=stop)
-        self._log(messages, result, time.perf_counter() - start)
+        metadata = self._log(messages, result, time.perf_counter() - start)
+        self._store_metric(metadata, persist=True)
         return result
 
     async def apredict_messages(self, messages: List[BaseMessage], stop: Optional[List[str]] = None) -> BaseMessage:
@@ -156,7 +176,8 @@ class SmartMonitoringWrapper(BaseLanguageModel):
         """
         start = time.perf_counter()
         result = await self.target.apredict_messages(messages, stop=stop)
-        self._log(messages, result, time.perf_counter() - start)
+        metadata = self._log(messages, result, time.perf_counter() - start)
+        self._store_metric(metadata, persist=True)
         return result
 
     def generate_prompt(self, prompts: List[Any], stop: Optional[List[str]] = None) -> LLMResult:
@@ -165,7 +186,8 @@ class SmartMonitoringWrapper(BaseLanguageModel):
         """
         start = time.perf_counter()
         result = self.target.generate_prompt(prompts, stop=stop)
-        self._log(prompts, result, time.perf_counter() - start)
+        metadata = self._log(prompts, result, time.perf_counter() - start)
+        self._store_metric(metadata, persist=True)
         return result
 
     async def agenerate_prompt(self, prompts: List[Any], stop: Optional[List[str]] = None) -> LLMResult:
@@ -174,5 +196,6 @@ class SmartMonitoringWrapper(BaseLanguageModel):
         """
         start = time.perf_counter()
         result = await self.target.agenerate_prompt(prompts, stop=stop)
-        self._log(prompts, result, time.perf_counter() - start)
+        metadata = self._log(prompts, result, time.perf_counter() - start)
+        self._store_metric(metadata, persist=True)
         return result
