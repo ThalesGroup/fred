@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Box, Container, Fade, Grid2, Typography, Chip, useTheme } from "@mui/material";
+import { Box, Container, Fade, Grid2, Typography, Chip, useTheme, Tooltip } from "@mui/material";
 import { ReactNode } from "react";
 
 interface TopBarProps {
@@ -51,13 +51,13 @@ export const TopBar = ({ title, description, backgroundUrl, children, fadeIn = t
           <Box sx={{ py: 3 }}>
             <Grid2 container spacing={3} alignItems="center">
               <Grid2 size={{ xs: 12, md: 7, lg: leftGrid }}>
-                <Box>
-                  <Chip label={title} color="primary" />
-                  <Typography variant="body1" color="textSecondary" sx={{ maxWidth: "300px", mt: 1 }}>
-                    {description}
-                  </Typography>
-                </Box>
-              </Grid2>
+  <Box>
+    <Tooltip title={description} placement="right" arrow>
+      <Chip label={title} color="primary" />
+    </Tooltip>
+  </Box>
+</Grid2>
+
               <Grid2 size={{ xs: 12, md: 5, lg: rightGrid }}>{children}</Grid2>
             </Grid2>
           </Box>
