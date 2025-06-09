@@ -29,8 +29,6 @@ from langgraph.constants import START
 from langgraph.graph import MessagesState, StateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
 
-from fred.monitoring.llm_monitoring import SmartMonitoringWrapper
-
 logger = logging.getLogger(__name__)
 
 class DocumentsExpert(AgentFlow):
@@ -64,7 +62,7 @@ class DocumentsExpert(AgentFlow):
         self.mcp_client = get_mcp_client_for_agent(self.name)
         self.toolkit = DocumentsToolkit(self.mcp_client)
         self.model_with_tools = self.model.bind_tools(self.toolkit.get_tools())
-        self.llm = SmartMonitoringWrapper(target=self.model_with_tools,name="Documents Expert")
+        self.llm =self.model_with_tools
         self.categories = self.agent_settings.categories if self.agent_settings.categories else ["documents"]
         if self.agent_settings.tag:
             self.tag = self.agent_settings.tag
