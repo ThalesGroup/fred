@@ -138,7 +138,7 @@ class ChatbotController:
                         payload = ChatMessagePayload(**msg)
                         streamed_messages.append(payload)
                         yield json.dumps(StreamEvent(type="stream", message=payload).model_dump()) + "\n"
-
+                    
                     session, final_messages = await self.session_manager.chat_ask_websocket(
                         callback=callback,
                         user_id=user.email,
@@ -183,6 +183,7 @@ class ChatbotController:
                             )
                         if not client_event.argument:
                             client_event.argument = ""  # Default cluster name
+
                         session, messages = await self.session_manager.chat_ask_websocket(
                             callback=websocket_callback,
                             user_id=client_event.user_id,

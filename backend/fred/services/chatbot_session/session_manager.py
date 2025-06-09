@@ -32,6 +32,8 @@ from langchain_core.messages import (BaseMessage, HumanMessage, AIMessage)
 from langgraph.graph.state import CompiledStateGraph
 from fred.application_context import get_app_context, get_configuration, get_context_service, get_default_model
 
+from fred.monitoring.logging_context import set_logging_context
+
 import asyncio
 
 logger = logging.getLogger(__name__)
@@ -157,6 +159,7 @@ class SessionManager:
             agent_name=agent_name,
             argument=argument
         )
+        set_logging_context(user_id=user_id, session_id=session.id)
         exchange_id = str(uuid4())
         base_rank = base_rank = len(history)
 

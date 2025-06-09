@@ -48,6 +48,7 @@ from langchain_core.language_models.base import BaseLanguageModel
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from flow import AgentFlow, Flow  # Base class for all agent flows
 import logging
+from fred.monitoring.smart_monitoring_wrapper import SmartMonitoringWrapper
 
 logger = logging.getLogger(__name__)
 
@@ -118,8 +119,9 @@ def get_model_for_agent(agent_name: str) -> BaseLanguageModel:
     Returns:
         BaseLanguageModel: The AI model configured for the agent.
     """
-    return get_app_context().get_model_for_agent(agent_name)
+    return SmartMonitoringWrapper(target=get_app_context().get_model_for_agent(agent_name),name=agent_name)
 
+    
 def get_default_model() -> BaseLanguageModel:
     """
     Retrieves the default AI model instance.
@@ -130,7 +132,7 @@ def get_default_model() -> BaseLanguageModel:
     Returns:
         BaseLanguageModel: The AI model configured for the agent.
     """
-    return get_app_context().get_default_model()
+    return SmartMonitoringWrapper(target=get_app_context().get_default_model(),name="DefaultModel")
 
 
 def get_model_for_leader() -> BaseLanguageModel:

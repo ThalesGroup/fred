@@ -62,7 +62,7 @@ class DocumentsExpert(AgentFlow):
         self.mcp_client = get_mcp_client_for_agent(self.name)
         self.toolkit = DocumentsToolkit(self.mcp_client)
         self.model_with_tools = self.model.bind_tools(self.toolkit.get_tools())
-        self.llm = self.model_with_tools
+        self.llm =self.model_with_tools
         self.categories = self.agent_settings.categories if self.agent_settings.categories else ["documents"]
         if self.agent_settings.tag:
             self.tag = self.agent_settings.tag
