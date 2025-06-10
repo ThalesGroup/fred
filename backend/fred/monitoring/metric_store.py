@@ -107,60 +107,60 @@ class MetricStore:
         with open(path, "r", encoding="utf-8") as f:
             self._metrics = [json.loads(line) for line in f if line.strip()]
 
-    def get_by_date_range(
-        self,
-        start_date: datetime,
-        end_date: datetime,
-        precision: str = "second",
-        as_dict: bool = False
-    ) -> Union[pd.DataFrame, List[Dict[str, Any]]]:
-        """
-        Filter and group metrics between two datetimes with a given time precision.
+    def get_all_by_date_range(self, start: datetime, end: datetime) -> List[Dict[str, Any]]:
+        return [
+            m for m in self._metrics
+            if start.timestamp() <= m.get("timestamp", 0) <= end.timestamp()
+        ]
 
-        Args:
-            start_date (datetime): Start of the date range (inclusive).
-            end_date (datetime): End of the date range (inclusive).
-            precision (str): Aggregation granularity. One of 'second', 'minute', 'hour', 'day'.
-            as_dict (bool): If True, return the result as a list of dictionaries instead of a DataFrame.
 
-        Returns:
-            Union[pd.DataFrame, List[Dict[str, Any]]]: Aggregated metrics.
+    def get_numerical_by_date_range(
+        self, start: datetime, end: datetime, precision: str = "minute"
+    ) -> List[Dict[str, Any]]:
+        import pandas as pd
+        import numpy as np
 
-        Raises:
-            ValueError: If the precision is invalid or timestamp format is incorrect.
-            KeyError: If 'timestamp' is missing from any metric.
-        """
-        freq_map = {
-            "second": "S",
-            "minute": "T",
-            "hour": "H",
-            "day": "D"
-        }
-
+        freq_map = {"second": "S", "minute": "T", "hour": "H", "day": "D"}
         if precision not in freq_map:
-            raise ValueError("Invalid precision. Use: 'second', 'minute', 'hour', 'day'.")
+            raise ValueError("Invalid precision. Choose from second, minute, hour, day.")
 
-        if not self._metrics:
-            return [] if as_dict else pd.DataFrame()
+        df = pd.json_normalize(self._metrics)
+        df["timestamp"] = pd.to_datetime(df["timestamp"], unit="s", errors="coerce")
+        df = df.dropna(subset=["timestamp"])
+        df = df[(df["timestamp"] >= start) & (df["timestamp"] <= end)]
 
-        df = pd.DataFrame(self._metrics)
+        if df.empty:
+            return []
 
-        if "timestamp" not in df.columns:
-            raise KeyError("Each metric must contain a 'timestamp' key.")
+        df.set_index("timestamp", inplace=True)
+        numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+        df_agg = df[numeric_cols].resample(freq_map[precision]).mean(numeric_only=True).reset_index()
+        df_agg = df_agg.replace({np.nan: None, np.inf: None, -np.inf: None})
+        return df_agg.to_dict(orient="records")
 
-        try:
-            df["timestamp"] = pd.to_datetime(df["timestamp"], unit="s", errors="raise")
-        except Exception as e:
-            raise ValueError(f"Invalid timestamp format: {e}")
 
-        mask = (df["timestamp"] >= start_date) & (df["timestamp"] <= end_date)
-        df_filtered = df.loc[mask]
+    def get_categorical_by_date_range(self, start: datetime, end: datetime) -> List[Dict[str, Any]]:
+        import pandas as pd
 
-        if df_filtered.empty:
-            return [] if as_dict else pd.DataFrame()
+        df = pd.json_normalize(self._metrics)
+        df["timestamp"] = pd.to_datetime(df["timestamp"], unit="s", errors="coerce")
+        df = df.dropna(subset=["timestamp"])
+        df = df[(df["timestamp"] >= start) & (df["timestamp"] <= end)]
 
-        df_filtered.set_index("timestamp", inplace=True)
-        df_grouped = df_filtered.resample(freq_map[precision]).mean(numeric_only=True)
-        df_grouped = df_grouped.reset_index()
+        if df.empty:
+            return []
 
-        return df_grouped.to_dict(orient="records") if as_dict else df_grouped
+        cat_cols = [
+            "user_id", "model_type", "model_name", "finish_reason", "session_id"
+        ]
+
+        result = []
+        for _, group in df.groupby(pd.Grouper(key="timestamp", freq="T")):
+            if group.empty:
+                continue
+            data = {"timestamp": group["timestamp"].iloc[0]}
+            for col in cat_cols:
+                if col in group.columns:
+                    data[col] = list(group[col].dropna().unique())
+            result.append(data)
+        return result
