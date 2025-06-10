@@ -39,6 +39,7 @@ from typing import List, Dict, Any, Optional, Union
 from pathlib import Path
 from datetime import datetime
 import pandas as pd
+import numpy as np
 
 
 class MetricStore:
@@ -48,6 +49,9 @@ class MetricStore:
 
     def __init__(self):
         self._metrics: List[Dict[str, Any]] = []
+
+    def __len__(self) -> int:
+        return len(self._metrics)
 
     def add_metric(self, metric: Dict[str, Any]) -> None:
         """
@@ -73,7 +77,7 @@ class MetricStore:
         """
         self._metrics.clear()
 
-    def save_to_file(self, filepath: str, append: bool = True) -> None:
+    def save_to_file(self, filepath: Union[str,Path], append: bool = True) -> None:
         """
         Persist metrics to a file in JSON Lines format.
 
@@ -112,22 +116,24 @@ class MetricStore:
             m for m in self._metrics
             if start.timestamp() <= m.get("timestamp", 0) <= end.timestamp()
         ]
+    
+    def _get_filtered_df(self, start: datetime, end: datetime) -> pd.DataFrame:
+        df = pd.json_normalize(self._metrics)
+        df["timestamp"] = pd.to_datetime(df["timestamp"], unit="s", errors="coerce")
+        df = df.dropna(subset=["timestamp"])
+        return df[(df["timestamp"] >= start) & (df["timestamp"] <= end)]
 
 
     def get_numerical_by_date_range(
         self, start: datetime, end: datetime, precision: str = "minute"
     ) -> List[Dict[str, Any]]:
-        import pandas as pd
-        import numpy as np
 
         freq_map = {"second": "S", "minute": "T", "hour": "H", "day": "D"}
         if precision not in freq_map:
             raise ValueError("Invalid precision. Choose from second, minute, hour, day.")
 
         df = pd.json_normalize(self._metrics)
-        df["timestamp"] = pd.to_datetime(df["timestamp"], unit="s", errors="coerce")
-        df = df.dropna(subset=["timestamp"])
-        df = df[(df["timestamp"] >= start) & (df["timestamp"] <= end)]
+        df = self._get_filtered_df(start, end)
 
         if df.empty:
             return []
@@ -143,9 +149,7 @@ class MetricStore:
         import pandas as pd
 
         df = pd.json_normalize(self._metrics)
-        df["timestamp"] = pd.to_datetime(df["timestamp"], unit="s", errors="coerce")
-        df = df.dropna(subset=["timestamp"])
-        df = df[(df["timestamp"] >= start) & (df["timestamp"] <= end)]
+        df = self._get_filtered_df(start, end)
 
         if df.empty:
             return []
