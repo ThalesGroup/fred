@@ -32,7 +32,7 @@ All endpoints accept `start` and `end` parameters as **ISO 8601** strings (e.g.,
   - `second`, `minute` (default), `hour`, `day`
 
 ```http
-GET /metrics/numerical?start=2025-06-09T00:00:00&end=2025-06-09T23:59:00&precision=minute
+GET fred/metrics/numerical?start=2025-06-09T00:00:00&end=2025-06-09T23:59:00&precision=minute
 ```
 
 ---
@@ -46,24 +46,10 @@ GET /metrics/numerical?start=2025-06-09T00:00:00&end=2025-06-09T23:59:00&precisi
 
 ---
 
-## ▶️ Run Locally
-
-From the root of your project (where `fred/` is located), run:
-
-```bash
-uvicorn monitoring_api:app --reload
-uvicorn fred.monitoring.monitoring_api:app --reload --port XXXX # if your port 8000 is already in use tips : 8002 is free
-```
-
-This starts the monitoring API on:
-```
-http://localhost:8000
-```
-
 ### 🔎 Docs available at:
 
-- Swagger UI: [http://localhost:8000/docs](http://localhost:8000/docs)
-- ReDoc: [http://localhost:8000/redoc](http://localhost:8000/redoc)
+- Swagger UI: [http://localhost:8000/fred/docs](http://localhost:8000/fred/docs)
+- ReDoc: [http://localhost:8000/fred/redoc](http://localhost:8000/fred/redoc)
 
 ---
 
@@ -71,7 +57,7 @@ http://localhost:8000
 
 ```bash
 # Input :
-curl "http://localhost:8002/metrics/all?start=2025-06-09T00:00:00&end=2025-06-09T23:00:00"
+curl "http://localhost:8000/fred/metrics/all?start=2025-06-09T00:00:00&end=2025-06-09T23:00:00"
 # Output:
 [
   {
@@ -159,7 +145,7 @@ curl "http://localhost:8002/metrics/all?start=2025-06-09T00:00:00&end=2025-06-09
 ```
 ```bash
 # Input :
-curl "http://localhost:8002/metrics/numerical?start=2025-06-09T00:00:00&end=2025-06-09T23:00:00&precision=hour"
+curl "http://localhost:8000/fred/metrics/numerical?start=2025-06-09T00:00:00&end=2025-06-09T23:00:00&precision=hour"
 # Output:
 [
   {
@@ -179,7 +165,7 @@ curl "http://localhost:8002/metrics/numerical?start=2025-06-09T00:00:00&end=2025
 ```
 ```bash
 # Input :
-curl "http://localhost:8002/metrics/categorical?start=2025-06-09T00:00:00&end=2025-06-09T23:00:00"
+curl "http://localhost:8000/fred/metrics/categorical?start=2025-06-09T00:00:00&end=2025-06-09T23:00:00"
 # Output:
 [
   {
@@ -262,9 +248,11 @@ fred/
 │   ├── metric_store.py          # MetricStore logic (in-memory + file)
 │   ├── logging_context.py       # Context-local user/session management
 │   ├── SmartMonitoringWrapper.py    # Wrapper for LangChain models
-│   ├── monitoring_api.py            # FastAPI server exposing metrics
 │   └── logs/
 │       └── monitoring_logs.jsonl  # Persistent log file (JSONL)
+├── services/
+│   ├── monitoring/
+│       ├── monitoring_controller.py            # FastAPI service exposing metrics initialize in fred/main.py
 ```
 
 ---
