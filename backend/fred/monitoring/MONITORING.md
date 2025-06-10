@@ -1,7 +1,7 @@
 
-# 📊 LLM Monitoring Interface (SmartMonitoringWrapper + API)
+# 📊 LLM Monitoring Interface (MonitoringWrapper + API)
 
-This module provides a **monitoring interface for LLM interactions**, exposing a FastAPI server to query stored metrics collected by the `SmartMonitoringWrapper`. The system is designed to support observability, debugging, and performance analytics in LLM-based applications using LangChain.
+This module provides a **monitoring interface for LLM interactions**, exposing a FastAPI server to query stored metrics collected by the `MonitoringWrapper`. The system is designed to support observability, debugging, and performance analytics in LLM-based applications using LangChain.
 
 ---
 
@@ -193,7 +193,7 @@ curl "http://localhost:8000/fred/metrics/categorical?start=2025-06-09T00:00:00&e
 
 ## 🧠 Components Overview
 
-### 🔹 `SmartMonitoringWrapper`
+### 🔹 `MonitoringWrapper`
 
 This is a universal wrapper for any `BaseLanguageModel` (LangChain-compatible) that automatically logs:
 
@@ -236,7 +236,7 @@ ctx = get_logging_context()
 print(ctx["user_id"])  # alice@example.com
 ```
 
-This is automatically used by the `SmartMonitoringWrapper` to enrich every log.
+This is automatically used by the `MonitoringWrapper` to enrich every log.
 
 ---
 
@@ -247,7 +247,7 @@ fred/
 ├── monitoring/
 │   ├── metric_store.py          # MetricStore logic (in-memory + file)
 │   ├── logging_context.py       # Context-local user/session management
-│   ├── SmartMonitoringWrapper.py    # Wrapper for LangChain models
+│   ├── MonitoringWrapper.py    # Wrapper for LangChain models
 │   └── logs/
 │       └── monitoring_logs.jsonl  # Persistent log file (JSONL)
 ├── services/

@@ -13,11 +13,11 @@
 # limitations under the License.
 
 """
-smart_monitoring_wrapper.py
+monitoring_wrapper.py
 
 A universal monitoring wrapper for LangChain LLMs.
 
-This module defines the `SmartMonitoringWrapper` class, a drop-in wrapper for any
+This module defines the `MonitoringWrapper` class, a drop-in wrapper for any
 LangChain-compatible `BaseLanguageModel` instance.
 
 Its goal is to transparently enhance LLMs with:
@@ -35,7 +35,7 @@ The wrapper supports:
 - Logging to any Python-compatible backend (e.g., console, OpenSearch, etc.)
 
 Usage example:
-    monitored_llm = SmartMonitoringWrapper(target=ChatOpenAI(), name="gpt-4")
+    monitored_llm = MonitoringWrapper(target=ChatOpenAI(), name="gpt-4")
     result = await monitored_llm.ainvoke("Tell me a joke.")
 
 This wrapper is especially useful for:
@@ -66,7 +66,7 @@ from fred.monitoring.metric_store import MetricStore
 logger = logging.getLogger("llm_monitoring")
 logger.setLevel(logging.INFO)
 
-class SmartMonitoringWrapper(BaseLanguageModel):
+class MonitoringWrapper(BaseLanguageModel):
     """
     A fully compatible wrapper around any BaseLanguageModel that adds intelligent logging and monitoring.
     
@@ -87,7 +87,7 @@ class SmartMonitoringWrapper(BaseLanguageModel):
         self._metric_store = metric_store or MetricStore()
 
     def _llm_type(self) -> str:
-        return "smart_monitoring_wrapper"
+        return "monitoring_wrapper"
 
     def _log(self, input: Any, result: Any, latency: float) -> dict:
         """
@@ -133,12 +133,12 @@ class SmartMonitoringWrapper(BaseLanguageModel):
         self._store_metric(metadata, persist=True)
         return result
 
-    def bind_tools(self, tools: list, *, tool_choice: Optional[str] = None, **kwargs) -> "SmartMonitoringWrapper":
+    def bind_tools(self, tools: list, *, tool_choice: Optional[str] = None, **kwargs) -> "MonitoringWrapper":
         """
         Binds tools to the underlying model and returns a new wrapped instance.
         """
         bound = self.target.bind_tools(tools, tool_choice=tool_choice, **kwargs)
-        return SmartMonitoringWrapper(target=bound, name=self.name)
+        return MonitoringWrapper(target=bound, name=self.name)
 
     def predict(self, text: str, stop: Optional[List[str]] = None) -> str:
         """
