@@ -26,6 +26,12 @@ import {
   ListItem,
   ClickAwayListener,
   Fade,
+  Chip,
+  FormControl,
+  InputLabel,
+  Link,
+  OutlinedInput,
+  Select,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
@@ -36,6 +42,17 @@ import { getAgentBadge } from "../../utils/avatar.tsx";
 import React from "react";
 import { StyledMenu } from "../../utils/styledMenu.tsx";
 import { SessionSchema } from "../../slices/chatApiStructures.ts";
+import BookmarkIcon from '@mui/icons-material/Bookmark';
+import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
+import { Session, useNavigate } from "react-router-dom";
+
+// Type factice pour les contextes (à remplacer par une interface réelle plus tard)
+interface ContextLight {
+  id: string;
+  title: string;
+  description: string;
+}
+
 
 export const Settings = ({
   sessions,
@@ -77,12 +94,27 @@ export const Settings = ({
   const [isEditing, setIsEditing] = useState(false);
   const [showElements, setShowElements] = useState(false);
 
+  // État pour les contextes (factice pour le moment)
+  const [contexts, setContexts] = useState<ContextLight[]>([
+    { id: "ctx-1", title: "Thales Air Defence", description: "Documents et informations sur Thales Air Defence et ses produits" },
+    { id: "ctx-2", title: "MBDA", description: "Informations sur le partenaire MBDA et projets communs" },
+    { id: "ctx-3", title: "Projet SAMP/T", description: "Réponse à l'appel d'offre SAMP/T pour défense sol-air" },
+    { id: "ctx-4", title: "Naval Group", description: "Informations sur Naval Group et partenariats navals" },
+    { id: "ctx-5", title: "Safran Electronics", description: "Contexte client Safran Electronics" }
+  ]);
+
+  // État pour le contexte sélectionné
+  const [selectedContext, setSelectedContext] = useState<ContextLight | null>(null);
+
+
   // Gestion du menu contextuel
   const openMenu = (event: React.MouseEvent<HTMLElement>, session: SessionSchema) => {
     event.stopPropagation();
     setMenuAnchorEl(event.currentTarget);
     setContextSession(session);
   };
+
+  const navigate = useNavigate();
 
   const closeMenu = () => {
     setMenuAnchorEl(null);
@@ -147,6 +179,143 @@ export const Settings = ({
         boxShadow: "None",
       }}
     >
+      {/* chat profile section */}
+      <Fade in={showElements} timeout={800}>
+        <Box
+          sx={{
+            py: 2.5,
+            px: 2,
+            borderBottom: `1px solid ${theme.palette.divider}`,
+          }}
+        >
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+              <Typography
+                variant="subtitle1"
+                sx={{
+                  fontWeight: 500,
+                }}
+              >
+                Profile
+              </Typography>
+              <Tooltip
+                title={
+                  <React.Fragment>
+                    <Typography variant="body2" sx={{ mb: 1 }}>
+                      Custom profiles allow you to personalize and contextualize your interactions with the assistant.
+                    </Typography>
+                    <Typography variant="body2" sx={{ mb: 1 }}>
+                      Unlike one-time file uploads, a profile is reusable across multiple conversations and can contain:
+                    </Typography>
+                    <ul style={{ margin: '0', paddingLeft: '16px' }}>
+                      <li>Information about a client or project</li>
+                      <li>Reference documents (PDF, Word, Excel...)</li>
+                      <li>Technical specifications</li>
+                    </ul>
+                  </React.Fragment>
+                }
+                arrow
+                placement="bottom-start"
+                componentsProps={{
+                  tooltip: {
+                    sx: {
+                      maxWidth: 300,
+                      bgcolor: theme.palette.background.paper,
+                      color: theme.palette.text.primary,
+                      p: 2,
+                      borderRadius: 1,
+                      boxShadow: theme.shadows[3],
+                      '& .MuiTooltip-arrow': {
+                        color: theme.palette.background.paper,
+                      }
+                    }
+                  }
+                }}
+              >
+                <HelpOutlineIcon
+                  sx={{
+                    ml: 1,
+                    fontSize: '0.9rem',
+                    color: 'text.secondary',
+                    cursor: 'help'
+                  }}
+                />
+              </Tooltip>
+            </Box>
+
+            <Tooltip title="Manage profiles">
+              <IconButton
+                onClick={() => navigate('/chatProfiles')}
+                size="small"
+                sx={{ mr: -1 }}
+              >
+                <AddIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          </Box>
+
+          <FormControl fullWidth size="small">
+            <Select
+              value={selectedContext?.id || ''}
+              onChange={(e) => {
+                const ctx = contexts.find(c => c.id === e.target.value);
+                setSelectedContext(ctx || null);
+              }}
+              displayEmpty
+              sx={{
+                mb: 1,
+                '.MuiSelect-select': {
+                  display: 'flex',
+                  alignItems: 'center'
+                }
+              }}
+              renderValue={(selected) => {
+                if (!selected) {
+                  return (
+                    <Typography variant="body2" color="text.secondary">
+                      Select a profile...
+                    </Typography>
+                  );
+                }
+                const ctx = contexts.find(c => c.id === selected);
+                return (
+                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    <BookmarkIcon sx={{ color: theme.palette.warning.main, mr: 1, fontSize: '1.1rem' }} />
+                    <Typography noWrap variant="body2">
+                      {ctx?.title}
+                    </Typography>
+                  </Box>
+                );
+              }}
+            >
+              <MenuItem value="">
+                <em>None</em>
+              </MenuItem>
+
+              {contexts.map((context) => (
+                <MenuItem key={context.id} value={context.id}>
+                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    <BookmarkIcon sx={{ color: theme.palette.warning.main, mr: 1, fontSize: '1.1rem' }} />
+                    <Box>
+                      <Typography variant="body2">{context.title}</Typography>
+                      <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block', maxWidth: '190px' }}>
+                        {context.description}
+                      </Typography>
+                    </Box>
+                  </Box>
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+
+          {selectedContext && (
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+              {selectedContext.description}
+            </Typography>
+          )}
+        </Box>
+      </Fade>
+
       {/* En-tête: titre et sélecteur d'agent */}
       <Fade in={showElements} timeout={900}>
         <Box

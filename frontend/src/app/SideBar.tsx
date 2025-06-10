@@ -39,6 +39,7 @@ import LightModeIcon from "@mui/icons-material/LightMode";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
+import ThreePIcon from '@mui/icons-material/ThreeP';
 import { ImageComponent } from "../utils/image.tsx";
 import { useContext } from "react";
 import { ApplicationContext } from "./ApplicationContextProvider.tsx";
@@ -135,13 +136,14 @@ export default function SideBar({ darkMode, onThemeChange }) {
       canBeDisabled: true,
       tooltip: 'Check the optimization gains on the selected cluster'
     },*/
+
     {
-      key: "agent",
-      label: "Agent Hub",
-      icon: <GroupIcon />,
-      url: `/agentHub`,
+      key: "chatProfiles",
+      label: "Chat Profiles",
+      icon: <ThreePIcon />,
+      url: `/chatProfiles`,
       canBeDisabled: false,
-      tooltip: "View agents",
+      tooltip: "View profiles",
     },
     {
       key: "documentLibrary",
@@ -152,12 +154,20 @@ export default function SideBar({ darkMode, onThemeChange }) {
       tooltip: "Consult document library",
     },
     {
-      key: "profile",
-      label: "Profile",
-      icon: <PersonIcon />,
-      url: `/profile?cluster=${currentClusterFullname}`,
+      key: "agent",
+      label: "Agent Hub",
+      icon: <GroupIcon />,
+      url: `/agentHub`,
       canBeDisabled: false,
-      tooltip: "View your profile",
+      tooltip: "View agents",
+    },
+    {
+      key: "account",
+      label: "Account",
+      icon: <PersonIcon />,
+      url: `/account?cluster=${currentClusterFullname}`,
+      canBeDisabled: false,
+      tooltip: "View your account",
     },
   ];
 

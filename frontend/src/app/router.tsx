@@ -37,6 +37,7 @@ import { Facts } from "../frugalit/pages/Facts";
 import { Audit } from "../pages/Audit";
 import { FrugalIt } from "../pages/FrugalIt";
 import Inspect from "../frugalit/pages/Inspect";
+import { ChatProfiles } from "../pages/ChatProfiles";
 
 const RootLayout = () => (
   <ProtectedRoute permission="viewer">
@@ -128,7 +129,7 @@ export const routes: RouteObject[] = [
         element: <Chat />,
       },
       {
-        path: "profile",
+        path: "account",
         element: <Profile />,
       },
       {
@@ -138,6 +139,10 @@ export const routes: RouteObject[] = [
       {
         path: "agentHub",
         element: <AgentHub />,
+      },
+      {
+        path: "chatProfiles",
+        element: <ChatProfiles />,
       },
     ].filter(Boolean),
   },
