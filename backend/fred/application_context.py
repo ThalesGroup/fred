@@ -31,22 +31,22 @@ from threading import Lock
 from typing import Dict, List, Type, Any
 from pydantic import BaseModel
 from fred.config.context_store_local_settings import ContextStoreLocalSettings
-from config.context_store_minio_settings import ContextStoreMinioSettings
-from config.feedback_store_local_settings import FeedbackStoreLocalSettings
-from config.feedback_store_opensearch_settings import FeedbackStoreOpenSearchSettings
-from main_utils import validate_settings_or_exit
-from feedback.feedback_service import FeedbackService
-from feedback.store.local_feedback_store import LocalFeedbackStore
-from feedback.store.opensearch_feedback_store import OpenSearchFeedbackStore
+from fred.config.context_store_minio_settings import ContextStoreMinioSettings
+from fred.config.feedback_store_local_settings import FeedbackStoreLocalSettings
+from fred.config.feedback_store_opensearch_settings import FeedbackStoreOpenSearchSettings
+from fred.main_utils import validate_settings_or_exit
+from fred.feedback.feedback_service import FeedbackService
+from fred.feedback.store.local_feedback_store import LocalFeedbackStore
+from fred.feedback.store.opensearch_feedback_store import OpenSearchFeedbackStore
 
 from fred.context.store.local_context_store import LocalContextStore
 from fred.context.store.minio_context_store import MinIOContextStore
-from model_factory import get_structured_chain
+from fred.model_factory import get_structured_chain
 from fred.common.structure import AgentSettings, Configuration, ServicesSettings
 from fred.model_factory import get_model
 from langchain_core.language_models.base import BaseLanguageModel
 from langchain_mcp_adapters.client import MultiServerMCPClient
-from flow import AgentFlow, Flow  # Base class for all agent flows
+from fred.flow import AgentFlow, Flow  # Base class for all agent flows
 import logging
 from fred.monitoring.smart_monitoring_wrapper import SmartMonitoringWrapper
 

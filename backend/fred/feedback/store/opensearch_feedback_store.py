@@ -1,5 +1,5 @@
 from opensearchpy import OpenSearch, exceptions
-from feedback.store.base_feedback_store import BaseFeedbackStore
+from fred.feedback.store.base_feedback_store import BaseFeedbackStore
 import logging
 import json
 

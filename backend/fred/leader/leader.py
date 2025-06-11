@@ -18,7 +18,7 @@ from typing import Literal
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from langgraph.graph.state import END, START, CompiledStateGraph, StateGraph
 
-from flow import AgentFlow, Flow
+from fred.flow import AgentFlow, Flow
 from fred.application_context import get_configuration, get_model_for_leader, get_app_context
 from fred.model_factory import get_model
 from fred.leader.structures.decision import ExecuteDecision, PlanDecision

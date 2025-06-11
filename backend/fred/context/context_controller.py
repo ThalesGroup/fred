@@ -15,7 +15,7 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional
-from context.context_service import ContextService
+from fred.context.context_service import ContextService
 
 class ContextEntry(BaseModel):
     title: Optional[str] = None

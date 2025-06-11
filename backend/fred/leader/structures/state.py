@@ -15,9 +15,9 @@
 import operator
 from typing import Annotated, List, Optional, Tuple
 
-from flow import AgentFlow
-from leader.structures.decision import ExecuteDecision, PlanDecision
-from leader.structures.plan import Plan
+from fred.flow import AgentFlow
+from fred.leader.structures.decision import ExecuteDecision, PlanDecision
+from fred.leader.structures.plan import Plan
 from langchain_core.messages import AnyMessage
 from langgraph.graph import MessagesState
 
