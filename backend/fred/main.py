@@ -37,7 +37,7 @@ from services.theater_analysis.theater_analysis_controller import TheaterAnalysi
 from services.mission.mission_controller import MissionController
 from services.theorical_radio.theorical_radio_controller import TheoricalRadioController
 from services.sensor.sensor_controller import SensorController, SensorConfigurationController
-from services.monitoring.monitoring_controller import MonitoringController
+from monitoring.metric_store_controller import MetricStoreController
 
 logger = logging.getLogger(__name__)
 
@@ -96,7 +96,7 @@ def build_app(configuration: Configuration, base_url: str) -> FastAPI:
     ChatbotController(router, ai_service)
     ContextController(router)
     FeedbackController(router)
-    MonitoringController(router)
+    MetricStoreController(router)
 
     app.include_router(router)
     return app

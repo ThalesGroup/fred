@@ -20,113 +20,33 @@ of structured metric logs.
 """
 
 import json
-from typing import List, Dict, Any, Optional, Union
-from pathlib import Path
-from datetime import datetime
-import pandas as pd
-import numpy as np
+import logging
 
+logger = logging.getLogger("MetricStore")
+logger.setLevel(logging.INFO)
 
 class MetricStore:
-    """
-    In-memory metric store with JSONL export/import and filtering by date with time precision.
-    """
+    _instance = None
 
-    def __init__(self):
-        self._metrics: List[Dict[str, Any]] = []
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+            cls._instance._data = []
+            logger.info("Created new MetricStore instance.")
+        return cls._instance
 
-    def __len__(self) -> int:
-        return len(self._metrics)
+    def add_data(self, json_data: dict):
+        if isinstance(json_data, dict):
+            self._data.append(json_data)
+            logger.info(f"Added data: {json_data}")
+        else:
+            logger.warning(f"Tried to add non-dict data: {json_data}")
 
-    def add_metric(self, metric: Dict[str, Any]) -> None:
-        self._metrics.append(metric)
-
-    def get_all(self) -> List[Dict[str, Any]]:
-        return self._metrics
-
-    def clear(self) -> None:
-        self._metrics.clear()
-
-    def save_to_file(self, filepath: Union[str, Path], append: bool = True) -> None:
-        path = Path(filepath)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        mode = "a" if append else "w"
-
-        with open(path, mode, encoding="utf-8") as f:
-            for metric in self._metrics:
-                json.dump(metric, f)
-                f.write("\n")
-
-    def load_from_file(self, filepath: str) -> None:
-        path = Path(filepath)
-        if not path.exists():
-            raise FileNotFoundError(f"{filepath} not found.")
-
-        with open(path, "r", encoding="utf-8") as f:
-            self._metrics = [json.loads(line) for line in f if line.strip()]
-
-    def get_all_by_date_range(self, start: datetime, end: datetime) -> List[Dict[str, Any]]:
-        return [
-            m for m in self._metrics
-            if start.timestamp() <= m.get("timestamp", 0) <= end.timestamp()
-        ]
-
-    def _get_filtered_df(self, start: datetime, end: datetime) -> pd.DataFrame:
-        if not self._metrics:
-            return pd.DataFrame()
-
-        df = pd.json_normalize(self._metrics)
-
-        if "timestamp" not in df.columns:
-            return pd.DataFrame()
-
-        df["timestamp"] = pd.to_datetime(df["timestamp"], unit="s", errors="coerce")
-        df = df.dropna(subset=["timestamp"])
-        return df[(df["timestamp"] >= start) & (df["timestamp"] <= end)]
-
-    def get_numerical_by_date_range(
-        self, start: datetime, end: datetime, precision: str = "minute"
-    ) -> List[Dict[str, Any]]:
-        if not self._metrics:
-            return []
-
-        freq_map = {"second": "S", "minute": "T", "hour": "H", "day": "D"}
-        if precision not in freq_map:
-            raise ValueError("Invalid precision. Choose from second, minute, hour, day.")
-
-        df = self._get_filtered_df(start, end)
-        if df.empty:
-            return []
-
-        df.set_index("timestamp", inplace=True)
-        numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
-        if not numeric_cols:
-            return []
-
-        df_agg = df[numeric_cols].resample(freq_map[precision]).mean(numeric_only=True).reset_index()
-        df_agg = df_agg.replace({np.nan: None, np.inf: None, -np.inf: None})
-        return df_agg.to_dict(orient="records")
-
-    def get_categorical_by_date_range(self, start: datetime, end: datetime) -> List[Dict[str, Any]]:
-        if not self._metrics:
-            return []
-
-        df = self._get_filtered_df(start, end)
-        if df.empty:
-            return []
-
-        cat_cols = [
-            "user_id", "model_type", "model_name", "finish_reason", "session_id"
-        ]
-
-        result = []
-        for _, group in df.groupby(pd.Grouper(key="timestamp", freq="T")):
-            if group.empty:
-                continue
-            data = {"timestamp": group["timestamp"].iloc[0]}
-            for col in cat_cols:
-                if col in group.columns:
-                    data[col] = list(group[col].dropna().unique())
-            result.append(data)
-
-        return result
+    def all(self):
+        count = len(self._data)
+        logger.info(f"Accessed all stored metrics. Total count: {count}")
+        return self._data
+    
+# Fonction pour accéder à l'instance
+def get_metric_store():
+    return MetricStore()
