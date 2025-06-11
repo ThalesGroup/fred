@@ -17,6 +17,7 @@ import { apiSlice } from "../frugalit/slices/api.tsx";
 import { chatApiSlice } from "../slices/chatApi"; // ✅ Import your chatApi slice
 import { documentApiSlice } from "../slices/documentApi.tsx";
 import { agentContextApiSlice } from "../slices/agentContextApi.tsx";
+import { monitoringApiMiddleware, monitoringApiReducer } from "../slices/monitoringApi.tsx";
 
 // Optional: Logging middleware for debugging
 const loggingMiddleware = () => (next) => (action) => {
@@ -46,6 +47,7 @@ const combinedReducer = combineReducers({
   documentApi: documentApiSlice.reducer,
   chatApi: chatApiSlice.reducer,
   agentContextApi: agentContextApiSlice.reducer,
+  monitoringApi: monitoringApiReducer
 });
 
 // Configure store
@@ -56,6 +58,7 @@ export const store = configureStore({
       apiSlice.middleware,
       documentApiSlice.middleware,
       chatApiSlice.middleware,
+      monitoringApiMiddleware,
       agentContextApiSlice.middleware,
       loggingMiddleware,
     ),
