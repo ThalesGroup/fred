@@ -37,6 +37,7 @@ export const CustomProfile: React.FC<CustomProfileProps> = ({
 }) => {
     const theme = useTheme();
 
+    console.log(chatProfile)
     return (
         <Fade in={true} timeout={1600 + index * 200}>
             <Card

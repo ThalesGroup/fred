@@ -45,12 +45,15 @@ import { SessionSchema } from "../../slices/chatApiStructures.ts";
 import BookmarkIcon from '@mui/icons-material/Bookmark';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import { Session, useNavigate } from "react-router-dom";
+import { useGetChatProfilesMutation } from "../../slices/chatProfileApi.tsx";
+import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
 
-// Type factice pour les contextes (à remplacer par une interface réelle plus tard)
-interface ContextLight {
+
+interface ChatProfileLight {
   id: string;
   title: string;
   description: string;
+  documents?: { document_name: string }[];
 }
 
 
@@ -88,30 +91,53 @@ export const Settings = ({
 
   // États du composant
   const [menuAnchorEl, setMenuAnchorEl] = useState<HTMLElement | null>(null);
-  const [contextSession, setContextSession] = useState<SessionSchema | null>(null);
+  const [chatProfileSession, setChatProfileSession] = useState<SessionSchema | null>(null);
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
   const [isEditing, setIsEditing] = useState(false);
   const [showElements, setShowElements] = useState(false);
+  const [getChatProfiles] = useGetChatProfilesMutation();
+  const [isLoading, setIsLoading] = useState(false);
 
-  // État pour les contextes (factice pour le moment)
-  const [contexts, setContexts] = useState<ContextLight[]>([
-    { id: "ctx-1", title: "Thales Air Defence", description: "Documents et informations sur Thales Air Defence et ses produits" },
-    { id: "ctx-2", title: "MBDA", description: "Informations sur le partenaire MBDA et projets communs" },
-    { id: "ctx-3", title: "Projet SAMP/T", description: "Réponse à l'appel d'offre SAMP/T pour défense sol-air" },
-    { id: "ctx-4", title: "Naval Group", description: "Informations sur Naval Group et partenariats navals" },
-    { id: "ctx-5", title: "Safran Electronics", description: "Contexte client Safran Electronics" }
-  ]);
+  // Snackbar states
+  const [snackbarOpen, setSnackbarOpen] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState("");
+  const [snackbarSeverity, setSnackbarSeverity] = useState<"success" | "error" | "info" | "warning">("success");
 
-  // État pour le contexte sélectionné
-  const [selectedContext, setSelectedContext] = useState<ContextLight | null>(null);
+  const [chatProfiles, setChatProfiles] = useState<ChatProfileLight[]>([])
 
 
-  // Gestion du menu contextuel
+
+  // Fetch chatProfiles from API with mock data
+  const fetchChatProfiles = async () => {
+    setIsLoading(true);
+    try {
+      const response = await getChatProfiles().unwrap();
+      setChatProfiles(response);
+    } catch (error) {
+      console.error("Error fetching chatProfiles:", error);
+      showSnackbar("Erreur lors du chargement des chatProfiles", "error");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // État pour le chatProfilee sélectionné
+  const [selectedChatProfile, setSelectedChatProfile] = useState<ChatProfileLight | null>(null);
+
+
+  // Snackbar handlers
+  const showSnackbar = (message: string, severity: "success" | "error" | "info" | "warning" = "success") => {
+    setSnackbarMessage(message);
+    setSnackbarSeverity(severity);
+    setSnackbarOpen(true);
+  };
+
+  // Gestion du menu chatProfileuel
   const openMenu = (event: React.MouseEvent<HTMLElement>, session: SessionSchema) => {
     event.stopPropagation();
     setMenuAnchorEl(event.currentTarget);
-    setContextSession(session);
+    setChatProfileSession(session);
   };
 
   const navigate = useNavigate();
@@ -156,9 +182,9 @@ export const Settings = ({
     }
   };
 
-  // Animation au chargement
   useEffect(() => {
     setShowElements(true);
+    fetchChatProfiles();
   }, []);
 
   return (
@@ -202,7 +228,7 @@ export const Settings = ({
                 title={
                   <React.Fragment>
                     <Typography variant="body2" sx={{ mb: 1 }}>
-                      Custom profiles allow you to personalize and contextualize your interactions with the assistant.
+                      Custom profiles allow you to personalize and chatProfileualize your interactions with the assistant.
                     </Typography>
                     <Typography variant="body2" sx={{ mb: 1 }}>
                       Unlike one-time file uploads, a profile is reusable across multiple conversations and can contain:
@@ -256,19 +282,13 @@ export const Settings = ({
 
           <FormControl fullWidth size="small">
             <Select
-              value={selectedContext?.id || ''}
+              value={selectedChatProfile?.id || ''}
               onChange={(e) => {
-                const ctx = contexts.find(c => c.id === e.target.value);
-                setSelectedContext(ctx || null);
+                const ctx = chatProfiles.find(c => c.id === e.target.value);
+                setSelectedChatProfile(ctx || null);
               }}
               displayEmpty
-              sx={{
-                mb: 1,
-                '.MuiSelect-select': {
-                  display: 'flex',
-                  alignItems: 'center'
-                }
-              }}
+              sx={{ mb: 1 }}
               renderValue={(selected) => {
                 if (!selected) {
                   return (
@@ -277,13 +297,11 @@ export const Settings = ({
                     </Typography>
                   );
                 }
-                const ctx = contexts.find(c => c.id === selected);
+                const ctx = chatProfiles.find(c => c.id === selected);
                 return (
                   <Box sx={{ display: 'flex', alignItems: 'center' }}>
                     <BookmarkIcon sx={{ color: theme.palette.warning.main, mr: 1, fontSize: '1.1rem' }} />
-                    <Typography noWrap variant="body2">
-                      {ctx?.title}
-                    </Typography>
+                    <Typography noWrap variant="body2">{ctx?.title}</Typography>
                   </Box>
                 );
               }}
@@ -291,16 +309,25 @@ export const Settings = ({
               <MenuItem value="">
                 <em>None</em>
               </MenuItem>
-
-              {contexts.map((context) => (
-                <MenuItem key={context.id} value={context.id}>
-                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                    <BookmarkIcon sx={{ color: theme.palette.warning.main, mr: 1, fontSize: '1.1rem' }} />
-                    <Box>
-                      <Typography variant="body2">{context.title}</Typography>
+              {chatProfiles.map((chatProfile) => (
+                <MenuItem key={chatProfile.id} value={chatProfile.id}>
+                  <Box sx={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                      <BookmarkIcon sx={{ color: theme.palette.warning.main, mr: 1, fontSize: '1.1rem' }} />
+                      <Typography variant="body2">{chatProfile.title}</Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block', maxWidth: '190px' }}>
-                        {context.description}
+                        {chatProfile.description}
                       </Typography>
+                      {chatProfile.documents && (
+
+                        <Box sx={{ display: 'flex', alignItems: 'center', ml: 1 }}>
+                          <InsertDriveFileIcon fontSize="small" sx={{ mr: 0.5 }} />
+                          <Typography variant="caption">{chatProfile.documents.length}</Typography>
+                        </Box>
+
+                      )}
                     </Box>
                   </Box>
                 </MenuItem>
@@ -308,9 +335,10 @@ export const Settings = ({
             </Select>
           </FormControl>
 
-          {selectedContext && (
+
+          {selectedChatProfile && (
             <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
-              {selectedContext.description}
+              {selectedChatProfile.description}
             </Typography>
           )}
         </Box>
@@ -622,12 +650,12 @@ export const Settings = ({
         </List>
       </Fade>
 
-      {/* Menu contextuel */}
-      <StyledMenu id="session-context-menu" anchorEl={menuAnchorEl} open={Boolean(menuAnchorEl)} onClose={closeMenu}>
+      {/* Menu chatProfileuel */}
+      <StyledMenu id="session-chatProfile-menu" anchorEl={menuAnchorEl} open={Boolean(menuAnchorEl)} onClose={closeMenu}>
         <MenuItem
           onClick={() => {
-            if (contextSession) {
-              onDeleteSession(contextSession);
+            if (chatProfileSession) {
+              onDeleteSession(chatProfileSession);
               closeMenu();
             }
           }}
