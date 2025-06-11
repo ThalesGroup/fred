@@ -20,9 +20,9 @@ from langgraph.constants import START, END
 from langgraph.graph import StateGraph
 from langgraph.prebuilt import ToolNode
 
-from flow import AgentFlow
-from agents.keda.structures import KedaScaling, MessagesStateWithFinalStructuredResponse
-from agents.keda.keda_toolkit import KedaToolkitBuilder
+from fred.flow import AgentFlow
+from fred.agents.keda.structures import KedaScaling, MessagesStateWithFinalStructuredResponse
+from fred.agents.keda.keda_toolkit import KedaToolkitBuilder
 from fred.application_context import get_app_context
 
 

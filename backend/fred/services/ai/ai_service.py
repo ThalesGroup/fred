@@ -29,7 +29,7 @@ from fastapi.responses import StreamingResponse
 from kubernetes import config
 from langfuse.callback import CallbackHandler
 
-from fred.application_context import get_app_context, get_configuration
+from application_context import get_app_context, get_configuration
 from services.ai.structure.cluster_context import ClusterContext
 from services.ai.structure.cluster_summary import ClusterSummary
 from services.ai.structure.cluster_topology import ClusterTopology

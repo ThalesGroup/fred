@@ -20,10 +20,10 @@ from langgraph.graph.state import END, START, CompiledStateGraph, StateGraph
 
 from flow import AgentFlow, Flow
 from fred.application_context import get_configuration, get_model_for_leader, get_app_context
-from model_factory import get_model
-from leader.structures.decision import ExecuteDecision, PlanDecision
-from leader.structures.plan import Plan
-from leader.structures.state import State
+from fred.model_factory import get_model
+from fred.leader.structures.decision import ExecuteDecision, PlanDecision
+from fred.leader.structures.plan import Plan
+from fred.leader.structures.state import State
 logger = logging.getLogger(__name__)
 
 class Leader(Flow):

@@ -30,7 +30,7 @@ import os
 from threading import Lock
 from typing import Dict, List, Type, Any
 from pydantic import BaseModel
-from config.context_store_local_settings import ContextStoreLocalSettings
+from fred.config.context_store_local_settings import ContextStoreLocalSettings
 from config.context_store_minio_settings import ContextStoreMinioSettings
 from config.feedback_store_local_settings import FeedbackStoreLocalSettings
 from config.feedback_store_opensearch_settings import FeedbackStoreOpenSearchSettings
@@ -39,8 +39,8 @@ from feedback.feedback_service import FeedbackService
 from feedback.store.local_feedback_store import LocalFeedbackStore
 from feedback.store.opensearch_feedback_store import OpenSearchFeedbackStore
 
-from context.store.local_context_store import LocalContextStore
-from context.store.minio_context_store import MinIOContextStore
+from fred.context.store.local_context_store import LocalContextStore
+from fred.context.store.minio_context_store import MinIOContextStore
 from model_factory import get_structured_chain
 from fred.common.structure import AgentSettings, Configuration, ServicesSettings
 from fred.model_factory import get_model

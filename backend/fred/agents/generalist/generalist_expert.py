@@ -17,8 +17,8 @@ import logging
 from typing import Optional
 from langchain_core.messages import SystemMessage
 from langgraph.graph import END, START, MessagesState, StateGraph
-from common.structure import AgentSettings, Configuration
-from flow import AgentFlow
+from fred.common.structure import AgentSettings, Configuration
+from fred.flow import AgentFlow
 from fred.application_context import get_agent_settings, get_model_for_agent
 
 logger = logging.getLogger(__name__)

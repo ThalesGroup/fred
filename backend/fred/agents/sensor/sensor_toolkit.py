@@ -17,8 +17,8 @@ from typing import override, List
 from langchain_core.tools import BaseToolkit, BaseTool
 from pydantic import Field
 
-from services.ai.structure.tools.sensor_frequency import get_sweep_tool
-from services.ai.structure.tools.sensor_configuration import get_sensor_configurations_tool
+from fred.services.ai.structure.tools.sensor_frequency import get_sweep_tool
+from fred.services.ai.structure.tools.sensor_configuration import get_sensor_configurations_tool
 
 class SensorToolkit(BaseToolkit):
     """
