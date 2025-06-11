@@ -87,7 +87,7 @@ ai:
         #   command: uv
         #   args:
         #     - "--directory"
-        #     - "/home/simon/Documents/github_repos/prometheus-mcp-server"
+        #     - "/home/xxx/Documents/github_repos/prometheus-mcp-server"
         #     -  "run"
         #     -  "src/prometheus_mcp_server/main.py"
         #   env: 
