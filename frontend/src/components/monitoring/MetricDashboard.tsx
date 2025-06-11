@@ -17,9 +17,13 @@ import { useEffect, useState } from "react";
 import { LLMMetric } from "./metricsType";
 import MetricChart from "./MetricChart";
 import MetricTable from "./MetricTable";
-
+import { subMinutes } from "date-fns";
+import { useGetNumericalMetricsQuery } from "../../slices/monitoringApi";
 // Mock fallback
 function getMockMetrics(): LLMMetric[] {
+
+    
+
   const now = Date.now() / 1000;
   return Array.from({ length: 20 }, (_, i) => {
     const timestamp = now - i * 60;
@@ -47,6 +51,21 @@ function getMockMetrics(): LLMMetric[] {
 }
 
 export default function MetricsDashboard() {
+  
+  const start = subMinutes(new Date(), 60).toISOString();
+    const end = new Date().toISOString();
+    const { data: realMetrics, isLoading, isError } = useGetNumericalMetricsQuery({ start, end });
+    useEffect(() => {
+    if (realMetrics) {
+      console.log("📊 Real backend metrics:", realMetrics);
+    }
+    if (isError) {
+      console.error("❌ Failed to fetch real metrics from backend");
+    }
+    }, [realMetrics, isError]);
+
+
+
   const [metrics, setMetrics] = useState<LLMMetric[]>([]);
 
   const fetchMetrics = async () => {
