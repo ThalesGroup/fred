@@ -33,7 +33,7 @@ from typing import List, Tuple
 import logging
 
 from fred.monitoring.metric_store import MetricStore
-from fred.monitoring.inmemory_metric_store import get_metric_store
+from fred.monitoring.hybride_metric_store import get_metric_store,HybridMetricStore
 from fred.monitoring.metric_types import CategoricalMetric, MetaData, NumericalMetric
 
 logger = logging.getLogger(__name__)
@@ -80,7 +80,7 @@ class MetricStoreController:
         Args:
             router: FastAPI APIRouter where endpoints will be mounted.
         """
-        self.metric_store: MetricStore = get_metric_store()
+        self.metric_store: HybridMetricStore = get_metric_store()
 
         @router.get(
             "/metrics/all",

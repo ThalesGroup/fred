@@ -31,8 +31,7 @@ from langchain_core.language_models import BaseLanguageModel
 from langchain_core.messages import BaseMessage
 from langchain_core.outputs import LLMResult
 
-from fred.monitoring.inmemory_metric_store import get_metric_store
-from backend.fred.monitoring.hybride_metric_store import get_jsonl_metric_store
+from fred.monitoring.hybride_metric_store import get_metric_store,HybridMetricStore
 from fred.monitoring.logging_context import get_logging_context
 from fred.monitoring.metric_store import Metric, MetricStore
 from fred.monitoring.metric_util import translate_response_metadata_to_metric
@@ -60,7 +59,7 @@ class MonitoredLanguageModel(BaseLanguageModel):
     """
     target: Any = Field(...)
     name: str = Field(default="unnamed")
-    _metric_store: MetricStore = PrivateAttr()
+    _metric_store: HybridMetricStore = PrivateAttr()
 
     def __init__(self, target: Any, name: str = "unnamed"):
         """
@@ -72,7 +71,6 @@ class MonitoredLanguageModel(BaseLanguageModel):
         """
         super().__init__(target=target, name=name)
         self._metric_store = get_metric_store()
-        self._jsonl_metric_store = get_jsonl_metric_store()
 
     def _llm_type(self) -> str:
         """
