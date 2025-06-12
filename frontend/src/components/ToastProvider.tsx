@@ -57,7 +57,7 @@ const renderDetailLines = (detail: string) => {
       });
   } catch (error) {
     console.error("Error rendering detail lines:", error);
-    return <Typography variant="body1">MERDE{detail}</Typography>; // Fallback to plain text if error occurs
+    return <Typography variant="body1">{detail}</Typography>; // Fallback to plain text if error occurs
   }
 };
 
