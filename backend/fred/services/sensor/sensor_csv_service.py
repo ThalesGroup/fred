@@ -22,9 +22,9 @@ import sys
 import pandas as pd
 
 from fred.application_context import get_configuration
-from services.sensor.sensor_structures import SensorSeries, FreqBand
-from services.sensor.sensor_structures import SensorConfigurationSeries, SensorConfiguration
-from common.utils import format_to_en
+from fred.services.sensor.sensor_structures import SensorSeries, FreqBand
+from fred.services.sensor.sensor_structures import SensorConfigurationSeries, SensorConfiguration
+from fred.common.utils import format_to_en
 
 logger = logging.getLogger(__name__)
 

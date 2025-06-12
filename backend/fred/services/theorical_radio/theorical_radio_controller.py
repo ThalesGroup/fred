@@ -18,10 +18,10 @@ Controllers to expose the radio data endpoints
 import traceback
 from fastapi import Depends, HTTPException, APIRouter
 
-from security.keycloak import KeycloakUser, get_current_user
-from services.theorical_radio.theorical_radio_abstract_service import AbstractTheoricalRadioService
-from services.theorical_radio.theorical_radio_service import TheoricalRadioService
-from services.theorical_radio.theorical_radio_structures import TheoricalRadioSeries
+from fred.security.keycloak import KeycloakUser, get_current_user
+from fred.services.theorical_radio.theorical_radio_abstract_service import AbstractTheoricalRadioService
+from fred.services.theorical_radio.theorical_radio_service import TheoricalRadioService
+from fred.services.theorical_radio.theorical_radio_structures import TheoricalRadioSeries
 
 class TheoricalRadioController:
     def __init__(self, app: APIRouter):

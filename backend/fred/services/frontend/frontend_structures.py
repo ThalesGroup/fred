@@ -20,9 +20,9 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
-from services.ai.structure.facts import Fact
-from services.ai.structure.workload_scores import WorkloadScores
-from services.kube.structure import Cluster, WorkloadKind
+from fred.services.ai.structure.facts import Fact
+from fred.services.ai.structure.workload_scores import WorkloadScores
+from fred.services.kube.structure import Cluster, WorkloadKind
 
 class WorkloadDescription(BaseModel):
     """

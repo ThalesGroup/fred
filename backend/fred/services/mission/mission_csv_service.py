@@ -23,7 +23,7 @@ import sys
 import pandas as pd
 
 from fred.application_context import get_configuration
-from services.mission.mission_structures import Mission, MissionSeries
+from fred.services.mission.mission_structures import Mission, MissionSeries
 
 logger = logging.getLogger(__name__)
 

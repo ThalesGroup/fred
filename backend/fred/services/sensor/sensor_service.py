@@ -13,9 +13,9 @@
 # limitations under the License.
 
 from fred.application_context import get_app_context, get_configuration
-from services.sensor.sensor_abstract_service import AbstractSensorService, AbstractSensorConfigurationService
-from services.sensor.sensor_csv_service import SensorCsvService, SensorConfigurationCsvService
-from common.structure import DatabaseTypeEnum
+from fred.services.sensor.sensor_abstract_service import AbstractSensorService, AbstractSensorConfigurationService
+from fred.services.sensor.sensor_csv_service import SensorCsvService, SensorConfigurationCsvService
+from fred.common.structure import DatabaseTypeEnum
 
 
 class SensorService:

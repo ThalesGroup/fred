@@ -12,7 +12,7 @@
 
 from common.structure import Series
 from common.utils import auc_calculation
-from services.finops.structure import CloudBilling
+from fred.services.finops.structure import CloudBilling
 
 
 # Parse CloudBilling data to Series

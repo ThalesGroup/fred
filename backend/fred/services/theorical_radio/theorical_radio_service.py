@@ -13,9 +13,9 @@
 # limitations under the License.
 
 from fred.application_context import get_configuration
-from services.theorical_radio.theorical_radio_abstract_service import AbstractTheoricalRadioService
-from services.theorical_radio.theorical_radio_csv_service import TheoricalRadioCsvService
-from common.structure import DatabaseTypeEnum
+from fred.services.theorical_radio.theorical_radio_abstract_service import AbstractTheoricalRadioService
+from fred.services.theorical_radio.theorical_radio_csv_service import TheoricalRadioCsvService
+from fred.common.structure import DatabaseTypeEnum
 
 
 class TheoricalRadioService:

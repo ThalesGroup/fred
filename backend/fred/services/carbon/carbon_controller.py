@@ -21,12 +21,12 @@ from datetime import datetime
 from fastapi import Depends, HTTPException, Query, APIRouter
 
 from security.keycloak import KeycloakUser, get_current_user
-from services.cluster_consumption.cluster_consumption_abstract_service import AbstractClusterConsumptionService
-from services.cluster_consumption.cluster_consumption_service import ClusterConsumptionService
-from services.cluster_consumption.cluster_consumption_structures import ClusterConsumptionSeries
-from common.structure import Configuration, CompareResult
-from common.structure import PrecisionEnum
-from common.utils import API_COMPARE_DOC
+from fred.services.cluster_consumption.cluster_consumption_abstract_service import AbstractClusterConsumptionService
+from fred.services.cluster_consumption.cluster_consumption_service import ClusterConsumptionService
+from fred.services.cluster_consumption.cluster_consumption_structures import ClusterConsumptionSeries
+from fred.common.structure import Configuration, CompareResult
+from fred.common.structure import PrecisionEnum
+from fred.common.utils import API_COMPARE_DOC
 
 
 class CarbonController:

@@ -30,27 +30,27 @@ from kubernetes import config
 from langfuse.callback import CallbackHandler
 
 from fred.application_context import get_app_context, get_configuration
-from services.ai.structure.cluster_context import ClusterContext
-from services.ai.structure.cluster_summary import ClusterSummary
-from services.ai.structure.cluster_topology import ClusterTopology
-from services.ai.structure.facts import Fact, Facts
-from services.ai.structure.ingress_essentials import IngressesEssentials
-from services.ai.structure.namespace_context import NamespaceContext
-from services.ai.structure.namespace_summary import NamespaceSummary
-from services.ai.structure.namespace_topology import NamespaceTopology
-from services.ai.structure.service_essentials import ServicesEssentials
-from services.ai.structure.workload_advanced import WorkloadAdvanced
-from services.ai.structure.workload_context import WorkloadContext
-from services.ai.structure.workload_essentials import WorkloadEssentials
-from services.ai.structure.workload_id import WorkloadId
-from services.ai.structure.workload_scores import WorkloadScores
-from services.ai.structure.workload_summary import WorkloadSummary
-from services.ai.structure.workload_topology import WorkloadTopology
-from services.kube.kube_service import KubeService
-from services.kube.structure import WorkloadKind
-from common.connectors.file_dao import FileDAO
-from common.error import UnavailableError
-from common.structure import Configuration, DAOTypeEnum
+from fred.services.ai.structure.cluster_context import ClusterContext
+from fred.services.ai.structure.cluster_summary import ClusterSummary
+from fred.services.ai.structure.cluster_topology import ClusterTopology
+from fred.services.ai.structure.facts import Fact, Facts
+from fred.services.ai.structure.ingress_essentials import IngressesEssentials
+from fred.services.ai.structure.namespace_context import NamespaceContext
+from fred.services.ai.structure.namespace_summary import NamespaceSummary
+from fred.services.ai.structure.namespace_topology import NamespaceTopology
+from fred.services.ai.structure.service_essentials import ServicesEssentials
+from fred.services.ai.structure.workload_advanced import WorkloadAdvanced
+from fred.services.ai.structure.workload_context import WorkloadContext
+from fred.services.ai.structure.workload_essentials import WorkloadEssentials
+from fred.services.ai.structure.workload_id import WorkloadId
+from fred.services.ai.structure.workload_scores import WorkloadScores
+from fred.services.ai.structure.workload_summary import WorkloadSummary
+from fred.services.ai.structure.workload_topology import WorkloadTopology
+from fred.services.kube.kube_service import KubeService
+from fred.services.kube.structure import WorkloadKind
+from fred.common.connectors.file_dao import FileDAO
+from fred.common.error import UnavailableError
+from fred.common.structure import Configuration, DAOTypeEnum
 
 # 🔹 Create a module-level logger
 logger = logging.getLogger(__name__)

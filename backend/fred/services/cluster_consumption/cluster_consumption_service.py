@@ -13,9 +13,9 @@
 # limitations under the License.
 
 from fred.application_context import get_app_context, get_configuration
-from services.cluster_consumption.cluster_consumption_abstract_service import AbstractClusterConsumptionService
-from services.cluster_consumption.cluster_consumption_csv_service import ClusterConsumptionCsvService
-from common.structure import Configuration, DatabaseTypeEnum
+from fred.services.cluster_consumption.cluster_consumption_abstract_service import AbstractClusterConsumptionService
+from fred.services.cluster_consumption.cluster_consumption_csv_service import ClusterConsumptionCsvService
+from fred.common.structure import Configuration, DatabaseTypeEnum
 
 
 class ClusterConsumptionService:
