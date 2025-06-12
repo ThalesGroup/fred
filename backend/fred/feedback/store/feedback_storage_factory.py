@@ -1,12 +1,12 @@
 import os
 import logging
 from pathlib import Path
-from main_utils import validate_settings_or_exit
-from config.feedback_store_local_settings import FeedbackStoreLocalSettings
-from config.feedback_store_opensearch_settings import FeedbackStoreOpenSearchSettings
-from feedback.feedback_service import FeedbackService
-from feedback.store.local_feedback_store import LocalFeedbackStore
-from feedback.store.opensearch_feedback_store import OpenSearchFeedbackStore
+from fred.main_utils import validate_settings_or_exit
+from fred.config.feedback_store_local_settings import FeedbackStoreLocalSettings
+from fred.config.feedback_store_opensearch_settings import FeedbackStoreOpenSearchSettings
+from fred.feedback.feedback_service import FeedbackService
+from fred.feedback.store.local_feedback_store import LocalFeedbackStore
+from fred.feedback.store.opensearch_feedback_store import OpenSearchFeedbackStore
 
 logger = logging.getLogger(__name__)
 

@@ -15,12 +15,12 @@
 from datetime import datetime
 from typing import Optional
 
-from flow import AgentFlow
+from fred.flow import AgentFlow
 from langgraph.constants import START
 from langgraph.graph import MessagesState, StateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
 
-from agents.monitoring.monitoring_toolkit import MonitoringToolkit
+from fred.agents.monitoring.monitoring_toolkit import MonitoringToolkit
 from fred.application_context import get_agent_settings, get_model_for_agent
 
 class MonitoringExpert(AgentFlow):

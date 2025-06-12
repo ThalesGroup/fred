@@ -10,7 +10,7 @@
       "console": "integratedTerminal",
       "justMyCode": false,
       "env": {
-        "PYTHONPATH": "${workspaceFolder}/backend/fred",
+        "PYTHONPATH": "${workspaceFolder}/backend",
         "PATH": "${workspaceFolder}/backend/.venv/bin:${env:PATH}",
         "LOG_LEVEL": "DEBUG"
       },

@@ -17,7 +17,7 @@ from typing import override, List
 from langchain_core.tools import BaseToolkit, BaseTool
 from pydantic import Field
 
-from services.ai.structure.tools.mission import get_mission_tool
+from fred.services.ai.structure.tools.mission import get_mission_tool
 class MissionToolkit(BaseToolkit):
     """
     Toolkit for Mission tools

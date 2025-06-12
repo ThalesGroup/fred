@@ -26,8 +26,8 @@ from collections import defaultdict
 from chatbot.agent_manager import AgentManager
 from flow import AgentFlow
 from fred.services.chatbot_session.attachement_processing import AttachementProcessing
-from services.chatbot_session.structure.chat_schema import ChatMessagePayload, ChatTokenUsage, SessionSchema, SessionWithFiles, clean_agent_metadata
-from services.chatbot_session.abstract_session_backend import AbstractSessionStorage
+from fred.services.chatbot_session.structure.chat_schema import ChatMessagePayload, ChatTokenUsage, SessionSchema, SessionWithFiles, clean_agent_metadata
+from fred.services.chatbot_session.abstract_session_backend import AbstractSessionStorage
 from langchain_core.messages import (BaseMessage, HumanMessage, AIMessage)
 from langgraph.graph.state import CompiledStateGraph
 from fred.application_context import get_app_context, get_configuration, get_context_service, get_default_model

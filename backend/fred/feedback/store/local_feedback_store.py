@@ -1,7 +1,7 @@
 import os
 import json
 from typing import Optional
-from feedback.store.base_feedback_store import BaseFeedbackStore
+from fred.feedback.store.base_feedback_store import BaseFeedbackStore
 
 class LocalFeedbackStore(BaseFeedbackStore):
     def __init__(self, root_path: str):
