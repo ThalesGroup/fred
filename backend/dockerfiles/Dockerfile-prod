@@ -3,44 +3,34 @@
 # -----------------------------------------------------------------------------
 FROM mirror.gcr.io/python:3.12.8-slim AS builder
 
-# Set the poetry env
-ENV POETRY_VIRTUALENVS_CREATE=true
-ENV POETRY_VIRTUALENVS_IN_PROJECT=true
-ENV POETRY_CACHE_DIR=/tmp/poetry_cache
+ARG UV_VERSION=0.7.12
+
+# Install dependencies
+RUN apt-get update && \
+    apt-get install -y curl && \
+    curl -Ls https://astral.sh/uv/${UV_VERSION}/install.sh | bash
 
 # Copy project files
-COPY .. /app
+COPY ../backend /app
+
+# Add uv into the PATH
+ENV PATH=/root/.local/bin:$PATH
 
 # Move to workdir
 WORKDIR /app
 
-# Install poetry and python dependancies
-RUN pip install poetry==1.7.1 --root-user-action=ignore && \
-    poetry install
+# Create python virtual env and install deps
+RUN uv venv && \
+    uv pip install -r uv.lock
 
 # -----------------------------------------------------------------------------
 # RUNTIME
 # -----------------------------------------------------------------------------
 FROM mirror.gcr.io/python:3.12.8-slim AS runtime
 
-ARG USER_NAME=fred-user
+ARG USER_NAME=python-user
 ARG USER_ID=1000
 ARG GROUP_ID=1000
-
-# # Install dependencies
-# RUN apt-get update && \
-#     apt-get install -y apt-transport-https ca-certificates gnupg curl unzip
-
-# # Install gcloud-cli
-# RUN curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg && \
-#     echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | tee -a /etc/apt/sources.list.d/google-cloud-sdk.list && \
-#     apt-get update && apt-get -y install google-cloud-cli google-cloud-cli-gke-gcloud-auth-plugin
-
-# # Install AWS CLI v2
-# RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip" && \
-#     unzip awscliv2.zip && \
-#     ./aws/install && \
-#     rm -rf awscliv2.zip aws
 
 # Setup user
 RUN groupadd -g ${GROUP_ID} ${USER_NAME} && \
@@ -56,7 +46,8 @@ COPY --from=builder --chown=${USER_ID}:${GROUP_ID} /app /app
 WORKDIR /app
 
 # Activate the virtualenv
-ENV PATH="/app/.venv/bin:$PATH"
+ENV PATH=/app/.venv/bin:$PATH
+ENV PYTHONPATH=/app
 
 # Expose Fast API default port
 EXPOSE 8000

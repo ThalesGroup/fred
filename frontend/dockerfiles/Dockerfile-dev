@@ -3,7 +3,7 @@
 # -----------------------------------------------------------------------------
 FROM mirror.gcr.io/node:22.13.0
 
-ARG USER_NAME=fred-user
+ARG USER_NAME=web-user
 ARG USER_ID=1000
 ARG GROUP_ID=1000
 
@@ -12,7 +12,7 @@ RUN apt-get update && \
     apt-get install -y make git
 
 # Copy project files
-COPY .. /app
+COPY ../frontend /app
 
 # Setup user
 RUN userdel node && \
