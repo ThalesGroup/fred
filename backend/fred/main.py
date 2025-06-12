@@ -12,6 +12,7 @@ import sys
 
 from fastapi import FastAPI, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
+from fred.monitoring.metric_store_controller import MetricStoreController
 from services.ai.ai_service import AIService
 from services.kube.kube_service import KubeService
 from rich.logging import RichHandler
@@ -95,6 +96,7 @@ def build_app(configuration: Configuration, base_url: str) -> FastAPI:
     ChatbotController(router, ai_service)
     ContextController(router)
     FeedbackController(router)
+    MetricStoreController(router)
 
     app.include_router(router)
     return app

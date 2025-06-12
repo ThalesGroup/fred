@@ -1,0 +1,53 @@
+from fastapi import APIRouter, Query, HTTPException
+from datetime import datetime
+from typing import List, Tuple
+import logging
+
+from fred.monitoring.metric_store import MetricStore
+from fred.monitoring.inmemory_metric_store import get_metric_store
+from fred.monitoring.metric_types import CategoricalMetric, MetaData, NumericalMetric
+
+logger = logging.getLogger(__name__)
+
+
+def parse_dates(start: str, end: str) -> Tuple[datetime, datetime]:
+    try:
+        return datetime.fromisoformat(start), datetime.fromisoformat(end)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid dates. Use ISO 8601 format.")
+
+
+class MetricStoreController:
+    def __init__(self, router: APIRouter):
+        self.metric_store: MetricStore = get_metric_store()
+
+        @router.get("/metrics/all", response_model=List[MetaData], tags=["Metrics"])
+        def get_all_metrics(
+            start: str = Query(..., description="Start date in ISO 8601 format"),
+            end: str = Query(..., description="End date in ISO 8601 format")
+        ) -> List[MetaData]:
+            start_dt, end_dt = parse_dates(start, end)
+            return self.metric_store.get_by_date_range(start_dt, end_dt)
+
+        @router.get("/metrics/numerical", response_model=List[NumericalMetric], tags=["Metrics"])
+        def get_numerical_metrics(
+            start: str = Query(...),
+            end: str = Query(...),
+            precision: str = Query("hour", enum=["sec", "min", "hour", "day"]),
+            agg: str = Query("avg", enum=["avg", "max", "min", "sum"])
+        ) -> List[NumericalMetric]:
+            start_dt, end_dt = parse_dates(start, end)
+            return self.metric_store.get_numerical_aggregated_by_precision(
+                start=start_dt, end=end_dt, precision=precision, agg=agg
+            )
+
+        @router.get("/metrics/categorical", response_model=List[CategoricalMetric], tags=["Metrics"])
+        def get_categorical_metrics(
+            start: str = Query(...),
+            end: str = Query(...)
+            
+        ) -> List[CategoricalMetric]:
+            start_dt, end_dt = parse_dates(start, end)
+            return self.metric_store.get_categorical_rows_by_date_range(
+                start=start_dt, end=end_dt
+            )

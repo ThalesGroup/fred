@@ -20,7 +20,7 @@ import tempfile
 import pathlib
 from io import BytesIO
 
-from context.context_service import ContextService
+from fred.context.context_service import ContextService
 
 class TestContextService(unittest.TestCase):
     

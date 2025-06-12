@@ -38,7 +38,6 @@ from fred.main_utils import validate_settings_or_exit
 from fred.feedback.feedback_service import FeedbackService
 from fred.feedback.store.local_feedback_store import LocalFeedbackStore
 from fred.feedback.store.opensearch_feedback_store import OpenSearchFeedbackStore
-
 from fred.context.store.local_context_store import LocalContextStore
 from fred.context.store.minio_context_store import MinIOContextStore
 from fred.model_factory import get_structured_chain
@@ -48,7 +47,8 @@ from langchain_core.language_models.base import BaseLanguageModel
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from fred.flow import AgentFlow, Flow  # Base class for all agent flows
 import logging
-from fred.monitoring.smart_monitoring_wrapper import SmartMonitoringWrapper
+
+from fred.monitoring.monitored_language_model import MonitoredLanguageModel
 
 logger = logging.getLogger(__name__)
 
@@ -119,7 +119,7 @@ def get_model_for_agent(agent_name: str) -> BaseLanguageModel:
     Returns:
         BaseLanguageModel: The AI model configured for the agent.
     """
-    return SmartMonitoringWrapper(target=get_app_context().get_model_for_agent(agent_name),name=agent_name)
+    return MonitoredLanguageModel(target=get_app_context().get_model_for_agent(agent_name),name=agent_name)
 
 
 def get_default_model() -> BaseLanguageModel:
@@ -132,7 +132,7 @@ def get_default_model() -> BaseLanguageModel:
     Returns:
         BaseLanguageModel: The AI model configured for the agent.
     """
-    return SmartMonitoringWrapper(target=get_app_context().get_default_model(),name="DefaultModel")
+    return MonitoredLanguageModel(target=get_app_context().get_default_model(),name="DefaultModel")
 
 
 def get_model_for_leader() -> BaseLanguageModel:

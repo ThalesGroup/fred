@@ -19,12 +19,12 @@ from datetime import datetime
 import pytest
 from unittest.mock import Mock, patch, AsyncMock
 
-from flow import AgentFlow
-from context.context_service import ContextService
+from fred.flow import AgentFlow
+from fred.context.context_service import ContextService
 from fred.services.chatbot_session.in_memory_session_backend import InMemorySessionStorage
-from services.chatbot_session.session_manager import SessionManager
-from services.chatbot_session.structure.chat_schema import SessionSchema
-from chatbot.agent_manager import AgentManager
+from fred.services.chatbot_session.session_manager import SessionManager
+from fred.services.chatbot_session.structure.chat_schema import SessionSchema
+from fred.chatbot.agent_manager import AgentManager
 from langchain_core.messages import AIMessage, SystemMessage
 
 

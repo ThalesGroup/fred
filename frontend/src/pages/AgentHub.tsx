@@ -42,6 +42,7 @@ import { KeyCloakService } from "../security/KeycloakService";
 import ContextManagementModal from "../components/chatbot/ContextManagementModal";
 import LocalOfferIcon from "@mui/icons-material/LocalOffer";
 import { useGetChatBotAgenticFlowsMutation } from "../slices/chatApi";
+import { TopBar } from "../common/TopBar";
 
 interface AgentCategory {
   name: string;
@@ -164,36 +165,12 @@ export const AgentHub = () => {
 
   return (
     <PageBodyWrapper>
-      {/* Hero Section */}
-      <Box
-        sx={{
-          position: "relative",
-          backgroundSize: "cover",
-          backgroundPosition: "center",
-          py: { xs: 3, md: 4 },
-          mb: 3,
-          borderRadius: 2,
-          boxShadow: theme.shadows[4],
-        }}
-      >
-        <Container maxWidth="xl">
-          <Fade in={showElements} timeout={1000}>
-            <Grid2 container alignItems="center" spacing={2}>
-              <Grid2 size={{ xs: 12, md: 8 }}>
-                <Box>
-                  <Typography variant="h4" fontWeight="bold" gutterBottom>
-                    Agent Hub
-                  </Typography>
-                  <Typography variant="body2" color="textSecondary" sx={{ maxWidth: "700px" }}>
-                    Explore and manage all available AI agents to enhance your workflow
-                  </Typography>
-                </Box>
-              </Grid2>
-            </Grid2>
-          </Fade>
-        </Container>
-      </Box>
-
+      <TopBar
+                          title="Agent Hub"
+                          description="Explore and manage available AI agents"
+                          backgroundUrl=""
+                        ></TopBar>
+      
       {/* Tabs Section */}
       <Container maxWidth="xl" sx={{ mb: 3 }}>
         <Fade in={showElements} timeout={1200}>
