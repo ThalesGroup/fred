@@ -52,7 +52,7 @@ from fred.monitoring.smart_monitoring_wrapper import SmartMonitoringWrapper
 
 logger = logging.getLogger(__name__)
 
-SUPPORTED_TRANSPORTS = ["sse", "streamable_http", "websocket"] # No STDIO transport as we need a URL in the mcp_servers configuration
+SUPPORTED_TRANSPORTS = ["sse", "stdio", "streamable_http", "websocket"]
 
 # -------------------------------
 # Public access helper functions
@@ -121,7 +121,7 @@ def get_model_for_agent(agent_name: str) -> BaseLanguageModel:
     """
     return SmartMonitoringWrapper(target=get_app_context().get_model_for_agent(agent_name),name=agent_name)
 
-    
+
 def get_default_model() -> BaseLanguageModel:
     """
     Retrieves the default AI model instance.
@@ -448,6 +448,9 @@ class ApplicationContext:
                     await mcp_client.connect_to_server(server_name=server.name,
                                                     url=server.url,
                                                     transport=server.transport,
+                                                    command=server.command,
+                                                    args=server.args,
+                                                    env=server.env,
                                                     sse_read_timeout=server.sse_read_timeout)
                 except Exception as e:
                     logger.error(f"Error when connecting to the {server.name} MCP server: {e}. Make sure it is up and running.")
