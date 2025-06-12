@@ -112,7 +112,7 @@ class MCPServerConfiguration(BaseModel):
     sse_read_timeout:  Optional[int] = Field(60 * 5, description="How long (in seconds) the client will wait for a new event before disconnecting")
     command: Optional[str] = Field(None, description="Command to run for stdio transport. Can be uv, uvx, npx and so on.")
     args: Optional[List[str]] = Field(None, description="Args to give the command as a list. ex:  ['--directory', '/directory/to/mcp', 'run', 'server.py']")
-    env: Optional[Dict[str, Any]] = Field(None, description="Environment variables to give the MCP server")
+    env: Optional[Dict[str, str]] = Field(None, description="Environment variables to give the MCP server")
     
 class PathOrIndexPrefix(BaseModel):
     energy_mix: str
