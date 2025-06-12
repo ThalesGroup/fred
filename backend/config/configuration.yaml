@@ -71,6 +71,35 @@ ai:
   recursion:
     recursion_limit: 40 #Number or max recursion use by the agents while using the model
   agents:
+    - name: "JiraExpert"
+      class_path: "agents.jira.jira_expert.JiraExpert"
+      enabled: true
+      mcp_servers:
+        - name: jira-mcp-server
+          transport: stdio
+          command: docker
+          args:
+            - "run"
+            - "-i"
+            -  "--rm"
+            -  "--env-file"
+            -  "/home/simon/Documents/github_repos/fred-agent/fred/backend/fred/agents/jira/.env"
+            -  "ghcr.io/sooperset/mcp-atlassian:latest"
+        ##################
+        ## OR USING UVX ##
+        ##################
+        # - name: jira-mcp-server
+        #   transport: stdio
+        #   command: uvx
+        #   args:
+        #     - "mcp-atlassian"
+        #   env:
+        #     JIRA_URL: https://thales-factory.atlassian.net
+        #     JIRA_USERNAME: simon.cariou@thalesgroup.com
+        #     JIRA_API_TOKEN: xxx
+        #     READ_ONLY_MODE: "true"
+        #   sse_read_timeout: 600 # 10 minutes. It is 5 minutes by default but it is too short.
+        #   model: {}
     - name: K8SOperatorExpert
       class_path: "agents.kubernetes_monitoring.k8s_operator_expert.K8SOperatorExpert"
       enabled: false
