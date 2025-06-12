@@ -86,7 +86,7 @@ ai:
             JIRA_API_TOKEN: "@TO_CHANGE"
             READ_ONLY_MODE: "true"
           sse_read_timeout: 600 # 10 minutes. It is 5 minutes by default but it is too short.
-          model: {}
+      model: {}
     - name: K8SOperatorExpert
       class_path: "agents.kubernetes_monitoring.k8s_operator_expert.K8SOperatorExpert"
       enabled: false

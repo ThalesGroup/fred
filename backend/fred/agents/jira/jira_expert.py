@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from datetime import datetime
+from typing import Optional
 
 from fred.flow import AgentFlow
 from langgraph.graph import MessagesState, StateGraph
@@ -35,7 +36,9 @@ class JiraExpert(AgentFlow):
     categories: list[str] = []
     tag: str = "jira operator"  # Défini au niveau de la classe
     
-    def __init__(self):
+    def __init__(self, 
+                 cluster_fullname: Optional[str]
+                 ):
         self.current_date = datetime.now().strftime("%Y-%m-%d")
         self.agent_settings = get_agent_settings(self.name)
         self.model = get_model_for_agent(self.name)
