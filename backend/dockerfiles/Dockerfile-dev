@@ -7,59 +7,49 @@ ARG USER_NAME=fred-user
 ARG USER_ID=1000
 ARG GROUP_ID=1000
 
-# Install dependencies
+# Install required system dependencies
 RUN apt-get update && \
-    apt-get install -y git
+    apt-get install -y git curl && \
+    rm -rf /var/lib/apt/lists/*
 
-# # Install dependencies
-# RUN apt-get update && \
-#     apt-get install -y apt-transport-https ca-certificates gnupg curl unzip
+# Install uv globally
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
+    mv /root/.local/bin/uv /usr/local/bin/uv && \
+    chmod +x /usr/local/bin/uv
 
-# # Install AWS CLI v2
-# RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip" && \
-#     unzip awscliv2.zip && \
-#     ./aws/install && \
-#     rm -rf awscliv2.zip aws
-
-# # Install gcloud-cli
-# RUN curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg && \
-#     echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | tee -a /etc/apt/sources.list.d/google-cloud-sdk.list && \
-#     apt-get update && apt-get -y install google-cloud-cli google-cloud-cli-gke-gcloud-auth-plugin
-
-# Copy project files
-COPY .. /app
-
-# Setup user
+# Setup user and permissions
 RUN groupadd -g ${GROUP_ID} ${USER_NAME} && \
     useradd -u ${USER_ID} -g ${GROUP_ID} -m ${USER_NAME} && \
-    mkdir /opt/python && \
-    chown -R ${USER_ID}:${GROUP_ID} /app /opt/python
+    mkdir -p /opt/python && \
+    chown -R ${USER_ID}:${GROUP_ID} /opt/python
 
-# Change user
-USER ${USER_NAME}
-
-# Set the python virtual env into docker image
-ENV VIRTUAL_ENV=/opt/python/venv
-ENV POETRY_CACHE_DIR=/tmp/poetry_cache
+# Set environment variables for uv and Python
+ENV UV_PROJECT_ENVIRONMENT=/opt/python/venv
+ENV PATH="/opt/python/venv/bin:$PATH"
 ENV OPENAI_API_KEY=<MUST_BE_DEFINED>
 
-# Move to workdir
+# Set working directory
 WORKDIR /app
 
-# Create python virtual env
-RUN python -m venv ${VIRTUAL_ENV}
+# Copy only dependency files first to leverage Docker layer caching
+COPY ../pyproject.toml ../uv.lock* /app/
 
-# Activate the virtualenv
-ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+# Install dependencies with uv
+RUN uv sync
 
-# Install poetry and python dependancies
-RUN pip install poetry==1.7.1 && \
-    poetry install && \
-    rm -rf $POETRY_CACHE_DIR
+# Copy the rest of the project files
+COPY .. /app
 
-# Expose Fast API default port
+# Adjust ownership of copied files
+RUN chown -R ${USER_ID}:${GROUP_ID} /app
+
+# Switch to the created user
+USER ${USER_NAME}
+
+# Expose FastAPI default port
 EXPOSE 8000
 
-# Run the python app
+# Run the application
+ENV PYTHONPATH="/app"
 ENTRYPOINT ["python", "fred/main.py"]
-CMD ["--server.configurationPath", "/app/config/configuration.yaml", "--server.baseUrlPath", "/fred"]
+CMD ["--server.configurationPath /app/config/configuration.yaml --server.baseUrlPath /fred"]
