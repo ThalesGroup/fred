@@ -12,41 +12,65 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""
-metric_store.py
+from abc import ABC, abstractmethod
+from datetime import datetime
+from typing import List, Optional
+from pydantic import BaseModel
 
-This module defines the `MetricStore` class for in-memory storage, filtering, and persistence
-of structured metric logs.
-"""
+from fred.monitoring.metric_types import CategoricalMetric, NumericalMetric
 
-import json
-import logging
 
-logger = logging.getLogger("MetricStore")
-logger.setLevel(logging.INFO)
+class TokenDetails(BaseModel):
+    cached_tokens: Optional[int] = 0
+    audio_tokens: Optional[int] = 0
+    reasoning_tokens: Optional[int] = 0
+    rejected_prediction_tokens: Optional[int] = 0
+    accepted_prediction_tokens: Optional[int] = 0
 
-class MetricStore:
-    _instance = None
 
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-            cls._instance._data = []
-            logger.info("Created new MetricStore instance.")
-        return cls._instance
+class TokenUsage(BaseModel):
+    prompt_tokens: int
+    completion_tokens: int
+    total_tokens: int
+    prompt_tokens_details: Optional[TokenDetails] = None
+    completion_tokens_details: Optional[TokenDetails] = None
 
-    def add_data(self, json_data: dict):
-        if isinstance(json_data, dict):
-            self._data.append(json_data)
-            logger.info(f"Added data: {json_data}")
-        else:
-            logger.warning(f"Tried to add non-dict data: {json_data}")
+class Metric(BaseModel):
+    timestamp: float
+    latency: float
+    user_id: str
+    session_id: str
+    model_type: str
 
-    def all(self):
-        count = len(self._data)
-        logger.info(f"Accessed all stored metrics. Total count: {count}")
-        return self._data
-    
-# Fonction pour accéder à l'instance
-def get_metric_store():
-    return MetricStore()
+    # Optional fields for downstream analysis
+    finish_reason: Optional[str] = None
+    model_name: Optional[str] = None
+    system_fingerprint: Optional[str] = None
+    service_tier: Optional[str] = None
+    token_usage: Optional[TokenUsage] = None
+
+class MetricStore(ABC):
+    @abstractmethod
+    def add_metric(self, metric: Metric) -> None:
+        pass
+
+    @abstractmethod
+    def get_all(self) -> List[Metric]:
+        pass
+
+    @abstractmethod
+    def get_by_date_range(self, start: datetime, end: datetime) -> List[Metric]:
+        pass
+
+    @abstractmethod
+    def get_numerical_aggregated_by_precision(
+        self, start: datetime, end: datetime, precision: str, agg: str
+    ) -> List[NumericalMetric]:
+        pass
+
+    @abstractmethod
+    def get_categorical_rows_by_date_range(
+        self, start: datetime, end: datetime
+    ) -> List[CategoricalMetric]:
+        pass
+

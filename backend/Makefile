@@ -70,6 +70,19 @@ clean: ## Remove virtualenv and build artifacts
 	@echo "🧹 Cleaning project..."
 	rm -rf $(VENV) $(TARGET) .mypy_cache .pytest_cache .coverage htmlcov .tox
 
+##@ Testing
+
+.PHONY: test
+
+test: dev  ## Run all tests with pytest
+	@echo "🧪 Running tests..."
+	PYTHONPATH=$(CURDIR) $(VENV)/bin/pytest --maxfail=5 --disable-warnings -q
+
+.PHONY: test-translate-response
+test-translate-response: dev  ## Run tests for test_translate_response_metadata.py
+	@echo "🧪 Running test_translate_response_metadata.py..."
+	PYTHONPATH=$(CURDIR)/fred $(VENV)/bin/pytest --maxfail=5 --disable-warnings -q fred/tests/test_translate_response_metadata.py
+
 ##@ Help
 
 .PHONY: help

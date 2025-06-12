@@ -44,3 +44,18 @@ class MetaData(BaseModel):
     latency: Optional[float] = None
     timestamp: Optional[float] = None
     model_type: Optional[str] = None
+
+class NumericalMetric(BaseModel):
+    bucket: str  # e.g., "2025-06-11T14:00"
+    values: Dict[str, float]  # {"latency": 0.32, "token_usage.total_tokens": 59}
+
+class CategoricalMetric(BaseModel):
+    timestamp: float
+    user_id: Optional[str]
+    session_id: Optional[str]
+    model_name: Optional[str]
+    model_type: Optional[str]
+    finish_reason: Optional[str]
+    id: Optional[str]
+    system_fingerprint: Optional[str]
+    service_tier: Optional[str]

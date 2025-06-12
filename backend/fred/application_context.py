@@ -34,6 +34,7 @@ from config.context_store_local_settings import ContextStoreLocalSettings
 from config.context_store_minio_settings import ContextStoreMinioSettings
 from config.feedback_store_local_settings import FeedbackStoreLocalSettings
 from config.feedback_store_opensearch_settings import FeedbackStoreOpenSearchSettings
+from fred.monitoring.monitored_language_model import MonitoredLanguageModel
 from main_utils import validate_settings_or_exit
 from feedback.feedback_service import FeedbackService
 from feedback.store.local_feedback_store import LocalFeedbackStore
@@ -48,7 +49,6 @@ from langchain_core.language_models.base import BaseLanguageModel
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from flow import AgentFlow, Flow  # Base class for all agent flows
 import logging
-from fred.monitoring.monitored_language_model import MonitoredLanguageModel
 
 logger = logging.getLogger(__name__)
 
