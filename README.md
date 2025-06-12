@@ -260,6 +260,51 @@ make docker-build
 make docker-run 
 ```
 
+## Docker images
+
+A _nightly_ docker image are available for the frontend and the backend.
+
+### Frontend
+
+Pull the frontend docker image with this command:
+```
+docker pull ghcr.io/thalesgroup/fred-frontend:nightly
+```
+
+This image needs the config file to set backends parameters. Copy and edit the file _frontend/public/config.json_. Then launch the container with your custom config.json:
+```
+docker run -d --name fred-frontend \
+  --volume <YOUR_CONFIG.JSON_FILE>:/usr/share/nginx/html/config.json \
+  --publish 80:80 \
+  ghcr.io/thalesgroup/fred-frontend:nightly
+```
+
+### Backend
+
+Pull the backend docker images with this command:
+```
+docker pull ghcr.io/thalesgroup/fred-backend:nightly
+```
+
+This image needs two files to be executed. Copy the two following files and edit and set the parameters you need:
+- backend/config/.env
+- backend/config/configuration.yaml
+
+You will also need a valid kubernetes config file.
+
+Then run the docker container with the previous files mounted as below:
+
+```
+docker run -d --name fred-backend \
+  --volume <YOUR_.ENV_FILE>:/app/config/.env \
+  --volume <YOUR_CONFIGURATION.YAML_FILE>:/app/config/configuration.yaml \
+  --volume <YOUR_KUBECONFIG_FILE>:/home/python-user/.kube/config:ro \
+  --publish 8000:8000 \
+  ghcr.io/thalesgroup/fred-backend:nightly
+```
+
+
+
 ## Documentation
 -
 Documentation is available at [https://fredk8.dev](https://fredk8.dev).
