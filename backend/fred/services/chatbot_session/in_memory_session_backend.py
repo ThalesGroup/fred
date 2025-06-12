@@ -15,9 +15,9 @@
 import logging
 from typing import Dict, List
 
-from services.chatbot_session.abstract_session_backend import AbstractSessionStorage
-from services.chatbot_session.session_manager import SessionSchema
-from services.chatbot_session.structure.chat_schema import ChatMessagePayload
+from fred.services.chatbot_session.abstract_session_backend import AbstractSessionStorage
+from fred.services.chatbot_session.session_manager import SessionSchema
+from fred.services.chatbot_session.structure.chat_schema import ChatMessagePayload
 
 logger = logging.getLogger(__name__)
 class InMemorySessionStorage(AbstractSessionStorage):

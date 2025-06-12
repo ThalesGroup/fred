@@ -15,7 +15,7 @@
 import logging
 from io import BytesIO
 from typing import Optional
-from context.store.base_context_store import BaseContextStore
+from fred.context.store.base_context_store import BaseContextStore
 from minio import Minio
 from minio.error import S3Error
 

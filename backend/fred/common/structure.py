@@ -107,10 +107,13 @@ class ModelConfiguration(BaseModel):
 
 class MCPServerConfiguration(BaseModel):
     name: str = Field(None, description="Name of the MCP server")
-    transport: Optional[str] = Field("sse", description="MCP server transport. Can be sse, websocket or streamable_http")
-    url: str = Field(None, description="URL and endpoint of the MCP server")
-    sse_read_timeout: int = Field(60 * 5, description="How long (in seconds) the client will wait for a new event before disconnecting")
-
+    transport: Optional[str] = Field("sse", description="MCP server transport. Can be sse, stdio, websocket or streamable_http")
+    url: Optional[str] = Field(None, description="URL and endpoint of the MCP server")
+    sse_read_timeout:  Optional[int] = Field(60 * 5, description="How long (in seconds) the client will wait for a new event before disconnecting")
+    command: Optional[str] = Field(None, description="Command to run for stdio transport. Can be uv, uvx, npx and so on.")
+    args: Optional[List[str]] = Field(None, description="Args to give the command as a list. ex:  ['--directory', '/directory/to/mcp', 'run', 'server.py']")
+    env: Optional[Dict[str, Any]] = Field(None, description="Environment variables to give the MCP server")
+    
 class PathOrIndexPrefix(BaseModel):
     energy_mix: str
     carbon_footprint: str

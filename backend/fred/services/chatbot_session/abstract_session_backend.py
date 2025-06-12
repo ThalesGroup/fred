@@ -15,7 +15,7 @@
 from typing import List
 from abc import ABC, abstractmethod
 
-from services.chatbot_session.structure.chat_schema import ChatMessagePayload, SessionSchema
+from fred.services.chatbot_session.structure.chat_schema import ChatMessagePayload, SessionSchema
 
 class AbstractSessionStorage(ABC):
 

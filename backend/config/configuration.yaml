@@ -77,8 +77,21 @@ ai:
       mcp_servers:
         - name: k8s-mcp-server
           transport: sse
-          url: http://localhost:8081/sse
+          url: http://localhost:8081/sse # Run the k8s mcp server via docker compose
           sse_read_timeout: 600 # 10 minutes. It is 5 minutes by default but it is too short.
+        #######################################
+        #### Example using STDIO transport ####
+        #######################################
+        # - name: prometheus-mcp-server
+        #   transport: stdio
+        #   command: uv
+        #   args:
+        #     - "--directory"
+        #     - "/home/xxx/Documents/github_repos/prometheus-mcp-server"
+        #     -  "run"
+        #     -  "src/prometheus_mcp_server/main.py"
+        #   env: 
+        #     PROMETHEUS_URL: "http://localhost:9091"
       model: {}
     - name: "GeneralistExpert"
       class_path: "agents.generalist.generalist_expert.GeneralistExpert"

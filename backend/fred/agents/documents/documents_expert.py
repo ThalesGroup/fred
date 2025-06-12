@@ -17,7 +17,7 @@ import logging
 from datetime import datetime
 from typing import List, Optional
 
-from flow import AgentFlow
+from fred.flow import AgentFlow
 from fred.agents.documents.documents_expert_toolkit import DocumentsToolkit
 from fred.application_context import (get_agent_settings,
                                       get_mcp_client_for_agent,

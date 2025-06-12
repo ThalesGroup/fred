@@ -17,7 +17,7 @@ from typing import override, List
 from langchain_core.tools import BaseToolkit, BaseTool
 from pydantic import Field
 
-from agents.keda.keda_tools import (generate_keda_cron_configuration,
+from fred.agents.keda.keda_tools import (generate_keda_cron_configuration,
                                                       generate_keda_prometheus_configuration, get_prometheus_url_tool,
                                                       get_workload_tool, get_workload_name_list_tool)
 

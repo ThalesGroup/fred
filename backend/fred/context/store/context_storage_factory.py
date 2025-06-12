@@ -13,12 +13,12 @@
 # limitations under the License.
 
 from pathlib import Path
-from config.context_store_local_settings import ContextStoreLocalSettings
-from config.context_store_minio_settings import ContextStoreMinioSettings
-from main_utils import validate_settings_or_exit
-from context.store.base_context_store import BaseContextStore
-from context.store.local_context_store import LocalContextStore
-from context.store.minio_context_store import MinIOContextStore
+from fred.config.context_store_local_settings import ContextStoreLocalSettings
+from fred.config.context_store_minio_settings import ContextStoreMinioSettings
+from fred.main_utils import validate_settings_or_exit
+from fred.context.store.base_context_store import BaseContextStore
+from fred.context.store.local_context_store import LocalContextStore
+from fred.context.store.minio_context_store import MinIOContextStore
 from fred.application_context import get_configuration
 from minio import Minio
 

@@ -20,7 +20,7 @@ import yaml
 
 logger = logging.getLogger(__name__)
 
-from common.structure import Configuration, PrecisionEnum, SampleDataType, Series, CompareResult, Window, Difference
+from fred.common.structure import Configuration, PrecisionEnum, SampleDataType, Series, CompareResult, Window, Difference
 
 def parse_server_configuration(configuration_path: str) -> Configuration:
     """
