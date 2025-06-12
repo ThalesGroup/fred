@@ -33,7 +33,7 @@ from typing import List, Tuple
 import logging
 
 from fred.monitoring.metric_store import MetricStore
-from fred.monitoring.hybride_metric_store import get_metric_store,HybridMetricStore
+from fred.monitoring.hybrid_metric_store import get_metric_store,HybridMetricStore
 from fred.monitoring.metric_types import CategoricalMetric, MetaData, NumericalMetric
 
 logger = logging.getLogger(__name__)
