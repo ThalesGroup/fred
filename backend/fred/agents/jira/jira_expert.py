@@ -31,18 +31,13 @@ class JiraExpert(AgentFlow):
     name: str = "JiraExpert"
     role: str = "Jira Expert"
     nickname: str = "Josh"
-    description: str = (
-        "An expert that has access to Jira API and can perform issues queries and aggregate data in a clear and concise manner"
-    )
+    description: str = "An expert that has access to Jira API and can perform issues queries and aggregate data in a clear and concise manner"
     icon: str = "jira_agent"
     categories: list[str] = []
     tag: str = "jira operator"  # Défini au niveau de la classe
     
-    def __init__(self, 
-                 cluster_fullname: Optional[str]
-                 ):
+    def __init__(self):
         self.current_date = datetime.now().strftime("%Y-%m-%d")
-        self.cluster_fullname = cluster_fullname
         self.agent_settings = get_agent_settings(self.name)
         self.model = get_model_for_agent(self.name)
         self.mcp_client = get_mcp_client_for_agent(self.name)
@@ -64,6 +59,7 @@ class JiraExpert(AgentFlow):
             base_prompt=self._generate_prompt(),
             categories=self.categories,
             tag=self.tag,
+            toolkit=self.toolkit
         )
         
 
@@ -76,10 +72,6 @@ class JiraExpert(AgentFlow):
         """
         lines = [
             "You are a Jira expert with access to tools for retrieving and analyzing data from Jira APIs. You are equipped with MCP server tools.",
-        ]
-
-        lines += [
-            "",
             "### Your Primary Responsibilities:",
             "1. **Retrieve Data**: Use the provided tools, including MCP server tools, to fetch data for:",
             "   - Ongoing issues associated to the API key user.",
@@ -94,8 +86,7 @@ class JiraExpert(AgentFlow):
             "1. Always use tools to fetch data before providing answers. Avoid generating generic guidance or assumptions.",
             "2. Aggregate and analyze the data to directly answer the user's query.",
             "3. Present the results clearly, with summaries, breakdowns, and trends where applicable.",
-            f"The current date is {datetime.now().strftime('%Y-%m-%d')}.",
-            "",
+            f"The current date is {datetime.now().strftime('%Y-%m-%d')}."
         ]
         return "\n".join(lines)
 
