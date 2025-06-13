@@ -25,19 +25,21 @@ export function TokenUsageChart({ start, end, precision, metrics }: TokenUsageCh
     }
   }
 
-  // Label formatting for X axis
+  // Label formatting for X axis, rounded for "round" numbers
   function getLabel(date: Date): string {
     const d = dayjs(date);
     switch (precision) {
       case "day":
-        return d.format("YYYY-MM-DD");
+        return d.format("DD MMMM");
       case "hour":
-        return d.format("YYYY-MM-DD HH:00");
+        return d.format("HH:00");
       case "min":
-        return d.format("HH:mm");
+        // Only show label for "round" 10-minutes (e.g., 16:00, 16:10, 16:20)
+        return d.minute() % 10 === 0 ? d.format("HH:mm") : "";
       case "sec":
       default:
-        return d.format("HH:mm:ss");
+        // Only show label for "round" 5-minutes (e.g., 16:00:00, 16:05:00)
+        return d.second() === 0 && d.minute() % 5 === 0 ? d.format("HH:mm:ss") : "";
     }
   }
 
@@ -63,8 +65,10 @@ export function TokenUsageChart({ start, end, precision, metrics }: TokenUsageCh
   }
 
   while (current.isBefore(endTime) || current.isSame(endTime)) {
+    // Retrieve the metric for the current time (if it exists)
     const key = getBucketKey(current.toDate());
     const metric = metricMap.get(key);
+
     data.push({
       time: getLabel(current.toDate()),
       tokens: metric ? (metric.values["token_usage.total_tokens"] ?? 0) : 0,
@@ -73,11 +77,14 @@ export function TokenUsageChart({ start, end, precision, metrics }: TokenUsageCh
     current = incrementDate(current);
   }
 
+  // Filter ticks to only those with a label
+  const ticks = data.map((d, i) => (d.time ? i : null)).filter((i) => i !== null) as number[];
+
   return (
     <ResponsiveContainer width="100%" height={300}>
       <BarChart data={data}>
         <CartesianGrid strokeDasharray="3 3" />
-        <XAxis dataKey="time" />
+        <XAxis dataKey="time" ticks={ticks.map((i) => data[i].time)} />
         <YAxis />
         <Tooltip />
         <Bar dataKey="tokens" fill="#8884d8" />
