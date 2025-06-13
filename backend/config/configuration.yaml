@@ -50,14 +50,41 @@ ai:
     connect: 5  # Time to wait for a connection in seconds
     read: 15    # Time to wait for a response in seconds
   default_model:
-    #provider: "ollama"
-    #name: "llama2"
+    # Required in .env:
+    #   OPENAI_API_KEY=...
     provider: "openai"
     name: "gpt-4o"
+    provider_settings:
+      temperature: 0.0
+      max_retries: 2
+      request_timeout: 30
+
+    # --- OR uncomment for Azure OpenAI ---
+    # Required in .env:
+    #   AZURE_OPENAI_API_KEY=...
+    #
+    # Optional for token-based auth:
+    #   AZURE_TENANT_ID=...
+    #   AZURE_CLIENT_ID=...
+    #   AZURE_CLIENT_SECRET=...
     #provider: "azure"
-    #name: "fred-gpt-4o"
-    api_version: "2024-05-01-preview"
-    temperature: 0.0
+    #name: "fred-gpt-4o"  # Azure deployment name
+    #provider_settings:
+    #  api_version: "2024-05-01-preview"
+    #  temperature: 0.0
+    #  max_retries: 2
+    #  request_timeout: 30
+    #  azure_endpoint: "https://tehopenai.openai.azure.com/"
+
+    # --- OR uncomment for Ollama ---
+    # provider: "ollama"
+    # name: "llama2"
+    # provider_settings:
+    #   base_url: "http://localhost:11434"
+    #   temperature: 0.0
+
+    # Optional in .env (only if remote):
+    #   OLLAMA_BASE_URL=http://remote-host:11434
   leader:
     name: "Fred"
     class_path: "leader.leader.Leader"
@@ -137,15 +164,6 @@ dao:
   type: "file"  # Currently the only one supported
   base_path: "~/.fred/dao-cache"
   max_cached_delay_seconds: 300  # Cache delay in seconds. Use 0 for no cache or a negative value for limitless cache.
-
-# Where to store user feedback
-feedback:
-   type: postgres
-#  db_host: fred-postgres
-#  db_port: 5432
-#  db_name: fred_db
-#  user: admin
-#  password: Azerty123_
 
 # Enable or disable the security layer
 security:

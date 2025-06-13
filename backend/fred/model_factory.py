@@ -48,38 +48,27 @@ def get_model(model_config: ModelConfiguration):
     if not provider:
         logger.error("Missing mandatory model_type property in model configuration: %s", model_config)
         raise ValueError("Missing mandatory_model type in model configuration.")
-    # Common parameters shared across providers
-    common_params = {
-        "temperature": model_config.temperature or 0,
-        # Optionally extend ModelConfiguration to include these fields
-        # "max_tokens": model_config.max_tokens,
-        # "request_timeout": model_config.request_timeout or 30,
-        # "logprobs": model_config.logprobs,
-        # "streaming": model_config.streaming or False,
-        # "verbose": model_config.verbose or False,
-    }
-    provider_settings = model_config.provider_settings or {}
+    provider_settings = (model_config.provider_settings or {}).copy()
 
     if provider == "azure":
         logger.info("Creating Azure Chat model instance with config %s", model_config)
         return AzureChatOpenAI(
-            azure_deployment=provider_settings.get("azure_deployment", "fred-gpt-4o"),
-            api_version=provider_settings.get("api_version", "2024-05-01-preview"),
-            **common_params
+            azure_deployment=model_config.name,
+            api_version=provider_settings.pop("api_version", "2024-05-01-preview"),
+            **provider_settings
         )
     elif provider == "openai":
         logger.info("Creating OpenAI Chat model instance with config %s", model_config)
         return ChatOpenAI(
             model=model_config.name,
-            max_retries=provider_settings.get("max_retries", 2),
-            **common_params
+            **provider_settings
         )
     elif provider == "ollama":
         logger.info("Creating Ollama Chat model instance with config %s", model_config)
         return ChatOllama(
             model=model_config.name,
-            base_url=provider_settings.get("base_url", None),
-            **common_params
+            base_url=provider_settings.pop("base_url", None),
+            **provider_settings
         )
     else:
         logger.error("Unsupported model provider %s", provider)

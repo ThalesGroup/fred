@@ -116,7 +116,6 @@ class TimeoutSettings(BaseModel):
 class ModelConfiguration(BaseModel):
     provider: Optional[str] = Field(None, description="Provider of the AI model, e.g., openai, ollama, azure.")
     name: Optional[str] = Field(None, description="Model name, e.g., gpt-4o, llama2.")
-    temperature: Optional[float] = Field(0.0, description="Temperature setting for the model.")
     provider_settings: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Additional provider-specific settings, e.g., Azure deployment name.")
 
 class MCPServerConfiguration(BaseModel):
@@ -251,14 +250,6 @@ class Security(BaseModel):
     client_id: str = "fred"
 
 
-class FeedbackDatabase(BaseModel):
-    type: str = "postgres"
-    #db_host: str = "localhost"
-    #db_port: int = 5432
-    #db_name: str = "fred_db"
-    #user: str = "fred_user"
-    #password: str
-
 class FrontendFlags(BaseModel):
     enableK8Features: bool = False
     enableElecWarfare: bool = False
@@ -284,7 +275,6 @@ class Configuration(BaseModel):
     ai: AIConfig
     dao: DAOConfiguration
     security: Security
-    feedback: FeedbackDatabase
     context_storage: ContextStorageConfig = Field(..., description="Content Storage configuration")
     feedback_storage: FeedbackStorageConfig = Field(..., description="Feedback Storage configuration")
 
