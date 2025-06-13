@@ -18,9 +18,9 @@ from langchain_core.tools import BaseToolkit, BaseTool
 from pydantic import Field
 from langchain_mcp_adapters.client import MultiServerMCPClient
 
-class DocumentsToolkit(BaseToolkit):
+class JiraExpertToolkit(BaseToolkit):
     """
-    Toolkit for MCP documents expert tools
+    Toolkit for Jira tools
     """
 
     tools: List[BaseTool] = Field(default_factory=list, description="List of the tools.")

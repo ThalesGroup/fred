@@ -1,3 +1,17 @@
+# Copyright Thales 2025
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
@@ -112,7 +126,7 @@ class MCPServerConfiguration(BaseModel):
     sse_read_timeout:  Optional[int] = Field(60 * 5, description="How long (in seconds) the client will wait for a new event before disconnecting")
     command: Optional[str] = Field(None, description="Command to run for stdio transport. Can be uv, uvx, npx and so on.")
     args: Optional[List[str]] = Field(None, description="Args to give the command as a list. ex:  ['--directory', '/directory/to/mcp', 'run', 'server.py']")
-    env: Optional[Dict[str, Any]] = Field(None, description="Environment variables to give the MCP server")
+    env: Optional[Dict[str, str]] = Field(None, description="Environment variables to give the MCP server")
     
 class PathOrIndexPrefix(BaseModel):
     energy_mix: str

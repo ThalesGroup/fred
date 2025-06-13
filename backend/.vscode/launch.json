@@ -9,7 +9,7 @@
       "console": "integratedTerminal",
       "justMyCode": true,
       "env": {
-        "PYTHONPATH": "${workspaceFolder}/fred",
+        "PYTHONPATH": "${workspaceFolder}",
         "PATH": "${workspaceFolder}/.venv/bin:${env:PATH}",
         "LOG_LEVEL": "INFO"
       },

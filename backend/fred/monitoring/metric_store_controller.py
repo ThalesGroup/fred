@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 """
 FastAPI routes and controller for accessing metrics stored in an in-memory
 MetricStore.

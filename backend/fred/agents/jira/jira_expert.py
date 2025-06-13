@@ -21,39 +21,32 @@ from langgraph.constants import START
 from langgraph.prebuilt import ToolNode, tools_condition
 
 from fred.application_context import get_agent_settings, get_model_for_agent, get_mcp_client_for_agent
-from fred.agents.kubernetes_monitoring.k8s_operator_toolkit import K8SOperatorToolkit
+from fred.agents.jira.jira_toolkit import JiraExpertToolkit
 
-class K8SOperatorExpert(AgentFlow):
+class JiraExpert(AgentFlow):
     """
-    Expert to execute actions on a Kubernetes cluster.
+    Expert to execute actions on a a Jira Instance.
     """
     # Class-level attributes for metadata
-    name: str = "K8SOperatorExpert"
-    role: str = "Kubernetes Operator Expert"
-    nickname: str = "Kimberley"
-    description: str = (
-        "A Kubernetes monitoring & operator expert that can perform various actions on a Kubernetes cluster "
-        "to provide insights on cluster performance, state of the current installed resources, "
-        "pod status, container information, logs, and many more. This expert performs the relevant "
-        "kubectl and helm commands in order to fulfill its mission and generate meaningful "
-        "and aggregated results for the user."
-    )
-    icon: str = "k8s_operator_agent"
+    name: str = "JiraExpert"
+    role: str = "Jira Expert"
+    nickname: str = "Josh"
+    description: str = "An expert that has access to Jira API and can perform issues queries and aggregate data in a clear and concise manner"
+    icon: str = "jira_agent"
     categories: list[str] = []
-    tag: str = "k8s operator"  # Défini au niveau de la classe
+    tag: str = "jira operator"  # Défini au niveau de la classe
     
     def __init__(self, 
                  cluster_fullname: Optional[str]
                  ):
         self.current_date = datetime.now().strftime("%Y-%m-%d")
-        self.cluster_fullname = cluster_fullname
         self.agent_settings = get_agent_settings(self.name)
         self.model = get_model_for_agent(self.name)
         self.mcp_client = get_mcp_client_for_agent(self.name)
-        self.toolkit = K8SOperatorToolkit(self.mcp_client)
+        self.toolkit = JiraExpertToolkit(self.mcp_client)
         self.model_with_tools = self.model.bind_tools(self.toolkit.get_tools())
         self.llm = self.model_with_tools
-        self.categories = self.agent_settings.categories if self.agent_settings.categories else ["Operator"]
+        self.categories = self.agent_settings.categories if self.agent_settings.categories else ["Jira"]
         # On conserve le tag de classe si agent_settings.tag est None ou vide
         if self.agent_settings.tag:
             self.tag = self.agent_settings.tag
@@ -68,42 +61,34 @@ class K8SOperatorExpert(AgentFlow):
             base_prompt=self._generate_prompt(),
             categories=self.categories,
             tag=self.tag,
+            toolkit=self.toolkit
         )
         
 
     def _generate_prompt(self) -> str:
         """
-        Generates the base prompt for the Kubernetes operator expert.
+        Generates the base prompt for the Jira expert.
 
         Returns:
             str: A formatted string containing the expert's instructions.
         """
         lines = [
-            "You are a Kubernetes monitoring & operator expert with access to tools for retrieving and analyzing data.",
-        ]
-        if self.cluster_fullname:
-            lines.append(f"Your current context involves a Kubernetes cluster named {self.cluster_fullname}, and you are equipped with MCP server tools.")
-        else:
-            lines.append("You are equipped with MCP server tools.")
-
-        lines += [
-            "",
+            "You are a Jira expert with access to tools for retrieving and analyzing data from Jira APIs. You are equipped with MCP server tools.",
             "### Your Primary Responsibilities:",
             "1. **Retrieve Data**: Use the provided tools, including MCP server tools, to fetch data for:",
-            "   - Pods & containers statuses and logs.",
-            "   - The state of the deployed resources and whether they are functioning properly.",
-            "   - Retrieve any malfunction in the cluster.",
+            "   - Ongoing issues associated to the API key user.",
+            "   - Summarize the worklog",
+            "   - Give an overview of the issues events and potential comments",
+            "   - Provide the resolution field & status of the issue everytime you mention it"
             "2. **Aggregate Data**: Execute appropriate commands using the MCP server in order to:",
-            "   - Get and interpret the logs and the resource statuses.",
+            "   - Give a concise status of the work the API key user has.",
             "   - Summarize key insights in a user-friendly manner.",
-            "",
+            "   - Provide the title of the Jira ticket everytime since the ticket Identifier is not really easy to understand",
             "### Key Instructions:",
             "1. Always use tools to fetch data before providing answers. Avoid generating generic guidance or assumptions.",
             "2. Aggregate and analyze the data to directly answer the user's query.",
             "3. Present the results clearly, with summaries, breakdowns, and trends where applicable.",
-            "",
-            f"The current date is {datetime.now().strftime('%Y-%m-%d')}.",
-            "",
+            f"The current date is {datetime.now().strftime('%Y-%m-%d')}."
         ]
         return "\n".join(lines)
 
