@@ -89,11 +89,11 @@ ai:
       model: {}
     - name: K8SOperatorExpert
       class_path: "agents.kubernetes_monitoring.k8s_operator_expert.K8SOperatorExpert"
-      enabled: false
+      enabled: true
       mcp_servers:
         - name: k8s-mcp-server
           transport: sse
-          url: http://localhost:8081/sse # Run the k8s mcp server via docker compose
+          url: http://k8s-mcp:8081/sse
           sse_read_timeout: 600 # 10 minutes. It is 5 minutes by default but it is too short.
         #######################################
         #### Example using STDIO transport ####
@@ -117,9 +117,9 @@ ai:
       class_path: "agents.documents.documents_expert.DocumentsExpert"
       enabled: true
       mcp_servers:
-        - name: knowledgeflow-mcp-server
+        - name: knowledge-flow-mcp-server
           transport: sse
-          url: http://localhost:8111/mcp
+          url: http://knowledge-flow-backend:8111/mcp
           sse_read_timeout: 2000
       model: {}
     # The Monitoring expert requires you activate the 'enableK8Features' flags above
@@ -147,7 +147,7 @@ security:
 
 # KEYCLOAK
 keycloak:
-  server_url: "https://localhost:8080"
+  server_url: "https://keycloak:8080"
   realm_name: "fred"
   client_id: "fred"
 
