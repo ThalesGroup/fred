@@ -21,6 +21,7 @@ import { Aggregation, Precision, useFetchNumericalMetricsMutation } from "../../
 import LoadingWithProgress from "../LoadingWithProgress";
 import DashboardCard from "./DashboardCard";
 import { TokenUsageChart } from "./TokenUsageChart";
+import "dayjs/locale/fr";
 
 type QuickRangeType =
   | "today"
@@ -61,7 +62,7 @@ export default function MetricsDashboard() {
   const [fetchNumericalMetrics, { data: numericalSum, isLoading, isError }] = useFetchNumericalMetricsMutation();
 
   const now = dayjs();
-  const [startDate, setStartDate] = useState<Dayjs>(now.subtract(3, "hours"));
+  const [startDate, setStartDate] = useState<Dayjs>(now.subtract(12, "hours"));
   const [endDate, setEndDate] = useState<Dayjs>(now);
   // Fetch metrics when startDate or endDate changes
   useEffect(() => {
@@ -248,7 +249,7 @@ export default function MetricsDashboard() {
             </Button>
           </ButtonGroup>
           <Box display="flex" gap={2} alignItems="center">
-            <LocalizationProvider dateAdapter={AdapterDayjs}>
+            <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="fr">
               <DateTimePicker
                 label="From"
                 value={startDate}
