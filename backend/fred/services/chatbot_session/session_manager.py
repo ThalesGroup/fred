@@ -23,8 +23,8 @@ from uuid import uuid4
 from fastapi import UploadFile
 from collections import defaultdict
 
-from chatbot.agent_manager import AgentManager
-from flow import AgentFlow
+from fred.chatbot.agent_manager import AgentManager
+from fred.flow import AgentFlow
 from fred.services.chatbot_session.attachement_processing import AttachementProcessing
 from fred.services.chatbot_session.structure.chat_schema import ChatMessagePayload, ChatTokenUsage, SessionSchema, SessionWithFiles, clean_agent_metadata
 from fred.services.chatbot_session.abstract_session_backend import AbstractSessionStorage

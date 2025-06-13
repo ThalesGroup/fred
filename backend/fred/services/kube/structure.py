@@ -39,7 +39,7 @@ from typing import List, Optional, Dict, Any
 from croniter import croniter, CroniterBadCronError, CroniterBadDateError
 from pydantic import BaseModel, ConfigDict, Field, model_validator, RootModel
 
-from common.structure import WorkloadKind
+from fred.common.structure import WorkloadKind
 
 
 class Cluster(BaseModel):
