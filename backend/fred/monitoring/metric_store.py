@@ -16,6 +16,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from typing import List, Optional
 from pydantic import BaseModel
+from enum import Enum
 
 from fred.monitoring.metric_types import CategoricalMetric, NumericalMetric
 
@@ -49,6 +50,18 @@ class Metric(BaseModel):
     service_tier: Optional[str] = None
     token_usage: Optional[TokenUsage] = None
 
+class Precision(str, Enum):
+    sec = "sec"
+    min = "min"
+    hour = "hour"
+    day = "day"
+
+class Aggregation(str, Enum):
+    avg = "avg"
+    max = "max"
+    min = "min"
+    sum = "sum"
+
 class MetricStore(ABC):
     @abstractmethod
     def add_metric(self, metric: Metric) -> None:
@@ -64,7 +77,7 @@ class MetricStore(ABC):
 
     @abstractmethod
     def get_numerical_aggregated_by_precision(
-        self, start: datetime, end: datetime, precision: str, agg: str
+        self, start: datetime, end: datetime, precision: Precision, agg: Aggregation
     ) -> List[NumericalMetric]:
         pass
 

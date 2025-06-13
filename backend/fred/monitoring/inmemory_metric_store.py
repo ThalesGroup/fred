@@ -19,7 +19,7 @@ from collections import defaultdict
 from statistics import mean
 from pydantic import BaseModel
 
-from fred.monitoring.metric_store import MetricStore, Metric
+from fred.monitoring.metric_store import MetricStore, Metric, Precision, Aggregation
 from fred.monitoring.metric_types import NumericalMetric, CategoricalMetric
 
 logger = logging.getLogger("InMemoryMetricStore")
@@ -75,19 +75,19 @@ class InMemoryMetricStore(MetricStore):
         ]
 
     def get_numerical_aggregated_by_precision(
-        self, start: datetime, end: datetime, precision: str, agg: str
+        self, start: datetime, end: datetime, precision: Precision, agg: Aggregation
     ) -> List[NumericalMetric]:
         metrics = self.get_by_date_range(start, end)
 
         def round_bucket(ts: float) -> str:
             dt = datetime.fromtimestamp(ts)
-            if precision == "sec":
+            if precision == Precision.sec:
                 return dt.strftime("%Y-%m-%d %H:%M:%S")
-            elif precision == "min":
+            elif precision == Precision.min:
                 return dt.strftime("%Y-%m-%d %H:%M")
-            elif precision == "hour":
+            elif precision == Precision.hour:
                 return dt.strftime("%Y-%m-%d %H:00")
-            elif precision == "day":
+            elif precision == Precision.day:
                 return dt.strftime("%Y-%m-%d")
             return dt.isoformat()
 
@@ -109,13 +109,13 @@ class InMemoryMetricStore(MetricStore):
             for field, val_list in field_values.items():
                 if not val_list:
                     continue
-                if agg == "avg":
+                if agg == Aggregation.avg:
                     values[field] = round(mean(val_list), 4)
-                elif agg == "max":
+                elif agg == Aggregation.max:
                     values[field] = round(max(val_list), 4)
-                elif agg == "min":
+                elif agg == Aggregation.min:
                     values[field] = round(min(val_list), 4)
-                elif agg == "sum":
+                elif agg == Aggregation.sum:
                     values[field] = round(sum(val_list), 4)
             result.append(NumericalMetric(bucket=bucket_key, values=values))
 

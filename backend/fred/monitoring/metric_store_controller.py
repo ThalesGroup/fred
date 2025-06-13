@@ -14,10 +14,10 @@
 
 from fastapi import APIRouter, Query, HTTPException
 from datetime import datetime
-from typing import List, Tuple
+from typing import Annotated, List, Tuple
 import logging
 
-from fred.monitoring.metric_store import MetricStore
+from fred.monitoring.metric_store import MetricStore, Precision, Aggregation
 from fred.monitoring.inmemory_metric_store import get_metric_store
 from fred.monitoring.metric_types import CategoricalMetric, MetaData, NumericalMetric
 
@@ -37,18 +37,18 @@ class MetricStoreController:
 
         @router.get("/metrics/all", response_model=List[MetaData], tags=["Metrics"])
         def get_all_metrics(
-            start: str = Query(..., description="Start date in ISO 8601 format"),
-            end: str = Query(..., description="End date in ISO 8601 format")
+            start: Annotated[str, Query(description="Start date in ISO 8601 format")],
+            end: Annotated[str, Query(description="End date in ISO 8601 format")]
         ) -> List[MetaData]:
             start_dt, end_dt = parse_dates(start, end)
             return self.metric_store.get_by_date_range(start_dt, end_dt)
 
         @router.get("/metrics/numerical", response_model=List[NumericalMetric], tags=["Metrics"])
         def get_numerical_metrics(
-            start: str = Query(...),
-            end: str = Query(...),
-            precision: str = Query("hour", enum=["sec", "min", "hour", "day"]),
-            agg: str = Query("avg", enum=["avg", "max", "min", "sum"])
+            start: Annotated[str, Query()],
+            end: Annotated[str, Query()],
+            precision: Precision = Precision.hour,
+            agg: Aggregation = Aggregation.avg,
         ) -> List[NumericalMetric]:
             start_dt, end_dt = parse_dates(start, end)
             return self.metric_store.get_numerical_aggregated_by_precision(
@@ -57,9 +57,8 @@ class MetricStoreController:
 
         @router.get("/metrics/categorical", response_model=List[CategoricalMetric], tags=["Metrics"])
         def get_categorical_metrics(
-            start: str = Query(...),
-            end: str = Query(...)
-            
+            start: Annotated[str, Query()],
+            end: Annotated[str, Query()]
         ) -> List[CategoricalMetric]:
             start_dt, end_dt = parse_dates(start, end)
             return self.metric_store.get_categorical_rows_by_date_range(
