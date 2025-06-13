@@ -22,7 +22,7 @@ from uuid import uuid4
 
 from fastapi import UploadFile
 from collections import defaultdict
-
+import requests
 from chatbot.agent_manager import AgentManager
 from flow import AgentFlow
 from fred.services.chatbot_session.attachement_processing import AttachementProcessing
@@ -93,6 +93,16 @@ class SessionManager:
             return "error"
 
         return None
+    
+    def get_chat_profile_data(self, chat_profile_id: str, knowledge_base_url: str = "http://localhost:8111/knowledge/v1") -> dict:
+        try:
+            response = requests.get(f"{knowledge_base_url}/chatProfiles/{chat_profile_id}", timeout=5)
+            response.raise_for_status()
+            return response.json()
+        except requests.RequestException as e:
+            raise RuntimeError(f"Failed to fetch chat profile {chat_profile_id}: {e}")
+
+
 
     def _get_or_create_session(self, 
                                user_id: str, 
@@ -137,21 +147,11 @@ class SessionManager:
         session_id: str,
         message: str,
         agent_name: str,
-        argument: str
+        argument: str,
+        chat_profile_id: Optional[str] = None
     ) -> Tuple[SessionSchema, List[ChatMessagePayload]]:
-        """
-        Handles a chat request via WebSocket.
-        This method prepares the session and message history, calls the agent,
-        and streams the responses.
-        :param callback: The callback to invoke for streaming responses.
-        :param user_id: The ID of the user.
-        :param session_id: The ID of the session.
-        :param message: The message from the user.
-        :param agent_name: The name of the agent to be used.
-        :return: A tuple of (session, interaction).
-        """
-        logger.info(f"chat_ask_websocket called with user_id: {user_id}, session_id: {session_id}, message: {message}, agent_name: {agent_name}")
-        # Step 1: Prepare session and history
+        logger.info(f"chat_ask_websocket called with user_id: {user_id}, session_id: {session_id}, message: {message}, agent_name: {agent_name}, chat_profile_id: {chat_profile_id}")
+
         session, history, agent, is_new_session = self._prepare_session_and_history(
             user_id=user_id,
             session_id=session_id,
@@ -161,9 +161,44 @@ class SessionManager:
         )
         set_logging_context(user_id=user_id, session_id=session.id)
         exchange_id = str(uuid4())
-        base_rank = base_rank = len(history)
+        base_rank = len(history)
 
-        # Step 2: Run agent and stream back enriched ChatMessagePayloads
+        injected_payload = None
+
+        # 🔁 Inject profile context if provided
+        if chat_profile_id:
+            try:
+                profile_data = self.get_chat_profile_data(chat_profile_id)
+                title = profile_data.get("title", "")
+                description = profile_data.get("description", "")
+                markdown = profile_data.get("markdown", "")
+                full_context = f"## {title}\n\n{description}\n\n{markdown}"
+
+                # Inject AIMessage and keep it for saving
+                profile_message = AIMessage(
+                    content=full_context,
+                    response_metadata={"injected": True, "origin": "chat_profile"}
+                )
+                history.insert(0, profile_message)
+
+                injected_payload = ChatMessagePayload(
+                    exchange_id=str(uuid4()),
+                    type="ai",
+                    sender="assistant",
+                    content=full_context,
+                    timestamp=datetime.now().isoformat(),
+                    session_id=session.id,
+                    rank=base_rank,  # context before user message
+                    metadata={"injected": True, "origin": "chat_profile"},
+                    subtype="injected_context"
+                )
+
+                logger.info(f"[PROFILE CONTEXT INJECTED] Profile {chat_profile_id} injected successfully.")
+
+            except Exception as e:
+                logger.error(f"Failed to inject chat profile context: {e}")
+
+        # 🧠 Run agent
         all_messages = await self._stream_agent_response(
             compiled_graph=agent.get_compiled_graph(),
             input_messages=history,
@@ -173,14 +208,14 @@ class SessionManager:
             base_rank=base_rank,
         )
 
-        # Step 3: Save session metadata
         session.updated_at = datetime.now()
         self.storage.save_session(session)
 
-        # Step 4: Create the user message payload
+        # 🙋‍♀️ User message payload
         timestamp = datetime.now().isoformat()
         metadata = clean_agent_metadata(getattr(message, "response_metadata", getattr(message, "metadata", {})) or {})
         subtype = self._infer_message_subtype(metadata, message.type if isinstance(message, BaseMessage) else None)
+
         user_payload = ChatMessagePayload(
             exchange_id=exchange_id,
             type="human",
@@ -192,21 +227,20 @@ class SessionManager:
             subtype=subtype
         )
 
-        # Step 5: Re-rank streamed assistant messages
+        # 🧾 Re-rank assistant messages
         for i, m in enumerate(all_messages):
-            m.rank = base_rank + 1 + i  # Incremental rank after user message
-            logger.info(
-                f"[SAVING] type={m.type} | content={m.content[:60]} | subtype={m.subtype} | fred.task={m.metadata.get('fred', {}).get('task')}"
-            )
+            m.rank = base_rank + 1 + i
 
-        logger.info(
-            f"[SAVING] type={user_payload.type} | content={user_payload.content[:60]} | subtype={user_payload.subtype} | fred.task={user_payload.metadata.get('fred', {}).get('task') if user_payload.metadata else None}"
-        )
+        # 🧠 Save messages: profile (optional) + user + responses
+        all_payloads = []
+        if injected_payload:
+            all_payloads.append(injected_payload)
+        all_payloads.append(user_payload)
+        all_payloads.extend(all_messages)
 
-        # Step 6: Save everything
-        all_payloads = [user_payload] + all_messages
         self.storage.save_messages(session.id, all_payloads)
         return session, all_payloads
+
 
     def _prepare_session_and_history(
         self, user_id: str, 

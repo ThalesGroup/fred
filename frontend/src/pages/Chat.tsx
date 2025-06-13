@@ -38,23 +38,28 @@ export interface AgenticFlow {
   tags?: string;
 }
 
+export interface ChatProfileLight {
+  id: string;
+  title: string;
+  description: string;
+}
+
 export const Chat = () => {
   const [searchParams] = useSearchParams();
   const cluster = searchParams.get("cluster");
   console.log("Cluster from params:", cluster);
-   
+
   const [getAgenticFlows] = useGetChatBotAgenticFlowsMutation();
   const [agenticFlows, setAgenticFlows] = useState<AgenticFlow[]>([]);
-
   const [currentAgenticFlow, setCurrentAgenticFlow] = useState<AgenticFlow | null>(null);
 
   const [getChatbotSessions] = useGetChatbotSessionsMutation();
   const [chatBotSessions, setChatBotSessions] = useState<SessionSchema[]>([]);
-
   const [currentChatBotSession, setCurrentChatBotSession] = useState<SessionSchema | null>(null);
   const [isCreatingNewConversation, setIsCreatingNewConversation] = useState(false);
 
-  // Select an agent
+  const [selectedChatProfile, setSelectedChatProfile] = useState<ChatProfileLight | null>(null);
+
   const handleSelectAgenticFlow = (flow: AgenticFlow) => {
     setCurrentAgenticFlow(flow);
     sessionStorage.setItem("currentAgenticFlow", JSON.stringify(flow));
@@ -169,11 +174,11 @@ export const Chat = () => {
             agenticFlows={agenticFlows}
             onUpdateOrAddSession={handleUpdateOrAddSession}
             isCreatingNewConversation={isCreatingNewConversation}
-            argument={cluster} // Pass cluster as an argument
+            argument={cluster}
+            selectedChatProfile={selectedChatProfile}
           />
         </Grid2>
         <Grid2 size="auto">
-          {/*Sidebar with chatbot sessions*/}
           <Settings
             sessions={chatBotSessions}
             currentSession={currentChatBotSession}
@@ -183,6 +188,7 @@ export const Chat = () => {
             currentAgenticFlow={currentAgenticFlow}
             onSelectAgenticFlow={handleSelectAgenticFlow}
             onDeleteSession={handleDeleteSession}
+            onSelectChatProfile={(profile) => setSelectedChatProfile(profile)}
           />
         </Grid2>
       </Grid2>

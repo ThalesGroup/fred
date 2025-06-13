@@ -66,6 +66,7 @@ export const Settings = ({
   currentAgenticFlow,
   onSelectAgenticFlow,
   onDeleteSession,
+  onSelectChatProfile,
 }: {
   sessions: SessionSchema[];
   currentSession: SessionSchema | null;
@@ -75,6 +76,7 @@ export const Settings = ({
   currentAgenticFlow: AgenticFlow;
   onSelectAgenticFlow: (flow: AgenticFlow) => void;
   onDeleteSession: (session: SessionSchema) => void;
+  onSelectChatProfile?: (profile: ChatProfileLight | null) => void;
 }) => {
   // Récupération du thème pour l'adaptation des couleurs
   const theme = useTheme<Theme>();
@@ -286,6 +288,9 @@ export const Settings = ({
               onChange={(e) => {
                 const ctx = chatProfiles.find(c => c.id === e.target.value);
                 setSelectedChatProfile(ctx || null);
+                if (onSelectChatProfile) {
+                  onSelectChatProfile(ctx || null);
+                }
               }}
               displayEmpty
               sx={{ mb: 1 }}

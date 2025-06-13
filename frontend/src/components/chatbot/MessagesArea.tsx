@@ -101,7 +101,12 @@ function Area({
             finalMessages.push(msg);
             console.log("✅ Classified as: FINAL RESPONSE");
           }
-        } else {
+        } 
+        else if (msg.subtype === "injected_context") {
+          console.log("⏭️ Skipping injected context message");
+          continue;
+        }
+        else {
           otherMessages.push(msg);
           console.warn("⚠️ Classified as: OTHER (fallback)");
         }

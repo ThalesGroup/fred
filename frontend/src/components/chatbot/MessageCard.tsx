@@ -196,11 +196,11 @@ export default function Message({
                   )}
                   {message.metadata && (
                     <Tooltip
-                      title={`This question used ${message.metadata.token_usage.input_tokens} tokens and the response used ${message.metadata.token_usage.output_tokens} tokens`}
+                      title={`This question used ${message.metadata.token_usage?.input_tokens} tokens and the response used ${message.metadata.token_usage?.output_tokens} tokens`}
                       placement="top"
                     >
                       <Typography color={theme.palette.text.secondary} fontSize=".7rem" sx={{ wordBreak: "normal" }}>
-                        {message.metadata.token_usage.output_tokens} tokens
+                        {message.metadata.token_usage?.output_tokens} tokens
                       </Typography>
                     </Tooltip>
                   )}

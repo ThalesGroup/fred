@@ -29,7 +29,7 @@ export interface ChatTokenUsage {
   total_tokens: number;
 }
 
-export type ChatMessageSubtype = "final" | "thought" | "tool_result" | "plan" | "execution" | "observation" | "error";
+export type ChatMessageSubtype = "final" | "thought" | "tool_result" | "plan" | "execution" | "observation" | "error" | "injected_context";
 
 export interface ChatSource {
   document_uid: string;
