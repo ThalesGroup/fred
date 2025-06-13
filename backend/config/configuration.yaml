@@ -141,15 +141,23 @@ dao:
 # Enable or disable the security layer
 security:
   enabled: false
-  keycloak_url: "http://keycloak:8080/realms/fred"
+  keycloak_url: "http://keycloak:8080/realms/app"
   authorized_origins:
   - "http://localhost:5173"
 
-# KEYCLOAK
-keycloak:
-  server_url: "https://keycloak:8080"
-  realm_name: "fred"
-  client_id: "fred"
+# Environment variables for the application
+
+# AZURE
+azure:
+  tenant_id: ""
+  client_id: ""
+  client_secret: ""
+  client_scope: ""
+  apim_key: ""
+  api_version: ""
+  deployment:
+    llm: ""
+    embedding: ""
 
 # CONTEXT STORAGE CONFIGURATION
 context_storage:
