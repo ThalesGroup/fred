@@ -10,46 +10,117 @@
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 
-import { Box, Grid2, Typography } from "@mui/material";
-import { useEffect } from "react";
-import { subMinutes } from "date-fns";
-import { useFetchNumericalMetricsMutation } from "../../slices/monitoringApi";
-import MetricChart from "./MetricChart";
+import { Box, Typography } from "@mui/material";
+import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
+import { DateTimePicker } from "@mui/x-date-pickers/DateTimePicker";
+import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
+import dayjs, { Dayjs } from "dayjs";
+import { useEffect, useState } from "react";
 import { PageBodyWrapper } from "../../common/PageBodyWrapper";
+import { Aggregation, Precision, useFetchNumericalMetricsMutation } from "../../slices/monitoringApi";
 import LoadingWithProgress from "../LoadingWithProgress";
+import DashboardCard from "./DashboardCard";
+import { TokenUsageChart } from "./TokenUsageChart";
+
+function getPrecisionForRange(start: Dayjs, end: Dayjs): Precision {
+  const diffMs = end.valueOf() - start.valueOf();
+  const diffDays = diffMs / (1000 * 60 * 60 * 24);
+  const diffHours = diffMs / (1000 * 60 * 60);
+
+  // less than 1 hour -> use second precision
+  if (diffHours <= 1) {
+    return "sec";
+  }
+
+  // 1 hour to 12 hours -> use minute precision
+  if (diffHours < 12) {
+    return "min";
+  }
+
+  // 12 hours to 2 days -> use hour precision
+  if (diffDays <= 2) {
+    return "hour";
+  }
+
+  // more than 2 days -> use day precision
+  return "day";
+}
 
 export default function MetricsDashboard() {
-  const [fetchNumericalMetrics, { data: numericalMetrics, isLoading, isError }] =
-    useFetchNumericalMetricsMutation();
+  const [fetchNumericalMetrics, { data: numericalSum, isLoading, isError }] = useFetchNumericalMetricsMutation();
 
+  const now = dayjs();
+  const [startDate, setStartDate] = useState<Dayjs>(now.subtract(3, "hours"));
+  const [endDate, setEndDate] = useState<Dayjs>(now);
+
+  // Fetch metrics when startDate or endDate changes
   useEffect(() => {
-    const start = subMinutes(new Date(), 60).toISOString();
-    const end = new Date().toISOString();
-    fetchNumericalMetrics({ start, end, precision: "minute", agg: "max" });
-  }, []);
+    fetchNumericalSumAggregation(startDate, endDate);
+  }, [startDate, endDate]);
+
+  function fetchNumericalSumAggregation(start: Dayjs, end: Dayjs) {
+    const param = {
+      start: start.toISOString(),
+      end: end.toISOString(),
+      precision: getPrecisionForRange(start, end),
+      agg: "sum" as Aggregation,
+    };
+
+    console.log("Fetching numerical metrics", param);
+    fetchNumericalMetrics(param);
+  }
 
   if (isError) {
     return (
       <Box p={4}>
-        <Typography variant="h6" color="error">❌ Failed to load metrics</Typography>
+        <Typography variant="h6" color="error">
+          ❌ Failed to load metrics
+        </Typography>
       </Box>
     );
   }
 
-  if (isLoading || !numericalMetrics) {
-      return (
-        <PageBodyWrapper>
-          <LoadingWithProgress />
-        </PageBodyWrapper>
-      );
-    }
+  if (isLoading || !numericalSum) {
+    return (
+      <PageBodyWrapper>
+        <LoadingWithProgress />
+      </PageBodyWrapper>
+    );
+  }
+
   return (
-    <Box p={2}>
-      <Grid2 container spacing={3} justifyContent="center">
-        <Grid2 size={{ xs: 8 }}>
-           <MetricChart metrics={numericalMetrics} />
-        </Grid2>
-      </Grid2>
+    <Box display="flex" flexDirection="column" gap={4} p={4}>
+      {/* Filters */}
+      <DashboardCard>
+        <Box display="flex" gap={2} alignItems="center">
+          <LocalizationProvider dateAdapter={AdapterDayjs}>
+            <DateTimePicker
+              label="Input Date"
+              value={startDate}
+              onChange={(newValue) => setStartDate(newValue)}
+              slotProps={{ textField: { size: "small", sx: { minWidth: 180 } } }}
+              maxDateTime={endDate ?? undefined}
+            />
+            <DateTimePicker
+              label="Output Date"
+              value={endDate}
+              onChange={(newValue) => setEndDate(newValue)}
+              slotProps={{ textField: { size: "small", sx: { minWidth: 180 } } }}
+              minDateTime={startDate ?? undefined}
+            />
+          </LocalizationProvider>
+        </Box>
+      </DashboardCard>
+
+      {/* Charts */}
+      <DashboardCard title="Token usage over time">
+        <TokenUsageChart
+          start={startDate.toDate()}
+          end={endDate.toDate()}
+          precision={getPrecisionForRange(startDate, endDate)}
+          metrics={numericalSum}
+        />
+      </DashboardCard>
     </Box>
   );
 }

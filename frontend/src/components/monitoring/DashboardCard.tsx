@@ -16,7 +16,7 @@ import { Paper, Typography, Box } from "@mui/material";
 import { ReactNode } from "react";
 
 interface DashboardCardProps {
-  title: string;
+  title?: string;
   children: ReactNode;
   padding?: number;
 }
@@ -24,11 +24,13 @@ interface DashboardCardProps {
 export default function DashboardCard({ title, children, padding = 2 }: DashboardCardProps) {
   return (
     <Paper elevation={3} sx={{ p: padding, borderRadius: 2 }}>
-      <Box mb={2}>
-        <Typography variant="subtitle1" fontWeight={600}>
-          {title}
-        </Typography>
-      </Box>
+      {title && (
+        <Box mb={2}>
+          <Typography variant="subtitle1" fontWeight={600}>
+            {title}
+          </Typography>
+        </Box>
+      )}
       {children}
     </Paper>
   );
