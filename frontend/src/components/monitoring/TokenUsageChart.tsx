@@ -1,6 +1,7 @@
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { NumericalMetric, Precision } from "../../slices/monitoringApi";
 import dayjs from "dayjs";
+import { useTheme } from "@mui/material/styles";
 
 export interface TokenUsageChartProps {
   start: Date;
@@ -10,6 +11,8 @@ export interface TokenUsageChartProps {
 }
 
 export function TokenUsageChart({ start, end, precision, metrics }: TokenUsageChartProps) {
+  const theme = useTheme();
+
   function getBucketKey(date: Date): string {
     const d = dayjs(date);
     switch (precision) {
@@ -87,7 +90,7 @@ export function TokenUsageChart({ start, end, precision, metrics }: TokenUsageCh
         <XAxis dataKey="time" ticks={ticks.map((i) => data[i].time)} />
         <YAxis />
         <Tooltip />
-        <Bar dataKey="tokens" fill="#8884d8" />
+        <Bar dataKey="tokens" fill={theme.palette.primary.main} />
       </BarChart>
     </ResponsiveContainer>
   );
