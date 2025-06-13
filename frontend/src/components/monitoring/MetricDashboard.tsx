@@ -27,23 +27,41 @@ function getPrecisionForRange(start: Dayjs, end: Dayjs): Precision {
   const diffDays = diffMs / (1000 * 60 * 60 * 24);
   const diffHours = diffMs / (1000 * 60 * 60);
 
-  // less than 1 hour -> use second precision
-  if (diffHours <= 1) {
+  // less than 10 minutes -> use second precision
+  if (diffMs <= 10000) {
     return "sec";
   }
 
-  // 1 hour to 12 hours -> use minute precision
-  if (diffHours < 12) {
+  // 10 minutes to 10 hours -> use minute precision
+  if (diffHours < 10) {
     return "min";
   }
 
-  // 12 hours to 2 days -> use hour precision
-  if (diffDays <= 2) {
+  // 10 hours to 3 days -> use hour precision
+  if (diffDays <= 3) {
     return "hour";
   }
 
-  // more than 2 days -> use day precision
+  // more than 3 days -> use day precision
   return "day";
+}
+
+function getRangeLabel(startDate: Dayjs, endDate: Dayjs): string {
+  const diffMs = endDate.diff(startDate);
+  const diffMinutes = Math.floor(diffMs / (1000 * 60));
+  const diffHours = Math.floor(diffMinutes / 60);
+  const diffDays = Math.floor(diffHours / 24);
+
+  if (diffDays >= 1) {
+    return `viewing data from last ${diffDays} day${diffDays > 1 ? "s" : ""}`;
+  }
+  if (diffHours >= 1) {
+    return `viewing data from last ${diffHours} hour${diffHours > 1 ? "s" : ""}`;
+  }
+  if (diffMinutes >= 1) {
+    return `viewing data from last ${diffMinutes} minute${diffMinutes > 1 ? "s" : ""}`;
+  }
+  return "viewing data from less than last a minute";
 }
 
 export default function MetricsDashboard() {
@@ -95,19 +113,23 @@ export default function MetricsDashboard() {
         <Box display="flex" gap={2} alignItems="center">
           <LocalizationProvider dateAdapter={AdapterDayjs}>
             <DateTimePicker
-              label="Input Date"
+              label="From"
               value={startDate}
               onChange={(newValue) => setStartDate(newValue)}
               slotProps={{ textField: { size: "small", sx: { minWidth: 180 } } }}
-              maxDateTime={endDate ?? undefined}
+              maxDateTime={endDate}
             />
             <DateTimePicker
-              label="Output Date"
+              label="To"
               value={endDate}
               onChange={(newValue) => setEndDate(newValue)}
               slotProps={{ textField: { size: "small", sx: { minWidth: 180 } } }}
-              minDateTime={startDate ?? undefined}
+              minDateTime={startDate}
+              maxDate={dayjs()}
             />
+            <Typography variant="body2" color="text.secondary" sx={{ ml: 2, fontStyle: "italic" }}>
+              {getRangeLabel(startDate, endDate)}
+            </Typography>
           </LocalizationProvider>
         </Box>
       </DashboardCard>
