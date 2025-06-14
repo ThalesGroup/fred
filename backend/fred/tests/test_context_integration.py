@@ -36,7 +36,7 @@ def context_dir():
 
 @pytest.fixture
 def context_service(context_dir):
-    return ContextService(minio_client=None, local_base_dir=context_dir)
+    return ContextService()
 
 
 @pytest.fixture

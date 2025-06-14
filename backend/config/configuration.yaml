@@ -170,20 +170,6 @@ security:
   enabled: false
   keycloak_url: "http://fred-keycloak:8080/realms/fred"
 
-# Environment variables for the application
-
-# AZURE
-azure:
-  tenant_id: ""
-  client_id: ""
-  client_secret: ""
-  client_scope: ""
-  apim_key: ""
-  api_version: ""
-  deployment:
-    llm: ""
-    embedding: ""
-
 # KEYCLOAK
 keycloak:
   server_url: "https://localhost:8080"
@@ -195,6 +181,11 @@ context_storage:
   type: "local"
   options:
     path: "~/.fred/context-store"
+
+metrics_storage:
+  type: "local"
+  settings:
+    path: "~/.fred/metrics-store"
 
 feedback_storage:
   type: local  # ou "minio"

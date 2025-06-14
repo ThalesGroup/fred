@@ -13,9 +13,9 @@
 # limitations under the License.
 
 from fred.application_context import get_configuration
-from services.theater_analysis.theater_analysis_abstract_service import AbstractTheaterAnalysisService
-from services.theater_analysis.theater_analysis_csv_service import TheaterAnalysisCsvService
-from common.structure import DatabaseTypeEnum
+from fred.services.theater_analysis.theater_analysis_abstract_service import AbstractTheaterAnalysisService
+from fred.services.theater_analysis.theater_analysis_csv_service import TheaterAnalysisCsvService
+from fred.common.structure import DatabaseTypeEnum
 
 class TheaterAnalysisService:
     def __new__(cls) -> AbstractTheaterAnalysisService:

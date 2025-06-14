@@ -34,11 +34,11 @@ from datetime import datetime
 
 from fastapi import Depends, HTTPException, Query, APIRouter
 
-from security.keycloak import KeycloakUser, get_current_user
-from services.cluster_consumption.cluster_consumption_abstract_service import AbstractClusterConsumptionService
-from services.cluster_consumption.cluster_consumption_service import ClusterConsumptionService
-from common.structure import PrecisionEnum, Series, CompareResult, Configuration
-from common.utils import API_COMPARE_DOC
+from fred.security.keycloak import KeycloakUser, get_current_user
+from fred.services.cluster_consumption.cluster_consumption_abstract_service import AbstractClusterConsumptionService
+from fred.services.cluster_consumption.cluster_consumption_service import ClusterConsumptionService
+from fred.common.structure import PrecisionEnum, Series, CompareResult, Configuration
+from fred.common.utils import API_COMPARE_DOC
 
 
 class FinopsController:

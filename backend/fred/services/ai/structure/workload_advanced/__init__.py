@@ -22,14 +22,14 @@ from typing import Optional, Union
 from langfuse.callback import CallbackHandler
 from pydantic import BaseModel, Field
 
-from services.ai.structure.workload_id import WorkloadId
-from services.ai.structure.workload_context import WorkloadContext
+from fred.services.ai.structure.workload_id import WorkloadId
+from fred.services.ai.structure.workload_context import WorkloadContext
 
-from services.ai.structure.workload_advanced.punchline import PunchlineAdvanced
-from services.ai.structure.workload_advanced.opensearch import OpenSearchAdvanced
+from fred.services.ai.structure.workload_advanced.punchline import PunchlineAdvanced
+from fred.services.ai.structure.workload_advanced.opensearch import OpenSearchAdvanced
 
-from services.ai.structure.workload_advanced.kafka import KafkaAdvanced
-from services.ai.structure.workload_advanced.opensearch_dashboard import (
+from fred.services.ai.structure.workload_advanced.kafka import KafkaAdvanced
+from fred.services.ai.structure.workload_advanced.opensearch_dashboard import (
     OpenSearchDashboardAdvanced,
 )
 

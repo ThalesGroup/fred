@@ -266,8 +266,15 @@ class ContextStorageConfig(BaseModel):
     type: str = Field(..., description="The storage backend to use (e.g., 'local', 'minio')")
     
 class FeedbackStorageConfig(BaseModel):
-    type: str = Field(..., description="The storage backend to use (e.g., 'local', 'minio')")
-    
+    type: str = Field(..., description="The storage backend to use (e.g., 'local', 'opensearch')")
+
+class MetricsStorageSettings(BaseModel):
+    path: str = Field(..., description="The path of the local metrics store")
+
+class MetricsStorageConfig(BaseModel):
+    type: str = Field(..., description="The metrics store to use (e.g., 'local')")
+    settings: MetricsStorageSettings
+
 class Configuration(BaseModel):
     frontend_settings: FrontendSettings
     database: DatabaseConfiguration
@@ -277,6 +284,7 @@ class Configuration(BaseModel):
     security: Security
     context_storage: ContextStorageConfig = Field(..., description="Content Storage configuration")
     feedback_storage: FeedbackStorageConfig = Field(..., description="Feedback Storage configuration")
+    metrics_storage:  MetricsStorageConfig = Field(..., description="Feedback Storage configuration")
 
 class OfflineStatus(BaseModel):
     is_offline: bool

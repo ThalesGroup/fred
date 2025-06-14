@@ -36,6 +36,7 @@
     "react-redux": "^9.1.0",
     "react-router-dom": "^7.6.0",
     "react-rrule-generator": "^1.2.0",
+    "recharts": "^2.15.3",
     "remark-gfm": "^4.0.1",
     "sass": "^1.70.0",
     "styled-components": "^6.1.13",

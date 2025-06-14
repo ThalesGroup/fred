@@ -397,11 +397,10 @@ export const DocumentLibrary = () => {
   return (
     <PageBodyWrapper>
       <TopBar
-                                title="Document Library"
-                                description="Access the knowledge base documents"
-                                backgroundUrl=""
-                              ></TopBar>
-     
+        title="Document Library"
+        description="Access the knowledge base documents"
+      ></TopBar>
+
       {/* Combined Search/Filter Section */}
       <Container maxWidth="xl" sx={{ mb: 3 }}>
         <Fade in={showElements} timeout={1500}>

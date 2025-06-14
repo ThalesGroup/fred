@@ -22,20 +22,19 @@ The entrypoint for the Fred microservice.
 import argparse
 import logging
 import os
-import sys
 
 from fastapi import FastAPI, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
+from fred.monitoring.hybrid_metric_store import create_metric_store
 from fred.monitoring.metric_store_controller import MetricStoreController
 from services.ai.ai_service import AIService
 from services.kube.kube_service import KubeService
-from rich.logging import RichHandler
 from dotenv import load_dotenv
 import uvicorn
 
 from fred.common.structure import Configuration
 from fred.common.utils import parse_server_configuration
-from fred.application_context import ApplicationContext,get_app_context
+from fred.application_context import ApplicationContext
 from fred.security.keycloak import initialize_keycloak
 from fred.main_utils import configure_logging
 
@@ -135,6 +134,8 @@ def main():
     ApplicationContext(configuration)
     initialize_keycloak(configuration)
 
+    # Create the singleton metric store. 
+    create_metric_store(configuration.metrics_storage)
     app = build_app(configuration, args.server_base_url_path)
     run_server(app, args.server_address, args.server_port, args.server_log_level)
 
