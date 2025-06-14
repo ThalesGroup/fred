@@ -35,8 +35,8 @@ import pathlib
 import sys
 import pandas as pd
 
-from services.theorical_radio.theorical_radio_structures import RadioData, TheoricalRadioSeries
-from common.utils import format_to_en
+from fred.services.theorical_radio.theorical_radio_structures import RadioData, TheoricalRadioSeries
+from fred.common.utils import format_to_en
 from fred.application_context import get_configuration
 
 logger = logging.getLogger(__name__)

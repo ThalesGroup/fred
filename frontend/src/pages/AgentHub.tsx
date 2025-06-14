@@ -166,11 +166,10 @@ export const AgentHub = () => {
   return (
     <PageBodyWrapper>
       <TopBar
-                          title="Agent Hub"
-                          description="Explore and manage available AI agents"
-                          backgroundUrl=""
-                        ></TopBar>
-      
+        title="Agent Hub"
+        description="Explore and manage available AI agents"
+      ></TopBar>
+
       {/* Tabs Section */}
       <Container maxWidth="xl" sx={{ mb: 3 }}>
         <Fade in={showElements} timeout={1200}>
@@ -404,7 +403,7 @@ export const AgentHub = () => {
                             >
                               {agent.description}
                             </Typography>
-                            
+
                             <Box sx={{ mt: 2, display: 'flex', alignItems: 'center' }}>
                               {/* <Button
                                 size="small"

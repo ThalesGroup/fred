@@ -32,7 +32,6 @@ export const Geomap = () => {
       <TopBar
         title="Theater of Operations"
         description="Navigate the current theater of operations from data captured in the Mediterranean Sea near the maritime neighbourhood TL."
-        backgroundUrl=""
         leftLg={4}
       />
 

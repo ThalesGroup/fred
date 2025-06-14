@@ -12,6 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""
+In-memory implementation of the MetricStore interface.
+
+This module provides a singleton-based in-memory metric store that can store,
+aggregate, and retrieve numerical and categorical metrics over time. Intended
+for use in development, testing, or non-persistent monitoring setups.
+"""
+
 import logging
 from datetime import datetime
 from typing import List, Dict, DefaultDict, Any
@@ -27,8 +35,18 @@ logger.setLevel(logging.INFO)
 
 
 def flatten_numeric_fields(prefix: str, obj: Any) -> Dict[str, float]:
-    flat: Dict[str, float] = {}
+    """
+    Recursively flattens an object (BaseModel or dict) to extract all numerical fields.
 
+    Args:
+        prefix (str): Prefix to prepend to field names for nested structures.
+        obj (Any): Object to flatten, typically a Pydantic model or dictionary.
+
+    Returns:
+        Dict[str, float]: A flat dictionary mapping dotted field names to float values.
+    """
+
+    flat: Dict[str, float] = {}
     if isinstance(obj, BaseModel):
         data = obj.model_dump(exclude_none=True)
     elif isinstance(obj, dict):
@@ -47,10 +65,19 @@ def flatten_numeric_fields(prefix: str, obj: Any) -> Dict[str, float]:
 
 
 class InMemoryMetricStore(MetricStore):
+    """
+    Singleton in-memory implementation of the MetricStore interface.
+
+    Stores metrics in a list, supports filtering by date range,
+    and provides aggregation over time buckets (second, minute, hour, day).
+    """
     _instance = None
     _initialized = False
 
     def __new__(cls):
+        """
+        Ensures that only one instance of the store is created (singleton pattern).
+        """
         if cls._instance is None:
             cls._instance = super().__new__(cls)
         return cls._instance
@@ -62,13 +89,35 @@ class InMemoryMetricStore(MetricStore):
             logger.info("Initialized InMemoryMetricStore")
 
     def add_metric(self, metric: Metric) -> None:
+        """
+        Adds a new metric to the store.
+
+        Args:
+            metric (Metric): The metric instance to store.
+        """
         self._metrics.append(metric)
         logger.debug(f"Added metric: {metric}")
 
     def get_all(self) -> List[Metric]:
-        return self._metrics
+        """
+        Returns all metrics currently stored.
+
+        Returns:
+            List[Metric]: List of all stored metrics.
+        """
+        return self._metrics   
 
     def get_by_date_range(self, start: datetime, end: datetime) -> List[Metric]:
+        """
+        Filters and returns metrics whose timestamp falls within the given date range.
+
+        Args:
+            start (datetime): Start of the date range.
+            end (datetime): End of the date range.
+
+        Returns:
+            List[Metric]: Filtered list of metrics.
+        """
         return [
             m for m in self._metrics
             if m.timestamp and start.timestamp() <= m.timestamp <= end.timestamp()
@@ -77,6 +126,18 @@ class InMemoryMetricStore(MetricStore):
     def get_numerical_aggregated_by_precision(
         self, start: datetime, end: datetime, precision: Precision, agg: Aggregation
     ) -> List[NumericalMetric]:
+        """
+        Aggregates numerical metrics over time buckets using the specified precision and aggregation method.
+
+        Args:
+            start (datetime): Start of the date range.
+            end (datetime): End of the date range.
+            precision (str): Time granularity ('sec', 'min', 'hour', 'day').
+            agg (str): Aggregation method ('avg', 'min', 'max', 'sum').
+
+        Returns:
+            List[NumericalMetric]: Aggregated metrics grouped by time buckets.
+        """
         metrics = self.get_by_date_range(start, end)
 
         def round_bucket(ts: float) -> str:
@@ -124,6 +185,16 @@ class InMemoryMetricStore(MetricStore):
     def get_categorical_rows_by_date_range(
         self, start: datetime, end: datetime
     ) -> List[CategoricalMetric]:
+        """
+        Extracts categorical fields from metrics within the specified date range.
+
+        Args:
+            start (datetime): Start of the date range.
+            end (datetime): End of the date range.
+
+        Returns:
+            List[CategoricalMetric]: List of categorical metric representations.
+        """
         metrics = self.get_by_date_range(start, end)
         result: List[CategoricalMetric] = []
         for m in metrics:
@@ -141,6 +212,12 @@ class InMemoryMetricStore(MetricStore):
         return result
 
 
-# Singleton accessor
+
 def get_metric_store() -> InMemoryMetricStore:
+    """
+    Returns the singleton instance of InMemoryMetricStore.
+
+    Returns:
+        InMemoryMetricStore: The singleton instance.
+    """
     return InMemoryMetricStore()

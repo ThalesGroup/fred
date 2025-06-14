@@ -24,7 +24,7 @@ from fred.application_context import get_structured_chain_for_service
 from langfuse.callback import CallbackHandler
 from pydantic import BaseModel, Field
 
-from services.ai.structure.cluster_context import ClusterContext
+from fred.services.ai.structure.cluster_context import ClusterContext
 
 
 class ClusterSummary(BaseModel):

@@ -37,11 +37,11 @@ import sys
 from datetime import datetime
 
 from fred.application_context import get_configuration
-from services.cluster_consumption.cluster_consumption_abstract_service import AbstractClusterConsumptionService
-from services.cluster_consumption.cluster_consumption_structures import ClusterConsumptionSeries, DetailSeries
-from common.structure import PrecisionEnum, Configuration, Series
-from common.utils import sample_data, SampleDataType
-from services.frontend.frontend_structures import Observation
+from fred.services.cluster_consumption.cluster_consumption_abstract_service import AbstractClusterConsumptionService
+from fred.services.cluster_consumption.cluster_consumption_structures import ClusterConsumptionSeries, DetailSeries
+from fred.common.structure import PrecisionEnum, Configuration, Series
+from fred.common.utils import sample_data, SampleDataType
+from fred.services.frontend.frontend_structures import Observation
 logger = logging.getLogger(__name__)
 
 class ClusterConsumptionCsvService(AbstractClusterConsumptionService):

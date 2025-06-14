@@ -12,7 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# monitoring_wrapper.py
+
+"""
+LangChain-compatible wrapper for monitoring Language Model calls.
+
+This module defines `MonitoredLanguageModel`, a drop-in replacement that wraps
+any LangChain-compatible LLM and logs structured monitoring data (latency,
+token usage, metadata, etc.) to a `MetricStore` backend.
+
+Metrics are automatically captured and translated from response metadata.
+"""
+
+
 
 import time
 import logging
@@ -23,32 +34,65 @@ from langchain_core.language_models import BaseLanguageModel
 from langchain_core.messages import BaseMessage
 from langchain_core.outputs import LLMResult
 
-from fred.monitoring.inmemory_metric_store import get_metric_store
+from fred.monitoring.hybrid_metric_store import HybridMetricStore, get_metric_store
 from fred.monitoring.logging_context import get_logging_context
-from fred.monitoring.metric_store import Metric, MetricStore
+from fred.monitoring.metric_store import Metric
 from fred.monitoring.metric_util import translate_response_metadata_to_metric
 
-logger = logging.getLogger("llm_monitoring")
-logger.setLevel(logging.INFO)
-
+logger = logging.getLogger(__name__)
 
 class MonitoredLanguageModel(BaseLanguageModel):
     """
-    A LangChain-compatible LLM wrapper that logs structured monitoring metrics.
-    Supports latency, user/session context, and token usage logging.
+    LangChain-compatible LLM wrapper that monitors and logs inference metrics.
+
+    Wraps another LLM (`target`) and automatically tracks:
+    - Latency
+    - Model name/type
+    - User/session context (from `get_logging_context`)
+    - Token usage (via `response_metadata`)
+
+    Metrics are translated using `translate_response_metadata_to_metric`
+    and stored in the configured `MetricStore` backend.
+    
+    Attributes:
+        target: The underlying LLM to wrap.
+        name: Logical name for the wrapped model (used in metrics).
     """
     target: Any = Field(...)
     name: str = Field(default="unnamed")
-    _metric_store: MetricStore = PrivateAttr()
+    _metric_store: HybridMetricStore = PrivateAttr()
 
     def __init__(self, target: Any, name: str = "unnamed"):
+        """
+        Initialize the monitored LLM wrapper.
+
+        Args:
+            target: A LangChain-compatible language model instance.
+            name: Optional label used to identify the model in logs and metrics.
+        """
         super().__init__(target=target, name=name)
         self._metric_store = get_metric_store()
 
     def _llm_type(self) -> str:
+        """
+        Return the internal type identifier used by LangChain.
+
+        Returns:
+            str: A fixed string identifying the wrapper type.
+        """
         return "monitoring_wrapper"
 
     def _log_and_store(self, result: Any, latency: float) -> Optional[Metric]:
+        """
+        Extract metadata from the result and log it as a `Metric`.
+
+        Args:
+            result: The output of the LLM call, expected to have `response_metadata`.
+            latency: Duration of the call in seconds.
+
+        Returns:
+            Metric | None: The created metric, or None if translation failed.
+        """
         ctx = get_logging_context()
         raw_metadata = getattr(result, "response_metadata", {}) or {}
 

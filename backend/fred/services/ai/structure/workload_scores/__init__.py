@@ -21,12 +21,12 @@ from typing import Optional
 from langfuse.callback import CallbackHandler
 from pydantic import BaseModel, Field
 
-from services.ai.structure.workload_context import WorkloadContext
-from services.ai.structure.workload_scores.compression import CompressionScore
-from services.ai.structure.workload_scores.cpu import CpuScore
-from services.ai.structure.workload_scores.io import IoScore
-from services.ai.structure.workload_scores.ram import RamScore
-from services.ai.structure.workload_scores.scalability import ScalabilityScore
+from fred.services.ai.structure.workload_context import WorkloadContext
+from fred.services.ai.structure.workload_scores.compression import CompressionScore
+from fred.services.ai.structure.workload_scores.cpu import CpuScore
+from fred.services.ai.structure.workload_scores.io import IoScore
+from fred.services.ai.structure.workload_scores.ram import RamScore
+from fred.services.ai.structure.workload_scores.scalability import ScalabilityScore
 
 
 class WorkloadScores(BaseModel):

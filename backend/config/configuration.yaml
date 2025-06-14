@@ -138,33 +138,10 @@ dao:
   base_path: "~/.fred/dao-cache"
   max_cached_delay_seconds: 300  # Cache delay in seconds. Use 0 for no cache or a negative value for limitless cache.
 
-# Where to store user feedback
-feedback:
-   type: postgres
-#  db_host: fred-postgres
-#  db_port: 5432
-#  db_name: fred_db
-#  user: admin
-#  password: Azerty123_
-
 # Enable or disable the security layer
 security:
   enabled: false
   keycloak_url: "http://fred-keycloak:8080/realms/fred"
-
-# Environment variables for the application
-
-# AZURE
-azure:
-  tenant_id: ""
-  client_id: ""
-  client_secret: ""
-  client_scope: ""
-  apim_key: ""
-  api_version: ""
-  deployment:
-    llm: ""
-    embedding: ""
 
 # KEYCLOAK
 keycloak:
@@ -177,6 +154,11 @@ context_storage:
   type: "local"
   options:
     path: "~/.fred/context-store"
+
+metrics_storage:
+  type: "local"
+  settings:
+    path: "~/.fred/metrics-store"
 
 feedback_storage:
   type: local  # ou "minio"
