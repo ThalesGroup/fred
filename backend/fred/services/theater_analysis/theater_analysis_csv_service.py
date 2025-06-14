@@ -36,14 +36,14 @@ import pathlib
 import sys
 import pandas as pd
 
-from services.theater_analysis.theater_analysis_structures import (
+from fred.services.theater_analysis.theater_analysis_structures import (
     TheaterAnalysisSeries,
     ShipSignalLocation
     )
-from services.theater_analysis.theater_analysis_structures import (
+from fred.services.theater_analysis.theater_analysis_structures import (
     Mission, MissionSeries
     )
-from services.theater_analysis.theater_analysis_structures import (
+from fred.services.theater_analysis.theater_analysis_structures import (
     DetectedData, DetectedDataSeries
     )
 
