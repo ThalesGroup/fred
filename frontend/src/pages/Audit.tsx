@@ -83,7 +83,7 @@ export const Audit = () => {
   console.log("currentClusterScores", currentClusterScores);
   return (
     <PageBodyWrapper>
-      <TopBar title="Resource Scores" description="Review your cluster resource scores" backgroundUrl="" />
+      <TopBar title="Resource Scores" description="Review your cluster resource scores" />
       <Box padding={4} paddingTop={12}>
         <ClusterScoresTable clusterScores={currentClusterScores} />
       </Box>

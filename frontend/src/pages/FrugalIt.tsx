@@ -57,7 +57,6 @@ export const FrugalIt = () => {
       <TopBar
         title="Footprint Overview"
         description="Monitor and analyze your clusters' cost, carbon, and energy metrics"
-        backgroundUrl=""
       >
         <Fade in={showElements} timeout={1500}>
           <Paper

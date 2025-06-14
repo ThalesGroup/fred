@@ -29,9 +29,8 @@ export interface CategoricalMetric {
   system_fingerprint?: string;
   service_tier?: string;
 }
-
-type Precision = "second" | "minute" | "hour" | "day";
-type Aggregation = "avg" | "min" | "max" | "sum";
+export type Precision = "sec" | "min" | "hour" | "day";
+export type Aggregation = "avg" | "min" | "max" | "sum";
 
 /**
  * API Slice for Monitoring Metrics (using `mutation` instead of `query`)
@@ -46,7 +45,7 @@ export const monitoringApi = createApi({
       precision?: Precision;
       agg?: Aggregation;
     }>({
-      query: ({ start, end, precision = "minute", agg = "avg" }) => ({
+      query: ({ start, end, precision = "min", agg = "avg" }) => ({
         url: `/fred/metrics/numerical`,
         method: "GET",
         params: { start, end, precision, agg },

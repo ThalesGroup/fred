@@ -41,7 +41,7 @@ from fred.feedback.store.opensearch_feedback_store import OpenSearchFeedbackStor
 from fred.context.store.local_context_store import LocalContextStore
 from fred.context.store.minio_context_store import MinIOContextStore
 from fred.model_factory import get_structured_chain
-from fred.common.structure import AgentSettings, Configuration, ServicesSettings
+from fred.common.structure import AgentSettings, Configuration, MetricsStorageConfig, ServicesSettings
 from fred.model_factory import get_model
 from langchain_core.language_models.base import BaseLanguageModel
 from langchain_mcp_adapters.client import MultiServerMCPClient

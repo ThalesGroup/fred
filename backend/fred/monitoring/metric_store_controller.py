@@ -30,11 +30,11 @@ All query parameters use ISO 8601 date-time strings (e.g. ``2025-06-12T09:15:00`
 
 from fastapi import APIRouter, Query, HTTPException
 from datetime import datetime
-from typing import List, Tuple
+from typing import Annotated, List, Tuple
 import logging
 
-from fred.monitoring.metric_store import MetricStore
-from fred.monitoring.hybrid_metric_store import get_metric_store,HybridMetricStore
+from fred.monitoring.hybrid_metric_store import HybridMetricStore, get_metric_store
+from fred.monitoring.metric_store import Aggregation, Precision
 from fred.monitoring.metric_types import CategoricalMetric, MetaData, NumericalMetric
 
 logger = logging.getLogger(__name__)
@@ -92,8 +92,8 @@ class MetricStoreController:
                         "given date range (no aggregation).",
         )
         def get_all_metrics(
-            start: str = Query(..., description="Start date (ISO 8601)"),
-            end: str = Query(..., description="End date (ISO 8601)"),
+            start: Annotated[str, Query(description="Start date in ISO 8601 format")],
+            end: Annotated[str, Query(description="End date in ISO 8601 format")]
         ) -> List[MetaData]:
             """
             Retrieve all raw metrics between **start** and **end** (inclusive)."""
@@ -111,18 +111,10 @@ class MetricStoreController:
             ),
         )
         def get_numerical_metrics(
-            start: str = Query(..., description="Start date (ISO 8601)"),
-            end: str = Query(..., description="End date (ISO 8601)"),
-            precision: str = Query(
-                "hour",
-                enum=["sec", "min", "hour", "day"],
-                description="Time bucket size"
-            ),
-            agg: str = Query(
-                "avg",
-                enum=["avg", "max", "min", "sum"],
-                description="Aggregation function"
-            ),
+            start: Annotated[str, Query()],
+            end: Annotated[str, Query()],
+            precision: Precision = Precision.hour,
+            agg: Aggregation = Aggregation.avg,
         ) -> List[NumericalMetric]:
             """
             Aggregate numerical metrics over the specified date range.
@@ -144,8 +136,8 @@ class MetricStoreController:
             description="Return categorical-only metric rows inside the date range.",
         )
         def get_categorical_metrics(
-            start: str = Query(..., description="Start date (ISO 8601)"),
-            end: str = Query(..., description="End date (ISO 8601)"),
+            start: Annotated[str, Query()],
+            end: Annotated[str, Query()]
         ) -> List[CategoricalMetric]:
             """Retrieve categorical metrics (id, model, finish_reason, …) between the given dates."""
             start_dt, end_dt = parse_dates(start, end)

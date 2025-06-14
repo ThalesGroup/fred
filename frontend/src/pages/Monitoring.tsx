@@ -17,14 +17,13 @@ import { TopBar } from "../common/TopBar"
 import MetricsDashboard from "../components/monitoring/MetricDashboard"
 
 export const Monitoring = () => {
-     return (
-        <PageBodyWrapper>
-            <TopBar
-                    title="Monitoring Overview"
-                    description="Monitor and analyze your clusters' cost, carbon, and energy metrics"
-                    backgroundUrl=""
-                  ></TopBar>
-                  <MetricsDashboard />
-        </PageBodyWrapper>
-     )
+   return (
+      <PageBodyWrapper>
+         <TopBar
+            title="Agent & AI Service Monitoring"
+            description="Track usage, performance, and costs across all AI agents and services — including tokens, latency, and activity trends."
+         ></TopBar>
+         <MetricsDashboard />
+      </PageBodyWrapper>
+   )
 }

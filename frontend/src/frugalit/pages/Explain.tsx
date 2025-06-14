@@ -156,7 +156,6 @@ export const Explain = () => {
       <TopBar
         title="Cluster Overview"
         description="Navigate your selected cluster and its resources"
-        backgroundUrl=""
       ></TopBar>
       <ReactECharts
         option={getOption()}

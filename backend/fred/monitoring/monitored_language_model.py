@@ -34,14 +34,12 @@ from langchain_core.language_models import BaseLanguageModel
 from langchain_core.messages import BaseMessage
 from langchain_core.outputs import LLMResult
 
-from fred.monitoring.hybrid_metric_store import get_metric_store,HybridMetricStore
+from fred.monitoring.hybrid_metric_store import HybridMetricStore, get_metric_store
 from fred.monitoring.logging_context import get_logging_context
-from fred.monitoring.metric_store import Metric, MetricStore
+from fred.monitoring.metric_store import Metric
 from fred.monitoring.metric_util import translate_response_metadata_to_metric
 
-logger = logging.getLogger("llm_monitoring")
-logger.setLevel(logging.INFO)
-
+logger = logging.getLogger(__name__)
 
 class MonitoredLanguageModel(BaseLanguageModel):
     """
