@@ -32,13 +32,13 @@ ENV OPENAI_API_KEY=<MUST_BE_DEFINED>
 WORKDIR /app
 
 # Copy only dependency files first to leverage Docker layer caching
-COPY ../pyproject.toml ../uv.lock* /app/
+COPY pyproject.toml uv.lock* /app/
 
 # Install dependencies with uv
 RUN uv sync
 
 # Copy the rest of the project files
-COPY .. /app
+COPY . /app
 
 # Adjust ownership of copied files
 RUN chown -R ${USER_ID}:${GROUP_ID} /app
@@ -50,6 +50,6 @@ USER ${USER_NAME}
 EXPOSE 8000
 
 # Run the application
-ENV PYTHONPATH="/app"
+ENV PYTHONPATH=/app
 ENTRYPOINT ["python", "fred/main.py"]
 CMD ["--server.configurationPath /app/config/configuration.yaml --server.baseUrlPath /fred"]
