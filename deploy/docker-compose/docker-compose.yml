@@ -37,8 +37,8 @@ services:
       dockerfile: dockerfiles/Dockerfile-dev
     environment:
       NO_PROXY: "*"
-      VITE_BACKEND_URL_API: http://kast-advisor.dpsc:8000
-      VITE_WEBSOCKET_URL: ws://kast-advisor.dpsc:8000/fred/chatbot/query
+      VITE_BACKEND_URL_API: http://localhost:8000
+      VITE_WEBSOCKET_URL: ws://localhost:8000/fred/chatbot/query
       VITE_USE_AUTH: false
     volumes:
       - ../../frontend:/app
