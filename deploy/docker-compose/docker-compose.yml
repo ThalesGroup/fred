@@ -1,310 +1,59 @@
 services:
-
+     
 # -----------------------------------------------------------------------------
-# Required components for Fred : PostgreSQL, Keycloak, Minio, OpenSearch
+# Fred frontend and backend
 # -----------------------------------------------------------------------------
 
-  postgres:
-    container_name: fred-postgres
-    image: mirror.gcr.io/postgres:15.12-alpine3.20
-    environment:
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: Azerty123_
-      POSTGRES_DB: fred_db
-    networks:
-      - fred-network
-    ports:
-      - 0.0.0.0:5432:5432/tcp
-    healthcheck:
-      test: "pg_isready -U admin -d postgres"
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  postgres-post-install-job:
-    container_name: fred-postgres-post-install-job
-    image: mirror.gcr.io/postgres:15.12-alpine3.20
-    volumes:
-      - ./postgres-post-install-job/create_env.sh:/usr/local/bin/create_env.sh
-    environment:
-      PGPASSWORD: Azerty123_
-    entrypoint:
-      - /bin/bash
-      - -c
-    command:
-      - >-
-        chmod +x /usr/local/bin/create_env.sh &&
-        create_env.sh "keycloak" "keycloak_db_user" "Azerty123_"
-    networks:
-      - fred-network
-    depends_on:
-      postgres:
-        condition: service_healthy
-      
-  keycloak:
-    container_name: fred-keycloak
-    image: mirror.gcr.io/keycloak/keycloak:25.0
-    environment:
-      KC_HTTP_ENABLE: true
-      KC_HTTP_PORT: 8080
-      KC_HOSTNAME_STRICT: false
-      KC_HOSTNAME_STRICT_HTTPS: false
-      KC_DB: postgres
-      KC_DB_URL: jdbc:postgresql://fred-postgres:5432/keycloak
-      KC_DB_USERNAME: keycloak_db_user
-      KC_DB_PASSWORD: Azerty123_
-      KEYCLOAK_ADMIN: admin
-      KEYCLOAK_ADMIN_PASSWORD: Azerty123_
-    command:
-      - start-dev
-      - --import-realm
-    volumes:
-      - ./keycloak/fred-realm.json:/opt/keycloak/data/import/fred-realm.json
-    networks:
-      - fred-network
-    ports:
-      - 0.0.0.0:8080:8080/tcp
-    depends_on:
-      postgres-post-install-job:
-        condition: service_completed_successfully
-    healthcheck:
-      test: /opt/keycloak/bin/kcadm.sh get realms/fred --fields id --server http://localhost:8080 --realm master --user $$KEYCLOAK_ADMIN --password $$KEYCLOAK_ADMIN_PASSWORD
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
-      start_interval: 10s
-
-  opensearch:
-    container_name: fred-opensearch
-    image: mirror.gcr.io/opensearchproject/opensearch:2.18.0
-    command:
-      - -Ediscovery.type=single-node
-    environment:
-      no_proxy: "*"
-      OPENSEARCH_JAVA_OPTS: "-Xms512m -Xmx512m"
-    volumes:
-      - ./opensearch/certs/:/usr/share/opensearch/config/certs/
-      - ./opensearch/config/opensearch.yml:/usr/share/opensearch/config/opensearch.yml
-      - ./opensearch/config/internal_users.yml:/usr/share/opensearch/config/opensearch-security/internal_users.yml
-      - ./opensearch/config/roles_mapping.yml:/usr/share/opensearch/config/opensearch-security/roles_mapping.yml
-      - ./opensearch/config/roles.yml:/usr/share/opensearch/config/opensearch-security/roles.yml
-      - ./opensearch/config/config.yml:/usr/share/opensearch/config/opensearch-security/config.yml
-    networks:
-      - fred-network
-    ports:
-      -  0.0.0.0:9200:9200/tcp
-    depends_on:
-      keycloak:
-        condition: service_healthy
-    healthcheck:
-      test: curl --insecure https://localhost:9200/_cluster/health
-      interval: 60s
-      timeout: 10s
-      retries: 20
-      start_period: 60s
-      start_interval: 10s
-
-  opensearch-post-install-job:
-    container_name: fred-opensearch-post-install-job
-    image: mirror.gcr.io/opensearchproject/opensearch:2.18.0
-    environment:
-      no_proxy: "*"
-    entrypoint:
-      - /bin/bash
-      - -c
-    command:
-      - >-
-        bash /opt/opensearch-post-install-job/create_users_and_roles.sh &&
-        bash /opt/opensearch-post-install-job/wait_for_os_init.sh &&
-        bash /opt/opensearch-post-install-job/create_indice.sh
-    volumes:
-      - ./opensearch/certs/:/usr/share/opensearch/config/certs/
-      - ./opensearch/config/opensearch.yml:/usr/share/opensearch/config/opensearch.yml
-      - ./opensearch/config/internal_users.yml:/usr/share/opensearch/config/opensearch-security/internal_users.yml
-      - ./opensearch/config/roles_mapping.yml:/usr/share/opensearch/config/opensearch-security/roles_mapping.yml
-      - ./opensearch/config/roles.yml:/usr/share/opensearch/config/opensearch-security/roles.yml
-      - ./opensearch/config/config.yml:/usr/share/opensearch/config/opensearch-security/config.yml
-      - ./opensearch-post-install-job/:/opt/opensearch-post-install-job/
-    networks:
-      - fred-network
-    depends_on:
-      opensearch:
-        condition: service_healthy
-
-  opensearch-dashboards:
-    container_name: fred-opensearch-dashboards
-    image: mirror.gcr.io/opensearchproject/opensearch-dashboards:2.18.0
-    environment:
-      no_proxy: "*"
-    volumes:
-      - ./opensearch-dashboards/opensearch-dashboards.yml:/usr/share/opensearch-dashboards/config/opensearch_dashboards.yml
-      - ./opensearch/certs/:/usr/share/opensearch/config/certs/
-    networks:
-      - fred-network
-    ports:
-      - 0.0.0.0:5601:5601/TCP
-    depends_on:
-      opensearch-post-install-job:
-        condition: service_completed_successfully
-    healthcheck:
-      test: curl --fail http://localhost:5601
-      interval: 60s
-      timeout: 10s
-      retries: 3
-      start_period: 5s
-      start_interval: 1s
-
-  minio:
-    container_name: fred-minio
-    image: mirror.gcr.io/minio/minio:RELEASE.2025-02-07T23-21-09Z
+  backend:
+    image: registry.thalesdigital.io/tsn/innovation/projects/fred/backend:0.1
+    container_name: fred-backend
+    build:
+      context: ../../backend
+      dockerfile: dockerfiles/Dockerfile-dev
+    env_file: "~/.fred/openai-api-key.env"
     environment:
       NO_PROXY: "*"
-      MINIO_ROOT_USER: admin
-      MINIO_ROOT_PASSWORD: Azerty123_
-      MINIO_IDENTITY_OPENID_CONFIG_URL: "http://fred-keycloak:8080/realms/fred/.well-known/openid-configuration"
-      MINIO_IDENTITY_OPENID_CLIENT_ID: "minio-console"
-      MINIO_IDENTITY_OPENID_CLIENT_SECRET: "Azerty123_"
-      MINIO_IDENTITY_OPENID_CLAIM_NAME: "policy"
-      MINIO_IDENTITY_OPENID_SCOPES: "openid"
-      MINIO_IDENTITY_OPENID_REDIRECT_URI: "http://localhost:9001/oauth_callback"
+      PYTHONUNBUFFERED: 1  # Pour voir les logs en temps réel
     command:
-      - server
-      - /data
-      - --console-address=:9001
+      - --server.configurationPath
+      - /app/config/configuration.yaml
+      - --server.baseUrlPath
+      - /fred
+    volumes:
+      - ../../backend:/app
+      - vol-kubeconfig:/home/fred-user/.kube:ro
     networks:
-      - fred-network
+      - app-network
     ports:
-      - 0.0.0.0:9000:9000/tcp
-      - 0.0.0.0:9001:9001/tcp
-    healthcheck:
-      test: curl --fail http://localhost:9000/minio/health/live
-      interval: 60s
-      timeout: 10s
-      retries: 3
-      start_period: 5s
-      start_interval: 1s
-    depends_on:
-      keycloak:
-        condition: service_healthy
+      - "0.0.0.0:8000:8000/tcp"
+      - "5678:5678"  # Port pour le débogueur
 
-  minio-post-install-job:
-    container_name: fred-minio-post-install-job
-    image: mirror.gcr.io/minio/minio:RELEASE.2025-02-07T23-21-09Z
+
+  frontend:
+    image: registry.thalesdigital.io/tsn/innovation/projects/fred/frontend:0.1
+    container_name: fred-frontend
+    build:
+      context: ../../frontend
+      dockerfile: dockerfiles/Dockerfile-dev
     environment:
       NO_PROXY: "*"
-      MINIO_ROOT_USER: admin
-      MINIO_ROOT_PASSWORD: Azerty123_
-    entrypoint:
-      - /bin/bash
-      - -c
-    command:
-      - |
-        mc alias set fred-minio http://fred-minio:9000 $$MINIO_ROOT_USER $$MINIO_ROOT_PASSWORD
-        
-        # Create bucket
-        mc mb fred-minio/fred-dev-content
-
-        # Create Read Only user
-        mc admin user add fred-minio fred_ro Azerty123_
-        mc admin policy create fred-minio fred-minio-ro-policy /opt/minio/ro-policy.json
-        mc admin policy attach fred-minio fred-minio-ro-policy --user fred_ro
-
-        # Create Read Write user
-        mc admin user add fred-minio fred_rw Azerty123_
-        mc admin policy create fred-minio fred-minio-rw-policy /opt/minio/rw-policy.json
-        mc admin policy attach fred-minio fred-minio-rw-policy --user fred_rw
+      VITE_BACKEND_URL_API: http://localhost:8000
+      VITE_WEBSOCKET_URL: ws://localhost:8000/fred/chatbot/query
+      VITE_USE_AUTH: false
     volumes:
-      - ./minio-post-install-job/:/opt/minio/
+      - ../../frontend:/app
     networks:
-      - fred-network
-    depends_on:
-      minio:
-        condition: service_healthy
-
-# -----------------------------------------------------------------------------
-# Dummy kubernetes cluster
-# -----------------------------------------------------------------------------
-
-  kube:
-    image: mirror.gcr.io/rancher/k3s:v1.30.3-k3s1
-    container_name: fred-kube
-    privileged: true
-    environment:
-      NO_PROXY: "fred-kube"
-      K3S_KUBECONFIG_OUTPUT: /usr/local/etc/.kube/config
-      K3S_KUBECONFIG_MODE: 644
-      K3S_BIND_ADDRESS: 0.0.0.0
-      K3S_TOKEN: Azerty123_
-    volumes:
-      - vol-kubeconfig:/usr/local/etc/.kube
-    command:
-      - "server"
-      - "--tls-san"
-      - "fred-kube"
-    networks:
-      - fred-network
+      - app-network
     ports:
-    - 6443:6443
-    healthcheck:
-      test: "kubectl get nodes"
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  kube-post-install-job:
-    image: mirror.gcr.io/alpine:3.21.3
-    container_name: fred-kube-post-install-job
-    volumes:
-      - vol-kubeconfig:/kube
-    environment:
-      KUBECONFIG: /kube/config
-    entrypoint: 
-      - /bin/sh
-      - -c
-    command:
-      - |
-        apk update
-        apk add --no-cache kubectl
-        if ! kubectl config get-contexts | grep -q k8s-cluster-local
-        then
-          kubectl config set-cluster default --server=https://fred-kube:6443
-          kubectl config rename-context default k8s-cluster-local
-        fi
-    networks:
-      - fred-network
-    depends_on:
-      kube:
-        condition: service_healthy
-
-
-# -----------------------------------------------------------------------------
-# MCP Servers
-# -----------------------------------------------------------------------------
-
-  k8s-mcp:
-    image: node:22-bookworm-slim
-    container_name: k8s-mcpserver
-    volumes:
-      - vol-kubeconfig:/kube
-    environment:
-      ALLOW_ONLY_NON_DESTRUCTIVE_TOOLS: true
-      ENABLE_UNSAFE_SSE_TRANSPORT: 1
-      PORT: 8081
-      KUBECONFIG: /kube/config
-    ports:
-      - 8081:8081
-    command: >
-      /bin/sh -c "apt update &&
-      apt install -y curl &&
-      curl -LO https://dl.k8s.io/release/$(curl -sL https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl &&
-      install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl &&
-      npx mcp-server-kubernetes@2.2.1"
-    networks:
-      - fred-network
+      - "0.0.0.0:5173:5173/tcp"
 
 volumes:
   vol-kubeconfig:
+    external: true
+    name: vol-kubeconfig
+
 
 networks:
-  fred-network:
+  app-network:
+    external: true
+    name: fred-shared-network
