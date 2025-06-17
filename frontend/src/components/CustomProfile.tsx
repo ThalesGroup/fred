@@ -147,6 +147,7 @@ export const CustomProfile: React.FC<CustomProfileProps> = ({
                                                 textOverflow: 'ellipsis',
                                                 whiteSpace: 'nowrap',
                                                 fontSize: '0.75rem',
+                                                maxWidth: '100%',
                                             }}
                                         >
                                             {doc.document_name}
