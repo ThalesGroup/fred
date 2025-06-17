@@ -20,7 +20,7 @@ import jwt
 from jwt import PyJWKClient
 from pydantic import BaseModel
 
-from common.structure import Configuration
+from fred.common.structure import Configuration
 
 # 🔹 Create a module-level logger
 logger = logging.getLogger(__name__)

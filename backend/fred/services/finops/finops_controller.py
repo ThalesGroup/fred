@@ -1,3 +1,17 @@
+# Copyright Thales 2025
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
@@ -20,11 +34,11 @@ from datetime import datetime
 
 from fastapi import Depends, HTTPException, Query, APIRouter
 
-from security.keycloak import KeycloakUser, get_current_user
-from services.cluster_consumption.cluster_consumption_abstract_service import AbstractClusterConsumptionService
-from services.cluster_consumption.cluster_consumption_service import ClusterConsumptionService
-from common.structure import PrecisionEnum, Series, CompareResult, Configuration
-from common.utils import API_COMPARE_DOC
+from fred.security.keycloak import KeycloakUser, get_current_user
+from fred.services.cluster_consumption.cluster_consumption_abstract_service import AbstractClusterConsumptionService
+from fred.services.cluster_consumption.cluster_consumption_service import ClusterConsumptionService
+from fred.common.structure import PrecisionEnum, Series, CompareResult, Configuration
+from fred.common.utils import API_COMPARE_DOC
 
 
 class FinopsController:

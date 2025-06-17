@@ -14,9 +14,9 @@
 
 
 from fred.application_context import get_configuration
-from services.mission.mission_abstract_service import AbstractMissionService
-from services.mission.mission_csv_service import MissionCsvService
-from common.structure import DatabaseTypeEnum
+from fred.services.mission.mission_abstract_service import AbstractMissionService
+from fred.services.mission.mission_csv_service import MissionCsvService
+from fred.common.structure import DatabaseTypeEnum
 
 
 class MissionService:

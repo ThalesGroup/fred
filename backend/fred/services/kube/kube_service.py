@@ -1,3 +1,17 @@
+# Copyright Thales 2025
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
@@ -33,12 +47,12 @@ from kubernetes import client, config
 from kubernetes.client import ApiException
 
 from fred.application_context import get_app_context, get_configuration
-from services.kube.structure import Cluster, ClusterList, WorkloadKind, WorkloadNameList, Workload, IngressesList, \
+from fred.services.kube.structure import Cluster, ClusterList, WorkloadKind, WorkloadNameList, Workload, IngressesList, \
     CustomObject, CustomObjectInfo
-from services.kube.structure import ConfigMapsList, NamespacesList, Namespace, ServicesList
-from common.connectors.file_dao import FileDAO
-from common.error import UnavailableError
-from common.structure import Configuration, DAOTypeEnum
+from fred.services.kube.structure import ConfigMapsList, NamespacesList, Namespace, ServicesList
+from fred.common.connectors.file_dao import FileDAO
+from fred.common.error import UnavailableError
+from fred.common.structure import Configuration, DAOTypeEnum
 
 logger = logging.getLogger(__name__)
 

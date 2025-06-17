@@ -17,14 +17,14 @@ from typing import Optional
 from langchain_core.messages import SystemMessage
 from langgraph.prebuilt import ToolNode, tools_condition
 from langgraph.graph import END, START, MessagesState, StateGraph
-from flow import AgentFlow
-from agents.technical_kubernetes.technical_kubernetes_toolkit import (
+from fred.flow import AgentFlow
+from fred.agents.technical_kubernetes.technical_kubernetes_toolkit import (
     TechnicalKubernetesToolkitBuilder,
 )
 from fred.application_context import get_agent_settings, get_model_for_agent
 from fred.services.ai.ai_service import AIService
 from fred.services.kube.kube_service import KubeService
-from model_factory import get_model
+from fred.model_factory import get_model
 
 class TechnicalKubernetesExpert(AgentFlow):
     """
@@ -69,8 +69,6 @@ class TechnicalKubernetesExpert(AgentFlow):
             toolkit=self.toolkit,
             tag=self.tag, 
         )
-
-    from datetime import datetime
 
     def _generate_prompt(self) -> str:
         """

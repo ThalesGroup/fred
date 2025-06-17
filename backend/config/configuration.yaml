@@ -71,14 +71,43 @@ ai:
   recursion:
     recursion_limit: 40 #Number or max recursion use by the agents while using the model
   agents:
+    - name: "JiraExpert"
+      class_path: "agents.jira.jira_expert.JiraExpert"
+      enabled: false
+      mcp_servers:
+        - name: jira-mcp-server
+          transport: stdio
+          command: uvx
+          args:
+            - "mcp-atlassian"
+          env:
+            JIRA_URL: "@TO_CHANGE"
+            JIRA_USERNAME: "@TO_CHANGE"
+            JIRA_API_TOKEN: "@TO_CHANGE"
+            READ_ONLY_MODE: "true"
+          sse_read_timeout: 600 # 10 minutes. It is 5 minutes by default but it is too short.
+      model: {}
     - name: K8SOperatorExpert
       class_path: "agents.kubernetes_monitoring.k8s_operator_expert.K8SOperatorExpert"
-      enabled: false
+      enabled: true
       mcp_servers:
         - name: k8s-mcp-server
           transport: sse
-          url: http://localhost:8081/sse
+          url: http://k8s-mcp:8081/sse
           sse_read_timeout: 600 # 10 minutes. It is 5 minutes by default but it is too short.
+        #######################################
+        #### Example using STDIO transport ####
+        #######################################
+        # - name: prometheus-mcp-server
+        #   transport: stdio
+        #   command: uv
+        #   args:
+        #     - "--directory"
+        #     - "/home/xxx/Documents/github_repos/prometheus-mcp-server"
+        #     -  "run"
+        #     -  "src/prometheus_mcp_server/main.py"
+        #   env: 
+        #     PROMETHEUS_URL: "http://localhost:9091"
       model: {}
     - name: "GeneralistExpert"
       class_path: "agents.generalist.generalist_expert.GeneralistExpert"
@@ -88,9 +117,9 @@ ai:
       class_path: "agents.documents.documents_expert.DocumentsExpert"
       enabled: true
       mcp_servers:
-        - name: knowledgeflow-mcp-server
+        - name: knowledge-flow-mcp-server
           transport: sse
-          url: http://localhost:8111/mcp
+          url: http://knowledge-flow-backend:8111/mcp
           sse_read_timeout: 2000
       model: {}
     # The Monitoring expert requires you activate the 'enableK8Features' flags above
@@ -109,19 +138,12 @@ dao:
   base_path: "~/.fred/dao-cache"
   max_cached_delay_seconds: 300  # Cache delay in seconds. Use 0 for no cache or a negative value for limitless cache.
 
-# Where to store user feedback
-feedback:
-   type: postgres
-#  db_host: fred-postgres
-#  db_port: 5432
-#  db_name: fred_db
-#  user: admin
-#  password: Azerty123_
-
 # Enable or disable the security layer
 security:
   enabled: false
-  keycloak_url: "http://fred-keycloak:8080/realms/fred"
+  keycloak_url: "http://keycloak:8080/realms/app"
+  authorized_origins:
+  - "http://localhost:5173"
 
 # Environment variables for the application
 
@@ -137,17 +159,16 @@ azure:
     llm: ""
     embedding: ""
 
-# KEYCLOAK
-keycloak:
-  server_url: "https://localhost:8080"
-  realm_name: "fred"
-  client_id: "fred"
-
 # CONTEXT STORAGE CONFIGURATION
 context_storage:
   type: "local"
   options:
     path: "~/.fred/context-store"
+
+metrics_storage:
+  type: "local"
+  settings:
+    path: "~/.fred/metrics-store"
 
 feedback_storage:
   type: local  # ou "minio"

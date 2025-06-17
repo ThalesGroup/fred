@@ -60,7 +60,6 @@ const extendedChatApi = chatApiSlice.injectEndpoints({
         method: "GET",
       }),
     }),
-
     // Créer ou mettre à jour un contexte
     saveAgentContext: builder.mutation({
       query: ({ agentName, context }) => ({

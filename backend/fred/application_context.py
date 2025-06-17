@@ -30,29 +30,29 @@ import os
 from threading import Lock
 from typing import Dict, List, Type, Any
 from pydantic import BaseModel
-from config.context_store_local_settings import ContextStoreLocalSettings
-from config.context_store_minio_settings import ContextStoreMinioSettings
-from config.feedback_store_local_settings import FeedbackStoreLocalSettings
-from config.feedback_store_opensearch_settings import FeedbackStoreOpenSearchSettings
-from main_utils import validate_settings_or_exit
-from feedback.feedback_service import FeedbackService
-from feedback.store.local_feedback_store import LocalFeedbackStore
-from feedback.store.opensearch_feedback_store import OpenSearchFeedbackStore
-
-from context.store.local_context_store import LocalContextStore
-from context.store.minio_context_store import MinIOContextStore
-from model_factory import get_structured_chain
-from fred.common.structure import AgentSettings, Configuration, ServicesSettings
+from fred.config.context_store_local_settings import ContextStoreLocalSettings
+from fred.config.context_store_minio_settings import ContextStoreMinioSettings
+from fred.config.feedback_store_local_settings import FeedbackStoreLocalSettings
+from fred.config.feedback_store_opensearch_settings import FeedbackStoreOpenSearchSettings
+from fred.main_utils import validate_settings_or_exit
+from fred.feedback.feedback_service import FeedbackService
+from fred.feedback.store.local_feedback_store import LocalFeedbackStore
+from fred.feedback.store.opensearch_feedback_store import OpenSearchFeedbackStore
+from fred.context.store.local_context_store import LocalContextStore
+from fred.context.store.minio_context_store import MinIOContextStore
+from fred.model_factory import get_structured_chain
+from fred.common.structure import AgentSettings, Configuration, MetricsStorageConfig, ServicesSettings
 from fred.model_factory import get_model
 from langchain_core.language_models.base import BaseLanguageModel
 from langchain_mcp_adapters.client import MultiServerMCPClient
-from flow import AgentFlow, Flow  # Base class for all agent flows
+from fred.flow import AgentFlow, Flow  # Base class for all agent flows
 import logging
-from fred.monitoring.smart_monitoring_wrapper import SmartMonitoringWrapper
+
+from fred.monitoring.monitored_language_model import MonitoredLanguageModel
 
 logger = logging.getLogger(__name__)
 
-SUPPORTED_TRANSPORTS = ["sse", "streamable_http", "websocket"] # No STDIO transport as we need a URL in the mcp_servers configuration
+SUPPORTED_TRANSPORTS = ["sse", "stdio", "streamable_http", "websocket"]
 
 # -------------------------------
 # Public access helper functions
@@ -119,9 +119,9 @@ def get_model_for_agent(agent_name: str) -> BaseLanguageModel:
     Returns:
         BaseLanguageModel: The AI model configured for the agent.
     """
-    return SmartMonitoringWrapper(target=get_app_context().get_model_for_agent(agent_name),name=agent_name)
+    return MonitoredLanguageModel(target=get_app_context().get_model_for_agent(agent_name),name=agent_name)
 
-    
+
 def get_default_model() -> BaseLanguageModel:
     """
     Retrieves the default AI model instance.
@@ -132,7 +132,7 @@ def get_default_model() -> BaseLanguageModel:
     Returns:
         BaseLanguageModel: The AI model configured for the agent.
     """
-    return SmartMonitoringWrapper(target=get_app_context().get_default_model(),name="DefaultModel")
+    return MonitoredLanguageModel(target=get_app_context().get_default_model(),name="DefaultModel")
 
 
 def get_model_for_leader() -> BaseLanguageModel:
@@ -448,6 +448,9 @@ class ApplicationContext:
                     await mcp_client.connect_to_server(server_name=server.name,
                                                     url=server.url,
                                                     transport=server.transport,
+                                                    command=server.command,
+                                                    args=server.args,
+                                                    env=server.env,
                                                     sse_read_timeout=server.sse_read_timeout)
                 except Exception as e:
                     logger.error(f"Error when connecting to the {server.name} MCP server: {e}. Make sure it is up and running.")

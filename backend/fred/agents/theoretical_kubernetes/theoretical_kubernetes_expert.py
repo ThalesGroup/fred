@@ -15,7 +15,7 @@
 from datetime import datetime
 from typing import List, Optional
 
-from flow import AgentFlow
+from fred.flow import AgentFlow
 from langchain_core.messages import SystemMessage
 from langgraph.graph import START, MessagesState, StateGraph
 from langgraph.graph import MessagesState, StateGraph, START, END

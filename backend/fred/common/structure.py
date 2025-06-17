@@ -1,3 +1,17 @@
+# Copyright Thales 2025
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
@@ -107,10 +121,13 @@ class ModelConfiguration(BaseModel):
 
 class MCPServerConfiguration(BaseModel):
     name: str = Field(None, description="Name of the MCP server")
-    transport: Optional[str] = Field("sse", description="MCP server transport. Can be sse, websocket or streamable_http")
-    url: str = Field(None, description="URL and endpoint of the MCP server")
-    sse_read_timeout: int = Field(60 * 5, description="How long (in seconds) the client will wait for a new event before disconnecting")
-
+    transport: Optional[str] = Field("sse", description="MCP server transport. Can be sse, stdio, websocket or streamable_http")
+    url: Optional[str] = Field(None, description="URL and endpoint of the MCP server")
+    sse_read_timeout:  Optional[int] = Field(60 * 5, description="How long (in seconds) the client will wait for a new event before disconnecting")
+    command: Optional[str] = Field(None, description="Command to run for stdio transport. Can be uv, uvx, npx and so on.")
+    args: Optional[List[str]] = Field(None, description="Args to give the command as a list. ex:  ['--directory', '/directory/to/mcp', 'run', 'server.py']")
+    env: Optional[Dict[str, str]] = Field(None, description="Environment variables to give the MCP server")
+    
 class PathOrIndexPrefix(BaseModel):
     energy_mix: str
     carbon_footprint: str
@@ -232,15 +249,8 @@ class Security(BaseModel):
     enabled: bool = True
     keycloak_url: str = "http://localhost:9080/realms/fred"
     client_id: str = "fred"
+    authorized_origins: List[str] = ["http://localhost:5173"]
 
-
-class FeedbackDatabase(BaseModel):
-    type: str = "postgres"
-    #db_host: str = "localhost"
-    #db_port: int = 5432
-    #db_name: str = "fred_db"
-    #user: str = "fred_user"
-    #password: str
 
 class FrontendFlags(BaseModel):
     enableK8Features: bool = False
@@ -258,8 +268,15 @@ class ContextStorageConfig(BaseModel):
     type: str = Field(..., description="The storage backend to use (e.g., 'local', 'minio')")
     
 class FeedbackStorageConfig(BaseModel):
-    type: str = Field(..., description="The storage backend to use (e.g., 'local', 'minio')")
-    
+    type: str = Field(..., description="The storage backend to use (e.g., 'local', 'opensearch')")
+
+class MetricsStorageSettings(BaseModel):
+    path: str = Field(..., description="The path of the local metrics store")
+
+class MetricsStorageConfig(BaseModel):
+    type: str = Field(..., description="The metrics store to use (e.g., 'local')")
+    settings: MetricsStorageSettings
+
 class Configuration(BaseModel):
     frontend_settings: FrontendSettings
     database: DatabaseConfiguration
@@ -267,9 +284,9 @@ class Configuration(BaseModel):
     ai: AIConfig
     dao: DAOConfiguration
     security: Security
-    feedback: FeedbackDatabase
     context_storage: ContextStorageConfig = Field(..., description="Content Storage configuration")
     feedback_storage: FeedbackStorageConfig = Field(..., description="Feedback Storage configuration")
+    metrics_storage:  MetricsStorageConfig = Field(..., description="Feedback Storage configuration")
 
 class OfflineStatus(BaseModel):
     is_offline: bool

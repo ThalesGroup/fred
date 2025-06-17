@@ -19,8 +19,8 @@ from uuid import uuid4
 import yaml
 from langchain_core.tools import tool
 
-from services.kube.kube_service import KubeService
-from common.structure import WorkloadKind
+from fred.services.kube.kube_service import KubeService
+from fred.common.structure import WorkloadKind
 
 
 class TargetKind(Enum):

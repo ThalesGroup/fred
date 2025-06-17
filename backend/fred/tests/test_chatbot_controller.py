@@ -18,10 +18,10 @@ from fastapi.testclient import TestClient
 from fastapi import APIRouter, FastAPI
 
 from fred.application_context import ApplicationContext
-from chatbot.chatbot_controller import ChatbotController
-from common.utils import parse_server_configuration
-from services.ai.ai_service import AIService
-from services.kube.kube_service import KubeService
+from fred.chatbot.chatbot_controller import ChatbotController
+from fred.common.utils import parse_server_configuration
+from fred.services.ai.ai_service import AIService
+from fred.services.kube.kube_service import KubeService
 
 
 @pytest.fixture(scope="module")

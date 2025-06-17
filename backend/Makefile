@@ -37,18 +37,14 @@ dev: $(TARGET)/.compiled ## Install from compiled lock
 	@echo "✅ Dependencies installed using uv."
 
 $(TARGET)/.compiled: pyproject.toml $(TARGET)/.uv-installed
-	@echo "📄 Compiling lock file and syncing dependencies..."
-	$(UV) pip compile --all-extras pyproject.toml --output-file uv.lock
-	$(UV) pip sync uv.lock
+	$(UV) sync
 	touch $@
 
 
 .PHONY: update
 
 update: $(TARGET)/.uv-installed ## Re-resolve and update all dependencies
-	@echo "⬆️  Re-compiling and syncing dependencies..."
-	$(UV) pip compile --all-extras
-	$(UV) pip sync --all-extras
+	$(UV) sync
 	touch $(TARGET)/.compiled
 
 ##@ Run
@@ -69,6 +65,19 @@ run: dev
 clean: ## Remove virtualenv and build artifacts
 	@echo "🧹 Cleaning project..."
 	rm -rf $(VENV) $(TARGET) .mypy_cache .pytest_cache .coverage htmlcov .tox
+
+##@ Testing
+
+.PHONY: test
+
+test: dev  ## Run all tests with pytest
+	@echo "🧪 Running tests..."
+	PYTHONPATH=$(CURDIR) $(VENV)/bin/pytest --maxfail=5 --disable-warnings -q
+
+.PHONY: test-translate-response
+test-translate-response: dev  ## Run tests for test_translate_response_metadata.py
+	@echo "🧪 Running test_translate_response_metadata.py..."
+	PYTHONPATH=$(CURDIR)/fred $(VENV)/bin/pytest --maxfail=5 --disable-warnings -q fred/tests/test_translate_response_metadata.py
 
 ##@ Help
 

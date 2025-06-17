@@ -57,6 +57,7 @@ import { ProgressStep, ProgressStepper } from "../components/ProgressStepper";
 import { DocumentTable } from "../components/documents/DocumentTable";
 import { DocumentDrawerTable } from "../components/documents/DocumentDrawerTable";
 import DocumentViewer from "../components/documents/DocumentViewer";
+import { TopBar } from "../common/TopBar";
 
 /**
  * DocumentLibrary.tsx
@@ -395,67 +396,11 @@ export const DocumentLibrary = () => {
 
   return (
     <PageBodyWrapper>
-      {/* Compact Header Section */}
-      <Box
-        sx={{
-          position: "relative",
-          backgroundSize: "cover",
-          backgroundPosition: "center",
-          py: { xs: 3, md: 4 }, // Reduced padding
-          mb: 3, // Reduced margin
-          borderRadius: 2,
-          boxShadow: theme.shadows[4],
-        }}
-      >
-        <Container maxWidth="xl">
-          <Fade in={showElements} timeout={1000}>
-            <Grid2 container alignItems="center" spacing={2}>
-              <Grid2 size={{ xs: 12, md: 8 }}>
-                <Box>
-                  <Typography variant="h4" fontWeight="bold" gutterBottom>
-                    Document Library
-                  </Typography>
-                  <Typography
-                    variant="body2" // Smaller text
-                    color="textSecondary"
-                    sx={{ maxWidth: "700px" }}
-                  >
-                    Access the knowledge base documents
-                  </Typography>
-                </Box>
-              </Grid2>
+      <TopBar
+        title="Document Library"
+        description="Access the knowledge base documents"
+      ></TopBar>
 
-              {userInfo.canManageDocuments && (
-                <Grid2
-                  container
-                  size={{ xs: 12, md: 4 }}
-                  sx={{
-                    justifyContent: "flex-end",
-                    textAlign: { xs: "left", md: "right" },
-                  }}
-                >
-                  <Button
-                    variant="contained"
-                    startIcon={<UploadIcon />}
-                    onClick={() => {
-                      setUploadProgressSteps([]);
-                      setTempFiles([]);
-                      setOpenSide(true);
-                    }}
-                    size="medium" // Smaller button
-                    sx={{
-                      borderRadius: "8px",
-                      mt: { xs: 1, md: 0 },
-                    }}
-                  >
-                    Upload a document
-                  </Button>
-                </Grid2>
-              )}
-            </Grid2>
-          </Fade>
-        </Container>
-      </Box>
       {/* Combined Search/Filter Section */}
       <Container maxWidth="xl" sx={{ mb: 3 }}>
         <Fade in={showElements} timeout={1500}>

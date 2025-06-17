@@ -15,7 +15,7 @@
 from datetime import datetime
 from typing import Optional
 
-from flow import AgentFlow
+from fred.flow import AgentFlow
 from langgraph.graph import MessagesState, StateGraph
 from langgraph.constants import START
 from langgraph.prebuilt import ToolNode, tools_condition

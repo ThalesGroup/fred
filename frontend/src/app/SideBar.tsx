@@ -26,6 +26,8 @@ import {
   ListItemText,
   Tooltip,
 } from "@mui/material";
+import MonitorHeartIcon from '@mui/icons-material/MonitorHeart';
+
 import AssistantIcon from "@mui/icons-material/Assistant";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import ChatIcon from "@mui/icons-material/Chat";
@@ -108,6 +110,7 @@ export default function SideBar({ darkMode, onThemeChange }) {
             canBeDisabled: false,
             tooltip: "Chat with the AI assistant team",
           },
+          
         ]
       : [
           {
@@ -119,6 +122,14 @@ export default function SideBar({ darkMode, onThemeChange }) {
             tooltip: "Chat with the AI assistant team",
           },
         ]),
+        {
+            key: "monitoring",
+            label: "Monitoring",
+            icon: <MonitorHeartIcon />,
+            url: `/monitoring`,
+            canBeDisabled: false,
+            tooltip: "Monitor the backend AI calls",
+          },
     /*
     {
        key: 'geomap',

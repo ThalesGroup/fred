@@ -1,12 +1,26 @@
+# Copyright Thales 2025
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import os
 import logging
 from pathlib import Path
-from main_utils import validate_settings_or_exit
-from config.feedback_store_local_settings import FeedbackStoreLocalSettings
-from config.feedback_store_opensearch_settings import FeedbackStoreOpenSearchSettings
-from feedback.feedback_service import FeedbackService
-from feedback.store.local_feedback_store import LocalFeedbackStore
-from feedback.store.opensearch_feedback_store import OpenSearchFeedbackStore
+from fred.main_utils import validate_settings_or_exit
+from fred.config.feedback_store_local_settings import FeedbackStoreLocalSettings
+from fred.config.feedback_store_opensearch_settings import FeedbackStoreOpenSearchSettings
+from fred.feedback.feedback_service import FeedbackService
+from fred.feedback.store.local_feedback_store import LocalFeedbackStore
+from fred.feedback.store.opensearch_feedback_store import OpenSearchFeedbackStore
 
 logger = logging.getLogger(__name__)
 

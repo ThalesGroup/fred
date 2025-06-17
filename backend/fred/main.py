@@ -1,3 +1,17 @@
+# Copyright Thales 2025
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
@@ -8,35 +22,35 @@ The entrypoint for the Fred microservice.
 import argparse
 import logging
 import os
-import sys
 
 from fastapi import FastAPI, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
+from fred.monitoring.hybrid_metric_store import create_metric_store
+from fred.monitoring.metric_store_controller import MetricStoreController
 from services.ai.ai_service import AIService
 from services.kube.kube_service import KubeService
-from rich.logging import RichHandler
 from dotenv import load_dotenv
 import uvicorn
 
-from common.structure import Configuration
-from common.utils import parse_server_configuration
+from fred.common.structure import Configuration
+from fred.common.utils import parse_server_configuration
 from fred.application_context import ApplicationContext
-from security.keycloak import initialize_keycloak
-from main_utils import configure_logging
+from fred.security.keycloak import initialize_keycloak
+from fred.main_utils import configure_logging
 
-from chatbot.chatbot_controller import ChatbotController
-from context.context_controller import ContextController
-from feedback.feedback_controller import FeedbackController
-from services.frontend.frontend_controller import UiController
-from services.kube.kube_controller import KubeController
-from services.ai.ai_controller import AIController
-from services.carbon.carbon_controller import CarbonController
-from services.energy.energy_controller import EnergyController
-from services.finops.finops_controller import FinopsController
-from services.theater_analysis.theater_analysis_controller import TheaterAnalysisController
-from services.mission.mission_controller import MissionController
-from services.theorical_radio.theorical_radio_controller import TheoricalRadioController
-from services.sensor.sensor_controller import SensorController, SensorConfigurationController
+from fred.chatbot.chatbot_controller import ChatbotController
+from fred.context.context_controller import ContextController
+from fred.feedback.feedback_controller import FeedbackController
+from fred.services.frontend.frontend_controller import UiController
+from fred.services.kube.kube_controller import KubeController
+from fred.services.ai.ai_controller import AIController
+from fred.services.carbon.carbon_controller import CarbonController
+from fred.services.energy.energy_controller import EnergyController
+from fred.services.finops.finops_controller import FinopsController
+from fred.services.theater_analysis.theater_analysis_controller import TheaterAnalysisController
+from fred.services.mission.mission_controller import MissionController
+from fred.services.theorical_radio.theorical_radio_controller import TheoricalRadioController
+from fred.services.sensor.sensor_controller import SensorController, SensorConfigurationController
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +83,7 @@ def build_app(configuration: Configuration, base_url: str) -> FastAPI:
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=configuration.security.authorized_origins,
         allow_methods=["GET", "POST", "PUT", "DELETE"],
         allow_headers=["Content-Type", "Authorization"],
     )
@@ -95,6 +109,7 @@ def build_app(configuration: Configuration, base_url: str) -> FastAPI:
     ChatbotController(router, ai_service)
     ContextController(router)
     FeedbackController(router)
+    MetricStoreController(router)
 
     app.include_router(router)
     return app
@@ -119,6 +134,8 @@ def main():
     ApplicationContext(configuration)
     initialize_keycloak(configuration)
 
+    # Create the singleton metric store. 
+    create_metric_store(configuration.metrics_storage)
     app = build_app(configuration, args.server_base_url_path)
     run_server(app, args.server_address, args.server_port, args.server_log_level)
 

@@ -43,7 +43,8 @@ export const Facts = () => {
 
   return (
     <PageBodyWrapper>
-      <TopBar title="Facts Overview" description="Monitor and analyze your cluster's facts" backgroundUrl="" />
+      <TopBar title="Facts Overview" 
+        description="Monitor and analyze your cluster's facts" />
       <Box
         sx={{
           padding: 8,

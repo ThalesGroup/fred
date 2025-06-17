@@ -14,7 +14,7 @@
 
 from abc import ABC, abstractmethod
 
-from services.theater_analysis.theater_analysis_structures import TheaterAnalysisSeries
+from fred.services.theater_analysis.theater_analysis_structures import TheaterAnalysisSeries
 
 class AbstractTheaterAnalysisService(ABC):
     """

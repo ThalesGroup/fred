@@ -1,3 +1,17 @@
+# Copyright Thales 2025
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
@@ -23,11 +37,11 @@ import sys
 from datetime import datetime
 
 from fred.application_context import get_configuration
-from services.cluster_consumption.cluster_consumption_abstract_service import AbstractClusterConsumptionService
-from services.cluster_consumption.cluster_consumption_structures import ClusterConsumptionSeries, DetailSeries
-from common.structure import PrecisionEnum, Configuration, Series
-from common.utils import sample_data, SampleDataType
-from services.frontend.frontend_structures import Observation
+from fred.services.cluster_consumption.cluster_consumption_abstract_service import AbstractClusterConsumptionService
+from fred.services.cluster_consumption.cluster_consumption_structures import ClusterConsumptionSeries, DetailSeries
+from fred.common.structure import PrecisionEnum, Configuration, Series
+from fred.common.utils import sample_data, SampleDataType
+from fred.services.frontend.frontend_structures import Observation
 logger = logging.getLogger(__name__)
 
 class ClusterConsumptionCsvService(AbstractClusterConsumptionService):

@@ -38,6 +38,7 @@ import { Audit } from "../pages/Audit";
 import { FrugalIt } from "../pages/FrugalIt";
 import Inspect from "../frugalit/pages/Inspect";
 import { ChatProfiles } from "../pages/ChatProfiles";
+import { Monitoring } from "../pages/Monitoring";
 
 const RootLayout = () => (
   <ProtectedRoute permission="viewer">
@@ -115,9 +116,7 @@ export const routes: RouteObject[] = [
         path: "inspect",
         element: ( 
          <FootprintContextProvider>
-
-        
-        <Inspect />
+            <Inspect />
          </FootprintContextProvider>),
       },
       isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES) && {
@@ -127,6 +126,14 @@ export const routes: RouteObject[] = [
       {
         path: "chat",
         element: <Chat />,
+      },
+      {
+        path: "monitoring",
+        element: <Monitoring />,
+      },
+      {
+        path: "monitoring",
+        element: <Monitoring />,
       },
       {
         path: "account",

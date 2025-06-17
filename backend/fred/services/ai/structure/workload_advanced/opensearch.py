@@ -23,7 +23,7 @@ from langchain_core.prompts import PromptTemplate
 from langfuse.callback import CallbackHandler
 from pydantic import Field, BaseModel
 
-from services.ai.structure.workload_context import WorkloadContext
+from fred.services.ai.structure.workload_context import WorkloadContext
 
 
 class OpenSearchAdvanced(BaseModel):

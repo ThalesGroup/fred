@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from context.store.context_storage_factory import get_context_store
+from fred.context.store.context_storage_factory import get_context_store
 import json
 import uuid
 from typing import Dict, Any
