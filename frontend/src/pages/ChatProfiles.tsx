@@ -3,8 +3,9 @@ import {
     Box, Typography, useTheme, TextField, Button, IconButton,
     Container, Paper, Fade, Snackbar, Alert,
     Dialog, DialogTitle, DialogContent, DialogActions,
-    Stack, alpha, InputAdornment,
-    Grid2
+    Stack, InputAdornment,
+    Grid2,
+    alpha
 } from "@mui/material";
 import { useState, useEffect } from "react";
 import { useDropzone } from "react-dropzone";
@@ -29,7 +30,8 @@ import {
     useUpdateChatProfileMutation,
     useDeleteChatProfileMutation,
     useUploadChatProfileDocumentsMutation,
-    useDeleteChatProfileDocumentMutation
+    useDeleteChatProfileDocumentMutation,
+    useGetChatProfileMaxTokensQuery
 } from "../slices/chatProfileApi"
 
 // Components
@@ -87,6 +89,8 @@ export const ChatProfiles = () => {
     const [deleteChatProfile] = useDeleteChatProfileMutation();
     const [uploadChatProfileDocuments] = useUploadChatProfileDocumentsMutation();
     const [deleteChatProfileDocument] = useDeleteChatProfileDocumentMutation();
+    const { data } = useGetChatProfileMaxTokensQuery();
+    const maxTokens = data?.max_tokens;
 
     // Dropzone configuration
     const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -107,7 +111,7 @@ export const ChatProfiles = () => {
         handleSearch();
     }, [chatProfiles, searchQuery]);
 
-    // Fetch chatProfiles from API with mock data
+    // Fetch chatProfiles from API
     const fetchChatProfiles = async () => {
         setIsLoading(true);
         try {
@@ -183,7 +187,7 @@ export const ChatProfiles = () => {
             setOpenCreateDialog(false);
 
             fetchChatProfiles();
-            showSnackbar("ChatProfile créé avec succès", "success");
+            showSnackbar("ChatProfile created successfully", "success");
         } catch (error) {
             console.error("Error creating chatProfile:", error);
             showSnackbar("Erreur lors de la création du chatProfile", "error");
@@ -191,7 +195,6 @@ export const ChatProfiles = () => {
             setIsLoading(false);
         }
     };
-
 
     // Edit chatProfile
     const handleOpenEditDialog = (chatProfile: ChatProfile) => {
@@ -214,7 +217,8 @@ export const ChatProfiles = () => {
             await updateChatProfile({
                 chatProfile_id: currentChatProfile.id,
                 title: newChatProfileTitle,
-                description: newChatProfileDescription
+                description: newChatProfileDescription,
+                files: tempFiles
             }).unwrap();
 
             if (tempFiles.length > 0) {
@@ -231,10 +235,11 @@ export const ChatProfiles = () => {
             setOpenEditDialog(false);
 
             fetchChatProfiles();
-            showSnackbar("ChatProfile modifié avec succès", "success");
-        } catch (error) {
-            console.error("Error updating chatProfile:", error);
-            showSnackbar("Erreur lors de la modification du chatProfile", "error");
+            showSnackbar("ChatProfile updated successfully", "success");
+        } catch (error: any) {
+            const errMsg = error?.data?.detail || "Erreur lors de la modification du chatProfile";
+            showSnackbar(errMsg, "error");
+            console.error("Update error:", error);
         } finally {
             setIsLoading(false);
         }
@@ -257,7 +262,7 @@ export const ChatProfiles = () => {
             setOpenDeleteDialog(false);
 
             fetchChatProfiles();
-            showSnackbar("ChatProfile supprimé avec succès", "success");
+            showSnackbar("ChatProfile deleted successfully", "success");
         } catch (error) {
             console.error("Error deleting chatProfile:", error);
             showSnackbar("Erreur lors de la suppression du chatProfile", "error");
@@ -281,7 +286,7 @@ export const ChatProfiles = () => {
                 documents: updatedDocuments
             });
 
-            showSnackbar("Document supprimé avec succès", "success");
+            showSnackbar("Document deleted successfully", "success");
         } catch (error) {
             console.error("Erreur lors de la suppression du document :", error);
             showSnackbar("Échec de la suppression du document", "error");
@@ -304,20 +309,20 @@ export const ChatProfiles = () => {
 
     return (
         <PageBodyWrapper>
-            {/*  Header Section */}
-            <Fade in={showElements} timeout={1000}>
-                <Box
-                    sx={{
-                        position: "relative",
-                        backgroundSize: "cover",
-                        backgroundPosition: "center",
-                        py: { xs: 3, md: 4 },
-                        mb: 3,
-                        borderRadius: 2,
-                        boxShadow: theme.shadows[4],
-                    }}
-                >
-                    <Container maxWidth="xl">
+            {/* Hero Section - Matching AgentHub style */}
+            <Box
+                sx={{
+                    position: "relative",
+                    backgroundSize: "cover",
+                    backgroundPosition: "center",
+                    py: { xs: 3, md: 4 },
+                    mb: 3,
+                    borderRadius: 2,
+                    boxShadow: theme.shadows[4],
+                }}
+            >
+                <Container maxWidth="xl">
+                    <Fade in={showElements} timeout={1000}>
                         <Grid2 container alignItems="center" spacing={2}>
                             <Grid2 size={{ xs: 12, md: 8 }}>
                                 <Box>
@@ -344,27 +349,24 @@ export const ChatProfiles = () => {
                                 </Button>
                             </Grid2>
                         </Grid2>
-                    </Container>
-                </Box>
-            </Fade>
+                    </Fade>
+                </Container>
+            </Box>
 
-            {/*  Search Section */}
-            <Container maxWidth="xl" sx={{ mb: 4 }}>
+            {/* Search Section - Matching AgentHub style */}
+            <Container maxWidth="xl" sx={{ mb: 3 }}>
                 <Fade in={showElements} timeout={1200}>
                     <Paper
-                        elevation={0}
+                        elevation={2}
                         sx={{
-                            p: 3,
+                            p: 2,
                             borderRadius: 4,
-                            border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
-                            backgroundColor: alpha(theme.palette.background.paper, 0.7),
-                            backdropFilter: 'blur(10px)',
-                            boxShadow: `0 8px 32px ${alpha(theme.palette.common.black, 0.1)}`,
+                            border: `1px solid ${theme.palette.divider}`,
                         }}
                     >
                         <TextField
                             fullWidth
-                            placeholder="Rechercher un chatProfile..."
+                            placeholder="Search profiles..."
                             variant="outlined"
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
@@ -378,7 +380,7 @@ export const ChatProfiles = () => {
                             sx={{
                                 '& .MuiOutlinedInput-root': {
                                     borderRadius: 3,
-                                    backgroundColor: alpha(theme.palette.background.paper, 0.8),
+                                    backgroundColor: theme.palette.background.paper,
                                     '&:hover': {
                                         '& .MuiOutlinedInput-notchedOutline': {
                                             borderColor: theme.palette.primary.main,
@@ -391,50 +393,76 @@ export const ChatProfiles = () => {
                 </Fade>
             </Container>
 
-            {/*  ChatProfiles Grid */}
+            {/* ChatProfiles Grid - Matching AgentHub style */}
             <Container maxWidth="xl">
-                <Fade in={showElements} timeout={1400}>
-                    <Box>
+                <Fade in={showElements} timeout={1500}>
+                    <Paper
+                        elevation={2}
+                        sx={{
+                            p: 3,
+                            borderRadius: 4,
+                            mb: 3,
+                            minHeight: "500px",
+                            border: `1px solid ${theme.palette.divider}`,
+                            position: "relative",
+                        }}
+                    >
                         {isLoading ? (
                             <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
                                 <LoadingSpinner />
                             </Box>
                         ) : filteredChatProfiles.length > 0 ? (
-                            <Grid2 container spacing={3}>
-                                {filteredChatProfiles.map((chatProfile, index) => (
-                                    <Grid2 size={{ xs: 12, sm: 6, lg: 4 }} key={chatProfile.id}>
-                                        <CustomProfile
-                                            chatProfile={chatProfile}
-                                            index={index}
-                                            onEdit={handleOpenEditDialog}
-                                            onDelete={handleOpenDeleteDialog}
-                                            getFileIcon={getFileIcon}
-                                            formatFileSize={formatFileSize}
-                                        />
-                                    </Grid2>
-                                ))}
-                            </Grid2>
+                            <>
+                                <Box
+                                    sx={{
+                                        mb: 3,
+                                        display: "flex",
+                                        justifyContent: "space-between",
+                                        alignItems: "center",
+                                    }}
+                                >
+                                    <Typography variant="h6" fontWeight="bold">
+                                        All Profiles ({filteredChatProfiles.length})
+                                    </Typography>
+                                </Box>
+                                <Grid2 container spacing={3}>
+                                    {filteredChatProfiles.map((chatProfile, index) => (
+                                        <Grid2 size={{ xs: 12, sm: 6, lg: 4 }} key={chatProfile.id}>
+                                            <CustomProfile
+                                                chatProfile={chatProfile}
+                                                index={index}
+                                                onEdit={handleOpenEditDialog}
+                                                onDelete={handleOpenDeleteDialog}
+                                                getFileIcon={getFileIcon}
+                                                formatFileSize={formatFileSize}
+                                                maxTokens={maxTokens}
+                                            />
+                                        </Grid2>
+                                    ))}
+                                </Grid2>
+                            </>
                         ) : (
-                            <Paper
-                                sx={{
-                                    p: 6,
-                                    textAlign: 'center',
-                                    borderRadius: 4,
-                                    border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
-                                    backgroundColor: alpha(theme.palette.background.paper, 0.7),
-                                    backdropFilter: 'blur(10px)',
-                                }}
+                            <Box
+                                display="flex"
+                                flexDirection="column"
+                                alignItems="center"
+                                justifyContent="center"
+                                minHeight="300px"
                             >
                                 <DocumentScannerIcon
                                     sx={{
                                         fontSize: 80,
-                                        color: alpha(theme.palette.text.secondary, 0.3),
-                                        mb: 3
+                                        color: theme.palette.text.secondary,
+                                        mb: 3,
+                                        opacity: 0.3
                                     }}
                                 />
-                                <Typography variant="body1" color="text.secondary" sx={{ mb: 3, maxWidth: 400, mx: 'auto' }}>
+                                <Typography variant="h6" color="textSecondary" align="center">
+                                    {searchQuery ? "No profiles found" : "No profiles available"}
+                                </Typography>
+                                <Typography variant="body2" color="textSecondary" align="center" sx={{ mt: 1, mb: 3 }}>
                                     {searchQuery
-                                        ? "No profile found"
+                                        ? "Try adjusting your search terms"
                                         : "Create your first chat profile to enhance your agents efficiency"
                                     }
                                 </Typography>
@@ -442,22 +470,22 @@ export const ChatProfiles = () => {
                                     variant="contained"
                                     startIcon={<AddIcon />}
                                     onClick={() => setOpenCreateDialog(true)}
-                                    size="large"
+                                    size="medium"
                                     sx={{
-                                        borderRadius: 3,
+                                        borderRadius: "8px",
                                         px: 4,
                                         py: 1.5,
                                     }}
                                 >
                                     Create profile
                                 </Button>
-                            </Paper>
+                            </Box>
                         )}
-                    </Box>
+                    </Paper>
                 </Fade>
             </Container>
 
-            {/* Minimalist Create ChatProfile Dialog */}
+            {/* Create Dialog - Harmonized style */}
             <Dialog
                 open={openCreateDialog}
                 onClose={() => !isLoading && setOpenCreateDialog(false)}
@@ -466,7 +494,7 @@ export const ChatProfiles = () => {
                 PaperProps={{
                     sx: {
                         borderRadius: 3,
-                        boxShadow: `0 10px 30px ${alpha(theme.palette.common.black, 0.15)}`,
+                        boxShadow: theme.shadows[4],
                     }
                 }}
             >
@@ -527,17 +555,17 @@ export const ChatProfiles = () => {
                                 {...getRootProps()}
                                 sx={{
                                     p: 3,
-                                    border: `2px dashed ${isDragActive ? theme.palette.primary.main : alpha(theme.palette.divider, 0.4)}`,
+                                    border: `2px dashed ${isDragActive ? theme.palette.primary.main : theme.palette.divider}`,
                                     borderRadius: 2,
                                     backgroundColor: isDragActive
-                                        ? alpha(theme.palette.primary.main, 0.03)
-                                        : alpha(theme.palette.background.default, 0.3),
+                                        ? theme.palette.action.hover
+                                        : theme.palette.background.default,
                                     cursor: 'pointer',
                                     transition: 'all 0.2s ease',
                                     textAlign: 'center',
                                     '&:hover': {
                                         borderColor: theme.palette.primary.main,
-                                        backgroundColor: alpha(theme.palette.primary.main, 0.02),
+                                        backgroundColor: theme.palette.action.hover,
                                     }
                                 }}
                             >
@@ -558,11 +586,233 @@ export const ChatProfiles = () => {
                                                 gap: 1,
                                                 p: 1,
                                                 borderRadius: 2,
-                                                backgroundColor: alpha(theme.palette.background.default, 0.5),
-                                                border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
+                                                backgroundColor: theme.palette.background.default,
+                                                border: `1px solid ${theme.palette.divider}`,
                                                 transition: 'all 0.2s ease',
                                                 '&:hover': {
-                                                    backgroundColor: alpha(theme.palette.background.default, 0.7),
+                                                    backgroundColor: theme.palette.action.hover,
+                                                }
+                                            }}
+                                        >
+                                            {getFileIcon(file.name.split('.').pop() || '')}
+                                            <Typography
+                                                variant="caption"
+                                                fontWeight={500}
+                                                sx={{
+                                                    flex: 1,
+                                                    overflow: 'hidden',
+                                                    textOverflow: 'ellipsis',
+                                                    whiteSpace: 'nowrap',
+                                                    fontSize: '0.8rem',
+                                                }}
+                                            >
+                                                {file.name}
+                                            </Typography>
+                                            <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem' }}>
+                                                {formatFileSize(file.size)}
+                                            </Typography>
+                                            <IconButton
+                                                size="small"
+                                                onClick={() => handleDeleteTempFile(index)}
+                                                disabled={isLoading}
+                                                sx={{ ml: 0.5 }}
+                                            >
+                                                <DeleteIcon fontSize="small" />
+                                            </IconButton>
+                                        </Box>
+                                    ))}
+                                </Stack>
+                            )}
+                        </Box>
+                    </Stack>
+                </DialogContent>
+
+                <DialogActions sx={{ px: 3, pb: 3, pt: 1 }}>
+                    <Button
+                        onClick={() => !isLoading && setOpenCreateDialog(false)}
+                        disabled={isLoading}
+                        sx={{ borderRadius: 2 }}
+                    >
+                        Cancel
+                    </Button>
+                    <Button
+                        variant="contained"
+                        onClick={handleCreateChatProfile}
+                        disabled={isLoading || !newChatProfileTitle.trim()}
+                        sx={{
+                            borderRadius: 2,
+                            px: 3,
+                        }}
+                    >
+                        {isLoading ? 'Creating...' : 'Create'}
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
+            {/* Edit Dialog - Harmonized style */}
+            <Dialog
+                open={openEditDialog}
+                onClose={() => !isLoading && setOpenEditDialog(false)}
+                fullWidth
+                maxWidth="sm"
+                PaperProps={{
+                    sx: {
+                        borderRadius: 3,
+                        boxShadow: theme.shadows[4],
+                    }
+                }}
+            >
+                <DialogTitle sx={{ pt: 3, pb: 1 }}>
+                    <Stack direction="row" justifyContent="space-between" alignItems="center">
+                        <Typography variant="h6" fontWeight={600}>
+                            Edit Profile
+                        </Typography>
+                        <IconButton
+                            onClick={() => !isLoading && setOpenEditDialog(false)}
+                            disabled={isLoading}
+                            size="small"
+                        >
+                            <CloseIcon />
+                        </IconButton>
+                    </Stack>
+                </DialogTitle>
+
+                <DialogContent sx={{ py: 2, pt: 2.5 }}>
+                    <Stack spacing={2.5}>
+                        <TextField
+                            autoFocus
+                            label="Title"
+                            fullWidth
+                            value={newChatProfileTitle}
+                            onChange={(e) => setNewChatProfileTitle(e.target.value)}
+                            required
+                            variant="outlined"
+                            size="small"
+                            sx={{
+                                '& .MuiOutlinedInput-root': {
+                                    borderRadius: 2,
+                                }
+                            }}
+                        />
+
+                        <TextField
+                            label="Description"
+                            fullWidth
+                            multiline
+                            rows={3}
+                            value={newChatProfileDescription}
+                            onChange={(e) => setNewChatProfileDescription(e.target.value)}
+                            variant="outlined"
+                            size="small"
+                            sx={{
+                                '& .MuiOutlinedInput-root': {
+                                    borderRadius: 2,
+                                }
+                            }}
+                        />
+
+                        {currentChatProfile?.documents && currentChatProfile.documents.length > 0 && (
+                            <Box>
+                                <Typography variant="body2" fontWeight={500} gutterBottom sx={{ color: 'text.secondary' }}>
+                                    Current documents
+                                </Typography>
+                                <Box
+                                    sx={{
+                                        maxHeight: 200,
+                                        overflowY: 'auto',
+                                        backgroundColor: theme.palette.background.default,
+                                        borderRadius: 2,
+                                        border: `1px solid ${theme.palette.divider}`,
+                                        px: 1,
+                                        py: 1,
+                                    }}
+                                >
+                                    <Stack spacing={0.8}>
+                                        {currentChatProfile.documents.map((doc) => (
+                                            <Box
+                                                key={doc.id}
+                                                sx={{
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: 1,
+                                                    p: 1,
+                                                    borderRadius: 2,
+                                                    backgroundColor: theme.palette.background.paper,
+                                                    border: `1px solid ${theme.palette.divider}`,
+                                                    transition: 'all 0.2s ease',
+                                                    '&:hover': {
+                                                        backgroundColor: theme.palette.action.hover,
+                                                    }
+                                                }}
+                                            >
+                                                {getFileIcon(doc.document_type)}
+                                                <Typography
+                                                    variant="caption"
+                                                    fontWeight={500}
+                                                    sx={{
+                                                        flex: 1,
+                                                        overflow: 'hidden',
+                                                        textOverflow: 'ellipsis',
+                                                        whiteSpace: 'nowrap',
+                                                        fontSize: '0.8rem',
+                                                    }}
+                                                >
+                                                    {doc.document_name}
+                                                </Typography>
+                                                <IconButton size="small" sx={{ ml: 'auto' }} onClick={() => handleDeleteExistingDocument(doc.id)}>
+                                                    <DeleteIcon fontSize="small" />
+                                                </IconButton>
+                                            </Box>
+                                        ))}
+                                    </Stack>
+                                </Box>
+                            </Box>
+                        )}
+
+                        <Box>
+                            <Typography variant="body2" fontWeight={500} gutterBottom sx={{ color: 'text.secondary' }}>
+                                Add documents
+                            </Typography>
+                            <Box
+                                {...getRootProps()}
+                                sx={{
+                                    p: 3,
+                                    border: `2px dashed ${isDragActive ? theme.palette.primary.main : theme.palette.divider}`,
+                                    borderRadius: 2,
+                                    backgroundColor: isDragActive
+                                        ? theme.palette.action.hover
+                                        : theme.palette.background.default,
+                                    cursor: 'pointer',
+                                    transition: 'all 0.2s ease',
+                                    textAlign: 'center',
+                                    '&:hover': {
+                                        borderColor: theme.palette.primary.main,
+                                        backgroundColor: theme.palette.action.hover,
+                                    }
+                                }}
+                            >
+                                <input {...getInputProps()} />
+                                <Typography variant="body2" color="text.secondary">
+                                    {isDragActive ? "Drop files here" : "Click or drag files here"}
+                                </Typography>
+                            </Box>
+
+                            {tempFiles.length > 0 && (
+                                <Stack spacing={0.8} sx={{ mt: 2 }}>
+                                    {tempFiles.map((file, index) => (
+                                        <Box
+                                            key={index}
+                                            sx={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: 1,
+                                                p: 1,
+                                                borderRadius: 2,
+                                                backgroundColor: theme.palette.success.light,
+                                                border: `1px solid ${theme.palette.success.main}`,
+                                                transition: 'all 0.2s ease',
+                                                '&:hover': {
+                                                    backgroundColor: theme.palette.success.main,
                                                 }
                                             }}
                                         >

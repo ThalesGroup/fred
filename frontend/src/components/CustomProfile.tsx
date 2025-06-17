@@ -1,22 +1,12 @@
 import React from 'react';
 import {
-    Card,
-    CardContent,
-    Typography,
-    useTheme,
-    Stack,
-    Box,
-    Chip,
-    Divider,
-    IconButton,
-    Tooltip,
-    Fade,
-    alpha
+    Card, Typography, useTheme, Stack, Box, Chip,
+    Divider, IconButton, Tooltip, Fade, alpha, LinearProgress
 } from "@mui/material";
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import DocumentScannerIcon from '@mui/icons-material/DocumentScanner';
-import { ChatProfile, ChatProfileDocument } from '../pages/ChatProfiles';
+import { ChatProfile } from '../pages/ChatProfiles';
 
 interface CustomProfileProps {
     chatProfile: ChatProfile;
@@ -25,6 +15,7 @@ interface CustomProfileProps {
     onDelete: (chatProfile: ChatProfile) => void;
     getFileIcon: (fileType: string) => React.ReactNode;
     formatFileSize: (bytes: number) => string;
+    maxTokens?: number;
 }
 
 export const CustomProfile: React.FC<CustomProfileProps> = ({
@@ -33,9 +24,12 @@ export const CustomProfile: React.FC<CustomProfileProps> = ({
     onEdit,
     onDelete,
     getFileIcon,
-    formatFileSize
+    formatFileSize,
+    maxTokens,
 }) => {
     const theme = useTheme();
+    const tokensUsed = chatProfile.tokens ?? 0;
+    const percentageUsed = Math.min((tokensUsed / maxTokens) * 100, 100);
 
     return (
         <Fade in={true} timeout={1600 + index * 200}>
@@ -65,7 +59,6 @@ export const CustomProfile: React.FC<CustomProfileProps> = ({
                     }
                 }}
             >
-                {/* Background Gradient */}
                 <Box
                     className="chatProfile-gradient"
                     sx={{
@@ -80,15 +73,7 @@ export const CustomProfile: React.FC<CustomProfileProps> = ({
                     }}
                 />
 
-                {/* Header with document count */}
-                <Box
-                    sx={{
-                        p: 3,
-                        pb: 2,
-                        position: 'relative',
-                        zIndex: 1,
-                    }}
-                >
+                <Box sx={{ p: 3, pb: 2, position: 'relative', zIndex: 1 }}>
                     <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={2}>
                         <Box sx={{ flex: 1, minWidth: 0 }}>
                             <Typography
@@ -133,12 +118,10 @@ export const CustomProfile: React.FC<CustomProfileProps> = ({
                     </Stack>
                 </Box>
 
-                {/* Compact Documents Section */}
                 {chatProfile.documents.length > 0 && (
                     <Box sx={{ px: 3, pb: 2 }}>
                         <Stack spacing={0.8}>
-                            {/* Show up to 3 documents */}
-                            {chatProfile.documents.slice(0, 3).map((doc, docIndex) => (
+                            {chatProfile.documents.slice(0, 3).map((doc) => (
                                 <Box
                                     key={doc.id}
                                     sx={{
@@ -149,7 +132,6 @@ export const CustomProfile: React.FC<CustomProfileProps> = ({
                                         borderRadius: 2,
                                         backgroundColor: alpha(theme.palette.background.default, 0.3),
                                         border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
-                                        transition: 'all 0.2s ease',
                                         '&:hover': {
                                             backgroundColor: alpha(theme.palette.background.default, 0.5),
                                         }
@@ -164,7 +146,6 @@ export const CustomProfile: React.FC<CustomProfileProps> = ({
                                                 overflow: 'hidden',
                                                 textOverflow: 'ellipsis',
                                                 whiteSpace: 'nowrap',
-                                                display: 'block',
                                                 fontSize: '0.75rem',
                                             }}
                                         >
@@ -173,32 +154,18 @@ export const CustomProfile: React.FC<CustomProfileProps> = ({
                                     </Box>
                                 </Box>
                             ))}
-                            
-                            {/* Show count for remaining documents if more than 3 */}
                             {chatProfile.documents.length > 3 && (
-                                <Box
+                                <Typography
+                                    variant="caption"
+                                    color="text.secondary"
                                     sx={{
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: 1,
+                                        fontSize: '0.75rem',
+                                        fontStyle: 'italic',
                                         pl: 1,
-                                        pt: 0.5,
                                     }}
                                 >
-                                    <Typography 
-                                        variant="caption" 
-                                        color="text.secondary" 
-                                        sx={{ 
-                                            fontSize: '0.75rem',
-                                            fontStyle: 'italic',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            gap: 0.5,
-                                        }}
-                                    >
-                                        📁 +{chatProfile.documents.length - 3} more
-                                    </Typography>
-                                </Box>
+                                    📁 +{chatProfile.documents.length - 3} more
+                                </Typography>
                             )}
                         </Stack>
                     </Box>
@@ -206,88 +173,87 @@ export const CustomProfile: React.FC<CustomProfileProps> = ({
 
                 <Divider sx={{ mx: 3 }} />
 
-                {/* Footer with emojis */}
-                <Box sx={{ p: 3, pt: 2 }}>
-                    <Stack direction="row" justifyContent="space-between" alignItems="center">
-                        <Box>
-                            <Typography 
-                                variant="caption" 
-                                color="text.secondary"
-                                sx={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: 0.5,
-                                    fontSize: '0.75rem',
-                                }}
-                            >
-                                🪙 <Typography>{(chatProfile.tokens ?? 0).toLocaleString()}</Typography> tokens
-                            </Typography>
-                            <Typography 
-                                variant="caption" 
-                                color="text.secondary" 
-                                sx={{ 
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: 0.5,
-                                    fontSize: '0.75rem',
-                                    mt: 0.3,
-                                }}
-                            >
-                                📅 {new Date(chatProfile.updated_at).toLocaleDateString('fr-FR', {
-                                    day: 'numeric',
-                                    month: 'short',
-                                    year: 'numeric'
-                                })}
-                            </Typography>
-                        </Box>
-
-                        {/* Actions with emoji tooltips */}
-                        <Stack
-                            direction="row"
-                            spacing={1}
-                            className="chatProfile-actions"
-                            sx={{
-                                opacity: 0,
-                                transform: 'translateY(8px)',
-                                transition: 'all 0.3s ease',
-                            }}
+                <Box sx={{ p: 3, pt: 2, flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
+                    <Stack spacing={1}>
+                        <Typography
+                            variant="caption"
+                            color={tokensUsed >= maxTokens ? 'error.main' : 'text.secondary'}
                         >
-                            <Tooltip title="Modifier">
-                                <IconButton
-                                    size="small"
-                                    onClick={() => onEdit(chatProfile)}
-                                    sx={{
-                                        backgroundColor: alpha(theme.palette.primary.main, 0.1),
-                                        color: theme.palette.primary.main,
-                                        '&:hover': {
-                                            backgroundColor: alpha(theme.palette.primary.main, 0.2),
-                                            transform: 'scale(1.05)',
-                                        },
-                                        transition: 'all 0.2s ease',
-                                    }}
-                                >
-                                    <EditIcon fontSize="small" />
-                                </IconButton>
-                            </Tooltip>
-                            <Tooltip title="Supprimer">
-                                <IconButton
-                                    size="small"
-                                    onClick={() => onDelete(chatProfile)}
-                                    sx={{
-                                        backgroundColor: alpha(theme.palette.error.main, 0.1),
-                                        color: theme.palette.error.main,
-                                        '&:hover': {
-                                            backgroundColor: alpha(theme.palette.error.main, 0.2),
-                                            transform: 'scale(1.05)',
-                                        },
-                                        transition: 'all 0.2s ease',
-                                    }}
-                                >
-                                    <DeleteIcon fontSize="small" />
-                                </IconButton>
-                            </Tooltip>
-                        </Stack>
+                            🪙 Tokens: {tokensUsed?.toLocaleString()} / {maxTokens?.toLocaleString()}
+                        </Typography>
+                        <LinearProgress
+                            variant="determinate"
+                            value={percentageUsed}
+                            sx={{
+                                height: 6,
+                                borderRadius: 5,
+                                backgroundColor: alpha(theme.palette.grey[300], 0.4),
+                                '& .MuiLinearProgress-bar': {
+                                    backgroundColor:
+                                        percentageUsed >= 100
+                                            ? theme.palette.error.main
+                                            : theme.palette.primary.main,
+                                },
+                            }}
+                        />
+                        <Typography
+                            variant="caption"
+                            color="text.secondary"
+                            sx={{ fontSize: '0.75rem' }}
+                        >
+                            📅 {new Date(chatProfile.updated_at).toLocaleDateString('fr-FR', {
+                                day: 'numeric',
+                                month: 'short',
+                                year: 'numeric'
+                            })}
+                        </Typography>
                     </Stack>
+
+                    <Box
+                        className="chatProfile-actions"
+                        sx={{
+                            mt: 2,
+                            display: 'flex',
+                            justifyContent: 'flex-end',
+                            gap: 1,
+                            opacity: 0,
+                            transform: 'translateY(8px)',
+                            transition: 'all 0.3s ease',
+                        }}
+                    >
+                        <Tooltip title="Edit">
+                            <IconButton
+                                size="small"
+                                onClick={() => onEdit(chatProfile)}
+                                sx={{
+                                    backgroundColor: alpha(theme.palette.primary.main, 0.1),
+                                    color: theme.palette.primary.main,
+                                    '&:hover': {
+                                        backgroundColor: alpha(theme.palette.primary.main, 0.2),
+                                        transform: 'scale(1.05)',
+                                    },
+                                }}
+                            >
+                                <EditIcon fontSize="small" />
+                            </IconButton>
+                        </Tooltip>
+                        <Tooltip title="Delete">
+                            <IconButton
+                                size="small"
+                                onClick={() => onDelete(chatProfile)}
+                                sx={{
+                                    backgroundColor: alpha(theme.palette.error.main, 0.1),
+                                    color: theme.palette.error.main,
+                                    '&:hover': {
+                                        backgroundColor: alpha(theme.palette.error.main, 0.2),
+                                        transform: 'scale(1.05)',
+                                    },
+                                }}
+                            >
+                                <DeleteIcon fontSize="small" />
+                            </IconButton>
+                        </Tooltip>
+                    </Box>
                 </Box>
             </Card>
         </Fade>
