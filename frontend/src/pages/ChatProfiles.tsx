@@ -28,7 +28,8 @@ import {
     useGetChatProfilesMutation,
     useUpdateChatProfileMutation,
     useDeleteChatProfileMutation,
-    useUploadChatProfileDocumentsMutation
+    useUploadChatProfileDocumentsMutation,
+    useDeleteChatProfileDocumentMutation
 } from "../slices/chatProfileApi"
 
 // Components
@@ -85,6 +86,7 @@ export const ChatProfiles = () => {
     const [updateChatProfile] = useUpdateChatProfileMutation();
     const [deleteChatProfile] = useDeleteChatProfileMutation();
     const [uploadChatProfileDocuments] = useUploadChatProfileDocumentsMutation();
+    const [deleteChatProfileDocument] = useDeleteChatProfileDocumentMutation();
 
     // Dropzone configuration
     const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -118,7 +120,7 @@ export const ChatProfiles = () => {
             setIsLoading(false);
         }
     };
-    
+
     // Handle search
     const handleSearch = () => {
         const filtered = chatProfiles.filter((chatProfile) =>
@@ -168,18 +170,18 @@ export const ChatProfiles = () => {
                 showSnackbar("Le titre est requis", "error");
                 return;
             }
-    
+
             const newChatProfile = await createChatProfile({
                 title: newChatProfileTitle,
                 description: newChatProfileDescription,
                 files: tempFiles,
             }).unwrap();
-    
+
             setNewChatProfileTitle("");
             setNewChatProfileDescription("");
             setTempFiles([]);
             setOpenCreateDialog(false);
-    
+
             fetchChatProfiles();
             showSnackbar("ChatProfile créé avec succès", "success");
         } catch (error) {
@@ -261,6 +263,28 @@ export const ChatProfiles = () => {
             showSnackbar("Erreur lors de la suppression du chatProfile", "error");
         } finally {
             setIsLoading(false);
+        }
+    };
+
+    const handleDeleteExistingDocument = async (documentId: string) => {
+        if (!currentChatProfile) return;
+        try {
+            await deleteChatProfileDocument({
+                chatProfile_id: currentChatProfile.id,
+                document_id: documentId
+            }).unwrap();
+
+            // Mettre à jour le profil en local sans re-fetch global
+            const updatedDocuments = currentChatProfile.documents.filter(doc => doc.id !== documentId);
+            setCurrentChatProfile({
+                ...currentChatProfile,
+                documents: updatedDocuments
+            });
+
+            showSnackbar("Document supprimé avec succès", "success");
+        } catch (error) {
+            console.error("Erreur lors de la suppression du document :", error);
+            showSnackbar("Échec de la suppression du document", "error");
         }
     };
 
@@ -659,65 +683,76 @@ export const ChatProfiles = () => {
                             }}
                         />
 
-                        {/* Existing Documents - Clean & Professional */}
                         {currentChatProfile?.documents && currentChatProfile.documents.length > 0 && (
                             <Box>
                                 <Typography variant="body2" fontWeight={500} gutterBottom sx={{ color: 'text.secondary' }}>
                                     Current documents
                                 </Typography>
-                                <Stack spacing={0.8}>
-                                    {currentChatProfile.documents.slice(0, 3).map((doc) => (
-                                        <Box
-                                            key={doc.id}
-                                            sx={{
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                gap: 1,
-                                                p: 1,
-                                                borderRadius: 2,
-                                                backgroundColor: alpha(theme.palette.background.default, 0.3),
-                                                border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
-                                                transition: 'all 0.2s ease',
-                                                '&:hover': {
-                                                    backgroundColor: alpha(theme.palette.background.default, 0.5),
-                                                }
-                                            }}
-                                        >
-                                            {getFileIcon(doc.document_type)}
-                                            <Typography
-                                                variant="caption"
-                                                fontWeight={500}
+                                <Box
+                                    sx={{
+                                        maxHeight: 200,
+                                        overflowY: 'auto',
+                                        backgroundColor: alpha(theme.palette.background.default, 0.2),
+                                        px: 1,
+                                        py: 1,
+                                    }}
+                                >
+                                    <Stack spacing={0.8}>
+                                        {currentChatProfile.documents.map((doc) => (
+                                            <Box
+                                                key={doc.id}
                                                 sx={{
-                                                    flex: 1,
-                                                    overflow: 'hidden',
-                                                    textOverflow: 'ellipsis',
-                                                    whiteSpace: 'nowrap',
-                                                    fontSize: '0.8rem',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: 1,
+                                                    p: 1,
+                                                    borderRadius: 2,
+                                                    backgroundColor: alpha(theme.palette.background.default, 0.3),
+                                                    border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
+                                                    transition: 'all 0.2s ease',
+                                                    '&:hover': {
+                                                        backgroundColor: alpha(theme.palette.background.default, 0.5),
+                                                    }
                                                 }}
                                             >
-                                                {doc.document_name}
-                                            </Typography>
-                                            <IconButton size="small" sx={{ ml: 'auto' }}>
-                                                <DeleteIcon fontSize="small" />
-                                            </IconButton>
-                                        </Box>
-                                    ))}
-                                    {currentChatProfile.documents.length > 3 && (
-                                        <Typography
-                                            variant="caption"
-                                            color="text.secondary"
-                                            sx={{
-                                                pl: 1,
-                                                fontSize: '0.75rem',
-                                                fontStyle: 'italic',
-                                            }}
-                                        >
-                                            +{currentChatProfile.documents.length - 3} more documents
-                                        </Typography>
-                                    )}
-                                </Stack>
+                                                {getFileIcon(doc.document_type)}
+                                                <Typography
+                                                    variant="caption"
+                                                    fontWeight={500}
+                                                    sx={{
+                                                        flex: 1,
+                                                        overflow: 'hidden',
+                                                        textOverflow: 'ellipsis',
+                                                        whiteSpace: 'nowrap',
+                                                        fontSize: '0.8rem',
+                                                    }}
+                                                >
+                                                    {doc.document_name}
+                                                </Typography>
+                                                <IconButton size="small" sx={{ ml: 'auto' }} onClick={() => handleDeleteExistingDocument(doc.id)}>
+                                                    <DeleteIcon fontSize="small" />
+                                                </IconButton>
+                                            </Box>
+                                        ))}
+                                    </Stack>
+                                </Box>
+                                {currentChatProfile.documents.length > 3 && (
+                                    <Typography
+                                        variant="caption"
+                                        color="text.secondary"
+                                        sx={{
+                                            pt: 0.5,
+                                            fontSize: '0.75rem',
+                                            fontStyle: 'italic',
+                                            textAlign: 'right'
+                                        }}
+                                    >
+                                        Showing all {currentChatProfile.documents.length} documents
+                                    </Typography>
+                                )}
                             </Box>
                         )}
+
 
                         {/* Add Documents - Simplified */}
                         <Box>
