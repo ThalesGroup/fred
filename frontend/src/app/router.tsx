@@ -37,6 +37,7 @@ import { Facts } from "../frugalit/pages/Facts";
 import { Audit } from "../pages/Audit";
 import { FrugalIt } from "../pages/FrugalIt";
 import Inspect from "../frugalit/pages/Inspect";
+import { ChatProfiles } from "../pages/ChatProfiles";
 import { Monitoring } from "../pages/Monitoring";
 
 const RootLayout = () => (
@@ -131,7 +132,11 @@ export const routes: RouteObject[] = [
         element: <Monitoring />,
       },
       {
-        path: "profile",
+        path: "monitoring",
+        element: <Monitoring />,
+      },
+      {
+        path: "account",
         element: <Profile />,
       },
       {
@@ -141,6 +146,10 @@ export const routes: RouteObject[] = [
       {
         path: "agentHub",
         element: <AgentHub />,
+      },
+      {
+        path: "chatProfiles",
+        element: <ChatProfiles />,
       },
     ].filter(Boolean),
   },

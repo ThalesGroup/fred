@@ -26,6 +26,12 @@ import {
   ListItem,
   ClickAwayListener,
   Fade,
+  Chip,
+  FormControl,
+  InputLabel,
+  Link,
+  OutlinedInput,
+  Select,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
@@ -36,6 +42,20 @@ import { getAgentBadge } from "../../utils/avatar.tsx";
 import React from "react";
 import { StyledMenu } from "../../utils/styledMenu.tsx";
 import { SessionSchema } from "../../slices/chatApiStructures.ts";
+import BookmarkIcon from '@mui/icons-material/Bookmark';
+import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
+import { Session, useNavigate } from "react-router-dom";
+import { useGetChatProfilesMutation } from "../../slices/chatProfileApi.tsx";
+import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
+
+
+interface ChatProfileLight {
+  id: string;
+  title: string;
+  description: string;
+  documents?: { document_name: string }[];
+}
+
 
 export const Settings = ({
   sessions,
@@ -46,6 +66,7 @@ export const Settings = ({
   currentAgenticFlow,
   onSelectAgenticFlow,
   onDeleteSession,
+  onSelectChatProfile,
 }: {
   sessions: SessionSchema[];
   currentSession: SessionSchema | null;
@@ -55,6 +76,7 @@ export const Settings = ({
   currentAgenticFlow: AgenticFlow;
   onSelectAgenticFlow: (flow: AgenticFlow) => void;
   onDeleteSession: (session: SessionSchema) => void;
+  onSelectChatProfile?: (profile: ChatProfileLight | null) => void;
 }) => {
   // Récupération du thème pour l'adaptation des couleurs
   const theme = useTheme<Theme>();
@@ -71,18 +93,56 @@ export const Settings = ({
 
   // États du composant
   const [menuAnchorEl, setMenuAnchorEl] = useState<HTMLElement | null>(null);
-  const [contextSession, setContextSession] = useState<SessionSchema | null>(null);
+  const [chatProfileSession, setChatProfileSession] = useState<SessionSchema | null>(null);
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
   const [isEditing, setIsEditing] = useState(false);
   const [showElements, setShowElements] = useState(false);
+  const [getChatProfiles] = useGetChatProfilesMutation();
+  const [isLoading, setIsLoading] = useState(false);
 
-  // Gestion du menu contextuel
+  // Snackbar states
+  const [snackbarOpen, setSnackbarOpen] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState("");
+  const [snackbarSeverity, setSnackbarSeverity] = useState<"success" | "error" | "info" | "warning">("success");
+
+  const [chatProfiles, setChatProfiles] = useState<ChatProfileLight[]>([])
+
+
+
+  // Fetch chatProfiles from API with mock data
+  const fetchChatProfiles = async () => {
+    setIsLoading(true);
+    try {
+      const response = await getChatProfiles().unwrap();
+      setChatProfiles(response);
+    } catch (error) {
+      console.error("Error fetching chatProfiles:", error);
+      showSnackbar("Erreur lors du chargement des chatProfiles", "error");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // État pour le chatProfilee sélectionné
+  const [selectedChatProfile, setSelectedChatProfile] = useState<ChatProfileLight | null>(null);
+
+
+  // Snackbar handlers
+  const showSnackbar = (message: string, severity: "success" | "error" | "info" | "warning" = "success") => {
+    setSnackbarMessage(message);
+    setSnackbarSeverity(severity);
+    setSnackbarOpen(true);
+  };
+
+  // Gestion du menu chatProfileuel
   const openMenu = (event: React.MouseEvent<HTMLElement>, session: SessionSchema) => {
     event.stopPropagation();
     setMenuAnchorEl(event.currentTarget);
-    setContextSession(session);
+    setChatProfileSession(session);
   };
+
+  const navigate = useNavigate();
 
   const closeMenu = () => {
     setMenuAnchorEl(null);
@@ -124,9 +184,9 @@ export const Settings = ({
     }
   };
 
-  // Animation au chargement
   useEffect(() => {
     setShowElements(true);
+    fetchChatProfiles();
   }, []);
 
   return (
@@ -147,6 +207,148 @@ export const Settings = ({
         boxShadow: "None",
       }}
     >
+      {/* chat profile section */}
+      <Fade in={showElements} timeout={800}>
+        <Box
+          sx={{
+            py: 2.5,
+            px: 2,
+            borderBottom: `1px solid ${theme.palette.divider}`,
+          }}
+        >
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+              <Typography
+                variant="subtitle1"
+                sx={{
+                  fontWeight: 500,
+                }}
+              >
+                Profile
+              </Typography>
+              <Tooltip
+                title={
+                  <React.Fragment>
+                    <Typography variant="body2" sx={{ mb: 1 }}>
+                      Custom profiles allow you to personalize and chatProfileualize your interactions with the assistant.
+                    </Typography>
+                    <Typography variant="body2" sx={{ mb: 1 }}>
+                      Unlike one-time file uploads, a profile is reusable across multiple conversations and can contain:
+                    </Typography>
+                    <ul style={{ margin: '0', paddingLeft: '16px' }}>
+                      <li>Information about a client or project</li>
+                      <li>Reference documents (PDF, Word, Excel...)</li>
+                      <li>Technical specifications</li>
+                    </ul>
+                  </React.Fragment>
+                }
+                arrow
+                placement="bottom-start"
+                componentsProps={{
+                  tooltip: {
+                    sx: {
+                      maxWidth: 300,
+                      bgcolor: theme.palette.background.paper,
+                      color: theme.palette.text.primary,
+                      p: 2,
+                      borderRadius: 1,
+                      boxShadow: theme.shadows[3],
+                      '& .MuiTooltip-arrow': {
+                        color: theme.palette.background.paper,
+                      }
+                    }
+                  }
+                }}
+              >
+                <HelpOutlineIcon
+                  sx={{
+                    ml: 1,
+                    fontSize: '0.9rem',
+                    color: 'text.secondary',
+                    cursor: 'help'
+                  }}
+                />
+              </Tooltip>
+            </Box>
+
+            <Tooltip title="Manage profiles">
+              <IconButton
+                onClick={() => navigate('/chatProfiles')}
+                size="small"
+                sx={{ mr: -1 }}
+              >
+                <AddIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          </Box>
+
+          <FormControl fullWidth size="small">
+            <Select
+              value={selectedChatProfile?.id || ''}
+              onChange={(e) => {
+                const ctx = chatProfiles.find(c => c.id === e.target.value);
+                setSelectedChatProfile(ctx || null);
+                if (onSelectChatProfile) {
+                  onSelectChatProfile(ctx || null);
+                }
+              }}
+              displayEmpty
+              sx={{ mb: 1 }}
+              renderValue={(selected) => {
+                if (!selected) {
+                  return (
+                    <Typography variant="body2" color="text.secondary">
+                      Select a profile...
+                    </Typography>
+                  );
+                }
+                const ctx = chatProfiles.find(c => c.id === selected);
+                return (
+                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    <BookmarkIcon sx={{ color: theme.palette.warning.main, mr: 1, fontSize: '1.1rem' }} />
+                    <Typography noWrap variant="body2">{ctx?.title}</Typography>
+                  </Box>
+                );
+              }}
+            >
+              <MenuItem value="">
+                <em>None</em>
+              </MenuItem>
+              {chatProfiles.map((chatProfile) => (
+                <MenuItem key={chatProfile.id} value={chatProfile.id}>
+                  <Box sx={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                      <BookmarkIcon sx={{ color: theme.palette.warning.main, mr: 1, fontSize: '1.1rem' }} />
+                      <Typography variant="body2">{chatProfile.title}</Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block', maxWidth: '190px' }}>
+                        {chatProfile.description}
+                      </Typography>
+                      {chatProfile.documents && (
+
+                        <Box sx={{ display: 'flex', alignItems: 'center', ml: 1 }}>
+                          <InsertDriveFileIcon fontSize="small" sx={{ mr: 0.5 }} />
+                          <Typography variant="caption">{chatProfile.documents.length}</Typography>
+                        </Box>
+
+                      )}
+                    </Box>
+                  </Box>
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+
+
+          {selectedChatProfile && (
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+              {selectedChatProfile.description}
+            </Typography>
+          )}
+        </Box>
+      </Fade>
+
       {/* En-tête: titre et sélecteur d'agent */}
       <Fade in={showElements} timeout={900}>
         <Box
@@ -453,12 +655,12 @@ export const Settings = ({
         </List>
       </Fade>
 
-      {/* Menu contextuel */}
-      <StyledMenu id="session-context-menu" anchorEl={menuAnchorEl} open={Boolean(menuAnchorEl)} onClose={closeMenu}>
+      {/* Menu chatProfileuel */}
+      <StyledMenu id="session-chatProfile-menu" anchorEl={menuAnchorEl} open={Boolean(menuAnchorEl)} onClose={closeMenu}>
         <MenuItem
           onClick={() => {
-            if (contextSession) {
-              onDeleteSession(contextSession);
+            if (chatProfileSession) {
+              onDeleteSession(chatProfileSession);
               closeMenu();
             }
           }}
