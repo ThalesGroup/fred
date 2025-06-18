@@ -13,7 +13,6 @@
 # limitations under the License.
 
 from pathlib import Path
-from fred.config.context_store_local_settings import ContextStoreLocalSettings
 from fred.config.context_store_minio_settings import ContextStoreMinioSettings
 from fred.main_utils import validate_settings_or_exit
 from fred.context.store.base_context_store import BaseContextStore
@@ -31,8 +30,7 @@ def get_context_store() -> BaseContextStore:
     config = get_configuration().context_storage
 
     if config.type == "local":
-        settings = validate_settings_or_exit(ContextStoreLocalSettings)
-        return LocalContextStore(Path(settings.root_path).expanduser())
+        return LocalContextStore(Path(config.settings.path).expanduser())
 
     elif config.type == "minio":
         settings = validate_settings_or_exit(ContextStoreMinioSettings)

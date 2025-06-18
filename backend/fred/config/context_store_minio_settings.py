@@ -14,7 +14,6 @@
 
 from pydantic_settings import BaseSettings
 from pydantic import Field
-import os
 
 class ContextStoreMinioSettings(BaseSettings):
     minio_endpoint: str = Field(..., validation_alias="MINIO_ENDPOINT")

@@ -15,6 +15,7 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from typing import Optional
+from fred.common.structure import FeedbackStorageConfig
 from fred.config.feedback_store_local_settings import FeedbackStoreLocalSettings
 from fred.feedback.feedback_service import FeedbackService
 from fred.feedback.store.local_feedback_store import LocalFeedbackStore
@@ -34,9 +35,11 @@ class FeedbackPayload(BaseModel):
         populate_by_name = True
 
 class FeedbackController:
-    def __init__(self, router: APIRouter):
-        settings = FeedbackStoreLocalSettings()
-        store = LocalFeedbackStore(settings.root_path)
+    def __init__(self, router: APIRouter, config: FeedbackStorageConfig):
+        if config.type == "local":
+            store = LocalFeedbackStore(config.settings.path)
+        else:
+            raise NotImplementedError(f"Feedback storage type '{config.type}' is not implemented yet.")
         self.service = FeedbackService(store)
 
         @router.post("/chatbot/feedback", tags=["Feedback"])

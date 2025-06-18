@@ -261,15 +261,22 @@ class FrontendSettings(BaseModel):
     feature_flags: FrontendFlags
     properties: Properties
 
+class MetricsStorageSettings(BaseModel):
+    path: str = Field(..., description="The path of the local metrics store")
+
+class FeedbackStorageSettings(BaseModel):
+    path: str = Field(..., description="The path of the local metrics store")
+
+class ContextStorageSettings(BaseModel):
+    path: str = Field(..., description="The path of the local metrics store")
 
 class ContextStorageConfig(BaseModel):
     type: str = Field(..., description="The storage backend to use (e.g., 'local', 'minio')")
-    
+    settings: ContextStorageSettings
+
 class FeedbackStorageConfig(BaseModel):
     type: str = Field(..., description="The storage backend to use (e.g., 'local', 'opensearch')")
-
-class MetricsStorageSettings(BaseModel):
-    path: str = Field(..., description="The path of the local metrics store")
+    settings: FeedbackStorageSettings
 
 class MetricsStorageConfig(BaseModel):
     type: str = Field(..., description="The metrics store to use (e.g., 'local')")
@@ -289,17 +296,14 @@ class Configuration(BaseModel):
 class OfflineStatus(BaseModel):
     is_offline: bool
 
-
 class Window(BaseModel):
     start: datetime
     end: datetime
     total: float
 
-
 class Difference(BaseModel):
     value: float
     percentage: float
-
 
 class CompareResult(BaseModel):
     cluster: str
@@ -307,7 +311,6 @@ class CompareResult(BaseModel):
     window_1: Window
     window_2: Window
     difference: Difference
-
 
 class Series(BaseModel):
     timestamps: List[datetime]
