@@ -52,6 +52,7 @@ const Login = (onAuthenticatedCallback: Function) => {
 
 const Logout = () => {
   if (USE_AUTH) {
+    sessionStorage.clear();
     keycloakInstance.logout({
       redirectUri: window.location.origin + "/", // Ensure this matches Keycloak's allowed URIs
     });
