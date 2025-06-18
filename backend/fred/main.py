@@ -108,7 +108,7 @@ def build_app(configuration: Configuration, base_url: str) -> FastAPI:
     UiController(router, kube_service, ai_service)
     ChatbotController(router, ai_service)
     ContextController(router)
-    FeedbackController(router)
+    FeedbackController(router, configuration.feedback_storage)
     MetricStoreController(router)
 
     app.include_router(router)
