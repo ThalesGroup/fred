@@ -399,7 +399,34 @@ export const DocumentLibrary = () => {
       <TopBar
         title="Document Library"
         description="Access the knowledge base documents"
-      ></TopBar>
+      >
+        {userInfo.canManageDocuments && (
+          <Grid2
+            container
+            size={{ xs: 12, md: 4 }}
+            sx={{
+              justifyContent: "flex-end",
+              textAlign: { xs: "left", md: "right" },
+            }}
+          >
+            <Button
+              variant="contained"
+              startIcon={<UploadIcon />}
+              onClick={() => {
+                setUploadProgressSteps([]);
+                setTempFiles([]);
+                setOpenSide(true);
+              }}
+              size="medium" // Smaller button
+              sx={{
+                borderRadius: "8px",
+                mt: { xs: 1, md: 0 },
+              }}
+            >
+              Upload a document
+            </Button>
+          </Grid2>
+        )}</TopBar>
 
       {/* Combined Search/Filter Section */}
       <Container maxWidth="xl" sx={{ mb: 3 }}>
