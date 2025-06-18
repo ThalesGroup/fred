@@ -165,21 +165,18 @@ dao:
   base_path: "~/.fred/dao-cache"
   max_cached_delay_seconds: 300  # Cache delay in seconds. Use 0 for no cache or a negative value for limitless cache.
 
-# Enable or disable the security layer
 security:
   enabled: false
   keycloak_url: "http://fred-keycloak:8080/realms/fred"
 
-# KEYCLOAK
 keycloak:
   server_url: "https://localhost:8080"
   realm_name: "fred"
   client_id: "fred"
 
-# CONTEXT STORAGE CONFIGURATION
 context_storage:
   type: "local"
-  options:
+  settings:
     path: "~/.fred/context-store"
 
 metrics_storage:
@@ -188,7 +185,12 @@ metrics_storage:
     path: "~/.fred/metrics-store"
 
 feedback_storage:
-  type: local  # ou "minio"
-  minio_endpoint: "localhost:9000"
-  minio_bucket_name: "fred-feedback"
-  minio_secure: false
+  type: local  # or "minio"
+  # For minio you require in .env:
+  #   MINIO_ENDPOINT=...
+  # MINIO_ACCESS_KEY
+  # MINIO_SECRET_KEY
+  # MINIO_BUCKET_NAME
+  # MINIO_SECURE
+  settings:
+    path: "~/.fred/feedback-store"
