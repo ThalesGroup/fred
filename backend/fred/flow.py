@@ -108,7 +108,7 @@ class AgentFlow:
         categories=None,
         tag=None,
         toolkit: BaseToolkit | None = None,
-        cluster_name: Optional[str] = None,
+        cluster_fullname: Optional[str] = None,
     ):
         """
         Initialize the agent with its core properties. This method creates the model,
@@ -138,7 +138,7 @@ class AgentFlow:
         self.compiled_graph = None
         self._context_enrichment = None
         self.toolkit = toolkit
-        self.cluster_name = cluster_name
+        self.cluster_fullname = cluster_fullname
         # Import here to avoid circular import
         from fred.application_context import get_model_for_agent
         self.model = get_model_for_agent(self.name)

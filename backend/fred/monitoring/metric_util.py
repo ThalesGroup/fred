@@ -73,9 +73,9 @@ def translate_response_metadata_to_metric(
     model_type: str
 ) -> Optional[Metric]:
     try:
-        logger.info(f"Raw metadata: {json.dumps(raw, indent=2, default=str)}")
-        logger.info(f"Logging context: {ctx}")
-        logger.info(f"Latency: {latency:.4f}, Model Type: {model_type}")
+        logger.debug(f"Raw metadata: {json.dumps(raw, indent=2, default=str)}")
+        logger.debug(f"Logging context: {ctx}")
+        logger.debug(f"Latency: {latency:.4f}, Model Type: {model_type}")
 
         token_usage_raw = raw.get("token_usage")
         token_usage = normalize_token_usage(token_usage_raw) if token_usage_raw else None
