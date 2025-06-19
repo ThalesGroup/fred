@@ -26,9 +26,9 @@ database:
   csv_files:
     # Can be absolute paths or relative paths to the main
     energy_mix: './services/cluster_consumption/data/simulated_energy_mix.csv'
-    carbon_footprint: './services/cluster_consumption/data/simulated_cluster_consumption_gco2_sep_to_feb.csv'
-    energy_footprint: './services/cluster_consumption/data/simulated_cluster_consumption_wh_sep_to_feb.csv'
-    financial_footprint: './services/cluster_consumption/data/simulated_cluster_consumption_usd_sep_to_feb.csv'
+    carbon_footprint: './services/cluster_consumption/data/simulated_cluster_consumption_gco2.csv'
+    energy_footprint: './services/cluster_consumption/data/simulated_cluster_consumption_wh.csv'
+    financial_footprint: './services/cluster_consumption/data/simulated_cluster_consumption_usd.csv'
     # Guerre elec & ship identification service
     frequencies: './services/sensor/data/bandes_freq.csv'
     sensors_test_new: './services/theater_analysis/data/detections-capteur-donnees-test_new_scenario.csv'
@@ -116,11 +116,11 @@ ai:
       model: {}
     - name: K8SOperatorExpert
       class_path: "agents.kubernetes_monitoring.k8s_operator_expert.K8SOperatorExpert"
-      enabled: false
+      enabled: true
       mcp_servers:
         - name: k8s-mcp-server
           transport: sse
-          url: http://localhost:8081/sse # Run the k8s mcp server via docker compose
+          url: http://k8s-mcp:8081/sse
           sse_read_timeout: 600 # 10 minutes. It is 5 minutes by default but it is too short.
         #######################################
         #### Example using STDIO transport ####
@@ -144,9 +144,9 @@ ai:
       class_path: "agents.documents.documents_expert.DocumentsExpert"
       enabled: true
       mcp_servers:
-        - name: knowledgeflow-mcp-server
+        - name: knowledge-flow-mcp-server
           transport: sse
-          url: http://localhost:8111/mcp
+          url: http://knowledge-flow-backend:8111/mcp
           sse_read_timeout: 2000
       model: {}
     # The Monitoring expert requires you activate the 'enableK8Features' flags above
@@ -167,7 +167,9 @@ dao:
 
 security:
   enabled: false
-  keycloak_url: "http://fred-keycloak:8080/realms/fred"
+  keycloak_url: "http://keycloak:8080/realms/app"
+  authorized_origins:
+  - "http://localhost:5173"
 
 keycloak:
   server_url: "https://localhost:8080"

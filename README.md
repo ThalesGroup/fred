@@ -1,13 +1,13 @@
 # Fred
 
 Fred is a multi-agent AI assistant to help managing your Kubernetes applications. 
-It consists of a python backend, exposing (fast API) REST endpoints, and a companion UI that
+It consists of a python backend, exposing (FastAPI) REST endpoints, and a companion UI that
 provides you with a simple but effective chatbot UI.
 
 Fred is primarly a laboratory to explore how to best design a complete multi-agent application using
 LangChain and LanGraph. It does not pretend to be a framework, instead it is a complete example
 that illustrates how to turn several specialized agents into a fully-fledge expert team ready to assist you in
-answering very precise questions about your K8S application.
+answering very precise questions about your K8S applications.
 
 Checkout [Fred website](https://fredk8.dev) for details and position papers.
 
@@ -20,7 +20,7 @@ then the UI as explained [here](./ui/README.md).
 
 Here is the quick procedure for impatient people.
 
-You will need a valid OpenAI API Key with an access to the *gpt-4o* model - check the [OpenAI help topic - How can I access GPT-4, GPT-4 Turbo, GPT-4o, and GPT-4o mini](https://help.openai.com/en/articles/7102672-how-can-i-access-gpt-4-gpt-4-turbo-gpt-4o-and-gpt-4o-mini#h_f472fd7cbc) to get one.
+In case you want to use OpenAI models, you will need a valid OpenAI API Key with an access to the *gpt-4o* model - check the [OpenAI help topic - How can I access GPT-4, GPT-4 Turbo, GPT-4o, and GPT-4o mini](https://help.openai.com/en/articles/7102672-how-can-i-access-gpt-4-gpt-4-turbo-gpt-4o-and-gpt-4o-mini#h_f472fd7cbc) to get one.
 
 ### Using non containerized development environment
 
@@ -38,7 +38,7 @@ pyenv global 3.12.8
 
 pyenv versions
   system
-* 3.12.8 (set by /home/cyrille-biard/.pyenv/version)
+* 3.12.8 (set by /home/<user>/.pyenv/version)
 ```
 
 A ``backend/.python-version`` file is part of the repository to ensure your local development environment match fred requirements.
@@ -50,7 +50,7 @@ make build
 ```
 
 The front end requires node `v22.13.0`.
-We **strongly** encourage you to use `nvm` to install and manage node.
+We **strongly** encourage you to use `nvm` (Installation instructions [here](https://github.com/nvm-sh/nvm?tab=readme-ov-file#install--update-script)) to install and manage node.
 Similarly use the `make` command.
 
 ```
@@ -58,10 +58,8 @@ cd frontend
 make build
 ```
 
-[Install NVM on Linux](https://github.com/nvm-sh/nvm?tab=readme-ov-file#install--update-script)
-Then
+Then use NVM to install the expected release of nodeJS
 ```
-Use NVM to install the expected release of nodeJS
 nvm install 22.13.0
 ```
 
@@ -86,26 +84,26 @@ Then open [https://localhost:5173](https://localhost:5173) in your local browser
 
 ### Using Docker development environment
 
-Watchout: **this is WIP.** The docker compose make easier to develop the frontend and the backend deploying and configuring the following required compoments for you:
+Watchout: **this is WIP.** The docker compose makes easier to develop the frontend and the backend, deploying and configuring the following required compoments for you:
 
 
 #### 0. Overview
 
-You setup everything on Docker. The provided dockerfiles correctly deals with all requirements issues as well by leveraging the same Makefiles.
+You setup everything on Docker. Provided Dockerfiles correctly deal with all requirements issues as well leveraging the same Makefiles.
 
-- keycloak
-- opensearch and opensearch-dashboards
-- minio
-- a dummy kubernetes cluster
+- Keycloak
+- Opensearch and Opensearch Dashboards
+- MinIO
+- a dummy Kubernetes cluster
 
-This guarantees we all share the same environments and Docker image.
+This guarantees we all share the same environment and Docker images.
 
 #### 1. Requirement
 
-According to the distribution of your docker host, install the following packages:
-- docker, [Install Docker Engine](https://docs.docker.com/engine/install/)
+According to the distribution of your docker underlying host, install the following packages:
+- Docker, [Install Docker Engine](https://docs.docker.com/engine/install/)
 - docker-compose, [Overview of installing Docker Compose](https://docs.docker.com/compose/install/)
-- a properly configured kube config file available at ~/.kube/config , for a dev k8s cluster or a Minikube, [Install Minikube](https://kubernetes.io/fr/docs/tasks/tools/install-minikube/)
+- a properly configured kube config file available at ``~/.kube/config`` , for a dev k8s cluster or a Minikube (Installation instructions for Minikube [here](https://kubernetes.io/fr/docs/tasks/tools/install-minikube/))
 
 #### 2. Prepare your Linux docker host
 
@@ -161,8 +159,8 @@ grep -q '127.0.0.1.*fred-keycloak' /etc/hosts || echo "127.0.0.1 fred-keycloak" 
 Ensure that following commands work
 
 ```
-ping fred-keycloack
-getent hosts fred-keycloack
+ping fred-keycloak
+getent hosts fred-keycloak
 ```
 
 ##### 2.4. Define OpenAI API Key environment variable
@@ -179,7 +177,7 @@ echo "OPENAI_API_KEY=<YOUR_OPENAI_API_KEY>" > ~/.fred/openai-api-key.env
 
 #### 3. Start the stack
 
-Once your docker host is ready, you can start the docker compose stack. The way to start all containers might depends on your IDE. VSCode has a plugin called `Dev Containers` that allow to develop directly into the container. But if you do not use VSCode, we provide a script to 
+Once your docker host is ready, you can start the docker compose stack. The way to start all containers depends on your IDE. VSCode has a plugin called `Dev Containers` that allow to develop directly into the container. But if you do not use VSCode, we provide a script to start the stack.
 
 You are going to use:
 

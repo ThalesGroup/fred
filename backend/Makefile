@@ -37,18 +37,14 @@ dev: $(TARGET)/.compiled ## Install from compiled lock
 	@echo "✅ Dependencies installed using uv."
 
 $(TARGET)/.compiled: pyproject.toml $(TARGET)/.uv-installed
-	@echo "📄 Compiling lock file and syncing dependencies..."
-	$(UV) pip compile --all-extras pyproject.toml --output-file uv.lock
-	$(UV) pip sync uv.lock
+	$(UV) sync
 	touch $@
 
 
 .PHONY: update
 
 update: $(TARGET)/.uv-installed ## Re-resolve and update all dependencies
-	@echo "⬆️  Re-compiling and syncing dependencies..."
-	$(UV) pip compile --all-extras
-	$(UV) pip sync --all-extras
+	$(UV) sync
 	touch $(TARGET)/.compiled
 
 ##@ Run

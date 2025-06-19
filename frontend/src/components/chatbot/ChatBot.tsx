@@ -14,7 +14,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Box, Grid2, Tooltip, Typography, useTheme } from "@mui/material";
-import { AgenticFlow } from "../../pages/Chat.tsx";
+import { AgenticFlow, ChatProfileLight } from "../../pages/Chat.tsx";
 import { usePostTranscribeAudioMutation } from "../../frugalit/slices/api.tsx";
 import { useToast } from "../ToastProvider.tsx";
 import UserInput, { UserInputContent } from "./UserInput.tsx";
@@ -38,6 +38,7 @@ export interface ChatBotEventSend {
   message: string;
   agent_name: string;
   argument?: string; // Optional arguments for the agent
+  chat_profile_id? : string; //Optional argument for chat profile usage
 }
 
 interface TranscriptionResponse {
@@ -51,6 +52,7 @@ const ChatBot = ({
   onUpdateOrAddSession,
   isCreatingNewConversation,
   argument,
+  selectedChatProfile
 }: {
   currentChatBotSession: SessionSchema;
   currentAgenticFlow: AgenticFlow;
@@ -58,6 +60,7 @@ const ChatBot = ({
   onUpdateOrAddSession: (session: SessionSchema) => void;
   isCreatingNewConversation: boolean;
   argument?: string; // Optional argument for the agent
+  selectedChatProfile?: ChatProfileLight | null;
 }) => {
   const theme = useTheme();
   const { showInfo, showError } = useToast();
@@ -364,12 +367,13 @@ const ChatBot = ({
     addMessage(userMessage);
 
     console.log("[📤 ChatBot] About to send, session_id =", currentChatBotSession?.id);
-    const event: ChatBotEventSend = {
+    const event: ChatBotEventSend & { chat_profile_id?: string } = {
       user_id: KeyCloakService.GetUserMail(),
       message: input,
       agent_name: agent ? agent.name : currentAgenticFlow.name,
       session_id: currentChatBotSession?.id,
-      argument: argument, // Optional argument for the agent
+      argument,
+      chat_profile_id: selectedChatProfile?.id,
     };
 
     try {

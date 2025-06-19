@@ -248,6 +248,7 @@ class Security(BaseModel):
     enabled: bool = True
     keycloak_url: str = "http://localhost:9080/realms/fred"
     client_id: str = "fred"
+    authorized_origins: List[str] = ["http://localhost:5173"]
 
 
 class FrontendFlags(BaseModel):
