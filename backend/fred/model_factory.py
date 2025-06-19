@@ -48,27 +48,27 @@ def get_model(model_config: ModelConfiguration):
     if not provider:
         logger.error("Missing mandatory model_type property in model configuration: %s", model_config)
         raise ValueError("Missing mandatory_model type in model configuration.")
-    provider_settings = (model_config.provider_settings or {}).copy()
+    settings = (model_config.settings or {}).copy()
 
     if provider == "azure":
         logger.info("Creating Azure Chat model instance with config %s", model_config)
         return AzureChatOpenAI(
             azure_deployment=model_config.name,
-            api_version=provider_settings.pop("api_version", "2024-05-01-preview"),
-            **provider_settings
+            api_version=settings.pop("api_version", "2024-05-01-preview"),
+            **settings
         )
     elif provider == "openai":
         logger.info("Creating OpenAI Chat model instance with config %s", model_config)
         return ChatOpenAI(
             model=model_config.name,
-            **provider_settings
+            **settings
         )
     elif provider == "ollama":
         logger.info("Creating Ollama Chat model instance with config %s", model_config)
         return ChatOllama(
             model=model_config.name,
-            base_url=provider_settings.pop("base_url", None),
-            **provider_settings
+            base_url=settings.pop("base_url", None),
+            **settings
         )
     else:
         logger.error("Unsupported model provider %s", provider)

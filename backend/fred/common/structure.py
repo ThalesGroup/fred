@@ -116,7 +116,7 @@ class TimeoutSettings(BaseModel):
 class ModelConfiguration(BaseModel):
     provider: Optional[str] = Field(None, description="Provider of the AI model, e.g., openai, ollama, azure.")
     name: Optional[str] = Field(None, description="Model name, e.g., gpt-4o, llama2.")
-    provider_settings: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Additional provider-specific settings, e.g., Azure deployment name.")
+    settings: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Additional provider-specific settings, e.g., Azure deployment name.")
 
 class MCPServerConfiguration(BaseModel):
     name: str = Field(None, description="Name of the MCP server")
@@ -263,17 +263,10 @@ class FrontendSettings(BaseModel):
     properties: Properties
 
 class MetricsStorageSettings(BaseModel):
-    path: str = Field(..., description="The path of the local metrics store")
+    local_path: str = Field(..., description="The path of the local metrics store")
 
 class FeedbackStorageSettings(BaseModel):
-    path: str = Field(..., description="The path of the local metrics store")
-
-class ContextStorageSettings(BaseModel):
-    path: str = Field(..., description="The path of the local metrics store")
-
-class ContextStorageConfig(BaseModel):
-    type: str = Field(..., description="The storage backend to use (e.g., 'local', 'minio')")
-    settings: ContextStorageSettings
+    local_path: str = Field(..., description="The path of the local metrics store")
 
 class FeedbackStorageConfig(BaseModel):
     type: str = Field(..., description="The storage backend to use (e.g., 'local', 'opensearch')")
@@ -290,7 +283,6 @@ class Configuration(BaseModel):
     ai: AIConfig
     dao: DAOConfiguration
     security: Security
-    context_storage: ContextStorageConfig = Field(..., description="Content Storage configuration")
     feedback_storage: FeedbackStorageConfig = Field(..., description="Feedback Storage configuration")
     metrics_storage:  MetricsStorageConfig = Field(..., description="Feedback Storage configuration")
 

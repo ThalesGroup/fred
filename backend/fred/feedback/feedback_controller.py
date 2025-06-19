@@ -37,7 +37,7 @@ class FeedbackPayload(BaseModel):
 class FeedbackController:
     def __init__(self, router: APIRouter, config: FeedbackStorageConfig):
         if config.type == "local":
-            store = LocalFeedbackStore(config.settings.path)
+            store = LocalFeedbackStore(config.settings.local_path)
         else:
             raise NotImplementedError(f"Feedback storage type '{config.type}' is not implemented yet.")
         self.service = FeedbackService(store)

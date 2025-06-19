@@ -30,7 +30,7 @@ from fred.services.chatbot_session.structure.chat_schema import ChatMessagePaylo
 from fred.services.chatbot_session.abstract_session_backend import AbstractSessionStorage
 from langchain_core.messages import (BaseMessage, HumanMessage, AIMessage)
 from langgraph.graph.state import CompiledStateGraph
-from fred.application_context import get_app_context, get_configuration, get_context_service, get_default_model
+from fred.application_context import get_app_context, get_configuration, get_default_model
 
 from fred.monitoring.logging_context import set_logging_context
 
@@ -58,7 +58,6 @@ class SessionManager:
         """
         self.storage = storage
         self.agent_manager = agent_manager
-        self.context_service = get_context_service()
         self.context_cache = {}  # Cache for agent contexts
         self.temp_files: dict[str, list[str]] = defaultdict(list)
         self.attachement_processing = AttachementProcessing()
