@@ -44,8 +44,7 @@ class JiraExpert(AgentFlow):
         self.model = get_model_for_agent(self.name)
         self.mcp_client = get_mcp_client_for_agent(self.name)
         self.toolkit = JiraExpertToolkit(self.mcp_client)
-        self.model_with_tools = self.model.bind_tools(self.toolkit.get_tools())
-        self.llm = self.model_with_tools
+        self.base_prompt=self._generate_prompt()
         self.categories = self.agent_settings.categories if self.agent_settings.categories else ["Jira"]
         # On conserve le tag de classe si agent_settings.tag est None ou vide
         if self.agent_settings.tag:
@@ -58,7 +57,7 @@ class JiraExpert(AgentFlow):
             description=self.description,
             icon=self.icon,
             graph=self.get_graph(),
-            base_prompt=self._generate_prompt(),
+            base_prompt=self.base_prompt,
             categories=self.categories,
             tag=self.tag,
             toolkit=self.toolkit
@@ -94,7 +93,7 @@ class JiraExpert(AgentFlow):
 
     
     async def reasoner(self, state: MessagesState):
-        response = self.llm.invoke([self.base_prompt] + state["messages"])
+        response = self.model.invoke([self.base_prompt] + state["messages"])
 
         return {"messages": [response]}
 

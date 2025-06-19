@@ -54,8 +54,10 @@ class GeneralistExpert(AgentFlow):
         
         # Extract categories
         self.categories = agent_settings.categories if agent_settings.categories else ["General"]
-        prompt = self._generate_prompt()
-        logger.info(f"MERDE {prompt}")
+
+        # Tell the Agent who it is via its base prompt
+        self.base_prompt = self._generate_prompt()
+        
         # Initialize parent class
         super().__init__(
             name=self.name,
@@ -64,7 +66,7 @@ class GeneralistExpert(AgentFlow):
             description=self.description,
             icon=self.icon,
             graph=self.get_graph(),
-            base_prompt=self._generate_prompt(),
+            base_prompt=self.base_prompt,
             categories=self.categories,
             tag=self.tag
         )
