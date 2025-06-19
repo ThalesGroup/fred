@@ -57,7 +57,6 @@ export interface ChatProfile {
 
 export const ChatProfiles = () => {
     const theme = useTheme();
-    const isDarkTheme = theme.palette.mode === "dark";
 
     // États
     const [chatProfiles, setChatProfiles] = useState<ChatProfile[]>([]);
@@ -119,7 +118,7 @@ export const ChatProfiles = () => {
             setChatProfiles(response);
         } catch (error) {
             console.error("Error fetching chatProfiles:", error);
-            showSnackbar("Erreur lors du chargement des chatProfiles", "error");
+            showSnackbar("Erreur fetching chatProfiles", "error");
         } finally {
             setIsLoading(false);
         }
@@ -210,7 +209,7 @@ export const ChatProfiles = () => {
         setIsLoading(true);
         try {
             if (!newChatProfileTitle.trim()) {
-                showSnackbar("Le titre est requis", "error");
+                showSnackbar("name is required", "error");
                 return;
             }
 
