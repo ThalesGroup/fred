@@ -61,8 +61,6 @@ class DocumentsExpert(AgentFlow):
         self.model = get_model_for_agent(self.name)
         self.mcp_client = get_mcp_client_for_agent(self.name)
         self.toolkit = DocumentsToolkit(self.mcp_client)
-        self.model_with_tools = self.model.bind_tools(self.toolkit.get_tools())
-        self.llm =self.model_with_tools
         self.categories = self.agent_settings.categories if self.agent_settings.categories else ["documents"]
         self.base_prompt = self._generate_prompt()
         if self.agent_settings.tag:
@@ -78,6 +76,7 @@ class DocumentsExpert(AgentFlow):
             base_prompt=self.base_prompt,
             categories=self.categories,
             tag=self.tag,
+            toolkit=self.toolkit
         )
         
     def _generate_prompt(self) -> str:
@@ -103,7 +102,7 @@ class DocumentsExpert(AgentFlow):
     
     async def reasoner(self, state: MessagesState):
         try:
-            response = self.llm.invoke([self.base_prompt] + state["messages"])
+            response = self.model.invoke([self.base_prompt] + state["messages"])
             for msg in state["messages"]:
                 if isinstance(msg, ToolMessage):
                     try:
@@ -114,7 +113,7 @@ class DocumentsExpert(AgentFlow):
                         documents, sources = self.extract_sources_from_tool_response(documents_data)
                         # Check if we have any valid documents after processing
                         if not documents:
-                            ai_message = await self.llm.ainvoke([HumanMessage(content=
+                            ai_message = await self.model.ainvoke([HumanMessage(content=
                                 "I found some documents but couldn't process them correctly. Please try again later."
                             )])
                             return {"messages": [ai_message]}
@@ -125,7 +124,7 @@ class DocumentsExpert(AgentFlow):
         except Exception as e:
             # Handle any other unexpected errors
             print(f"Unexpected error in DocumentsExpert agent: {str(e)}")
-            error_message = await self.llm.ainvoke([HumanMessage(content=
+            error_message = await self.model.ainvoke([HumanMessage(content=
                 "An error occurred while processing your request. Please try again later."
             )])
             return {"messages": [error_message]}
