@@ -12,7 +12,8 @@ image:
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
   tag: 0.1
-  imagePullSecretName: "gitlab-registry-creds"
+  imagePullSecrets:
+    name: "gitlab-registry-creds"
 
 # This is for setting Kubernetes Annotations to a Pod.
 # For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/
@@ -108,95 +109,193 @@ affinity: {}
 baseUrlPath: /fred
 
 config:
+  frontend_settings:
+    feature_flags:
+      # If true acuivate the backend and frontend modules in charge of K8 
+      # and frugality monitoring
+      enableK8Features: true
+      # If true activate support for an electronic warfare demonstration
+      enableElecWarfare: false
+    properties:
+      logoName: "fred"
+
   database:
-    type: elasticsearch
-    host: hostname
-    port: 80
-    scheme: http
-    username: elastic
-    password: elastic
-    # Index prefix where to read the data
-    index_prefix:
-      energy_mix: "energy_mix"
-      carbon_footprint: "carbon_footprint"
-      energy_footprint: "energy_footprint"
-      financial_footprint: "financial_footprint"
+    type: csv
+    csv_files:
+      # Can be absolute paths or relative paths to the main
+      energy_mix: './services/cluster_consumption/data/simulated_energy_mix.csv'
+      carbon_footprint: './services/cluster_consumption/data/simulated_cluster_consumption_gco2_sep_to_feb.csv'
+      energy_footprint: './services/cluster_consumption/data/simulated_cluster_consumption_wh_sep_to_feb.csv'
+      financial_footprint: './services/cluster_consumption/data/simulated_cluster_consumption_usd_sep_to_feb.csv'
+      # Guerre elec & ship identification service
+      frequencies: './services/sensor/data/bandes_freq.csv'
+      sensors_test_new: './services/theater_analysis/data/detections-capteur-donnees-test_new_scenario.csv'
+      mission: './services/mission/data/mission.csv'
+      radio: './services/theater_analysis/data/radio-maritime-donnees-tests_excel_light_militaire.csv'
+      signal_identification_guide: './services/theorical_radio/data/Signal_identification_guide_new.csv'
+
   kubernetes:
-    kube_config: "/usr/local/etc/kubeconfig"
-    # Optional, needed for aws EKS clusters.
-    # aws_config: "~/.aws/config"
+    kube_config: '~/.kube/config'
+    aws_config: '~/.aws/config' # Optional, needed for aws EKS clusters.
+    # Timeout settings for the client
     timeout:
-      connect: 5
-      read: 15
+      connect: 5  # Time to wait for a connection in seconds
+      read: 15    # Time to wait for a response in seconds
+
   ai:
     # Timeout settings for the client
     timeout:
       connect: 5  # Time to wait for a connection in seconds
       read: 15    # Time to wait for a response in seconds
+    default_model:
+      #provider: "ollama"
+      #name: "llama2"
+      provider: "openai"
+      name: "gpt-4o"
+      #provider: "azure"
+      #name: "fred-gpt-4o"
+      api_version: "2024-05-01-preview"
+      temperature: 0.0
+    leader:
+      name: "Fred"
+      class_path: "leader.leader.Leader"
+      enabled: true
+      max_steps: 5
+      model: {}
+    services:
+      - name: "kubernetes"
+        enabled: false
+        model: {}
+    recursion:
+      recursion_limit: 40 #Number or max recursion use by the agents while using the model
     agents:
-      GeneralistExpert:
-        enabled: true
-        model:
-          model_type: "openai"
-          model: "gpt-4o"
-          temperature: 0
-      DocumentsExpert:
-        enabled: true
-        categories:
-          - "eco-conception"
-        settings:
-          document_directory: "./resources/knowledge/imported"
-          chunk_size: 512
-          chunk_overlap: 64
-        model:
-          model_type: "openai"
-          model: "gpt-4o"
-          temperature: 0
-      TechnicalKubernetesExpert:
+      - name: "JiraExpert"
+        class_path: "agents.jira.jira_expert.JiraExpert"
         enabled: false
-        categories:
-          - "kubernetes"
-          - "namespaces"
-          - "workloads"
-          - "architecture"
-          - "security"
-          - "networking"
-          - "storage"
-          - "configuration"
-          - "scaling"
-          - "deployment"
-        model:
-          model_type: "openai"
-          model: "gpt-4o"
-          temperature: 0
-      MonitoringExpert:
-        enabled: false
+        mcp_servers:
+          - name: jira-mcp-server
+            transport: stdio
+            command: uvx
+            args:
+              - "mcp-atlassian"
+            env:
+              JIRA_URL: "@TO_CHANGE"
+              JIRA_USERNAME: "@TO_CHANGE"
+              JIRA_API_TOKEN: "@TO_CHANGE"
+              READ_ONLY_MODE: "true"
+            sse_read_timeout: 600 # 10 minutes. It is 5 minutes by default but it is too short.
+        model: {}
+      - name: K8SOperatorExpert
+        class_path: "agents.kubernetes_monitoring.k8s_operator_expert.K8SOperatorExpert"
+        enabled: true
+        mcp_servers:
+          - name: k8s-mcp-server
+            transport: sse
+            url: http://k8s-mcp:8081/sse
+            sse_read_timeout: 600 # 10 minutes. It is 5 minutes by default but it is too short.
+          #######################################
+          #### Example using STDIO transport ####
+          #######################################
+          # - name: prometheus-mcp-server
+          #   transport: stdio
+          #   command: uv
+          #   args:
+          #     - "--directory"
+          #     - "/home/xxx/Documents/github_repos/prometheus-mcp-server"
+          #     -  "run"
+          #     -  "src/prometheus_mcp_server/main.py"
+          #   env: 
+          #     PROMETHEUS_URL: "http://localhost:9091"
+        model: {}
+      - name: "GeneralistExpert"
+        class_path: "agents.generalist.generalist_expert.GeneralistExpert"
+        enabled: true
+        model: {}
+      - name: "DocumentsExpert"
+        class_path: "agents.documents.documents_expert.DocumentsExpert"
+        enabled: true
+        mcp_servers:
+          - name: knowledge-flow-mcp-server
+            transport: sse
+            url: http://knowledge-flow-backend:8111/mcp
+            sse_read_timeout: 2000
+        model: {}
+      # The Monitoring expert requires you activate the 'enableK8Features' flags above
+      - name: "MonitoringExpert"
+        class_path: "agents.monitoring.monitoring_expert.MonitoringExpert"
+        enabled: true
         categories:
           - "monitoring"
           - "observability"
-          - "logging"
-          - "metrics"
-          - "tracing"
-          - "alerting"
-          - "dashboards"
-          - "events"
-          - "alarms"
-          - "notifications"
-        model:
-          model_type: "openai"
-          model: "gpt-4o"
-          temperature: 0
+        model: {}
+
+  # Where to save fred produced resources like Essentials or Scores
+  # and external resources like Kubernetes Workload descriptions
   dao:
     type: "file"  # Currently the only one supported
-    base_path: "~/.fred/fred-backend-cache"
-    max_cached_delay_seconds: 10  # Cache delay in seconds. Use 0 for no cache or a negative value for limitless cache.
-  feedback:
-    type: postgres
-    db_host: fred-postgres
-    db_port: 5432
-    db_name: fred_db
-    user: admin
-    password: Azerty123_
+    base_path: "~/.fred/dao-cache"
+    max_cached_delay_seconds: 300  # Cache delay in seconds. Use 0 for no cache or a negative value for limitless cache.
+
+  # Enable or disable the security layer
   security:
     enabled: false
-    keycloak_url: "http://fred-keycloak:8080/realms/fred"
+    keycloak_url: "http://keycloak:8080/realms/app"
+    authorized_origins:
+    - "http://localhost:5173"
+
+  # Environment variables for the application
+
+  # AZURE
+  azure:
+    tenant_id: ""
+    client_id: ""
+    client_secret: ""
+    client_scope: ""
+    apim_key: ""
+    api_version: ""
+    deployment:
+      llm: ""
+      embedding: ""
+
+  # CONTEXT STORAGE CONFIGURATION
+  context_storage:
+    type: "local"
+    options:
+      path: "~/.fred/context-store"
+
+  metrics_storage:
+    type: "local"
+    settings:
+      path: "~/.fred/metrics-store"
+
+  feedback_storage:
+    type: local  # ou "minio"
+    minio_endpoint: "localhost:9000"
+    minio_bucket_name: "fred-feedback"
+    minio_secure: false
+
+
+
+dotenv:
+  azure_tenant_id: ""
+  azure_client_id: ""
+  azure_client_secret: ""
+  azure_client_scope: ""
+  azure_api_version: "2024-06-01"
+  azure_apim_base_url: "https://trustnest.azure-api.net"
+  azure_resource_path_embeddings: "/genai-aoai-inference/v1"
+  azure_resource_path_llm: "/genai-aoai-inference/v2"
+  azure_apim_key: "your-subscription-key"
+  azure_openai_endpoint: "https://your-azure-openai-resource.openai.azure.com"
+  azure_openai_key: "your-real-azure-openai-api-key"
+  azure_deployment_llm: "gpt-4o"
+  azure_deployment_embedding: "text-embedding-ada-002"
+  openai_api_key: "sk-..."
+  openai_api_base: "https://api.openai.com/v1"
+  openai_api_version: ""
+  openai_model_name: "text-embedding-ada-002"
+  keycloak_server_url: "https://localhost:8080"
+  keycloak_realm_name: "fred"
+  keycloak_client_id: "fred"
+  local_context_storage_path: "~/.fred/context-store"
+  local_metadata_storage_path: "~/.knowledge-flow/metadata-store.json"
