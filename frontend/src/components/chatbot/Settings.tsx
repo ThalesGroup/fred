@@ -26,11 +26,7 @@ import {
   ListItem,
   ClickAwayListener,
   Fade,
-  Chip,
   FormControl,
-  InputLabel,
-  Link,
-  OutlinedInput,
   Select,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
@@ -44,7 +40,7 @@ import { StyledMenu } from "../../utils/styledMenu.tsx";
 import { SessionSchema } from "../../slices/chatApiStructures.ts";
 import BookmarkIcon from '@mui/icons-material/Bookmark';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
-import { Session, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useGetChatProfilesMutation } from "../../slices/chatProfileApi.tsx";
 import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
 
@@ -99,12 +95,12 @@ export const Settings = ({
   const [isEditing, setIsEditing] = useState(false);
   const [showElements, setShowElements] = useState(false);
   const [getChatProfiles] = useGetChatProfilesMutation();
-  const [isLoading, setIsLoading] = useState(false);
+  const [, setIsLoading] = useState(false);
 
   // Snackbar states
-  const [snackbarOpen, setSnackbarOpen] = useState(false);
-  const [snackbarMessage, setSnackbarMessage] = useState("");
-  const [snackbarSeverity, setSnackbarSeverity] = useState<"success" | "error" | "info" | "warning">("success");
+  const [, setSnackbarOpen] = useState(false);
+  const [, setSnackbarMessage] = useState("");
+  const [, setSnackbarSeverity] = useState<"success" | "error" | "info" | "warning">("success");
 
   const [chatProfiles, setChatProfiles] = useState<ChatProfileLight[]>([])
 
@@ -118,7 +114,7 @@ export const Settings = ({
       setChatProfiles(response);
     } catch (error) {
       console.error("Error fetching chatProfiles:", error);
-      showSnackbar("Erreur lors du chargement des chatProfiles", "error");
+      showSnackbar("Error fetching chat profiles", "error");
     } finally {
       setIsLoading(false);
     }
@@ -230,16 +226,18 @@ export const Settings = ({
                 title={
                   <React.Fragment>
                     <Typography variant="body2" sx={{ mb: 1 }}>
-                      Custom profiles allow you to personalize and chatProfileualize your interactions with the assistant.
+                      Custom profiles allow you to personalize and improve your interactions with the assistants.
                     </Typography>
                     <Typography variant="body2" sx={{ mb: 1 }}>
                       Unlike one-time file uploads, a profile is reusable across multiple conversations and can contain:
                     </Typography>
+                    <Typography variant="body2" sx={{ mb: 1 }}>
                     <ul style={{ margin: '0', paddingLeft: '16px' }}>
                       <li>Information about a client or project</li>
                       <li>Reference documents (PDF, Word, Excel...)</li>
                       <li>Technical specifications</li>
                     </ul>
+                    </Typography>
                   </React.Fragment>
                 }
                 arrow
@@ -649,7 +647,7 @@ export const Settings = ({
                 color: "text.disabled",
               }}
             >
-              <Typography variant="body2">Aucune conversation</Typography>
+              <Typography variant="body2">No conversation</Typography>
             </Box>
           )}
         </List>
@@ -667,7 +665,7 @@ export const Settings = ({
           disableRipple
         >
           <DeleteOutlineIcon fontSize="small" sx={{ mr: 2, fontSize: "1rem" }} />
-          <Typography variant="body2">Supprimer</Typography>
+          <Typography variant="body2">Delete</Typography>
         </MenuItem>
       </StyledMenu>
     </Box>

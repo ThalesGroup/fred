@@ -16,7 +16,6 @@ import { combineReducers, configureStore, createReducer, isFulfilled, isPending,
 import { apiSlice } from "../frugalit/slices/api.tsx";
 import { chatApiSlice } from "../slices/chatApi"; // ✅ Import your chatApi slice
 import { documentApiSlice } from "../slices/documentApi.tsx";
-import { agentContextApiSlice } from "../slices/agentContextApi.tsx";
 import { chatProfileApiSlice } from "../slices/chatProfileApi.tsx";
 import { monitoringApiMiddleware, monitoringApiReducer } from "../slices/monitoringApi.tsx";
 
@@ -47,7 +46,6 @@ const combinedReducer = combineReducers({
   api: apiSlice.reducer,
   documentApi: documentApiSlice.reducer,
   chatApi: chatApiSlice.reducer,
-  agentContextApi: agentContextApiSlice.reducer,
   chatProfileApi: chatProfileApiSlice.reducer,
   monitoringApi: monitoringApiReducer
 });
@@ -61,7 +59,6 @@ export const store = configureStore({
       documentApiSlice.middleware,
       chatApiSlice.middleware,
       monitoringApiMiddleware,
-      agentContextApiSlice.middleware,
       chatProfileApiSlice.middleware,
       loggingMiddleware,
     ),

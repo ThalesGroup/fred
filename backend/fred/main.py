@@ -39,7 +39,6 @@ from fred.security.keycloak import initialize_keycloak
 from fred.main_utils import configure_logging
 
 from fred.chatbot.chatbot_controller import ChatbotController
-from fred.context.context_controller import ContextController
 from fred.feedback.feedback_controller import FeedbackController
 from fred.services.frontend.frontend_controller import UiController
 from fred.services.kube.kube_controller import KubeController
@@ -107,8 +106,7 @@ def build_app(configuration: Configuration, base_url: str) -> FastAPI:
     AIController(router, ai_service)
     UiController(router, kube_service, ai_service)
     ChatbotController(router, ai_service)
-    ContextController(router)
-    FeedbackController(router)
+    FeedbackController(router, configuration.feedback_storage)
     MetricStoreController(router)
 
     app.include_router(router)
@@ -123,7 +121,6 @@ def run_server(app: FastAPI, host: str, port: int, log_level: str):
         log_level=log_level,
         loop="asyncio"
     )
-
 
 def main():
     load_environment()
