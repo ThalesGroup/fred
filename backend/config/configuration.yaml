@@ -51,25 +51,25 @@ ai:
     read: 15    # Time to wait for a response in seconds
   default_model:
     # Required in .env:
-    #   OPENAI_API_KEY=...
+    # - OPENAI_API_KEY
     provider: "openai"
     name: "gpt-4o"
-    provider_settings:
+    settings:
       temperature: 0.0
       max_retries: 2
       request_timeout: 30
 
     # --- OR uncomment for Azure OpenAI ---
     # Required in .env:
-    #   AZURE_OPENAI_API_KEY=...
+    # - AZURE_OPENAI_API_KEY
     #
     # Optional for token-based auth:
-    #   AZURE_TENANT_ID=...
-    #   AZURE_CLIENT_ID=...
-    #   AZURE_CLIENT_SECRET=...
+    # - AZURE_TENANT_ID
+    # - AZURE_CLIENT_ID
+    # - AZURE_CLIENT_SECRET
     #provider: "azure"
-    #name: "fred-gpt-4o"  # Azure deployment name
-    #provider_settings:
+    #name: "fred-gpt-4o"  
+    #settings:
     #  api_version: "2024-05-01-preview"
     #  temperature: 0.0
     #  max_retries: 2
@@ -79,12 +79,9 @@ ai:
     # --- OR uncomment for Ollama ---
     # provider: "ollama"
     # name: "llama2"
-    # provider_settings:
+    # settings:
     #   base_url: "http://localhost:11434"
     #   temperature: 0.0
-
-    # Optional in .env (only if remote):
-    #   OLLAMA_BASE_URL=http://remote-host:11434
   leader:
     name: "Fred"
     class_path: "leader.leader.Leader"
@@ -96,7 +93,7 @@ ai:
       enabled: false
       model: {}
   recursion:
-    recursion_limit: 40 #Number or max recursion use by the agents while using the model
+    recursion_limit: 40 # Number or max recursion use by the agents while using the model
   agents:
     - name: "JiraExpert"
       class_path: "agents.jira.jira_expert.JiraExpert"
@@ -165,34 +162,24 @@ dao:
   base_path: "~/.fred/dao-cache"
   max_cached_delay_seconds: 300  # Cache delay in seconds. Use 0 for no cache or a negative value for limitless cache.
 
+# Security. As of today only keycloak is supported.
 security:
   enabled: false
+  client_id: "fred"
   keycloak_url: "http://keycloak:8080/realms/app"
   authorized_origins:
   - "http://localhost:5173"
 
-keycloak:
-  server_url: "https://localhost:8080"
-  realm_name: "fred"
-  client_id: "fred"
-
-context_storage:
-  type: "local"
-  settings:
-    path: "~/.fred/context-store"
-
+# Agentic metrics are stored in a prometheus or opensearch backend. To make development
+# easy by default they are stored on a local file. 
 metrics_storage:
-  type: "local"
+  type: "local" 
   settings:
-    path: "~/.fred/metrics-store"
+    local_path: "~/.fred/metrics-store"
 
+# Feedbacks are store in a simple local file. It is plan to add 
+# additional backend like opensearch or minio.
 feedback_storage:
-  type: local  # or "minio"
-  # For minio you require in .env:
-  #   MINIO_ENDPOINT=...
-  # MINIO_ACCESS_KEY
-  # MINIO_SECRET_KEY
-  # MINIO_BUCKET_NAME
-  # MINIO_SECURE
+  type: local
   settings:
-    path: "~/.fred/feedback-store"
+    local_path: "~/.fred/feedback-store"

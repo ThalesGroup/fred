@@ -28,7 +28,8 @@ This will:
 
 ## Configure Your LLM Provider (Required)
 
-To use Fred, you must configure an LLM provider in `configuration.yaml` and `.env`.
+To use Fred, you must configure an LLM provider in `configuration.yaml` and `.env`. The logic is simple: 
+in '.env' file you provide only sensitive access keys and tokens. ALl the rest is in the yaml file. 
 
 Fred supports:
 
@@ -37,7 +38,7 @@ Fred supports:
 - ✅ **Azure via API Management (APIM)**
 - ✅ **Ollama** (for local models like `llama2`, `mistral`, etc.)
 
-See [LLM Configuration](#-configuring-freds-ai-model-provider-openai-azure-apim) below for details.
+See [LLM Configuration](#configuring-freds-ai-model-provider) below for details.
 
 ---
 
@@ -47,16 +48,16 @@ Fred is modular — it can integrate with:
 
 - 🟤 **MCP servers** (for code execution, monitoring, document search, etc.)
 - 🔍 **OpenSearch** (for persistent vector storage)
-- 🪣 **MinIO** (for storing feedback, files, or context)
+- 🪣 **MinIO** (for storing feedbacks, files)
 - ☁️ **Cloud storage** (via the `context_storage` and `dao` configs)
 
-These are optional. By default, Fred uses local file-based context cache.
+These are optional. By default, Fred uses local file-based cache.
 
 You can plug in real backends incrementally, agent by agent.
 
 ---
 
-## Configuring Fred's AI Model Provider (OpenAI, Azure, APIM)
+## Configuring Fred's AI Model Provider
 
 Fred supports multiple AI model providers through a flexible YAML configuration and environment-based secret management.
 
@@ -76,7 +77,7 @@ ai:
   default_model:
     provider: "openai"
     name: "gpt-4o"
-    provider_settings:
+    settings:
       temperature: 0.0
       max_retries: 2
       request_timeout: 30
@@ -88,7 +89,7 @@ ai:
   default_model:
     provider: "azure"
     name: "fred-gpt-4o"  # your Azure deployment name
-    provider_settings:
+    settings:
       api_version: "2024-05-01-preview"
       temperature: 0.0
       request_timeout: 30
@@ -101,7 +102,7 @@ ai:
   default_model:
     provider: "azure"
     name: "fred-gpt-4o"
-    provider_settings:
+    settings:
       api_version: "2024-05-01-preview"
       temperature: 0.0
       request_timeout: 30

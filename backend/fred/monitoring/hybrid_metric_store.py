@@ -23,7 +23,7 @@ class HybridMetricStore(MetricStore):
 
     def __init__(self, config: MetricsStorageConfig):
         self._metrics: List[Metric] = []
-        raw_path = config.settings.path
+        raw_path = config.settings.local_path
         self.data_path = os.path.expanduser(os.path.join(raw_path, "metrics.jsonl"))
         os.makedirs(os.path.dirname(self.data_path), exist_ok=True)
         self._lock = Lock()

@@ -136,7 +136,6 @@ class AgentFlow:
         self.tag = tag
         self.streaming_memory = MemorySaver()
         self.compiled_graph = None
-        self._context_enrichment = None
         self.toolkit = toolkit
         self.cluster_fullname = cluster_fullname
         # Import here to avoid circular import
@@ -162,7 +161,6 @@ class AgentFlow:
     async def expert(self, state):
         """
         Processes user messages and interacts with the model.
-        Uses context enrichment if available.
         
         Args:
             state: The current state of the conversation.
@@ -171,38 +169,10 @@ class AgentFlow:
             dict: The updated state with the expert's response.
         """
         
-        # Build prompt including context enrichment if available
         prompt_content = self.base_prompt
-        if self._context_enrichment:
-            prompt_content = f"{self.base_prompt}\n\n{self._context_enrichment}"
-            logger.info(f"Agent '{self.name}' using enriched prompt with context")
-            # Log a short preview of the prompt (first 100 chars)
-            preview = prompt_content[:100].replace('\n', ' ') + "..."
-            logger.debug(f"Prompt preview: {preview}")
-        else:
-            logger.info(f"Agent '{self.name}' using standard prompt without context")
-            
         prompt = SystemMessage(content=prompt_content)
         response = await self.model.ainvoke([prompt] + state["messages"])
         return {"messages": [response]}
-    
-    def set_context_enrichment(self, context_text: str):
-        """
-        Temporarily sets a context enrichment for this agent.
-        
-        Args:
-            context_text: The formatted context text to add to the base prompt.
-        """
-        self._context_enrichment = context_text
-        logger.info(f"Temporary context added to agent '{self.name}'")
-        
-    def clear_context_enrichment(self):
-        """
-        Removes the temporary context enrichment.
-        """
-        if self._context_enrichment:
-            logger.info(f"Cleaning up temporary context for agent '{self.name}'")
-            self._context_enrichment = None
     
     def save_graph_image(self, path: str):
         """
@@ -224,12 +194,6 @@ class AgentFlow:
     
     async def reasoner(self, state: MessagesState):
         prompt_content = self.base_prompt
-        if self._context_enrichment:
-            prompt_content += f"\n\n{self._context_enrichment}"
-            logger.info(f"[{self.name}] Using enriched prompt with context.")
-        else:
-            logger.info(f"[{self.name}] Using standard prompt.")
-
         prompt = SystemMessage(content=prompt_content)
         response = await self.model.ainvoke([prompt] + state["messages"])
         return {"messages": [response]}

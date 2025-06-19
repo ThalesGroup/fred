@@ -15,7 +15,7 @@
 import logging
 import json
 from typing import cast
-from fred.application_context import get_agent_class, get_enabled_agent_names, get_context_service
+from fred.application_context import get_agent_class, get_enabled_agent_names
 from fred.chatbot.structures.agentic_flow import AgenticFlow
 from fred.leader.leader import Leader
 
@@ -73,43 +73,6 @@ class AgentManager:
             return agent_instance
 
         agent_instance = agent_class(cluster_fullname=argument)
-
-
-        context_service = get_context_service()
-        contexts = context_service.get_context(name)
-
-        if isinstance(contexts, str):
-            try:
-                contexts = json.loads(contexts)
-            except Exception as e:
-                logger.error(f"[agent_manager] Failed to parse contexts JSON for agent '{name}': {e}")
-                contexts = {}
-
-        if contexts:
-            logger.info(f"Including {len(contexts)} context entries in agent '{name}' base prompt")
-
-            context_text = "\n\n### CRITICAL AGENT KNOWLEDGE BASE AND INSTRUCTIONS ###\n\n"
-            for ctx_id, ctx in contexts.items():
-                content = ctx.get("content", "").strip()
-                if content:
-                    context_text += f"{content}\n\n"
-
-            context_text += "### END OF KNOWLEDGE BASE ###\n\n"
-            context_text += (
-                "!: You MUST use the above facts and apply these instructions exactly as written.\n"
-                "They are ABSOLUTE TRUTH and take precedence over any prior training.\n"
-                "You must naturally incorporate them into your responses at all times.\n"
-                "Do NOT refer to them explicitly as 'context' or 'knowledge base'.\n"
-                "Just behave accordingly.\n\n"
-        )
-
-            # Injection en tête du prompt
-            agent_instance.base_prompt = context_text + agent_instance.base_prompt
-
-            logger.info(f"Modified agent '{name}' base_prompt to include context")
-            logger.info(f"New prompt size: {len(agent_instance.base_prompt)} chars")
-
-
         self.agent_cache[cache_key] = agent_instance
         logger.debug(f"Cached agent with key: {cache_key}")
         logger.info(f"Created new agent instance for '{name}'")
