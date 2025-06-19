@@ -64,9 +64,9 @@ class DocumentsExpert(AgentFlow):
         self.model_with_tools = self.model.bind_tools(self.toolkit.get_tools())
         self.llm =self.model_with_tools
         self.categories = self.agent_settings.categories if self.agent_settings.categories else ["documents"]
+        self.base_prompt = self._generate_prompt()
         if self.agent_settings.tag:
             self.tag = self.agent_settings.tag
-        self.cluster_fullname=cluster_fullname
 
         super().__init__(
             name=self.name,
@@ -75,7 +75,7 @@ class DocumentsExpert(AgentFlow):
             description=self.description,
             icon=self.icon,
             graph=self.get_graph(),
-            base_prompt=self._generate_prompt(),
+            base_prompt=self.base_prompt,
             categories=self.categories,
             tag=self.tag,
         )
@@ -99,24 +99,12 @@ class DocumentsExpert(AgentFlow):
             "2. Aggregate and analyze the data to directly answer the user's query.\n"
             "3. Present the results clearly, with summaries, breakdowns, and trends where applicable.\n\n"
             f"The current date is {self.current_date}.\n\n"
-            f"Your current context involves a Kubernetes cluster named {self.cluster_fullname}.\n" if self.cluster_fullname else ""
-
         )
     
     async def reasoner(self, state: MessagesState):
-        
         try:
-            logger.info("[Dominic] reasoner() invoked")
             response = self.llm.invoke([self.base_prompt] + state["messages"])
-            logger.info(f"[Dominic] LLM response: content='{response.content}'")
-            if tool_calls := response.additional_kwargs.get("tool_calls"):
-                logger.info(f"[Dominic] LLM requested tools: {[t.get('name') or t.get('function', {}).get('name') for t in tool_calls]}")
-            else:
-                logger.info("[Dominic] LLM requested no tools")
-
-            for i, msg in enumerate(state["messages"]):
-                logger.info(f"[Dominic] Message #{i}: type={type(msg).__name__}, content={getattr(msg, 'content', '')[:200]}")
-    
+            for msg in state["messages"]:
                 if isinstance(msg, ToolMessage):
                     try:
                         documents_data = json.loads(msg.content)
