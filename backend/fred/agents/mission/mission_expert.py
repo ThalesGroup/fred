@@ -46,11 +46,9 @@ class MissionExpert(AgentFlow):
         self.toolkit = MissionToolkit()
         self.cluster_fullname = cluster_fullname
         self.model = get_model_for_agent(self.name)
-        self.model_with_tools = self.model.bind_tools(self.toolkit.get_tools())
-        self.llm = self.model_with_tools
         self.agent_settings = get_agent_settings(self.name)
         self.categories = self.agent_settings.categories if self.agent_settings.categories else ["mission"]
-        
+        self.base_prompt=self._generate_prompt()
         # On conserve le tag de classe si agent_settings.tag est None ou vide
         if self.agent_settings.tag:
             self.tag = self.agent_settings.tag
@@ -62,7 +60,7 @@ class MissionExpert(AgentFlow):
             description=self.description,
             icon=self.icon,
             graph=self.get_graph(),
-            base_prompt=self._generate_prompt(),
+            base_prompt=self.base_prompt,
             categories=self.categories,
             tag=self.tag,
             toolkit=self.toolkit
@@ -94,7 +92,7 @@ class MissionExpert(AgentFlow):
         )
         
     async def reasoner(self, state: MessagesState):
-        response = self.llm.invoke([self.base_prompt] + state["messages"])
+        response = self.model.invoke([self.base_prompt] + state["messages"])
         return {"messages": [response]}
         
     def get_graph(self):
