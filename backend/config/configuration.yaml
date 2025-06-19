@@ -26,9 +26,9 @@ database:
   csv_files:
     # Can be absolute paths or relative paths to the main
     energy_mix: './services/cluster_consumption/data/simulated_energy_mix.csv'
-    carbon_footprint: './services/cluster_consumption/data/simulated_cluster_consumption_gco2_sep_to_feb.csv'
-    energy_footprint: './services/cluster_consumption/data/simulated_cluster_consumption_wh_sep_to_feb.csv'
-    financial_footprint: './services/cluster_consumption/data/simulated_cluster_consumption_usd_sep_to_feb.csv'
+    carbon_footprint: './services/cluster_consumption/data/simulated_cluster_consumption_gco2.csv'
+    energy_footprint: './services/cluster_consumption/data/simulated_cluster_consumption_wh.csv'
+    financial_footprint: './services/cluster_consumption/data/simulated_cluster_consumption_usd.csv'
     # Guerre elec & ship identification service
     frequencies: './services/sensor/data/bandes_freq.csv'
     sensors_test_new: './services/theater_analysis/data/detections-capteur-donnees-test_new_scenario.csv'
