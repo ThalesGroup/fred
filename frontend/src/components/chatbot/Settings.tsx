@@ -226,7 +226,7 @@ export const Settings = ({
                 title={
                   <React.Fragment>
                     <Typography variant="body2" sx={{ mb: 1 }}>
-                      Custom profiles allow you to personalize and chatProfileualize your interactions with the assistant.
+                      Custom profiles allow you to personalize and improve your interactions with the assistants.
                     </Typography>
                     <Typography variant="body2" sx={{ mb: 1 }}>
                       Unlike one-time file uploads, a profile is reusable across multiple conversations and can contain:
