@@ -45,7 +45,7 @@ class ChatMessagePayload(BaseModel):
     rank: int = Field(..., description="Monotonically increasing index of the message within the session")
     metadata: Optional[Dict[str, Union[str, int, float, dict, list]]] = Field(default_factory=dict)
     subtype: Optional[Literal[
-        "final", "thought", "tool_result", "plan", "execution", "observation", "error"
+        "final", "thought", "tool_result", "plan", "execution", "observation", "error", "injected_context"
     ]] = None
     def with_metadata(
         self,

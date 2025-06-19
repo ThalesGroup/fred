@@ -57,6 +57,8 @@ class TechnicalKubernetesExpert(AgentFlow):
         ai_service = AIService(kube_service)
         self.toolkit = TechnicalKubernetesToolkitBuilder(ai_service).build()
         self.categories = self.agent_settings.categories if self.agent_settings.categories else ["Kubernetes"]
+        self.base_prompt=self._generate_prompt()
+        
         super().__init__(
             name=self.name,
             role=self.role,
@@ -64,7 +66,7 @@ class TechnicalKubernetesExpert(AgentFlow):
             description=self.description,
             icon=self.icon,
             graph=self.get_graph(),
-            base_prompt=self._generate_prompt(),
+            base_prompt=self.base_prompt(),
             categories=self.categories,
             toolkit=self.toolkit,
             tag=self.tag, 

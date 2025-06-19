@@ -83,7 +83,7 @@ def build_app(configuration: Configuration, base_url: str) -> FastAPI:
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=configuration.security.authorized_origins,
         allow_methods=["GET", "POST", "PUT", "DELETE"],
         allow_headers=["Content-Type", "Authorization"],
     )

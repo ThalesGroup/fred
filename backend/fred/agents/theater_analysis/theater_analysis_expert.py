@@ -43,11 +43,10 @@ class TheaterAnalysisExpert(AgentFlow):
                  cluster_fullname: Optional[str],
                  ):
         self.current_date = datetime.now().strftime("%Y-%m-%d")
+        self.base_prompt=self._generate_prompt()
         self.toolkit=TheaterAnalysisToolkit()
         self.cluster_fullname = cluster_fullname
         self.model = get_model_for_agent(self.name)
-        self.model_with_tools = self.model.bind_tools(self.toolkit.get_tools())
-        self.llm = self.model_with_tools
         self.agent_settings = get_agent_settings(self.name)
         categories = self.agent_settings.categories if self.agent_settings.categories else ["ship_location"]
         super().__init__(
@@ -57,7 +56,7 @@ class TheaterAnalysisExpert(AgentFlow):
             description=self.description,
             icon=self.icon,
             graph=self.get_graph(),
-            base_prompt=self._generate_prompt(),
+            base_prompt=self.base_prompt,
             categories=categories,
             toolkit=self.toolkit 
         )
@@ -91,7 +90,7 @@ class TheaterAnalysisExpert(AgentFlow):
             )
 
     async def reasoner(self, state: MessagesState):
-        response = self.llm.invoke([self.base_prompt] + state["messages"])
+        response = self.model.invoke([self.base_prompt] + state["messages"])
 
         return {"messages": [response]}
 

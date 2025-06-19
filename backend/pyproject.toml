@@ -2,7 +2,9 @@
 name = "fred"
 version = "0.1.0"
 description = "Fred backend"
-authors = ["Fred <noreply@example.com>"]
+authors = [
+    {name = "Fred", email = "noreply@example.com"}
+]
 requires-python = ">=3.12,<3.13"
 
 dependencies = [
@@ -29,7 +31,9 @@ dependencies = [
   "pytest-asyncio>=0.26.0,<0.27.0",
   "python-multipart>=0.0.20,<0.0.21",
   "nest-asyncio>=1.6.0,<2.0.0",
-  "opensearch-py>=2.8.0,<3.0.0"
+  "opensearch-py>=2.8.0,<3.0.0",
+  "rich>=14.0.0",
+  "cryptography>=45.0.4",
 ]
 
 [project.optional-dependencies]
@@ -41,5 +45,11 @@ dev = [
 ]
 
 [build-system]
-requires = ["uv"]
-build-backend = "uv.build"
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+packages = [
+  { include = "backend" }
+]
+
+[tool.setuptools.packages.find]
+include = ["fred*"]

@@ -106,7 +106,8 @@ class ChatbotController:
                     user_id=user.email,
                     session_id=event.session_id,
                     message=event.message,
-                    agent_name=event.agent_name
+                    agent_name=event.agent_name,
+                    chat_profile_id=event.chat_profile_id
                 )
 
                 return FinalEvent(
@@ -144,7 +145,8 @@ class ChatbotController:
                         user_id=user.email,
                         session_id=event.session_id,
                         message=event.message,
-                        agent_name=event.agent_name
+                        agent_name=event.agent_name,
+                        chat_profile_id=event.chat_profile_id
                     )
 
                     yield json.dumps(
@@ -190,7 +192,8 @@ class ChatbotController:
                             session_id=client_event.session_id,
                             message=client_event.message,
                             agent_name=client_event.agent_name,
-                            argument=client_event.argument
+                            argument=client_event.argument,
+                            chat_profile_id=client_event.chat_profile_id
                         )
                         await websocket.send_text(
                             FinalEvent(

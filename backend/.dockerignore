@@ -7,6 +7,7 @@ __pycache__/
 venv/
 .env/
 *.env
+.venv/
 
 # Build artifacts
 build/
@@ -30,6 +31,7 @@ logs/
 pytest_cache/
 .tox/
 .nox/
+tests
 
 # Jupyter Notebook checkpoints
 .ipynb_checkpoints/
@@ -61,3 +63,9 @@ migrations/
 *.tmp
 *.temp
 tmp/
+
+# dockerfiles
+dockerfiles
+
+# Local development related files
+target/
