@@ -20,8 +20,10 @@ import { transformWithEsbuild } from "vite";
 export default defineConfig({
   server: {
     host: "0.0.0.0",
+    port: parseInt(process.env.VITE_PORT || '5173'),
+    allowedHosts: (process.env.VITE_ALLOWED_HOSTS || '').split(',').filter(Boolean),
     proxy: {
-      "/fred": "http://localhost:8000",
+      "/fred": process.env.VITE_BACKEND_URL || "http://localhost:8000"
     }
   },
   plugins: [
