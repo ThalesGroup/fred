@@ -106,8 +106,17 @@ class DocumentsExpert(AgentFlow):
     async def reasoner(self, state: MessagesState):
         
         try:
+            logger.info("[Dominic] reasoner() invoked")
             response = self.llm.invoke([self.base_prompt] + state["messages"])
-            for msg in state["messages"]:
+            logger.info(f"[Dominic] LLM response: content='{response.content}'")
+            if tool_calls := response.additional_kwargs.get("tool_calls"):
+                logger.info(f"[Dominic] LLM requested tools: {[t.get('name') or t.get('function', {}).get('name') for t in tool_calls]}")
+            else:
+                logger.info("[Dominic] LLM requested no tools")
+
+            for i, msg in enumerate(state["messages"]):
+                logger.info(f"[Dominic] Message #{i}: type={type(msg).__name__}, content={getattr(msg, 'content', '')[:200]}")
+    
                 if isinstance(msg, ToolMessage):
                     try:
                         documents_data = json.loads(msg.content)
