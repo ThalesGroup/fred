@@ -21,7 +21,7 @@ import {
   CardContent,
   Chip,
   Divider,
-  Grid,
+  Grid2,
   Paper,
   Stack,
   Theme,
@@ -52,7 +52,6 @@ export function Profile() {
   const theme = useTheme<Theme>();
   const smallSideBar = useMediaQuery(theme.breakpoints.down("md"));
 
-  // Obtenir les initiales pour l'avatar
   const getInitials = () => {
     if (!username) return "U";
     const names = username.split(" ");
@@ -62,14 +61,12 @@ export function Profile() {
     return username.substring(0, 2).toUpperCase();
   };
 
-  // Déterminer la couleur de l'avatar en fonction du rôle
   const getAvatarColor = () => {
-    if (userRoles.includes("admin")) return "#D32F2F";
-    if (userRoles.includes("manager")) return "#7B1FA2";
-    return "#1976D2";
-  };
+  if (userRoles.includes("admin")) return theme.palette.error.main;
+  if (userRoles.includes("manager")) return theme.palette.secondary.dark;
+  return theme.palette.primary.main;
+};
 
-  // Fonction pour obtenir l'icône en fonction du rôle
   const getRoleIcon = (role) => {
     if (role.includes("admin")) return <AdminPanelSettingsIcon fontSize="small" />;
     if (role.includes("user")) return <AccountCircleIcon fontSize="small" />;
@@ -100,22 +97,17 @@ export function Profile() {
     <PageBodyWrapper>
       <Box
         sx={{
-          minHeight: "100vh",
-          display: "flex",
-          flexDirection: "column",
-          marginLeft: smallSideBar ? "20%" : "20%",
-          marginRight: smallSideBar ? "20%" : "20%",
-          alignItems: "center",
-          py: 4,
-          px: 2,
-        }}
+    width: "90%",
+   // maxWidth: "1200px", // or "lg" if using a container pattern
+    mx: "auto",
+    px: 2,
+    py: 8,
+  }}
       >
-        <Typography variant="h4" component="h1" sx={{ mb: 4, fontWeight: "bold", color: "primary.main" }}></Typography>
-
         {username ? (
-          <Grid container spacing={4} direction="column">
+          <Grid2 spacing={4} direction="column">
             {/* Section principale du profil */}
-            <Grid item xs={12}>
+            <Grid2   size={{ xs: 12 }}>
               <Card
                 elevation={3}
                 sx={{
@@ -159,9 +151,8 @@ export function Profile() {
 
                   <Divider sx={{ mb: 3 }} />
 
-                  {/* Nouvelle section pour les informations utilisateur */}
-                  <Grid container spacing={2} sx={{ mb: 3, alignItems: "center" }}>
-                    <Grid item xs={12} sm={6}>
+                  <Grid2 container spacing={2} sx={{ mb: 3, alignItems: "center" }} >
+                    <Grid2 size={{ xs: 12 , sm: 6}}>
                       <Box
                         sx={{
                           display: "flex",
@@ -174,14 +165,13 @@ export function Profile() {
                         <Typography variant="body2" fontWeight="medium">
                           Email
                         </Typography>
-                        <EmailIcon sx={{ ml: 2, color: "primary.main" }} />
                       </Box>
                       <Typography variant="body1" textAlign="center">
                         {userEmail}
                       </Typography>
-                    </Grid>
+                    </Grid2>
 
-                    <Grid item xs={12} sm={6}>
+                    <Grid2 size={{ xs: 12 , sm: 6}}>
                       <Box
                         sx={{
                           display: "flex",
@@ -194,14 +184,13 @@ export function Profile() {
                         <Typography variant="body2" fontWeight="medium">
                           User ID
                         </Typography>
-                        <FingerprintIcon sx={{ ml: 2, color: "primary.main" }} />
                       </Box>
                       <Typography variant="body1" textAlign="center" sx={{ wordBreak: "break-all" }}>
                         {userId}
                       </Typography>
-                    </Grid>
+                    </Grid2>
 
-                    <Grid item xs={12} sm={6}>
+                    <Grid2 size={{ xs: 12 , sm: 6}}>
                       <Box
                         sx={{
                           display: "flex",
@@ -214,14 +203,13 @@ export function Profile() {
                         <Typography variant="body2" fontWeight="medium">
                           Last Authentication
                         </Typography>
-                        <AccessTimeIcon sx={{ ml: 2, color: "primary.main" }} />
                       </Box>
                       <Typography variant="body1" textAlign="center">
                         {formatAuthDate()}
                       </Typography>
-                    </Grid>
+                    </Grid2>
 
-                    <Grid item xs={12} sm={6}>
+                    <Grid2 size={{ xs: 12 , sm: 6}}>
                       <Box
                         sx={{
                           display: "flex",
@@ -232,15 +220,14 @@ export function Profile() {
                       >
                         <AccessTimeIcon sx={{ mr: 2, color: "primary.main" }} />
                         <Typography variant="body2" fontWeight="medium">
-                          Expiration de la session
+                          Session Expiration
                         </Typography>
-                        <AccessTimeIcon sx={{ ml: 2, color: "primary.main" }} />
                       </Box>
                       <Typography variant="body1" textAlign="center">
                         {formatExpDate()}
                       </Typography>
-                    </Grid>
-                  </Grid>
+                    </Grid2>
+                  </Grid2>
 
                   <Divider sx={{ mb: 3 }} />
 
@@ -266,13 +253,15 @@ export function Profile() {
                     }}
                   >
                     {userRoles.map((role) => (
-                      <Tooltip key={role} title={`Role : ${role}`}>
                         <Chip
                           icon={getRoleIcon(role)}
                           label={role}
                           sx={{
                             fontWeight: "medium",
                             py: 2,
+
+
+                            
                             backgroundColor: theme.palette.mode === "dark" ? "primary.dark" : "primary.light",
                             color: theme.palette.mode === "dark" ? "white" : "primary.dark",
                             "&:hover": {
@@ -284,7 +273,6 @@ export function Profile() {
                             transition: "all 0.2s ease",
                           }}
                         />
-                      </Tooltip>
                     ))}
                   </Box>
 
@@ -318,11 +306,10 @@ export function Profile() {
                   </Stack>
                 </CardContent>
               </Card>
-            </Grid>
+            </Grid2>
 
-            {/* Section du token - maintenant sous la carte principale */}
             {showToken && (
-              <Grid item xs={12}>
+              <Grid2 size={{ xs: 12 , sm: 12}}>
                 <Card elevation={3} sx={{ borderRadius: 2 }}>
                   <CardContent>
                     <Typography
@@ -366,9 +353,9 @@ export function Profile() {
                     </Box>
                   </CardContent>
                 </Card>
-              </Grid>
+              </Grid2>
             )}
-          </Grid>
+          </Grid2>
         ) : (
           <Paper
             elevation={2}
@@ -380,7 +367,7 @@ export function Profile() {
             }}
           >
             <Typography variant="h5" sx={{ color: "text.secondary" }}>
-              Aucun utilisateur connecté
+              No user connected
             </Typography>
             <Button
               variant="contained"
@@ -388,7 +375,7 @@ export function Profile() {
               sx={{ mt: 2, borderRadius: 2 }}
               onClick={() => (window.location.href = "/login")}
             >
-              Se connecter
+              Log in
             </Button>
           </Paper>
         )}
