@@ -116,8 +116,7 @@ class TimeoutSettings(BaseModel):
 class ModelConfiguration(BaseModel):
     provider: Optional[str] = Field(None, description="Provider of the AI model, e.g., openai, ollama, azure.")
     name: Optional[str] = Field(None, description="Model name, e.g., gpt-4o, llama2.")
-    temperature: Optional[float] = Field(0.0, description="Temperature setting for the model.")
-    provider_settings: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Additional provider-specific settings, e.g., Azure deployment name.")
+    settings: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Additional provider-specific settings, e.g., Azure deployment name.")
 
 class MCPServerConfiguration(BaseModel):
     name: str = Field(None, description="Name of the MCP server")
@@ -263,15 +262,15 @@ class FrontendSettings(BaseModel):
     feature_flags: FrontendFlags
     properties: Properties
 
+class MetricsStorageSettings(BaseModel):
+    local_path: str = Field(..., description="The path of the local metrics store")
 
-class ContextStorageConfig(BaseModel):
-    type: str = Field(..., description="The storage backend to use (e.g., 'local', 'minio')")
-    
+class FeedbackStorageSettings(BaseModel):
+    local_path: str = Field(..., description="The path of the local metrics store")
+
 class FeedbackStorageConfig(BaseModel):
     type: str = Field(..., description="The storage backend to use (e.g., 'local', 'opensearch')")
-
-class MetricsStorageSettings(BaseModel):
-    path: str = Field(..., description="The path of the local metrics store")
+    settings: FeedbackStorageSettings
 
 class MetricsStorageConfig(BaseModel):
     type: str = Field(..., description="The metrics store to use (e.g., 'local')")
@@ -284,24 +283,20 @@ class Configuration(BaseModel):
     ai: AIConfig
     dao: DAOConfiguration
     security: Security
-    context_storage: ContextStorageConfig = Field(..., description="Content Storage configuration")
     feedback_storage: FeedbackStorageConfig = Field(..., description="Feedback Storage configuration")
     metrics_storage:  MetricsStorageConfig = Field(..., description="Feedback Storage configuration")
 
 class OfflineStatus(BaseModel):
     is_offline: bool
 
-
 class Window(BaseModel):
     start: datetime
     end: datetime
     total: float
 
-
 class Difference(BaseModel):
     value: float
     percentage: float
-
 
 class CompareResult(BaseModel):
     cluster: str
@@ -309,7 +304,6 @@ class CompareResult(BaseModel):
     window_1: Window
     window_2: Window
     difference: Difference
-
 
 class Series(BaseModel):
     timestamps: List[datetime]

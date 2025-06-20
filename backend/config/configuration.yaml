@@ -26,9 +26,9 @@ database:
   csv_files:
     # Can be absolute paths or relative paths to the main
     energy_mix: './services/cluster_consumption/data/simulated_energy_mix.csv'
-    carbon_footprint: './services/cluster_consumption/data/simulated_cluster_consumption_gco2_sep_to_feb.csv'
-    energy_footprint: './services/cluster_consumption/data/simulated_cluster_consumption_wh_sep_to_feb.csv'
-    financial_footprint: './services/cluster_consumption/data/simulated_cluster_consumption_usd_sep_to_feb.csv'
+    carbon_footprint: './services/cluster_consumption/data/simulated_cluster_consumption_gco2.csv'
+    energy_footprint: './services/cluster_consumption/data/simulated_cluster_consumption_wh.csv'
+    financial_footprint: './services/cluster_consumption/data/simulated_cluster_consumption_usd.csv'
     # Guerre elec & ship identification service
     frequencies: './services/sensor/data/bandes_freq.csv'
     sensors_test_new: './services/theater_analysis/data/detections-capteur-donnees-test_new_scenario.csv'
@@ -50,14 +50,38 @@ ai:
     connect: 5  # Time to wait for a connection in seconds
     read: 15    # Time to wait for a response in seconds
   default_model:
-    #provider: "ollama"
-    #name: "llama2"
+    # Required in .env:
+    # - OPENAI_API_KEY
     provider: "openai"
     name: "gpt-4o"
+    settings:
+      temperature: 0.0
+      max_retries: 2
+      request_timeout: 30
+
+    # --- OR uncomment for Azure OpenAI ---
+    # Required in .env:
+    # - AZURE_OPENAI_API_KEY
+    #
+    # Optional for token-based auth:
+    # - AZURE_TENANT_ID
+    # - AZURE_CLIENT_ID
+    # - AZURE_CLIENT_SECRET
     #provider: "azure"
-    #name: "fred-gpt-4o"
-    api_version: "2024-05-01-preview"
-    temperature: 0.0
+    #name: "fred-gpt-4o"  
+    #settings:
+    #  api_version: "2024-05-01-preview"
+    #  temperature: 0.0
+    #  max_retries: 2
+    #  request_timeout: 30
+    #  azure_endpoint: "https://tehopenai.openai.azure.com/"
+
+    # --- OR uncomment for Ollama ---
+    # provider: "ollama"
+    # name: "llama2"
+    # settings:
+    #   base_url: "http://localhost:11434"
+    #   temperature: 0.0
   leader:
     name: "Fred"
     class_path: "leader.leader.Leader"
@@ -69,7 +93,7 @@ ai:
       enabled: false
       model: {}
   recursion:
-    recursion_limit: 40 #Number or max recursion use by the agents while using the model
+    recursion_limit: 40 # Number or max recursion use by the agents while using the model
   agents:
     - name: "JiraExpert"
       class_path: "agents.jira.jira_expert.JiraExpert"
@@ -138,40 +162,24 @@ dao:
   base_path: "~/.fred/dao-cache"
   max_cached_delay_seconds: 300  # Cache delay in seconds. Use 0 for no cache or a negative value for limitless cache.
 
-# Enable or disable the security layer
+# Security. As of today only keycloak is supported.
 security:
   enabled: false
+  client_id: "fred"
   keycloak_url: "http://keycloak:8080/realms/app"
   authorized_origins:
   - "http://localhost:5173"
 
-# Environment variables for the application
-
-# AZURE
-azure:
-  tenant_id: ""
-  client_id: ""
-  client_secret: ""
-  client_scope: ""
-  apim_key: ""
-  api_version: ""
-  deployment:
-    llm: ""
-    embedding: ""
-
-# CONTEXT STORAGE CONFIGURATION
-context_storage:
-  type: "local"
-  options:
-    path: "~/.fred/context-store"
-
+# Agentic metrics are stored in a prometheus or opensearch backend. To make development
+# easy by default they are stored on a local file. 
 metrics_storage:
-  type: "local"
+  type: "local" 
   settings:
-    path: "~/.fred/metrics-store"
+    local_path: "~/.fred/metrics-store"
 
+# Feedbacks are store in a simple local file. It is plan to add 
+# additional backend like opensearch or minio.
 feedback_storage:
-  type: local  # ou "minio"
-  minio_endpoint: "localhost:9000"
-  minio_bucket_name: "fred-feedback"
-  minio_secure: false
+  type: local
+  settings:
+    local_path: "~/.fred/feedback-store"

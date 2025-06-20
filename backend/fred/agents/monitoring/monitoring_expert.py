@@ -46,6 +46,7 @@ class MonitoringExpert(AgentFlow):
         self.cluster_fullname = cluster_fullname
         self.agent_settings = get_agent_settings(self.name)
         self.categories = self.agent_settings.categories if self.agent_settings.categories else ["Monitoring"]
+        self.base_prompt=self._generate_prompt()
         # On conserve le tag de classe si agent_settings.tag est None ou vide
         if self.agent_settings.tag:
             self.tag = self.agent_settings.tag
@@ -57,7 +58,7 @@ class MonitoringExpert(AgentFlow):
             description=self.description,
             icon=self.icon,
             graph=self.get_graph(),
-            base_prompt=self._generate_prompt(),
+            base_prompt=self.base_prompt,
             categories=self.categories,
             tag=self.tag,
             toolkit=self.toolkit 

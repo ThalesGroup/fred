@@ -104,7 +104,7 @@ class MonitoredLanguageModel(BaseLanguageModel):
         )
 
         if metric:
-            logger.info(f"Captured metric: {metric}")
+            logger.debug(f"Captured metric: {metric}")
             self._metric_store.add_metric(metric)
         else:
             logger.warning("⚠️ Failed to translate metadata to Metric.")
