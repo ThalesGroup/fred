@@ -24,7 +24,6 @@ export const CustomProfile: React.FC<CustomProfileProps> = ({
     onEdit,
     onDelete,
     getFileIcon,
-    formatFileSize,
     maxTokens,
 }) => {
     const theme = useTheme();
