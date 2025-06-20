@@ -13,8 +13,8 @@
 // limitations under the License.
 
 import { createApi } from "@reduxjs/toolkit/query/react";
-import { Metadata } from "../components/documents/DocumentCard.tsx";
 import { createDynamicBaseQuery } from "../common/dynamicBaseQuery.tsx";
+import { Metadata } from "../components/documents/DocumentTable.tsx";
 
 export interface KnowledgeDocument {
   document_uid: string;
@@ -66,11 +66,11 @@ const extendedDocumentApi = documentApiSlice.injectEndpoints({
         body: filters ?? {}, // If filters are undefined, send empty object
       }),
     }),
-    putDocumentMetadata: builder.mutation<Metadata, { document_uid: string; metadata: Metadata }>({
-      query: ({ document_uid, metadata }) => ({
+    updateDocumentRetrievable: builder.mutation<void, { document_uid: string; retrievable: boolean }>({
+      query: ({ document_uid, retrievable }) => ({
         url: `/knowledge/v1/document/${document_uid}`,
         method: "PUT",
-        body: metadata,
+        body: { retrievable },
       }),
     }),
     deleteDocument: builder.mutation<void, string>({
@@ -84,7 +84,7 @@ const extendedDocumentApi = documentApiSlice.injectEndpoints({
 
 export const {
   useGetDocumentMetadataMutation,
-  usePutDocumentMetadataMutation,
+  useUpdateDocumentRetrievableMutation,
   useGetDocumentsWithFilterMutation,
   useDeleteDocumentMutation,
   useGetDocumentMarkdownPreviewMutation,
