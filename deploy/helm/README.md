@@ -26,3 +26,7 @@ kubectl create secret generic fred-backend-kubeconfig --from-file=$HOME/.kube/co
 helm upgrade -i fred-backend ./backend/ --values ./custom-fred-backend.yaml -n test
 helm upgrade -i fred-frontend ./frontend/ --values ./custom-fred-frontend.yaml -n test
 ```
+
+Then access to fred
+
+http://fred.test
