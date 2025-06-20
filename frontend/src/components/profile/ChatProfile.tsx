@@ -20,11 +20,14 @@ import {
 import AddIcon from "@mui/icons-material/Add";
 import SearchIcon from "@mui/icons-material/Search";
 import DeleteIcon from "@mui/icons-material/Delete";
+import EditIcon from "@mui/icons-material/Edit"
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
-import { useGetChatProfilesMutation, useDeleteChatProfileMutation } from "../../slices/chatProfileApi";
+import { useGetChatProfilesMutation, useDeleteChatProfileMutation, useUpdateChatProfileMutation, useGetChatProfileMaxTokensQuery } from "../../slices/chatProfileApi";
 import { CreateChatProfileDialog } from "./ChatProfileDialog";
 import { getDocumentIcon } from "../documents/DocumentIcon";
+import { ChatProfile, ChatProfileEditDialog } from "./ChatProfileEditDialog";
+import { useToast } from "../ToastProvider";
 
 const TokenBar = ({ tokens, max }: { tokens: number; max: number }) => {
   const usage = Math.min(tokens / max, 1);
@@ -58,7 +61,13 @@ export const ChatProfiles = () => {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [getChatProfiles] = useGetChatProfilesMutation();
   const [deleteChatProfile] = useDeleteChatProfileMutation();
+  const [updateChatProfile] = useUpdateChatProfileMutation();
   const [openDialog, setOpenDialog] = useState(false);
+  const [openEditDialog, setOpenEditDialog] = useState(false);
+  const [currentChatProfile, setCurrentChatProfile] = useState<ChatProfile>()
+  const { data } = useGetChatProfileMaxTokensQuery();
+  const maxTokens = data?.max_tokens;
+  const { showError } = useToast();
 
   useEffect(() => {
     fetchChatProfiles();
@@ -73,18 +82,77 @@ export const ChatProfiles = () => {
     }
   };
 
+  // Edit chatProfile
+  const handleOpenEditDialog = (chatProfile: any) => {
+    setCurrentChatProfile(chatProfile);
+    setOpenEditDialog(true);
+  };
+
+
+  const handleSaveChatProfile = async ({
+    title,
+    description,
+    files,
+  }: {
+    title: string;
+    description: string;
+    files: File[];
+  }) => {
+    try {
+      await updateChatProfile({
+        chatProfile_id: currentChatProfile.id,
+        title,
+        description,
+        files
+      }).unwrap();
+
+      setOpenEditDialog(false);
+      setCurrentChatProfile(null);
+
+      await fetchChatProfiles(); 
+    } catch (error: any) {
+      showError({
+        summary: "Update failed",
+        detail: `Could not update profile: ${error?.data?.detail || error.message}`,
+      });
+
+      await handleReloadProfile();
+    }
+  };
+
+
   const handleDelete = async (id: string) => {
     try {
       await deleteChatProfile({ chatProfile_id: id }).unwrap();
       setChatProfiles((prev) => prev.filter((p) => p.id !== id));
     } catch (e) {
-      console.error("Failed to delete profile", e);
-    }
+      showError({
+        summary: "Delete failed",
+        detail: `Could not delete profile: ${e?.data?.detail || e.message}`,
+      });    }
   };
 
   const filteredProfiles = chatProfiles.filter((profile) =>
     profile.title.toLowerCase().includes(search.toLowerCase())
   );
+
+  const handleReloadProfile = async () => {
+    try {
+      const response = await getChatProfiles().unwrap();
+      setChatProfiles(response);
+
+      if (currentChatProfile) {
+        const updated = response.find((p) => p.id === currentChatProfile.id);
+        if (updated) {
+          setCurrentChatProfile(updated);
+        }
+      }
+    } catch (e) {
+      showError({
+        summary: "Reload failed",
+        detail: `Could not reload profile: ${e?.data?.detail || e.message}`,
+      });    }
+  };
 
   return (
     <Container maxWidth="xl" sx={{ pb: 10 }}>
@@ -171,7 +239,7 @@ export const ChatProfiles = () => {
                     </Typography>
 
                     <Stack spacing={1.2} mt={1}>
-                      {profile.documents.map((doc) => (
+                      {profile.documents?.map((doc) => (
                         <Box
                           key={doc.id}
                           display="flex"
@@ -195,20 +263,26 @@ export const ChatProfiles = () => {
                 )}
 
                 <Box mt="auto">
-                  <Grid2 container alignItems="center" spacing={2}>
+                  <Grid2 container alignItems="center" spacing={1}>
                     <Grid2>
                       <Typography variant="caption" color="text.secondary" whiteSpace="nowrap">
-                        Tokens: {profile.tokens} / {profile.max_tokens ?? 12000}
+                        Tokens: {profile.tokens} / {maxTokens ?? 12000}
                       </Typography>
                     </Grid2>
 
                     <Grid2 flexGrow={1}>
-                      <TokenBar tokens={profile.tokens} max={profile.max_tokens ?? 12000} />
+                      <TokenBar tokens={profile.tokens} max={maxTokens ?? 12000} />
                     </Grid2>
 
                     <Grid2>
+                      <IconButton onClick={() => handleOpenEditDialog(profile)}>
+                        <EditIcon fontSize="small" />
+                      </IconButton>
+                    </Grid2>
+                    <Grid2>
+
                       <IconButton onClick={() => handleDelete(profile.id)}>
-                        <DeleteIcon color="error" />
+                        <DeleteIcon fontSize="small" />
                       </IconButton>
                     </Grid2>
                   </Grid2>
@@ -238,6 +312,14 @@ export const ChatProfiles = () => {
         open={openDialog}
         onClose={() => setOpenDialog(false)}
         onCreated={fetchChatProfiles}
+      />
+
+      <ChatProfileEditDialog
+        open={openEditDialog}
+        onClose={() => setOpenEditDialog(false)}
+        onSave={handleSaveChatProfile}
+        chatProfile={currentChatProfile}
+        onReloadProfile={handleReloadProfile}
       />
     </Container>
   );
