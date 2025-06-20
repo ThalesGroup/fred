@@ -27,6 +27,7 @@ import {
 } from "../slices/chatApi.tsx";
 import { SessionSchema } from "../slices/chatApiStructures.ts";
 import { useSearchParams } from "react-router-dom";
+import { ChatProfile } from "../components/profile/ChatProfileEditDialog.tsx";
 
 export interface AgenticFlow {
   name: string;
@@ -58,7 +59,7 @@ export const Chat = () => {
   const [currentChatBotSession, setCurrentChatBotSession] = useState<SessionSchema | null>(null);
   const [isCreatingNewConversation, setIsCreatingNewConversation] = useState(false);
 
-  const [selectedChatProfile, setSelectedChatProfile] = useState<ChatProfileLight | null>(null);
+  const [selectedChatProfile, setSelectedChatProfile] = useState<ChatProfile | null>(null);
 
   const handleSelectAgenticFlow = (flow: AgenticFlow) => {
     setCurrentAgenticFlow(flow);
