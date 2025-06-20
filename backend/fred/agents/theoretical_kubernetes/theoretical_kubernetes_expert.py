@@ -193,6 +193,7 @@ class TheoreticalKubernetesExpert(AgentFlow):
         Initialize the Theoretical Kubernetes Expert.
         """
         self.current_date = datetime.now().strftime("%Y-%m-%d")
+        self.base_prompt=self._generate_prompt()
         agent_settings = get_agent_settings(self.name)
         self.categories = agent_settings.categories if agent_settings.categories else ["Kubernetes"]
         self.cluster_fullname = cluster_fullname
@@ -203,7 +204,7 @@ class TheoreticalKubernetesExpert(AgentFlow):
             description=self.description,
             icon=self.icon,
             graph=self.get_graph(),
-            base_prompt=self._generate_prompt(),
+            base_prompt=self.base_prompt,
             categories=self.categories,
         )
 

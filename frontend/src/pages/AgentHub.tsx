@@ -39,7 +39,6 @@ import { LoadingSpinner } from "../utils/loadingSpinner";
 import { getAgentBadge } from "../utils/avatar";
 import Grid2 from "@mui/material/Grid2";
 import { KeyCloakService } from "../security/KeycloakService";
-import ContextManagementModal from "../components/chatbot/ContextManagementModal";
 import LocalOfferIcon from "@mui/icons-material/LocalOffer";
 import { useGetChatBotAgenticFlowsMutation } from "../slices/chatApi";
 import { TopBar } from "../common/TopBar";
@@ -53,7 +52,6 @@ export const AgentHub = () => {
   const theme = useTheme();
   const isDarkTheme = theme.palette.mode === "dark";
 
-  // États
   const [agenticFlows, setAgenticFlows] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [tabValue, setTabValue] = useState(0);
@@ -61,9 +59,7 @@ export const AgentHub = () => {
   const [favoriteAgents, setFavoriteAgents] = useState<string[]>([]);
   const [categories, setCategories] = useState<AgentCategory[]>([{ name: "all" }, { name: "favorites" }]);
 
-  // États pour la gestion du contexte
-  const [contextModalOpen, setContextModalOpen] = useState(false);
-  const [selectedAgent] = useState(null);
+  const [] = useState(null);
   const [, setUserInfo] = useState({
     name: KeyCloakService.GetUserName(),
     isAdmin: KeyCloakService.GetUserRoles().includes("admin"),
@@ -150,8 +146,6 @@ export const AgentHub = () => {
     setFavoriteAgents(updatedFavorites);
     localStorage.setItem("favoriteAgents", JSON.stringify(updatedFavorites));
   };
-
-  // Gérer l'ouverture de la modale de contexte
 
   // Obtenir le titre de la section actuelle
   const getSectionTitle = () => {
@@ -404,26 +398,6 @@ export const AgentHub = () => {
                               {agent.description}
                             </Typography>
 
-                            <Box sx={{ mt: 2, display: 'flex', alignItems: 'center' }}>
-                              {/* <Button
-                                size="small"
-                                startIcon={<DescriptionIcon />}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  openContextModal(agent);
-                                }}
-                                sx={{
-                                  ml: 1,
-                                  textTransform: "none",
-                                  fontSize: "0.75rem",
-                                  fontWeight: "normal",
-                                  color: theme.palette.primary.main,
-                                }}
-                              >
-                                Manage Context
-                              </Button> */}
-                            </Box>
-
                             {agent.experts && agent.experts.length > 0 && (
                               <Box sx={{ mt: 2 }}>
                                 <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>
@@ -498,14 +472,6 @@ export const AgentHub = () => {
           </Paper>
         </Fade>
       </Container>
-
-      {/* Context Management Modal */}
-      <ContextManagementModal
-        open={contextModalOpen}
-        onClose={() => setContextModalOpen(false)}
-        agent={selectedAgent}
-        getAgentBadge={getAgentBadge}
-      />
     </PageBodyWrapper>
   );
 };
