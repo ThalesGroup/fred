@@ -107,6 +107,7 @@ class ChatbotController:
                     session_id=event.session_id,
                     message=event.message,
                     agent_name=event.agent_name,
+                    argument=event.argument,
                     chat_profile_id=event.chat_profile_id
                 )
 
@@ -146,6 +147,7 @@ class ChatbotController:
                         session_id=event.session_id,
                         message=event.message,
                         agent_name=event.agent_name,
+                        argument=event.argument,
                         chat_profile_id=event.chat_profile_id
                     )
 
