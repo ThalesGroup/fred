@@ -16,10 +16,10 @@ import requests
 from langchain_core.tools import StructuredTool
 from pydantic import BaseModel, Field
 
-from services.cluster_consumption.cluster_consumption_structures import (
+from fred.services.cluster_consumption.cluster_consumption_structures import (
     ClusterConsumption,
 )
-from common.structure import PrecisionEnum
+from fred.common.structure import PrecisionEnum
 
 
 class EnergyMixInput(BaseModel):
