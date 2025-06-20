@@ -11,7 +11,6 @@ import { useState, useEffect } from "react";
 import { useDropzone } from "react-dropzone";
 import { LoadingSpinner } from "../utils/loadingSpinner";
 import AddIcon from "@mui/icons-material/Add";
-import UploadIcon from '@mui/icons-material/Upload';
 import DeleteIcon from '@mui/icons-material/Delete';
 import CloseIcon from '@mui/icons-material/Close';
 import SearchIcon from '@mui/icons-material/Search';
@@ -25,7 +24,6 @@ import FolderIcon from '@mui/icons-material/Folder';
 
 // API imports
 import {
-    useCreateChatProfileMutation,
     useGetChatProfilesMutation,
     useUpdateChatProfileMutation,
     useDeleteChatProfileMutation,
@@ -83,7 +81,6 @@ export const ChatProfiles = () => {
 
     // API hooks
     const [getChatProfiles] = useGetChatProfilesMutation();
-    const [createChatProfile] = useCreateChatProfileMutation();
     const [updateChatProfile] = useUpdateChatProfileMutation();
     const [deleteChatProfile] = useDeleteChatProfileMutation();
     const [uploadChatProfileDocuments] = useUploadChatProfileDocumentsMutation();
@@ -174,11 +171,6 @@ export const ChatProfiles = () => {
                 return;
             }
 
-            const newChatProfile = await createChatProfile({
-                title: newChatProfileTitle,
-                description: newChatProfileDescription,
-                files: tempFiles,
-            }).unwrap();
 
             setNewChatProfileTitle("");
             setNewChatProfileDescription("");

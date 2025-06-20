@@ -25,9 +25,7 @@ import {
   Paper,
   Stack,
   Theme,
-  Tooltip,
   Typography,
-  useMediaQuery,
   useTheme,
 } from "@mui/material";
 import { PageBodyWrapper } from "../common/PageBodyWrapper";
@@ -50,7 +48,6 @@ export function Profile() {
   const [showToken, setShowToken] = useState(false);
 
   const theme = useTheme<Theme>();
-  const smallSideBar = useMediaQuery(theme.breakpoints.down("md"));
 
   const getInitials = () => {
     if (!username) return "U";
