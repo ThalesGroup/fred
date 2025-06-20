@@ -1,6 +1,6 @@
 import { createApi } from "@reduxjs/toolkit/query/react";
 import { createDynamicBaseQuery } from "../common/dynamicBaseQuery";
-import { ChatProfile } from "../pages/ChatProfiles";
+import { ChatProfile } from "../components/profile/ChatProfileEditDialog";
 
 export const chatProfileApiSlice = createApi({
   reducerPath: "chatProfileApi",
@@ -50,6 +50,7 @@ const chatProfileApiEndpoints = chatProfileApiSlice.injectEndpoints({
           formData.append("files", file);
         });
 
+        console.log(formData)
         return {
           url: `/knowledge/v1/chatProfiles/${chatProfile_id}`,
           method: "PUT",
@@ -63,21 +64,6 @@ const chatProfileApiEndpoints = chatProfileApiSlice.injectEndpoints({
         url: `/knowledge/v1/chatProfiles/${chatProfile_id}`,
         method: "DELETE",
       }),
-    }),
-
-    uploadChatProfileDocuments: builder.mutation<{ success: boolean }, { chatProfile_id: string; files: File[] }>({
-      query: ({ chatProfile_id, files }) => {
-        const formData = new FormData();
-        files.forEach((file) => {
-          formData.append("files", file);
-        });
-
-        return {
-          url: `/knowledge/v1/chatProfiles/${chatProfile_id}/documents`,
-          method: "POST",
-          body: formData,
-        };
-      },
     }),
 
     deleteChatProfileDocument: builder.mutation<{ success: boolean }, { chatProfile_id: string; document_id: string }>({
@@ -100,7 +86,6 @@ export const {
   useCreateChatProfileMutation,
   useUpdateChatProfileMutation,
   useDeleteChatProfileMutation,
-  useUploadChatProfileDocumentsMutation,
   useDeleteChatProfileDocumentMutation,
   useGetChatProfileMaxTokensQuery
 } = chatProfileApiEndpoints;

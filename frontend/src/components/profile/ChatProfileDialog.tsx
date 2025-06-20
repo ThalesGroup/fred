@@ -78,7 +78,7 @@ export const CreateChatProfileDialog = ({ open, onClose, onCreated }: CreateChat
             <DialogContent>
                 <Stack spacing={2.5} mt={1}>
                     <TextField
-                        label="Title"
+                        label="Name"
                         fullWidth
                         value={title}
                         onChange={(e) => setTitle(e.target.value)}
