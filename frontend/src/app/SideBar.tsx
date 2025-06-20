@@ -32,7 +32,7 @@ import AssistantIcon from "@mui/icons-material/Assistant";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import ChatIcon from "@mui/icons-material/Chat";
 import TuneIcon from "@mui/icons-material/Tune";
-import PersonIcon from "@mui/icons-material/Person";
+import AccountCircleIcon from "@mui/icons-material/AccountCircle";
 import MenuIcon from "@mui/icons-material/Menu";
 import AssessmentIcon from "@mui/icons-material/Assessment";
 import GroupIcon from "@mui/icons-material/Group";
@@ -41,7 +41,6 @@ import LightModeIcon from "@mui/icons-material/LightMode";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
-import ThreePIcon from '@mui/icons-material/ThreeP';
 import { ImageComponent } from "../utils/image.tsx";
 import { useContext } from "react";
 import { ApplicationContext } from "./ApplicationContextProvider.tsx";
@@ -70,66 +69,65 @@ export default function SideBar({ darkMode, onThemeChange }) {
   const menuItems = [
     ...(isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES)
       ? [
-          {
-            key: "explain",
-            label: "Cluster",
-            icon: <AssistantIcon />,
-            url: `/explain?cluster=${currentClusterFullname}`,
-            canBeDisabled: true,
-            tooltip: "Explain the cluster",
-          },
-          {
-            key: "facts",
-            label: "Facts",
-            icon: <AssistantIcon />,
-            url: `/facts?cluster=${currentClusterFullname}`,
-            canBeDisabled: true,
-            tooltip: "Checkout the business and usage facts associated with the cluster",
-          },
-          {
-            key: "audit",
-            label: "Audit",
-            icon: <AssessmentIcon />,
-            url: `/audit?cluster=${currentClusterFullname}`,
-            canBeDisabled: true,
-            tooltip: "View a complete eco-score audit of the selected cluster",
-          },
-          {
-            key: "optimize",
-            label: "Optimize",
-            icon: <TuneIcon />,
-            url: `/optimize?cluster=${currentClusterFullname}`,
-            canBeDisabled: true,
-            tooltip: 'Check the optimization gains on the selected cluster'
-          },
-          {
-            key: "chat",
-            label: "Chat",
-            icon: <ChatIcon />,
-            url: `/chat?cluster=${currentClusterFullname}`,
-            canBeDisabled: false,
-            tooltip: "Chat with the AI assistant team",
-          },
-          
-        ]
-      : [
-          {
-            key: "chat",
-            label: "Chat",
-            icon: <ChatIcon />,
-            url: `/chat`,
-            canBeDisabled: false,
-            tooltip: "Chat with the AI assistant team",
-          },
-        ]),
         {
-            key: "monitoring",
-            label: "Monitoring",
-            icon: <MonitorHeartIcon />,
-            url: `/monitoring`,
-            canBeDisabled: false,
-            tooltip: "Monitor the backend AI calls",
-          },
+          key: "explain",
+          label: "Cluster",
+          icon: <AssistantIcon />,
+          url: `/explain?cluster=${currentClusterFullname}`,
+          canBeDisabled: true,
+          tooltip: "Explain the cluster",
+        },
+        {
+          key: "facts",
+          label: "Facts",
+          icon: <AssistantIcon />,
+          url: `/facts?cluster=${currentClusterFullname}`,
+          canBeDisabled: true,
+          tooltip: "Checkout the business and usage facts associated with the cluster",
+        },
+        {
+          key: "audit",
+          label: "Audit",
+          icon: <AssessmentIcon />,
+          url: `/audit?cluster=${currentClusterFullname}`,
+          canBeDisabled: true,
+          tooltip: "View a complete eco-score audit of the selected cluster",
+        },
+        {
+          key: "optimize",
+          label: "Optimize",
+          icon: <TuneIcon />,
+          url: `/optimize?cluster=${currentClusterFullname}`,
+          canBeDisabled: true,
+          tooltip: 'Check the optimization gains on the selected cluster'
+        },
+        {
+          key: "chat",
+          label: "Chat",
+          icon: <ChatIcon />,
+          url: `/chat?cluster=${currentClusterFullname}`,
+          canBeDisabled: false,
+          tooltip: "Chat with the AI assistant team",
+        },
+      ]
+      : [
+        {
+          key: "chat",
+          label: "Chat",
+          icon: <ChatIcon />,
+          url: `/chat`,
+          canBeDisabled: false,
+          tooltip: "Chat with the AI assistant team",
+        },
+      ]),
+    {
+      key: "monitoring",
+      label: "Monitoring",
+      icon: <MonitorHeartIcon />,
+      url: `/monitoring`,
+      canBeDisabled: false,
+      tooltip: "Monitor the backend AI calls",
+    },
     /*
     {
        key: 'geomap',
@@ -147,15 +145,6 @@ export default function SideBar({ darkMode, onThemeChange }) {
       canBeDisabled: true,
       tooltip: 'Check the optimization gains on the selected cluster'
     },*/
-
-    {
-      key: "chatProfiles",
-      label: "Chat Profiles",
-      icon: <ThreePIcon />,
-      url: `/chatProfiles`,
-      canBeDisabled: false,
-      tooltip: "View profiles",
-    },
     {
       key: "documentLibrary",
       label: "Documents",
@@ -174,8 +163,8 @@ export default function SideBar({ darkMode, onThemeChange }) {
     },
     {
       key: "account",
-      label: "Account",
-      icon: <PersonIcon />,
+      label: "User Settings",
+      icon: <AccountCircleIcon />,
       url: `/account?cluster=${currentClusterFullname}`,
       canBeDisabled: false,
       tooltip: "View your account",
@@ -365,12 +354,13 @@ export default function SideBar({ darkMode, onThemeChange }) {
                 </ListItemIcon>
                 {!isSidebarSmall && (
                   <ListItemText
-                    primary={item.label}
-                    primaryTypographyProps={{
-                      fontWeight: active ? 500 : 400,
-                      fontSize: "0.9rem",
-                    }}
+                    primary={
+                      <Typography variant="sidebar" fontWeight={active ? 500 : 300}>
+                        {item.label}
+                      </Typography>
+                    }
                   />
+
                 )}
                 {active && !isSidebarSmall && (
                   <Box
