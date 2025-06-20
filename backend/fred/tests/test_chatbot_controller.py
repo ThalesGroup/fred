@@ -23,7 +23,7 @@ from fred.common.utils import parse_server_configuration
 from fred.services.ai.ai_service import AIService
 from fred.services.kube.kube_service import KubeService
 
-
+# TODO REVIEW THESE TESTS AND MAKE SURE THEY WORK WITHOUT REQUIRING LLM REMOTE ACCESS. 
 @pytest.fixture(scope="module")
 def test_app():
     """
@@ -55,7 +55,8 @@ def test_post_streaming_query(test_app):
         "session_id": None,
         "user_id": "mock@user.com",
         "message": "Qui est shakespeare ?",
-        "agent_name": "GeneralistExpert"
+        "agent_name": "GeneralistExpert",
+        "argument": "none"
     }
 
     headers = {
@@ -88,7 +89,8 @@ def test_post_single_query(test_app):
         "session_id": None,
         "user_id": "mock@user.com",
         "message": "Qui est shakespeare ?",
-        "agent_name": "GeneralistExpert"
+        "agent_name": "GeneralistExpert",
+        "argument": "none"
     }
 
     headers = {
