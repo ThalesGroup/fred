@@ -12,8 +12,9 @@ image:
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
   tag: 0.1
-  imagePullSecrets:
-    name: "gitlab-registry-creds"
+
+imagePullSecrets:
+  - name: "gitlab-registry-creds"
 
 # This is for setting Kubernetes Annotations to a Pod.
 # For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/
