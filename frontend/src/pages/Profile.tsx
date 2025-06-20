@@ -3,6 +3,8 @@ import { useState } from "react";
 import {
   Box,
   Paper,
+  Stack,
+  Tooltip,
   Typography,
   Theme,
   Button,
@@ -27,14 +29,31 @@ export function Profile() {
   const username = KeyCloakService.GetUserName();
   const userRoles = KeyCloakService.GetUserRoles();
   const tokenParsed = KeyCloakService.GetTokenParsed();
-  const fullName = tokenParsed?.name || username || "Not available";
-  const userEmail = tokenParsed?.email || "Not available";
-  const userId = tokenParsed?.sub?.substring(0, 8) || "Not available";
+  const [showToken, setShowToken] = useState(false);
 
-  const [activeTab, setActiveTab] = useState(() => {
-    const savedTab = localStorage.getItem("profile_active_tab");
-    return savedTab ? parseInt(savedTab, 10) : 0;
-  });
+  const theme = useTheme<Theme>();
+
+  const getInitials = () => {
+    if (!username) return "U";
+    const names = username.split(" ");
+    if (names.length > 1) {
+      return `${names[0][0]}${names[1][0]}`.toUpperCase();
+    }
+    return username.substring(0, 2).toUpperCase();
+  };
+
+  const getAvatarColor = () => {
+  if (userRoles.includes("admin")) return theme.palette.error.main;
+  if (userRoles.includes("manager")) return theme.palette.secondary.dark;
+  return theme.palette.primary.main;
+};
+
+  const getRoleIcon = (role) => {
+    if (role.includes("admin")) return <AdminPanelSettingsIcon fontSize="small" />;
+    if (role.includes("user")) return <AccountCircleIcon fontSize="small" />;
+    if (role.includes("manager")) return <SecurityIcon fontSize="small" />;
+    return <CodeIcon fontSize="small" />;
+  };
 
   const formatAuthDate = () => {
     if (!tokenParsed?.auth_time) return "Not available";
