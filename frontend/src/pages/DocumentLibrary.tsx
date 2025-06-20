@@ -48,6 +48,7 @@ import {
   useGetDocumentMarkdownPreviewMutation,
   useGetDocumentsWithFilterMutation,
   useLazyGetDocumentRawContentQuery,
+  useUpdateDocumentRetrievableMutation
 } from "../slices/documentApi";
 
 import { useGetChatBotAgenticFlowsMutation } from "../slices/chatApi";
@@ -163,7 +164,7 @@ export const DocumentLibrary = () => {
   const [documentsPerPage, setDocumentsPerPage] = useState(10); // Number of documents shown per page
   const [currentPage, setCurrentPage] = useState(1); // Current page in the pagination component
   const [agentFilter, setAgentFilter] = useState(null); // Selected agent for filtering document list
-  const [currentAgent, setCurrentAgent] = useState(""); // Selected agent in the upload drawer
+  const [, setCurrentAgent] = useState(""); // Selected agent in the upload drawer
   const [openSide, setOpenSide] = useState(false); // Whether the upload drawer is open
   const [showElements, setShowElements] = useState(false); // Controls whether page elements are faded in
 
@@ -172,6 +173,8 @@ export const DocumentLibrary = () => {
   const [currentAgenticFlow, setCurrentAgenticFlow] = useState(null); // Currently selected agent flow object
 
   const [documentViewerOpen, setDocumentViewerOpen] = useState<boolean>(false);
+
+  const [updateDocumentRetrievable] = useUpdateDocumentRetrievableMutation();
 
   // userInfo:
   // Stores information about the currently authenticated user.
@@ -222,11 +225,6 @@ export const DocumentLibrary = () => {
     fetchFiles();
   }, [agentFilter, getDocumentsWithFilter]);
 
-  // Event handlers
-  const handleChangeAgent = (event) => {
-    setCurrentAgent(event.target.value);
-    setCurrentPage(1); // good idea to reset page too
-  };
 
   const handleChangeAgentFilter = (event) => {
     setAgentFilter(event.target.value);
@@ -394,6 +392,28 @@ export const DocumentLibrary = () => {
     setDocumentViewerOpen(false);
   };
 
+  const handleToggleRetrievable = async (file) => {
+    try {
+      await updateDocumentRetrievable({
+        document_uid: file.document_uid,
+        retrievable: !file.retrievable,
+      }).unwrap();
+
+      showInfo({
+        summary: "Updated",
+        detail: `Document "${file.document_name}" is now ${!file.retrievable ? "retrievable" : "not retrievable"}.`,
+      });
+
+      await fetchFiles(); // recharge les documents
+    } catch (error) {
+      console.error("Update failed:", error);
+      showError({
+        summary: "Error updating document",
+        detail: error?.data?.detail || error.message,
+      });
+    }
+  };
+
   return (
     <PageBodyWrapper>
       <TopBar
@@ -402,11 +422,11 @@ export const DocumentLibrary = () => {
       >
         {userInfo.canManageDocuments && (
           <Grid2
-            container
-            size={{ xs: 12, md: 4 }}
+            size={{ xs: 12, md: 12 }}
             sx={{
+              display: "flex",
               justifyContent: "flex-end",
-              textAlign: { xs: "left", md: "right" },
+              mt: { xs: 1, md: 0 },
             }}
           >
             <Button
@@ -417,10 +437,9 @@ export const DocumentLibrary = () => {
                 setTempFiles([]);
                 setOpenSide(true);
               }}
-              size="medium" // Smaller button
+              size="medium"
               sx={{
                 borderRadius: "8px",
-                mt: { xs: 1, md: 0 },
               }}
             >
               Upload a document
@@ -539,12 +558,9 @@ export const DocumentLibrary = () => {
                   }}
                   onDelete={handleDelete}
                   onDownload={handleDownload}
-                  onToggleRetrievable={(file) => {
-                    // You can reuse the same logic as in DocumentCard or hook into update mutation here
-                    console.warn("Retrievable toggle not implemented in table view yet", file);
-                  }}
                   isAdmin={userInfo.canManageDocuments}
                   onOpen={(document_uid, file_name) => handleDocumentMarkdownPreview(document_uid, file_name)}
+                  onToggleRetrievable={handleToggleRetrievable}
                 />
                 <Box display="flex" alignItems="center" mt={3} justifyContent="space-between">
                   <Pagination
@@ -623,20 +639,6 @@ export const DocumentLibrary = () => {
           <Typography variant="h5" fontWeight="bold" gutterBottom>
             Upload a document
           </Typography>
-          <Typography variant="body2" color="textSecondary" sx={{ mb: 3 }}>
-            Select an agent before uploading any document
-          </Typography>
-
-          <FormControl fullWidth size="small" sx={{ mb: 3 }}>
-            <InputLabel>Agent</InputLabel>
-            <Select value={currentAgent} onChange={handleChangeAgent} input={<OutlinedInput label="Agent" />}>
-              {agenticFlows.map((agent) => (
-                <MenuItem key={agent.nickname} value={agent.nickname} onClick={() => setCurrentAgenticFlow(agent)}>
-                  {agent.nickname}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
 
           <Paper
             sx={{
@@ -698,7 +700,7 @@ export const DocumentLibrary = () => {
               color="success"
               startIcon={<SaveIcon />}
               onClick={handleAddFiles}
-              disabled={!currentAgenticFlow || !tempFiles.length || isLoading}
+              disabled={!tempFiles.length || isLoading}
               sx={{ borderRadius: "8px" }}
             >
               {isLoading ? "Saving..." : "Save"}
