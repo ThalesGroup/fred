@@ -16,6 +16,7 @@ import { useState } from "react";
 import CloseIcon from "@mui/icons-material/Close";
 import { useDropzone } from "react-dropzone";
 import { useCreateChatProfileMutation } from "../../slices/chatProfileApi";
+import { useToast } from "../ToastProvider";
 
 interface CreateChatProfileDialogProps {
     open: boolean;
@@ -30,6 +31,7 @@ export const CreateChatProfileDialog = ({ open, onClose, onCreated }: CreateChat
     const [files, setFiles] = useState<File[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [createChatProfile] = useCreateChatProfileMutation();
+    const { showError } = useToast();
 
     const { getRootProps, getInputProps, isDragActive } = useDropzone({
         onDrop: (accepted) => setFiles((prev) => [...prev, ...accepted]),
@@ -56,13 +58,14 @@ export const CreateChatProfileDialog = ({ open, onClose, onCreated }: CreateChat
             onCreated();
             onClose();
         } catch (e) {
-            console.error("Failed to create profile", e);
+            showError({
+                summary: "Creation failed",
+                detail: `Could not create profile: ${e?.data?.detail || e.message}`,
+            });
         } finally {
             setIsLoading(false);
         }
     };
-
-
 
     return (
         <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
