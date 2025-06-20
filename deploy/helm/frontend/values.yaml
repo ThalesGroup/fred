@@ -4,7 +4,10 @@ image:
   repository: registry.thalesdigital.io/tsn/innovation/projects/fred/frontend
   tag: 0.1
   pullPolicy: IfNotPresent
-  imagePullSecretName: "gitlab-registry-creds"
+
+imagePullSecrets:
+  - name: "gitlab-registry-creds"
+
 service:
   type: ClusterIP
   port: 80

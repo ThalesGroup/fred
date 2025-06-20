@@ -1,37 +1,28 @@
-# Kpack deployment
+# Installation
 
-## kpack-dev quick start
-
-You need to have a local kubernetes cluster up and running, either minikube or k3d.
-
-Initialize the kast token
-```sh
-kastctl pass --init --token <KAST_TOKEN>
+Déployer le frontend et le backend de fred
 ```
+cd backend
+docker build -f dockerfiles/Dockerfile-dev -t registry.thalesdigital.io/tsn/innovation/projects/fred/backend:0.1 .
+docker save registry.thalesdigital.io/tsn/innovation/projects/fred/backend:0.1 | gzip > /tmp/backend.tgz
+sudo k3s ctr images import /tmp/backend.tgz
 
-Launch the installation
-```sh
-kastctl install --kpack kpack-dev.yml --deployment-path . --token <KAST_TOKEN>
+cd ../frontend
+docker build -f dockerfiles/Dockerfile-dev -t registry.thalesdigital.io/tsn/innovation/projects/fred/frontend:0.1 .
+docker save registry.thalesdigital.io/tsn/innovation/projects/fred/frontend:0.1 | gzip > /tmp/frontend.tgz
+sudo k3s ctr images import /tmp/frontend.tgz
+
+
+IP_K3S=$(hostname -I | awk '{print $1}')
+
+echo $IP_K3S fred-backend.test | sudo tee -a /etc/hosts
+echo $IP_K3S fred.test | sudo tee -a /etc/hosts
+
+PUIS
+
+kubectl create secret generic fred-backend-kubeconfig --from-file=$HOME/.kube/config -n test
+
+
+helm upgrade -i fred-backend ./backend/ --values ./custom-fred-backend.yaml -n test
+helm upgrade -i fred-frontend ./frontend/ --values ./custom-fred-frontend.yaml -n test
 ```
-
-Configure your /etc/hosts
-```sh
-grep -q "127.0.0.1.*auth.dev.local" /etc/hosts || { echo "127.0.0.1 auth.dev.local" | sudo tee -a /etc/hosts ; }
-grep -q "127.0.0.1.*minio.dev.local" /etc/hosts || { echo "127.0.0.1 minio.dev.local" | sudo tee -a /etc/hosts ; }
-grep -q "127.0.0.1.*opensearch.dev.local" /etc/hosts || { echo "127.0.0.1 opensearch.dev.local" | sudo tee -a /etc/hosts ; }
-grep -q "127.0.0.1.*www.dev.local" /etc/hosts || { echo "127.0.0.1 www.dev.local" | sudo tee -a /etc/hosts ; }
-grep -q "127.0.0.1.*api.dev.local" /etc/hosts || { echo "127.0.0.1 api.dev.local" | sudo tee -a /etc/hosts ; }
-```
-
-Get the users password
-```sh
-kastctl pass --show --token <KAST_TOKEN>
-```
-
-Access
-
-- Keycloak: https://auth.dev.local
-- Minio: https://minio.dev.local
-- Opensearch: https://opensearch.dev.local
-- Fred ui: https://www.dev.local
-- Fred API: https://api.dev.local

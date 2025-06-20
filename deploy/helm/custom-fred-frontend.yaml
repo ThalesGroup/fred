@@ -1,0 +1,30 @@
+# spe frontend
+
+imagePullSecretName: []
+ingress:
+  enabled: true
+  className: "traefik"
+  annotations: {}
+  hosts:
+    - host: fred.test
+      paths:
+        - path: /
+  tls:
+    - secretName: fred-frontend-crt
+      hosts:
+        - fred.test
+
+config:
+  backendUrlApi: "http://fred-backend.test"
+  websocketUrl: "ws://fred-backend.test/fred/chatbot/query"
+
+env:
+  - name: VITE_ALLOWED_HOSTS
+    value: "fred.test"
+  - name: VITE_BACKEND_URL_KNOWLEDGE
+    value: "http://knowledge-flow-backend:8080"
+
+
+#    allowedHosts: (process.env.VITE_ALLOWED_HOSTS || '').split(',').filter(Boolean),
+#    proxy: {
+#      "/fred": process.env.VITE_BACKEND_URL || "http://localhost:8000"

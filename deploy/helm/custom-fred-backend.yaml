@@ -1,0 +1,26 @@
+# spe backend
+
+ingress:
+  enabled: true
+  className: "traefik"
+  annotations: {}
+    # kubernetes.io/ingress.class: nginx
+    # kubernetes.io/tls-acme: "true"
+  hosts:
+    - host: fred-backend.test
+      paths:
+        - path: /
+          pathType: ImplementationSpecific
+
+config:
+  feedback:
+    db_host: postgres
+  security:
+    enabled: true
+    keycloak_url: "http://keycloak.test/realms/app"
+    authorized_origins:
+    - "http://fred.test"
+
+dotenv:
+  openai_api_key: "sk-*****"
+  keycloak_server_url: "https://keycloak"
