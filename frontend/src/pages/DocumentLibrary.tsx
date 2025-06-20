@@ -164,7 +164,7 @@ export const DocumentLibrary = () => {
   const [documentsPerPage, setDocumentsPerPage] = useState(10); // Number of documents shown per page
   const [currentPage, setCurrentPage] = useState(1); // Current page in the pagination component
   const [agentFilter, setAgentFilter] = useState(null); // Selected agent for filtering document list
-  const [currentAgent, setCurrentAgent] = useState(""); // Selected agent in the upload drawer
+  const [, setCurrentAgent] = useState(""); // Selected agent in the upload drawer
   const [openSide, setOpenSide] = useState(false); // Whether the upload drawer is open
   const [showElements, setShowElements] = useState(false); // Controls whether page elements are faded in
 
@@ -225,11 +225,6 @@ export const DocumentLibrary = () => {
     fetchFiles();
   }, [agentFilter, getDocumentsWithFilter]);
 
-  // Event handlers
-  const handleChangeAgent = (event) => {
-    setCurrentAgent(event.target.value);
-    setCurrentPage(1); // good idea to reset page too
-  };
 
   const handleChangeAgentFilter = (event) => {
     setAgentFilter(event.target.value);
