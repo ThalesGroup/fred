@@ -19,7 +19,7 @@ import { PageBodyWrapper } from "../common/PageBodyWrapper";
 import { KeyCloakService } from "../security/KeycloakService";
 import { ProfileCard } from "../components/profile/ProfileCard";
 import { ProfileToken } from "../components/profile/ProfileToken";
-import { ChatProfiles } from "../components/profile/ChatProfile2";
+import { ChatProfiles } from "../components/profile/ChatProfile";
 import { TopBar } from "../common/TopBar";
 
 export function Profile() {
