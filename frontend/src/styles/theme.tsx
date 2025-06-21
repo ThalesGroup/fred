@@ -62,33 +62,11 @@ declare module "@mui/material/styles" {
     };
   }
   interface PaletteOptions {
-    chart?: {
-      primary?: string;
-      secondary?: string;
-      red?: string;
-      green?: string;
-      blue?: string;
-      yellow?: string;
-      orange?: string;
-      veryHighBlue?: string;
-      highBlue?: string;
-      mediumBlue?: string;
-      lowBlue?: string;
-      veryLowBlue?: string;
-      veryHighGreen?: string;
-      highGreen?: string;
-      mediumGreen?: string;
-      lowGreen?: string;
-      veryLowGreen?: string;
-      veryHighYellow?: string;
-      highYellow?: string;
-      mediumYellow?: string;
-      lowYellow?: string;
-      veryLowYellow?: string;
-      customAreaStyle?: string;
-    };
+    chart?: Partial<Palette["chart"]>;
   }
+
   interface TypographyVariants {
+    sidebar: React.CSSProperties;
     markdown: {
       h1: React.CSSProperties;
       h2: React.CSSProperties;
@@ -102,18 +80,10 @@ declare module "@mui/material/styles" {
     };
   }
   interface TypographyVariantsOptions {
-    markdown?: {
-      h1?: React.CSSProperties;
-      h2?: React.CSSProperties;
-      h3?: React.CSSProperties;
-      h4?: React.CSSProperties;
-      p?: React.CSSProperties;
-      code?: React.CSSProperties;
-      a?: React.CSSProperties;
-      ul?: React.CSSProperties;
-      li?: React.CSSProperties;
-    };
+    sidebar?: React.CSSProperties;
+    markdown?: Partial<TypographyVariants["markdown"]>;
   }
+
   interface Theme {
     layout: {
       sidebarWidth: number;
@@ -128,6 +98,11 @@ declare module "@mui/material/styles" {
   }
 }
 
+declare module "@mui/material/Typography" {
+  interface TypographyPropsVariantOverrides {
+    sidebar: true;
+  }
+}
 // Light Mode Palette
 const lightPalette = {
   mode: "light" as PaletteMode,
@@ -231,9 +206,6 @@ const darkPalette = {
   background: {
     default: "#1b1b1b",
     paper: "#333333",
-
-    //default: '#2a2929',
-    //paper: '#1e1e1e',
   },
   common: {
     white: "#fff",
@@ -326,6 +298,13 @@ const darkPalette = {
 const lightTypography = {
   fontFamily: "Roboto, sans-serif",
   fontSize: 12,
+  sidebar: {
+    fontSize: "0.85rem", // ~13.6px, compact but readable
+    fontWeight: 300,     // Light weight like OpenAI sidebar
+    lineHeight: 1.5,
+    color: lightPalette.text.secondary,
+    fontFamily: "Roboto, sans-serif",
+  },
   h1: { fontSize: "2rem", fontWeight: 600, fontFamily: "Roboto, sans-serif" },
   h2: { fontSize: "1.5rem", fontWeight: 500, fontFamily: "Roboto, sans-serif" },
   body1: {
@@ -374,7 +353,7 @@ const lightTypography = {
     p: {
       lineHeight: 1.8,
       fontWeight: 400,
-      fontSize: "1.1rem",
+      fontSize: "1.0rem",
       marginBottom: "0.8rem",
       fontFamily: "Roboto, sans-serif",
     },
@@ -412,6 +391,13 @@ const lightTypography = {
 const darkTypography = {
   fontFamily: "Roboto, sans-serif",
   fontSize: 12,
+  sidebar: {
+    fontSize: "0.85rem",
+    fontWeight: 300,
+    lineHeight: 1.5,
+    color: darkPalette.text.secondary,
+    fontFamily: "Roboto, sans-serif",
+  },
   h1: { fontSize: "2rem", fontWeight: 600, fontFamily: "Roboto, sans-serif" },
   h2: { fontSize: "1.5rem", fontWeight: 500, fontFamily: "Roboto, sans-serif" },
   body1: {
@@ -461,7 +447,7 @@ const darkTypography = {
       color: darkPalette.text.primary,
       lineHeight: 1.8,
       fontWeight: 400,
-      fontSize: "1.1rem",
+      fontSize: "1.0rem",
       marginBottom: "0.8rem",
       fontFamily: "Roboto, sans-serif",
     },

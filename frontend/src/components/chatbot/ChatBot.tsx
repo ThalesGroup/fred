@@ -14,7 +14,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Box, Grid2, Tooltip, Typography, useTheme } from "@mui/material";
-import { AgenticFlow, ChatProfileLight } from "../../pages/Chat.tsx";
+import { AgenticFlow } from "../../pages/Chat.tsx";
 import { usePostTranscribeAudioMutation } from "../../frugalit/slices/api.tsx";
 import { useToast } from "../ToastProvider.tsx";
 import UserInput, { UserInputContent } from "./UserInput.tsx";
@@ -26,6 +26,7 @@ import { getConfig } from "../../common/config.tsx";
 import { useGetChatBotMessagesMutation } from "../../slices/chatApi.tsx";
 import { KeyCloakService } from "../../security/KeycloakService.ts";
 import { StreamEvent, ChatMessagePayload, SessionSchema, FinalEvent } from "../../slices/chatApiStructures.ts";
+import { ChatProfile } from "../profile/ChatProfileEditDialog.tsx";
 
 export interface ChatBotError {
   session_id: string | null;
@@ -60,7 +61,7 @@ const ChatBot = ({
   onUpdateOrAddSession: (session: SessionSchema) => void;
   isCreatingNewConversation: boolean;
   argument?: string; // Optional argument for the agent
-  selectedChatProfile?: ChatProfileLight | null;
+  selectedChatProfile?: ChatProfile | null;
 }) => {
   const theme = useTheme();
   const { showInfo, showError } = useToast();
