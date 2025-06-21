@@ -401,7 +401,7 @@ export const DocumentLibrary = () => {
 
       showInfo({
         summary: "Updated",
-        detail: `Document "${file.document_name}" is now ${!file.retrievable ? "retrievable" : "not retrievable"}.`,
+        detail: `Document "${file.document_name}" is now ${!file.retrievable ? "searchable" : "excluded from search"}.`,
       });
 
       await fetchFiles(); // recharge les documents

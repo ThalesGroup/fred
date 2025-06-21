@@ -163,7 +163,7 @@ export default function SideBar({ darkMode, onThemeChange }) {
     },
     {
       key: "account",
-      label: "User Settings",
+      label: "Profile",
       icon: <AccountCircleIcon />,
       url: `/account?cluster=${currentClusterFullname}`,
       canBeDisabled: false,

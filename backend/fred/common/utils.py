@@ -25,8 +25,7 @@
 # limitations under the License.
 
 from datetime import datetime, timedelta
-from typing import Tuple, Dict, Optional, Any
-from copy import deepcopy
+from typing import Tuple, Dict, Optional
 import logging
 import traceback
 import pandas as pd

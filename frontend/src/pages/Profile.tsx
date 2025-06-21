@@ -47,9 +47,9 @@ export function Profile() {
   };
 
   const menuItems = [
-    { label: "Account Info", icon: <AccountCircleIcon /> },
-    { label: "Session Token", icon: <KeyIcon /> },
-    { label: "Agent Preferences", icon: <ChatIcon /> },
+    { label: "Account", icon: <AccountCircleIcon /> },
+    { label: "Token", icon: <KeyIcon /> },
+    { label: "Agentic Profiles", icon: <ChatIcon /> },
   ];
 
   return (
@@ -62,7 +62,7 @@ export function Profile() {
       <Box sx={{ width: "95%", mx: "auto", px: 2, py: 8 }}>
         {username ? (
           <Box display="flex">
-            <Box width={340} mr={4}>
+            <Box width={600} mr={4}>
               <Paper elevation={1}>
                 <List>
                   {menuItems.map((item, index) => (
