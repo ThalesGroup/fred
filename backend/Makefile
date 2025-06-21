@@ -37,9 +37,8 @@ dev: $(TARGET)/.compiled ## Install from compiled lock
 	@echo "✅ Dependencies installed using uv."
 
 $(TARGET)/.compiled: pyproject.toml $(TARGET)/.uv-installed
-	$(UV) sync
+	$(UV) sync --extra dev
 	touch $@
-
 
 .PHONY: update
 

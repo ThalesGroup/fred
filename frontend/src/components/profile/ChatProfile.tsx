@@ -7,27 +7,32 @@ import {
   TextField,
   Paper,
   InputAdornment,
-  IconButton,
   Card,
   CardContent,
   Grid2,
   Stack,
-  Collapse,
-  useTheme,
   Fab,
   Button,
+  Drawer,
+  IconButton
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import SearchIcon from "@mui/icons-material/Search";
 import DeleteIcon from "@mui/icons-material/Delete";
 import EditIcon from "@mui/icons-material/Edit"
-import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
-import ExpandLessIcon from "@mui/icons-material/ExpandLess";
+import CloseIcon from "@mui/icons-material/Close"
 import { useGetChatProfilesMutation, useDeleteChatProfileMutation, useUpdateChatProfileMutation, useGetChatProfileMaxTokensQuery } from "../../slices/chatProfileApi";
 import { CreateChatProfileDialog } from "./ChatProfileDialog";
 import { getDocumentIcon } from "../documents/DocumentIcon";
 import { ChatProfile, ChatProfileEditDialog } from "./ChatProfileEditDialog";
 import { useToast } from "../ToastProvider";
+
+const getPreview = (text: string, maxChars: number = 300) => {
+  if (text.length <= maxChars) return text;
+  const shortened = text.slice(0, maxChars);
+  const lastSpace = shortened.lastIndexOf(" ");
+  return shortened.slice(0, lastSpace) + " ...";
+};
 
 const TokenBar = ({ tokens, max }: { tokens: number; max: number }) => {
   const usage = Math.min(tokens / max, 1);
@@ -55,13 +60,13 @@ const TokenBar = ({ tokens, max }: { tokens: number; max: number }) => {
 };
 
 export const ChatProfiles = () => {
-  const theme = useTheme();
   const [chatProfiles, setChatProfiles] = useState([]);
   const [search, setSearch] = useState("");
-  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [getChatProfiles] = useGetChatProfilesMutation();
   const [deleteChatProfile] = useDeleteChatProfileMutation();
   const [updateChatProfile] = useUpdateChatProfileMutation();
+  const [openDescription, setOpenDescription] = useState<ChatProfile | null>(null);
+
   const [openDialog, setOpenDialog] = useState(false);
   const [openEditDialog, setOpenEditDialog] = useState(false);
   const [currentChatProfile, setCurrentChatProfile] = useState<ChatProfile>()
@@ -109,7 +114,7 @@ export const ChatProfiles = () => {
       setOpenEditDialog(false);
       setCurrentChatProfile(null);
 
-      await fetchChatProfiles(); 
+      await fetchChatProfiles();
     } catch (error: any) {
       showError({
         summary: "Update failed",
@@ -129,7 +134,8 @@ export const ChatProfiles = () => {
       showError({
         summary: "Delete failed",
         detail: `Could not delete profile: ${e?.data?.detail || e.message}`,
-      });    }
+      });
+    }
   };
 
   const filteredProfiles = chatProfiles.filter((profile) =>
@@ -151,7 +157,8 @@ export const ChatProfiles = () => {
       showError({
         summary: "Reload failed",
         detail: `Could not reload profile: ${e?.data?.detail || e.message}`,
-      });    }
+      });
+    }
   };
 
   return (
@@ -176,15 +183,17 @@ export const ChatProfiles = () => {
 
       <Grid2 container spacing={3} alignItems="stretch">
         {filteredProfiles.map((profile) => (
-          <Grid2 size={{ xs: 12, sm: 6, md: 6 }} key={profile.id} display="flex">
+          <Grid2 size={{ xs: 12 }} key={profile.id} display="flex">
             <Card
-              elevation={2}
+              elevation={1}
               sx={{
                 borderRadius: 2,
                 display: "flex",
                 flexDirection: "column",
                 flexGrow: 1,
                 width: "100%",
+                backgroundColor: "transparent",
+                border: (theme) => `1px solid ${theme.palette.divider}`,
               }}
             >
               <CardContent sx={{ flex: 1, display: "flex", flexDirection: "column" }}>
@@ -194,43 +203,42 @@ export const ChatProfiles = () => {
                   </Typography>
                 </Box>
 
-                <Box pt={2} mb={1} flexGrow={1}>
-                  <Collapse
-                    in={expandedId === profile.id}
-                    collapsedSize={120}  // More height for collapsed state
-                    sx={{ minHeight: 120 }}  // Ensures collapsed cards still look filled
-                  >
-                    <Box
+                <Box
+                  pt={2}
+                  mb={1}
+                  flexGrow={1}
+                  display="flex"
+                  justifyContent="center"
+                >
+                  <Box width="70%">
+                    <Typography
+                      variant="body2"
+                      color="text.secondary"
                       sx={{
-                        bgcolor: theme.palette.mode === "light" ? "#fff" : "background.paper",
-                        border: `1px solid ${theme.palette.divider}`,
-                        borderRadius: 2,
-                        p: 2,
-                        fontSize: theme.typography.body2.fontSize,
-                        color: "text.primary",
+                        backgroundColor: (theme) => theme.palette.background.paper,
+                        px: 2,
+                        py: 1.5,
                         fontFamily: "monospace",
                         whiteSpace: "pre-wrap",
-                        lineHeight: 1.6,
-                        maxHeight: 380,
-                        overflow: "auto",
+                        minHeight: "4.5em",
+                        borderRadius: 1,
                       }}
                     >
-                      {profile.description || "No description provided."}
-                    </Box>
-                  </Collapse>
-                  {profile.description?.length > 100 && (
-                    <Button
-                      size="small"
-                      onClick={() =>
-                        setExpandedId((prev) => (prev === profile.id ? null : profile.id))
-                      }
-                      endIcon={expandedId === profile.id ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-                      sx={{ mt: 1 }}
-                    >
-                      {expandedId === profile.id ? "Show less" : "Show more"}
-                    </Button>
-                  )}
+                      {getPreview(profile.description || "No description provided.")}
+                    </Typography>
+
+                    {(profile.description?.length ?? 0) > 200 && (
+                      <Button
+                        size="small"
+                        onClick={() => setOpenDescription(profile)}
+                        sx={{ mt: 1 }}
+                      >
+                        View full description
+                      </Button>
+                    )}
+                  </Box>
                 </Box>
+
 
                 {profile.documents?.length > 0 && (
                   <Box mt={2}>
@@ -262,31 +270,26 @@ export const ChatProfiles = () => {
                   </Box>
                 )}
 
-                <Box mt="auto">
-                  <Grid2 container alignItems="center" spacing={1}>
-                    <Grid2>
-                      <Typography variant="caption" color="text.secondary" whiteSpace="nowrap">
-                        Tokens: {profile.tokens} / {maxTokens ?? 12000}
-                      </Typography>
-                    </Grid2>
+                <Box mt="auto" display="flex" justifyContent="space-between" alignItems="flex-end" pt={2}>
+                  {/* Left side: Tokens info and gauge */}
+                  <Box sx={{ width: 200}}>
+                    <Typography variant="caption" color="text.secondary" whiteSpace="nowrap" sx={{ mb: 0.5 }}>
+                      Tokens: {profile.tokens} / {maxTokens ?? 12000}
+                    </Typography>
+                    <TokenBar tokens={profile.tokens} max={maxTokens ?? 12000} />
+                  </Box>
 
-                    <Grid2 flexGrow={1}>
-                      <TokenBar tokens={profile.tokens} max={maxTokens ?? 12000} />
-                    </Grid2>
-
-                    <Grid2>
-                      <IconButton onClick={() => handleOpenEditDialog(profile)}>
-                        <EditIcon fontSize="small" />
-                      </IconButton>
-                    </Grid2>
-                    <Grid2>
-
-                      <IconButton onClick={() => handleDelete(profile.id)}>
-                        <DeleteIcon fontSize="small" />
-                      </IconButton>
-                    </Grid2>
-                  </Grid2>
+                  {/* Right side: Edit / Delete buttons */}
+                  <Box display="flex" gap={1}>
+                    <IconButton onClick={() => handleOpenEditDialog(profile)}>
+                      <EditIcon fontSize="small" />
+                    </IconButton>
+                    <IconButton onClick={() => handleDelete(profile.id)}>
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
+                  </Box>
                 </Box>
+
               </CardContent>
             </Card>
           </Grid2>
@@ -321,6 +324,35 @@ export const ChatProfiles = () => {
         chatProfile={currentChatProfile}
         onReloadProfile={handleReloadProfile}
       />
+      <Drawer
+        anchor="right"
+        open={Boolean(openDescription)}
+        onClose={() => setOpenDescription(null)}
+        PaperProps={{
+          sx: { width: { xs: "100%", sm: 500 }, p: 3 },
+        }}
+      >
+        <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+          <Typography variant="h6">
+            {openDescription?.title || "Profile description"}
+          </Typography>
+          <IconButton onClick={() => setOpenDescription(null)}>
+            <CloseIcon />
+          </IconButton>
+        </Box>
+
+        <Box
+          sx={{
+            fontFamily: "monospace",
+            whiteSpace: "pre-wrap",
+            lineHeight: 1.6,
+            overflowY: "auto",
+            color: "text.primary",
+          }}
+        >
+          {openDescription?.description || "No description provided."}
+        </Box>
+      </Drawer>
     </Container>
   );
 };
