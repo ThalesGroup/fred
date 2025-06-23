@@ -26,6 +26,8 @@ import os
 from fastapi import FastAPI, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
 from fred.monitoring.hybrid_metric_store import create_metric_store
+from fred.monitoring.tool_monitoring.hybrid_tool_metric_store import create_tool_metric_store
+from fred.common.structure import MetricsStorageConfig, MetricsStorageSettings
 from fred.monitoring.metric_store_controller import MetricStoreController
 from services.ai.ai_service import AIService
 from services.kube.kube_service import KubeService
@@ -133,6 +135,8 @@ def main():
 
     # Create the singleton metric store. 
     create_metric_store(configuration.metrics_storage)
+    temp_conf = MetricsStorageConfig(type='local',settings=MetricsStorageSettings(local_path="fred/monitoring/tool_monitoring/data"))
+    create_tool_metric_store(temp_conf)
     app = build_app(configuration, args.server_base_url_path)
     run_server(app, args.server_address, args.server_port, args.server_log_level)
 

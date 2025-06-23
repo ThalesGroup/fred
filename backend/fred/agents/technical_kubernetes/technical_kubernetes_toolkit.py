@@ -14,6 +14,7 @@
 
 from langchain_core.tools import BaseToolkit, StructuredTool
 from pydantic import BaseModel, Field
+from fred.monitoring.tool_monitoring.monitor_tool import monitor_tool
 
 
 class ClusterTopologyArgs(BaseModel):
@@ -53,11 +54,12 @@ class TechnicalKubernetesToolkitBuilder:
 
     def build(self):
         func = wrapper(ai_service=self.ai_service)
-        tool = StructuredTool.from_function(
+        raw_tool = StructuredTool.from_function(
             func=func,
             name="get_cluster_topology",
             description="Retrieves a condensed representation of a Kubernetes cluster.",
             args_schema=ClusterTopologyArgs,
             return_direct=True,
         )
+        tool = monitor_tool(tool)
         return TechnicalKubernetesToolkit(tools=[tool])
