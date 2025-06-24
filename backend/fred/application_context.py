@@ -34,7 +34,11 @@ from fred.common.structure import AgentSettings, Configuration, ServicesSettings
 from fred.model_factory import get_model
 from langchain_core.language_models.base import BaseLanguageModel
 from langchain_mcp_adapters.client import MultiServerMCPClient
+from langchain_core.tools import BaseTool
 from fred.flow import AgentFlow, Flow  # Base class for all agent flows
+from fred.common.utils import log_exception
+from fred.common.error import UnsupportedTransportError, MCPToolFetchError
+
 import logging
 
 from fred.monitoring.monitored_language_model import MonitoredLanguageModel
@@ -191,7 +195,19 @@ def get_mcp_client_for_agent(agent_name: str) -> None:
     Returns:
         MultiServerMCPClient: A connection to a multi MCP server
     """
-    return get_app_context().get_mcp_client_for_agent(agent_name)
+    return get_app_context().get_mcp_client_for_agent(agent_name);
+
+def get_mcp_agent_tools(mcp_client: MultiServerMCPClient) -> list[BaseTool]:
+    """
+    Retrieves the AI MCP client tools list.
+
+    Args:
+        mcp_client (MultiServerMCPClient): The MCP client connected to the MCP server.
+
+    Returns:
+        list[BaseTool]: A list of all the tools associated to the agent
+    """
+    return get_app_context().get_mcp_agent_tools(mcp_client)
 
 # -------------------------------
 # Runtime status class
@@ -370,23 +386,40 @@ class ApplicationContext:
         loop = asyncio.get_event_loop()
         loop.run_until_complete(self.connect_to_mcp_server(agent_name, mcp_client))
         return mcp_client
+    
+    def get_mcp_agent_tools(self, mcp_client: MultiServerMCPClient) -> list[BaseTool]:
+        tools = mcp_client.get_tools()
+        if not tools:
+            raise MCPToolFetchError("The tool list is empty, make sure the MCP server configuration is correct.")
+        return tools
         
     async def connect_to_mcp_server(self, agent_name: str, mcp_client: MultiServerMCPClient) -> MultiServerMCPClient:
         agent_settings = self.get_agent_settings(agent_name)
+        exceptions = []
+        
         for server in agent_settings.mcp_servers:
-            if server.transport in SUPPORTED_TRANSPORTS:
-                try:
-                    await mcp_client.connect_to_server(server_name=server.name,
-                                                    url=server.url,
-                                                    transport=server.transport,
-                                                    command=server.command,
-                                                    args=server.args,
-                                                    env=server.env,
-                                                    sse_read_timeout=server.sse_read_timeout)
-                except Exception as e:
-                    logger.error(f"Error when connecting to the {server.name} MCP server: {e}. Make sure it is up and running.")
+            if server.transport not in SUPPORTED_TRANSPORTS:
+                raise UnsupportedTransportError(f"Unsupported transport '{server.transport}' for server '{server.name}'. Must be one of: {SUPPORTED_TRANSPORTS}")
+
             else:
-                logger.error(f"Unsupported transport: must be one of {SUPPORTED_TRANSPORTS}")
+                try:
+                    await mcp_client.connect_to_server(
+                        server_name=server.name,
+                        url=server.url,
+                        transport=server.transport,
+                        command=server.command,
+                        args=server.args,
+                        env=server.env,
+                        sse_read_timeout=server.sse_read_timeout
+                    )
+                except* Exception as eg:
+                    for sub in eg.exceptions:
+                        log_exception(sub, f"Failed to connect to MCP server: {server.name}")
+                        exceptions.append(sub)
+
+        if exceptions:
+            raise ExceptionGroup("One or more MCP server connections failed, have a look in the logs for a more detailed stacktrace.", exceptions)
+
         return mcp_client
       
     # --- Agent classes ---
