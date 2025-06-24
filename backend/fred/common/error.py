@@ -22,3 +22,10 @@ class UnavailableError(HTTPException):
 
 class InvalidCacheError(FileNotFoundError):
     ...
+
+class UnsupportedTransportError(ValueError):
+    ...
+    
+class MCPToolFetchError(ValueError):
+    ...
+    
