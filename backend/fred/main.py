@@ -26,9 +26,10 @@ import os
 from fastapi import FastAPI, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
 from fred.monitoring.hybrid_metric_store import create_metric_store
+from fred.monitoring.metric_store_controller import MetricStoreController
 from fred.monitoring.tool_monitoring.hybrid_tool_metric_store import create_tool_metric_store
 from fred.common.structure import MetricsStorageConfig, MetricsStorageSettings
-from fred.monitoring.metric_store_controller import MetricStoreController
+from fred.monitoring.tool_monitoring.tool_metric_store_controller import ToolMetricStoreController
 from services.ai.ai_service import AIService
 from services.kube.kube_service import KubeService
 from dotenv import load_dotenv
@@ -110,6 +111,7 @@ def build_app(configuration: Configuration, base_url: str) -> FastAPI:
     ChatbotController(router, ai_service)
     FeedbackController(router, configuration.feedback_storage)
     MetricStoreController(router)
+    ToolMetricStoreController(router)
 
     app.include_router(router)
     return app
