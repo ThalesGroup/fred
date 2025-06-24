@@ -43,7 +43,7 @@ import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import { useNavigate } from "react-router-dom";
 import { useGetChatProfilesMutation } from "../../slices/chatProfileApi.tsx";
 import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
-import { ChatProfile } from "../profile/ChatProfileEditDialog.tsx";
+import { KnowledgeContext } from "../knowledgeContext/KnowledgeContextEditDialog.tsx";
 
 export const Settings = ({
   sessions,
@@ -64,7 +64,7 @@ export const Settings = ({
   currentAgenticFlow: AgenticFlow;
   onSelectAgenticFlow: (flow: AgenticFlow) => void;
   onDeleteSession: (session: SessionSchema) => void;
-  onSelectChatProfile?: (profile: ChatProfile | null) => void;
+  onSelectChatProfile?: (profile: KnowledgeContext | null) => void;
 }) => {
   // Récupération du thème pour l'adaptation des couleurs
   const theme = useTheme<Theme>();
@@ -94,7 +94,7 @@ export const Settings = ({
   const [, setSnackbarMessage] = useState("");
   const [, setSnackbarSeverity] = useState<"success" | "error" | "info" | "warning">("success");
 
-  const [chatProfiles, setChatProfiles] = useState<ChatProfile[]>([])
+  const [chatProfiles, setChatProfiles] = useState<KnowledgeContext[]>([])
 
 
 
@@ -113,7 +113,7 @@ export const Settings = ({
   };
 
   // État pour le chatProfilee sélectionné
-  const [selectedChatProfile, setSelectedChatProfile] = useState<ChatProfile | null>(null);
+  const [selectedChatProfile, setSelectedChatProfile] = useState<KnowledgeContext | null>(null);
 
 
   // Snackbar handlers

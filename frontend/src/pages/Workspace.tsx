@@ -17,64 +17,64 @@ import SearchIcon from "@mui/icons-material/Search";
 import CloseIcon from "@mui/icons-material/Close"
 import { TopBar } from "../common/TopBar";
 import { useToast } from "../components/ToastProvider";
-import { useGetWorkspacesMutation, useDeleteWorkspaceMutation, useUpdateWorkspaceMutation } from "../slices/workspaceApi";
+import { useGetKnowledgeContextsMutation, useDeleteKnowledgeContextMutation, useUpdateKnowledgeContextMutation } from "../slices/knowledgeContextApi";
 import { PageBodyWrapper } from "../common/PageBodyWrapper";
-import { WorkspaceItem } from "../components/workspace/WorkspaceItem";
-import { CreateWorkspaceDialog } from "../components/workspace/WorkspaceDialog";
-import { WorkspaceEditDialog } from "../components/workspace/WorkspaceEditDialog";
-import { Workspace } from "../components/workspace/WorkspaceEditDialog";
+import { KnowledgeContext, KnowledgeContextEditDialog } from "../components/knowledgeContext/KnowledgeContextEditDialog";
+import { KnowledgeContextItem } from "../components/knowledgeContext/KnowledgeContextItem";
+import { KnowledgeContextCreateDialog } from "../components/knowledgeContext/KnowledgeContextCreateDialog";
 
-const mockWorkspaces: Workspace[] = [{
-  id: "1",
-  title: "Client – Vinci Construction",
-  description: "Ce workspace contient tous les documents relatifs au projet A22.",
-  tokens: 9800,
-  documents: [
-    {
-      id: "doc-1",
-      document_name: "contrat_final.pdf",
-      document_type: "pdf",
-      description: "Version finale du contrat signée avec le client.fgeyfdlveyzfvudzqp bf evozge ziu tgra_ègrègoz_èargtoèa ent.fgeyfdlveyzfvudzqp bf evozge ziu tgraent.fgeyfdlveyzfvudzqp bf evozge ziu tgraent.fgeyfdlveyzfvudzqp bf evozge ziu tgraent.fgeyfdlveyzfvudzqp bf evozge ziu tgraent.fgeyfdlveyzfvudzqp bf evozge ziu tgraent.fgeyfdlveyzfvudzqp bf evozge ziu tgra gy agio rphgh_a çpay _çtapy",
-    },
-    {
-      id: "doc-2",
-      document_name: "plan_technique_v2.docx",
-      document_type: "docx",
-      description: "Plans techniques mis à jour suite aux remarques du bureau d'études.",
-    },
-    {
-      id: "doc-3",
-      document_name: "budget.xlsx",
-      document_type: "xlsx",
-      description: "Projection budgétaire validée pour le T3.",
-    },
-    {
-      id: "doc-4",
-      document_name: "meeting_notes_mars.pptx",
-      document_type: "pptx",
-      description: "Présentation récapitulative du comité de pilotage de mars.",
-    },
-    {
-      id: "doc-5",
-      document_name: "annexes.pdf",
-      document_type: "pdf",
-      description: "Documents annexes et références réglementaires.",
-    }
-  ]
+
+const mockWorkspaces: KnowledgeContext[] = [{
+    id: "1",
+    title: "Client – Vinci Construction",
+    description: "Ce workspace contient tous les documents relatifs au projet A22.",
+    tokens: 9800,
+    documents: [
+        {
+            id: "doc-1",
+            document_name: "contrat_final.pdf",
+            document_type: "pdf",
+            description: "Version finale du contrat signée avec le client.fgeyfdlveyzfvudzqp bf evozge ziu tgra_ègrègoz_èargtoèa ent.fgeyfdlveyzfvudzqp bf evozge ziu tgraent.fgeyfdlveyzfvudzqp bf evozge ziu tgraent.fgeyfdlveyzfvudzqp bf evozge ziu tgraent.fgeyfdlveyzfvudzqp bf evozge ziu tgraent.fgeyfdlveyzfvudzqp bf evozge ziu tgraent.fgeyfdlveyzfvudzqp bf evozge ziu tgra gy agio rphgh_a çpay _çtapy",
+        },
+        {
+            id: "doc-2",
+            document_name: "plan_technique_v2.docx",
+            document_type: "docx",
+            description: "Plans techniques mis à jour suite aux remarques du bureau d'études.",
+        },
+        {
+            id: "doc-3",
+            document_name: "budget.xlsx",
+            document_type: "xlsx",
+            description: "Projection budgétaire validée pour le T3.",
+        },
+        {
+            id: "doc-4",
+            document_name: "meeting_notes_mars.pptx",
+            document_type: "pptx",
+            description: "Présentation récapitulative du comité de pilotage de mars.",
+        },
+        {
+            id: "doc-5",
+            document_name: "annexes.pdf",
+            document_type: "pdf",
+            description: "Documents annexes et références réglementaires.",
+        }
+    ]
 }];
 
 
 export const WorkspacePage = () => {
     const [workspaces, setWorkspaces] = useState([]);
     const [search, setSearch] = useState("");
-    const [getWorkspaces] = useGetWorkspacesMutation();
-    const [deleteWorkspace] = useDeleteWorkspaceMutation();
-    const [updateWorkspace] = useUpdateWorkspaceMutation();
-    const [openDescription, setOpenDescription] = useState<Workspace | null>(null);
+    const [getWorkspaces] = useGetKnowledgeContextsMutation();
+    const [deleteWorkspace] = useDeleteKnowledgeContextMutation();
+    const [updateWorkspace] = useUpdateKnowledgeContextMutation();
+    const [openDescription, setOpenDescription] = useState<KnowledgeContext | null>(null);
 
     const [openDialog, setOpenDialog] = useState(false);
     const [openEditDialog, setOpenEditDialog] = useState(false);
-    const [currentWorkspace, setCurrentWorkspace] = useState<Workspace>()
+    const [currentWorkspace, setCurrentWorkspace] = useState<KnowledgeContext>()
     const { showError } = useToast();
 
     useEffect(() => {
@@ -108,7 +108,7 @@ export const WorkspacePage = () => {
     }) => {
         try {
             await updateWorkspace({
-                workspace_id: currentWorkspace.id,
+                knowledgeContext_id: currentWorkspace.id,
                 title,
                 description,
                 files
@@ -131,7 +131,7 @@ export const WorkspacePage = () => {
 
     const handleDelete = async (id: string) => {
         try {
-            await deleteWorkspace({ workspace_id: id }).unwrap();
+            await deleteWorkspace({ knowledgeContext_id: id }).unwrap();
             setWorkspaces((prev) => prev.filter((p) => p.id !== id));
         } catch (e) {
             showError({
@@ -201,12 +201,17 @@ export const WorkspacePage = () => {
                 <Grid2 container spacing={3} alignItems="stretch">
                     {mockWorkspaces.map((w) => (
                         <Grid2 size={{ xs: 12 }} key={w.id} display="flex">
-                            <WorkspaceItem
-                                workspace={w}
+                            <KnowledgeContextItem
                                 onEdit={handleOpenEditDialog}
                                 onDelete={handleDelete}
-                                onViewDescription={(p) => setOpenDescription(p)}
-                            />
+                                onViewDescription={setOpenDescription}
+                                allowDocuments
+                                allowDocumentDescription
+                                id={w.id}
+                                title={w.title}
+                                description={w.description}
+                                documents={w.documents} 
+                                />
                         </Grid2>
                     ))}
                 </Grid2>
@@ -226,18 +231,18 @@ export const WorkspacePage = () => {
                     <AddIcon />
                 </Fab>
 
-                <CreateWorkspaceDialog
+                <KnowledgeContextCreateDialog
                     open={openDialog}
                     onClose={() => setOpenDialog(false)}
                     onCreated={fetchWorkspaces}
                 />
 
-                <WorkspaceEditDialog
+                <KnowledgeContextEditDialog
                     open={openEditDialog}
                     onClose={() => setOpenEditDialog(false)}
                     onSave={handleSaveWorkspace}
-                    workspace={currentWorkspace}
-                    onReloadProfile={handleReloadProfile}
+                    context={currentWorkspace}
+                    onReloadContext={handleReloadProfile}
                 />
                 <Drawer
                     anchor="right"
