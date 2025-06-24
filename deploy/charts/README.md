@@ -33,7 +33,13 @@ echo $IP_K3S fred.test | sudo tee -a /etc/hosts
 Create a secret containing a kubeconfig file
 
 ```
+# If the kubeconfig points on a remote kubernetes cluster :
 kubectl create secret generic fred-backend-kubeconfig --from-file=$HOME/.kube/config -n test
+
+# If the kubeconfig points on the kubernetes cluster hosting the fred backend
+cp $HOME/.kube/config /tmp/config
+sed -i 's|^\([[:space:]]*server:\)[[:space:]]*.*$|\1 https://kubernetes.default.svc|' /tmp/config
+kubectl create secret generic fred-backend-kubeconfig --from-file=/tmp/config -n test
 ```
 
 Prepare a custom values file for the backend and the frontend 
