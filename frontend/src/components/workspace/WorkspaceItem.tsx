@@ -161,49 +161,6 @@ export const WorkspaceItem = ({
             </Box>
           </Box>
         )}
-
-        {/* Footer: Tokens + actions
-        <Box
-          mt="auto"
-          pt={2}
-          display="flex"
-          justifyContent="space-between"
-          alignItems="flex-end"
-        >
-          <Box sx={{ width: 200 }}>
-            <Typography
-              variant="caption"
-              color="text.secondary"
-              whiteSpace="nowrap"
-              sx={{ mb: 0.5 }}
-            >
-              Tokens: {workspace.tokens} / {maxTokens ?? 12000}
-            </Typography>
-            <Box
-              sx={{
-                height: 10,
-                width: "100%",
-                borderRadius: 5,
-                bgcolor: "#eeeeee",
-                overflow: "hidden",
-              }}
-            >
-              <Box
-                sx={{
-                  height: "100%",
-                  width: `${tokenUsage * 100}%`,
-                  bgcolor:
-                    tokenUsage < 0.7
-                      ? "success.main"
-                      : tokenUsage < 0.9
-                        ? "warning.main"
-                        : "error.main",
-                  transition: "width 0.3s ease-in-out",
-                }}
-              />
-            </Box>
-          </Box>
-        </Box> */}
       </CardContent>
     </Card>
   );
