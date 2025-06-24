@@ -246,7 +246,7 @@ class ChatbotController:
             response_model=List[ChatMessagePayload]
         )
         def get_session_history(session_id: str, user: KeycloakUser = Depends(get_current_user)) -> list[ChatMessagePayload]:
-            return self.session_manager.get_session_history(session_id)
+            return self.session_manager.get_session_history(session_id, user.email)
 
         @app.delete(
             "/chatbot/session/{session_id}",

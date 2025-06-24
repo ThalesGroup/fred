@@ -53,6 +53,6 @@ class InMemorySessionStorage(AbstractSessionStorage):
         self.history[session_id].extend(messages)
         logger.info(f"Saved {len(messages)} messages to session {session_id}")
 
-    def get_message_history(self, session_id: str) -> List[ChatMessagePayload]:
-        history = self.history.get(session_id, [])
+    def get_message_history(self, session_id: str, user_id: str) -> List[ChatMessagePayload]:
+        history = self.history.get(session_id, []) if self.sessions.get(session_id).user_id == user_id else []
         return sorted(history, key=lambda m: m.rank if m.rank is not None else 0)
