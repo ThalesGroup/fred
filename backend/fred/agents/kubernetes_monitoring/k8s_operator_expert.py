@@ -67,6 +67,7 @@ class K8SOperatorExpert(AgentFlow):
             base_prompt=self.base_prompt,
             categories=self.categories,
             tag=self.tag,
+            mcp_client=self.mcp_client,
             toolkit=self.toolkit
         )
         
@@ -101,9 +102,8 @@ class K8SOperatorExpert(AgentFlow):
             "1. Always use tools to fetch data before providing answers. Avoid generating generic guidance or assumptions.",
             "2. Aggregate and analyze the data to directly answer the user's query.",
             "3. Present the results clearly, with summaries, breakdowns, and trends where applicable.",
-            "",
+            "4. When you cannot access a Kubernetes cluster, do not make numbers up and tell the user that you cannot access your cluster",
             f"The current date is {datetime.now().strftime('%Y-%m-%d')}.",
-            "",
         ]
         return "\n".join(lines)
 

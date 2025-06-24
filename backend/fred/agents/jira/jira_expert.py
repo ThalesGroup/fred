@@ -60,6 +60,7 @@ class JiraExpert(AgentFlow):
             base_prompt=self.base_prompt,
             categories=self.categories,
             tag=self.tag,
+            mcp_client=self.mcp_client,
             toolkit=self.toolkit
         )
         
@@ -87,6 +88,9 @@ class JiraExpert(AgentFlow):
             "1. Always use tools to fetch data before providing answers. Avoid generating generic guidance or assumptions.",
             "2. Aggregate and analyze the data to directly answer the user's query.",
             "3. Present the results clearly, with summaries, breakdowns, and trends where applicable.",
+            "4. Everytime you mention a ticket, indicate who created it, the creation date and time, the status, who it is assigned to and a summary of the issue.",
+            "5. Always summarize the comments of the tickets if there are any.",
+            "6. When listing tickets, provide its title as a bold clickable link that redirects to the issue in Jira (not the API link, the actual link.)."
             f"The current date is {datetime.now().strftime('%Y-%m-%d')}."
         ]
         return "\n".join(lines)
