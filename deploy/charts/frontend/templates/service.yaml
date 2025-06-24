@@ -8,6 +8,6 @@ spec:
   type: {{ .Values.service.type }}
   ports:
     - port: {{ .Values.service.port }}
-      targetPort: 80
+      targetPort: 5173
   selector:
     app: {{ .Chart.Name }}
