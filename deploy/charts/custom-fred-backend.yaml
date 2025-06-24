@@ -1,0 +1,12 @@
+# spe backend
+
+ingress:
+  enabled: true
+  className: "traefik"
+
+dotenv:
+  openai_api_key: "sk-*****"
+
+env:
+  - name: OPENAI_API_KEY
+    value: "sk-*****"
