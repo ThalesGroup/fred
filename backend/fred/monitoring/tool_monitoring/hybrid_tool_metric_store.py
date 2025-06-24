@@ -109,12 +109,7 @@ class HybridToolMetricStore(MetricStore):
                 timestamp=m.timestamp,
                 user_id=m.user_id,
                 session_id=m.session_id,
-                model_name=m.model_name,
-                model_type=m.model_type,
-                finish_reason=m.finish_reason,
-                id=getattr(m, "id", None),
-                system_fingerprint=m.system_fingerprint,
-                service_tier=m.service_tier
+                tool_name=m.tool_name
             )
             for m in metrics
         ]

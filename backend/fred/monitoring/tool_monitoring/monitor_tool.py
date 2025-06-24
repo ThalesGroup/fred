@@ -49,20 +49,20 @@ def monitor_tool(tool):
         async def monitored_arun(*args, **kwargs):
             start = time.perf_counter()
             try:
-                result = await original_arun(*args, **kwargs)
+                result = original_run(*args, **kwargs)
                 latency = time.perf_counter() - start
-
+                
                 ctx = get_logging_context()
                 
-                raw_metric = {
-                    "timestamp":time.time(),
-                    "tool_name":tool.name,
-                    "latency":latency,
-                    "user_id":ctx.get("user_id","unknown-user"),
-                    "session_id":ctx.get("session_id","unknown-session"),
-                }
-                save_to_df(raw_metric)
-                logger.info(f"tool metric : {raw_metric},df : {metrics_df.head(3)}")
+                tool_metric = ToolMetric(
+                    timestamp=time.time(),
+                    tool_name=tool.name,
+                    latency=latency,
+                    user_id=ctx.get("user_id","unknown-user"),
+                    session_id=ctx.get("session_id","unknown-session"),
+                    )
+                tool_metric_store.add_metric(tool_metric)
+                logger.info(f"tool metric : {tool_metric},tool_metric_store : {tool_metric_store.get_all()}")
                 return result
             except Exception as e:
                 logger.exception(f"[{tool.name}] async failed: {e}")
