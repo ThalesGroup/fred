@@ -28,6 +28,7 @@ from fred.flow import AgentFlow
 from fred.services.chatbot_session.attachement_processing import AttachementProcessing
 from fred.services.chatbot_session.structure.chat_schema import ChatMessagePayload, ChatTokenUsage, SessionSchema, SessionWithFiles, clean_agent_metadata
 from fred.services.chatbot_session.abstract_session_backend import AbstractSessionStorage
+from fred.security.keycloak import KeycloakUser
 from langchain_core.messages import (BaseMessage, HumanMessage, AIMessage)
 from langgraph.graph.state import CompiledStateGraph
 from fred.application_context import get_app_context, get_configuration, get_default_model
@@ -270,7 +271,7 @@ class SessionManager:
         # Build up message history
         history: List[BaseMessage] = []
         if not is_new_session:
-            messages = self.get_session_history(session.id)
+            messages = self.get_session_history(session.id, user_id)
 
             for msg in messages:
                 logger.debug(f"[RESTORED] session_id={msg.session_id} exchange_id={msg.exchange_id} rank={msg.rank} | type={msg.type} | subtype={msg.subtype} | fred.task={msg.metadata.get('fred', {}).get('task')}")
@@ -324,8 +325,8 @@ class SessionManager:
         return enriched_sessions
 
 
-    def get_session_history(self, session_id: str) -> List[ChatMessagePayload]:
-        return self.storage.get_message_history(session_id)
+    def get_session_history(self, session_id: str, user_id: str) -> List[ChatMessagePayload]:
+        return self.storage.get_message_history(session_id, user_id)
     
 
     async def _stream_agent_response(
