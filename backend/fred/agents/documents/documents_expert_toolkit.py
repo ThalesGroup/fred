@@ -29,9 +29,10 @@ class DocumentsToolkit(BaseToolkit):
 
     def __init__(self, mcp_client: MultiServerMCPClient):
         super().__init__()
-        self.tools = get_mcp_agent_tools(mcp_client)
+        raw_tools = get_mcp_agent_tools(mcp_client)
+        self.tools = [monitor_tool(tool) for tool in raw_tools]
 
     @override
     def get_tools(self) -> list[BaseTool]:
         """Get the tools in the toolkit."""
-        return [monitor_tool(tool) for tool in self.tools]
+        return self.tools
