@@ -13,6 +13,10 @@ def monitor_tool(tool):
     """
     Decorates a BaseTool to log latency, errors, and collect metrics.
     """
+    if getattr(tool, "_is_monitored", False):
+        logger.info('Tool already monitored')
+        return tool
+
     original_run = getattr(tool, "_run", None)
     original_arun = getattr(tool, "_arun", None)
     
@@ -36,7 +40,7 @@ def monitor_tool(tool):
                     session_id=ctx.get("session_id","unknown-session"),
                     )
                 tool_metric_store.add_metric(tool_metric)
-                logger.info(f"tool metric : {tool_metric},tool_metric_store : {tool_metric_store.get_all()}")
+                logger.info(f"(run) tool metric : {tool_metric}")
                 return result
             except Exception as e:
                 logger.exception(f"[{tool.name}] failed: {e}")
@@ -49,7 +53,7 @@ def monitor_tool(tool):
         async def monitored_arun(*args, **kwargs):
             start = time.perf_counter()
             try:
-                result = original_run(*args, **kwargs)
+                result = await original_arun(*args, **kwargs)
                 latency = time.perf_counter() - start
                 
                 ctx = get_logging_context()
@@ -62,12 +66,13 @@ def monitor_tool(tool):
                     session_id=ctx.get("session_id","unknown-session"),
                     )
                 tool_metric_store.add_metric(tool_metric)
-                logger.info(f"tool metric : {tool_metric},tool_metric_store : {tool_metric_store.get_all()}")
+                logger.info(f"(arun) tool metric : {tool_metric}")
                 return result
             except Exception as e:
                 logger.exception(f"[{tool.name}] async failed: {e}")
                 raise
 
         tool._arun = monitored_arun
+        tool._is_monitored = True
 
     return tool
