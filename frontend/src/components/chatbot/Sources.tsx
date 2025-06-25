@@ -260,9 +260,6 @@ export default function Sources({
               <Typography id="modal-title" variant="h6" component="h2">
                 {selectedSource?.file_name}
               </Typography>
-              {selectedSource?.agent_name && (
-                <Chip size="small" icon={<PersonOutlineIcon />} label={selectedSource.agent_name} sx={{ mt: 0.5 }} />
-              )}
             </Box>
           </Box>
 

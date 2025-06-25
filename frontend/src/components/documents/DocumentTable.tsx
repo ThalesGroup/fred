@@ -42,7 +42,6 @@ import { useGetDocumentMetadataMutation } from "../../slices/documentApi";
 export interface FileRow {
   document_uid: string;
   document_name: string;
-  agent_name?: string;
   date_added_to_kb?: string;
   retrievable?: boolean;
 }
