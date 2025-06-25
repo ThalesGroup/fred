@@ -14,18 +14,24 @@ import {
   Fab,
   Button,
   Drawer,
-  IconButton
+  IconButton,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import SearchIcon from "@mui/icons-material/Search";
 import DeleteIcon from "@mui/icons-material/Delete";
-import EditIcon from "@mui/icons-material/Edit"
-import CloseIcon from "@mui/icons-material/Close"
-import { useGetChatProfilesMutation, useDeleteChatProfileMutation, useUpdateChatProfileMutation, useGetChatProfileMaxTokensQuery } from "../../slices/chatProfileApi";
+import EditIcon from "@mui/icons-material/Edit";
+import CloseIcon from "@mui/icons-material/Close";
+import {
+  useGetChatProfilesMutation,
+  useDeleteChatProfileMutation,
+  useUpdateChatProfileMutation,
+  useGetChatProfileMaxTokensQuery,
+} from "../../slices/chatProfileApi";
 import { CreateChatProfileDialog } from "./ChatProfileDialog";
 import { getDocumentIcon } from "../documents/DocumentIcon";
 import { ChatProfile, ChatProfileEditDialog } from "./ChatProfileEditDialog";
 import { useToast } from "../ToastProvider";
+import { useSearchParams } from "react-router-dom";
 
 const getPreview = (text: string, maxChars: number = 300) => {
   if (text.length <= maxChars) return text;
@@ -67,9 +73,12 @@ export const ChatProfiles = () => {
   const [updateChatProfile] = useUpdateChatProfileMutation();
   const [openDescription, setOpenDescription] = useState<ChatProfile | null>(null);
 
-  const [openDialog, setOpenDialog] = useState(false);
+  const [searchParams, _] = useSearchParams();
+  const needToOpenNewProfileDialog = searchParams.get("new") === "true";
+  const [openDialog, setOpenDialog] = useState(needToOpenNewProfileDialog);
+
   const [openEditDialog, setOpenEditDialog] = useState(false);
-  const [currentChatProfile, setCurrentChatProfile] = useState<ChatProfile>()
+  const [currentChatProfile, setCurrentChatProfile] = useState<ChatProfile>();
   const { data } = useGetChatProfileMaxTokensQuery();
   const maxTokens = data?.max_tokens;
   const { showError } = useToast();
@@ -93,7 +102,6 @@ export const ChatProfiles = () => {
     setOpenEditDialog(true);
   };
 
-
   const handleSaveChatProfile = async ({
     title,
     description,
@@ -108,7 +116,7 @@ export const ChatProfiles = () => {
         chatProfile_id: currentChatProfile.id,
         title,
         description,
-        files
+        files,
       }).unwrap();
 
       setOpenEditDialog(false);
@@ -125,7 +133,6 @@ export const ChatProfiles = () => {
     }
   };
 
-
   const handleDelete = async (id: string) => {
     try {
       await deleteChatProfile({ chatProfile_id: id }).unwrap();
@@ -138,9 +145,7 @@ export const ChatProfiles = () => {
     }
   };
 
-  const filteredProfiles = chatProfiles.filter((profile) =>
-    profile.title.toLowerCase().includes(search.toLowerCase())
-  );
+  const filteredProfiles = chatProfiles.filter((profile) => profile.title.toLowerCase().includes(search.toLowerCase()));
 
   const handleReloadProfile = async () => {
     try {
@@ -198,18 +203,10 @@ export const ChatProfiles = () => {
             >
               <CardContent sx={{ flex: 1, display: "flex", flexDirection: "column" }}>
                 <Box display="flex" justifyContent="space-between" alignItems="center">
-                  <Typography variant="h6">
-                    {profile.title}
-                  </Typography>
+                  <Typography variant="h6">{profile.title}</Typography>
                 </Box>
 
-                <Box
-                  pt={2}
-                  mb={1}
-                  flexGrow={1}
-                  display="flex"
-                  justifyContent="center"
-                >
+                <Box pt={2} mb={1} flexGrow={1} display="flex" justifyContent="center">
                   <Box width="70%">
                     <Typography
                       variant="body2"
@@ -228,17 +225,12 @@ export const ChatProfiles = () => {
                     </Typography>
 
                     {(profile.description?.length ?? 0) > 200 && (
-                      <Button
-                        size="small"
-                        onClick={() => setOpenDescription(profile)}
-                        sx={{ mt: 1 }}
-                      >
+                      <Button size="small" onClick={() => setOpenDescription(profile)} sx={{ mt: 1 }}>
                         View full description
                       </Button>
                     )}
                   </Box>
                 </Box>
-
 
                 {profile.documents?.length > 0 && (
                   <Box mt={2}>
@@ -272,7 +264,7 @@ export const ChatProfiles = () => {
 
                 <Box mt="auto" display="flex" justifyContent="space-between" alignItems="flex-end" pt={2}>
                   {/* Left side: Tokens info and gauge */}
-                  <Box sx={{ width: 200}}>
+                  <Box sx={{ width: 200 }}>
                     <Typography variant="caption" color="text.secondary" whiteSpace="nowrap" sx={{ mb: 0.5 }}>
                       Tokens: {profile.tokens} / {maxTokens ?? 12000}
                     </Typography>
@@ -289,7 +281,6 @@ export const ChatProfiles = () => {
                     </IconButton>
                   </Box>
                 </Box>
-
               </CardContent>
             </Card>
           </Grid2>
@@ -311,11 +302,7 @@ export const ChatProfiles = () => {
         <AddIcon />
       </Fab>
 
-      <CreateChatProfileDialog
-        open={openDialog}
-        onClose={() => setOpenDialog(false)}
-        onCreated={fetchChatProfiles}
-      />
+      <CreateChatProfileDialog open={openDialog} onClose={() => setOpenDialog(false)} onCreated={fetchChatProfiles} />
 
       <ChatProfileEditDialog
         open={openEditDialog}
@@ -333,9 +320,7 @@ export const ChatProfiles = () => {
         }}
       >
         <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-          <Typography variant="h6">
-            {openDescription?.title || "Profile description"}
-          </Typography>
+          <Typography variant="h6">{openDescription?.title || "Profile description"}</Typography>
           <IconButton onClick={() => setOpenDescription(null)}>
             <CloseIcon />
           </IconButton>
