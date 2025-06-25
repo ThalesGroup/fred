@@ -202,7 +202,7 @@ def get_mcp_agent_tools(mcp_client: MultiServerMCPClient) -> list[BaseTool]:
     Retrieves the AI MCP client tools list.
 
     Args:
-        mcp_client (MultiServerMCPClient): The MCP client connected to the MCP server.
+        mcp_client (MultiServerMCPClient): The MCP client connected to the MCP servers.
 
     Returns:
         list[BaseTool]: A list of all the tools associated to the agent
