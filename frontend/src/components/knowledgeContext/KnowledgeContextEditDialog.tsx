@@ -59,7 +59,6 @@ export const KnowledgeContextEditDialog = ({
   onClose,
   onSave,
   context,
-  onReloadContext,
   allowDocuments = true,
   allowDocumentDescription = true,
   dialogTitle,

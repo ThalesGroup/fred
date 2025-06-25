@@ -30,7 +30,7 @@ import {
 import { KnowledgeContextItem } from "../components/knowledgeContext/KnowledgeContextItem";
 import { KnowledgeContextCreateDialog } from "../components/knowledgeContext/KnowledgeContextCreateDialog";
 
-export const WorkspacePage = () => {
+export const Workspaces = () => {
   const [workspaces, setWorkspaces] = useState<KnowledgeContext[]>([]);
   const [search, setSearch] = useState("");
   const [getWorkspaces] = useLazyGetKnowledgeContextsQuery();
@@ -64,7 +64,6 @@ export const WorkspacePage = () => {
     title,
     description,
     files,
-    documents,
     documentsDescription,
   }: {
     title: string;
@@ -130,7 +129,7 @@ export const WorkspacePage = () => {
 
   return (
     <PageBodyWrapper>
-      <TopBar title="Workspaces" description="Access your workspaces">
+      <TopBar title="Workspaces" description="Manage workspaces">
         <Grid2
           sx={{ display: "flex", justifyContent: "flex-end", mt: { xs: 1, md: 0 } }}
         ></Grid2>

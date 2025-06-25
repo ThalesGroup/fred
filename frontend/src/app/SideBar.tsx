@@ -163,10 +163,10 @@ export default function SideBar({ darkMode, onThemeChange }) {
       tooltip: "View agents",
     },
         {
-      key: "workspace",
-      label: "Workspace",
+      key: "workspaces",
+      label: "Workspaces",
       icon: <WorkspacesIcon />,
-      url: `/workspace`,
+      url: `/workspaces`,
       canBeDisabled: false,
       tooltip: "View Workspace",
     },
