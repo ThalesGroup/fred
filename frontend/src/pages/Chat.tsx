@@ -27,7 +27,7 @@ import {
 } from "../slices/chatApi.tsx";
 import { SessionSchema } from "../slices/chatApiStructures.ts";
 import { useSearchParams } from "react-router-dom";
-import { ChatProfile } from "../components/profile/ChatProfileEditDialog.tsx";
+import { KnowledgeContext } from "../components/knowledgeContext/KnowledgeContextEditDialog.tsx";
 
 export interface AgenticFlow {
   name: string;
@@ -59,7 +59,7 @@ export const Chat = () => {
   const [currentChatBotSession, setCurrentChatBotSession] = useState<SessionSchema | null>(null);
   const [isCreatingNewConversation, setIsCreatingNewConversation] = useState(false);
 
-  const [selectedChatProfile, setSelectedChatProfile] = useState<ChatProfile | null>(null);
+  const [selectedChatProfile, setSelectedChatProfile] = useState<KnowledgeContext | null>(null);
 
   const handleSelectAgenticFlow = (flow: AgenticFlow) => {
     setCurrentAgenticFlow(flow);
