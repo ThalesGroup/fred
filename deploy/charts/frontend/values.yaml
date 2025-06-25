@@ -25,7 +25,9 @@ ingress:
         - fred.dev.local
 config:
   backendUrlApi: "https://api.dev.local"
+  backendUrlKnowledge: "http://localhost:8111"
   websocketUrl: "ws://api.dev.local/fred/chatbot/query"
+
 oidc:
   enabled: true
   config:
