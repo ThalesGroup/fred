@@ -146,6 +146,17 @@ ai:
           url: http://knowledge-flow-backend:8111/mcp
           sse_read_timeout: 2000
       model: {}
+      # The Rags expert essentially is the Document expert before using tools and the knownledge-flow backend as a MCP server
+    - name: "RagsExpert"
+      class_path: "agents.rags.rags_expert.RagsExpert"
+      enabled: false
+      categories:
+        - "rag"
+      settings:
+        chunk_size: 512
+        chunk_overlap: 64
+        knowledge_flow_url: "http://localhost:8111/knowledge/v1" 
+      model: {}
     # The Monitoring expert requires you activate the 'enableK8Features' flags above
     - name: "MonitoringExpert"
       class_path: "fred.agents.monitoring.monitoring_expert.MonitoringExpert"
