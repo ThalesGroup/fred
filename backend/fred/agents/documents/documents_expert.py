@@ -76,7 +76,6 @@ class DocumentsExpert(AgentFlow):
             base_prompt=self.base_prompt,
             categories=self.categories,
             tag=self.tag,
-            mcp_client=self.mcp_client,
             toolkit=self.toolkit
         )
         
