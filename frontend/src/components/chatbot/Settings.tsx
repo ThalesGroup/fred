@@ -41,9 +41,9 @@ import { SessionSchema } from "../../slices/chatApiStructures.ts";
 import BookmarkIcon from '@mui/icons-material/Bookmark';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import { useNavigate } from "react-router-dom";
-import { useGetChatProfilesMutation } from "../../slices/chatProfileApi.tsx";
 import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
 import { KnowledgeContext } from "../knowledgeContext/KnowledgeContextEditDialog.tsx";
+import { useLazyGetKnowledgeContextsQuery } from "../../slices/knowledgeContextApi.tsx";
 
 export const Settings = ({
   sessions,
@@ -86,7 +86,7 @@ export const Settings = ({
   const [editText, setEditText] = useState("");
   const [isEditing, setIsEditing] = useState(false);
   const [showElements, setShowElements] = useState(false);
-  const [getChatProfiles] = useGetChatProfilesMutation();
+  const [getChatProfiles] = useLazyGetKnowledgeContextsQuery();
   const [, setIsLoading] = useState(false);
 
   // Snackbar states
@@ -102,7 +102,7 @@ export const Settings = ({
   const fetchChatProfiles = async () => {
     setIsLoading(true);
     try {
-      const response = await getChatProfiles().unwrap();
+      const response = await getChatProfiles({tag:"chat_profile"}).unwrap();
       setChatProfiles(response);
     } catch (error) {
       console.error("Error fetching chatProfiles:", error);

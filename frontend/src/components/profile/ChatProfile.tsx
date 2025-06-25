@@ -20,12 +20,12 @@ import { useToast } from "../ToastProvider";
 import { KnowledgeContextItem } from "../knowledgeContext/KnowledgeContextItem";
 import { KnowledgeContextCreateDialog } from "../knowledgeContext/KnowledgeContextCreateDialog";
 import { KnowledgeContextEditDialog } from "../knowledgeContext/KnowledgeContextEditDialog";
-import { useDeleteKnowledgeContextMutation, useGetKnowledgeContextsMutation, useUpdateKnowledgeContextMutation } from "../../slices/knowledgeContextApi";
+import { useDeleteKnowledgeContextMutation, useLazyGetKnowledgeContextsQuery, useUpdateKnowledgeContextMutation } from "../../slices/knowledgeContextApi";
 
 export const ChatProfiles = () => {
   const [chatProfiles, setChatProfiles] = useState([]);
   const [search, setSearch] = useState("");
-  const [getChatProfiles] = useGetKnowledgeContextsMutation();
+  const [getChatProfiles] = useLazyGetKnowledgeContextsQuery();
   const [deleteChatProfile] = useDeleteKnowledgeContextMutation();
   const [updateChatProfile] = useUpdateKnowledgeContextMutation();
   const [openDescription, setOpenDescription] = useState(null);
@@ -42,7 +42,7 @@ export const ChatProfiles = () => {
 
   const fetchChatProfiles = async () => {
     try {
-      const response = await getChatProfiles().unwrap();
+      const response = await getChatProfiles({tag: "chat_profile"}).unwrap();
       setChatProfiles(response);
     } catch (e) {
       console.error("Failed to fetch chat profiles", e);
@@ -88,7 +88,7 @@ export const ChatProfiles = () => {
 
   const handleReloadProfile = async () => {
     try {
-      const response = await getChatProfiles().unwrap();
+      const response = await getChatProfiles({tag: "chat_profile"}).unwrap();
       setChatProfiles(response);
       if (currentChatProfile) {
         const updated = response.find((p) => p.id === currentChatProfile.id);
@@ -163,6 +163,8 @@ export const ChatProfiles = () => {
         onClose={() => setOpenDialog(false)}
         onCreated={fetchChatProfiles}
         allowDocumentDescription={false}
+        dialogTitle="Chat profile"
+        tag="chat_profile"
       />
 
       <KnowledgeContextEditDialog
@@ -172,6 +174,7 @@ export const ChatProfiles = () => {
         onReloadContext={handleReloadProfile}
         context={currentChatProfile}
         allowDocumentDescription={false}
+        dialogTitle="Chat profile"
       />
 
       <Drawer

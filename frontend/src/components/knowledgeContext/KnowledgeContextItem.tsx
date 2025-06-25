@@ -28,7 +28,6 @@ interface KnowledgeContextItemProps {
   onEdit: (item: any) => void;
   onDelete: (id: string) => void;
   onViewDescription?: (item: any) => void;
-  size?: "large" | "small";
 }
 
 export const KnowledgeContextItem = ({
@@ -41,7 +40,7 @@ export const KnowledgeContextItem = ({
   onEdit,
   onDelete,
   onViewDescription,
-}: KnowledgeContextItemProps) => {
+  }: KnowledgeContextItemProps) => {
   const getPreview = (text: string, maxChars = 300) => {
     if (text.length <= maxChars) return text;
     const shortened = text.slice(0, maxChars);

@@ -30,6 +30,8 @@ interface KnowledgeContextCreateDialogProps {
   onCreated: () => void;
   allowDocuments?: boolean;
   allowDocumentDescription?: boolean;
+  dialogTitle: string;
+  tag: "workspace" | "chat_profile"
 }
 
 export const KnowledgeContextCreateDialog = ({
@@ -37,7 +39,9 @@ export const KnowledgeContextCreateDialog = ({
   onClose,
   onCreated,
   allowDocuments = true,
-  allowDocumentDescription = true
+  allowDocumentDescription = true,
+  dialogTitle,
+  tag
 }: KnowledgeContextCreateDialogProps) => {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -73,7 +77,11 @@ export const KnowledgeContextCreateDialog = ({
       await createKnowledgeContext({
         title,
         description,
-        files: files.map((f) => f.file),
+        files: files.map(f => f.file),
+        tag,
+        fileDescriptions: Object.fromEntries(
+          files.map(f => [f.file.name, f.description || ""])
+        )
       }).unwrap();
       setTitle("");
       setDescription("");
@@ -90,11 +98,12 @@ export const KnowledgeContextCreateDialog = ({
     }
   };
 
+
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="md">
       <DialogTitle>
         <Stack direction="row" justifyContent="space-between" alignItems="center">
-          <Typography variant="h6">New Knowledge Context</Typography>
+          <Typography variant="h6">New {dialogTitle}</Typography>
           <IconButton onClick={onClose} disabled={isLoading}>
             <CloseIcon />
           </IconButton>
