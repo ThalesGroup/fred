@@ -38,7 +38,7 @@ import { Audit } from "../pages/Audit";
 import { FrugalIt } from "../pages/FrugalIt";
 import Inspect from "../frugalit/pages/Inspect";
 import { Monitoring } from "../pages/Monitoring";
-import { WorkspacePage } from "../pages/Workspace";
+import { Workspaces } from "../pages/Workspaces";
 
 
 const RootLayout = () => (
@@ -145,8 +145,8 @@ export const routes: RouteObject[] = [
         element: <AgentHub />,
       },
       {
-        path: "workspace",
-        element: <WorkspacePage />,
+        path: "workspaces",
+        element: <Workspaces />,
       },
     ].filter(Boolean),
   },
