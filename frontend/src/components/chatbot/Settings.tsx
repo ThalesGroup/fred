@@ -38,12 +38,12 @@ import { getAgentBadge } from "../../utils/avatar.tsx";
 import React from "react";
 import { StyledMenu } from "../../utils/styledMenu.tsx";
 import { SessionSchema } from "../../slices/chatApiStructures.ts";
-import BookmarkIcon from '@mui/icons-material/Bookmark';
-import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
-import { useNavigate } from "react-router-dom";
-import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
+import BookmarkIcon from "@mui/icons-material/Bookmark";
+import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
+import InsertDriveFileIcon from "@mui/icons-material/InsertDriveFile";
 import { KnowledgeContext } from "../knowledgeContext/KnowledgeContextEditDialog.tsx";
 import { useLazyGetKnowledgeContextsQuery } from "../../slices/knowledgeContextApi.tsx";
+import InvisibleLink from "../InvisibleLink.tsx";
 
 export const Settings = ({
   sessions,
@@ -130,8 +130,6 @@ export const Settings = ({
     setChatProfileSession(session);
   };
 
-  const navigate = useNavigate();
-
   const closeMenu = () => {
     setMenuAnchorEl(null);
   };
@@ -204,16 +202,23 @@ export const Settings = ({
             borderBottom: `1px solid ${theme.palette.divider}`,
           }}
         >
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center' }}>
-              <Typography
-                variant="subtitle1"
-                sx={{
-                  fontWeight: 500,
+          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
+            <Box sx={{ display: "flex", alignItems: "center" }}>
+              <InvisibleLink
+                to={{
+                  pathname: "/account",
+                  search: "?tab=2",
                 }}
               >
-                Profile
-              </Typography>
+                <Typography
+                  variant="subtitle1"
+                  sx={{
+                    fontWeight: 500,
+                  }}
+                >
+                  Profile
+                </Typography>
+              </InvisibleLink>
               <Tooltip
                 title={
                   <React.Fragment>
@@ -224,11 +229,11 @@ export const Settings = ({
                       Unlike one-time file uploads, a profile is reusable across multiple conversations and can contain:
                     </Typography>
                     <Typography variant="body2" sx={{ mb: 1 }}>
-                    <ul style={{ margin: '0', paddingLeft: '16px' }}>
-                      <li>Information about a client or project</li>
-                      <li>Reference documents (PDF, Word, Excel...)</li>
-                      <li>Technical specifications</li>
-                    </ul>
+                      <ul style={{ margin: "0", paddingLeft: "16px" }}>
+                        <li>Information about a client or project</li>
+                        <li>Reference documents (PDF, Word, Excel...)</li>
+                        <li>Technical specifications</li>
+                      </ul>
                     </Typography>
                   </React.Fragment>
                 }
@@ -243,40 +248,43 @@ export const Settings = ({
                       p: 2,
                       borderRadius: 1,
                       boxShadow: theme.shadows[3],
-                      '& .MuiTooltip-arrow': {
+                      "& .MuiTooltip-arrow": {
                         color: theme.palette.background.paper,
-                      }
-                    }
-                  }
+                      },
+                    },
+                  },
                 }}
               >
                 <HelpOutlineIcon
                   sx={{
                     ml: 1,
-                    fontSize: '0.9rem',
-                    color: 'text.secondary',
-                    cursor: 'help'
+                    fontSize: "0.9rem",
+                    color: "text.secondary",
+                    cursor: "help",
                   }}
                 />
               </Tooltip>
             </Box>
 
-            <Tooltip title="Manage profiles">
-              <IconButton
-                onClick={() => navigate('/chatProfiles')}
-                size="small"
-                sx={{ mr: -1 }}
+            <Tooltip title="Add new profiles">
+              <InvisibleLink
+                to={{
+                  pathname: "/account",
+                  search: "?tab=2&new=true",
+                }}
               >
-                <AddIcon fontSize="small" />
-              </IconButton>
+                <IconButton size="small" sx={{ mr: -1 }}>
+                  <AddIcon fontSize="small" />
+                </IconButton>
+              </InvisibleLink>
             </Tooltip>
           </Box>
 
           <FormControl fullWidth size="small">
             <Select
-              value={selectedChatProfile?.id || ''}
+              value={selectedChatProfile?.id || ""}
               onChange={(e) => {
-                const ctx = chatProfiles.find(c => c.id === e.target.value);
+                const ctx = chatProfiles.find((c) => c.id === e.target.value);
                 setSelectedChatProfile(ctx || null);
                 if (onSelectChatProfile) {
                   onSelectChatProfile(ctx || null);
@@ -292,11 +300,13 @@ export const Settings = ({
                     </Typography>
                   );
                 }
-                const ctx = chatProfiles.find(c => c.id === selected);
+                const ctx = chatProfiles.find((c) => c.id === selected);
                 return (
-                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                    <BookmarkIcon sx={{ color: theme.palette.warning.main, mr: 1, fontSize: '1.1rem' }} />
-                    <Typography noWrap variant="body2">{ctx?.title}</Typography>
+                  <Box sx={{ display: "flex", alignItems: "center" }}>
+                    <BookmarkIcon sx={{ color: theme.palette.warning.main, mr: 1, fontSize: "1.1rem" }} />
+                    <Typography noWrap variant="body2">
+                      {ctx?.title}
+                    </Typography>
                   </Box>
                 );
               }}
@@ -306,22 +316,25 @@ export const Settings = ({
               </MenuItem>
               {chatProfiles.map((chatProfile) => (
                 <MenuItem key={chatProfile.id} value={chatProfile.id}>
-                  <Box sx={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                      <BookmarkIcon sx={{ color: theme.palette.warning.main, mr: 1, fontSize: '1.1rem' }} />
+                  <Box sx={{ display: "flex", flexDirection: "column", width: "100%" }}>
+                    <Box sx={{ display: "flex", alignItems: "center" }}>
+                      <BookmarkIcon sx={{ color: theme.palette.warning.main, mr: 1, fontSize: "1.1rem" }} />
                       <Typography variant="body2">{chatProfile.title}</Typography>
                     </Box>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block', maxWidth: '190px' }}>
+                    <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        noWrap
+                        sx={{ display: "block", maxWidth: "190px" }}
+                      >
                         {chatProfile.description}
                       </Typography>
                       {chatProfile.documents && (
-
-                        <Box sx={{ display: 'flex', alignItems: 'center', ml: 1 }}>
+                        <Box sx={{ display: "flex", alignItems: "center", ml: 1 }}>
                           <InsertDriveFileIcon fontSize="small" sx={{ mr: 0.5 }} />
                           <Typography variant="caption">{chatProfile.documents.length}</Typography>
                         </Box>
-
                       )}
                     </Box>
                   </Box>
@@ -330,9 +343,8 @@ export const Settings = ({
             </Select>
           </FormControl>
 
-
           {selectedChatProfile && (
-            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+            <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1 }}>
               {selectedChatProfile.description}
             </Typography>
           )}
@@ -646,7 +658,12 @@ export const Settings = ({
       </Fade>
 
       {/* Menu chatProfileuel */}
-      <StyledMenu id="session-chatProfile-menu" anchorEl={menuAnchorEl} open={Boolean(menuAnchorEl)} onClose={closeMenu}>
+      <StyledMenu
+        id="session-chatProfile-menu"
+        anchorEl={menuAnchorEl}
+        open={Boolean(menuAnchorEl)}
+        onClose={closeMenu}
+      >
         <MenuItem
           onClick={() => {
             if (chatProfileSession) {
