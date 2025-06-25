@@ -141,21 +141,6 @@ export const SourceCard = ({ source, onCardClick, onViewDocument, loading }: Sou
               {formatDate(source.modified)}
             </Typography>
           </Box>
-
-          {/* Agent chip (if provided) */}
-          {source.agent_name && (
-            <Chip
-              icon={<PersonOutlineIcon sx={{ fontSize: "0.9rem" }} />}
-              label={source.agent_name}
-              size="small"
-              sx={{
-                height: 24,
-                "& .MuiChip-label": { px: 1, fontSize: "0.75rem" },
-                alignSelf: "flex-start",
-                mt: 0.5,
-              }}
-            />
-          )}
         </Box>
 
         {/* Preview icon (bottom-right, floating) */}

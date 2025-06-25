@@ -21,7 +21,6 @@ class DocumentSource(BaseModel):
     file_name: str
     page: Optional[int]
     uid: str
-    agent_name: Optional[str] = None
     modified: Optional[str] = None
 
     # Required by frontend

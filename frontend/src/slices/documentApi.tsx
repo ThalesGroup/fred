@@ -22,7 +22,6 @@ export interface KnowledgeDocument {
   date_added_to_kb?: string;
   retrievable?: boolean;
   front_metadata?: {
-    agent_name?: string;
     [key: string]: any;
   };
   [key: string]: any; // If your metadata is flexible
