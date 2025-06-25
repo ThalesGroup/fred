@@ -116,7 +116,7 @@ export const routes: RouteObject[] = [
       isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES) && {
         path: "inspect",
         element: (
-          <FootprintContextProvider>
+         <FootprintContextProvider>
             <Inspect />
           </FootprintContextProvider>),
       },
@@ -127,10 +127,6 @@ export const routes: RouteObject[] = [
       {
         path: "chat",
         element: <Chat />,
-      },
-      {
-        path: "monitoring",
-        element: <Monitoring />,
       },
       {
         path: "monitoring",

@@ -4,7 +4,10 @@ image:
   repository: registry.thalesdigital.io/tsn/innovation/projects/fred/frontend
   tag: 0.1
   pullPolicy: IfNotPresent
-  imagePullSecretName: "gitlab-registry-creds"
+
+imagePullSecrets:
+  - name: "gitlab-registry-creds"
+
 service:
   type: ClusterIP
   port: 80
@@ -22,13 +25,21 @@ ingress:
         - fred.dev.local
 config:
   backendUrlApi: "https://api.dev.local"
+  backendUrlKnowledge: "http://localhost:8111"
   websocketUrl: "ws://api.dev.local/fred/chatbot/query"
+
 oidc:
   enabled: true
   config:
     realm: "my-realm"
-    authServerUrl: "https://keycloak/"
-    clientId: "fred"
+    authServerUrl: "https://keycloak.test/"
+    clientId: "app"
+
+feedback_storage:
+  type: local  # ou "minio"
+  minio_endpoint: "localhost:9000"
+  minio_bucket_name: "fred-feedback"
+  minio_secure: false
 
 resources: {}
 podAnnotations: {}

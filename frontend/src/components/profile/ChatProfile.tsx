@@ -60,7 +60,7 @@ export const ChatProfiles = () => {
         knowledgeContext_id: currentChatProfile.id,
         title,
         description,
-        files
+        files,
       }).unwrap();
       setOpenEditDialog(false);
       setCurrentChatProfile(null);
@@ -184,9 +184,7 @@ export const ChatProfiles = () => {
         PaperProps={{ sx: { width: { xs: "100%", sm: 500 }, p: 3 } }}
       >
         <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-          <Typography variant="h6">
-            {openDescription?.title || "Profile description"}
-          </Typography>
+          <Typography variant="h6">{openDescription?.title || "Profile description"}</Typography>
           <IconButton onClick={() => setOpenDescription(null)}>
             <CloseIcon />
           </IconButton>

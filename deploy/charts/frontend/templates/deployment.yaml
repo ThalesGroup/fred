@@ -25,19 +25,29 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - containerPort: 80
+          # command:
+          # - /bin/sh
+          # - -c 
+          # - tail -f /dev/null
+          {{- with .Values.env }}
+          env:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           {{- if .Values.oidc.enabled }}
           volumeMounts:
             - name: {{ .Chart.Name }}-config-vol
-              mountPath: /usr/share/nginx/html/keycloak.json
+              mountPath: /app/public/keycloak.json
               subPath: keycloak.json
             - name: {{ .Chart.Name }}-config-vol
-              mountPath: /usr/share/nginx/html/config.json
+              mountPath: /app/public/config.json
               subPath: config.json
           {{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
+      {{- if .Values.imagePullSecrets }}
       imagePullSecrets:
-        - name: {{ .Values.image.imagePullSecretName }}
+      {{ toYaml .Values.imagePullSecrets | indent 2 }}
+      {{- end }}
       {{- if .Values.oidc.enabled }}
       volumes:
         - name: {{ .Chart.Name }}-config-vol
