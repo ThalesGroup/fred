@@ -12,9 +12,9 @@ export const { reducer: chatApiReducer, middleware: chatApiMiddleware } = knowle
 
 const knowledgeContextApiEndpoints = knowledgeContextApiSlice.injectEndpoints({
   endpoints: (builder) => ({
-    getKnowledgeContexts: builder.mutation<KnowledgeContext[], void>({
-      query: () => ({
-        url: `/knowledge/v1/knowledgeContexts`,
+    getKnowledgeContexts: builder.query<KnowledgeContext[], { tag: string }>({
+      query: ({ tag }) => ({
+        url: `/knowledge/v1/knowledgeContexts?tag=${encodeURIComponent(tag)}`,
         method: "GET",
       }),
     }),
@@ -23,14 +23,20 @@ const knowledgeContextApiEndpoints = knowledgeContextApiSlice.injectEndpoints({
       title: string;
       description: string;
       files: File[];
+      tag: string;
+      fileDescriptions?: Record<string, string>;
     }>({
-      query: ({ title, description, files }) => {
+      query: ({ title, description, files, tag, fileDescriptions = {} }) => {
         const formData = new FormData();
         formData.append("title", title);
         formData.append("description", description);
+        formData.append("tag", tag);
+
         files.forEach(file => {
           formData.append("files", file);
         });
+
+        formData.append("file_descriptions", JSON.stringify(fileDescriptions));
 
         return {
           url: `/knowledge/v1/knowledgeContexts`,
@@ -40,8 +46,15 @@ const knowledgeContextApiEndpoints = knowledgeContextApiSlice.injectEndpoints({
       },
     }),
 
-    updateKnowledgeContext: builder.mutation<KnowledgeContext, { knowledgeContext_id: string; title: string; description: string; files?: File[] }>({
-      query: ({ knowledgeContext_id, title, description, files }) => {
+
+    updateKnowledgeContext: builder.mutation<KnowledgeContext, {
+      knowledgeContext_id: string;
+      title: string;
+      description: string;
+      files?: File[];
+      documentsDescription?: Record<string, string>;
+    }>({
+      query: ({ knowledgeContext_id, title, description, files, documentsDescription }) => {
         const formData = new FormData();
         formData.append("title", title);
         formData.append("description", description);
@@ -50,7 +63,10 @@ const knowledgeContextApiEndpoints = knowledgeContextApiSlice.injectEndpoints({
           formData.append("files", file);
         });
 
-        console.log(formData)
+        if (documentsDescription && Object.keys(documentsDescription).length > 0) {
+          formData.append("documents_description", JSON.stringify(documentsDescription));
+        }
+        
         return {
           url: `/knowledge/v1/knowledgeContexts/${knowledgeContext_id}`,
           method: "PUT",
@@ -58,6 +74,7 @@ const knowledgeContextApiEndpoints = knowledgeContextApiSlice.injectEndpoints({
         };
       },
     }),
+
 
     deleteKnowledgeContext: builder.mutation<{ success: boolean }, { knowledgeContext_id: string }>({
       query: ({ knowledgeContext_id }) => ({
@@ -76,7 +93,7 @@ const knowledgeContextApiEndpoints = knowledgeContextApiSlice.injectEndpoints({
 });
 
 export const {
-  useGetKnowledgeContextsMutation,
+  useLazyGetKnowledgeContextsQuery,
   useCreateKnowledgeContextMutation,
   useUpdateKnowledgeContextMutation,
   useDeleteKnowledgeContextMutation,

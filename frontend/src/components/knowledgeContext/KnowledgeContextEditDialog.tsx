@@ -1,4 +1,3 @@
-// components/shared/KnowledgeContextEditDialog.tsx
 import { useEffect, useState } from 'react';
 import {
   Dialog,
@@ -21,7 +20,7 @@ import { useDropzone } from 'react-dropzone';
 import { useDeleteKnowledgeContextDocumentMutation } from '../../slices/knowledgeContextApi';
 import { useToast } from '../ToastProvider';
 
-interface Document {
+export interface Document {
   id: string;
   document_name: string;
   document_type: string;
@@ -35,6 +34,7 @@ export interface KnowledgeContext {
   description?: string;
   documents: Document[];
   tokens?: number;
+  tag?: string;
 }
 
 interface KnowledgeContextEditDialogProps {
@@ -46,10 +46,12 @@ interface KnowledgeContextEditDialogProps {
     description: string;
     files: File[];
     documents: Document[];
+    documentsDescription: Record<string, string>;
   }) => Promise<void>;
   context: KnowledgeContext;
   allowDocuments?: boolean;
   allowDocumentDescription?: boolean;
+  dialogTitle: string
 }
 
 export const KnowledgeContextEditDialog = ({
@@ -59,12 +61,14 @@ export const KnowledgeContextEditDialog = ({
   context,
   onReloadContext,
   allowDocuments = true,
-  allowDocumentDescription = true
+  allowDocumentDescription = true,
+  dialogTitle,
 }: KnowledgeContextEditDialogProps) => {
   const theme = useTheme();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [tempFiles, setTempFiles] = useState<File[]>([]);
+  const [tempFileDescriptions, setTempFileDescriptions] = useState<Record<string, string>>({});
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loadingDocumentIds, setLoadingDocumentIds] = useState<string[]>([]);
   const [isSaving, setIsSaving] = useState(false);
@@ -82,6 +86,7 @@ export const KnowledgeContextEditDialog = ({
       setTitle(context.title || "");
       setDescription(context.description || "");
       setTempFiles([]);
+      setTempFileDescriptions({});
       setDocuments(context.documents || []);
       setLoadingDocumentIds([]);
       setIsSaving(false);
@@ -119,12 +124,24 @@ export const KnowledgeContextEditDialog = ({
     setIsSaving(true);
 
     try {
+      const documentsDescription: Record<string, string> = {
+        ...documents.reduce((acc, doc) => {
+          if (doc.document_name && doc.description) {
+            acc[doc.document_name] = doc.description;
+          }
+          return acc;
+        }, {} as Record<string, string>),
+        ...tempFileDescriptions,
+      };
+
       await onSave({
         title,
         description,
         files: tempFiles,
-        documents
+        documents,
+        documentsDescription
       });
+
       onClose();
     } catch (err: any) {
       showError({
@@ -140,7 +157,7 @@ export const KnowledgeContextEditDialog = ({
     <Dialog open={open} onClose={isSaving ? undefined : onClose} fullWidth maxWidth="md">
       <DialogTitle>
         <Stack direction="row" justifyContent="space-between" alignItems="center">
-          <Typography variant="h6">Edit Knowledge Context</Typography>
+          <Typography variant="h6">Edit {dialogTitle}</Typography>
           <IconButton onClick={onClose} disabled={isSaving}>
             <CloseIcon />
           </IconButton>
@@ -240,6 +257,62 @@ export const KnowledgeContextEditDialog = ({
                         </Box>
                       );
                     })}
+                  </Stack>
+                </Box>
+              )}
+
+              {tempFiles.length > 0 && (
+                <Box>
+                  <Typography variant="subtitle2">New documents:</Typography>
+                  <Stack spacing={1.5}>
+                    {tempFiles.map((file) => (
+                      <Box
+                        key={file.name}
+                        display="flex"
+                        flexDirection="column"
+                        px={2}
+                        py={1.5}
+                        borderRadius={2}
+                        bgcolor="background.default"
+                        border={(theme) => `1px solid ${theme.palette.divider}`}
+                        boxShadow={1}
+                      >
+                        <Box display="flex" justifyContent="space-between" alignItems="center">
+                          <Typography variant="body2" fontWeight={500} noWrap>
+                            {file.name}
+                          </Typography>
+                          <IconButton
+                            size="small"
+                            onClick={() =>
+                              setTempFiles((prev) => prev.filter((f) => f.name !== file.name))
+                            }
+                            disabled={isSaving}
+                          >
+                            <DeleteIcon fontSize="small" />
+                          </IconButton>
+                        </Box>
+
+                        {allowDocumentDescription && (
+                          <TextField
+                            label="Document description (optional)"
+                            fullWidth
+                            size="small"
+                            value={tempFileDescriptions[file.name] || ""}
+                            onChange={(e) =>
+                              setTempFileDescriptions((prev) => ({
+                                ...prev,
+                                [file.name]: e.target.value,
+                              }))
+                            }
+                            multiline
+                            rows={2}
+                            sx={{ mt: 1.5 }}
+                            disabled={isSaving}
+                          />
+                        )}
+                      </Box>
+
+                    ))}
                   </Stack>
                 </Box>
               )}
