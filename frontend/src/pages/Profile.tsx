@@ -71,7 +71,7 @@ export function Profile() {
   const menuItems = [
     { label: "Account", icon: <AccountCircleIcon /> },
     { label: "Token", icon: <KeyIcon /> },
-    { label: "Agentic Profiles", icon: <ChatIcon /> },
+    { label: "Chat Profiles", icon: <ChatIcon /> },
   ];
 
   return (

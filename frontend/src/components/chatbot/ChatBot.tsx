@@ -26,7 +26,7 @@ import { getConfig } from "../../common/config.tsx";
 import { useGetChatBotMessagesMutation } from "../../slices/chatApi.tsx";
 import { KeyCloakService } from "../../security/KeycloakService.ts";
 import { StreamEvent, ChatMessagePayload, SessionSchema, FinalEvent } from "../../slices/chatApiStructures.ts";
-import { ChatProfile } from "../profile/ChatProfileEditDialog.tsx";
+import { KnowledgeContext } from "../knowledgeContext/KnowledgeContextEditDialog.tsx";
 
 export interface ChatBotError {
   session_id: string | null;
@@ -61,7 +61,7 @@ const ChatBot = ({
   onUpdateOrAddSession: (session: SessionSchema) => void;
   isCreatingNewConversation: boolean;
   argument?: string; // Optional argument for the agent
-  selectedChatProfile?: ChatProfile | null;
+  selectedChatProfile?: KnowledgeContext | null;
 }) => {
   const theme = useTheme();
   const { showInfo, showError } = useToast();

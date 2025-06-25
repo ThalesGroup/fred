@@ -40,9 +40,9 @@ import { StyledMenu } from "../../utils/styledMenu.tsx";
 import { SessionSchema } from "../../slices/chatApiStructures.ts";
 import BookmarkIcon from "@mui/icons-material/Bookmark";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
-import { useGetChatProfilesMutation } from "../../slices/chatProfileApi.tsx";
 import InsertDriveFileIcon from "@mui/icons-material/InsertDriveFile";
-import { ChatProfile } from "../profile/ChatProfileEditDialog.tsx";
+import { KnowledgeContext } from "../knowledgeContext/KnowledgeContextEditDialog.tsx";
+import { useLazyGetKnowledgeContextsQuery } from "../../slices/knowledgeContextApi.tsx";
 import InvisibleLink from "../InvisibleLink.tsx";
 
 export const Settings = ({
@@ -64,7 +64,7 @@ export const Settings = ({
   currentAgenticFlow: AgenticFlow;
   onSelectAgenticFlow: (flow: AgenticFlow) => void;
   onDeleteSession: (session: SessionSchema) => void;
-  onSelectChatProfile?: (profile: ChatProfile | null) => void;
+  onSelectChatProfile?: (profile: KnowledgeContext | null) => void;
 }) => {
   // Récupération du thème pour l'adaptation des couleurs
   const theme = useTheme<Theme>();
@@ -86,7 +86,7 @@ export const Settings = ({
   const [editText, setEditText] = useState("");
   const [isEditing, setIsEditing] = useState(false);
   const [showElements, setShowElements] = useState(false);
-  const [getChatProfiles] = useGetChatProfilesMutation();
+  const [getChatProfiles] = useLazyGetKnowledgeContextsQuery();
   const [, setIsLoading] = useState(false);
 
   // Snackbar states
@@ -94,13 +94,15 @@ export const Settings = ({
   const [, setSnackbarMessage] = useState("");
   const [, setSnackbarSeverity] = useState<"success" | "error" | "info" | "warning">("success");
 
-  const [chatProfiles, setChatProfiles] = useState<ChatProfile[]>([]);
+  const [chatProfiles, setChatProfiles] = useState<KnowledgeContext[]>([])
+
+
 
   // Fetch chatProfiles from API with mock data
   const fetchChatProfiles = async () => {
     setIsLoading(true);
     try {
-      const response = await getChatProfiles().unwrap();
+      const response = await getChatProfiles({tag:"chat_profile"}).unwrap();
       setChatProfiles(response);
     } catch (error) {
       console.error("Error fetching chatProfiles:", error);
@@ -111,7 +113,8 @@ export const Settings = ({
   };
 
   // État pour le chatProfilee sélectionné
-  const [selectedChatProfile, setSelectedChatProfile] = useState<ChatProfile | null>(null);
+  const [selectedChatProfile, setSelectedChatProfile] = useState<KnowledgeContext | null>(null);
+
 
   // Snackbar handlers
   const showSnackbar = (message: string, severity: "success" | "error" | "info" | "warning" = "success") => {
