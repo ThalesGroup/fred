@@ -20,7 +20,8 @@ from langgraph.graph.state import CompiledStateGraph, StateGraph
 from langgraph.checkpoint.memory import MemorySaver
 from langchain_core.tools import BaseToolkit
 from langchain_core.messages import SystemMessage
-
+from langchain_mcp_adapters.client import MultiServerMCPClient
+from fred.common.error import NoToolkitProvidedError
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +86,8 @@ class AgentFlow:
         base_prompt (str): The base prompt used by the agent.
         categories (list): Categories the agent belongs to.
         tag (str): Tag for the agent.
-        toolkit: the agent toolkit
+        cluster_fullname (str): The associated Kubernetes cluster,
+        toolkit (list[BaseTool]): the agent toolkit which is essentially a list of tools
     """
     
     # Class attributes for documentation/metadata
@@ -138,6 +140,12 @@ class AgentFlow:
         self.compiled_graph = None
         self.toolkit = toolkit
         self.cluster_fullname = cluster_fullname
+        # When mcp_client is detected in the agent constructor, make sure a toolkit also is
+        if hasattr(self, "mcp_client") and self.toolkit is None:
+            raise NoToolkitProvidedError(
+                f"{self.__class__.__name__} defines `mcp_client`, but no `toolkit` was provided. "
+                "You must pass `toolkit` to super().__init__() when using mcp_client."
+            )
         # Import here to avoid circular import
         from fred.application_context import get_model_for_agent
         self.model = get_model_for_agent(self.name)
