@@ -25,6 +25,7 @@ def monitor_tool(tool):
     if original_run:
         @wraps(original_run)
         def monitored_run(*args, **kwargs):
+            logger.info(f"Tool '{tool.name}' started with args: {args}")
             start = time.perf_counter()
             try:
                 result = original_run(*args, **kwargs)
@@ -40,7 +41,7 @@ def monitor_tool(tool):
                     session_id=ctx.get("session_id","unknown-session"),
                     )
                 tool_metric_store.add_metric(tool_metric)
-                logger.info(f"(run) tool metric : {tool_metric}")
+                logger.info(f"Tool '{tool.name}' completed in {latency:.2f}s with result: {result}")
                 return result
             except Exception as e:
                 logger.exception(f"[{tool.name}] failed: {e}")
@@ -51,6 +52,7 @@ def monitor_tool(tool):
     if original_arun:
         @wraps(original_arun)
         async def monitored_arun(*args, **kwargs):
+            logger.info(f"Tool '{tool.name}' started with args: {args}")
             start = time.perf_counter()
             try:
                 result = await original_arun(*args, **kwargs)
@@ -66,7 +68,7 @@ def monitor_tool(tool):
                     session_id=ctx.get("session_id","unknown-session"),
                     )
                 tool_metric_store.add_metric(tool_metric)
-                logger.info(f"(arun) tool metric : {tool_metric}")
+                logger.info(f"Tool '{tool.name}' completed in {latency:.2f}s with result: {result}")
                 return result
             except Exception as e:
                 logger.exception(f"[{tool.name}] async failed: {e}")
