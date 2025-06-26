@@ -16,6 +16,7 @@ ingress:
 
 config:
   backendUrlApi: "http://fred-backend.test"
+  backendUrlKnowledge: "http://knowledge-flow-backend.test"
   websocketUrl: "ws://fred-backend.test/fred/chatbot/query"
 
 env:

@@ -41,6 +41,7 @@ import LightModeIcon from "@mui/icons-material/LightMode";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
+import WorkspacesIcon from '@mui/icons-material/Workspaces';
 import { ImageComponent } from "../utils/image.tsx";
 import { useContext } from "react";
 import { ApplicationContext } from "./ApplicationContextProvider.tsx";
@@ -160,6 +161,14 @@ export default function SideBar({ darkMode, onThemeChange }) {
       url: `/agentHub`,
       canBeDisabled: false,
       tooltip: "View agents",
+    },
+        {
+      key: "workspaces",
+      label: "Workspaces",
+      icon: <WorkspacesIcon />,
+      url: `/workspaces`,
+      canBeDisabled: false,
+      tooltip: "View Workspace",
     },
     {
       key: "account",

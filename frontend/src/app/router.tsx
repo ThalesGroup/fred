@@ -38,6 +38,8 @@ import { Audit } from "../pages/Audit";
 import { FrugalIt } from "../pages/FrugalIt";
 import Inspect from "../frugalit/pages/Inspect";
 import { Monitoring } from "../pages/Monitoring";
+import { Workspaces } from "../pages/Workspaces";
+
 
 const RootLayout = () => (
   <ProtectedRoute permission="viewer">
@@ -113,10 +115,10 @@ export const routes: RouteObject[] = [
       },
       isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES) && {
         path: "inspect",
-        element: ( 
+        element: (
          <FootprintContextProvider>
             <Inspect />
-         </FootprintContextProvider>),
+          </FootprintContextProvider>),
       },
       isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES) && {
         path: "geomap",
@@ -125,10 +127,6 @@ export const routes: RouteObject[] = [
       {
         path: "chat",
         element: <Chat />,
-      },
-      {
-        path: "monitoring",
-        element: <Monitoring />,
       },
       {
         path: "monitoring",
@@ -145,6 +143,10 @@ export const routes: RouteObject[] = [
       {
         path: "agentHub",
         element: <AgentHub />,
+      },
+      {
+        path: "workspaces",
+        element: <Workspaces />,
       },
     ].filter(Boolean),
   },
