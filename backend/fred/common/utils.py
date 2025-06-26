@@ -1,17 +1,3 @@
-# Copyright Thales 2025
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -30,6 +16,8 @@ import logging
 import traceback
 import pandas as pd
 import yaml
+from functools import wraps
+import inspect
 
 logger = logging.getLogger(__name__)
 
@@ -241,3 +229,29 @@ def log_exception(e: Exception, context_message: Optional[str] = None) -> str:
     logger.error("🧵 Stack trace:\n%s", stack_trace, stacklevel=2)
 
     return summary
+
+def is_authorized(instance, session_id: str, user_id: str) -> bool:
+    session = instance.sessions.get(session_id)
+    return session is not None and session.user_id == user_id
+
+# Decorator for wrapping methods to protect by authentication
+def requires_authorization(method):
+    @wraps(method)
+    def wrapper(self, *args, **kwargs):
+        sig = inspect.signature(method)
+        bound_args = sig.bind(self, *args, **kwargs)
+        bound_args.apply_defaults()
+
+        arguments = bound_args.arguments
+        session_id = arguments.get('session_id')
+        user_id = arguments.get('user_id')
+
+        if user_id is None:
+            raise ValueError(f"Missing 'user_id' in method '{method.__name__}'")
+
+        if not is_authorized(self, session_id, user_id):
+            logger.warning(f"Unauthorized access: user {user_id} to session {session_id} in method '{method.__name__}'")
+            return None if method.__name__.startswith("get_") else False
+
+        return method(self, *args, **kwargs)
+    return wrapper

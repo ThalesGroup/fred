@@ -119,7 +119,7 @@ class SessionManager:
             A tuple of (SessionSchema, is_new_session)
         """
         if session_id:
-            session = self.storage.get_session(session_id)
+            session = self.storage.get_session(session_id, user_id)
             if session:
                 logger.info(f"Resumed existing session {session_id} for user {user_id}")
                 return session, False
@@ -238,7 +238,7 @@ class SessionManager:
         all_payloads.append(user_payload)
         all_payloads.extend(all_messages)
 
-        self.storage.save_messages(session.id, all_payloads)
+        self.storage.save_messages(session.id, all_payloads, user_id)
         return session, all_payloads
 
 
@@ -291,8 +291,8 @@ class SessionManager:
 
         return session, history, agent, is_new_session
 
-    def delete_session(self, session_id: str) -> bool:
-        return self.storage.delete_session(session_id)
+    def delete_session(self, session_id: str, user_id: str) -> bool:
+        return self.storage.delete_session(session_id, user_id)
 
     def get_sessions(self, user_id: str) -> List[SessionWithFiles]:
         """
