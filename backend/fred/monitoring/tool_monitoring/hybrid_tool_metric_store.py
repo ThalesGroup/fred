@@ -12,7 +12,7 @@ from collections import defaultdict
 from fred.common.structure import MetricsStorageConfig
 from fred.monitoring.metric_store import MetricStore
 from fred.monitoring.tool_monitoring.metric_types import ToolMetric,NumericalMetric,CategoricalMetric
-from fred.monitoring.inmemory_metric_store import flatten_numeric_fields
+from fred.monitoring.metric_util import flatten_numeric_fields
 
 logger = logging.getLogger(__name__)
 
@@ -126,14 +126,14 @@ def create_tool_metric_store(config: MetricsStorageConfig) -> HybridToolMetricSt
 
 def get_tool_metric_store() -> HybridToolMetricStore:
     """
-    Returns the initialized HybridMetricStore singleton.
+    Returns the initialized HybridToolMetricStore singleton.
 
     Raises:
         RuntimeError: If the metric store has not been initialized yet.
     """
     if _instance is None:
         raise RuntimeError(
-            "HybridMetricStore has not been initialized. "
+            "HybridToolMetricStore has not been initialized. "
             "Call `get_create_metric_store(config)` once during application startup."
         )
     return _instance

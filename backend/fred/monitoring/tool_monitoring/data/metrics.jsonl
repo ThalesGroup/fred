@@ -24,3 +24,9 @@
 {"timestamp":1750859092.9302697,"user_id":"admin@mail.com","session_id":"VQc9_mnXEF4","tool_name":"search_documents_using_vectorization","latency":0.739375445060432}
 {"timestamp":1750860168.8258631,"user_id":"admin@mail.com","session_id":"9XUSC3Gbj-4","tool_name":"search_documents_using_vectorization","latency":0.6982839880511165}
 {"timestamp":1750860334.8890095,"user_id":"admin@mail.com","session_id":"AcjnKLT3U-c","tool_name":"search_documents_using_vectorization","latency":0.7277770830551162}
+{"timestamp":1750926891.7500072,"user_id":"admin@mail.com","session_id":"603oL_rAhVg","tool_name":"search_documents_using_vectorization","latency":8.520748259999891}
+{"timestamp":1750927619.2294197,"user_id":"admin@mail.com","session_id":"s9bVoiBWInU","tool_name":"search_documents_using_vectorization","latency":0.9944800709999981}
+{"timestamp":1750927653.9638088,"user_id":"admin@mail.com","session_id":"-tkevUWllY4","tool_name":"search_documents_using_vectorization","latency":0.7163118580001537}
+{"timestamp":1750927777.8320136,"user_id":"admin@mail.com","session_id":"WxN3i3iXfRo","tool_name":"search_documents_using_vectorization","latency":0.7213771759998053}
+{"timestamp":1750950051.598984,"user_id":"admin@mail.com","session_id":"b86Ykisdb-Y","tool_name":"search_documents_using_vectorization","latency":1.1909474909989513}
+{"timestamp":1750950101.4392107,"user_id":"admin@mail.com","session_id":"GCd2zXuqHQA","tool_name":"search_documents_using_vectorization","latency":0.7019023370012292}
