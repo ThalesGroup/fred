@@ -10,19 +10,19 @@ from statistics import mean
 from collections import defaultdict
 
 from fred.common.structure import MetricsStorageConfig
-from fred.monitoring.metric_store import MetricStore, Metric
-from fred.monitoring.metric_types import NumericalMetric, CategoricalMetric
-from fred.monitoring.inmemory_metric_store import flatten_numeric_fields
+from fred.monitoring.metric_store import MetricStore
+from fred.monitoring.node_monitoring.metric_types import NodeMetric,NumericalMetric,CategoricalMetric
+from fred.monitoring.metric_util import flatten_numeric_fields
 
 logger = logging.getLogger(__name__)
 
-class HybridMetricStore(MetricStore):
+class HybridNodeMetricStore(MetricStore):
     """
     Combines in-memory speed with file persistence (JSONL).
     """
 
     def __init__(self, config: MetricsStorageConfig):
-        self._metrics: List[Metric] = []
+        self._metrics: List[NodeMetric] = []
         raw_path = config.settings.local_path
         self.data_path = os.path.expanduser(os.path.join(raw_path, "metrics.jsonl"))
         os.makedirs(os.path.dirname(self.data_path), exist_ok=True)
@@ -33,23 +33,24 @@ class HybridMetricStore(MetricStore):
         if os.path.exists(self.data_path):
             with open(self.data_path, "r") as f:
                 for line in f:
-                    self._metrics.append(Metric(**json.loads(line)))
-            logger.info(f"HybridMetricStore: Loaded {len(self._metrics)} metrics.")
+                    logger.info(line)
+                    self._metrics.append(NodeMetric(**json.loads(line)))
+            logger.info(f"HybridToolMetricStore: Loaded {len(self._metrics)} metrics.")
 
-    def _save(self, metric: Metric):
+    def _save(self, metric: NodeMetric):
         with open(self.data_path, "a") as f:
             f.write(metric.model_dump_json() + "\n")
 
-    def add_metric(self, metric: Metric) -> None:
+    def add_metric(self, metric: NodeMetric) -> None:
         with self._lock:
             self._metrics.append(metric)
             self._save(metric)
-            logger.debug(f"HybridMetricStore: Metric added and persisted.")
+            logger.debug(f"HybridToolMetricStore: NodeMetric added and persisted.")
 
-    def get_all(self) -> List[Metric]:
+    def get_all(self) -> List[NodeMetric]:
         return self._metrics
 
-    def get_by_date_range(self, start: datetime, end: datetime) -> List[Metric]:
+    def get_by_date_range(self, start: datetime, end: datetime) -> List[NodeMetric]:
         return [
             m for m in self._metrics
             if m.timestamp and start.timestamp() <= m.timestamp <= end.timestamp()
@@ -99,7 +100,7 @@ class HybridMetricStore(MetricStore):
             result.append(NumericalMetric(bucket=bucket_key, values=values))
 
         return result
-
+    
     def get_categorical_rows_by_date_range(
         self, start: datetime, end: datetime
     ) -> List[CategoricalMetric]:
@@ -109,35 +110,31 @@ class HybridMetricStore(MetricStore):
                 timestamp=m.timestamp,
                 user_id=m.user_id,
                 session_id=m.session_id,
-                model_name=m.model_name,
-                model_type=m.model_type,
-                finish_reason=m.finish_reason,
-                id=getattr(m, "id", None),
-                system_fingerprint=m.system_fingerprint,
-                service_tier=m.service_tier
+                tool_name=m.tool_name
             )
             for m in metrics
         ]
 
-# Singleton accessor
-_instance: Optional[HybridMetricStore] = None
 
-def create_metric_store(config: MetricsStorageConfig) -> HybridMetricStore:
+# Singleton accessor
+_instance: Optional[HybridNodeMetricStore] = None
+
+def create_node_metric_store(config: MetricsStorageConfig) -> HybridNodeMetricStore:
     global _instance
     if _instance is None:
-        _instance = HybridMetricStore(config)
+        _instance = HybridNodeMetricStore(config)
     return _instance
 
-def get_metric_store() -> HybridMetricStore:
+def get_node_metric_store() -> HybridNodeMetricStore:
     """
-    Returns the initialized HybridMetricStore singleton.
+    Returns the initialized HybridNodeMetricStore singleton.
 
     Raises:
         RuntimeError: If the metric store has not been initialized yet.
     """
     if _instance is None:
         raise RuntimeError(
-            "HybridMetricStore has not been initialized. "
+            "HybridNodeMetricStore has not been initialized. "
             "Call `get_create_metric_store(config)` once during application startup."
         )
     return _instance

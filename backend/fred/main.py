@@ -25,11 +25,12 @@ import os
 
 from fastapi import FastAPI, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
-from fred.monitoring.hybrid_metric_store import create_metric_store
-from fred.monitoring.metric_store_controller import MetricStoreController
 from fred.monitoring.tool_monitoring.hybrid_tool_metric_store import create_tool_metric_store
-from fred.common.structure import MetricsStorageConfig, MetricsStorageSettings
 from fred.monitoring.tool_monitoring.tool_metric_store_controller import ToolMetricStoreController
+from fred.monitoring.node_monitoring.hybrid_node_metric_store import create_node_metric_store
+from fred.monitoring.node_monitoring.node_metric_store_controller import NodeMetricStoreController
+
+from fred.common.structure import MetricsStorageConfig, MetricsStorageSettings
 from services.ai.ai_service import AIService
 from services.kube.kube_service import KubeService
 from dotenv import load_dotenv
@@ -110,8 +111,9 @@ def build_app(configuration: Configuration, base_url: str) -> FastAPI:
     UiController(router, kube_service, ai_service)
     ChatbotController(router, ai_service)
     FeedbackController(router, configuration.feedback_storage)
-    MetricStoreController(router)
     ToolMetricStoreController(router)
+    NodeMetricStoreController(router)
+
 
     app.include_router(router)
     return app
@@ -136,9 +138,11 @@ def main():
     initialize_keycloak(configuration)
 
     # Create the singleton metric store. 
-    create_metric_store(configuration.metrics_storage)
+    # create_metric_store(configuration.metrics_storage)
     temp_conf = MetricsStorageConfig(type='local',settings=MetricsStorageSettings(local_path="fred/monitoring/tool_monitoring/data"))
     create_tool_metric_store(temp_conf)
+    node_temp_conf = MetricsStorageConfig(type='local',settings=MetricsStorageSettings(local_path="fred/monitoring/node_monitoring/data"))
+    create_node_metric_store(node_temp_conf)
     app = build_app(configuration, args.server_base_url_path)
     run_server(app, args.server_address, args.server_port, args.server_log_level)
 
