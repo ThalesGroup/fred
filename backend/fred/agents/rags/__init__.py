@@ -11,23 +11,3 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-from fastapi import HTTPException
-
-
-class UnavailableError(HTTPException):
-    def __init__(self, message):
-        super().__init__(status_code=503, detail=f"Resource unavailable: {message}")
-
-
-class InvalidCacheError(FileNotFoundError):
-    ...
-
-class UnsupportedTransportError(ValueError):
-    ...
-    
-class MCPToolFetchError(ValueError):
-    ...
-    
-class NoToolkitProvidedError(ValueError):
-    ...
