@@ -166,33 +166,31 @@ export const Chat = () => {
     );
   }
   return (
-    <PageBodyWrapper>
-      <Grid2 container display="flex" flexDirection="row">
-        <Grid2 size="grow">
-          <ChatBot
-            currentChatBotSession={currentChatBotSession}
-            currentAgenticFlow={currentAgenticFlow}
-            agenticFlows={agenticFlows}
-            onUpdateOrAddSession={handleUpdateOrAddSession}
-            isCreatingNewConversation={isCreatingNewConversation}
-            argument={cluster}
-            selectedChatProfile={selectedChatProfile}
-          />
-        </Grid2>
-        <Grid2 size="auto">
-          <Settings
-            sessions={chatBotSessions}
-            currentSession={currentChatBotSession}
-            onSelectSession={handleSelectSession}
-            onCreateNewConversation={handleCreateNewConversation}
-            agenticFlows={agenticFlows}
-            currentAgenticFlow={currentAgenticFlow}
-            onSelectAgenticFlow={handleSelectAgenticFlow}
-            onDeleteSession={handleDeleteSession}
-            onSelectChatProfile={(profile) => setSelectedChatProfile(profile)}
-          />
-        </Grid2>
+    <Grid2 container display="flex" flexDirection="row">
+      <Grid2 size="grow">
+        <ChatBot
+          currentChatBotSession={currentChatBotSession}
+          currentAgenticFlow={currentAgenticFlow}
+          agenticFlows={agenticFlows}
+          onUpdateOrAddSession={handleUpdateOrAddSession}
+          isCreatingNewConversation={isCreatingNewConversation}
+          argument={cluster}
+          selectedChatProfile={selectedChatProfile}
+        />
       </Grid2>
-    </PageBodyWrapper>
+      <Grid2 size="auto">
+        <Settings
+          sessions={chatBotSessions}
+          currentSession={currentChatBotSession}
+          onSelectSession={handleSelectSession}
+          onCreateNewConversation={handleCreateNewConversation}
+          agenticFlows={agenticFlows}
+          currentAgenticFlow={currentAgenticFlow}
+          onSelectAgenticFlow={handleSelectAgenticFlow}
+          onDeleteSession={handleDeleteSession}
+          onSelectChatProfile={(profile) => setSelectedChatProfile(profile)}
+        />
+      </Grid2>
+    </Grid2>
   );
 };

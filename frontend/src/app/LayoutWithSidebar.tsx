@@ -16,17 +16,23 @@ import { Outlet } from "react-router-dom";
 import { useContext } from "react";
 import { ApplicationContext } from "./ApplicationContextProvider";
 import SideBar from "./SideBar";
-import { Box, CssBaseline } from "@mui/material";
+import { Box, CssBaseline, useTheme } from "@mui/material";
 
 export const LayoutWithSidebar = () => {
   const { darkMode, toggleDarkMode } = useContext(ApplicationContext);
+  const theme = useTheme();
 
   return (
     <>
       <CssBaseline />
       <Box sx={{ display: "flex" }}>
         <SideBar darkMode={darkMode} onThemeChange={toggleDarkMode} />
-        <Box sx={{ flexGrow: 1 }}>
+        <Box
+          sx={{
+            flexGrow: 1,
+            overflow: "auto",
+          }}
+        >
           <Outlet />
         </Box>
       </Box>
