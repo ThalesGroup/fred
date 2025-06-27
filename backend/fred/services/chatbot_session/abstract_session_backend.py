@@ -53,6 +53,6 @@ class AbstractSessionStorage(ABC):
         pass
 
     @abstractmethod
-    def get_message_history(self, session_id: str) -> List[ChatMessagePayload]:
+    def get_message_history(self, session_id: str, user_id: str) -> List[ChatMessagePayload]:
         """Retrieve messages for a given session."""
         pass
