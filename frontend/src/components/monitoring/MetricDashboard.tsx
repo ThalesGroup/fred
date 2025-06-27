@@ -16,7 +16,6 @@ import { DateTimePicker } from "@mui/x-date-pickers/DateTimePicker";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import dayjs, { Dayjs } from "dayjs";
 import { useEffect, useState } from "react";
-import { PageBodyWrapper } from "../../common/PageBodyWrapper";
 import { Aggregation, Precision, useFetchNumericalMetricsMutation } from "../../slices/monitoringApi";
 import LoadingWithProgress from "../LoadingWithProgress";
 import DashboardCard from "./DashboardCard";
@@ -180,11 +179,7 @@ export default function MetricsDashboard() {
   }
 
   if (isLoading || !numericalSum) {
-    return (
-      <PageBodyWrapper>
-        <LoadingWithProgress />
-      </PageBodyWrapper>
-    );
+    return <LoadingWithProgress />;
   }
 
   return (

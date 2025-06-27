@@ -16,7 +16,6 @@ import "dayjs/locale/en-gb";
 import { useEffect, useState } from "react";
 import { Grid2 } from "@mui/material";
 
-import { PageBodyWrapper } from "../common/PageBodyWrapper.tsx";
 import LoadingWithProgress from "../components/LoadingWithProgress.tsx";
 import ChatBot from "../components/chatbot/ChatBot.tsx";
 import { Settings } from "../components/chatbot/Settings.tsx";
@@ -159,11 +158,7 @@ export const Chat = () => {
   }, [chatBotSessions]);
 
   if (!currentAgenticFlow) {
-    return (
-      <PageBodyWrapper>
-        <LoadingWithProgress />
-      </PageBodyWrapper>
-    );
+    return <LoadingWithProgress />;
   }
   return (
     <Grid2 container display="flex" flexDirection="row">

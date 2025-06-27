@@ -12,18 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { PageBodyWrapper } from "../common/PageBodyWrapper"
-import { TopBar } from "../common/TopBar"
-import MetricsDashboard from "../components/monitoring/MetricDashboard"
+import { TopBar } from "../common/TopBar";
+import MetricsDashboard from "../components/monitoring/MetricDashboard";
 
 export const Monitoring = () => {
-   return (
-      <PageBodyWrapper>
-         <TopBar
-            title="Agent & AI Service Monitoring"
-            description="Track usage, performance, and costs across all AI agents and services — including tokens, latency, and activity trends."
-         ></TopBar>
-         <MetricsDashboard />
-      </PageBodyWrapper>
-   )
-}
+  return (
+    <>
+      <TopBar
+        title="Agent & AI Service Monitoring"
+        description="Track usage, performance, and costs across all AI agents and services — including tokens, latency, and activity trends."
+      ></TopBar>
+      <MetricsDashboard />
+    </>
+  );
+};
