@@ -14,7 +14,6 @@
 
 import { useEffect } from "react";
 
-import { PageBodyWrapper } from "../../common/PageBodyWrapper.tsx";
 import { TopBar } from "../../common/TopBar.tsx";
 
 import { GeomapLayout } from "../component/Geomap.tsx";
@@ -28,7 +27,7 @@ export const Geomap = () => {
   }, [getTheaterOfOperationMapData]);
 
   return (
-    <PageBodyWrapper>
+    <>
       <TopBar
         title="Theater of Operations"
         description="Navigate the current theater of operations from data captured in the Mediterranean Sea near the maritime neighbourhood TL."
@@ -38,6 +37,6 @@ export const Geomap = () => {
       {isLoading && <div>Loading map data...</div>}
       {isError && <div>Error loading map data.</div>}
       {data && <GeomapLayout data={data} />}
-    </PageBodyWrapper>
+    </>
   );
 };

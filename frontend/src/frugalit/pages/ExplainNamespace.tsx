@@ -13,7 +13,6 @@
 // limitations under the License.
 
 import { useSearchParams } from "react-router-dom";
-import { PageBodyWrapper } from "../../common/PageBodyWrapper.tsx";
 import { Box } from "@mui/material";
 import { useContext, useEffect, useState } from "react";
 import { ApplicationContext } from "../../app/ApplicationContextProvider.tsx";
@@ -73,22 +72,16 @@ export const ExplainNamespace = () => {
   console.log("ClusterFullName", clusterFullName);
   console.log("CurrentClusterOverview", currentClusterOverview);
   if (!currentClusterOverview || currentClusterOverview?.fullname !== clusterFullName) {
-    return (
-      <PageBodyWrapper>
-        <LoadingWithProgress />
-      </PageBodyWrapper>
-    );
+    return <LoadingWithProgress />;
   }
   return (
-    <PageBodyWrapper>
-      <Box display="flex" flexDirection="column" justifyContent="center" alignItems="center" minHeight="50vh">
-        <NamespaceCard
-          cluster={currentClusterOverview}
-          factList={namespaceFacts}
-          summary={namespaceSummary}
-          namespace={namespace}
-        />
-      </Box>
-    </PageBodyWrapper>
+    <Box display="flex" flexDirection="column" justifyContent="center" alignItems="center" minHeight="50vh">
+      <NamespaceCard
+        cluster={currentClusterOverview}
+        factList={namespaceFacts}
+        summary={namespaceSummary}
+        namespace={namespace}
+      />
+    </Box>
   );
 };

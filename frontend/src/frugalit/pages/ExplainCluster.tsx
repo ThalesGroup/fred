@@ -13,7 +13,6 @@
 // limitations under the License.
 
 import { useSearchParams } from "react-router-dom";
-import { PageBodyWrapper } from "../../common/PageBodyWrapper.tsx";
 import { Box } from "@mui/material";
 import { useContext, useEffect, useState } from "react";
 import { ApplicationContext } from "../../app/ApplicationContextProvider.tsx";
@@ -64,18 +63,12 @@ export const ExplainCluster = () => {
   }, [clusterFullName, currentClusterOverview]); // Trigger when 'cluster' changes
 
   if (!currentClusterOverview || currentClusterOverview?.fullname !== clusterFullName) {
-    return (
-      <PageBodyWrapper>
-        <LoadingWithProgress />
-      </PageBodyWrapper>
-    );
+    return <LoadingWithProgress />;
   }
   console.log("ExplainCluster: facts", clusterFacts);
   return (
-    <PageBodyWrapper>
-      <Box display="flex" flexDirection="column" justifyContent="center" alignItems="center" minHeight="50vh">
-        <ClusterCard cluster={currentClusterOverview} factList={clusterFacts} summary={clusterSummary} />
-      </Box>
-    </PageBodyWrapper>
+    <Box display="flex" flexDirection="column" justifyContent="center" alignItems="center" minHeight="50vh">
+      <ClusterCard cluster={currentClusterOverview} factList={clusterFacts} summary={clusterSummary} />
+    </Box>
   );
 };

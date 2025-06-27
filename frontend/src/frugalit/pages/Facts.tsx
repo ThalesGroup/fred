@@ -16,7 +16,6 @@ import { Box } from "@mui/material";
 import { useContext, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { ApplicationContext } from "../../app/ApplicationContextProvider.tsx";
-import { PageBodyWrapper } from "../../common/PageBodyWrapper.tsx";
 import FactsHexagonChart from "../component/FactsHexagonChart.tsx";
 import LoadingWithProgress from "../../components/LoadingWithProgress.tsx";
 import { TopBar } from "../../common/TopBar.tsx";
@@ -34,17 +33,12 @@ export const Facts = () => {
   }, [clusterFullName, currentClusterOverview, application_context]);
 
   if (!currentClusterDescription) {
-    return (
-      <PageBodyWrapper>
-        <LoadingWithProgress />
-      </PageBodyWrapper>
-    );
+    return <LoadingWithProgress />;
   }
 
   return (
-    <PageBodyWrapper>
-      <TopBar title="Facts Overview" 
-        description="Monitor and analyze your cluster's facts" />
+    <>
+      <TopBar title="Facts Overview" description="Monitor and analyze your cluster's facts" />
       <Box
         sx={{
           padding: 8,
@@ -56,6 +50,6 @@ export const Facts = () => {
       >
         <FactsHexagonChart clusterDescription={currentClusterDescription} />
       </Box>
-    </PageBodyWrapper>
+    </>
   );
 };

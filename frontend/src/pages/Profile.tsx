@@ -15,7 +15,6 @@ import {
 import AccountCircleIcon from "@mui/icons-material/AccountCircle";
 import KeyIcon from "@mui/icons-material/VpnKey";
 import ChatIcon from "@mui/icons-material/Chat";
-import { PageBodyWrapper } from "../common/PageBodyWrapper";
 import { KeyCloakService } from "../security/KeycloakService";
 import { ProfileCard } from "../components/profile/ProfileCard";
 import { ProfileToken } from "../components/profile/ProfileToken";
@@ -75,7 +74,7 @@ export function Profile() {
   ];
 
   return (
-    <PageBodyWrapper>
+    <>
       <TopBar title="User Profile" description="Manage your user preferences and chat profiles" />
 
       <Box sx={{ width: "95%", mx: "auto", px: 2, py: 8 }}>
@@ -165,6 +164,6 @@ export function Profile() {
           </Paper>
         )}
       </Box>
-    </PageBodyWrapper>
+    </>
   );
 }

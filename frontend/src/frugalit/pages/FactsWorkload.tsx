@@ -16,7 +16,6 @@ import React, { useState } from "react";
 import { useLocation } from "react-router-dom";
 import { useGetWorkloadFactsMutation } from "../slices/api.tsx";
 import { useToast } from "../../components/ToastProvider.tsx";
-import { PageBodyWrapper } from "../../common/PageBodyWrapper.tsx";
 import { useConfirmationDialog } from "../../components/ConfirmationDialogProvider.tsx";
 import { useWorkloadFactHandlers } from "../hooks/useWorkloadFactHandlers.tsx";
 import { FactsPageLayout } from "../component/FactsPageLayout.tsx";
@@ -45,16 +44,14 @@ export const FactsWorkload: React.FC = () => {
   const handleToggleForm = () => setShowForm((prev) => !prev);
   useConfirmationDialog();
   return (
-    <PageBodyWrapper>
-      <FactsPageLayout
-        title="Workload Facts"
-        factList={factList}
-        onSubmit={handleSubmit}
-        onEdit={handleEdit}
-        onDelete={handleDelete}
-        showForm={showForm}
-        toggleForm={handleToggleForm}
-      />
-    </PageBodyWrapper>
+    <FactsPageLayout
+      title="Workload Facts"
+      factList={factList}
+      onSubmit={handleSubmit}
+      onEdit={handleEdit}
+      onDelete={handleDelete}
+      showForm={showForm}
+      toggleForm={handleToggleForm}
+    />
   );
 };

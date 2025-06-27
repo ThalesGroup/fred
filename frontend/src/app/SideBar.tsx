@@ -26,7 +26,7 @@ import {
   ListItemText,
   Tooltip,
 } from "@mui/material";
-import MonitorHeartIcon from '@mui/icons-material/MonitorHeart';
+import MonitorHeartIcon from "@mui/icons-material/MonitorHeart";
 
 import AssistantIcon from "@mui/icons-material/Assistant";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
@@ -41,7 +41,7 @@ import LightModeIcon from "@mui/icons-material/LightMode";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
-import WorkspacesIcon from '@mui/icons-material/Workspaces';
+import WorkspacesIcon from "@mui/icons-material/Workspaces";
 import { ImageComponent } from "../utils/image.tsx";
 import { useContext } from "react";
 import { ApplicationContext } from "./ApplicationContextProvider.tsx";
@@ -70,57 +70,57 @@ export default function SideBar({ darkMode, onThemeChange }) {
   const menuItems = [
     ...(isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES)
       ? [
-        {
-          key: "explain",
-          label: "Cluster",
-          icon: <AssistantIcon />,
-          url: `/explain?cluster=${currentClusterFullname}`,
-          canBeDisabled: true,
-          tooltip: "Explain the cluster",
-        },
-        {
-          key: "facts",
-          label: "Facts",
-          icon: <AssistantIcon />,
-          url: `/facts?cluster=${currentClusterFullname}`,
-          canBeDisabled: true,
-          tooltip: "Checkout the business and usage facts associated with the cluster",
-        },
-        {
-          key: "audit",
-          label: "Audit",
-          icon: <AssessmentIcon />,
-          url: `/audit?cluster=${currentClusterFullname}`,
-          canBeDisabled: true,
-          tooltip: "View a complete eco-score audit of the selected cluster",
-        },
-        {
-          key: "optimize",
-          label: "Optimize",
-          icon: <TuneIcon />,
-          url: `/optimize?cluster=${currentClusterFullname}`,
-          canBeDisabled: true,
-          tooltip: 'Check the optimization gains on the selected cluster'
-        },
-        {
-          key: "chat",
-          label: "Chat",
-          icon: <ChatIcon />,
-          url: `/chat?cluster=${currentClusterFullname}`,
-          canBeDisabled: false,
-          tooltip: "Chat with the AI assistant team",
-        },
-      ]
+          {
+            key: "explain",
+            label: "Cluster",
+            icon: <AssistantIcon />,
+            url: `/explain?cluster=${currentClusterFullname}`,
+            canBeDisabled: true,
+            tooltip: "Explain the cluster",
+          },
+          {
+            key: "facts",
+            label: "Facts",
+            icon: <AssistantIcon />,
+            url: `/facts?cluster=${currentClusterFullname}`,
+            canBeDisabled: true,
+            tooltip: "Checkout the business and usage facts associated with the cluster",
+          },
+          {
+            key: "audit",
+            label: "Audit",
+            icon: <AssessmentIcon />,
+            url: `/audit?cluster=${currentClusterFullname}`,
+            canBeDisabled: true,
+            tooltip: "View a complete eco-score audit of the selected cluster",
+          },
+          {
+            key: "optimize",
+            label: "Optimize",
+            icon: <TuneIcon />,
+            url: `/optimize?cluster=${currentClusterFullname}`,
+            canBeDisabled: true,
+            tooltip: "Check the optimization gains on the selected cluster",
+          },
+          {
+            key: "chat",
+            label: "Chat",
+            icon: <ChatIcon />,
+            url: `/chat?cluster=${currentClusterFullname}`,
+            canBeDisabled: false,
+            tooltip: "Chat with the AI assistant team",
+          },
+        ]
       : [
-        {
-          key: "chat",
-          label: "Chat",
-          icon: <ChatIcon />,
-          url: `/chat`,
-          canBeDisabled: false,
-          tooltip: "Chat with the AI assistant team",
-        },
-      ]),
+          {
+            key: "chat",
+            label: "Chat",
+            icon: <ChatIcon />,
+            url: `/chat`,
+            canBeDisabled: false,
+            tooltip: "Chat with the AI assistant team",
+          },
+        ]),
     {
       key: "monitoring",
       label: "Monitoring",
@@ -162,7 +162,7 @@ export default function SideBar({ darkMode, onThemeChange }) {
       canBeDisabled: false,
       tooltip: "View agents",
     },
-        {
+    {
       key: "workspaces",
       label: "Workspaces",
       icon: <WorkspacesIcon />,
@@ -198,7 +198,7 @@ export default function SideBar({ darkMode, onThemeChange }) {
   return (
     <Box
       height="100vh"
-      position="fixed"
+      // position="fixed"
       width={sidebarWidth}
       sx={{
         bgcolor: sideBarBgColor,
@@ -308,6 +308,8 @@ export default function SideBar({ darkMode, onThemeChange }) {
           pt: 3,
           px: isSidebarSmall ? 1 : 2,
           flexGrow: 1,
+          overflowX: "hidden",
+          overflowY: "auto",
         }}
       >
         {menuItems.map((item) => {
@@ -369,7 +371,6 @@ export default function SideBar({ darkMode, onThemeChange }) {
                       </Typography>
                     }
                   />
-
                 )}
                 {active && !isSidebarSmall && (
                   <Box

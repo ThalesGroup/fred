@@ -14,7 +14,6 @@
 
 import { useParams, useLocation } from "react-router-dom";
 import { Typography } from "@mui/material";
-import { PageBodyWrapper } from "../common/PageBodyWrapper";
 import { ResourceScoreDetailRadarChart } from "../frugalit/component/ResourceScoreDetailRadarChart";
 import { WorkloadScores } from "../frugalit/slices/scoresStructures";
 
@@ -38,13 +37,11 @@ export const Scores = () => {
   }
 
   return (
-    <PageBodyWrapper>
-      <ResourceScoreDetailRadarChart
-        zoom={"50%"}
-        application_name={application}
-        data={mapScoresToAttributes(score)}
-        unit={"/100"}
-      />
-    </PageBodyWrapper>
+    <ResourceScoreDetailRadarChart
+      zoom={"50%"}
+      application_name={application}
+      data={mapScoresToAttributes(score)}
+      unit={"/100"}
+    />
   );
 };

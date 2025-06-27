@@ -14,7 +14,6 @@
 
 import React, { useState } from "react";
 import { useLocation } from "react-router-dom";
-import { PageBodyWrapper } from "../../common/PageBodyWrapper.tsx";
 import { useNamespaceFactHandlers } from "../hooks/useNamespaceFactHandlers.tsx";
 import { FactsPageLayout } from "../component/FactsPageLayout.tsx";
 
@@ -32,16 +31,14 @@ export const FactsNamespace: React.FC = () => {
   const [showForm, setShowForm] = useState(false);
   const handleToggleForm = () => setShowForm((prev) => !prev);
   return (
-    <PageBodyWrapper>
-      <FactsPageLayout
-        title="Namespace Facts"
-        factList={factList}
-        onSubmit={handleSubmit}
-        onEdit={handleEdit}
-        onDelete={handleDelete}
-        showForm={showForm}
-        toggleForm={handleToggleForm}
-      />
-    </PageBodyWrapper>
+    <FactsPageLayout
+      title="Namespace Facts"
+      factList={factList}
+      onSubmit={handleSubmit}
+      onEdit={handleEdit}
+      onDelete={handleDelete}
+      showForm={showForm}
+      toggleForm={handleToggleForm}
+    />
   );
 };

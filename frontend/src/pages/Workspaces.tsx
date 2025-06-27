@@ -21,12 +21,11 @@ import {
   useUpdateKnowledgeContextMutation,
   useLazyGetKnowledgeContextsQuery,
 } from "../slices/knowledgeContextApi";
-import { PageBodyWrapper } from "../common/PageBodyWrapper";
 import {
   KnowledgeContext,
   KnowledgeContextEditDialog,
-  Document
-  } from "../components/knowledgeContext/KnowledgeContextEditDialog";
+  Document,
+} from "../components/knowledgeContext/KnowledgeContextEditDialog";
 import { KnowledgeContextItem } from "../components/knowledgeContext/KnowledgeContextItem";
 import { KnowledgeContextCreateDialog } from "../components/knowledgeContext/KnowledgeContextCreateDialog";
 
@@ -106,7 +105,7 @@ export const Workspaces = () => {
   };
 
   const filteredWorkspaces = workspaces.filter((workspace) =>
-    workspace.title.toLowerCase().includes(search.toLowerCase())
+    workspace.title.toLowerCase().includes(search.toLowerCase()),
   );
 
   const handleReloadProfile = async () => {
@@ -128,11 +127,9 @@ export const Workspaces = () => {
   };
 
   return (
-    <PageBodyWrapper>
+    <>
       <TopBar title="Workspaces" description="Manage workspaces">
-        <Grid2
-          sx={{ display: "flex", justifyContent: "flex-end", mt: { xs: 1, md: 0 } }}
-        ></Grid2>
+        <Grid2 sx={{ display: "flex", justifyContent: "flex-end", mt: { xs: 1, md: 0 } }}></Grid2>
       </TopBar>
 
       <Container maxWidth="xl" sx={{ pb: 10, justifyContent: "center" }}>
@@ -173,10 +170,7 @@ export const Workspaces = () => {
         </Grid2>
 
         {filteredWorkspaces.length === 0 && (
-          <Paper
-            elevation={2}
-            sx={{ p: 4, mt: 3, borderRadius: 2, textAlign: "center" }}
-          >
+          <Paper elevation={2} sx={{ p: 4, mt: 3, borderRadius: 2, textAlign: "center" }}>
             <Typography variant="body1">No workspaces found.</Typography>
           </Paper>
         )}
@@ -214,9 +208,7 @@ export const Workspaces = () => {
           PaperProps={{ sx: { width: { xs: "100%", sm: 500 }, p: 3 } }}
         >
           <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-            <Typography variant="h6">
-              {openDescription?.title || "Profile description"}
-            </Typography>
+            <Typography variant="h6">{openDescription?.title || "Profile description"}</Typography>
             <IconButton onClick={() => setOpenDescription(null)}>
               <CloseIcon />
             </IconButton>
@@ -235,6 +227,6 @@ export const Workspaces = () => {
           </Box>
         </Drawer>
       </Container>
-    </PageBodyWrapper>
+    </>
   );
 };

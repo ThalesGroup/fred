@@ -18,15 +18,21 @@ import { ApplicationContext } from "./ApplicationContextProvider";
 import SideBar from "./SideBar";
 import { Box, CssBaseline } from "@mui/material";
 
-export const LayoutWithSidebar = () => {
+export const LayoutWithSidebar = ({ children }: React.PropsWithChildren<{}>) => {
   const { darkMode, toggleDarkMode } = useContext(ApplicationContext);
 
   return (
     <>
-      <CssBaseline />
+      <CssBaseline enableColorScheme />
       <Box sx={{ display: "flex" }}>
         <SideBar darkMode={darkMode} onThemeChange={toggleDarkMode} />
-        <Box sx={{ flexGrow: 1 }}>
+        <Box
+          sx={{
+            flexGrow: 1,
+            overflow: "auto",
+          }}
+        >
+          {children}
           <Outlet />
         </Box>
       </Box>

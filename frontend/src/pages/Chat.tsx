@@ -16,7 +16,6 @@ import "dayjs/locale/en-gb";
 import { useEffect, useState } from "react";
 import { Grid2 } from "@mui/material";
 
-import { PageBodyWrapper } from "../common/PageBodyWrapper.tsx";
 import LoadingWithProgress from "../components/LoadingWithProgress.tsx";
 import ChatBot from "../components/chatbot/ChatBot.tsx";
 import { Settings } from "../components/chatbot/Settings.tsx";
@@ -159,40 +158,34 @@ export const Chat = () => {
   }, [chatBotSessions]);
 
   if (!currentAgenticFlow) {
-    return (
-      <PageBodyWrapper>
-        <LoadingWithProgress />
-      </PageBodyWrapper>
-    );
+    return <LoadingWithProgress />;
   }
   return (
-    <PageBodyWrapper>
-      <Grid2 container display="flex" flexDirection="row">
-        <Grid2 size="grow">
-          <ChatBot
-            currentChatBotSession={currentChatBotSession}
-            currentAgenticFlow={currentAgenticFlow}
-            agenticFlows={agenticFlows}
-            onUpdateOrAddSession={handleUpdateOrAddSession}
-            isCreatingNewConversation={isCreatingNewConversation}
-            argument={cluster}
-            selectedChatProfile={selectedChatProfile}
-          />
-        </Grid2>
-        <Grid2 size="auto">
-          <Settings
-            sessions={chatBotSessions}
-            currentSession={currentChatBotSession}
-            onSelectSession={handleSelectSession}
-            onCreateNewConversation={handleCreateNewConversation}
-            agenticFlows={agenticFlows}
-            currentAgenticFlow={currentAgenticFlow}
-            onSelectAgenticFlow={handleSelectAgenticFlow}
-            onDeleteSession={handleDeleteSession}
-            onSelectChatProfile={(profile) => setSelectedChatProfile(profile)}
-          />
-        </Grid2>
+    <Grid2 container display="flex" flexDirection="row">
+      <Grid2 size="grow">
+        <ChatBot
+          currentChatBotSession={currentChatBotSession}
+          currentAgenticFlow={currentAgenticFlow}
+          agenticFlows={agenticFlows}
+          onUpdateOrAddSession={handleUpdateOrAddSession}
+          isCreatingNewConversation={isCreatingNewConversation}
+          argument={cluster}
+          selectedChatProfile={selectedChatProfile}
+        />
       </Grid2>
-    </PageBodyWrapper>
+      <Grid2 size="auto">
+        <Settings
+          sessions={chatBotSessions}
+          currentSession={currentChatBotSession}
+          onSelectSession={handleSelectSession}
+          onCreateNewConversation={handleCreateNewConversation}
+          agenticFlows={agenticFlows}
+          currentAgenticFlow={currentAgenticFlow}
+          onSelectAgenticFlow={handleSelectAgenticFlow}
+          onDeleteSession={handleDeleteSession}
+          onSelectChatProfile={(profile) => setSelectedChatProfile(profile)}
+        />
+      </Grid2>
+    </Grid2>
   );
 };
