@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { PageBodyWrapper } from "../common/PageBodyWrapper";
 import { useDropzone } from "react-dropzone";
 import {
   Box,
@@ -48,7 +47,7 @@ import {
   useGetDocumentMarkdownPreviewMutation,
   useGetDocumentsWithFilterMutation,
   useLazyGetDocumentRawContentQuery,
-  useUpdateDocumentRetrievableMutation
+  useUpdateDocumentRetrievableMutation,
 } from "../slices/documentApi";
 
 import { useGetChatBotAgenticFlowsMutation } from "../slices/chatApi";
@@ -224,7 +223,6 @@ export const DocumentLibrary = () => {
   useEffect(() => {
     fetchFiles();
   }, [agentFilter, getDocumentsWithFilter]);
-
 
   const handleChangeAgentFilter = (event) => {
     setAgentFilter(event.target.value);
@@ -415,11 +413,8 @@ export const DocumentLibrary = () => {
   };
 
   return (
-    <PageBodyWrapper>
-      <TopBar
-        title="Document Library"
-        description="Access the knowledge base documents"
-      >
+    <>
+      <TopBar title="Document Library" description="Access the knowledge base documents">
         {userInfo.canManageDocuments && (
           <Grid2
             size={{ xs: 12, md: 12 }}
@@ -445,7 +440,8 @@ export const DocumentLibrary = () => {
               Upload a document
             </Button>
           </Grid2>
-        )}</TopBar>
+        )}
+      </TopBar>
 
       {/* Combined Search/Filter Section */}
       <Container maxWidth="xl" sx={{ mb: 3 }}>
@@ -709,6 +705,6 @@ export const DocumentLibrary = () => {
         </Drawer>
       )}
       <DocumentViewer document={selectedDocument} open={documentViewerOpen} onClose={handleCloseDocumentViewer} />
-    </PageBodyWrapper>
+    </>
   );
 };

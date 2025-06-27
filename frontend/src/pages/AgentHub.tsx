@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { PageBodyWrapper } from "../common/PageBodyWrapper";
 import {
   Box,
   Typography,
@@ -158,11 +157,8 @@ export const AgentHub = () => {
   };
 
   return (
-    <PageBodyWrapper>
-      <TopBar
-        title="Agent Hub"
-        description="Explore and manage available AI agents"
-      ></TopBar>
+    <>
+      <TopBar title="Agent Hub" description="Explore and manage available AI agents"></TopBar>
 
       {/* Tabs Section */}
       <Container maxWidth="xl" sx={{ mb: 3 }}>
@@ -472,6 +468,6 @@ export const AgentHub = () => {
           </Paper>
         </Fade>
       </Container>
-    </PageBodyWrapper>
+    </>
   );
 };
