@@ -24,8 +24,6 @@ def monitor_node(func):
             result = await func(*args, **kwargs)
             latency = time.perf_counter() - start
 
-            logger.info(result)
-
             ctx = get_logging_context()
             ai_message = (result.get("messages") or [{}])[0]
             message = ai_message.__dict__
@@ -38,6 +36,7 @@ def monitor_node(func):
                 latency=latency,
                 user_id=ctx.get("user_id", "unknown-user"),
                 session_id=ctx.get("session_id", "unknown-session"),
+                agent_name=ctx.get("agent_name", "unknown-agent_name"),
                 model_name=response_metadata.get("model_name"),
                 input_tokens=usage.get("prompt_tokens"),
                 output_tokens=usage.get("completion_tokens"),
@@ -74,6 +73,7 @@ def monitor_node(func):
                 latency=latency,
                 user_id=ctx.get("user_id", "unknown-user"),
                 session_id=ctx.get("session_id", "unknown-session"),
+                agent_name=ctx.get("agent_name", "unknown-agent_name"),
                 model_name=response_metadata.get("model_name"),
                 input_tokens=usage.get("prompt_tokens"),
                 output_tokens=usage.get("completion_tokens"),

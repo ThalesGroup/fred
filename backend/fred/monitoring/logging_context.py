@@ -32,8 +32,10 @@ import contextvars
 
 user_id_var = contextvars.ContextVar("user_id", default="unknown-user")
 session_id_var = contextvars.ContextVar("session_id", default="unknown-session")
+agent_name_var = contextvars.ContextVar("agent_name", default="unknown-agent_name")
 
-def set_logging_context(user_id: str, session_id: str)->None:
+
+def set_logging_context(user_id: str, session_id: str, agent_name: str)->None:
     """
     Set the user ID and session ID in the context.
 
@@ -47,6 +49,7 @@ def set_logging_context(user_id: str, session_id: str)->None:
     """
     user_id_var.set(user_id)
     session_id_var.set(session_id)
+    agent_name_var.set(agent_name)
 
 def get_logging_context() -> dict:
     """
@@ -61,4 +64,5 @@ def get_logging_context() -> dict:
     return {
         "user_id": user_id_var.get(),
         "session_id": session_id_var.get(),
+        "agent_name": agent_name_var.get(),
     }
