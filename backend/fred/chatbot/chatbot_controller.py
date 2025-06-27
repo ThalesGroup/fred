@@ -255,7 +255,7 @@ class ChatbotController:
             tags=fastapi_tags,
         )
         def delete_session(session_id: str, user: KeycloakUser = Depends(get_current_user)) -> bool:
-            return self.session_manager.delete_session(session_id)
+            return self.session_manager.delete_session(session_id, user.email)
 
 
         @app.post(

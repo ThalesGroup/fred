@@ -232,7 +232,8 @@ def log_exception(e: Exception, context_message: Optional[str] = None) -> str:
 
 def is_authorized(instance, session_id: str, user_id: str) -> bool:
     session = instance.sessions.get(session_id)
-    return session is not None and session.user_id == user_id
+    return True if session is None else session is not None and session.user_id == user_id
+
 
 # Decorator for wrapping methods to protect by authentication
 def requires_authorization(method):
@@ -248,10 +249,12 @@ def requires_authorization(method):
 
         if user_id is None:
             raise ValueError(f"Missing 'user_id' in method '{method.__name__}'")
+        if session_id is None:
+            raise ValueError(f"Missing 'session_id' or in method '{method.__name__}'")
 
         if not is_authorized(self, session_id, user_id):
             logger.warning(f"Unauthorized access: user {user_id} to session {session_id} in method '{method.__name__}'")
-            return None if method.__name__.startswith("get_") else False
+            return False
 
         return method(self, *args, **kwargs)
     return wrapper
