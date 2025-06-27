@@ -39,7 +39,7 @@ export interface ChatBotEventSend {
   message: string;
   agent_name: string;
   argument?: string; // Optional arguments for the agent
-  chat_profile_id? : string; //Optional argument for chat profile usage
+  chat_profile_id?: string; //Optional argument for chat profile usage
 }
 
 interface TranscriptionResponse {
@@ -53,7 +53,7 @@ const ChatBot = ({
   onUpdateOrAddSession,
   isCreatingNewConversation,
   argument,
-  selectedChatProfile
+  selectedChatProfile,
 }: {
   currentChatBotSession: SessionSchema;
   currentAgenticFlow: AgenticFlow;
@@ -415,56 +415,66 @@ const ChatBot = ({
       : 0;
 
   return messages?.length ? (
-    <Grid2 container display="flex" height="100vh" direction="column" alignItems="center" paddingBottom={1}>
-      {/* Chatbot messages area */}
-      <Grid2
-        display="flex"
-        flexDirection="column"
-        flex="1"
-        p={2}
+    <Box width={"100%"} height="100%" display="flex" flexDirection="column" alignItems="center">
+      <Box
         width="80%"
-        sx={{
-          overflowY: "scroll",
-          overflowX: "hidden",
-          scrollbarWidth: "none",
-          wordBreak: "break-word",
-          alignContent: "center",
-        }}
+        paddingX={5}
+        maxWidth="768px"
+        display="flex"
+        height="100vh"
+        flexDirection="column"
+        alignItems="center"
+        paddingBottom={1}
       >
-        <MessagesArea
-          key={currentChatBotSession?.id}
-          messages={messages}
-          agenticFlows={agenticFlows}
-          currentAgenticFlow={currentAgenticFlow}
-        />
-        {waitResponse && (
-          <Grid2 size="grow" marginTop={5}>
-            <DotsLoader dotColor={theme.palette.text.primary} />
-          </Grid2>
-        )}
-      </Grid2>
-
-      {/* User input area */}
-      <Grid2 container width="80%" alignContent="center">
-        <UserInput
-          enableFilesAttachment={true}
-          enableAudioAttachment={true}
-          isWaiting={waitResponse}
-          onSend={handleSend}
-        />
-      </Grid2>
-
-      {/* Conversatiom tokens count */}
-      <Grid2 container display="fex" width="80%" justifyContent="flex-end" marginTop={0.5}>
-        <Tooltip
-          title={`This conversation has used ${inputTokenCounts} prompt tokens and ${outputTokenCounts} response tokens`}
+        {/* Chatbot messages area */}
+        <Grid2
+          display="flex"
+          flexDirection="column"
+          flex="1"
+          p={2}
+          sx={{
+            overflowY: "scroll",
+            overflowX: "hidden",
+            scrollbarWidth: "none",
+            wordBreak: "break-word",
+            alignContent: "center",
+          }}
         >
-          <Typography fontSize="0.8rem" color={theme.palette.text.secondary} fontStyle="italic">
-            {`This conversation has used ${outputTokenCounts + inputTokenCounts > 0 ? outputTokenCounts + inputTokenCounts : "..."} tokens`}
-          </Typography>
-        </Tooltip>
-      </Grid2>
-    </Grid2>
+          <MessagesArea
+            key={currentChatBotSession?.id}
+            messages={messages}
+            agenticFlows={agenticFlows}
+            currentAgenticFlow={currentAgenticFlow}
+          />
+          {waitResponse && (
+            <Grid2 size="grow" marginTop={5}>
+              <DotsLoader dotColor={theme.palette.text.primary} />
+            </Grid2>
+          )}
+        </Grid2>
+
+        {/* User input area */}
+        <Grid2 container width="100%" alignContent="center">
+          <UserInput
+            enableFilesAttachment={true}
+            enableAudioAttachment={true}
+            isWaiting={waitResponse}
+            onSend={handleSend}
+          />
+        </Grid2>
+
+        {/* Conversatiom tokens count */}
+        <Grid2 container width="100%" display="fex" justifyContent="flex-end" marginTop={0.5}>
+          <Tooltip
+            title={`This conversation has used ${inputTokenCounts} prompt tokens and ${outputTokenCounts} response tokens`}
+          >
+            <Typography fontSize="0.8rem" color={theme.palette.text.secondary} fontStyle="italic">
+              {`This conversation has used ${outputTokenCounts + inputTokenCounts > 0 ? outputTokenCounts + inputTokenCounts : "..."} tokens`}
+            </Typography>
+          </Tooltip>
+        </Grid2>
+      </Box>
+    </Box>
   ) : (
     <Grid2
       container
