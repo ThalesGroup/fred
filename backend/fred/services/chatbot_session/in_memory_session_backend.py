@@ -37,13 +37,17 @@ class InMemorySessionStorage(AbstractSessionStorage):
 
     @requires_authorization
     def get_session(self, session_id: str, user_id: str) -> SessionSchema:
+        if session_id not in self.sessions:
+            return None
         return self.sessions[session_id]
 
     @requires_authorization
     def delete_session(self, session_id: str, user_id: str) -> bool:
-        del self.sessions[session_id]
-        self.history.pop(session_id, None)
-        return True
+        if session_id in self.sessions:
+            del self.sessions[session_id]
+            self.history.pop(session_id, None)
+            return True
+        return False
 
     @requires_authorization
     def save_messages(self, session_id: str, messages: List[ChatMessagePayload], user_id: str) -> None:
