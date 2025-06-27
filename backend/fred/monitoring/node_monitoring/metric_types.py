@@ -7,6 +7,7 @@ class NodeMetric(BaseModel):
     latency: float
     user_id: str
     session_id: str
+    agent_name: Optional[str] = None
     model_name: Optional[str] = None
     input_tokens: Optional[int] = None
     output_tokens: Optional[int] = None
@@ -35,6 +36,7 @@ class CategoricalMetric(BaseModel):
         timestamp: UNIX timestamp of the event.
         user_id: User identifier.
         session_id: Session identifier.
+        agent_name: Name of the agent used.
         model_name: Name of the model used.
         model_type: Type or category of the model.
         finish_reason: Why the generation ended.
@@ -43,7 +45,12 @@ class CategoricalMetric(BaseModel):
         service_tier: Tier or SLA level of the request.
     """
     timestamp: float
-    tool_name: str
     user_id: Optional[str]
     session_id: Optional[str]
-    
+    agent_name: Optional[str]
+    model_name: Optional[str]
+    model_type: Optional[str]
+    finish_reason: Optional[str]
+    id: Optional[str]
+    system_fingerprint: Optional[str]
+    service_tier: Optional[str]
