@@ -40,10 +40,9 @@ import Inspect from "../frugalit/pages/Inspect";
 import { Monitoring } from "../pages/Monitoring";
 import { Workspaces } from "../pages/Workspaces";
 
-
-const RootLayout = () => (
+const RootLayout = ({ children }: React.PropsWithChildren<{}>) => (
   <ProtectedRoute permission="viewer">
-    <LayoutWithSidebar />
+    <LayoutWithSidebar>{children}</LayoutWithSidebar>
   </ProtectedRoute>
 );
 
@@ -116,9 +115,10 @@ export const routes: RouteObject[] = [
       isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES) && {
         path: "inspect",
         element: (
-         <FootprintContextProvider>
+          <FootprintContextProvider>
             <Inspect />
-          </FootprintContextProvider>),
+          </FootprintContextProvider>
+        ),
       },
       isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES) && {
         path: "geomap",
@@ -152,7 +152,11 @@ export const routes: RouteObject[] = [
   },
   {
     path: "*",
-    element: <PageError />,
+    element: (
+      <RootLayout>
+        <PageError />
+      </RootLayout>
+    ),
   },
 ];
 

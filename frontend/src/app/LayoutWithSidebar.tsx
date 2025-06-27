@@ -18,7 +18,7 @@ import { ApplicationContext } from "./ApplicationContextProvider";
 import SideBar from "./SideBar";
 import { Box, CssBaseline, useTheme } from "@mui/material";
 
-export const LayoutWithSidebar = () => {
+export const LayoutWithSidebar = ({ children }: React.PropsWithChildren<{}>) => {
   const { darkMode, toggleDarkMode } = useContext(ApplicationContext);
   const theme = useTheme();
 
@@ -33,6 +33,7 @@ export const LayoutWithSidebar = () => {
             overflow: "auto",
           }}
         >
+          {children}
           <Outlet />
         </Box>
       </Box>
