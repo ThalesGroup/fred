@@ -55,10 +55,15 @@ class HybridNodeMetricStore(MetricStore):
             m for m in self._metrics
             if m.timestamp and start.timestamp() <= m.timestamp <= end.timestamp()
         ]
-
+    
     def get_numerical_aggregated_by_precision(
-        self, start: datetime, end: datetime, precision: str, agg: str
+        self,
+        start: datetime,
+        end: datetime,
+        precision: str,
+        agg_mapping: Dict[str, str]
     ) -> List[NumericalMetric]:
+        
         metrics = self.get_by_date_range(start, end)
 
         def round_bucket(ts: float) -> str:
@@ -89,17 +94,24 @@ class HybridNodeMetricStore(MetricStore):
             for field, val_list in field_values.items():
                 if not val_list:
                     continue
-                if agg == "avg":
+                op = agg_mapping.get(field)
+                if op is None:
+                    continue
+                if op == "avg":
                     values[field] = round(mean(val_list), 4)
-                elif agg == "max":
+                elif op == "max":
                     values[field] = round(max(val_list), 4)
-                elif agg == "min":
+                elif op == "min":
                     values[field] = round(min(val_list), 4)
-                elif agg == "sum":
+                elif op == "sum":
                     values[field] = round(sum(val_list), 4)
+                else:
+                    # Optional: raise error if unsupported agg
+                    continue
             result.append(NumericalMetric(bucket=bucket_key, values=values))
 
         return result
+
     
     def get_categorical_rows_by_date_range(
         self, start: datetime, end: datetime
