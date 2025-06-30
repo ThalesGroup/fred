@@ -137,12 +137,8 @@ def main():
     ApplicationContext(configuration)
     initialize_keycloak(configuration)
 
-    # Create the singleton metric store. 
-    # create_metric_store(configuration.metrics_storage)
-    temp_conf = MetricsStorageConfig(type='local',settings=MetricsStorageSettings(local_path="fred/monitoring/tool_monitoring/data"))
-    create_tool_metric_store(temp_conf)
-    node_temp_conf = MetricsStorageConfig(type='local',settings=MetricsStorageSettings(local_path="fred/monitoring/node_monitoring/data"))
-    create_node_metric_store(node_temp_conf)
+    create_tool_metric_store(configuration.node_metrics_storage)
+    create_node_metric_store(configuration.tool_metrics_storage)
     app = build_app(configuration, args.server_base_url_path)
     run_server(app, args.server_address, args.server_port, args.server_log_level)
 
