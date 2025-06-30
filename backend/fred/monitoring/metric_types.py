@@ -130,9 +130,10 @@ class NumericalMetric(BaseModel):
         values: Mapping of metric field names to aggregated values.
     """
     time_bucket: str
-    agent_name: Optional[str] = None
-    model_name: Optional[str] = None
     values: Dict[str, float]
+
+    class Config:
+        extra = "allow"
 
 
 
