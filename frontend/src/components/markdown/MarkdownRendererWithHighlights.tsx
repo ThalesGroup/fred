@@ -19,19 +19,26 @@ import { alpha, Box, Typography, useTheme } from "@mui/material";
 import type { Plugin } from "unified";
 import { visit } from "unist-util-visit";
 
+// Highlight class names
+export const HIGHLIGHT_BLOCK_CLASS = "highlight";
+export const HIGHLIGHT_INLINE_CLASS = "inline-highlight";
+
+// Plugin to handle custom highlight directives
+// This allows us to use `:::highlight` for block-level highlights
+// and `:highlight[...text...]` for inline highlights
 export const highlightDirective: Plugin = () => {
   return (tree) => {
     visit(tree, (node: any) => {
       if (node.type === "containerDirective" && node.name === "highlight") {
         node.data = node.data || {};
         node.data.hName = "div";
-        node.data.hProperties = { className: "highlight" };
+        node.data.hProperties = { className: HIGHLIGHT_BLOCK_CLASS };
       }
 
       if (node.type === "textDirective" && node.name === "highlight") {
         node.data = node.data || {};
         node.data.hName = "span";
-        node.data.hProperties = { className: "inline-highlight" };
+        node.data.hProperties = { className: HIGHLIGHT_INLINE_CLASS };
       }
     });
   };
@@ -86,7 +93,14 @@ export default function MarkdownRendererWithHighlights({
   // Custom highlight components
   const highlightComponents = {
     div: ({ node, children, ...props }) => {
-      const { ref, ...rest } = props;
+      const { ref, className, ...rest } = props;
+      if (!className || !className.includes(HIGHLIGHT_BLOCK_CLASS)) {
+        return (
+          <div className={className} {...rest}>
+            {children}
+          </div>
+        );
+      }
       return (
         <Box
           sx={{
@@ -96,6 +110,7 @@ export default function MarkdownRendererWithHighlights({
             padding: 1,
             my: 2,
           }}
+          className={className}
           {...rest}
         >
           {children}
@@ -103,16 +118,23 @@ export default function MarkdownRendererWithHighlights({
       );
     },
     span: ({ node, children, ...props }) => {
-      const { ref, ...rest } = props;
+      const { ref, className, ...rest } = props;
+      if (!className || !className.includes(HIGHLIGHT_INLINE_CLASS)) {
+        return (
+          <span className={className} {...rest}>
+            {children}
+          </span>
+        );
+      }
       return (
         <Typography
           component="span"
           sx={{
-            bgcolor: theme.palette.highlight.light,
+            bgcolor: alpha(theme.palette.primary.main, 0.5),
             px: 0.5,
             borderRadius: 0.5,
-            fontWeight: "bold",
           }}
+          className={className}
           {...rest}
         >
           {children}
