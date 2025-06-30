@@ -1,9 +1,36 @@
+# Copyright Thales 2025
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# You may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""
+monitor_tool.py
+
+Defines the monitor_tool decorator to automatically track
+tool executions (sync and async) in LangChain or similar frameworks.
+
+Features:
+- Records latency.
+- Captures user/session from logging context.
+- Persists metrics in ToolMetricStore.
+- Adds minimal overhead and preserves original signature.
+"""
+
+
 import time
 import logging
 from functools import wraps
 import pandas as pd
 from fred.monitoring.logging_context import get_logging_context
-from fred.monitoring.tool_monitoring.utils import translate_to_metric
 from fred.monitoring.tool_monitoring.tool_metric_type import ToolMetric
 from fred.monitoring.tool_monitoring.tool_metric_store import ToolMetricStore,get_tool_metric_store
 
@@ -11,7 +38,18 @@ logger = logging.getLogger(__name__)
 
 def monitor_tool(tool):
     """
-    Decorates a BaseTool to log latency, errors, and collect metrics.
+    Decorator that instruments a BaseTool to log metrics automatically.
+
+    When applied:
+    - Wraps _run and _arun methods to measure latency.
+    - Captures user/session IDs from logging context.
+    - Stores ToolMetric records in ToolMetricStore.
+
+    Args:
+        tool: The tool instance to instrument.
+
+    Returns:
+        The same tool, with wrapped methods.
     """
     if getattr(tool, "_is_monitored", False):
         logger.info('Tool already monitored')

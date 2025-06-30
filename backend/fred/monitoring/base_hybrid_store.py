@@ -1,3 +1,34 @@
+# Copyright Thales 2025
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# You may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""
+base_hybrid_store.py
+
+Provides HybridJsonlStore: a generic, thread-safe, hybrid (in-memory + JSONL) 
+persistent store for metrics.
+
+Features:
+- Persists metrics in JSONL files.
+- Loads existing records on startup.
+- Supports time-range filtering.
+- Flexible dynamic aggregation with custom groupby and aggregation functions.
+
+Intended use:
+- Backing stores for NodeMetricStore, ToolMetricStore, etc.
+"""
+
+
 import os
 import json
 import logging
@@ -19,7 +50,15 @@ T = TypeVar('T', bound=BaseModel)
 
 class HybridJsonlStore(Generic[T], MetricStore):
     """
-    Generic hybrid store for metrics: in-memory + JSONL persistence.
+    Generic hybrid store for metrics.
+
+    Stores any Pydantic model to a JSONL file and keeps an in-memory cache
+    for fast reads and aggregations.
+
+    Features:
+    - Thread-safe writes.
+    - Flexible time-bucket rounding.
+    - Dynamic groupby and aggregation of numerical metrics.
     """
 
     def __init__(self, config: MetricsStorageConfig, filename: str, model: Type[T]):
@@ -87,6 +126,19 @@ class HybridJsonlStore(Generic[T], MetricStore):
         agg_mapping: Dict[str, str],
         groupby_fields: Optional[List[str]] = None
     ) -> List[Dict[str, Any]]:
+        """
+        Aggregates numerical fields from stored metrics over time buckets and groupby dimensions.
+
+        Args:
+            start (datetime): Start of the time window.
+            end (datetime): End of the time window.
+            precision (str): Time bucket granularity ('sec', 'min', 'hour', 'day').
+            agg_mapping (Dict[str, str]): Mapping of field names to aggregation ops (avg, min, max, sum).
+            groupby_fields (Optional[List[str]]): Fields to group by in addition to time buckets.
+
+        Returns:
+            List[Dict[str, Any]]: Each record includes time_bucket, groupby fields, and aggregated values.
+        """
         if groupby_fields is None:
             groupby_fields = []
 

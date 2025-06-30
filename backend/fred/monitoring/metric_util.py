@@ -12,6 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""
+metric_util.py
+
+Utility functions for metric processing.
+
+Includes:
+- flatten_numeric_fields: Recursively flattens numeric fields in nested objects or dicts,
+  producing a flat dictionary of field paths to numeric values.
+"""
+
 import logging
 from typing import Dict, Any
 from pydantic import BaseModel
@@ -20,6 +30,16 @@ logger = logging.getLogger(__name__)
 
 
 def flatten_numeric_fields(prefix: str, obj: Any) -> Dict[str, float]:
+    """
+    Recursively flattens numeric fields in a nested Pydantic model or dict.
+
+    Args:
+        prefix (str): Prefix for field paths.
+        obj (Any): The object to flatten.
+
+    Returns:
+        Dict[str, float]: Mapping of flattened field paths to numeric values.
+    """
     flat: Dict[str, float] = {}
 
     if isinstance(obj, BaseModel):

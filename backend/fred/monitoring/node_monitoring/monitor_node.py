@@ -1,3 +1,29 @@
+# Copyright Thales 2025
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# You may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""
+monitor_node.py
+
+This module defines a decorator to transparently monitor LangGraph node executions.
+It records latency, user/session context, model info, and token usage as NodeMetric entries.
+
+Features:
+- Works on both sync and async node functions.
+- Automatically enriches metrics with request context.
+- Persists metrics via NodeMetricStore.
+"""
+
 import time
 import logging
 import functools
@@ -9,7 +35,19 @@ from fred.monitoring.node_monitoring.node_metric_store import get_node_metric_st
 logger = logging.getLogger(__name__)
 
 def monitor_node(func):
-    """Decorator to monitor sync or async LangGraph node functions."""
+    """
+    Decorator to automatically record metrics for a LangGraph node function.
+
+    Supports both sync and async functions.
+    Records:
+    - Execution latency
+    - Node function name
+    - User/session IDs from logging context
+    - Agent/model information
+    - Token usage details
+
+    Persists metrics to the configured NodeMetricStore.
+    """
     if getattr(func, "_is_monitored", False):
         logger.info(f"Node '{func.__name__}' is already monitored.")
         return func
