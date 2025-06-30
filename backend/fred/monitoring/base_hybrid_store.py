@@ -3,7 +3,7 @@ import json
 import logging
 from datetime import datetime
 from threading import Lock
-from typing import Type, TypeVar, Generic, List, Optional, Dict, DefaultDict, Any
+from typing import Type, TypeVar, Generic, List, Optional, Dict, DefaultDict, Any, Tuple
 from statistics import mean
 from collections import defaultdict
 
@@ -87,23 +87,11 @@ class HybridJsonlStore(Generic[T], MetricStore):
         agg_mapping: Dict[str, str],
         groupby_fields: Optional[List[str]] = None
     ) -> List[Dict[str, Any]]:
-        
         if groupby_fields is None:
             groupby_fields = []
 
+        # Filtrer les metrics par date
         metrics = self.get_by_date_range(start, end)
-
-        def round_bucket(ts: float) -> str:
-            dt = datetime.fromtimestamp(ts)
-            if precision == "sec":
-                return dt.strftime("%Y-%m-%d %H:%M:%S")
-            elif precision == "min":
-                return dt.strftime("%Y-%m-%d %H:%M")
-            elif precision == "hour":
-                return dt.strftime("%Y-%m-%d %H:00")
-            elif precision == "day":
-                return dt.strftime("%Y-%m-%d")
-            return dt.isoformat()
 
         # (time_bucket, *groupby) => { field -> [values] }
         buckets: DefaultDict[Tuple[str, ...], Dict[str, List[float]]] = defaultdict(lambda: defaultdict(list))
@@ -112,20 +100,24 @@ class HybridJsonlStore(Generic[T], MetricStore):
             if m.timestamp is None:
                 continue
 
-            time_bucket = round_bucket(m.timestamp)
+            # Round timestamp into bucket
+            time_bucket = self._round_bucket(m.timestamp, Precision(precision))
 
+            # Build groupby key parts
             grouping_values = []
             for field in groupby_fields:
+                # Always add a value to maintain alignment with groupby_fields
                 value = getattr(m, field, None)
-                grouping_values.append(str(value) if value is not None else "null")
+                grouping_values.append(str(value) if value is not None else "_MISSING_")
 
             bucket_key = (time_bucket, *grouping_values)
 
+            # Flatten all numeric fields in the metric
             flat_fields = flatten_numeric_fields("", m)
             for key, value in flat_fields.items():
                 buckets[bucket_key][key].append(value)
 
-        # Now build the transformed result
+        # Build the response
         result: List[Dict[str, Any]] = []
 
         for bucket_key, field_values in sorted(buckets.items()):
@@ -134,15 +126,11 @@ class HybridJsonlStore(Generic[T], MetricStore):
 
             record = {"time_bucket": time_bucket}
 
-            # Add groupby fields with their names if possible
-            for i, field_value in enumerate(group_values):
-                if i < len(groupby_fields):
-                    field_name = groupby_fields[i]
-                else:
-                    field_name = f"groupby_{i+1}"
-                record[field_name] = field_value
+            # Add exactly the groupby fields requested
+            for field_name, val in zip(groupby_fields, group_values):
+                record[field_name] = val
 
-            # Compute the aggregated values with suffix
+            # Compute aggregated values
             values = {}
             for field, val_list in field_values.items():
                 if not val_list:
@@ -162,10 +150,10 @@ class HybridJsonlStore(Generic[T], MetricStore):
                 else:
                     continue
 
-                # Rename the field with aggregation suffix
                 values[f"{field}--{op}"] = agg_value
 
             record["values"] = values
             result.append(record)
 
         return result
+
