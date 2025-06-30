@@ -3,7 +3,7 @@ import time
 import json
 from typing import Optional, Dict, Any
 
-from fred.monitoring.tool_monitoring.metric_types import ToolMetric
+from fred.monitoring.tool_monitoring.tool_metric_type import ToolMetric
 
 logger = logging.getLogger(__name__)
 
