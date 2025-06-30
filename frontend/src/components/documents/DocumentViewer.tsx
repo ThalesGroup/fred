@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useEffect, useState } from "react";
-import { Box, Typography, IconButton, CircularProgress, Drawer, AppBar, Toolbar } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import DownloadIcon from "@mui/icons-material/Download";
-import MarkdownViewer from "../markdown/MarkdownRenderer.tsx";
+import { AppBar, Box, CircularProgress, Drawer, IconButton, Toolbar, Typography } from "@mui/material";
+import { useEffect, useState } from "react";
 import { useGetDocumentMarkdownPreviewMutation } from "../../slices/documentApi.tsx";
+import MarkdownRendererWithHighlights, { HighlightedPart } from "../markdown/MarkdownRendererWithHighlights.tsx";
 
 // Props definition for the DocumentViewer component
 interface DocumentViewerProps {
@@ -29,6 +29,8 @@ interface DocumentViewerProps {
   } | null;
   open: boolean; // Controls whether the Drawer is open
   onClose: () => void; // Callback when the Drawer should be closed
+  highlightedParts?: HighlightedPart[]; // Optional array of parts to highlight in the document
+  chunksToHighlight?: string[]; // Optional array of text chunks to highlight in the document
 }
 
 /**
@@ -43,12 +45,24 @@ interface DocumentViewerProps {
  * It encapsulates all logic related to document fetching and rendering.
  * The parent component does **not** need to handle downloading or decoding.
  */
-export const DocumentViewer: React.FC<DocumentViewerProps> = ({ document: doc, open, onClose }) => {
+export const DocumentViewer: React.FC<DocumentViewerProps> = ({
+  document: doc,
+  open,
+  onClose,
+  highlightedParts = [],
+  chunksToHighlight = [],
+}) => {
   const [docContent, setDocContent] = useState<string>(""); // Parsed document content (decoded)
   const [isLoadingDoc, setIsLoadingDoc] = useState<boolean>(false); // Internal loading state
   const [getFullDocument] = useGetDocumentMarkdownPreviewMutation(); // API call to fetch full document
 
-  console.log("DocumentViewer: ", doc);
+  // Compute chunk parts to highlight in the document
+  const highlightedPartsFromExtracts = chunksToHighlight.map((chunk) => {
+    const start = docContent.indexOf(chunk);
+    const end = start + chunk.length;
+    return { start, end };
+  });
+
   // Load markdown content whenever the viewer is opened with a document
   useEffect(() => {
     if (!open || !doc?.document_uid) return;
@@ -143,7 +157,12 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({ document: doc, o
               <CircularProgress />
             </Box>
           ) : (
-            <MarkdownViewer content={docContent} size="large" enableEmojiSubstitution={true} />
+            <MarkdownRendererWithHighlights
+              highlightedParts={[...highlightedParts, ...highlightedPartsFromExtracts]}
+              content={docContent}
+              size="medium"
+              enableEmojiSubstitution={true}
+            />
           )}
         </Box>
       </Box>
