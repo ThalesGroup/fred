@@ -59,6 +59,7 @@ import { DocumentDrawerTable } from "../components/documents/DocumentDrawerTable
 import DocumentViewer from "../components/documents/DocumentViewer";
 import { TopBar } from "../common/TopBar";
 import { ResponsiveContainer } from "recharts";
+import { useTranslation } from 'react-i18next';
 
 /**
  * DocumentLibrary.tsx
@@ -128,6 +129,7 @@ export const DocumentLibrary = () => {
   const [triggerDownload] = useLazyGetDocumentRawContentQuery();
 
   const theme = useTheme();
+  const { t } = useTranslation();
 
   const hasDocumentManagementPermission = () => {
     const userRoles = KeyCloakService.GetUserRoles();
@@ -360,8 +362,8 @@ export const DocumentLibrary = () => {
   return (
     <PageBodyWrapper>
       <TopBar
-        title="Document Library"
-        description="Access the knowledge base documents"
+        title={t("documentLibrary.title")}
+        description={t("documentLibrary.description")}
       >
         {userInfo.canManageDocuments && (
           <Grid2
@@ -385,7 +387,7 @@ export const DocumentLibrary = () => {
                 borderRadius: "8px",
               }}
             >
-              Upload a document
+              {t("documentLibrary.upload")}
             </Button>
           </Grid2>
         )}</TopBar>
@@ -405,7 +407,7 @@ export const DocumentLibrary = () => {
               <Grid2 size={{ xs: 12, md: 12 }}>
                 <TextField
                   fullWidth
-                  placeholder="Search a document"
+                  placeholder={t("documentLibrary.searchPlaceholder")}
                   variant="outlined"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
@@ -418,7 +420,7 @@ export const DocumentLibrary = () => {
                     endAdornment: searchQuery && (
                       <InputAdornment position="end">
                         <IconButton
-                          aria-label="clear search"
+                          aria-label={t("documentLibrary.clearSearch")}
                           onClick={() => setSearchQuery("")}
                           edge="end"
                           size="small"
@@ -457,7 +459,7 @@ export const DocumentLibrary = () => {
             ) : currentDocuments.length > 0 ? (
               <Box>
                 <Typography variant="h6" fontWeight="bold" gutterBottom sx={{ mb: 2 }}>
-                  Documents ({filteredFiles.length})
+                  {t("documentLibrary.documents", { count: filteredFiles.length })}
                 </Typography>
                 <DocumentTable
                   files={currentDocuments}
@@ -504,27 +506,16 @@ export const DocumentLibrary = () => {
               </Box>
             ) : (
               <Box display="flex" flexDirection="column" alignItems="center" justifyContent="center" minHeight="400px">
-                <LibraryBooksRoundedIcon
-                  sx={{
-                    fontSize: 60,
-                    color: theme.palette.text.secondary,
-                    mb: 2,
-                  }}
-                />
+                <LibraryBooksRoundedIcon sx={{ fontSize: 60, color: theme.palette.text.secondary, mb: 2 }} />
                 <Typography variant="h5" color="textSecondary" align="center">
-                  No document found
+                  {t("documentLibrary.noDocument")}
                 </Typography>
                 <Typography variant="body1" color="textSecondary" align="center" sx={{ mt: 1 }}>
-                  Try to modify your search criteria
+                  {t("documentLibrary.modifySearch")}
                 </Typography>
                 {userInfo.canManageDocuments && (
-                  <Button
-                    variant="outlined"
-                    startIcon={<UploadIcon />}
-                    onClick={() => setOpenSide(true)}
-                    sx={{ mt: 2 }}
-                  >
-                    Add documents
+                  <Button variant="outlined" startIcon={<UploadIcon />} onClick={() => setOpenSide(true)} sx={{ mt: 2 }}>
+                    {t("documentLibrary.addDocuments")}
                   </Button>
                 )}
               </Box>
@@ -549,7 +540,7 @@ export const DocumentLibrary = () => {
           }}
         >
           <Typography variant="h5" fontWeight="bold" gutterBottom>
-            Upload a document
+            {t("documentLibrary.uploadDrawerTitle")}
           </Typography>
 
           <Paper
@@ -586,10 +577,10 @@ export const DocumentLibrary = () => {
               <Box display="flex" flexDirection="column" justifyContent="center" alignItems="center" height="100%">
                 <UploadIcon sx={{ fontSize: 40, color: "text.secondary", mb: 2 }} />
                 <Typography variant="body1" color="textSecondary">
-                  Drop your files here
+                  {t("documentLibrary.dropFiles")}
                 </Typography>
                 <Typography variant="body2" color="textSecondary">
-                  or click to select (max 200Mb per file)
+                  {t("documentLibrary.maxSize")}
                 </Typography>
               </Box>
             ) : (
@@ -604,7 +595,7 @@ export const DocumentLibrary = () => {
 
           <Box sx={{ mt: 3, display: "flex", justifyContent: "space-between" }}>
             <Button variant="outlined" onClick={() => setOpenSide(false)} sx={{ borderRadius: "8px" }}>
-              Cancel
+              {t("documentLibrary.cancel")}
             </Button>
 
             <Button
@@ -615,7 +606,7 @@ export const DocumentLibrary = () => {
               disabled={!tempFiles.length || isLoading}
               sx={{ borderRadius: "8px" }}
             >
-              {isLoading ? "Saving..." : "Save"}
+              {isLoading ? t("documentLibrary.saving") : t("documentLibrary.save")}
             </Button>
           </Box>
         </Drawer>

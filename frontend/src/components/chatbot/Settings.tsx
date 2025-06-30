@@ -44,6 +44,7 @@ import InsertDriveFileIcon from "@mui/icons-material/InsertDriveFile";
 import { KnowledgeContext } from "../knowledgeContext/KnowledgeContextEditDialog.tsx";
 import { useLazyGetKnowledgeContextsQuery } from "../../slices/knowledgeContextApi.tsx";
 import InvisibleLink from "../InvisibleLink.tsx";
+import { useTranslation } from "react-i18next";
 
 export const Settings = ({
   sessions,
@@ -69,6 +70,7 @@ export const Settings = ({
   // Récupération du thème pour l'adaptation des couleurs
   const theme = useTheme<Theme>();
   const isDarkTheme = theme.palette.mode === "dark";
+  const { t } = useTranslation();
 
   // Couleurs harmonisées avec le SideBar
   const bgColor = theme.palette.sidebar.background;
@@ -102,7 +104,7 @@ export const Settings = ({
   const fetchChatProfiles = async () => {
     setIsLoading(true);
     try {
-      const response = await getChatProfiles({tag:"chat_profile"}).unwrap();
+      const response = await getChatProfiles({ tag: "chat_profile" }).unwrap();
       setChatProfiles(response);
     } catch (error) {
       console.error("Error fetching chatProfiles:", error);
@@ -216,23 +218,18 @@ export const Settings = ({
                     fontWeight: 500,
                   }}
                 >
-                  Profile
-                </Typography>
+                  {t("settings.profile.title")}             </Typography>
               </InvisibleLink>
               <Tooltip
                 title={
                   <React.Fragment>
+                    <Typography variant="body2" sx={{ mb: 1 }}>{t("settings.profile.tooltip.intro")}</Typography>
+                    <Typography variant="body2" sx={{ mb: 1 }}>{t("settings.profile.tooltip.uses")}</Typography>
                     <Typography variant="body2" sx={{ mb: 1 }}>
-                      Custom profiles allow you to personalize and improve your interactions with the assistants.
-                    </Typography>
-                    <Typography variant="body2" sx={{ mb: 1 }}>
-                      Unlike one-time file uploads, a profile is reusable across multiple conversations and can contain:
-                    </Typography>
-                    <Typography variant="body2" sx={{ mb: 1 }}>
-                      <ul style={{ margin: "0", paddingLeft: "16px" }}>
-                        <li>Information about a client or project</li>
-                        <li>Reference documents (PDF, Word, Excel...)</li>
-                        <li>Technical specifications</li>
+                      <ul style={{ margin: 0, paddingLeft: 16 }}>
+                        <li>{t("settings.profile.tooltip.example1")}</li>
+                        <li>{t("settings.profile.tooltip.example2")}</li>
+                        <li>{t("settings.profile.tooltip.example3")}</li>
                       </ul>
                     </Typography>
                   </React.Fragment>
@@ -266,7 +263,7 @@ export const Settings = ({
               </Tooltip>
             </Box>
 
-            <Tooltip title="Add new profiles">
+            <Tooltip title={t("settings.profile.add")}>
               <InvisibleLink
                 to={{
                   pathname: "/account",
@@ -296,7 +293,7 @@ export const Settings = ({
                 if (!selected) {
                   return (
                     <Typography variant="body2" color="text.secondary">
-                      Select a profile...
+                      {t("settings.profile.select")}
                     </Typography>
                   );
                 }
@@ -312,7 +309,7 @@ export const Settings = ({
               }}
             >
               <MenuItem value="">
-                <em>None</em>
+                <em>{t("settings.profile.none")}</em>
               </MenuItem>
               {chatProfiles.map((chatProfile) => (
                 <MenuItem key={chatProfile.id} value={chatProfile.id}>
@@ -367,7 +364,7 @@ export const Settings = ({
               fontWeight: 500,
             }}
           >
-            Assistants
+            {t("settings.assistants")}
           </Typography>
 
           {currentAgenticFlow && (
@@ -471,9 +468,9 @@ export const Settings = ({
               fontWeight: 500,
             }}
           >
-            Conversations
+            {t("settings.conversations")}
           </Typography>
-          <Tooltip title="New conversation">
+          <Tooltip title={t("settings.newConversation")}>
             <IconButton
               onClick={() => onCreateNewConversation()}
               size="small"
@@ -651,7 +648,7 @@ export const Settings = ({
                 color: "text.disabled",
               }}
             >
-              <Typography variant="body2">No conversation</Typography>
+              <Typography variant="body2">{t("settings.noConversation")}</Typography>
             </Box>
           )}
         </List>
@@ -674,7 +671,7 @@ export const Settings = ({
           disableRipple
         >
           <DeleteOutlineIcon fontSize="small" sx={{ mr: 2, fontSize: "1rem" }} />
-          <Typography variant="body2">Delete</Typography>
+          <Typography variant="body2">{t("settings.delete")}</Typography>
         </MenuItem>
       </StyledMenu>
     </Box>

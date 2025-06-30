@@ -22,6 +22,7 @@ import LoadingWithProgress from "../LoadingWithProgress";
 import DashboardCard from "./DashboardCard";
 import { TokenUsageChart } from "./TokenUsageChart";
 import "dayjs/locale/fr";
+import { useTranslation } from "react-i18next";
 
 type QuickRangeType =
   | "today"
@@ -60,6 +61,7 @@ function getPrecisionForRange(start: Dayjs, end: Dayjs): Precision {
 
 export default function MetricsDashboard() {
   const [fetchNumericalMetrics, { data: numericalSum, isLoading, isError }] = useFetchNumericalMetricsMutation();
+  const { t } = useTranslation();
 
   const now = dayjs();
   const [startDate, setStartDate] = useState<Dayjs>(now.subtract(12, "hours"));
@@ -193,72 +195,45 @@ export default function MetricsDashboard() {
       <DashboardCard>
         <Box display="flex" flexDirection="column" gap={2}>
           <ButtonGroup variant="outlined" size="small" sx={{ mb: 1, flexWrap: "wrap" }}>
-            <Button
-              onClick={() => setSelectedRange("today")}
-              variant={isRangeSelected("today") ? "contained" : "outlined"}
-            >
-              Today
+            <Button onClick={() => setSelectedRange("today")} variant={isRangeSelected("today") ? "contained" : "outlined"}>
+              {t("metrics.range.today")}
             </Button>
-            <Button
-              onClick={() => setSelectedRange("yesterday")}
-              variant={isRangeSelected("yesterday") ? "contained" : "outlined"}
-            >
-              Yesterday
+            <Button onClick={() => setSelectedRange("yesterday")} variant={isRangeSelected("yesterday") ? "contained" : "outlined"}>
+              {t("metrics.range.yesterday")}
             </Button>
-            <Button
-              onClick={() => setSelectedRange("thisWeek")}
-              variant={isRangeSelected("thisWeek") ? "contained" : "outlined"}
-            >
-              This week
+            <Button onClick={() => setSelectedRange("thisWeek")} variant={isRangeSelected("thisWeek") ? "contained" : "outlined"}>
+              {t("metrics.range.thisWeek")}
             </Button>
-            <Button
-              onClick={() => setSelectedRange("thisMonth")}
-              variant={isRangeSelected("thisMonth") ? "contained" : "outlined"}
-            >
-              This month
+            <Button onClick={() => setSelectedRange("thisMonth")} variant={isRangeSelected("thisMonth") ? "contained" : "outlined"}>
+              {t("metrics.range.thisMonth")}
             </Button>
-            <Button
-              onClick={() => setSelectedRange("thisYear")}
-              variant={isRangeSelected("thisYear") ? "contained" : "outlined"}
-            >
-              This year
+            <Button onClick={() => setSelectedRange("thisYear")} variant={isRangeSelected("thisYear") ? "contained" : "outlined"}>
+              {t("metrics.range.thisYear")}
             </Button>
-            <Button
-              onClick={() => setSelectedRange("last12h")}
-              variant={isRangeSelected("last12h") ? "contained" : "outlined"}
-            >
-              Last 12 hours
+            <Button onClick={() => setSelectedRange("last12h")} variant={isRangeSelected("last12h") ? "contained" : "outlined"}>
+              {t("metrics.range.last12h")}
             </Button>
-            <Button
-              onClick={() => setSelectedRange("last24h")}
-              variant={isRangeSelected("last24h") ? "contained" : "outlined"}
-            >
-              Last 24 hours
+            <Button onClick={() => setSelectedRange("last24h")} variant={isRangeSelected("last24h") ? "contained" : "outlined"}>
+              {t("metrics.range.last24h")}
             </Button>
-            <Button
-              onClick={() => setSelectedRange("last7d")}
-              variant={isRangeSelected("last7d") ? "contained" : "outlined"}
-            >
-              Last 7 days
+            <Button onClick={() => setSelectedRange("last7d")} variant={isRangeSelected("last7d") ? "contained" : "outlined"}>
+              {t("metrics.range.last7d")}
             </Button>
-            <Button
-              onClick={() => setSelectedRange("last30d")}
-              variant={isRangeSelected("last30d") ? "contained" : "outlined"}
-            >
-              Last 30 days
+            <Button onClick={() => setSelectedRange("last30d")} variant={isRangeSelected("last30d") ? "contained" : "outlined"}>
+              {t("metrics.range.last30d")}
             </Button>
           </ButtonGroup>
           <Box display="flex" gap={2} alignItems="center">
             <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="fr">
               <DateTimePicker
-                label="From"
+                label={t("metrics.from")}
                 value={startDate}
                 onChange={(newValue) => setStartDate(newValue)}
                 slotProps={{ textField: { size: "small", sx: { minWidth: 180 } } }}
                 maxDateTime={endDate}
               />
               <DateTimePicker
-                label="To"
+                label={t("metrics.to")}
                 value={endDate}
                 onChange={(newValue) => setEndDate(newValue)}
                 slotProps={{ textField: { size: "small", sx: { minWidth: 180 } } }}
@@ -270,7 +245,7 @@ export default function MetricsDashboard() {
       </DashboardCard>
 
       {/* Charts */}
-      <DashboardCard title="Token usage over time">
+      <DashboardCard title={t("metrics.tokenUsage")}>
         <TokenUsageChart
           start={startDate.toDate()}
           end={endDate.toDate()}
