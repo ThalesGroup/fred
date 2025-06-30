@@ -2,6 +2,8 @@
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
 
+applicationName: fred-backend
+
 # This will set the replicaset count more information can be found here: https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/
 replicaCount: 1
 
@@ -43,13 +45,13 @@ service:
 
 # This block is for setting up the ingress for more information can be found here: https://kubernetes.io/docs/concepts/services-networking/ingress/
 ingress:
-  enabled: false
-  className: "nginx"
+  enabled: true
+  # className: "nginx"
   annotations: {}
     # kubernetes.io/ingress.class: nginx
     # kubernetes.io/tls-acme: "true"
   hosts:
-    - host: fred-backend.test
+    - host: fred-backend.dev.fred.thalesgroup.com
       paths:
         - path: /
           pathType: ImplementationSpecific
@@ -70,7 +72,7 @@ resources: {}
   #   cpu: 100m
   #   memory: 128Mi
 
-This is to setup the liveness and readiness probes more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
+# This is to setup the liveness and readiness probes more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
 livenessProbe:
   httpGet:
     path: /
@@ -192,7 +194,7 @@ config:
         mcp_servers:
           - name: k8s-mcp-server
             transport: sse
-            url: http://k8s-mcp:8081/sse
+            url: http://mcp-server-k8s:8081/sse
             sse_read_timeout: 600 # 10 minutes. It is 5 minutes by default but it is too short.
           #######################################
           #### Example using STDIO transport ####
@@ -219,7 +221,7 @@ config:
           - name: knowledge-flow-mcp-server
             transport: sse
             #url: http://knowledge-flow-backend:8111/mcp
-            url: http://knowledge-flow-backend.test/mcp
+            url: http://knowledge-flow-backend/mcp
             sse_read_timeout: 2000
         model: {}
       # The Monitoring expert requires you activate the 'enableK8Features' flags above
@@ -241,9 +243,9 @@ config:
   # Enable or disable the security layer
   security:
     enabled: true
-    keycloak_url: "http://keycloak.test/realms/app"
+    keycloak_url: "http://keycloak/realms/app"
     authorized_origins:
-    - "http://fred.test"
+    - "http://fred.dev.fred.thalesgroup.com"
     - "http://fred"
 
   # Environment variables for the application
@@ -303,3 +305,40 @@ dotenv:
   keycloak_client_id: "app"
   local_context_storage_path: "/home/fred-user/.fred/context-store"
   local_metadata_storage_path: "/home/fred-user/.knowledge-flow/metadata-store.json"
+
+
+kubeconfig:
+  data:
+    kubeconfig: |
+      apiVersion: v1
+      clusters:
+      - cluster:
+          certificate-authority-data: *****
+          extensions:
+          - extension:
+              last-update: Tue, 10 Jun 2025 11:21:54 CEST
+              provider: minikube.sigs.k8s.io
+              version: v1.35.0
+            name: cluster_info
+          server: https://yyy.yyy.yyy.yyy:8443
+        name: minikube
+      contexts:
+      - context:
+          cluster: minikube
+          extensions:
+          - extension:
+              last-update: Tue, 10 Jun 2025 11:21:54 CEST
+              provider: minikube.sigs.k8s.io
+              version: v1.35.0
+            name: context_info
+          namespace: default
+          user: minikube
+        name: minikube
+      current-context: minikube
+      kind: Config
+      preferences: {}
+      users:
+      - name: minikube
+        user:
+          client-certificate-data: kkkkkk
+          client-key-data: mmmmmmm
