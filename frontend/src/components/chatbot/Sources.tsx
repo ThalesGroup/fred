@@ -12,19 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useState } from "react";
-import { useTheme } from "@mui/material/styles";
-import { Button, Typography, Modal, Box, IconButton, Divider, Chip } from "@mui/material";
-import CloseIcon from "@mui/icons-material/Close";
-import VisibilityIcon from "@mui/icons-material/Visibility";
 import LibraryBooksIcon from "@mui/icons-material/LibraryBooks";
-import PersonOutlineIcon from "@mui/icons-material/PersonOutline";
-import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
+import { Box } from "@mui/material";
+import { useTheme } from "@mui/material/styles";
+import { useEffect, useRef, useState } from "react";
 import { ChatSource } from "../../slices/chatApiStructures.ts";
-import MarkdownRenderer from "../markdown/MarkdownRenderer.tsx";
-import { SourceCard } from "./SourceCard.tsx";
-import { getDocumentIcon } from "../documents/DocumentIcon.tsx";
 import FoldableChatSection from "./FoldableChatSection";
+import { SourceCard } from "./SourceCard.tsx";
 
 /**
  * Sources Component
@@ -65,6 +59,35 @@ export default function Sources({
     {} as { [docId: string]: ChatSource[] },
   );
 
+  // Gradient visibility state and ref
+  const scrollBoxRef = useRef<HTMLDivElement>(null);
+  const [showGradient, setShowGradient] = useState(false);
+
+  useEffect(() => {
+    const scrollBox = scrollBoxRef.current;
+    if (!scrollBox) return;
+
+    const checkScroll = () => {
+      // If not scrollable, hide gradient
+      if (scrollBox.scrollHeight <= scrollBox.clientHeight + 1) {
+        setShowGradient(false);
+        return;
+      }
+      // Show gradient if not at/near bottom
+      const atBottom = scrollBox.scrollTop + scrollBox.clientHeight >= scrollBox.scrollHeight - 8;
+      setShowGradient(!atBottom);
+    };
+
+    checkScroll();
+    scrollBox.addEventListener("scroll", checkScroll);
+    window.addEventListener("resize", checkScroll);
+
+    return () => {
+      scrollBox.removeEventListener("scroll", checkScroll);
+      window.removeEventListener("resize", checkScroll);
+    };
+  }, [sources]);
+
   return (
     <>
       {/* Top-level foldable section for sources */}
@@ -85,6 +108,7 @@ export default function Sources({
             }}
           >
             <Box
+              ref={scrollBoxRef}
               sx={{
                 display: "flex",
                 flexDirection: "column",
@@ -102,17 +126,19 @@ export default function Sources({
               ))}
             </Box>
             {/* Bottom gradient overlay for scroll hint */}
-            <Box
-              sx={{
-                pointerEvents: "none",
-                position: "absolute",
-                left: 0,
-                right: 0,
-                bottom: 0,
-                height: 28,
-                background: `linear-gradient(to bottom, rgba(255,255,255,0) 0%, ${theme.palette.background.default} 100%)`,
-              }}
-            />
+            {showGradient && (
+              <Box
+                sx={{
+                  pointerEvents: "none",
+                  position: "absolute",
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  height: 28,
+                  background: `linear-gradient(to bottom, rgba(255,255,255,0) 0%, ${theme.palette.background.default} 100%)`,
+                }}
+              />
+            )}
           </Box>
         </FoldableChatSection>
       )}
