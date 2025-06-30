@@ -52,12 +52,12 @@ ai:
   default_model:
     # Required in .env:
     # - OPENAI_API_KEY
-    provider: "openai"
-    name: "gpt-4o"
-    settings:
-      temperature: 0.0
-      max_retries: 2
-      request_timeout: 30
+    # provider: "openai"
+    # name: "gpt-4o"
+    # settings:
+    #   temperature: 0.0
+    #   max_retries: 2
+    #   request_timeout: 30
 
     # --- OR uncomment for Azure OpenAI ---
     # Required in .env:
@@ -67,14 +67,14 @@ ai:
     # - AZURE_TENANT_ID
     # - AZURE_CLIENT_ID
     # - AZURE_CLIENT_SECRET
-    #provider: "azure"
-    #name: "fred-gpt-4o"  
-    #settings:
-    #  api_version: "2024-05-01-preview"
-    #  temperature: 0.0
-    #  max_retries: 2
-    #  request_timeout: 30
-    #  azure_endpoint: "https://tehopenai.openai.azure.com/"
+    provider: "azure"
+    name: "fred-gpt-4o"  
+    settings:
+     api_version: "2024-05-01-preview"
+     temperature: 0.0
+     max_retries: 2
+     request_timeout: 30
+     azure_endpoint: "https://tehopenai.openai.azure.com/"
 
     # --- OR uncomment for Ollama ---
     # provider: "ollama"
@@ -143,7 +143,7 @@ ai:
       mcp_servers:
         - name: knowledge-flow-mcp-server
           transport: sse
-          url: http://knowledge-flow-backend:8111/mcp
+          url: http://localhost:8111/mcp
           sse_read_timeout: 2000
       model: {}
       # The Rags expert essentially is the Document expert before using tools and the knownledge-flow backend as a MCP server
@@ -183,10 +183,15 @@ security:
 
 # Agentic metrics are stored in a prometheus or opensearch backend. To make development
 # easy by default they are stored on a local file. 
-metrics_storage:
+node_metrics_storage:
   type: "local" 
   settings:
-    local_path: "~/.fred/metrics-store"
+    local_path: "~/.fred/node-metrics-store"
+
+tool_metrics_storage:
+  type: "local" 
+  settings:
+    local_path: "~/.fred/tool-metrics-store"
 
 # Feedbacks are store in a simple local file. It is plan to add 
 # additional backend like opensearch or minio.
