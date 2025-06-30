@@ -47,8 +47,11 @@ import { useContext } from "react";
 import { ApplicationContext } from "./ApplicationContextProvider.tsx";
 import { SideBarClusterSelector } from "../frugalit/component/SideBarClusterSelector.tsx";
 import { FeatureFlagKey, getProperty, isFeatureEnabled } from "../common/config.tsx";
+import { LanguageSelector } from "../components/LanguageSelector.tsx";
+import { useTranslation } from "react-i18next";
 
 export default function SideBar({ darkMode, onThemeChange }) {
+  const { t } = useTranslation();
   const theme = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
@@ -72,111 +75,94 @@ export default function SideBar({ darkMode, onThemeChange }) {
       ? [
         {
           key: "explain",
-          label: "Cluster",
+          label: t("sidebar.cluster"),
           icon: <AssistantIcon />,
           url: `/explain?cluster=${currentClusterFullname}`,
           canBeDisabled: true,
-          tooltip: "Explain the cluster",
+          tooltip: t("sidebar.tooltip.cluster"),
         },
         {
           key: "facts",
-          label: "Facts",
+          label: t("sidebar.facts"),
           icon: <AssistantIcon />,
           url: `/facts?cluster=${currentClusterFullname}`,
           canBeDisabled: true,
-          tooltip: "Checkout the business and usage facts associated with the cluster",
+          tooltip: t("sidebar.tooltip.facts"),
         },
         {
           key: "audit",
-          label: "Audit",
+          label: t("sidebar.audit"),
           icon: <AssessmentIcon />,
           url: `/audit?cluster=${currentClusterFullname}`,
           canBeDisabled: true,
-          tooltip: "View a complete eco-score audit of the selected cluster",
+          tooltip: t("sidebar.tooltip.audit"),
         },
         {
           key: "optimize",
-          label: "Optimize",
+          label: t("sidebar.optimize"),
           icon: <TuneIcon />,
           url: `/optimize?cluster=${currentClusterFullname}`,
           canBeDisabled: true,
-          tooltip: 'Check the optimization gains on the selected cluster'
+          tooltip: t("sidebar.tooltip.optimize"),
         },
         {
           key: "chat",
-          label: "Chat",
+          label: t("sidebar.chat"),
           icon: <ChatIcon />,
           url: `/chat?cluster=${currentClusterFullname}`,
           canBeDisabled: false,
-          tooltip: "Chat with the AI assistant team",
+          tooltip: t("sidebar.tooltip.chat"),
         },
       ]
       : [
         {
           key: "chat",
-          label: "Chat",
+          label: t("sidebar.chat"),
           icon: <ChatIcon />,
           url: `/chat`,
           canBeDisabled: false,
-          tooltip: "Chat with the AI assistant team",
+          tooltip: t("sidebar.tooltip.chat"),
         },
       ]),
     {
       key: "monitoring",
-      label: "Monitoring",
+      label: t("sidebar.monitoring"),
       icon: <MonitorHeartIcon />,
       url: `/monitoring`,
       canBeDisabled: false,
-      tooltip: "Monitor the backend AI calls",
+      tooltip: t("sidebar.tooltip.monitoring"),
     },
-    /*
-    {
-       key: 'geomap',
-       label: 'Map',
-       icon: <PublicIcon />,
-       url: `/geomap`,
-       canBeDisabled: false,
-       tooltip: 'Displays a geomap of the current theater of operations'
-    }, 
-    {
-      key: 'optimize',
-      label: 'Optimize',
-      icon: <TuneIcon />,
-      url: `/optimize?cluster=${currentClusterFullname}`,
-      canBeDisabled: true,
-      tooltip: 'Check the optimization gains on the selected cluster'
-    },*/
     {
       key: "documentLibrary",
-      label: "Documents",
+      label: t("sidebar.documentLibrary"),
       icon: <MenuBookIcon />,
       url: `/documentLibrary`,
       canBeDisabled: false,
-      tooltip: "Consult document library",
+      tooltip: t("sidebar.tooltip.documentLibrary"),
     },
     {
       key: "agent",
-      label: "Agent Hub",
+      label: t("sidebar.agent"),
       icon: <GroupIcon />,
       url: `/agentHub`,
       canBeDisabled: false,
-      tooltip: "View agents",
+      tooltip: t("sidebar.tooltip.agent"),
     },
-        {
+    {
       key: "workspaces",
-      label: "Workspaces",
+      label: t("sidebar.workspaces"),
       icon: <WorkspacesIcon />,
       url: `/workspaces`,
       canBeDisabled: false,
-      tooltip: "View Workspace",
+      tooltip: t("sidebar.tooltip.workspaces"),
     },
     {
       key: "account",
-      label: "Profile",
+      label: t("sidebar.account"),
       icon: <AccountCircleIcon />,
       url: `/account?cluster=${currentClusterFullname}`,
       canBeDisabled: false,
-      tooltip: "View your account",
+      tooltip: t("sidebar.tooltip.account"),
     },
   ];
 
@@ -319,7 +305,7 @@ export default function SideBar({ darkMode, onThemeChange }) {
                 isSidebarSmall
                   ? currentClusterFullname || !item.canBeDisabled
                     ? item.tooltip
-                    : "Please select a cluster first"
+                    : t("sidebar.tooltip.selectCluster")
                   : ""
               }
               placement="right"
@@ -413,7 +399,7 @@ export default function SideBar({ darkMode, onThemeChange }) {
         >
           {!isSidebarSmall && (
             <Typography variant="caption" color="text.secondary" sx={{ mr: 1 }}>
-              {darkMode ? "dark" : "light"} mode
+              {darkMode ? t("sidebar.theme.dark") : t("sidebar.theme.light")}
             </Typography>
           )}
           <IconButton
@@ -486,6 +472,7 @@ export default function SideBar({ darkMode, onThemeChange }) {
                 <OpenInNewIcon sx={{ fontSize: "0.8rem", color: "text.secondary" }} />
               </IconButton>
             </Box>
+            <LanguageSelector />
           </>
         )}
       </Box>

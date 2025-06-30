@@ -38,6 +38,7 @@ import dayjs from "dayjs";
 import { getDocumentIcon } from "./DocumentIcon";
 import { DocumentTableRowActionsMenu } from "./DocumentTableRowActionsMenu";
 import { useGetDocumentMetadataMutation } from "../../slices/documentApi";
+import { useTranslation } from "react-i18next";
 
 export interface FileRow {
   document_uid: string;
@@ -74,6 +75,7 @@ export const DocumentTable: React.FC<FileTableProps> = ({
   onOpen,
   isAdmin = false,
 }) => {
+  const { t } = useTranslation();
   const allSelected = selected.length === files.length && files.length > 0;
   const [sortBy, setSortBy] = useState<keyof FileRow>("date_added_to_kb");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
@@ -128,21 +130,9 @@ export const DocumentTable: React.FC<FileTableProps> = ({
   return (
     <>
       {selected.length > 0 && (
-        <Box
-          sx={{
-            position: "absolute",
-            left: 24,
-            right: 24,
-            zIndex: 10,
-            p: 2,
-            top: 0,
-            display: "flex",
-            justifyContent: "flex-end",
-            alignItems: "center",
-          }}
-        >
+        <Box sx={{ position: "absolute", left: 24, right: 24, zIndex: 10, p: 2, top: 0, display: "flex", justifyContent: "flex-end", alignItems: "center" }}>
           <Typography pr={2} variant="subtitle2">
-            {selected.length} selected
+            {t("documentTable.selectedCount", { count: selected.length })}
           </Typography>
           <Box display="flex" gap={1}>
             <Button
@@ -151,7 +141,7 @@ export const DocumentTable: React.FC<FileTableProps> = ({
               color="error"
               onClick={() => selected.forEach((uid) => onDelete(uid, ""))}
             >
-              Delete Selected
+              {t("documentTable.deleteSelected")}
             </Button>
             <Button
               size="small"
@@ -167,7 +157,7 @@ export const DocumentTable: React.FC<FileTableProps> = ({
                 })
               }
             >
-              Download Selected
+              {t("documentTable.downloadSelected")}
             </Button>
           </Box>
         </Box>
@@ -187,7 +177,7 @@ export const DocumentTable: React.FC<FileTableProps> = ({
                   direction={sortBy === "document_name" ? sortDirection : "asc"}
                   onClick={() => handleSortChange("document_name")}
                 >
-                  File Name
+                  {t("documentTable.fileName")}
                 </TableSortLabel>
               </TableCell>
               <TableCell>
@@ -196,11 +186,11 @@ export const DocumentTable: React.FC<FileTableProps> = ({
                   direction={sortBy === "date_added_to_kb" ? sortDirection : "asc"}
                   onClick={() => handleSortChange("date_added_to_kb")}
                 >
-                  Date Added
+                  {t("documentTable.dateAdded")}
                 </TableSortLabel>
               </TableCell>
-              <TableCell>Retrievable</TableCell>
-              <TableCell align="right">Actions</TableCell>
+              <TableCell>{t("documentTable.retrievable")}</TableCell>
+              <TableCell align="right">{t("documentTable.actions")}</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -221,13 +211,11 @@ export const DocumentTable: React.FC<FileTableProps> = ({
                   <TableCell>
                     <Box display="flex" alignItems="center" gap={1}>
                       {getDocumentIcon(file.document_name)}
-                      <Typography variant="body2" noWrap>
-                        {file.document_name}
-                      </Typography>
+                      <Typography variant="body2" noWrap>{file.document_name}</Typography>
                     </Box>
                   </TableCell>
                   <TableCell>
-                    <Tooltip title="Date added to knowledge base">
+                    <Tooltip title={t("documentTable.dateAddedTooltip")}>
                       <Typography variant="body2">
                         <EventAvailableIcon fontSize="small" sx={{ mr: 0.5 }} />
                         {formatDate(file.date_added_to_kb)}
@@ -237,11 +225,7 @@ export const DocumentTable: React.FC<FileTableProps> = ({
                   <TableCell>
                     {isAdmin && onToggleRetrievable ? (
                       <Switch size="small" checked={file.retrievable} onChange={() => onToggleRetrievable(file)} />
-                    ) : file.retrievable ? (
-                      "Yes"
-                    ) : (
-                      "No"
-                    )}
+                    ) : file.retrievable ? t("documentTable.yes") : t("documentTable.no")}
                   </TableCell>
                   <TableCell align="right">
                     {isAdmin && (
@@ -253,29 +237,27 @@ export const DocumentTable: React.FC<FileTableProps> = ({
                     )}
                   </TableCell>
                 </TableRow>
+
                 <TableRow>
                   <TableCell colSpan={6} sx={{ p: 0, borderBottom: "none" }}>
                     <Collapse in={openRows[file.document_uid]} timeout="auto" unmountOnExit>
                       <Box sx={{ p: 2, bgcolor: "background.default" }}>
                         {loadingMetadata[file.document_uid] ? (
                           <Typography variant="body2" fontStyle="italic" color="text.secondary">
-                            Loading metadata...
+                            {t("documentTable.loadingMetadata")}
                           </Typography>
-                        ) : metadataByUid[file.document_uid] &&
-                          Object.keys(metadataByUid[file.document_uid]).length > 0 ? (
+                        ) : metadataByUid[file.document_uid] && Object.keys(metadataByUid[file.document_uid]).length > 0 ? (
                           Object.entries(metadataByUid[file.document_uid]).map(([key, value]) => (
                             <Box key={key} sx={{ display: "flex", flexDirection: "row", mb: 0.5 }}>
-                              <Typography variant="body2" fontWeight={500}>
-                                {key}:
-                              </Typography>
+                              <Typography variant="body2" fontWeight={500}>{key}:</Typography>
                               <Typography variant="body2" sx={{ ml: 1 }}>
-                                {typeof value === "object" && value !== null ? JSON.stringify(value, null, 2) : String(value)}
+                                {typeof value === "object" ? JSON.stringify(value, null, 2) : String(value)}
                               </Typography>
                             </Box>
                           ))
                         ) : (
                           <Typography variant="body2" fontStyle="italic" color="text.secondary">
-                            No metadata available for this document.
+                            {t("documentTable.noMetadata")}
                           </Typography>
                         )}
                       </Box>
@@ -289,4 +271,4 @@ export const DocumentTable: React.FC<FileTableProps> = ({
       </TableContainer>
     </>
   );
-};
+}
