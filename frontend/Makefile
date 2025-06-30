@@ -57,6 +57,9 @@ docker-build: ## Build the Docker image
 run: check-node node_modules ## Run fred-ui front-end locally
 	npm run dev
 
+run-only:
+	npm run dev
+
 .PHONY: docker-run
 docker-run: ## Docker run
 	docker run -it --rm \
