@@ -56,14 +56,18 @@ class HybridNodeMetricStore(MetricStore):
             if m.timestamp and start.timestamp() <= m.timestamp <= end.timestamp()
         ]
     
-    def get_numerical_aggregated_by_precision(
+    def get_aggregate_numerical_metrics_by_time_and_group(
         self,
         start: datetime,
         end: datetime,
         precision: str,
-        agg_mapping: Dict[str, str]
+        agg_mapping: Dict[str, str],
+        groupby_fields: Optional[List[str]] = None
     ) -> List[NumericalMetric]:
         
+        if groupby_fields is None:
+            groupby_fields = []
+
         metrics = self.get_by_date_range(start, end)
 
         def round_bucket(ts: float) -> str:
@@ -83,13 +87,28 @@ class HybridNodeMetricStore(MetricStore):
         for m in metrics:
             if m.timestamp is None:
                 continue
-            bucket = round_bucket(m.timestamp)
+
+            time_bucket = round_bucket(m.timestamp)
+
+            # Extraire les valeurs de groupby
+            grouping_values = []
+            for field in groupby_fields:
+                value = getattr(m, field, None)
+                grouping_values.append(str(value) if value is not None else "null")
+
+            # Clé du bucket = time_bucket + grouping fields
+            bucket_key = (time_bucket, *grouping_values)
+
             flat_fields = flatten_numeric_fields("", m)
             for key, value in flat_fields.items():
-                buckets[bucket][key].append(value)
+                buckets[bucket_key][key].append(value)
 
         result: List[NumericalMetric] = []
         for bucket_key, field_values in sorted(buckets.items()):
+            time_bucket = bucket_key[0]
+            group_values = bucket_key[1:]
+            bucket_str = "|".join([time_bucket] + list(group_values))
+
             values: Dict[str, float] = {}
             for field, val_list in field_values.items():
                 if not val_list:
@@ -105,10 +124,8 @@ class HybridNodeMetricStore(MetricStore):
                     values[field] = round(min(val_list), 4)
                 elif op == "sum":
                     values[field] = round(sum(val_list), 4)
-                else:
-                    # Optional: raise error if unsupported agg
-                    continue
-            result.append(NumericalMetric(bucket=bucket_key, values=values))
+
+            result.append(NumericalMetric(bucket=bucket_str, values=values))
 
         return result
 

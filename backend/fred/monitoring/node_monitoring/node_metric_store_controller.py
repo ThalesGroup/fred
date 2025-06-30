@@ -51,7 +51,8 @@ class NodeMetricStoreController:
             start: Annotated[str, Query()],
             end: Annotated[str, Query()],
             precision: Precision = Precision.hour,
-            agg: List[str] = Query(default=[])
+            agg: List[str] = Query(default=[]),
+            groupby: List[str] = Query(default=[])
         ) -> List[NumericalMetric]:
             start_dt, end_dt = parse_dates(start, end)
 
@@ -63,12 +64,15 @@ class NodeMetricStoreController:
                     agg_mapping[field] = op
                 except ValueError:
                     raise HTTPException(400, detail=f"Invalid agg parameter format: {item}")
-            logger.info(agg_mapping)
-            return self.metric_store.get_numerical_aggregated_by_precision(
+
+            logger.info(f"agg_mapping={agg_mapping}, groupby={groupby}")
+
+            return self.metric_store.get_aggregate_numerical_metrics_by_time_and_group(
                 start=start_dt,
                 end=end_dt,
                 precision=precision,
-                agg_mapping=agg_mapping
+                agg_mapping=agg_mapping,
+                groupby_fields=groupby
             )
 
 
