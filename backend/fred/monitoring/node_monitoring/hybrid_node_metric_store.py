@@ -35,7 +35,7 @@ class HybridNodeMetricStore(MetricStore):
                 for line in f:
                     logger.info(line)
                     self._metrics.append(NodeMetric(**json.loads(line)))
-            logger.info(f"HybridToolMetricStore: Loaded {len(self._metrics)} metrics.")
+            logger.info(f"HybridNodeMetricStore: Loaded {len(self._metrics)} metrics.")
 
     def _save(self, metric: NodeMetric):
         with open(self.data_path, "a") as f:
@@ -45,7 +45,7 @@ class HybridNodeMetricStore(MetricStore):
         with self._lock:
             self._metrics.append(metric)
             self._save(metric)
-            logger.debug(f"HybridToolMetricStore: NodeMetric added and persisted.")
+            logger.debug(f"HybridNodeMetricStore: NodeMetric added and persisted.")
 
     def get_all(self) -> List[NodeMetric]:
         return self._metrics
