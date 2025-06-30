@@ -71,13 +71,20 @@ export default function MarkdownRendererWithHighlights({
       // Clamp indices to content length
       const safeStart = Math.max(0, Math.min(start, highlightedContent.length));
       const safeEnd = Math.max(safeStart, Math.min(end, highlightedContent.length));
-
+      const part = highlightedContent.slice(safeStart, safeEnd);
       // Add text between highlighted parts
       result += highlightedContent.slice(lastIndex, safeStart);
 
-      // Add highlighted part: use container directive if multi-line, else text directive
-      const part = highlightedContent.slice(safeStart, safeEnd);
-      if (/\n/.test(part)) {
+      // Decide directive type
+      const isMultiline = /\n/.test(part);
+      // Check if highlight is exactly a whole line
+      const before = safeStart === 0 ? "\n" : highlightedContent[safeStart - 1];
+      const after = safeEnd === highlightedContent.length ? "\n" : highlightedContent[safeEnd];
+      const isLineStart = safeStart === 0 || before === "\n";
+      const isLineEnd = safeEnd === highlightedContent.length || after === "\n";
+      const isWholeLine = isLineStart && isLineEnd;
+
+      if (isMultiline || isWholeLine) {
         // Block-level highlight
         result += `\n:::highlight\n${part}\n:::\n`;
       } else {
