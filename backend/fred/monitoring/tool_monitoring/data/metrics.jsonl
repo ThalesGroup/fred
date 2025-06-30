@@ -31,3 +31,4 @@
 {"timestamp":1750950051.598984,"user_id":"admin@mail.com","session_id":"b86Ykisdb-Y","tool_name":"search_documents_using_vectorization","latency":1.1909474909989513}
 {"timestamp":1750950101.4392107,"user_id":"admin@mail.com","session_id":"GCd2zXuqHQA","tool_name":"search_documents_using_vectorization","latency":0.7019023370012292}
 {"timestamp":1751017516.8868413,"user_id":"admin@mail.com","session_id":"RjI5kui133U","tool_name":"get_energy_mix","latency":0.08524636699985422}
+{"timestamp":1751032656.8103585,"user_id":"admin@mail.com","session_id":"TNAn2s7pKX4","tool_name":"search_documents_using_vectorization","latency":0.6931990609991772}

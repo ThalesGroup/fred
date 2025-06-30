@@ -98,6 +98,8 @@ class HybridToolMetricStore(MetricStore):
                     values[field] = round(sum(val_list), 4)
             result.append(NumericalMetric(bucket=bucket_key, values=values))
 
+        if result is None:
+            result = []
         return result
     
     def get_categorical_rows_by_date_range(

@@ -41,24 +41,36 @@ class NodeMetricStoreController:
         ) -> List[NodeMetric]:
             start_dt, end_dt = parse_dates(start, end)
             return self.metric_store.get_by_date_range(start_dt, end_dt)
-
+        
+        
         @router.get(
             "/metrics/nodes/numerical",
             response_model=List[NumericalMetric],
-            tags=["Metrics"],
-            summary="Aggregate numerical node metrics",
-            description="Aggregate node metrics into time buckets (precision) and compute the selected aggregation (avg, min, max, sum).",
         )
         def get_node_numerical_metrics(
             start: Annotated[str, Query()],
             end: Annotated[str, Query()],
             precision: Precision = Precision.hour,
-            agg: Aggregation = Aggregation.avg,
+            agg: List[str] = Query(default=[])
         ) -> List[NumericalMetric]:
             start_dt, end_dt = parse_dates(start, end)
+
+            # parse agg
+            agg_mapping = {}
+            for item in agg:
+                try:
+                    field, op = item.split(":")
+                    agg_mapping[field] = op
+                except ValueError:
+                    raise HTTPException(400, detail=f"Invalid agg parameter format: {item}")
+            logger.info(agg_mapping)
             return self.metric_store.get_numerical_aggregated_by_precision(
-                start=start_dt, end=end_dt, precision=precision, agg=agg
+                start=start_dt,
+                end=end_dt,
+                precision=precision,
+                agg_mapping=agg_mapping
             )
+
 
         @router.get(
             "/metrics/nodes/categorical",
