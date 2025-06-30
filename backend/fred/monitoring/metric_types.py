@@ -12,12 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 """
+metric_types.py
+
 Pydantic data models defining the structure of monitoring metrics.
 
-This includes token usage details, filter results, and output formats for
-numerical and categorical metric aggregations.
+Includes:
+- Token usage details (TokenDetails, TokenUsage).
+- Metadata about model inferences.
+- NumericalMetric for aggregated numerical results.
+- CategoricalMetric for extracting categorical fields.
 """
 
 from typing import Optional, Dict, List, Any
@@ -126,8 +130,18 @@ class NumericalMetric(BaseModel):
     Aggregated numerical metrics for a specific time bucket.
 
     Attributes:
-        bucket: Time window label (e.g., '2025-06-12T15:00').
+        time_bucket: Label for the time bucket (e.g., '2025-06-12T15:00').
         values: Mapping of metric field names to aggregated values.
+
+    Extra fields:
+        Any groupby field requested will also be included dynamically.
+
+    Example:
+        {
+            "time_bucket": "2025-06-12T15:00",
+            "model_name": "gpt-4",
+            "values": {"latency--avg": 1.23, "tokens--sum": 2000}
+        }
     """
     time_bucket: str
     values: Dict[str, float]
