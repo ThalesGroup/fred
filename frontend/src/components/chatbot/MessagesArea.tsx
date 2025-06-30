@@ -101,12 +101,10 @@ function Area({
             finalMessages.push(msg);
             console.log("✅ Classified as: FINAL RESPONSE");
           }
-        } 
-        else if (msg.subtype === "injected_context") {
+        } else if (msg.subtype === "injected_context") {
           console.log("⏭️ Skipping injected context message");
           continue;
-        }
-        else {
+        } else {
           otherMessages.push(msg);
           console.warn("⚠️ Classified as: OTHER (fallback)");
         }
@@ -129,12 +127,7 @@ function Area({
 
       if (Object.keys(thoughtsByTask).length > 0) {
         elements.push(
-          <Thoughts
-            key={`thoughts-${group[0].exchange_id}`}
-            messages={thoughtsByTask}
-            expandThoughts={true}
-            enableThoughts={true}
-          />,
+          <Thoughts key={`thoughts-${group[0].exchange_id}`} messages={thoughtsByTask} isOpenByDefault={true} />,
         );
       }
       for (const msg of otherMessages) {
