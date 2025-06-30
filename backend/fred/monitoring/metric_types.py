@@ -129,8 +129,12 @@ class NumericalMetric(BaseModel):
         bucket: Time window label (e.g., '2025-06-12T15:00').
         values: Mapping of metric field names to aggregated values.
     """
-    bucket: str  # e.g., "2025-06-11T14:00"
-    values: Dict[str, float]  # {"latency": 0.32, "token_usage.total_tokens": 59}
+    time_bucket: str
+    agent_name: Optional[str] = None
+    model_name: Optional[str] = None
+    values: Dict[str, float]
+
+
 
 class CategoricalMetric(BaseModel):
     """
@@ -140,6 +144,7 @@ class CategoricalMetric(BaseModel):
         timestamp: UNIX timestamp of the event.
         user_id: User identifier.
         session_id: Session identifier.
+        agent_name: Name of the agent used.
         model_name: Name of the model used.
         model_type: Type or category of the model.
         finish_reason: Why the generation ended.
@@ -150,6 +155,7 @@ class CategoricalMetric(BaseModel):
     timestamp: float
     user_id: Optional[str]
     session_id: Optional[str]
+    agent_name: Optional[str]
     model_name: Optional[str]
     model_type: Optional[str]
     finish_reason: Optional[str]

@@ -131,7 +131,7 @@ class MetricStore(ABC):
         pass
 
     @abstractmethod
-    def get_numerical_aggregated_by_precision(
+    def get_aggregate_numerical_metrics_by_time_and_group(
         self, start: datetime, end: datetime, precision: Precision, agg: Aggregation
     ) -> List[NumericalMetric]:
         """

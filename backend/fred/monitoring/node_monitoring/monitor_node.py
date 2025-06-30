@@ -3,8 +3,8 @@ import logging
 import functools
 import inspect
 from fred.monitoring.logging_context import get_logging_context
-from fred.monitoring.node_monitoring.metric_types import NodeMetric
-from fred.monitoring.node_monitoring.hybrid_node_metric_store import get_node_metric_store
+from fred.monitoring.node_monitoring.node_metric_type import NodeMetric
+from fred.monitoring.node_monitoring.node_metric_store import get_node_metric_store
 
 logger = logging.getLogger(__name__)
 

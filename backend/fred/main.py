@@ -25,10 +25,12 @@ import os
 
 from fastapi import FastAPI, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
-from fred.monitoring.tool_monitoring.hybrid_tool_metric_store import create_tool_metric_store
+from fred.monitoring.tool_monitoring.tool_metric_store import create_tool_metric_store
 from fred.monitoring.tool_monitoring.tool_metric_store_controller import ToolMetricStoreController
-from fred.monitoring.node_monitoring.hybrid_node_metric_store import create_node_metric_store
+from fred.monitoring.tool_monitoring.tool_metric_store import ToolMetric
+from fred.monitoring.node_monitoring.node_metric_store import create_node_metric_store
 from fred.monitoring.node_monitoring.node_metric_store_controller import NodeMetricStoreController
+from fred.monitoring.node_monitoring.node_metric_store import NodeMetric
 
 from fred.common.structure import MetricsStorageConfig, MetricsStorageSettings
 from services.ai.ai_service import AIService
