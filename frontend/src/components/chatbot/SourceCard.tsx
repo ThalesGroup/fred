@@ -66,6 +66,7 @@ export const SourceCard = ({ documentId, sources }: SourceCardProps) => {
         document={{ document_uid: documentId }}
         open={documentViewerOpen}
         onClose={() => setDocumentViewerOpen(false)}
+        chunksToHighlight={sources.map((source) => source.content)}
       />
     </>
   );
