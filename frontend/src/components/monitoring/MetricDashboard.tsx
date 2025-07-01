@@ -17,11 +17,12 @@ import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import dayjs, { Dayjs } from "dayjs";
 import { useEffect, useState } from "react";
 import { PageBodyWrapper } from "../../common/PageBodyWrapper";
-import { Aggregation, Precision, useFetchNumericalMetricsMutation } from "../../slices/monitoringApi";
+import { Precision, useFetchNumericalMetricsMutation } from "../../slices/monitoringApi";
 import LoadingWithProgress from "../LoadingWithProgress";
 import DashboardCard from "./DashboardCard";
 import { TokenUsageChart } from "./TokenUsageChart";
 import "dayjs/locale/fr";
+import { groupBy } from "lodash";
 
 type QuickRangeType =
   | "today"
@@ -74,7 +75,7 @@ export default function MetricsDashboard() {
       start: start.toISOString(),
       end: end.toISOString(),
       precision: getPrecisionForRange(start, end),
-      agg: "sum" as Aggregation,
+      agg: ["total_tokens:sum"],
     };
 
     console.log("Fetching numerical metrics", param);
