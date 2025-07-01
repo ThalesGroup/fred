@@ -1,40 +1,17 @@
-// Copyright Thales 2025
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 import React, { useState } from "react";
 import { IconButton, Menu, MenuItem, ListItemIcon, ListItemText } from "@mui/material";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import DeleteIcon from "@mui/icons-material/Delete";
 import DownloadIcon from "@mui/icons-material/Download";
-import VisibilityIcon from "@mui/icons-material/Visibility"; // Import icon for viewing documents
+import VisibilityIcon from "@mui/icons-material/Visibility";
+import { useTranslation } from "react-i18next";
 
-/**
- * Props interface for the document row actions menu
- * @property onDelete - Function to handle document deletion
- * @property onDownload - Function to handle document download
- * @property onOpen - Function to handle document viewing/opening
- */
 interface DocumentTableRowActionsMenuProps {
   onDelete: () => void;
   onDownload: () => void;
   onOpen: () => void;
 }
 
-/**
- * Component that displays a menu with actions for document table rows
- * Provides options to view, download, and delete documents
- */
 export const DocumentTableRowActionsMenu: React.FC<DocumentTableRowActionsMenuProps> = ({
   onDelete,
   onDownload,
@@ -42,10 +19,15 @@ export const DocumentTableRowActionsMenu: React.FC<DocumentTableRowActionsMenuPr
 }) => {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const open = Boolean(anchorEl);
+  const { t } = useTranslation();
 
   return (
     <>
-      <IconButton size="small" onClick={(e) => setAnchorEl(e.currentTarget)}>
+      <IconButton
+        size="small"
+        onClick={(e) => setAnchorEl(e.currentTarget)}
+        aria-label={t("documentActions.menuLabel")}
+      >
         <MoreVertIcon fontSize="small" />
       </IconButton>
       <Menu
@@ -55,7 +37,6 @@ export const DocumentTableRowActionsMenu: React.FC<DocumentTableRowActionsMenuPr
         anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
         transformOrigin={{ vertical: "top", horizontal: "right" }}
       >
-        {/* New View/Open option */}
         <MenuItem
           onClick={() => {
             onOpen();
@@ -65,7 +46,7 @@ export const DocumentTableRowActionsMenu: React.FC<DocumentTableRowActionsMenuPr
           <ListItemIcon>
             <VisibilityIcon fontSize="small" />
           </ListItemIcon>
-          <ListItemText primary="Preview" />
+          <ListItemText primary={t("documentActions.preview")} />
         </MenuItem>
         <MenuItem
           onClick={() => {
@@ -76,7 +57,7 @@ export const DocumentTableRowActionsMenu: React.FC<DocumentTableRowActionsMenuPr
           <ListItemIcon>
             <DownloadIcon fontSize="small" />
           </ListItemIcon>
-          <ListItemText primary="Download" />
+          <ListItemText primary={t("documentActions.download")} />
         </MenuItem>
         <MenuItem
           onClick={() => {
@@ -87,7 +68,7 @@ export const DocumentTableRowActionsMenu: React.FC<DocumentTableRowActionsMenuPr
           <ListItemIcon>
             <DeleteIcon fontSize="small" />
           </ListItemIcon>
-          <ListItemText primary="Delete" />
+          <ListItemText primary={t("documentActions.delete")} />
         </MenuItem>
       </Menu>
     </>

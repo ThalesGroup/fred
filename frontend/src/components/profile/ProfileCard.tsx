@@ -20,6 +20,8 @@ import LogoutIcon from "@mui/icons-material/Logout";
 import EmailIcon from "@mui/icons-material/Email";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import FingerprintIcon from "@mui/icons-material/Fingerprint";
+import { useTranslation } from "react-i18next";
+import { LanguageSelector } from "../LanguageSelector";
 
 interface ProfileCardProps {
   username: string;
@@ -44,6 +46,7 @@ export function ProfileCard({
   onLogout,
 }: ProfileCardProps) {
   const theme = useTheme();
+  const { t } = useTranslation();
 
   const getInitials = () => {
     if (!username) return "U";
@@ -110,11 +113,22 @@ export function ProfileCard({
 
           <Divider sx={{ mb: 3 }} />
 
+          <Box sx={{ mb: 3 }}>
+            <Typography variant="subtitle2" sx={{ textAlign: "center", mb: 1 }}>
+              {t("profile.language")}
+            </Typography>
+            <Box display="flex" justifyContent="center">
+              <LanguageSelector />
+            </Box>
+          </Box>
+
+          <Divider sx={{ mb: 3 }} />
+
           <Grid2 container spacing={2} sx={{ mb: 3, alignItems: "center" }}>
             <Grid2 size={{ xs: 12, sm: 6 }}>
               <Box display="flex" alignItems="center" justifyContent="center" mb={1}>
                 <EmailIcon sx={{ mr: 2, color: "primary.main" }} />
-                <Typography variant="body2" fontWeight="medium">Email</Typography>
+                <Typography variant="body2" fontWeight="medium">{t("profile.email")}</Typography>
               </Box>
               <Typography variant="body1" textAlign="center">{userEmail}</Typography>
             </Grid2>
@@ -122,7 +136,7 @@ export function ProfileCard({
             <Grid2 size={{ xs: 12, sm: 6 }}>
               <Box display="flex" alignItems="center" justifyContent="center" mb={1}>
                 <FingerprintIcon sx={{ mr: 2, color: "primary.main" }} />
-                <Typography variant="body2" fontWeight="medium">User ID</Typography>
+                <Typography variant="body2" fontWeight="medium">{t("profile.userId")}</Typography>
               </Box>
               <Typography variant="body1" textAlign="center" sx={{ wordBreak: "break-all" }}>{userId}</Typography>
             </Grid2>
@@ -130,7 +144,7 @@ export function ProfileCard({
             <Grid2 size={{ xs: 12, sm: 6 }}>
               <Box display="flex" alignItems="center" justifyContent="center" mb={1}>
                 <AccessTimeIcon sx={{ mr: 2, color: "primary.main" }} />
-                <Typography variant="body2" fontWeight="medium">Last Authentication</Typography>
+                <Typography variant="body2" fontWeight="medium">{t("profile.authTime")}</Typography>
               </Box>
               <Typography variant="body1" textAlign="center">{formatAuthDate()}</Typography>
             </Grid2>
@@ -138,7 +152,7 @@ export function ProfileCard({
             <Grid2 size={{ xs: 12, sm: 6 }}>
               <Box display="flex" alignItems="center" justifyContent="center" mb={1}>
                 <AccessTimeIcon sx={{ mr: 2, color: "primary.main" }} />
-                <Typography variant="body2" fontWeight="medium">Session Expiration</Typography>
+                <Typography variant="body2" fontWeight="medium">{t("profile.expTime")}</Typography>
               </Box>
               <Typography variant="body1" textAlign="center">{formatExpDate()}</Typography>
             </Grid2>
@@ -150,7 +164,7 @@ export function ProfileCard({
             variant="h6"
             sx={{ mb: 2, display: "flex", alignItems: "center", justifyContent: "center" }}
           >
-            <SecurityIcon sx={{ mr: 1 }} /> User Roles
+            <SecurityIcon sx={{ mr: 1 }} /> {t("profile.roles")}
           </Typography>
 
           <Box display="flex" flexWrap="wrap" justifyContent="center" gap={1} mb={3}>
@@ -183,7 +197,7 @@ export function ProfileCard({
               onClick={onLogout}
               sx={{ borderRadius: 2, px: 3, boxShadow: 2 }}
             >
-              Logout
+              {t("profile.logout")}
             </Button>
           </Stack>
         </CardContent>
