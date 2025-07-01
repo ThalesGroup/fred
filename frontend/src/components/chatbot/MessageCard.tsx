@@ -27,7 +27,7 @@ import { useToast } from "../ToastProvider.tsx";
 import { extractHttpErrorMessage } from "../../utils/extractHttpErrorMessage.tsx";
 import { usePostFeedbackMutation } from "../../slices/chatApi.tsx";
 import { ChatMessagePayload } from "../../slices/chatApiStructures.ts";
-import MarkdownRenderer from "../markdown/MarkdownRenderer.tsx";
+import CustomMarkdownRenderer from "../markdown/CustomMarkdownRenderer.tsx";
 
 export default function Message({
   message,
@@ -144,10 +144,10 @@ export default function Message({
                     wordBreak: "break-word",
                   }}
                 >
-                  <MarkdownRenderer
+                  <CustomMarkdownRenderer
                     content={message.content as string}
-                    size="large"
-                    enableEmojiSubstitution={side === "left"} // only apply for assistant replies
+                    size="medium"
+                  //  enableEmojiSubstitution={side === "left"} // only apply for assistant replies
                   />
                 </Box>
               </Grid2>
