@@ -16,6 +16,7 @@ import React from "react";
 import { Typography, IconButton, List, ListItem, ListItemIcon, ListItemText } from "@mui/material";
 import DeleteIcon from "@mui/icons-material/Delete";
 import { getDocumentIcon } from "./DocumentIcon";
+import { useTranslation } from "react-i18next";
 
 interface TempFile {
   name: string;
@@ -25,16 +26,17 @@ interface TempFileTableProps {
   files: TempFile[];
   onDelete: (index: number) => void;
 }
-
 export const DocumentDrawerTable: React.FC<TempFileTableProps> = ({ files, onDelete }) => {
+  const { t } = useTranslation();
+
   return (
     <List dense disablePadding>
       {files.map((file, index) => (
         <ListItem
           key={index}
-          sx={{ pl: 0 }} // Remove default left padding
+          sx={{ pl: 0 }}
           secondaryAction={
-            <IconButton edge="end" onClick={() => onDelete(index)}>
+            <IconButton edge="end" onClick={() => onDelete(index)} aria-label={t("documentDrawerTable.deleteFile")}>
               <DeleteIcon />
             </IconButton>
           }
