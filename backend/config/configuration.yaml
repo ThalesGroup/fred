@@ -52,12 +52,12 @@ ai:
   default_model:
     # Required in .env:
     # - OPENAI_API_KEY
-    # provider: "openai"
-    # name: "gpt-4o"
-    # settings:
-    #   temperature: 0.0
-    #   max_retries: 2
-    #   request_timeout: 30
+    provider: "openai"
+    name: "gpt-4o"
+    settings:
+      temperature: 0.0
+      max_retries: 2
+      request_timeout: 30
 
     # --- OR uncomment for Azure OpenAI ---
     # Required in .env:
@@ -67,14 +67,14 @@ ai:
     # - AZURE_TENANT_ID
     # - AZURE_CLIENT_ID
     # - AZURE_CLIENT_SECRET
-    provider: "azure"
-    name: "fred-gpt-4o"  
-    settings:
-     api_version: "2024-05-01-preview"
-     temperature: 0.0
-     max_retries: 2
-     request_timeout: 30
-     azure_endpoint: "https://tehopenai.openai.azure.com/"
+    #provider: "azure"
+    #name: "fred-gpt-4o"  
+    #settings:
+    #  api_version: "2024-05-01-preview"
+    #  temperature: 0.0
+    #  max_retries: 2
+    #  request_timeout: 30
+    #  azure_endpoint: "https://tehopenai.openai.azure.com/"
 
     # --- OR uncomment for Ollama ---
     # provider: "ollama"
@@ -113,7 +113,7 @@ ai:
       model: {}
     - name: K8SOperatorExpert
       class_path: "fred.agents.kubernetes_monitoring.k8s_operator_expert.K8SOperatorExpert"
-      enabled: false
+      enabled: true
       mcp_servers:
         - name: k8s-mcp-server
           transport: sse
@@ -143,7 +143,7 @@ ai:
       mcp_servers:
         - name: knowledge-flow-mcp-server
           transport: sse
-          url: http://localhost:8111/mcp
+          url: http://knowledge-flow-backend:8111/mcp
           sse_read_timeout: 2000
       model: {}
       # The Rags expert essentially is the Document expert before using tools and the knownledge-flow backend as a MCP server
