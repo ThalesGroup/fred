@@ -20,6 +20,7 @@ from langgraph.graph import END, START, MessagesState, StateGraph
 from fred.common.structure import AgentSettings, Configuration
 from fred.flow import AgentFlow
 from fred.application_context import get_agent_settings, get_model_for_agent
+from fred.monitoring.node_monitoring.monitor_node import monitor_node
 
 logger = logging.getLogger(__name__)
 class GeneralistExpert(AgentFlow):
@@ -119,7 +120,7 @@ class GeneralistExpert(AgentFlow):
             StateGraph: The constructed state graph.
         """
         builder = StateGraph(MessagesState)
-        builder.add_node("expert", self.expert)
+        builder.add_node("expert", monitor_node(self.expert))
         builder.add_edge(START, "expert")
         builder.add_edge("expert", END)
         return builder

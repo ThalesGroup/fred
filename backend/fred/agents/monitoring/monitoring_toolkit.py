@@ -17,6 +17,7 @@ from typing import override, List
 from langchain_core.tools import BaseToolkit, BaseTool
 from pydantic import Field
 
+from fred.monitoring.tool_monitoring.monitor_tool import monitor_tool
 from fred.services.ai.structure.tools.energy_consumption import get_energy_consumption_tool
 from fred.services.ai.structure.tools.energy_mix import get_energy_mix_tool
 from fred.services.ai.structure.tools.finops_consumption import get_finops_consumption_tool
@@ -31,11 +32,12 @@ class MonitoringToolkit(BaseToolkit):
 
     def __init__(self):
         super().__init__()
-        self.tools = [
+        raw_tools = [
             get_energy_consumption_tool,
             get_energy_mix_tool,
             get_finops_consumption_tool,
         ]
+        self.tools = [monitor_tool(tool) for tool in raw_tools]
 
     @override
     def get_tools(self) -> list[BaseTool]:
