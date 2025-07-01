@@ -158,7 +158,7 @@ class SessionManager:
             agent_name=agent_name,
             argument=argument
         )
-        set_logging_context(user_id=user_id, session_id=session.id)
+        set_logging_context(user_id=user_id, session_id=session.id, agent_name=agent_name)
         exchange_id = str(uuid4())
         base_rank = len(history)
 
