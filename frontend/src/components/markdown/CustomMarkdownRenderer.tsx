@@ -5,7 +5,6 @@ import DOMPurify from "dompurify";
 import mermaid from "mermaid";
 import CropFreeIcon from "@mui/icons-material/CropFree";
 import ReactDOMServer from "react-dom/server";
-import TuneIcon from "@mui/icons-material/Tune";
 interface Props {
     content: string;
     size?: "small" | "medium" | "large";
@@ -117,7 +116,16 @@ export default function CustomMarkdownRenderer({
 
         (async () => {
             const raw = await marked.parse(processedMarkdown);
-            setHtml(DOMPurify.sanitize(raw, { USE_PROFILES: { html: true } }));
+            // setHtml(DOMPurify.sanitize(raw, { USE_PROFILES: { html: true } }));
+            setHtml(
+                DOMPurify.sanitize(raw, {
+                    // keep the default HTML rules *and* allow inline SVG
+                    USE_PROFILES: { html: true, svg: true },
+                    // explicitly permit the tags and attributes the icon SVG needs
+                    ADD_TAGS: ['svg', 'path', 'g'],
+                    ADD_ATTR: ['d', 'fill', 'stroke', 'stroke-width', 'viewBox'],
+                }),
+            );
         })();
     }, [processedMarkdown]);
 
@@ -159,11 +167,19 @@ export default function CustomMarkdownRenderer({
                     lineHeight: 1.6,
                     overflowX: "auto",
                     wordBreak: "break-word",
+                    /* tables */
                     "& table": { width: "100%", borderCollapse: "collapse", my: 2 },
                     "& th, & td": { border: "1px solid #ddd", p: "0.5rem", textAlign: "left" },
                     "& th": { bgcolor: "#f3f3f3", fontWeight: 600 },
+                    /* headings */
+                    "& h1": { fontSize: "1.6rem", mt: 2 },
+                    "& h2": { fontSize: "1.4rem", mt: 2 },
+                    "& h3": { fontSize: "1.15rem", mt: 1.5 },
+                    /* code blocks */
                     "& pre": { bgcolor: "#f5f5f5", p: 2, borderRadius: 2, overflowX: "auto" },
+                    /* details */
                     "& details": { bgcolor: "#fafafa", border: "1px solid #ccc", borderRadius: 1, p: 1, my: 2 },
+
                     /* Diagram styling */
                     "& .mermaid-wrapper": {
                         position: "relative",
