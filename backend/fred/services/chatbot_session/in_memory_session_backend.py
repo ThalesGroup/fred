@@ -39,8 +39,11 @@ class InMemorySessionStorage(AbstractSessionStorage, AbstractSecuredResourceAcce
 
     def get_sessions_for_user(self, user_id: str) -> List[SessionSchema]:
         logger.debug(f"Retrieving sessions for user: {user_id}")
-        for session in self.sessions.values():
-            logger.debug(f"Session ID: {session.id}, User ID: {session.user_id}")
+        user_sessions = (session for session in self.sessions.values() if session.user_id == user_id)
+        session_ids = []
+        for session in user_sessions:
+            session_ids.append(session.id)
+        logger.debug(f"Retrieved {len(session_ids)} session{"s" if len(session_ids) > 1 else ""} for {user_id}")
         return [s for s in self.sessions.values() if s.user_id == user_id]
 
     @auth_required
