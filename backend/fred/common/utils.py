@@ -12,6 +12,7 @@
 
 from datetime import datetime, timedelta
 from typing import Tuple, Dict, Optional
+from fastapi import HTTPException
 import logging
 import traceback
 import pandas as pd
@@ -230,13 +231,8 @@ def log_exception(e: Exception, context_message: Optional[str] = None) -> str:
 
     return summary
 
-def is_authorized(instance, session_id: str, user_id: str) -> bool:
-    session = instance.sessions.get(session_id)
-    return True if session is None else session is not None and session.user_id == user_id
-
-
 # Decorator for wrapping methods to protect by authentication
-def requires_authorization(method):
+def auth_required(method):
     @wraps(method)
     def wrapper(self, *args, **kwargs):
         sig = inspect.signature(method)
@@ -251,10 +247,19 @@ def requires_authorization(method):
             raise ValueError(f"Missing 'user_id' in method '{method.__name__}'")
         if session_id is None:
             raise ValueError(f"Missing 'session_id' or in method '{method.__name__}'")
-
-        if not is_authorized(self, session_id, user_id):
+        
+        if not hasattr(self, "get_authorized_user_id") or not callable(getattr(self, "get_authorized_user_id")):
+            raise NotImplementedError(
+                f"{self.__class__.__name__} must implement 'get_authorized_user_id' method from AbstractSecuredResourceAccess"
+            )
+            
+        authorized_user_id = self.get_authorized_user_id(session_id)
+        if authorized_user_id is not None and authorized_user_id != user_id:
             logger.warning(f"Unauthorized access: user {user_id} to session {session_id} in method '{method.__name__}'")
-            return False
-
+            raise HTTPException(
+                status_code=403,
+                detail=f"Unauthorized access: user {user_id} to session {session_id} in method '{method.__name__}'"
+            )
+        
         return method(self, *args, **kwargs)
     return wrapper
