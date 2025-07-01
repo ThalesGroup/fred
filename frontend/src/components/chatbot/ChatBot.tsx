@@ -27,6 +27,7 @@ import { useGetChatBotMessagesMutation } from "../../slices/chatApi.tsx";
 import { KeyCloakService } from "../../security/KeycloakService.ts";
 import { StreamEvent, ChatMessagePayload, SessionSchema, FinalEvent } from "../../slices/chatApiStructures.ts";
 import { KnowledgeContext } from "../knowledgeContext/KnowledgeContextEditDialog.tsx";
+import { useTranslation } from "react-i18next";
 
 export interface ChatBotError {
   session_id: string | null;
@@ -39,7 +40,7 @@ export interface ChatBotEventSend {
   message: string;
   agent_name: string;
   argument?: string; // Optional arguments for the agent
-  chat_profile_id? : string; //Optional argument for chat profile usage
+  chat_profile_id?: string; //Optional argument for chat profile usage
 }
 
 interface TranscriptionResponse {
@@ -64,6 +65,8 @@ const ChatBot = ({
   selectedChatProfile?: KnowledgeContext | null;
 }) => {
   const theme = useTheme();
+  const { t } = useTranslation();
+
   const { showInfo, showError } = useToast();
   const webSocketRef = useRef<WebSocket | null>(null);
   const [getChatBotMessages] = useGetChatBotMessagesMutation();
@@ -457,10 +460,15 @@ const ChatBot = ({
       {/* Conversatiom tokens count */}
       <Grid2 container display="fex" width="80%" justifyContent="flex-end" marginTop={0.5}>
         <Tooltip
-          title={`This conversation has used ${inputTokenCounts} prompt tokens and ${outputTokenCounts} response tokens`}
+          title={t("chatbot.tooltip.tokenUsage", {
+            input: inputTokenCounts,
+            output: outputTokenCounts,
+          })}
         >
           <Typography fontSize="0.8rem" color={theme.palette.text.secondary} fontStyle="italic">
-            {`This conversation has used ${outputTokenCounts + inputTokenCounts > 0 ? outputTokenCounts + inputTokenCounts : "..."} tokens`}
+            {t("chatbot.tooltip.tokenCount", {
+              total: outputTokenCounts + inputTokenCounts > 0 ? outputTokenCounts + inputTokenCounts : "..."
+            })}
           </Typography>
         </Tooltip>
       </Grid2>
@@ -479,13 +487,13 @@ const ChatBot = ({
       <Grid2 container display="flex" alignItems="center" gap={2}>
         <Box display="flex" flexDirection="row" alignItems="center">
           <Typography variant="h4" paddingRight={1}>
-            Start a new conversation with {currentAgenticFlow.nickname}
+            {t("chatbot.startNew", { name: currentAgenticFlow.nickname })}
           </Typography>
           {getAgentBadge(currentAgenticFlow.nickname)}
         </Box>
       </Grid2>
       <Typography variant="h5">{currentAgenticFlow.role}.</Typography>
-      <Typography>You can select another assistant in the settings panel.</Typography>
+      <Typography>{t("chatbot.changeAssistant")}</Typography>
       <Grid2 size={{ xs: 12, md: 10, lg: 6 }} m={2} marginTop={0} minHeight="15%" display="flex" alignItems="start">
         <UserInput
           enableFilesAttachment={true}

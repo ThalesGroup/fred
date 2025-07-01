@@ -1,3 +1,17 @@
+// Copyright Thales 2025
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at:
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 import { useEffect, useState } from "react";
 import {
   Box,
@@ -6,10 +20,10 @@ import {
   TextField,
   Paper,
   InputAdornment,
-  Grid2,
   Fab,
   Drawer,
   IconButton,
+  Grid2,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import SearchIcon from "@mui/icons-material/Search";
@@ -25,12 +39,14 @@ import { PageBodyWrapper } from "../common/PageBodyWrapper";
 import {
   KnowledgeContext,
   KnowledgeContextEditDialog,
-  Document
-  } from "../components/knowledgeContext/KnowledgeContextEditDialog";
+  Document,
+} from "../components/knowledgeContext/KnowledgeContextEditDialog";
 import { KnowledgeContextItem } from "../components/knowledgeContext/KnowledgeContextItem";
 import { KnowledgeContextCreateDialog } from "../components/knowledgeContext/KnowledgeContextCreateDialog";
+import { useTranslation } from "react-i18next";
 
 export const Workspaces = () => {
+  const { t } = useTranslation();
   const [workspaces, setWorkspaces] = useState<KnowledgeContext[]>([]);
   const [search, setSearch] = useState("");
   const [getWorkspaces] = useLazyGetKnowledgeContextsQuery();
@@ -129,17 +145,15 @@ export const Workspaces = () => {
 
   return (
     <PageBodyWrapper>
-      <TopBar title="Workspaces" description="Manage workspaces">
-        <Grid2
-          sx={{ display: "flex", justifyContent: "flex-end", mt: { xs: 1, md: 0 } }}
-        ></Grid2>
+      <TopBar title={t("workspaces.title")} description={t("workspaces.description")}>
+        <Grid2 sx={{ display: "flex", justifyContent: "flex-end", mt: { xs: 1, md: 0 } }}></Grid2>
       </TopBar>
 
       <Container maxWidth="xl" sx={{ pb: 10, justifyContent: "center" }}>
         <Box mb={3}>
           <TextField
             fullWidth
-            placeholder="Search workspaces..."
+            placeholder={t("workspaces.searchPlaceholder")}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             slotProps={{
@@ -173,11 +187,8 @@ export const Workspaces = () => {
         </Grid2>
 
         {filteredWorkspaces.length === 0 && (
-          <Paper
-            elevation={2}
-            sx={{ p: 4, mt: 3, borderRadius: 2, textAlign: "center" }}
-          >
-            <Typography variant="body1">No workspaces found.</Typography>
+          <Paper elevation={2} sx={{ p: 4, mt: 3, borderRadius: 2, textAlign: "center" }}>
+            <Typography variant="body1">{t("workspaces.noResults")}</Typography>
           </Paper>
         )}
 
@@ -194,7 +205,7 @@ export const Workspaces = () => {
           open={openDialog}
           onClose={() => setOpenDialog(false)}
           onCreated={fetchWorkspaces}
-          dialogTitle="Workspace"
+          dialogTitle={t("workspaces.createDialogTitle")}
           tag="workspace"
         />
 
@@ -204,7 +215,7 @@ export const Workspaces = () => {
           onSave={handleSaveWorkspace}
           context={currentWorkspace!}
           onReloadContext={handleReloadProfile}
-          dialogTitle="Workspace"
+          dialogTitle={t("workspaces.editDialogTitle")}
         />
 
         <Drawer
@@ -215,7 +226,7 @@ export const Workspaces = () => {
         >
           <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
             <Typography variant="h6">
-              {openDescription?.title || "Profile description"}
+              {openDescription?.title || t("workspaces.drawerTitle")}
             </Typography>
             <IconButton onClick={() => setOpenDescription(null)}>
               <CloseIcon />
@@ -231,7 +242,7 @@ export const Workspaces = () => {
               color: "text.primary",
             }}
           >
-            {openDescription?.description || "No description provided."}
+            {openDescription?.description || t("workspaces.noDescription")}
           </Box>
         </Drawer>
       </Container>

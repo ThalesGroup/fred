@@ -22,6 +22,8 @@ from langgraph.prebuilt import ToolNode, tools_condition
 
 from fred.agents.monitoring.monitoring_toolkit import MonitoringToolkit
 from fred.application_context import get_agent_settings, get_model_for_agent
+from fred.monitoring.node_monitoring.monitor_node import monitor_node
+
 
 class MonitoringExpert(AgentFlow):
     """
@@ -122,7 +124,7 @@ class MonitoringExpert(AgentFlow):
     def get_graph(self):
         builder = StateGraph(MessagesState)
 
-        builder.add_node("reasoner", self.reasoner)
+        builder.add_node("reasoner", monitor_node(self.reasoner))
         builder.add_node("tools", ToolNode(self.toolkit.get_tools()))
 
         builder.add_edge(START, "reasoner")
