@@ -27,14 +27,14 @@ class AbstractSessionStorage(ABC):
         pass
 
     @abstractmethod
-    def get_session(self, session_id: str) -> SessionSchema:
+    def get_session(self, session_id: str, user_id: str) -> SessionSchema:
         """
         Retrieve a session by its ID.
         """
         pass
 
     @abstractmethod
-    def delete_session(self, session_id: str) -> bool:
+    def delete_session(self, session_id: str, user_id: str) -> bool:
         """
         Delete a session by its ID.
         """
@@ -48,7 +48,7 @@ class AbstractSessionStorage(ABC):
         pass
 
     @abstractmethod
-    def save_messages(self, session_id: str, messages: List[ChatMessagePayload]) -> None:
+    def save_messages(self, session_id: str, messages: List[ChatMessagePayload], user_id: str) -> None:
         """Save a batch of messages to the session history."""
         pass
 
