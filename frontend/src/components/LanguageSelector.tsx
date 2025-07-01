@@ -1,3 +1,4 @@
+// components/common/LanguageSelector.tsx
 import { useTranslation } from "react-i18next";
 import { IconButton, Tooltip, Box } from "@mui/material";
 
@@ -10,27 +11,38 @@ export const LanguageSelector = () => {
   };
 
   return (
-    <Box sx={{ display: "flex", alignItems: "center", mt: 1 }}>
-      <Tooltip title="Français" placement="top">
+    <Box sx={{ display: "flex", gap: 1 }}>
+      <Tooltip title="Français" arrow>
         <IconButton
           onClick={() => changeLanguage("fr")}
           size="small"
           sx={{
-            opacity: currentLang === "fr" ? 1 : 0.5,
-            "&:hover": { opacity: 1 },
+            fontSize: "0.75rem",
+            //fontWeight: "bold",
+            opacity: currentLang === "fr" ? 1 : 0.4,
+            borderRadius: 1,
+            border: currentLang === "fr" ? "1px solid" : "none",
+            borderColor: "primary.main",
+            color: "text.primary",
+            px: 1,
           }}
         >
           FR
         </IconButton>
       </Tooltip>
-
-      <Tooltip title="English" placement="top">
+      <Tooltip title="English" arrow>
         <IconButton
           onClick={() => changeLanguage("en")}
           size="small"
           sx={{
-            opacity: currentLang === "en" ? 1 : 0.5,
-            "&:hover": { opacity: 1 },
+            fontSize: "0.75rem",
+            //fontWeight: "bold",
+            opacity: currentLang === "en" ? 1 : 0.4,
+            borderRadius: 1,
+            border: currentLang === "en" ? "1px solid" : "none",
+            borderColor: "primary.main",
+            color: "text.primary",
+            px: 1,
           }}
         >
           EN

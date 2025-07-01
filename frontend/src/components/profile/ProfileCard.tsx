@@ -21,6 +21,7 @@ import EmailIcon from "@mui/icons-material/Email";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import FingerprintIcon from "@mui/icons-material/Fingerprint";
 import { useTranslation } from "react-i18next";
+import { LanguageSelector } from "../LanguageSelector";
 
 interface ProfileCardProps {
   username: string;
@@ -109,6 +110,17 @@ export function ProfileCard({
           <Typography variant="body1" color="text.secondary" sx={{ mb: 3, textAlign: "center" }}>
             @{username}
           </Typography>
+
+          <Divider sx={{ mb: 3 }} />
+
+          <Box sx={{ mb: 3 }}>
+            <Typography variant="subtitle2" sx={{ textAlign: "center", mb: 1 }}>
+              {t("profile.language")}
+            </Typography>
+            <Box display="flex" justifyContent="center">
+              <LanguageSelector />
+            </Box>
+          </Box>
 
           <Divider sx={{ mb: 3 }} />
 

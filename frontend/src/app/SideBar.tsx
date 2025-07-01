@@ -47,7 +47,6 @@ import { useContext } from "react";
 import { ApplicationContext } from "./ApplicationContextProvider.tsx";
 import { SideBarClusterSelector } from "../frugalit/component/SideBarClusterSelector.tsx";
 import { FeatureFlagKey, getProperty, isFeatureEnabled } from "../common/config.tsx";
-import { LanguageSelector } from "../components/LanguageSelector.tsx";
 import { useTranslation } from "react-i18next";
 
 export default function SideBar({ darkMode, onThemeChange }) {
@@ -472,7 +471,6 @@ export default function SideBar({ darkMode, onThemeChange }) {
                 <OpenInNewIcon sx={{ fontSize: "0.8rem", color: "text.secondary" }} />
               </IconButton>
             </Box>
-            <LanguageSelector />
           </>
         )}
       </Box>

@@ -159,6 +159,7 @@
             "title": "Informations du token",
             "none": "Aucun token disponible"
         },
+        "language": "Langue de l'interface",
         "chat": {
             "searchPlaceholder": "Rechercher des profils...",
             "noProfiles": "Aucun profil trouvé.",
