@@ -114,6 +114,12 @@ const GetUserMail = (): string => {
   return "admin@mail.com";
 };
 
+const GetUserId = (): string => {
+  if (USE_AUTH && keycloakInstance?.tokenParsed) {
+    return keycloakInstance.tokenParsed.sub || "admin";
+  }
+  return "admin";
+};
 /**
  * Renvoie le token brut pour l'ajouter dans Authorization: Bearer <token>.
  */
@@ -138,6 +144,7 @@ export const KeyCloakService = {
   CallLogin: Login,
   CallLogout: Logout,
   GetUserName: GetUserName,
+  GetUserId: GetUserId,
   GetUserMail: GetUserMail,
   GetToken: GetToken,
   GetRealmRoles: GetRealmRoles,
