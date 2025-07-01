@@ -13,12 +13,16 @@
 # limitations under the License.
 
 """
-Abstract base class and core data models for metrics used in the monitoring system.
+metric_store.py
 
-Defines:
-- `TokenDetails`, `TokenUsage`, and `Metric` data structures.
-- `MetricStore`: abstract base class to be implemented by specific storage backends.
+Defines the abstract MetricStore interface and core data models for monitoring.
+
+Includes:
+- TokenDetails and TokenUsage models for tracking LLM token breakdowns.
+- Precision and Aggregation enums.
+- Abstract MetricStore interface specifying required store methods.
 """
+
 
 from abc import ABC, abstractmethod
 from datetime import datetime
@@ -131,7 +135,7 @@ class MetricStore(ABC):
         pass
 
     @abstractmethod
-    def get_numerical_aggregated_by_precision(
+    def get_aggregate_numerical_metrics_by_time_and_group(
         self, start: datetime, end: datetime, precision: Precision, agg: Aggregation
     ) -> List[NumericalMetric]:
         """
