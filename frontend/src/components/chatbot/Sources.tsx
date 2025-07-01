@@ -25,7 +25,6 @@ import {
   Divider,
   Drawer,
   Backdrop,
-  Chip,
   Paper,
 } from "@mui/material";
 import Grid2 from "@mui/material/Grid2";
@@ -33,7 +32,6 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import CloseIcon from "@mui/icons-material/Close";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import LibraryBooksIcon from "@mui/icons-material/LibraryBooks";
-import PersonOutlineIcon from "@mui/icons-material/PersonOutline";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import DocumentViewer from "../documents/DocumentViewer.tsx";
 import { ChatSource } from "../../slices/chatApiStructures.ts";
@@ -260,9 +258,6 @@ export default function Sources({
               <Typography id="modal-title" variant="h6" component="h2">
                 {selectedSource?.file_name}
               </Typography>
-              {selectedSource?.agent_name && (
-                <Chip size="small" icon={<PersonOutlineIcon />} label={selectedSource.agent_name} sx={{ mt: 0.5 }} />
-              )}
             </Box>
           </Box>
 
