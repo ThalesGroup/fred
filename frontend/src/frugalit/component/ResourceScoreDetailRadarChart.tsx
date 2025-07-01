@@ -13,11 +13,11 @@
 // limitations under the License.
 
 import Box from "@mui/material/Box";
-import { IconButton, Grid2, Paper, useTheme, Drawer } from "@mui/material";
+import { IconButton, Grid2, Paper, useTheme, Drawer, Typography } from "@mui/material";
 import ReactECharts from "echarts-for-react";
-import MarkdownRenderer from "../../components/markdown/MarkdownRenderer";
 import CropFreeIcon from "@mui/icons-material/CropFree";
 import { useState } from "react";
+import CustomMarkdownRenderer from "../../components/markdown/CustomMarkdownRenderer";
 
 const truncateMarkdown = (content: string, maxLength: number) => {
   return content.length > maxLength ? content.substring(0, maxLength) + " ..." : content;
@@ -129,8 +129,9 @@ export const ResourceScoreDetailRadarChart = (props: {
         {props.data.map((attribut, index) => (
           <Grid2 size={{ xs: 12, sm: 6, md: 4 }} key={index}>
             <Paper sx={{ p: 2, width: "100%", position: "relative" }}>
-              <MarkdownRenderer
-                content={`## ${attribut.display_text}\n${truncateMarkdown(attribut.reason, 500)}`}
+              <Typography>{attribut.display_text}</Typography>
+              <CustomMarkdownRenderer
+                content={truncateMarkdown(attribut.reason, 500)}
                 size="small"
               />
               <IconButton
@@ -146,7 +147,7 @@ export const ResourceScoreDetailRadarChart = (props: {
       <Drawer anchor="right" open={open} onClose={handleCloseSummary}>
         <Box sx={{ width: "50vw", p: 2 }}>
           <Paper sx={{ p: 1, px: 2, width: "100%" }}>
-            <MarkdownRenderer size="medium" content={summaryContent} />
+            <CustomMarkdownRenderer size="medium" content={summaryContent} />
           </Paper>
         </Box>
       </Drawer>
