@@ -79,7 +79,7 @@ function Area({
           task,
         );
         console.log("Sender:", sender);
-        console.log("Content preview:", content?.slice(0, 120));
+        console.log("Content preview:", content?.slice(0, 3000));
         console.log("Metadata:", msg.metadata);
         console.groupEnd();
 

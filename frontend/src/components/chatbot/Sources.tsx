@@ -35,9 +35,9 @@ import LibraryBooksIcon from "@mui/icons-material/LibraryBooks";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import DocumentViewer from "../documents/DocumentViewer.tsx";
 import { ChatSource } from "../../slices/chatApiStructures.ts";
-import MarkdownRenderer from "../markdown/MarkdownRenderer.tsx";
 import { SourceCard } from "./SourceCard.tsx";
 import { getDocumentIcon } from "../documents/DocumentIcon.tsx";
+import CustomMarkdownRenderer from "../markdown/CustomMarkdownRenderer.tsx";
 
 /**
  * Sources Component
@@ -280,7 +280,11 @@ export default function Sources({
               pr: 1,
             }}
           >
-            <MarkdownRenderer content={selectedSource?.content} size="large" enableEmojiSubstitution={true} />
+            <CustomMarkdownRenderer 
+              content={selectedSource?.content} 
+              size="medium" 
+              enableEmojiSubstitution={true} 
+              />
           </Box>
 
           <Box sx={{ display: "flex", justifyContent: "flex-end", mt: 3 }}>

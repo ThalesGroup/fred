@@ -15,6 +15,7 @@
 import { useTheme } from "@mui/material";
 import ReactMarkdown from "react-markdown";
 import { getMarkdownComponents } from "./GetMarkdownComponents";
+import remarkGfm from "remark-gfm";
 
 export interface MarkdownRendererProps {
   content: string;
@@ -76,5 +77,5 @@ export default function MarkdownRenderer({
     ? replaceStageDirectionsWithEmoji(content || "")
     : content || "No markdown content provided.";
 
-  return <ReactMarkdown components={components}>{finalContent}</ReactMarkdown>;
+  return <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>{finalContent}</ReactMarkdown>;
 }
