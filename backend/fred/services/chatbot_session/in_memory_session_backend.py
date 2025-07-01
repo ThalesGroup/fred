@@ -13,18 +13,26 @@
 # limitations under the License.
 
 import logging
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from fred.services.chatbot_session.abstract_session_backend import AbstractSessionStorage
+from fred.services.chatbot_session.abstract_user_authentication_backend import AbstractSecuredResourceAccess
 from fred.services.chatbot_session.session_manager import SessionSchema
 from fred.services.chatbot_session.structure.chat_schema import ChatMessagePayload
-from fred.common.utils import requires_authorization
+from fred.common.utils import auth_required
 
 logger = logging.getLogger(__name__)
-class InMemorySessionStorage(AbstractSessionStorage):
+
+class InMemorySessionStorage(AbstractSessionStorage, AbstractSecuredResourceAccess):
     def __init__(self):
         self.sessions: Dict[str, SessionSchema] = {}
         self.history: Dict[str, List[ChatMessagePayload]] = {}
+        
+    def get_authorized_user_id(self, session_id: str) -> Optional[str]:
+        session = self.sessions.get(session_id)
+        if session:
+            return session.user_id
+        return None
 
     def save_session(self, session: SessionSchema) -> None:
         self.sessions[session.id] = session
@@ -35,13 +43,13 @@ class InMemorySessionStorage(AbstractSessionStorage):
             logger.debug(f"Session ID: {session.id}, User ID: {session.user_id}")
         return [s for s in self.sessions.values() if s.user_id == user_id]
 
-    @requires_authorization
+    @auth_required
     def get_session(self, session_id: str, user_id: str) -> SessionSchema:
         if session_id not in self.sessions:
             return None
         return self.sessions[session_id]
 
-    @requires_authorization
+    @auth_required
     def delete_session(self, session_id: str, user_id: str) -> bool:
         if session_id in self.sessions:
             del self.sessions[session_id]
@@ -49,14 +57,14 @@ class InMemorySessionStorage(AbstractSessionStorage):
             return True
         return False
 
-    @requires_authorization
+    @auth_required
     def save_messages(self, session_id: str, messages: List[ChatMessagePayload], user_id: str) -> None:
         if session_id not in self.history:
             self.history[session_id] = []
         self.history[session_id].extend(messages)
         logger.info(f"Saved {len(messages)} messages to session {session_id}")
 
-    @requires_authorization
+    @auth_required
     def get_message_history(self, session_id: str, user_id: str) -> List[ChatMessagePayload]:
         history = self.history.get(session_id, [])
         return sorted(history, key=lambda m: m.rank if m.rank is not None else 0)
