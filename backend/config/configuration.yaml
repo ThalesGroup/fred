@@ -113,7 +113,7 @@ ai:
       model: {}
     - name: K8SOperatorExpert
       class_path: "fred.agents.kubernetes_monitoring.k8s_operator_expert.K8SOperatorExpert"
-      enabled: true
+      enabled: false
       mcp_servers:
         - name: k8s-mcp-server
           transport: sse
