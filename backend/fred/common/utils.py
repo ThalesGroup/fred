@@ -1,3 +1,5 @@
+# Copyright Thales 2025
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -242,12 +244,16 @@ def auth_required(method):
         arguments = bound_args.arguments
         session_id = arguments.get('session_id')
         user_id = arguments.get('user_id')
-
+        
+        # Args and type check at runtime
         if user_id is None:
             raise ValueError(f"Missing 'user_id' in method '{method.__name__}'")
         if session_id is None:
             raise ValueError(f"Missing 'session_id' or in method '{method.__name__}'")
-        
+        if not isinstance(user_id, str):
+            raise ValueError(f"'user_id' must be of type 'str'")
+        if not isinstance(session_id, str):
+            raise ValueError(f"'session_id' must be of type 'str'")
         if not hasattr(self, "get_authorized_user_id") or not callable(getattr(self, "get_authorized_user_id")):
             raise NotImplementedError(
                 f"{self.__class__.__name__} must implement 'get_authorized_user_id' method from AbstractSecuredResourceAccess"
