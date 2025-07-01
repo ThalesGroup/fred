@@ -143,7 +143,7 @@ export default function Message({
                     borderRadius: 3,
                     wordBreak: "break-word",
 
-                    // 🧾 Markdown-specific styling (for tables)
+                    // Markdown-specific styling (for tables)
                     "& table": {
                       borderCollapse: "collapse",
                       width: "100%",
