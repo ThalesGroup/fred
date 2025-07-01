@@ -33,7 +33,6 @@ import Grid2 from "@mui/material/Grid2";
 import LocalOfferIcon from "@mui/icons-material/LocalOffer";
 import { PageBodyWrapper } from "../common/PageBodyWrapper";
 import { LoadingSpinner } from "../utils/loadingSpinner";
-import { KeyCloakService } from "../security/KeycloakService";
 import { useGetChatBotAgenticFlowsMutation } from "../slices/chatApi";
 import { TopBar } from "../common/TopBar";
 import { AgentCard } from "../components/AgenCard";
@@ -80,7 +79,6 @@ const ActionButton = ({ icon, children }: { icon: React.ReactNode; children: Rea
 export const AgentHub = () => {
   const theme = useTheme();
   const { t } = useTranslation();
-  const isDarkTheme = theme.palette.mode === "dark";
   const [agenticFlows, setAgenticFlows] = useState<Agent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [tabValue, setTabValue] = useState(0);

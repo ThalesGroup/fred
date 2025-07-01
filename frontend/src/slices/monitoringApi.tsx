@@ -13,15 +13,16 @@
 import { createApi } from "@reduxjs/toolkit/query/react";
 import { createDynamicBaseQuery } from "../common/dynamicBaseQuery.tsx";
 
-export interface NumericalMetric {
-  bucket: string;
+export type NumericalMetric = {
+  time_bucket: string;
   values: Record<string, number>;
-}
+} & Record<string, any>;
 
 export interface CategoricalMetric {
   timestamp: number;
   user_id?: string;
   session_id?: string;
+  agent_name?: string;
   model_name?: string;
   model_type?: string;
   finish_reason?: string;
@@ -29,26 +30,34 @@ export interface CategoricalMetric {
   system_fingerprint?: string;
   service_tier?: string;
 }
+
 export type Precision = "sec" | "min" | "hour" | "day";
-export type Aggregation = "avg" | "min" | "max" | "sum";
 
 /**
- * API Slice for Monitoring Metrics (using `mutation` instead of `query`)
+ * API Slice for Monitoring Metrics
  */
 export const monitoringApi = createApi({
   reducerPath: "monitoringApi",
   baseQuery: createDynamicBaseQuery({ backend: "api" }),
   endpoints: (builder) => ({
+
     fetchNumericalMetrics: builder.mutation<NumericalMetric[], {
       start: string;
       end: string;
       precision?: Precision;
-      agg?: Aggregation;
+      agg: string[];          // Ex: ["latency:avg", "total_tokens:sum"]
+      groupby?: string[];       // Ex: "agent_name"
     }>({
-      query: ({ start, end, precision = "min", agg = "avg" }) => ({
-        url: `/fred/metrics/numerical`,
+      query: ({ start, end, precision = "min", agg, groupby }) => ({
+        url: `/fred/metrics/nodes/numerical`,
         method: "GET",
-        params: { start, end, precision, agg },
+        params: {
+          start,
+          end,
+          precision,
+          ...(groupby ? { groupby } : {}),
+          agg,  // Will serialize to multiple &agg=... in query
+        },
       }),
     }),
 
@@ -57,7 +66,7 @@ export const monitoringApi = createApi({
       end: string;
     }>({
       query: ({ start, end }) => ({
-        url: `/fred/metrics/categorical`,
+        url: `/fred/metrics/nodes/categorical`,
         method: "GET",
         params: { start, end },
       }),

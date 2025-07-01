@@ -46,7 +46,7 @@ export function TokenUsageChart({ start, end, precision, metrics }: TokenUsageCh
     }
   }
 
-  const metricMap = new Map(metrics.map((m) => [m.bucket, m]));
+  const metricMap = new Map(metrics.map((m) => [m.time_bucket, m]));
 
   // Generate all buckets between start and end according to precision
   const data: { time: string; tokens: number }[] = [];
@@ -74,7 +74,7 @@ export function TokenUsageChart({ start, end, precision, metrics }: TokenUsageCh
 
     data.push({
       time: getLabel(current.toDate()),
-      tokens: metric ? (metric.values["token_usage.total_tokens"] ?? 0) : 0,
+      tokens: metric ? (metric.values["total_tokens--sum"] ?? 0) : 0,
     });
 
     current = incrementDate(current);

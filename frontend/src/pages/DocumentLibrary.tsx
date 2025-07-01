@@ -20,7 +20,6 @@ import {
   useTheme,
   TextField,
   FormControl,
-  InputLabel,
   MenuItem,
   Select,
   OutlinedInput,
@@ -35,7 +34,7 @@ import {
   Fade,
 } from "@mui/material";
 import ClearIcon from "@mui/icons-material/Clear";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { LoadingSpinner } from "../utils/loadingSpinner";
 import UploadIcon from "@mui/icons-material/Upload";
 import SaveIcon from "@mui/icons-material/Save";
@@ -58,7 +57,6 @@ import { DocumentTable } from "../components/documents/DocumentTable";
 import { DocumentDrawerTable } from "../components/documents/DocumentDrawerTable";
 import DocumentViewer from "../components/documents/DocumentViewer";
 import { TopBar } from "../common/TopBar";
-import { ResponsiveContainer } from "recharts";
 import { useTranslation } from 'react-i18next';
 
 /**
@@ -119,7 +117,7 @@ import { useTranslation } from 'react-i18next';
  * - Responsive layout using MUI's Grid2 and Breakpoints
  */
 export const DocumentLibrary = () => {
-  const { showInfo, showError, showWarn } = useToast();
+  const { showInfo, showError } = useToast();
 
   // API Hooks
   const [deleteDocument] = useDeleteDocumentMutation();
