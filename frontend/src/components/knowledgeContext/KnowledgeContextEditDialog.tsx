@@ -19,6 +19,7 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import { useDropzone } from 'react-dropzone';
 import { useDeleteKnowledgeContextDocumentMutation } from '../../slices/knowledgeContextApi';
 import { useToast } from '../ToastProvider';
+import { useTranslation } from 'react-i18next';
 
 export interface Document {
   id: string;
@@ -64,6 +65,7 @@ export const KnowledgeContextEditDialog = ({
   dialogTitle,
 }: KnowledgeContextEditDialogProps) => {
   const theme = useTheme();
+  const { t } = useTranslation();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [tempFiles, setTempFiles] = useState<File[]>([]);
@@ -156,7 +158,9 @@ export const KnowledgeContextEditDialog = ({
     <Dialog open={open} onClose={isSaving ? undefined : onClose} fullWidth maxWidth="md">
       <DialogTitle>
         <Stack direction="row" justifyContent="space-between" alignItems="center">
-          <Typography variant="h6">Edit {dialogTitle}</Typography>
+          <Typography variant="h6">
+            {t("dialogs.edit.title", { context: dialogTitle })}
+          </Typography>
           <IconButton onClick={onClose} disabled={isSaving}>
             <CloseIcon />
           </IconButton>
@@ -166,7 +170,7 @@ export const KnowledgeContextEditDialog = ({
       <DialogContent>
         <Stack spacing={2.5} mt={1}>
           <TextField
-            label="Name"
+            label={t("dialogs.edit.name")}
             fullWidth
             value={title}
             onChange={(e) => setTitle(e.target.value)}
@@ -175,7 +179,7 @@ export const KnowledgeContextEditDialog = ({
           />
 
           <TextField
-            label="Description"
+            label={t("dialogs.edit.description")}
             fullWidth
             multiline
             rows={3}
@@ -202,14 +206,14 @@ export const KnowledgeContextEditDialog = ({
                 <input {...getInputProps()} disabled={isSaving} />
                 <Typography variant="body2" color="text.secondary">
                   {isDragActive
-                    ? "Drop files here"
-                    : "Click or drag and drop files here"}
+                    ? t("dialogs.edit.dropActive")
+                    : t("dialogs.edit.dropDefault")}
                 </Typography>
               </Box>
 
               {documents.length > 0 && (
                 <Box>
-                  <Typography variant="subtitle2">Existing documents:</Typography>
+                  <Typography variant="subtitle2">{t("dialogs.edit.existingDocuments")}</Typography>
                   <Stack spacing={1.5}>
                     {documents.map((doc) => {
                       const isLoading = loadingDocumentIds.includes(doc.id);
@@ -242,7 +246,7 @@ export const KnowledgeContextEditDialog = ({
                           </Box>
                           {allowDocumentDescription && (
                             <TextField
-                              label="Document description (optional)"
+                              label={t("dialogs.edit.documentDescription")}
                               fullWidth
                               size="small"
                               value={doc.description || ""}
@@ -262,7 +266,7 @@ export const KnowledgeContextEditDialog = ({
 
               {tempFiles.length > 0 && (
                 <Box>
-                  <Typography variant="subtitle2">New documents:</Typography>
+                  <Typography variant="subtitle2">{t("dialogs.edit.newDocuments")}</Typography>
                   <Stack spacing={1.5}>
                     {tempFiles.map((file) => (
                       <Box
@@ -293,7 +297,7 @@ export const KnowledgeContextEditDialog = ({
 
                         {allowDocumentDescription && (
                           <TextField
-                            label="Document description (optional)"
+                            label={t("dialogs.edit.documentDescription")}
                             fullWidth
                             size="small"
                             value={tempFileDescriptions[file.name] || ""}
@@ -310,7 +314,6 @@ export const KnowledgeContextEditDialog = ({
                           />
                         )}
                       </Box>
-
                     ))}
                   </Stack>
                 </Box>
@@ -321,15 +324,18 @@ export const KnowledgeContextEditDialog = ({
       </DialogContent>
 
       <DialogActions sx={{ px: 3, pb: 2 }}>
-        <Button onClick={onClose} disabled={isSaving}>Cancel</Button>
+        <Button onClick={onClose} disabled={isSaving}>
+          {t("dialogs.edit.cancel")}
+        </Button>
         <Button
           variant="contained"
           onClick={handleSave}
           disabled={!title.trim() || isSaving}
         >
-          {isSaving ? <CircularProgress size={20} /> : "Save"}
+          {isSaving ? <CircularProgress size={20} /> : t("dialogs.edit.save")}
         </Button>
       </DialogActions>
     </Dialog>
   );
+
 };
