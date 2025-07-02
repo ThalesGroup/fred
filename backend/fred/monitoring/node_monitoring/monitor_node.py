@@ -66,7 +66,7 @@ def monitor_node(func):
             ai_message = (result.get("messages") or [{}])[0]
             message = ai_message.__dict__
             response_metadata = message.get("response_metadata", {})
-            usage = response_metadata.get("token_usage", {})
+            usage_metadata =  message.get("usage_metadata", {})
 
             metric = NodeMetric(
                 timestamp=time.time(),
@@ -76,9 +76,9 @@ def monitor_node(func):
                 session_id=ctx.get("session_id", "unknown-session"),
                 agent_name=ctx.get("agent_name", "unknown-agent_name"),
                 model_name=response_metadata.get("model_name"),
-                input_tokens=usage.get("prompt_tokens"),
-                output_tokens=usage.get("completion_tokens"),
-                total_tokens=usage.get("total_tokens"),
+                input_tokens=usage_metadata.get("input_tokens"),
+                output_tokens=usage_metadata.get("output_tokens"),
+                total_tokens=usage_metadata.get("total_tokens"),
                 result_summary=str(message.get("content", ""))[:300],
                 metadata=result,
             )
