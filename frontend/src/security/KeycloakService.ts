@@ -106,6 +106,13 @@ const GetUserName = (): string => {
   return "admin"; // Default to "admin" if no authentication is used
 };
 
+const GetUserFullName = (): string => {
+  if (USE_AUTH) {
+    return keycloakInstance.tokenParsed.name;
+  }
+  return "Admin Istrator"; // Default to "Admin Istrator" if no authentication is used
+};
+
 const GetUserMail = (): string => {
   if (USE_AUTH && keycloakInstance?.tokenParsed) {
     // Au choix, "name", "preferred_username", "email", ...
@@ -145,6 +152,7 @@ export const KeyCloakService = {
   CallLogout: Logout,
   GetUserName: GetUserName,
   GetUserId: GetUserId,
+  GetUserFullName: GetUserFullName,
   GetUserMail: GetUserMail,
   GetToken: GetToken,
   GetRealmRoles: GetRealmRoles,
