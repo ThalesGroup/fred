@@ -19,7 +19,7 @@ from fred.services.chatbot_session.abstract_session_backend import AbstractSessi
 from fred.services.chatbot_session.abstract_user_authentication_backend import AbstractSecuredResourceAccess
 from fred.services.chatbot_session.session_manager import SessionSchema
 from fred.services.chatbot_session.structure.chat_schema import ChatMessagePayload
-from fred.common.utils import auth_required
+from fred.common.utils import authorization_required
 
 logger = logging.getLogger(__name__)
 
@@ -46,13 +46,13 @@ class InMemorySessionStorage(AbstractSessionStorage, AbstractSecuredResourceAcce
         logger.debug(f"Retrieved {len(session_ids)} session{"s" if len(session_ids) > 1 else ""} for {user_id}")
         return [s for s in self.sessions.values() if s.user_id == user_id]
 
-    @auth_required
+    @authorization_required
     def get_session(self, session_id: str, user_id: str) -> SessionSchema:
         if session_id not in self.sessions:
             return None
         return self.sessions[session_id]
 
-    @auth_required
+    @authorization_required
     def delete_session(self, session_id: str, user_id: str) -> bool:
         if session_id in self.sessions:
             del self.sessions[session_id]
@@ -60,14 +60,14 @@ class InMemorySessionStorage(AbstractSessionStorage, AbstractSecuredResourceAcce
             return True
         return False
 
-    @auth_required
+    @authorization_required
     def save_messages(self, session_id: str, messages: List[ChatMessagePayload], user_id: str) -> None:
         if session_id not in self.history:
             self.history[session_id] = []
         self.history[session_id].extend(messages)
         logger.info(f"Saved {len(messages)} messages to session {session_id}")
 
-    @auth_required
+    @authorization_required
     def get_message_history(self, session_id: str, user_id: str) -> List[ChatMessagePayload]:
         history = self.history.get(session_id, [])
         return sorted(history, key=lambda m: m.rank if m.rank is not None else 0)
