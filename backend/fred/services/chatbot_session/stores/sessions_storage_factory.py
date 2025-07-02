@@ -30,12 +30,12 @@ def get_sessions_store() -> AbstractSessionStorage:
         AbstractSessionStorage: An instance of the sessions store.
     """
     # Get the sessions storage configuration from the application context
-    config = get_configuration()
+    config = get_configuration().session_storage
 
     if config.type == "in_memory":
         return InMemorySessionStorage()
     elif config.type == "opensearch":
-        settings = validate_settings_or_exit(OpenSearchSettings)
+        settings = config.settings
         return OpensearchSessionStorage(
             host=settings.host,
             username=settings.username,
@@ -43,6 +43,7 @@ def get_sessions_store() -> AbstractSessionStorage:
             secure=settings.secure,
             verify_certs=settings.verify_certs,
             sessions_index=settings.sessions_index,
+            history_index=settings.history_index
         )
     else:   
         raise ValueError(f"Unsupported sessions storage backend: {config.type}")
