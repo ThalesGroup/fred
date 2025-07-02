@@ -142,22 +142,6 @@ export default function Message({
                     marginTop: side === "right" ? 1 : 0,
                     borderRadius: 3,
                     wordBreak: "break-word",
-
-                    // Markdown-specific styling (for tables)
-                    "& table": {
-                      borderCollapse: "collapse",
-                      width: "100%",
-                      marginTop: theme.spacing(1),
-                    },
-                    "& th, & td": {
-                      border: "1px solid",
-                      padding: theme.spacing(1),
-                      textAlign: "left",
-                    },
-                    "& th": {
-                      backgroundColor: theme.palette.grey[100],
-                      fontWeight: "bold",
-                    },
                   }}
                 >
                   <MarkdownRenderer
