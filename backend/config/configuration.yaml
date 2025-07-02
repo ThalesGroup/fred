@@ -194,3 +194,16 @@ feedback_storage:
   type: local
   settings:
     local_path: "~/.fred/feedback-store"
+
+# Sessions and messages are stored by default in_memory 
+# but it can be modified to use a backend like opensearch
+session_storage:
+  # type: in_memory # default value
+  type: opensearch
+  settings:
+    host: https:localhost:9200
+    user: admin
+    password: Azerty123_ # @TODO pass it as an env variable
+    secure: false
+    verify_certs: false
+    sessions_index: sessions

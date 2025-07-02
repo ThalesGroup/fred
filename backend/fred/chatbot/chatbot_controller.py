@@ -18,7 +18,6 @@ from typing import List
 from uuid import uuid4
 
 from fred.chatbot.agent_manager import AgentManager
-from fred.services.chatbot_session.in_memory_session_backend import InMemorySessionStorage
 from fred.services.chatbot_session.session_manager import SessionManager
 from fred.services.chatbot_session.structure.chat_schema import ChatMessagePayload, ErrorEvent, FinalEvent, SessionSchema, SessionWithFiles, StreamEvent
 from fred.chatbot.structures.chatbot_error import ChatBotError
@@ -43,6 +42,7 @@ from fred.common.structure import (
     DAOTypeEnum,
 )
 from fred.application_context import get_configuration
+from fred.services.chatbot_session.stores.sessions_storage_factory import get_sessions_store
 from fred.common.utils import log_exception
 from fred.security.keycloak import KeycloakUser, get_current_user
 from fred.services.ai.ai_service import AIService
@@ -63,8 +63,7 @@ class ChatbotController:
         self.ai_service = ai_service
         self.cluster_consumption_service = ClusterConsumptionService()
         self.agent_manager = AgentManager()
-        self.session_manager = SessionManager(InMemorySessionStorage(), self.agent_manager)
-
+        self.session_manager = SessionManager(get_sessions_store())
         # For import-export operations
         match get_configuration().dao.type:
             case DAOTypeEnum.file:
