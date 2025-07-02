@@ -13,28 +13,25 @@
 # limitations under the License.
 
 import logging
-from typing import Dict, List, Optional, Any
-
+from typing import List, Optional
+from opensearchpy import OpenSearch, RequestsHttpConnection, OpenSearchException
 from fred.services.chatbot_session.abstract_session_backend import AbstractSessionStorage
 from fred.services.chatbot_session.abstract_user_authentication_backend import AbstractSecuredResourceAccess
 from fred.services.chatbot_session.session_manager import SessionSchema
 from fred.services.chatbot_session.structure.chat_schema import ChatMessagePayload
-from opensearchpy import OpenSearch, RequestsHttpConnection, OpenSearchException
-from fred.common.utils import auth_required
+from fred.common.utils import authorization_required
 
 logger = logging.getLogger(__name__)
 
 class OpensearchSessionStorage(AbstractSessionStorage, AbstractSecuredResourceAccess):
     def __init__(self, 
-                 host: str, 
-                 sessions_index: str, 
+                 host: str,
+                 sessions_index: str,
+                 history_index: str,
                  username: str = None,
                  password: str = None,
                  secure: bool = False,
                  verify_certs: bool = False):
-
-        self.sessions: Dict[str, SessionSchema] = {}
-        self.history: Dict[str, List[ChatMessagePayload]] = {}
         
         self.client = OpenSearch(
             host,
@@ -45,88 +42,120 @@ class OpensearchSessionStorage(AbstractSessionStorage, AbstractSecuredResourceAc
         )
         
         self.sessions_index = sessions_index
+        self.history_index = history_index
 
-        if not self.client.indices.exists(index=sessions_index):
-            self.client.indices.create(index=sessions_index)
-            logger.info(f"Opensearch index '{sessions_index}' created.")
-        else:
-            logger.warning(f"Opensearch index '{sessions_index}' already exists.")
-        
+        for index in [sessions_index, history_index]:
+            if not self.client.indices.exists(index=index):
+                self.client.indices.create(index=index)
+                logger.info(f"Opensearch index '{index}' created.")
+            else:
+                logger.debug(f"Opensearch index '{index}' already exists.")
+
     def get_authorized_user_id(self, session_id: str) -> Optional[str]:
-        session = self.sessions.get(session_id)
-        if session:
-            return session.user_id
-        return None
-
-
-    def write_session(self, session_id: str, session: dict) -> Any:
-        """
-        Write session dict to OpenSearch using the session_id as its uid.
-        """
         try:
-            response = self.client.index(
-                index=self.sessions_index,
-                id=session_id,
-                body=session
-            )
-            logger.info(f"Session written to index '{self.sessions.index}' for session_id '{session_id}'.")
-            return response
-        except OpenSearchException as e:
-            logger.error(f"❌ Failed to write session with id {session_id}: {e}")
-            raise ValueError(f"Failed to write session to Opensearch: {e}")
-        
-    def save_session(self, session: SessionSchema) -> None:
-        """Save session in Opensearch
-
-        Args:
-            session (dict): A dictionary containing a session
-        """
-        try:
-            self.write_session(session_id=session.get("session_id"), session=session)
+            session = self.client.get(index=self.sessions_index, id=session_id)
+            return session["_source"].get("user_id")
         except Exception as e:
-            logger.error(f"❌ Failed to write session with session_id {session.get("session_id")}: {e}")
-            raise ValueError(e)
-    
-    # @TODO adapt
-    def get_sessions_for_user(self, user_id: str) -> List[SessionSchema]:
-        logger.debug(f"Retrieving sessions for user: {user_id}")
-        user_sessions = (session for session in self.sessions.values() if session.user_id == user_id)
-        session_ids = []
-        for session in user_sessions:
-            session_ids.append(session.id)
-        logger.debug(f"Retrieved {len(session_ids)} session{"s" if len(session_ids) > 1 else ""} for {user_id}")
-        return [s for s in self.sessions.values() if s.user_id == user_id]
-   
-    # @TODO adapt
-    @auth_required
-    def get_session(self, session_id: str, user_id: str) -> SessionSchema:
-        if session_id not in self.sessions:
+            logger.warning(f"Could not get user_id for session {session_id}: {e}")
             return None
-        return self.sessions[session_id]
-    
-    # @TODO adapt
-    @auth_required
+
+    def save_session(self, session: SessionSchema) -> None:
+        try:
+            session_dict = session.model_dump()
+            self.client.index(index=self.sessions_index, id=session.id, body=session_dict)
+            logger.debug(f"Session {session.id} saved for user {session.user_id}")
+        except Exception as e:
+            logger.error(f"Failed to save session {session.id}: {e}")
+            raise
+
+    @authorization_required
+    def get_session(self, session_id: str, user_id: str) -> Optional[SessionSchema]:
+        try:
+            response = self.client.get(index=self.sessions_index, id=session_id)
+            session_data = response["_source"]
+            if session_data.get("user_id") != user_id:
+                logger.warning(f"Unauthorized access attempt to session {session_id} by user {user_id}")
+                return None
+            return SessionSchema(**session_data)
+        except Exception as e:
+            logger.error(f"Failed to retrieve session {session_id}: {e}")
+            return None
+
+    @authorization_required
     def delete_session(self, session_id: str, user_id: str) -> bool:
-        """Delete session from OpenSearch using the session_id."""
         try:
             self.client.delete(index=self.sessions_index, id=session_id)
-            logger.info(f"Session with session_id '{session_id}' deleted from index '{self.sessions_index}'.")
-
+            self.client.delete_by_query(
+                index=self.history_index,
+                body={"query": {"term": {"session_id": session_id}}}
+            )
+            logger.info(f"Deleted session {session_id} and its messages")
+            return True
         except Exception as e:
-            logger.error(f"Error while deleting session for session_id '{session_id}': {e}")
-            raise e
+            logger.error(f"Failed to delete session {session_id}: {e}")
+            return False
 
+    def get_sessions_for_user(self, user_id: str) -> List[SessionSchema]:
+        try:
+            query = {
+                "query": {
+                    "term": {
+                        "user_id": user_id
+                    }
+                }
+            }
+            response = self.client.search(index=self.sessions_index, body=query, size=1000)
+            sessions = [SessionSchema(**hit["_source"]) for hit in response["hits"]["hits"]]
+            logger.debug(f"Retrieved {len(sessions)} sessions for user {user_id}")
+            return sessions
+        except Exception as e:
+            logger.error(f"Failed to fetch sessions for user {user_id}: {e}")
+            return []
 
-    # @TODO adapt
-    @auth_required
+    @authorization_required
     def save_messages(self, session_id: str, messages: List[ChatMessagePayload], user_id: str) -> None:
-        if session_id not in self.history:
-            self.history[session_id] = []
-        self.history[session_id].extend(messages)
-        logger.info(f"Saved {len(messages)} messages to session {session_id}")
+        try:
+            actions = [
+                {
+                    "index": {
+                        "_index": self.history_index,
+                        "_id": f"{session_id}-{message.rank or i}"
+                    }
+                }
+                for i, message in enumerate(messages)
+            ]
+            bodies = [msg.model_dump() for msg in messages]
+            bulk_body = [entry for pair in zip(actions, bodies) for entry in pair]
 
-    # @TODO adapt
-    @auth_required
+            # OpenSearch Bulk API
+            self.client.bulk(body=bulk_body)
+            logger.info(f"Saved {len(messages)} messages for session {session_id}")
+        except Exception as e:
+            logger.error(f"Failed to save messages for session {session_id}: {e}")
+            raise
+
+    @authorization_required
     def get_message_history(self, session_id: str, user_id: str) -> List[ChatMessagePayload]:
-        history = self.history.get(session_id, [])
-        return sorted(history, key=lambda m: m.rank if m.rank is not None else 0)
+        try:
+            query = {
+                "query": {
+                    "term": {
+                        "session_id": session_id
+                    }
+                },
+                "sort": [
+                    {
+                        "rank": {
+                            "order": "asc",
+                            "unmapped_type" : "long"
+                        }
+                    }
+                    
+                ],
+                "size": 1000
+            }
+            response = self.client.search(index=self.history_index, body=query)
+            return [ChatMessagePayload(**hit["_source"]) for hit in response["hits"]["hits"]]
+        except Exception as e:
+            logger.error(f"Failed to retrieve messages for session {session_id}: {e}")
+            return []

@@ -238,12 +238,13 @@ class MetricsStorageConfig(BaseModel):
     settings: MetricsStorageSettings
 
 class OpenSearchSettings(BaseModel):
-    host: str = Field(default="http://localhost:9200", description="URL of the Opensearch host")
-    username: str = Field(default="fred", description="Opensearch username")
+    host: str = Field(default="https://localhost:9200", description="URL of the Opensearch host")
+    username: str = Field(default="app_rw", description="Opensearch username")
     password: str = Field(description="Opensearch user password")
     secure: bool = Field(default=False, description="Use TLS with Opensearch")
     verify_certs: bool = Field(default=False, description="Verify certificates")
     sessions_index: str = Field(default="sessions", description="Index where sessions are stored")
+    history_index: str = Field(default="history", description="Index where messages histories are stored")
 
 class SessionStorageConfig(BaseModel):
     type: str = Field(default="in_memory", description="Session storage type: 'in_memory' or 'opensearch'")
