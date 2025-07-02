@@ -45,7 +45,7 @@ spec:
             - containerPort: 8000
           {{- with .Values.env }}
           env:
-            {{- toYaml . | nindent 12 }}
+            {{- toYaml . | nindent 12 }}/
           {{- end }}
           {{- with .Values.resources }}
           resources:
@@ -60,7 +60,7 @@ spec:
               subPath: configuration.yaml
             - name: {{ .Chart.Name }}-kubeconfig-vol
               mountPath: /home/fred-user/.kube/config
-              subPath: config
+              subPath: kubeconfig
             - name: {{ .Chart.Name }}-env-vol
               mountPath: /app/config/.env
               subPath: .env            
