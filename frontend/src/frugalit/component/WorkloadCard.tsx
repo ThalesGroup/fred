@@ -32,7 +32,6 @@ import { ResourceIdentityCard } from "./ResourceIdentityCard";
 import { Workload } from "../../utils/resource";
 import { WorkloadAdvanced, WorkloadId, WorkloadEssentials, ClusterOverview } from "../slices/api";
 import { ResourceScoreCard } from "./ResourceScoreCard";
-import MarkdownRenderer from "../../components/markdown/MarkdownRenderer";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FactList } from "../slices/factsStructures";
@@ -41,6 +40,7 @@ import { WorkloadSummary } from "../slices/workloadSummaryStructures";
 import EmptyIcon from "@mui/icons-material/RemoveCircleOutline";
 import { WorkloadScores } from "../slices/scoresStructures";
 import { WorkloadEcoScore } from "./WorkloadEcoScore";
+import CustomMarkdownRenderer from "../../components/markdown/CustomMarkdownRenderer";
 
 interface ResourceOverviewProps {
   cluster: ClusterOverview;
@@ -257,7 +257,7 @@ export const WorkloadCard = ({
       <Grid2 size={{ xs: 12, md: 6 }} sx={{ display: "flex", flexDirection: "column", flexGrow: 1 }}>
         <Paper elevation={3} sx={{ flex: 0, padding: 2, marginBottom: 2, position: "relative" }}>
           <Typography variant="body2">Summary</Typography>
-          <MarkdownRenderer content={truncateMarkdown(_summary, 1200)} />
+           <CustomMarkdownRenderer content={truncateMarkdown(_summary, 2400)} size="small"/>
           <IconButton sx={{ position: "absolute", top: 8, right: 8 }} onClick={() => handleOpenSummary(_summary)}>
             <CropFreeIcon />
           </IconButton>
@@ -293,7 +293,7 @@ export const WorkloadCard = ({
       <Drawer anchor="right" open={open} onClose={handleCloseSummary}>
         <Box sx={{ width: "50vw", p: 2 }}>
           <Paper sx={{ p: 1, px: 2, width: "100%" }}>
-            <MarkdownRenderer size="medium" content={summaryContent} />
+            <CustomMarkdownRenderer content={summaryContent} size="medium"/>
           </Paper>
         </Box>
       </Drawer>

@@ -60,7 +60,7 @@ spec:
               subPath: configuration.yaml
             - name: {{ .Chart.Name }}-kubeconfig-vol
               mountPath: /home/fred-user/.kube/config
-              subPath: config
+              subPath: kubeconfig
             - name: {{ .Chart.Name }}-env-vol
               mountPath: /app/config/.env
               subPath: .env            
