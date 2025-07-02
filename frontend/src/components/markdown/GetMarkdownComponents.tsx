@@ -24,11 +24,10 @@ interface GetMarkdownComponentsOptions {
 /**
  * GetMarkdownComponents
  *
- * A factory function that returns a mapping of custom React components
- * to be used with `react-markdown` for rendering markdown content.
+ * Returns a mapping of custom React components to render markdown content
+ * with consistent MUI theme-based styling, and optional emoji rendering fix.
  *
- * This function supports:
- * - Dynamic theming based on MUI's `theme.typography.markdown` styles
+ * Supports:
  * - Font size scaling (`small`, `medium`, `large`)
  * - Optional emoji fix for emphasis or stage direction rendering (e.g., disables italics on emojis)
  * - Mermaid diagram rendering from fenced code blocks (```mermaid)
@@ -98,5 +97,48 @@ export function getMarkdownComponents({ theme, size, enableEmojiFix = true }: Ge
         </code>
       );
     },
+    table: ({ node, ...props }) => (
+      <table
+        style={{
+          width: "100%",
+          borderCollapse: "collapse",
+          marginTop: theme.spacing(1),
+          border: `1px solid ${theme.palette.divider}`,
+        }}
+        {...props}
+      />
+    ),
+    thead: ({ node, ...props }) => <thead {...props} />,
+    tbody: ({ node, ...props }) => <tbody {...props} />,
+    tr: ({ node, ...props }) => <tr {...props} />,
+    th: ({ node, ...props }) => (
+      <th
+        style={{
+          border: `1px solid ${theme.palette.divider}`,
+          padding: theme.spacing(1),
+          textAlign: "left",
+          backgroundColor: theme.palette.background.paper,
+          fontWeight: theme.typography.fontWeightMedium,
+          color: theme.palette.text.primary,
+          fontFamily: theme.typography.fontFamily,
+          fontSize: theme.typography.body2.fontSize,
+        }}
+        {...props}
+      />
+    ),
+    td: ({ node, ...props }) => (
+      <td
+        style={{
+          border: `1px solid ${theme.palette.divider}`,
+          padding: theme.spacing(1),
+          textAlign: "left",
+          color: theme.palette.text.primary,
+          fontFamily: theme.typography.fontFamily,
+          fontSize: theme.typography.body2.fontSize,
+        }}
+        {...props}
+      />
+    ),
+
   };
 }
