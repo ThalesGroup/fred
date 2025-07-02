@@ -14,6 +14,7 @@
 
 import Mermaid from "./Mermaid.tsx";
 import {
+  alpha,
   Paper,
   Table,
   TableBody,
@@ -89,7 +90,7 @@ export function getMarkdownComponents({
       );
     },
 
-    // Tables
+    // Markdown tables rendered with MUI Table components
     table: ({ node, ...props }) => (
       <TableContainer
         component={Paper}
@@ -118,8 +119,8 @@ export function getMarkdownComponents({
         sx={{
           backgroundColor:
             theme.palette.mode === "dark"
-              ? theme.palette.primary.dark
-              : theme.palette.grey[200],
+              ? alpha(theme.palette.primary.main, 0.2)
+              : alpha(theme.palette.primary.main, 0.1),
         }}
         {...props}
       />
@@ -130,7 +131,7 @@ export function getMarkdownComponents({
       <TableCell
         component="th"
         sx={{
-          fontWeight: theme.typography.fontWeightMedium,
+          fontWeight: theme.typography.fontWeightBold,
           color: theme.palette.text.primary,
           border: `1px solid ${theme.palette.divider}`,
           padding: theme.spacing(1),
