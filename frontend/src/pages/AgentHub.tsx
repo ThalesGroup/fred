@@ -35,7 +35,7 @@ import { PageBodyWrapper } from "../common/PageBodyWrapper";
 import { LoadingSpinner } from "../utils/loadingSpinner";
 import { useGetChatBotAgenticFlowsMutation } from "../slices/chatApi";
 import { TopBar } from "../common/TopBar";
-import { AgentCard } from "../components/AgenCard";
+import { AgentCard } from "../components/AgentCard";
 
 interface Agent {
   name: string;
