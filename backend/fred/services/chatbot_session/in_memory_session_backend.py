@@ -19,6 +19,7 @@ from fred.services.chatbot_session.abstract_session_backend import AbstractSessi
 from fred.services.chatbot_session.abstract_user_authentication_backend import AbstractSecuredResourceAccess
 from fred.services.chatbot_session.session_manager import SessionSchema
 from fred.services.chatbot_session.structure.chat_schema import ChatMessagePayload
+from fred.common.error import AuthorizationSentinel, SESSION_NOT_INITIALIZED
 from fred.common.utils import authorization_required
 
 logger = logging.getLogger(__name__)
@@ -28,11 +29,11 @@ class InMemorySessionStorage(AbstractSessionStorage, AbstractSecuredResourceAcce
         self.sessions: Dict[str, SessionSchema] = {}
         self.history: Dict[str, List[ChatMessagePayload]] = {}
         
-    def get_authorized_user_id(self, session_id: str) -> Optional[str]:
+    def get_authorized_user_id(self, session_id: str) -> str | None | AuthorizationSentinel:
         session = self.sessions.get(session_id)
-        if session:
-            return session.user_id
-        return None
+        if session is None:
+            return SESSION_NOT_INITIALIZED
+        return session.user_id
 
     def save_session(self, session: SessionSchema) -> None:
         self.sessions[session.id] = session
