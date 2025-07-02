@@ -1,4 +1,3 @@
-// Updated ChatProfiles.tsx using KnowledgeContextItem and generic dialogs
 import { useEffect, useState } from "react";
 import {
   Box,
@@ -20,9 +19,15 @@ import { useToast } from "../ToastProvider";
 import { KnowledgeContextItem } from "../knowledgeContext/KnowledgeContextItem";
 import { KnowledgeContextCreateDialog } from "../knowledgeContext/KnowledgeContextCreateDialog";
 import { KnowledgeContextEditDialog } from "../knowledgeContext/KnowledgeContextEditDialog";
-import { useDeleteKnowledgeContextMutation, useLazyGetKnowledgeContextsQuery, useUpdateKnowledgeContextMutation } from "../../slices/knowledgeContextApi";
+import {
+  useDeleteKnowledgeContextMutation,
+  useLazyGetKnowledgeContextsQuery,
+  useUpdateKnowledgeContextMutation
+} from "../../slices/knowledgeContextApi";
+import { useTranslation } from "react-i18next";
 
 export const ChatProfiles = () => {
+  const { t } = useTranslation();
   const [chatProfiles, setChatProfiles] = useState([]);
   const [search, setSearch] = useState("");
   const [getChatProfiles] = useLazyGetKnowledgeContextsQuery();
@@ -32,8 +37,6 @@ export const ChatProfiles = () => {
   const [openDialog, setOpenDialog] = useState(false);
   const [openEditDialog, setOpenEditDialog] = useState(false);
   const [currentChatProfile, setCurrentChatProfile] = useState(null);
-  // const { data } = useGetChatProfileMaxTokensQuery();
-  // const maxTokens = data?.max_tokens;
   const { showError } = useToast();
 
   useEffect(() => {
@@ -42,7 +45,7 @@ export const ChatProfiles = () => {
 
   const fetchChatProfiles = async () => {
     try {
-      const response = await getChatProfiles({tag: "chat_profile"}).unwrap();
+      const response = await getChatProfiles({ tag: "chat_profile" }).unwrap();
       setChatProfiles(response);
     } catch (e) {
       console.error("Failed to fetch chat profiles", e);
@@ -67,8 +70,8 @@ export const ChatProfiles = () => {
       await fetchChatProfiles();
     } catch (error) {
       showError({
-        summary: "Update failed",
-        detail: `Could not update profile: ${error?.data?.detail || error.message}`,
+        summary: t("profile.chat.updateError"),
+        detail: `${error?.data?.detail || error.message}`,
       });
       await handleReloadProfile();
     }
@@ -80,15 +83,15 @@ export const ChatProfiles = () => {
       setChatProfiles((prev) => prev.filter((p) => p.id !== id));
     } catch (e) {
       showError({
-        summary: "Delete failed",
-        detail: `Could not delete profile: ${e?.data?.detail || e.message}`,
+        summary: t("profile.chat.deleteError"),
+        detail: `${e?.data?.detail || e.message}`,
       });
     }
   };
 
   const handleReloadProfile = async () => {
     try {
-      const response = await getChatProfiles({tag: "chat_profile"}).unwrap();
+      const response = await getChatProfiles({ tag: "chat_profile" }).unwrap();
       setChatProfiles(response);
       if (currentChatProfile) {
         const updated = response.find((p) => p.id === currentChatProfile.id);
@@ -96,8 +99,8 @@ export const ChatProfiles = () => {
       }
     } catch (e) {
       showError({
-        summary: "Reload failed",
-        detail: `Could not reload profile: ${e?.data?.detail || e.message}`,
+        summary: t("profile.chat.reloadError"),
+        detail: `${e?.data?.detail || e.message}`,
       });
     }
   };
@@ -111,7 +114,7 @@ export const ChatProfiles = () => {
       <Box mb={3}>
         <TextField
           fullWidth
-          placeholder="Search profiles..."
+          placeholder={t("profile.chat.searchPlaceholder")}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           InputProps={{
@@ -132,7 +135,6 @@ export const ChatProfiles = () => {
               title={profile.title}
               description={profile.description}
               documents={profile.documents}
-              //maxTokens={maxTokens}
               onEdit={handleOpenEditDialog}
               onDelete={handleDelete}
               onViewDescription={setOpenDescription}
@@ -145,7 +147,7 @@ export const ChatProfiles = () => {
 
       {filteredProfiles.length === 0 && (
         <Paper elevation={2} sx={{ p: 4, mt: 3, borderRadius: 2, textAlign: "center" }}>
-          <Typography variant="body1">No profiles found.</Typography>
+          <Typography variant="body1">{t("profile.chat.noProfiles")}</Typography>
         </Paper>
       )}
 
@@ -163,7 +165,7 @@ export const ChatProfiles = () => {
         onClose={() => setOpenDialog(false)}
         onCreated={fetchChatProfiles}
         allowDocumentDescription={false}
-        dialogTitle="Chat profile"
+        dialogTitle={t("profile.chat.dialogTitle")}
         tag="chat_profile"
       />
 
@@ -174,7 +176,7 @@ export const ChatProfiles = () => {
         onReloadContext={handleReloadProfile}
         context={currentChatProfile}
         allowDocumentDescription={false}
-        dialogTitle="Chat profile"
+        dialogTitle={t("profile.chat.dialogTitle")}
       />
 
       <Drawer
@@ -184,7 +186,9 @@ export const ChatProfiles = () => {
         PaperProps={{ sx: { width: { xs: "100%", sm: 500 }, p: 3 } }}
       >
         <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-          <Typography variant="h6">{openDescription?.title || "Profile description"}</Typography>
+          <Typography variant="h6">
+            {openDescription?.title || t("profile.chat.drawerTitle")}
+          </Typography>
           <IconButton onClick={() => setOpenDescription(null)}>
             <CloseIcon />
           </IconButton>
@@ -199,7 +203,7 @@ export const ChatProfiles = () => {
             color: "text.primary",
           }}
         >
-          {openDescription?.description || "No description provided."}
+          {openDescription?.description || t("profile.chat.noDescription")}
         </Box>
       </Drawer>
     </Container>

@@ -99,24 +99,31 @@ const GetUserRoles = (): string[] => {
   return [...clientRoles]; // Merge both
 };
 
-const GetUserName = (): string => {
+const GetUserName = (): string | null => {
   if (USE_AUTH) {
     return keycloakInstance.tokenParsed.preferred_username;
   }
   return "admin"; // Default to "admin" if no authentication is used
 };
 
-const GetUserMail = (): string => {
+const GetUserFullName = (): string | null => {
+  if (USE_AUTH) {
+    return keycloakInstance.tokenParsed.name;
+  }
+  return "Administrator"; // Default to "Administrator" if no authentication is used
+};
+
+const GetUserMail = (): string | null => {
   if (USE_AUTH && keycloakInstance?.tokenParsed) {
     // Au choix, "name", "preferred_username", "email", ...
-    return keycloakInstance.tokenParsed.email || "user@mail.com";
+    return keycloakInstance.tokenParsed.email;
   }
   return "admin@mail.com";
 };
 
-const GetUserId = (): string => {
+const GetUserId = (): string | null => {
   if (USE_AUTH && keycloakInstance?.tokenParsed) {
-    return keycloakInstance.tokenParsed.sub || "admin";
+    return keycloakInstance.tokenParsed.sub;
   }
   return "admin";
 };
@@ -145,6 +152,7 @@ export const KeyCloakService = {
   CallLogout: Logout,
   GetUserName: GetUserName,
   GetUserId: GetUserId,
+  GetUserFullName: GetUserFullName,
   GetUserMail: GetUserMail,
   GetToken: GetToken,
   GetRealmRoles: GetRealmRoles,

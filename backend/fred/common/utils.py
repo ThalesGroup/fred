@@ -234,7 +234,7 @@ def log_exception(e: Exception, context_message: Optional[str] = None) -> str:
     return summary
 
 # Decorator for wrapping methods to protect by authentication
-def auth_required(method):
+def authorization_required(method):
     @wraps(method)
     def wrapper(self, *args, **kwargs):
         sig = inspect.signature(method)
@@ -249,7 +249,7 @@ def auth_required(method):
         if user_id is None:
             raise ValueError(f"Missing 'user_id' in method '{method.__name__}'")
         if session_id is None:
-            raise ValueError(f"Missing 'session_id' or in method '{method.__name__}'")
+            raise ValueError(f"Missing 'session_id' in method '{method.__name__}'")
         if not isinstance(user_id, str):
             raise ValueError(f"'user_id' must be of type 'str'")
         if not isinstance(session_id, str):

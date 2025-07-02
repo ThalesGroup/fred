@@ -13,9 +13,8 @@
 // limitations under the License.
 
 import { useTheme } from "@mui/material/styles";
-import { Card, CardContent, Tooltip, Typography, Box, IconButton, Divider, Chip } from "@mui/material";
+import { Card, CardContent, Tooltip, Typography, Box, IconButton, Divider } from "@mui/material";
 import VisibilityIcon from "@mui/icons-material/Visibility";
-import PersonOutlineIcon from "@mui/icons-material/PersonOutline";
 import HistoryIcon from "@mui/icons-material/History";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import dayjs from "dayjs";
@@ -141,21 +140,6 @@ export const SourceCard = ({ source, onCardClick, onViewDocument, loading }: Sou
               {formatDate(source.modified)}
             </Typography>
           </Box>
-
-          {/* Agent chip (if provided) */}
-          {source.agent_name && (
-            <Chip
-              icon={<PersonOutlineIcon sx={{ fontSize: "0.9rem" }} />}
-              label={source.agent_name}
-              size="small"
-              sx={{
-                height: 24,
-                "& .MuiChip-label": { px: 1, fontSize: "0.75rem" },
-                alignSelf: "flex-start",
-                mt: 0.5,
-              }}
-            />
-          )}
         </Box>
 
         {/* Preview icon (bottom-right, floating) */}

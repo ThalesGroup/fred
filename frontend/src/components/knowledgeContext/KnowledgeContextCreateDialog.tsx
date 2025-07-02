@@ -1,4 +1,4 @@
-// components/profile/CreateKnowledgeContextDialog.tsx
+// CreateKnowledgeContextDialog.tsx with i18n integration
 import {
   Dialog,
   DialogTitle,
@@ -18,6 +18,7 @@ import DocumentScannerIcon from '@mui/icons-material/DocumentScanner';
 import DeleteIcon from "@mui/icons-material/Delete";
 import { useCreateKnowledgeContextMutation } from "../../slices/knowledgeContextApi";
 import { useToast } from "../ToastProvider";
+import { useTranslation } from "react-i18next";
 
 interface FileWithDescription {
   file: File;
@@ -43,6 +44,7 @@ export const KnowledgeContextCreateDialog = ({
   dialogTitle,
   tag
 }: KnowledgeContextCreateDialogProps) => {
+  const { t } = useTranslation();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [files, setFiles] = useState<FileWithDescription[]>([]);
@@ -90,20 +92,19 @@ export const KnowledgeContextCreateDialog = ({
       onClose();
     } catch (e) {
       showError({
-        summary: "Creation failed",
-        detail: `Could not create context: ${e?.data?.detail || e.message}`,
+        summary: t("dialogs.create.errorSummary"),
+        detail: t("dialogs.create.errorDetail", { message: e?.data?.detail || e.message }),
       });
     } finally {
       setIsLoading(false);
     }
   };
 
-
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="md">
       <DialogTitle>
         <Stack direction="row" justifyContent="space-between" alignItems="center">
-          <Typography variant="h6">New {dialogTitle}</Typography>
+          <Typography variant="h6">{t("dialogs.create.title", { type: dialogTitle })}</Typography>
           <IconButton onClick={onClose} disabled={isLoading}>
             <CloseIcon />
           </IconButton>
@@ -113,7 +114,7 @@ export const KnowledgeContextCreateDialog = ({
       <DialogContent>
         <Stack spacing={2.5} mt={1}>
           <TextField
-            label="Name"
+            label={t("dialogs.create.name")}
             fullWidth
             value={title}
             onChange={(e) => setTitle(e.target.value)}
@@ -122,7 +123,7 @@ export const KnowledgeContextCreateDialog = ({
           />
 
           <TextField
-            label="Description"
+            label={t("dialogs.create.description")}
             fullWidth
             multiline
             rows={3}
@@ -133,22 +134,19 @@ export const KnowledgeContextCreateDialog = ({
 
           {allowDocuments && (
             <>
-              <Box
-                {...getRootProps()}
-                sx={{
-                  p: 3,
-                  border: `2px dashed #ccc`,
-                  borderRadius: 2,
-                  textAlign: "center",
-                  backgroundColor: "background.default",
-                  cursor: isLoading ? "not-allowed" : "pointer",
-                  opacity: isLoading ? 0.5 : 1,
-                  transition: "all 0.2s ease"
-                }}
-              >
+              <Box {...getRootProps()} sx={{
+                p: 3,
+                border: `2px dashed #ccc`,
+                borderRadius: 2,
+                textAlign: "center",
+                backgroundColor: "background.default",
+                cursor: isLoading ? "not-allowed" : "pointer",
+                opacity: isLoading ? 0.5 : 1,
+                transition: "all 0.2s ease"
+              }}>
                 <input {...getInputProps()} disabled={isLoading} />
                 <Typography variant="body2" color="text.secondary">
-                  {isDragActive ? "Drop files here" : "Click or drag and drop files here"}
+                  {isDragActive ? t("dialogs.create.dropHere") : t("dialogs.create.dragOrClick")}
                 </Typography>
               </Box>
 
@@ -183,7 +181,7 @@ export const KnowledgeContextCreateDialog = ({
                       </Box>
                       {allowDocumentDescription && (
                         <TextField
-                          label="Document description (optional)"
+                          label={t("dialogs.create.documentDescription")}
                           fullWidth
                           size="small"
                           value={file.description || ""}
@@ -204,13 +202,13 @@ export const KnowledgeContextCreateDialog = ({
       </DialogContent>
 
       <DialogActions sx={{ px: 3, pb: 2 }}>
-        <Button onClick={onClose} disabled={isLoading}>Cancel</Button>
+        <Button onClick={onClose} disabled={isLoading}>{t("dialogs.cancel")}</Button>
         <Button
           variant="contained"
           onClick={handleCreate}
           disabled={isLoading || !title.trim()}
         >
-          {isLoading ? "Creating..." : "Create"}
+          {isLoading ? t("dialogs.create.loading") : t("dialogs.create.confirm")}
         </Button>
       </DialogActions>
     </Dialog>
