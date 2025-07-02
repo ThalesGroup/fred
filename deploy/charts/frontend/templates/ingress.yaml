@@ -8,7 +8,9 @@ metadata:
     {{- toYaml . | nindent 4 }}
   {{- end }}
 spec:
+  {{- if and (.Values.ingress.className) (ne .Values.ingress.className "") }}
   ingressClassName: {{ .Values.ingress.className }}
+  {{- end }}
   rules:
   {{- range .Values.ingress.hosts }}
   - host: {{ .host }}
