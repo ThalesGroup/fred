@@ -16,8 +16,8 @@ import { useEffect, useState } from "react";
 import { Box, Typography, IconButton, CircularProgress, Drawer, AppBar, Toolbar } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import DownloadIcon from "@mui/icons-material/Download";
-import MarkdownViewer from "../markdown/MarkdownRenderer.tsx";
 import { useGetDocumentMarkdownPreviewMutation } from "../../slices/documentApi.tsx";
+import CustomMarkdownRenderer from "../markdown/CustomMarkdownRenderer.tsx";
 
 // Props definition for the DocumentViewer component
 interface DocumentViewerProps {
@@ -110,7 +110,7 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({ document: doc, o
       window.document.body.removeChild(link);
     }
   };
-  console.log("DocumentViewer rendering docContent: ", docContent);
+  //console.log("DocumentViewer rendering docContent: ", docContent);
   return (
     <Drawer anchor="right" open={open} onClose={onClose}>
       <Box
@@ -143,7 +143,11 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({ document: doc, o
               <CircularProgress />
             </Box>
           ) : (
-            <MarkdownViewer content={docContent} size="large" enableEmojiSubstitution={true} />
+            <CustomMarkdownRenderer
+  content={docContent}
+  size="small"
+/>
+            // <MarkdownViewer content={docContent} size="small" enableEmojiSubstitution={true} />
           )}
         </Box>
       </Box>

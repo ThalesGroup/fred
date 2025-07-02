@@ -25,6 +25,8 @@ export const getDocumentIcon = (filename: string): JSX.Element | null => {
     case "xlsx":
     case "xls":
       return <ExcelIcon style={{ width: 20, height: 20 }} />;
+    case "csv":
+      return <ExcelIcon style={{ width: 20, height: 20 }} />;
     default:
       return null;
   }

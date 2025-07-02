@@ -25,6 +25,7 @@ import inspect
 logger = logging.getLogger(__name__)
 
 from fred.common.structure import Configuration, PrecisionEnum, SampleDataType, Series, CompareResult, Window, Difference
+from fred.common.error import SESSION_NOT_INITIALIZED
 
 def parse_server_configuration(configuration_path: str) -> Configuration:
     """
@@ -244,8 +245,7 @@ def authorization_required(method):
         arguments = bound_args.arguments
         session_id = arguments.get('session_id')
         user_id = arguments.get('user_id')
-        
-        # Args and type check at runtime
+
         if user_id is None:
             raise ValueError(f"Missing 'user_id' in method '{method.__name__}'")
         if session_id is None:
@@ -256,16 +256,21 @@ def authorization_required(method):
             raise ValueError(f"'session_id' must be of type 'str'")
         if not hasattr(self, "get_authorized_user_id") or not callable(getattr(self, "get_authorized_user_id")):
             raise NotImplementedError(
-                f"{self.__class__.__name__} must implement 'get_authorized_user_id' method from AbstractSecuredResourceAccess"
+                f"{self.__class__.__name__} must implement 'get_authorized_user_id'"
             )
-            
+
         authorized_user_id = self.get_authorized_user_id(session_id)
-        if authorized_user_id is not None and authorized_user_id != user_id:
+
+        if authorized_user_id is SESSION_NOT_INITIALIZED:
+            logger.debug(f"Session '{session_id}' not yet initialized — skipping auth check for method '{method.__name__}'")
+            return method(self, *args, **kwargs)
+
+        if authorized_user_id != user_id:
             logger.warning(f"Unauthorized access: user {user_id} to session {session_id} in method '{method.__name__}'")
             raise HTTPException(
                 status_code=403,
-                detail=f"Unauthorized access: user {user_id} to session {session_id} in method '{method.__name__}'"
+                detail=f"Unauthorized access: user {user_id} to session {session_id}"
             )
-        
+
         return method(self, *args, **kwargs)
     return wrapper
