@@ -183,10 +183,15 @@ security:
 
 # Agentic metrics are stored in a prometheus or opensearch backend. To make development
 # easy by default they are stored on a local file. 
-metrics_storage:
+node_metrics_storage:
   type: "local" 
   settings:
-    local_path: "~/.fred/metrics-store"
+    local_path: "~/.fred/node-metrics-store"
+
+tool_metrics_storage:
+  type: "local" 
+  settings:
+    local_path: "~/.fred/tool-metrics-store"
 
 # Feedbacks are store in a simple local file. It is plan to add 
 # additional backend like opensearch or minio.

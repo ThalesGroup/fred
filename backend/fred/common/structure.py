@@ -293,7 +293,8 @@ class Configuration(BaseModel):
     dao: DAOConfiguration
     security: Security
     feedback_storage: FeedbackStorageConfig = Field(..., description="Feedback Storage configuration")
-    metrics_storage: MetricsStorageConfig = Field(..., description="Metrics Storage configuration")
+    node_metrics_storage:  MetricsStorageConfig = Field(..., description="Node Monitoring Storage configuration")
+    tool_metrics_storage:  MetricsStorageConfig = Field(..., description="Tool Monitoring Storage configuration")
     session_storage: SessionStorageConfig = Field(..., description="Session Storage configuration")
 
 class OfflineStatus(BaseModel):

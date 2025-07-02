@@ -1,5 +1,6 @@
 import { Box, Card, CardContent, Grid2, Typography, useTheme } from "@mui/material";
 import CodeIcon from "@mui/icons-material/Code";
+import { useTranslation } from "react-i18next";
 
 interface ProfileTokenProps {
   tokenParsed: any;
@@ -7,6 +8,7 @@ interface ProfileTokenProps {
 
 export function ProfileToken({ tokenParsed }: ProfileTokenProps) {
   const theme = useTheme();
+  const { t } = useTranslation();
 
   return (
     <Grid2 size={{ xs: 12 }}>
@@ -21,7 +23,7 @@ export function ProfileToken({ tokenParsed }: ProfileTokenProps) {
               alignItems: "center",
             }}
           >
-            <CodeIcon sx={{ mr: 1 }} /> Token Information
+            <CodeIcon sx={{ mr: 1 }} /> {t("profile.token.title")}
           </Typography>
           <Box
             sx={{
@@ -48,7 +50,7 @@ export function ProfileToken({ tokenParsed }: ProfileTokenProps) {
                 fontSize: "0.75rem",
               }}
             >
-              {tokenParsed ? JSON.stringify(tokenParsed, null, 2) : "No available token"}
+              {tokenParsed ? JSON.stringify(tokenParsed, null, 2) : t("profile.token.none")}
             </pre>
           </Box>
         </CardContent>

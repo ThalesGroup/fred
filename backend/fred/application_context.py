@@ -41,8 +41,6 @@ from fred.common.error import UnsupportedTransportError, MCPToolFetchError
 
 import logging
 
-from fred.monitoring.monitored_language_model import MonitoredLanguageModel
-
 logger = logging.getLogger(__name__)
 
 SUPPORTED_TRANSPORTS = ["sse", "stdio", "streamable_http", "websocket"]
@@ -112,7 +110,7 @@ def get_model_for_agent(agent_name: str) -> BaseLanguageModel:
     Returns:
         BaseLanguageModel: The AI model configured for the agent.
     """
-    return MonitoredLanguageModel(target=get_app_context().get_model_for_agent(agent_name),name=agent_name)
+    return get_app_context().get_model_for_agent(agent_name)
 
 
 def get_default_model() -> BaseLanguageModel:
@@ -125,7 +123,7 @@ def get_default_model() -> BaseLanguageModel:
     Returns:
         BaseLanguageModel: The AI model configured for the agent.
     """
-    return MonitoredLanguageModel(target=get_app_context().get_default_model(),name="DefaultModel")
+    return get_app_context().get_default_model()
 
 
 def get_model_for_leader() -> BaseLanguageModel:

@@ -12,12 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 """
+metric_types.py
+
 Pydantic data models defining the structure of monitoring metrics.
 
-This includes token usage details, filter results, and output formats for
-numerical and categorical metric aggregations.
+Includes:
+- Token usage details (TokenDetails, TokenUsage).
+- Metadata about model inferences.
+- NumericalMetric for aggregated numerical results.
+- CategoricalMetric for extracting categorical fields.
 """
 
 from typing import Optional, Dict, List, Any
@@ -126,11 +130,26 @@ class NumericalMetric(BaseModel):
     Aggregated numerical metrics for a specific time bucket.
 
     Attributes:
-        bucket: Time window label (e.g., '2025-06-12T15:00').
+        time_bucket: Label for the time bucket (e.g., '2025-06-12T15:00').
         values: Mapping of metric field names to aggregated values.
+
+    Extra fields:
+        Any groupby field requested will also be included dynamically.
+
+    Example:
+        {
+            "time_bucket": "2025-06-12T15:00",
+            "model_name": "gpt-4",
+            "values": {"latency--avg": 1.23, "tokens--sum": 2000}
+        }
     """
-    bucket: str  # e.g., "2025-06-11T14:00"
-    values: Dict[str, float]  # {"latency": 0.32, "token_usage.total_tokens": 59}
+    time_bucket: str
+    values: Dict[str, float]
+
+    class Config:
+        extra = "allow"
+
+
 
 class CategoricalMetric(BaseModel):
     """
@@ -140,6 +159,7 @@ class CategoricalMetric(BaseModel):
         timestamp: UNIX timestamp of the event.
         user_id: User identifier.
         session_id: Session identifier.
+        agent_name: Name of the agent used.
         model_name: Name of the model used.
         model_type: Type or category of the model.
         finish_reason: Why the generation ended.
@@ -150,6 +170,7 @@ class CategoricalMetric(BaseModel):
     timestamp: float
     user_id: Optional[str]
     session_id: Optional[str]
+    agent_name: Optional[str]
     model_name: Optional[str]
     model_type: Optional[str]
     finish_reason: Optional[str]
