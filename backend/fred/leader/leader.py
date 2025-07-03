@@ -24,12 +24,49 @@ from fred.model_factory import get_model
 from fred.leader.structures.decision import ExecuteDecision, PlanDecision
 from fred.leader.structures.plan import Plan
 from fred.leader.structures.state import State
+from fred.monitoring.node_monitoring.monitor_node import monitor_node
+
 logger = logging.getLogger(__name__)
 
 class Leader(Flow):
     """
-    Fred is an agentic flow chatbot that uses a plan and supervisor approach with ReAct experts calling.
-    It manages a dynamic list of experts that can be updated during the session.
+    Leader agent for Fred's agentic flow framework.
+
+    The Leader is a specialized controller in Fred's architecture.
+    It manages an agentic workflow that supervises multiple expert agents,
+    creating, adapting, and executing plans to fulfill user objectives through
+    a dynamic, multi-step reasoning process.
+
+    The Leader coordinates experts by:
+      - Planning a sequence of tasks to solve a user objective.
+      - Assigning individual tasks to the best-suited expert.
+      - Supervising execution and validating results.
+      - Replanning if necessary to achieve the goal.
+
+    Attributes
+    ----------
+    name : str
+        The agent's display name.
+    role : str
+        The role of the agent in the system.
+    nickname : str
+        A short informal name.
+    description : str
+        A description of the agent's purpose.
+    icon : str
+        UI icon identifier.
+    tag : str
+        Tag to categorize the agent.
+    graph : StateGraph or None
+        The execution graph defining the Leader's flow.
+    model : Any
+        The language model used for planning and decisions.
+    experts : dict[str, AgentFlow]
+        Registered expert agents available for task execution.
+    compiled_expert_graphs : dict[str, CompiledStateGraph]
+        Precompiled graphs for the experts.
+    max_steps : int
+        Maximum number of allowed steps before forcing a final answer.
     """
 
     name: str = "Fred"
@@ -87,11 +124,11 @@ class Leader(Flow):
         """
         if self.graph is None:
             builder = StateGraph(State)
-            builder.add_node("planning", self.plan)
-            builder.add_node("supervise", self.supervise)
-            builder.add_node("execute", self.execute)
-            builder.add_node("validate", self.validate)
-            builder.add_node("respond", self.respond)
+            builder.add_node("planning", monitor_node(self.plan))
+            builder.add_node("supervise", monitor_node(self.supervise))
+            builder.add_node("execute", monitor_node(self.execute))
+            builder.add_node("validate", monitor_node(self.validate))
+            builder.add_node("respond", monitor_node(self.respond))
 
             builder.add_edge(START, "planning")
             builder.add_edge("planning", "supervise")
@@ -195,7 +232,7 @@ class Leader(Flow):
         # Then use state["initial_objective"] in your prompts instead of state["objective"]
         objective = state["initial_objective"]
 
-        structured_model = self.model.with_structured_output(Plan)
+        structured_model = self.model.with_structured_output(Plan,include_raw=True)
 
         # If some progress has been made, the agent needs to come up with additional steps.
         if "progress" in state and len(state["progress"]) > 0:
@@ -231,7 +268,11 @@ class Leader(Flow):
                 prompt = base_prompt
 
             messages = step_conclusions + [HumanMessage(content=prompt)]
-            re_plan: Plan = await structured_model.ainvoke(messages)
+
+            response = await structured_model.ainvoke(messages)
+
+            raw_response = response["raw"]
+            re_plan :Plan = response["parsed"]
 
             # Add additional messages to the messages with metadata
             # Include the user and plan messages
@@ -253,6 +294,7 @@ class Leader(Flow):
                 "plan": Plan(steps=state["plan"].steps + re_plan.steps),
                 "traces": ["Plan adjusted with additional steps."],
                 "objective": objective,
+                "raw_response": raw_response,
             }
 
         # If no progress has been made, the agent needs to come up with the initial plan.
@@ -282,7 +324,10 @@ class Leader(Flow):
 
             messages = state["messages"] + [SystemMessage(content=prompt)]
 
-            new_plan: Plan = await structured_model.ainvoke(messages)
+            response = await structured_model.ainvoke(messages)
+
+            raw_response = response["raw"]
+            new_plan : Plan = response["parsed"]
 
             # Add additional messages to the messages with metadata
             # Include the user and plan messages
@@ -304,6 +349,7 @@ class Leader(Flow):
                 "traces": ["Initial plan set."],
                 "progress": [],
                 "objective": objective,
+                "raw_response": raw_response,
             }
 
     async def supervise(self, state: State):
@@ -342,10 +388,13 @@ class Leader(Flow):
             f"{all_experts_info}\n\n"
             f"Please answer with **only the expert name** that is best suited to execute this task."
         )
-        structured_model = self.model.with_structured_output(ExecuteDecision)
-        expert_decision = await structured_model.ainvoke(
+        structured_model = self.model.with_structured_output(ExecuteDecision,include_raw=True)
+        response = await structured_model.ainvoke(
             [HumanMessage(content=expert_prompt)]
         )
+        raw_response = response["raw"]
+        expert_decision = response["parsed"]
+
         selected_expert = expert_decision.expert
         logger.info(f"Fred selected expert: {selected_expert} for step {task_number}")
         if selected_expert not in self.experts:
@@ -405,6 +454,7 @@ class Leader(Flow):
                 f"Step {task_number} ({task}) assigned to {expert_name} and executed"
             ],
             "progress": state["progress"] + [(task, response.get("messages", []))],
+            "raw_response": raw_response,
         }
 
     async def validate(self, state: State):
@@ -452,10 +502,16 @@ class Leader(Flow):
 
         messages = step_conclusions + [HumanMessage(content=prompt)]
 
-        structured_model = self.model.with_structured_output(PlanDecision)
-        plan_decision: PlanDecision = await structured_model.ainvoke(messages)
+        structured_model = self.model.with_structured_output(PlanDecision,include_raw=True)
+
+        response = await structured_model.ainvoke(messages)
+
+        raw_response = response["raw"]
+        plan_decision: PlanDecision = response["parsed"]
+        
 
         return {
             "plan_decision": plan_decision,
             "traces": [f"Evaluation done, status is {plan_decision}."],
+            "raw_response": raw_response,
         }

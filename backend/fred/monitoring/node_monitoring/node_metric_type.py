@@ -40,7 +40,6 @@ class NodeMetric(BaseModel):
         input_tokens (Optional[int]): Number of input tokens.
         output_tokens (Optional[int]): Number of output tokens.
         total_tokens (Optional[int]): Total tokens used.
-        result_summary (Optional[str]): Text summary of the response.
         metadata (Dict[str, Any]): Arbitrary extra metadata.
     """
     timestamp: float
@@ -53,5 +52,4 @@ class NodeMetric(BaseModel):
     input_tokens: Optional[int] = None
     output_tokens: Optional[int] = None
     total_tokens: Optional[int] = None
-    result_summary: Optional[str] = None
     metadata: Dict[str, Any] = Field(default_factory=dict)

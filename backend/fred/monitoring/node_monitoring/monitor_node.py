@@ -23,16 +23,58 @@ Features:
 - Automatically enriches metrics with request context.
 - Persists metrics via NodeMetricStore.
 """
-
 import time
 import logging
 import functools
 import inspect
+from langchain_core.messages.ai import AIMessage
 from fred.monitoring.logging_context import get_logging_context
 from fred.monitoring.node_monitoring.node_metric_type import NodeMetric
 from fred.monitoring.node_monitoring.node_metric_store import get_node_metric_store
 
 logger = logging.getLogger(__name__)
+
+def extract_all_aimessages_from_result(result):
+    """
+    Returns a flat list of AIMessage objects to monitor.
+    Covers:
+    - Single AIMessage
+    - Dict with 'raw_response': AIMessage
+    - Dict with 'raw_response': [AIMessage, ...]
+    - Dict with 'messages': [AIMessage, ...]
+    """
+    if result is None:
+        return []
+
+    # Direct AIMessage
+    if hasattr(result, "response_metadata") and hasattr(result, "usage_metadata"):
+        return [result]
+
+    # Dict with 'raw_response'
+    if isinstance(result, dict) and "raw_response" in result:
+        raw = result["raw_response"]
+        if isinstance(raw, list):
+            return [msg for msg in raw if hasattr(msg, "response_metadata")]
+        if hasattr(raw, "response_metadata"):
+            return [raw]
+
+    # Dict with 'messages'
+    if isinstance(result, dict) and "messages" in result:
+        messages = result.get("messages", [])
+        return [msg for msg in messages if hasattr(msg, "response_metadata")]
+
+    return []
+
+def extract_metadata(msg):
+    """
+    Extract response_metadata and usage_metadata from an AIMessage.
+    Assumes msg is already an AIMessage.
+    """
+    response_metadata = getattr(msg, "response_metadata", {}) or {}
+    usage_metadata = getattr(msg, "usage_metadata", {}) or {}
+    return response_metadata, usage_metadata
+
+
 
 def monitor_node(func):
     """
@@ -43,8 +85,8 @@ def monitor_node(func):
     - Execution latency
     - Node function name
     - User/session IDs from logging context
-    - Agent/model information
-    - Token usage details
+    - Agent/model information (if available)
+    - Token usage details (if available)
 
     Persists metrics to the configured NodeMetricStore.
     """
@@ -54,20 +96,39 @@ def monitor_node(func):
 
     metric_store = get_node_metric_store()
 
-    async def _run_async(*args, **kwargs):
-        node_name = func.__name__
-        logger.info(f"Node '{node_name}' started with args: {args}, kwargs: {kwargs}")
-        start = time.perf_counter()
-        try:
-            result = await func(*args, **kwargs)
-            latency = time.perf_counter() - start
+    def log_metrics(node_name, result, latency):
+        ctx = get_logging_context()
+        metrics_to_store = []
 
-            ctx = get_logging_context()
-            ai_message = (result.get("messages") or [{}])[0]
-            message = ai_message.__dict__
-            response_metadata = message.get("response_metadata", {})
-            usage = response_metadata.get("token_usage", {})
+        # ✅ Get all AIMessages from the result in any supported shape
+        messages = extract_all_aimessages_from_result(result)
 
+        if messages:
+            for idx, msg in enumerate(messages):
+                response_metadata, usage_metadata = extract_metadata(msg)
+                response_metadata_with_id = {**response_metadata, "id": getattr(msg, "id", None)}
+
+                metric = NodeMetric(
+                    timestamp=time.time(),
+                    node_name=f"{node_name}[msg-{idx}]",
+                    latency=latency,
+                    user_id=ctx.get("user_id", "unknown-user"),
+                    session_id=ctx.get("session_id", "unknown-session"),
+                    agent_name=ctx.get("agent_name", "unknown-agent_name"),
+                    model_name=response_metadata.get("model_name"),
+                    input_tokens=usage_metadata.get("input_tokens"),
+                    output_tokens=usage_metadata.get("output_tokens"),
+                    total_tokens=usage_metadata.get("total_tokens"),
+                    metadata=response_metadata_with_id,
+                )
+                metrics_to_store.append(metric)
+        else:
+            # Fallback: try to get response_metadata if it exists on the object
+            try:
+                fallback_metadata = getattr(result, "response_metadata", {}) or {}
+            except Exception as e:
+                logger.warning(f"[MONITOR] Failed to extract response_metadata from fallback object: {e}")
+                fallback_metadata = {}
             metric = NodeMetric(
                 timestamp=time.time(),
                 node_name=node_name,
@@ -75,18 +136,31 @@ def monitor_node(func):
                 user_id=ctx.get("user_id", "unknown-user"),
                 session_id=ctx.get("session_id", "unknown-session"),
                 agent_name=ctx.get("agent_name", "unknown-agent_name"),
-                model_name=response_metadata.get("model_name"),
-                input_tokens=usage.get("prompt_tokens"),
-                output_tokens=usage.get("completion_tokens"),
-                total_tokens=usage.get("total_tokens"),
-                result_summary=str(message.get("content", ""))[:300],
+                model_name=None,
+                input_tokens=None,
+                output_tokens=None,
+                total_tokens=None,
                 metadata=result,
             )
             metric_store.add_metric(metric)
 
             logger.info(f"Node '{node_name}' completed in {latency:.2f}s - Metric : {metric}")
-            return result
 
+            metrics_to_store.append(metric)
+
+        for m in metrics_to_store:
+            metric_store.add_metric(m)
+        logger.info(f"Node '{node_name}' completed in {latency:.2f}s - Metrics to store = {metrics_to_store}")
+
+    async def _run_async(*args, **kwargs):
+        node_name = func.__name__
+        logger.info(f"Node '{node_name}' started with args: {args}, kwargs: {kwargs}")
+        start = time.perf_counter()
+        try:
+            result = await func(*args, **kwargs)
+            latency = time.perf_counter() - start
+            log_metrics(node_name, result, latency)
+            return result
         except Exception as e:
             latency = time.perf_counter() - start
             logger.exception(f"Node '{node_name}' failed in {latency:.2f}s with error: {e}")
@@ -99,31 +173,8 @@ def monitor_node(func):
         try:
             result = func(*args, **kwargs)
             latency = time.perf_counter() - start
-
-            ctx = get_logging_context()
-            message = (result.get("messages") or [{}])[0]
-            response_metadata = message.get("response_metadata", {})
-            usage = response_metadata.get("token_usage", {})
-
-            metric = NodeMetric(
-                timestamp=time.time(),
-                node_name=node_name,
-                latency=latency,
-                user_id=ctx.get("user_id", "unknown-user"),
-                session_id=ctx.get("session_id", "unknown-session"),
-                agent_name=ctx.get("agent_name", "unknown-agent_name"),
-                model_name=response_metadata.get("model_name"),
-                input_tokens=usage.get("prompt_tokens"),
-                output_tokens=usage.get("completion_tokens"),
-                total_tokens=usage.get("total_tokens"),
-                result_summary=str(message.get("content", ""))[:300],
-                metadata=result,
-            )
-            metric_store.add_metric(metric)
-
-            logger.info(f"Node '{node_name}' completed in {latency:.2f}s.")
+            log_metrics(node_name, result, latency)
             return result
-
         except Exception as e:
             latency = time.perf_counter() - start
             logger.exception(f"Node '{node_name}' failed in {latency:.2f}s with error: {e}")
