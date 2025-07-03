@@ -26,7 +26,7 @@ import requests
 from fred.chatbot.agent_manager import AgentManager
 from fred.flow import AgentFlow
 from fred.services.chatbot_session.attachement_processing import AttachementProcessing
-from fred.services.chatbot_session.structure.chat_schema import ChatMessagePayload, ChatTokenUsage, SessionSchema, SessionWithFiles, clean_agent_metadata
+from fred.services.chatbot_session.structure.chat_schema import ChatMessagePayload, ChatTokenUsage, SessionSchema, SessionWithFiles, clean_agent_metadata, clean_token_usage
 from fred.services.chatbot_session.abstract_session_backend import AbstractSessionStorage
 from langchain_core.messages import (BaseMessage, HumanMessage, AIMessage)
 from langgraph.graph.state import CompiledStateGraph
@@ -370,6 +370,8 @@ class SessionManager:
                 for i, message in enumerate(message_block):
                     raw_metadata = getattr(message, "response_metadata", {}) or {}
                     cleaned_metadata = clean_agent_metadata(raw_metadata)
+                    token_usage = getattr(message, "usage_metadata", {}) or {}
+                    cleaned_metadata["token_usage"] = clean_token_usage(token_usage)
                     # If LangChain returns type='tool', force subtype to 'tool_result'
                     #subtype = self._infer_message_subtype(cleaned_metadata)
                     subtype = self._infer_message_subtype(cleaned_metadata, message.type if isinstance(message, BaseMessage) else None)

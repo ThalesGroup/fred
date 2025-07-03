@@ -92,6 +92,35 @@ class ErrorEvent(BaseModel):
 # --- Union for WebSocket response ---
 ChatEvent = Union[StreamEvent, FinalEvent, ErrorEvent]
 
+def clean_token_usage(raw: dict) -> dict:
+    """
+    Clean a raw token usage dictionary:
+    - Always keep input_tokens, output_tokens, total_tokens.
+    - Include any other key from raw only if its value is not zero
+      (or if it's a nested dict with non-zero items).
+    """
+    result = {}
+
+    # Always keep the main 3 keys
+    for key in ["input_tokens", "output_tokens", "total_tokens"]:
+        result[key] = raw.get(key, 0)
+
+    # Add other keys if they have non-zero content
+    for key, value in raw.items():
+        if key in result:
+            continue
+        if isinstance(value, dict):
+            # Filter sub-dict
+            filtered = {k: v for k, v in value.items() if v != 0}
+            if filtered:
+                result[key] = filtered
+        else:
+            if value != 0:
+                result[key] = value
+
+    return result
+
+
 def clean_agent_metadata(raw: dict) -> dict:
     """Extract only the relevant and safe metadata fields for ChatMessagePayload."""
     cleaned = {}
@@ -101,13 +130,6 @@ def clean_agent_metadata(raw: dict) -> dict:
 
     if finish_reason := raw.get("finish_reason"):
         cleaned["finish_reason"] = finish_reason
-
-    if usage := raw.get("token_usage"):
-        cleaned["token_usage"] = {
-            "input_tokens": usage.get("prompt_tokens", 0),
-            "output_tokens": usage.get("completion_tokens", 0),
-            "total_tokens": usage.get("total_tokens", 0)
-        }
 
     if sources := raw.get("sources"):
         cleaned["sources"] = sources
