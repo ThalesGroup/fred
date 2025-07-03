@@ -417,7 +417,7 @@ const ChatBot = ({
       ? messages.reduce((sum, msg) => sum + (msg.metadata?.token_usage?.input_tokens || 0), 0)
       : 0;
 
-  return messages?.length ? (
+  return (
     <Box width={"100%"} height="100%" display="flex" flexDirection="column" alignItems="center">
       <Box
         width="80%"
@@ -429,90 +429,98 @@ const ChatBot = ({
         alignItems="center"
         paddingBottom={1}
       >
-        {/* Chatbot messages area */}
-        <Grid2
-          display="flex"
-          flexDirection="column"
-          flex="1"
-          p={2}
-          sx={{
-            overflowY: "scroll",
-            overflowX: "hidden",
-            scrollbarWidth: "none",
-            wordBreak: "break-word",
-            alignContent: "center",
-          }}
-        >
-          <MessagesArea
-            key={currentChatBotSession?.id}
-            messages={messages}
-            agenticFlows={agenticFlows}
-            currentAgenticFlow={currentAgenticFlow}
-          />
-          {waitResponse && (
-            <Grid2 size="grow" marginTop={5}>
-              <DotsLoader dotColor={theme.palette.text.primary} />
-            </Grid2>
-          )}
-        </Grid2>
-
-        {/* User input area */}
-        <Grid2 container width="100%" alignContent="center">
-          <UserInput
-            enableFilesAttachment={true}
-            enableAudioAttachment={true}
-            isWaiting={waitResponse}
-            onSend={handleSend}
-          />
-        </Grid2>
-
-        {/* Conversatiom tokens count */}
-        <Grid2 container width="100%" display="fex" justifyContent="flex-end" marginTop={0.5}>
-          <Tooltip
-            title={t("chatbot.tooltip.tokenUsage", {
-              input: inputTokenCounts,
-              output: outputTokenCounts,
-            })}
+        {/* Conversation start */}
+        {messages?.length === 0 && (
+          <Box
+            display="flex"
+            flexDirection="column"
+            justifyContent="center"
+            height="100vh"
+            alignItems="center"
+            gap={2}
+            width="100%"
           >
-            <Typography fontSize="0.8rem" color={theme.palette.text.secondary} fontStyle="italic">
-              {t("chatbot.tooltip.tokenCount", {
-                total: outputTokenCounts + inputTokenCounts > 0 ? outputTokenCounts + inputTokenCounts : "...",
-              })}
-            </Typography>
-          </Tooltip>
-        </Grid2>
+            {/* User input area */}
+            <Grid2 container display="flex" alignItems="center" gap={2}>
+              <Box display="flex" flexDirection="row" alignItems="center">
+                <Typography variant="h4" paddingRight={1}>
+                  {t("chatbot.startNew", { name: currentAgenticFlow.nickname })}
+                </Typography>
+                {getAgentBadge(currentAgenticFlow.nickname)}
+              </Box>
+            </Grid2>
+            <Typography variant="h5">{currentAgenticFlow.role}.</Typography>
+            <Typography>{t("chatbot.changeAssistant")}</Typography>
+            <Box display="flex" alignItems="start" width="100%">
+              <UserInput
+                enableFilesAttachment={true}
+                enableAudioAttachment={true}
+                isWaiting={waitResponse}
+                onSend={handleSend}
+              />
+            </Box>
+          </Box>
+        )}
+
+        {/* Ongoing conversation */}
+        {messages?.length > 0 && (
+          <>
+            {/* Chatbot messages area */}
+            <Grid2
+              display="flex"
+              flexDirection="column"
+              flex="1"
+              p={2}
+              sx={{
+                overflowY: "scroll",
+                overflowX: "hidden",
+                scrollbarWidth: "none",
+                wordBreak: "break-word",
+                alignContent: "center",
+              }}
+            >
+              <MessagesArea
+                key={currentChatBotSession?.id}
+                messages={messages}
+                agenticFlows={agenticFlows}
+                currentAgenticFlow={currentAgenticFlow}
+              />
+              {waitResponse && (
+                <Grid2 size="grow" marginTop={5}>
+                  <DotsLoader dotColor={theme.palette.text.primary} />
+                </Grid2>
+              )}
+            </Grid2>
+
+            {/* User input area */}
+            <Grid2 container width="100%" alignContent="center">
+              <UserInput
+                enableFilesAttachment={true}
+                enableAudioAttachment={true}
+                isWaiting={waitResponse}
+                onSend={handleSend}
+              />
+            </Grid2>
+
+            {/* Conversatiom tokens count */}
+            <Grid2 container width="100%" display="fex" justifyContent="flex-end" marginTop={0.5}>
+              <Tooltip
+                title={t("chatbot.tooltip.tokenUsage", {
+                  input: inputTokenCounts,
+                  output: outputTokenCounts,
+                })}
+              >
+                <Typography fontSize="0.8rem" color={theme.palette.text.secondary} fontStyle="italic">
+                  {t("chatbot.tooltip.tokenCount", {
+                    total: outputTokenCounts + inputTokenCounts > 0 ? outputTokenCounts + inputTokenCounts : "...",
+                  })}
+                </Typography>
+              </Tooltip>
+            </Grid2>
+          </>
+        )}
       </Box>
     </Box>
-  ) : (
-    <Grid2
-      container
-      display="flex"
-      flexDirection="column"
-      justifyContent="center"
-      height="100vh"
-      alignItems="center"
-      gap={2}
-    >
-      {/* User input area */}
-      <Grid2 container display="flex" alignItems="center" gap={2}>
-        <Box display="flex" flexDirection="row" alignItems="center">
-          <Typography variant="h4" paddingRight={1}>
-            {t("chatbot.startNew", { name: currentAgenticFlow.nickname })}
-          </Typography>
-          {getAgentBadge(currentAgenticFlow.nickname)}
-        </Box>
-      </Grid2>
-      <Typography variant="h5">{currentAgenticFlow.role}.</Typography>
-      <Typography>{t("chatbot.changeAssistant")}</Typography>
-      <Grid2 size={{ xs: 12, md: 10, lg: 6 }} m={2} marginTop={0} minHeight="15%" display="flex" alignItems="start">
-        <UserInput
-          enableFilesAttachment={true}
-          enableAudioAttachment={true}
-          isWaiting={waitResponse}
-          onSend={handleSend}
-        />
-      </Grid2>
-    </Grid2>
   );
 };
 
