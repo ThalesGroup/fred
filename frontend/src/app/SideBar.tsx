@@ -116,11 +116,11 @@ export default function SideBar({ darkMode, onThemeChange }) {
       : [
           {
             key: "chat",
-            label: "Chat",
+            label: t("sidebar.chat"),
             icon: <ChatIcon />,
             url: `/chat`,
             canBeDisabled: false,
-            tooltip: "Chat with the AI assistant team",
+            tooltip: t("sidebar.tooltip.chat"),
           },
         ]),
     {
