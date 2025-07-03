@@ -22,6 +22,7 @@ from fred.agents.documents.documents_expert_toolkit import DocumentsToolkit
 from fred.application_context import (get_agent_settings,
                                       get_mcp_client_for_agent,
                                       get_model_for_agent)
+from fred.monitoring.node_monitoring.monitor_node import monitor_node
 from fred.common.models.document_source import DocumentSource
 from fred.services.chatbot_session.structure.chat_schema import ChatSource
 from langchain_core.messages import HumanMessage, ToolMessage
@@ -167,7 +168,7 @@ class DocumentsExpert(AgentFlow):
     def get_graph(self):
         builder = StateGraph(MessagesState)
 
-        builder.add_node("reasoner", self.reasoner)
+        builder.add_node("reasoner", monitor_node(self.reasoner))
         builder.add_node("tools", ToolNode(self.toolkit.get_tools()))
 
         builder.add_edge(START, "reasoner")

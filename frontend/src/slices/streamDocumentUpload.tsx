@@ -18,15 +18,12 @@ import { ProcessingProgress } from "../types/ProcessingProgress";
 
 export async function streamProcessDocument(
   file: File,
-  agent_name: string,
   onProgress: (update: ProcessingProgress) => void,
 ): Promise<void> {
   const token = KeyCloakService.GetToken();
   const formData = new FormData();
   formData.append("files", file);
-  const metadata = {
-    agent_name,
-  };
+  const metadata = {};
   formData.append("metadata_json", JSON.stringify(metadata));
   const backend_url_knowledge = getConfig().backend_url_knowledge;
   if (!backend_url_knowledge) {

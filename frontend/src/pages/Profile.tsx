@@ -1,4 +1,17 @@
-// components/profile/Profile.tsx
+// Copyright Thales 2025
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at:
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 import { useEffect } from "react";
 import {
   Box,
@@ -22,6 +35,7 @@ import { ChatProfiles } from "../components/profile/ChatProfile";
 import { TopBar } from "../common/TopBar";
 import { useSearchParams } from "react-router-dom";
 import InvisibleLink from "../components/InvisibleLink";
+import { useTranslation } from "react-i18next";
 
 function getFallbackTab(): number {
   const savedTab = localStorage.getItem("last_profile_active_tab");
@@ -30,21 +44,19 @@ function getFallbackTab(): number {
 
 export function Profile() {
   const theme = useTheme<Theme>();
+  const { t } = useTranslation();
 
   const username = KeyCloakService.GetUserName();
   const userRoles = KeyCloakService.GetUserRoles();
   const tokenParsed = KeyCloakService.GetTokenParsed();
-  const fullName = tokenParsed?.name || username || "Not available";
-  const userEmail = tokenParsed?.email || "Not available";
-  const userId = tokenParsed?.sub?.substring(0, 8) || "Not available";
+  const fullName = tokenParsed?.name || username || t("profile.notAvailable");
+  const userEmail = tokenParsed?.email || t("profile.notAvailable");
+  const userId = tokenParsed?.sub?.substring(0, 8) || t("profile.notAvailable");
 
-  // Get tab index from URL param, fallback to localStorage, and redirect if needed
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get("tab");
   const activeTab = tabParam !== null && !isNaN(Number(tabParam)) ? Number(tabParam) : getFallbackTab();
-  console.log("Active tab:", activeTab);
 
-  // On mount: if tab param is missing, redirect to URL with correct tab param
   useEffect(() => {
     if (tabParam === null) {
       const fallbackTab = getFallbackTab();
@@ -52,36 +64,34 @@ export function Profile() {
     }
   }, [tabParam, setSearchParams]);
 
-  // When tab changes via URL, update localStorage
   useEffect(() => {
     localStorage.setItem("last_profile_active_tab", activeTab.toString());
   }, [activeTab]);
 
   const formatAuthDate = () => {
-    if (!tokenParsed?.auth_time) return "Not available";
+    if (!tokenParsed?.auth_time) return t("profile.notAvailable");
     return new Date(tokenParsed.auth_time * 1000).toLocaleString();
   };
 
   const formatExpDate = () => {
-    if (!tokenParsed?.exp) return "Not available";
+    if (!tokenParsed?.exp) return t("profile.notAvailable");
     return new Date(tokenParsed.exp * 1000).toLocaleString();
   };
 
   const menuItems = [
-    { label: "Account", icon: <AccountCircleIcon /> },
-    { label: "Token", icon: <KeyIcon /> },
-    { label: "Chat Profiles", icon: <ChatIcon /> },
+    { label: t("profile.menu.account"), icon: <AccountCircleIcon /> },
+    { label: t("profile.menu.token"), icon: <KeyIcon /> },
+    { label: t("profile.menu.chat"), icon: <ChatIcon /> },
   ];
 
   return (
     <>
-      <TopBar title="User Profile" description="Manage your user preferences and chat profiles" />
+      <TopBar title={t("profile.title")} description={t("profile.description")} />
 
       <Box sx={{ width: "95%", mx: "auto", px: 2, py: 8 }}>
         {username ? (
           <Box display="flex">
             <Box width={200} mr={4}>
-              {/* Tab selector */}
               <Paper elevation={1}>
                 <List>
                   {menuItems.map((item, index) => (
@@ -120,7 +130,6 @@ export function Profile() {
             </Box>
 
             <Box flexGrow={1}>
-              {/* Active tab */}
               {activeTab === 0 && (
                 <ProfileCard
                   username={username}
@@ -136,7 +145,6 @@ export function Profile() {
               )}
 
               {activeTab === 1 && <ProfileToken tokenParsed={tokenParsed} />}
-
               {activeTab === 2 && <ChatProfiles />}
             </Box>
           </Box>
@@ -151,7 +159,7 @@ export function Profile() {
             }}
           >
             <Typography variant="h5" sx={{ color: "text.secondary" }}>
-              No user connected
+              {t("profile.noUser")}
             </Typography>
             <Button
               variant="contained"
@@ -159,7 +167,7 @@ export function Profile() {
               sx={{ mt: 2, borderRadius: 2 }}
               onClick={() => (window.location.href = "/login")}
             >
-              Log in
+              {t("profile.login")}
             </Button>
           </Paper>
         )}

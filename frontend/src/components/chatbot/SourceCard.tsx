@@ -50,15 +50,13 @@ export const SourceCard = ({ documentId, sources }: SourceCardProps) => {
           })}
           onClick={() => setDocumentViewerOpen(true)}
         >
-          <>
-            <ArticleOutlinedIcon sx={{ fontSize: "1.2rem", color: "text.secondary" }} />
-            <Typography
-              sx={{ fontSize: "0.85rem", color: "text.secondary", cursor: "pointer" }}
-              onClick={() => setDocumentViewerOpen(true)}
-            >
-              {sources[0].file_name}
-            </Typography>
-          </>
+          <ArticleOutlinedIcon sx={{ fontSize: "1.2rem", color: "text.secondary" }} />
+          <Typography
+            sx={{ fontSize: "0.85rem", color: "text.secondary", cursor: "pointer" }}
+            onClick={() => setDocumentViewerOpen(true)}
+          >
+            {sources[0].file_name}
+          </Typography>
         </Box>
       </Tooltip>
 

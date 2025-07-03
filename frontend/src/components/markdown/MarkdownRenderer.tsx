@@ -16,6 +16,7 @@ import { useTheme } from "@mui/material";
 import ReactMarkdown, { type Components } from "react-markdown";
 import type { PluggableList } from "unified";
 import { getMarkdownComponents } from "./GetMarkdownComponents";
+import remarkGfm from "remark-gfm";
 
 export interface MarkdownRendererProps {
   content: string;
@@ -89,7 +90,7 @@ export default function MarkdownRenderer({
         ...components,
         ...(props.components || {}),
       }}
-      remarkPlugins={remarkPlugins}
+      remarkPlugins={[remarkGfm, ...remarkPlugins]}
     >
       {finalContent}
     </ReactMarkdown>

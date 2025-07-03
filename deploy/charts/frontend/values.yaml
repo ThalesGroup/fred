@@ -23,16 +23,25 @@ ingress:
     - secretName: fred-frontend-crt
       hosts:
         - fred.dev.local
+
 config:
-  backendUrlApi: "https://api.dev.local"
-  backendUrlKnowledge: "http://localhost:8111"
-  websocketUrl: "ws://api.dev.local/fred/chatbot/query"
+  backendUrlApi: "http://fred-backend.dev.fred.thalesgroup.com"
+  backendUrlKnowledge: "http://knowledge-flow-backend.dev.fred.thalesgroup.com"
+  websocketUrl: "ws://fred-backend.dev.fred.thalesgroup.com/fred/chatbot/query"
+
+env:
+  - name: VITE_ALLOWED_HOSTS
+    value: "fred.test"
+  - name: VITE_BACKEND_URL_KNOWLEDGE
+    value: "http://knowledge-flow-backend.dev.fred.thalesgroup.com"
+  - name: VITE_USE_AUTH
+    value: "true"
 
 oidc:
   enabled: true
   config:
-    realm: "my-realm"
-    authServerUrl: "https://keycloak.test/"
+    realm: "app"
+    authServerUrl: "https://keycloak.dev.fred.thalesgroup.com/"
     clientId: "app"
 
 feedback_storage:
