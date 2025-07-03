@@ -183,7 +183,6 @@ export default function SideBar({ darkMode, onThemeChange }) {
   return (
     <Box
       height="100vh"
-      // position="fixed"
       width={sidebarWidth}
       sx={{
         bgcolor: sideBarBgColor,
