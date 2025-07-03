@@ -28,7 +28,7 @@ from fred.flow import AgentFlow
 from fred.services.chatbot_session.attachement_processing import AttachementProcessing
 from fred.services.chatbot_session.structure.chat_schema import ChatMessagePayload, ChatTokenUsage, SessionSchema, SessionWithFiles, clean_agent_metadata
 from fred.services.chatbot_session.abstract_session_backend import AbstractSessionStorage
-from langchain_core.messages import (BaseMessage, HumanMessage, AIMessage)
+from langchain_core.messages import (BaseMessage, HumanMessage, AIMessage, SystemMessage)
 from langgraph.graph.state import CompiledStateGraph
 from fred.application_context import get_app_context, get_configuration, get_default_model
 
@@ -173,7 +173,6 @@ class SessionManager:
                 markdown = profile_data.get("markdown", "")
                 full_context = f"## {title}\n\n{description}\n\n{markdown}"
 
-                # Inject AIMessage and keep it for saving
                 profile_message = AIMessage(
                     content=full_context,
                     response_metadata={"injected": True, "origin": "chat_profile"}
@@ -187,7 +186,7 @@ class SessionManager:
                     content=full_context,
                     timestamp=datetime.now().isoformat(),
                     session_id=session.id,
-                    rank=base_rank,  # context before user message
+                    rank=base_rank,  # injected context comes before user message
                     metadata={"injected": True, "origin": "chat_profile"},
                     subtype="injected_context"
                 )
@@ -197,24 +196,12 @@ class SessionManager:
             except Exception as e:
                 logger.error(f"Failed to inject chat profile context: {e}")
 
-        # 🧠 Run agent
-        all_messages = await self._stream_agent_response(
-            compiled_graph=agent.get_compiled_graph(),
-            input_messages=history,
-            session_id=session.id,
-            callback=callback,
-            exchange_id=exchange_id,
-            base_rank=base_rank,
-        )
-
-        session.updated_at = datetime.now()
-        self.storage.save_session(session)
-
-        # 🙋‍♀️ User message payload
+        # 🕐 Generate timestamp and extract metadata
         timestamp = datetime.now().isoformat()
         metadata = clean_agent_metadata(getattr(message, "response_metadata", getattr(message, "metadata", {})) or {})
         subtype = self._infer_message_subtype(metadata, message.type if isinstance(message, BaseMessage) else None)
 
+        # 👤 Create the user message payload first (before any agent response)
         user_payload = ChatMessagePayload(
             exchange_id=exchange_id,
             type="human",
@@ -226,18 +213,38 @@ class SessionManager:
             subtype=subtype
         )
 
-        # 🧾 Re-rank assistant messages
-        for i, m in enumerate(all_messages):
-            m.rank = base_rank + 1 + i
-
-        # 🧠 Save messages: profile (optional) + user + responses
         all_payloads = []
         if injected_payload:
             all_payloads.append(injected_payload)
-        all_payloads.append(user_payload)
-        all_payloads.extend(all_messages)
 
+        all_payloads.append(user_payload)
+
+        # 🤖 Call the agent and collect the assistant responses
+        try:
+            agent_messages = await self._stream_agent_response(
+                compiled_graph=agent.get_compiled_graph(),
+                input_messages=history,
+                session_id=session.id,
+                callback=callback,
+                exchange_id=exchange_id,
+                base_rank=base_rank,
+            )
+
+            # Ensure correct ranks for assistant messages
+            for i, m in enumerate(agent_messages):
+                m.rank = base_rank + 1 + i
+
+            all_payloads.extend(agent_messages)
+
+        except Exception as e:
+            logger.error(f"Error during agent execution: {e}")
+            # No crash — we still return user message only
+
+        # 💾 Save all messages in correct order
+        session.updated_at = datetime.now()
+        self.storage.save_session(session)
         self.storage.save_messages(session.id, all_payloads)
+
         return session, all_payloads
 
 
@@ -279,8 +286,8 @@ class SessionManager:
                 elif msg.type == "ai":
                         history.append(AIMessage(content=msg.content, response_metadata=msg.metadata or {}))
                 elif msg.type == "system":
-                    #history.append(SystemMessage(content=msg.content))
-                    pass
+                        history.append(SystemMessage(content=msg.content))
+                    
 
 
         # Append the new question
