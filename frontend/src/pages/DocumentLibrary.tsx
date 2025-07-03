@@ -19,7 +19,6 @@ import {
   useTheme,
   TextField,
   FormControl,
-  InputLabel,
   MenuItem,
   Select,
   OutlinedInput,
@@ -34,7 +33,7 @@ import {
   Fade,
 } from "@mui/material";
 import ClearIcon from "@mui/icons-material/Clear";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { LoadingSpinner } from "../utils/loadingSpinner";
 import UploadIcon from "@mui/icons-material/Upload";
 import SaveIcon from "@mui/icons-material/Save";
@@ -50,7 +49,6 @@ import {
   useUpdateDocumentRetrievableMutation,
 } from "../slices/documentApi";
 
-import { useGetChatBotAgenticFlowsMutation } from "../slices/chatApi";
 import { streamProcessDocument } from "../slices/streamDocumentUpload";
 import { useToast } from "../components/ToastProvider";
 import { ProgressStep, ProgressStepper } from "../components/ProgressStepper";
@@ -58,13 +56,13 @@ import { DocumentTable } from "../components/documents/DocumentTable";
 import { DocumentDrawerTable } from "../components/documents/DocumentDrawerTable";
 import DocumentViewer from "../components/documents/DocumentViewer";
 import { TopBar } from "../common/TopBar";
+import { useTranslation } from "react-i18next";
 
 /**
  * DocumentLibrary.tsx
  *
  * This component renders the **Document Library** page, which enables users to:
  * - View and search documents in the knowledge base
- * - Filter documents by responsible agent
  * - Upload new documents via drag & drop or manual file selection
  * - Delete existing documents (with permission)
  * - Preview documents (Markdown-only for now) in a Drawer-based viewer
@@ -73,7 +71,6 @@ import { TopBar } from "../common/TopBar";
  *
  * 1. **Search & Filter**:
  *    - Users can type keywords to search filenames.
- *    - A dropdown lets users filter documents by agent (if available).
  *
  * 2. **Pagination**:
  *    - Document list is paginated with user-selectable rows per page (10, 20, 50).
@@ -82,7 +79,6 @@ import { TopBar } from "../common/TopBar";
  *    - Only visible to users with "admin" or "editor" roles.
  *    - Allows upload of multiple documents.
  *    - Supports real-time streaming feedback (progress steps).
- *    - Requires selecting an agent before upload.
  *
  * 4. **DocumentTable Integration**:
  *    - Displays a table of documents with actions like:
@@ -120,27 +116,22 @@ import { TopBar } from "../common/TopBar";
  * - Responsive layout using MUI's Grid2 and Breakpoints
  */
 export const DocumentLibrary = () => {
-  const { showInfo, showError, showWarning } = useToast();
+  const { showInfo, showError } = useToast();
 
   // API Hooks
   const [deleteDocument] = useDeleteDocumentMutation();
   const [getDocumentsWithFilter] = useGetDocumentsWithFilterMutation();
-  const [getAgenticFlows] = useGetChatBotAgenticFlowsMutation();
   const [getDocumentMarkdownContent] = useGetDocumentMarkdownPreviewMutation();
   const [selectedDocument, setSelectedDocument] = useState<any>(null);
   const [triggerDownload] = useLazyGetDocumentRawContentQuery();
 
   const theme = useTheme();
+  const { t } = useTranslation();
 
   const hasDocumentManagementPermission = () => {
     const userRoles = KeyCloakService.GetUserRoles();
     return userRoles.includes("admin") || userRoles.includes("editor");
   };
-
-  // If the user does not select an agent all files will be shown
-  // If the user selects an agent, only the files related to that agent will be shown. This page will
-  // show these files, the search capability will be limited to the files related to that agent.
-  const [currentAgentFiles, setCurrentAgentFiles] = useState([]);
 
   // tempFiles:
   // This state holds the list of files that the user has selected or dropped into the upload drawer.
@@ -162,15 +153,10 @@ export const DocumentLibrary = () => {
   const [isHighlighted, setIsHighlighted] = useState(false); // Highlight state for the upload Dropzone
   const [documentsPerPage, setDocumentsPerPage] = useState(10); // Number of documents shown per page
   const [currentPage, setCurrentPage] = useState(1); // Current page in the pagination component
-  const [agentFilter, setAgentFilter] = useState(null); // Selected agent for filtering document list
-  const [, setCurrentAgent] = useState(""); // Selected agent in the upload drawer
   const [openSide, setOpenSide] = useState(false); // Whether the upload drawer is open
   const [showElements, setShowElements] = useState(false); // Controls whether page elements are faded in
 
   // Backend Data States
-  const [agenticFlows, setAgenticFlows] = useState([]); // List of available agents fetched from backend
-  const [currentAgenticFlow, setCurrentAgenticFlow] = useState(null); // Currently selected agent flow object
-
   const [documentViewerOpen, setDocumentViewerOpen] = useState<boolean>(false);
 
   const [updateDocumentRetrievable] = useUpdateDocumentRetrievableMutation();
@@ -196,6 +182,26 @@ export const DocumentLibrary = () => {
     },
   });
 
+  const [allDocuments, setAllDocuments] = useState<KnowledgeDocument[]>([]);
+
+  const fetchFiles = async () => {
+    try {
+      setIsLoading(true);
+
+      const response = await getDocumentsWithFilter(null).unwrap();
+      const docs = response.documents as KnowledgeDocument[];
+      setAllDocuments(docs);
+    } catch (error) {
+      console.error("Error fetching documents:", error);
+      showError({
+        summary: "Fetch Failed",
+        detail: error?.data?.detail || error.message || "Unknown error occurred while fetching.",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   useEffect(() => {
     setShowElements(true);
     setUserInfo({
@@ -206,27 +212,8 @@ export const DocumentLibrary = () => {
   }, []);
 
   useEffect(() => {
-    getAgenticFlows().then((response) => {
-      setAgenticFlows(response.data);
-      if (response.data && response.data.length > 0) {
-        setCurrentAgenticFlow(response.data[0]);
-      }
-    });
-  }, [getAgenticFlows]);
-
-  useEffect(() => {
-    if (currentAgenticFlow) {
-      setCurrentAgent(currentAgenticFlow.nickname);
-    }
-  }, [currentAgenticFlow]);
-
-  useEffect(() => {
     fetchFiles();
-  }, [agentFilter, getDocumentsWithFilter]);
-
-  const handleChangeAgentFilter = (event) => {
-    setAgentFilter(event.target.value);
-  };
+  }, [getDocumentsWithFilter]);
 
   const handleDownload = async (document_uid: string, file_name: string) => {
     try {
@@ -259,13 +246,6 @@ export const DocumentLibrary = () => {
       });
       await fetchFiles(); // <-- ensures fresh backend state
       setSelectedFiles((prev) => prev.filter((id) => id !== document_uid));
-      // Remove from local state too
-      // const newFiles = currentAgentFiles.filter((file) => file.document_uid !== document_uid);
-      // setCurrentAgentFiles(newFiles);
-
-      /* setFilteredFiles((prev) =>
-        prev.filter((file) => file.document_uid !== document_uid)
-      ); */
     } catch (error) {
       showError({
         summary: "Delete Failed",
@@ -301,48 +281,14 @@ export const DocumentLibrary = () => {
     }
   };
 
-  const fetchFiles = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      const filters = agentFilter?.trim() ? { front_metadata: { agent_name: agentFilter } } : {};
-
-      const response = await getDocumentsWithFilter(filters).unwrap();
-
-      const docs = response.documents as KnowledgeDocument[];
-
-      setCurrentAgentFiles(
-        docs.map((doc) => ({
-          document_uid: doc.document_uid,
-          document_name: doc.document_name,
-          date_added_to_kb: doc.date_added_to_kb,
-          retrievable: doc.retrievable,
-          agent_name: doc.front_metadata?.agent_name || "-",
-        })),
-      );
-    } catch (error) {
-      console.error("Error fetching files:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [agentFilter, getDocumentsWithFilter]);
-
   const handleAddFiles = async () => {
     setIsLoading(true);
     setUploadProgressSteps([]);
     try {
-      if (!currentAgenticFlow) {
-        showWarning({
-          summary: "Agent not selected",
-          detail: "Please select an agent before uploading documents",
-        });
-        setIsLoading(false);
-        return;
-      }
-      const agent_name = currentAgenticFlow.nickname;
       let uploadCount = 0;
       for (const file of tempFiles) {
         try {
-          await streamProcessDocument(file, agent_name, (progress) => {
+          await streamProcessDocument(file, (progress) => {
             setUploadProgressSteps((prev) => [
               ...prev,
               {
@@ -374,14 +320,11 @@ export const DocumentLibrary = () => {
       setIsLoading(false);
     }
   };
-  useEffect(() => {
-    fetchFiles();
-  }, [agentFilter, fetchFiles]);
 
   // Pagination
   const indexOfLastDocument = currentPage * documentsPerPage;
   const indexOfFirstDocument = indexOfLastDocument - documentsPerPage;
-  const filteredFiles = currentAgentFiles.filter((file) =>
+  const filteredFiles = allDocuments.filter((file) =>
     file.document_name.toLowerCase().includes(searchQuery.toLowerCase()),
   );
   const currentDocuments = filteredFiles.slice(indexOfFirstDocument, indexOfLastDocument);
@@ -414,7 +357,7 @@ export const DocumentLibrary = () => {
 
   return (
     <>
-      <TopBar title="Document Library" description="Access the knowledge base documents">
+      <TopBar title={t("documentLibrary.title")} description={t("documentLibrary.description")}>
         {userInfo.canManageDocuments && (
           <Grid2
             size={{ xs: 12, md: 12 }}
@@ -437,13 +380,13 @@ export const DocumentLibrary = () => {
                 borderRadius: "8px",
               }}
             >
-              Upload a document
+              {t("documentLibrary.upload")}
             </Button>
           </Grid2>
         )}
       </TopBar>
 
-      {/* Combined Search/Filter Section */}
+      {/* Search Section */}
       <Container maxWidth="xl" sx={{ mb: 3 }}>
         <Fade in={showElements} timeout={1500}>
           <Paper
@@ -455,10 +398,10 @@ export const DocumentLibrary = () => {
             }}
           >
             <Grid2 container spacing={2} alignItems="center">
-              <Grid2 size={{ xs: 12, md: 5 }}>
+              <Grid2 size={{ xs: 12, md: 12 }}>
                 <TextField
                   fullWidth
-                  placeholder="Search a document"
+                  placeholder={t("documentLibrary.searchPlaceholder")}
                   variant="outlined"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
@@ -471,7 +414,7 @@ export const DocumentLibrary = () => {
                     endAdornment: searchQuery && (
                       <InputAdornment position="end">
                         <IconButton
-                          aria-label="clear search"
+                          aria-label={t("documentLibrary.clearSearch")}
                           onClick={() => setSearchQuery("")}
                           edge="end"
                           size="small"
@@ -483,37 +426,6 @@ export const DocumentLibrary = () => {
                   }}
                   size="small"
                 />
-              </Grid2>
-
-              <Grid2 size={{ xs: 6, md: 3 }}>
-                <FormControl fullWidth size="small">
-                  <InputLabel>Agent</InputLabel>
-                  <Select
-                    value={agentFilter || ""}
-                    onChange={handleChangeAgentFilter}
-                    input={<OutlinedInput label="Agent" />}
-                  >
-                    <MenuItem value="">All</MenuItem>
-                    {agenticFlows.map((agent) => (
-                      <MenuItem key={agent.nickname} value={agent.nickname}>
-                        {agent.nickname}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Grid2>
-
-              <Grid2 size={{ xs: 12, md: 4 }}>
-                <Button
-                  variant="contained"
-                  startIcon={<SearchIcon />}
-                  fullWidth
-                  onClick={fetchFiles}
-                  size="medium"
-                  sx={{ borderRadius: "8px" }}
-                >
-                  Search
-                </Button>
               </Grid2>
             </Grid2>
           </Paper>
@@ -541,7 +453,7 @@ export const DocumentLibrary = () => {
             ) : currentDocuments.length > 0 ? (
               <Box>
                 <Typography variant="h6" fontWeight="bold" gutterBottom sx={{ mb: 2 }}>
-                  Documents ({filteredFiles.length})
+                  {t("documentLibrary.documents", { count: filteredFiles.length })}
                 </Typography>
                 <DocumentTable
                   files={currentDocuments}
@@ -588,18 +500,12 @@ export const DocumentLibrary = () => {
               </Box>
             ) : (
               <Box display="flex" flexDirection="column" alignItems="center" justifyContent="center" minHeight="400px">
-                <LibraryBooksRoundedIcon
-                  sx={{
-                    fontSize: 60,
-                    color: theme.palette.text.secondary,
-                    mb: 2,
-                  }}
-                />
+                <LibraryBooksRoundedIcon sx={{ fontSize: 60, color: theme.palette.text.secondary, mb: 2 }} />
                 <Typography variant="h5" color="textSecondary" align="center">
-                  No document found
+                  {t("documentLibrary.noDocument")}
                 </Typography>
                 <Typography variant="body1" color="textSecondary" align="center" sx={{ mt: 1 }}>
-                  Try to modify your search criteria
+                  {t("documentLibrary.modifySearch")}
                 </Typography>
                 {userInfo.canManageDocuments && (
                   <Button
@@ -608,7 +514,7 @@ export const DocumentLibrary = () => {
                     onClick={() => setOpenSide(true)}
                     sx={{ mt: 2 }}
                   >
-                    Add documents
+                    {t("documentLibrary.addDocuments")}
                   </Button>
                 )}
               </Box>
@@ -633,7 +539,7 @@ export const DocumentLibrary = () => {
           }}
         >
           <Typography variant="h5" fontWeight="bold" gutterBottom>
-            Upload a document
+            {t("documentLibrary.uploadDrawerTitle")}
           </Typography>
 
           <Paper
@@ -670,10 +576,10 @@ export const DocumentLibrary = () => {
               <Box display="flex" flexDirection="column" justifyContent="center" alignItems="center" height="100%">
                 <UploadIcon sx={{ fontSize: 40, color: "text.secondary", mb: 2 }} />
                 <Typography variant="body1" color="textSecondary">
-                  Drop your files here
+                  {t("documentLibrary.dropFiles")}
                 </Typography>
                 <Typography variant="body2" color="textSecondary">
-                  or click to select (max 200Mb per file)
+                  {t("documentLibrary.maxSize")}
                 </Typography>
               </Box>
             ) : (
@@ -688,7 +594,7 @@ export const DocumentLibrary = () => {
 
           <Box sx={{ mt: 3, display: "flex", justifyContent: "space-between" }}>
             <Button variant="outlined" onClick={() => setOpenSide(false)} sx={{ borderRadius: "8px" }}>
-              Cancel
+              {t("documentLibrary.cancel")}
             </Button>
 
             <Button
@@ -699,7 +605,7 @@ export const DocumentLibrary = () => {
               disabled={!tempFiles.length || isLoading}
               sx={{ borderRadius: "8px" }}
             >
-              {isLoading ? "Saving..." : "Save"}
+              {isLoading ? t("documentLibrary.saving") : t("documentLibrary.save")}
             </Button>
           </Box>
         </Drawer>

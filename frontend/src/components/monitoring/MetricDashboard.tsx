@@ -15,12 +15,13 @@ import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import { DateTimePicker } from "@mui/x-date-pickers/DateTimePicker";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import dayjs, { Dayjs } from "dayjs";
+import "dayjs/locale/fr";
 import { useEffect, useState } from "react";
-import { Aggregation, Precision, useFetchNumericalMetricsMutation } from "../../slices/monitoringApi";
+import { useTranslation } from "react-i18next";
+import { Precision, useFetchNumericalMetricsMutation } from "../../slices/monitoringApi";
 import LoadingWithProgress from "../LoadingWithProgress";
 import DashboardCard from "./DashboardCard";
 import { TokenUsageChart } from "./TokenUsageChart";
-import "dayjs/locale/fr";
 
 type QuickRangeType =
   | "today"
@@ -59,6 +60,7 @@ function getPrecisionForRange(start: Dayjs, end: Dayjs): Precision {
 
 export default function MetricsDashboard() {
   const [fetchNumericalMetrics, { data: numericalSum, isLoading, isError }] = useFetchNumericalMetricsMutation();
+  const { t } = useTranslation();
 
   const now = dayjs();
   const [startDate, setStartDate] = useState<Dayjs>(now.subtract(12, "hours"));
@@ -73,7 +75,7 @@ export default function MetricsDashboard() {
       start: start.toISOString(),
       end: end.toISOString(),
       precision: getPrecisionForRange(start, end),
-      agg: "sum" as Aggregation,
+      agg: ["total_tokens:sum"],
     };
 
     console.log("Fetching numerical metrics", param);
@@ -192,68 +194,68 @@ export default function MetricsDashboard() {
               onClick={() => setSelectedRange("today")}
               variant={isRangeSelected("today") ? "contained" : "outlined"}
             >
-              Today
+              {t("metrics.range.today")}
             </Button>
             <Button
               onClick={() => setSelectedRange("yesterday")}
               variant={isRangeSelected("yesterday") ? "contained" : "outlined"}
             >
-              Yesterday
+              {t("metrics.range.yesterday")}
             </Button>
             <Button
               onClick={() => setSelectedRange("thisWeek")}
               variant={isRangeSelected("thisWeek") ? "contained" : "outlined"}
             >
-              This week
+              {t("metrics.range.thisWeek")}
             </Button>
             <Button
               onClick={() => setSelectedRange("thisMonth")}
               variant={isRangeSelected("thisMonth") ? "contained" : "outlined"}
             >
-              This month
+              {t("metrics.range.thisMonth")}
             </Button>
             <Button
               onClick={() => setSelectedRange("thisYear")}
               variant={isRangeSelected("thisYear") ? "contained" : "outlined"}
             >
-              This year
+              {t("metrics.range.thisYear")}
             </Button>
             <Button
               onClick={() => setSelectedRange("last12h")}
               variant={isRangeSelected("last12h") ? "contained" : "outlined"}
             >
-              Last 12 hours
+              {t("metrics.range.last12h")}
             </Button>
             <Button
               onClick={() => setSelectedRange("last24h")}
               variant={isRangeSelected("last24h") ? "contained" : "outlined"}
             >
-              Last 24 hours
+              {t("metrics.range.last24h")}
             </Button>
             <Button
               onClick={() => setSelectedRange("last7d")}
               variant={isRangeSelected("last7d") ? "contained" : "outlined"}
             >
-              Last 7 days
+              {t("metrics.range.last7d")}
             </Button>
             <Button
               onClick={() => setSelectedRange("last30d")}
               variant={isRangeSelected("last30d") ? "contained" : "outlined"}
             >
-              Last 30 days
+              {t("metrics.range.last30d")}
             </Button>
           </ButtonGroup>
           <Box display="flex" gap={2} alignItems="center">
             <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="fr">
               <DateTimePicker
-                label="From"
+                label={t("metrics.from")}
                 value={startDate}
                 onChange={(newValue) => setStartDate(newValue)}
                 slotProps={{ textField: { size: "small", sx: { minWidth: 180 } } }}
                 maxDateTime={endDate}
               />
               <DateTimePicker
-                label="To"
+                label={t("metrics.to")}
                 value={endDate}
                 onChange={(newValue) => setEndDate(newValue)}
                 slotProps={{ textField: { size: "small", sx: { minWidth: 180 } } }}
@@ -265,7 +267,7 @@ export default function MetricsDashboard() {
       </DashboardCard>
 
       {/* Charts */}
-      <DashboardCard title="Token usage over time">
+      <DashboardCard title={t("metrics.tokenUsage")}>
         <TokenUsageChart
           start={startDate.toDate()}
           end={endDate.toDate()}

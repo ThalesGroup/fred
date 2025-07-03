@@ -1,282 +1,332 @@
+# 📊 Fred Monitoring System
 
-# 📊 LLM Monitoring Interface (MonitoredLanguageModel + API)
+A flexible, JSONL-based metric logging and querying framework for LangGraph nodes and LangChain tools.
 
-This module provides a **monitoring interface for LLM interactions**, exposing a FastAPI server to query stored metrics collected by the `MonitoredLanguageModel`. The system is designed to support observability, debugging, and performance analytics in LLM-based applications using LangChain.
+- Lightweight local storage (JSONL).
+- In-memory caching for fast reads.
+- Flexible time-window queries.
+- Dynamic aggregation with groupby.
+- Pluggable with your existing LangGraph or LangChain code.
 
----
+## Overview
+Fred Monitoring lets you **record and analyze** the performance and usage of your system.
 
-## 🚀 FastAPI Monitoring Server
+**Key ideas:**
 
-The `metric_store_controller.py` module exposes 3 GET endpoints for querying metrics:
+- **Instrumentation:** Add decorators to log metrics automatically.
+- **Persistence:** All events saved to JSONL, with optional fields.
+- **Query:** Expose REST endpoints to filter, aggregate, and analyze metrics.
+- **Flexibility:** Dynamic groupby and aggregation in queries.
 
-### ⚠️ Required for all endpoints:
-All endpoints accept `start` and `end` parameters as **ISO 8601** strings (e.g., `2025-06-09T00:00:00`).
+## Quick Example: How to use the decorators
 
----
+### 1️⃣ For LangGraph nodes
 
-## 📂 Endpoints
+```python
 
-### 1. `/metrics/all`
-> Return all raw metrics without filtering or aggregation.
+from fred.monitoring.node_monitoring.monitor_node import monitor_node
 
-- 🧾 Full logs: latency, user ID, model info, token usage, etc.
-- 📌 No precision, just a date range.
+def get_graph(self):
+        """
+        Simple graph
+        """
+        builder = StateGraph(MessagesState)
+        builder.add_node("myNode", monitor_node(self.myNode))
+        builder.add_edge(START, "myNode")
+        builder.add_edge("myNode", END)
+        return builder
+```
+What it does:
 
----
+- Records latency.
 
-### 2. `/metrics/numerical`
-> Return only numerical metrics aggregated by time precision.
+- Captures user_id / session_id / agent_name from context.
 
-- 📈 Aggregation option:
-  - `avg` (default), `min`, `max`, `sum`,
-- 🕒 Precision options:
-  - `sec`, `min`, `hour` (default), `day`
+- Saves a NodeMetric entry.
 
-```http
-GET fred/metrics/numerical?start=2025-06-11T10:30:00&end=2025-06-11T18:00:00&precision=min&agg=sum
+### 2️⃣ For LangChain tools
+
+```python
+
+from langchain_core.tools import BaseToolkit
+from fred.monitoring.tool_monitoring.monitor_tool import monitor_tool
+
+class MyToolkit(BaseToolkit):
+    """
+    Simple Toolkit
+    """
+
+    def __init__(self, tools):
+        super().__init__()
+        self.tools = [monitor_tool(tool) for tool in tools]
+
+    @override
+    def get_tools(self) -> list[BaseTool]:
+        """Get the tools in the toolkit."""
+        return self.tools
+
+```
+What it does:
+
+- Wraps _run/_arun to time executions.
+
+- Captures user/session context.
+
+- Saves a ToolMetric entry.
+
+## How it Works
+
+- At runtime, the decorators log metrics including:
+
+  - Timestamp
+
+  - Latency
+
+  - User and session identifiers
+
+  - Tool/Node name
+
+  - Custom metadata
+
+- Metrics are stored in JSONL files on disk (append-only).
+
+- A FastAPI server exposes endpoints to read and analyze them.
+
+## 📚 REST API Endpoints
+
+Your FastAPI app registers endpoints under:
+
+✅ /metrics/nodes/...
+✅ /metrics/tools/...
+
+**Each has the same set of 3 main endpoints:**
+
+### 1️⃣ /all
+
+  Returns raw, unaggregated metrics in a time range.
+
+**Example request:**
+```bash
+http://localhost:8000/fred/metrics/nodes/all?start=2025-06-10T12:30:00&end=2025-07-10T23:00:00
 ```
 
----
-
-### 3. `/metrics/categorical`
-> Return all distinct categorical values in the range.
-
-- Includes fields like:
-  - `user_id`, `model_type`, `model_name`, `session_id`, `finish_reason`
-- Aggregates over fixed time intervals (1-minute chunks by default)
-
----
-
-### 🔎 Docs available at:
-
-- Swagger UI: [http://localhost:8000/fred/docs](http://localhost:8000/fred/docs)
-- ReDoc: [http://localhost:8000/fred/redoc](http://localhost:8000/fred/redoc)
-
----
-
-## 🧪 Example Queries and outputs
-
+**Example response:**
 ```bash
-# Input :
-curl "http://localhost:8000/fred/metrics/all?start=2025-06-11T10:30:00&end=2025-06-11T18:00:00"
-# Output:
 [
   {
-    "token_usage": {
-      "completion_tokens": 7,
-      "prompt_tokens": 32,
-      "total_tokens": 39,
-      "completion_tokens_details": {
-        "accepted_prediction_tokens": 0,
-        "rejected_prediction_tokens": 0,
-        "reasoning_tokens": 0,
-        "audio_tokens": 0,
-        "cached_tokens": 0
-      },
-      "prompt_tokens_details": {
-        "accepted_prediction_tokens": 0,
-        "rejected_prediction_tokens": 0,
-        "reasoning_tokens": 0,
-        "audio_tokens": 0,
-        "cached_tokens": 0
-      }
-    },
+    "timestamp": 1751286058.90173,
+    "node_name": "reasoner",
+    "latency": 1.30374222599858,
+    "user_id": "admin@mail.com",
+    "session_id": "b7G9wfuDpmw",
+    "agent_name": "MonitoringExpert",
     "model_name": "gpt-4o-2024-11-20",
-    "system_fingerprint": "fp_ee1d74bde0",
-    "id": "chatcmpl-BhBlcfKmlNxKR5ltZvfUnDKr9DcTM",
-    "prompt_filter_results": [
-      {
-        "prompt_index": 0,
-        "content_filter_results": {
-          "hate": {
-            "filtered": false,
-            "severity": "safe"
+    "input_tokens": 1008,
+    "output_tokens": 14,
+    "total_tokens": 1022,
+    "result_summary": "Hello! How can I assist you with Kubernetes monitoring today?",
+    "metadata": {
+      "messages": [
+        {
+          "content": "Hello! How can I assist you with Kubernetes monitoring today?",
+          "additional_kwargs": {
+            "refusal": null
           },
-          "jailbreak": {
-            "filtered": false,
-            "detected": false
+          "response_metadata": {
+            "token_usage": {
+              "completion_tokens": 14,
+              "prompt_tokens": 1008,
+              "total_tokens": 1022,
+              "completion_tokens_details": {
+                "accepted_prediction_tokens": 0,
+                "audio_tokens": 0,
+                "reasoning_tokens": 0,
+                "rejected_prediction_tokens": 0
+              },
+              "prompt_tokens_details": {
+                "audio_tokens": 0,
+                "cached_tokens": 0
+              }
+            },
+            "model_name": "gpt-4o-2024-11-20",
+            "system_fingerprint": "fp_ee1d74bde0",
+            "id": "chatcmpl-Bo7nGwuh1qt0Npf7jxJzNHyfEzUlD",
+            "service_tier": null,
+            "prompt_filter_results": [
+              {
+                "prompt_index": 0,
+                "content_filter_results": {
+                  "hate": {
+                    "filtered": false,
+                    "severity": "safe"
+                  },
+                  "jailbreak": {
+                    "filtered": false,
+                    "detected": false
+                  },
+                  "self_harm": {
+                    "filtered": false,
+                    "severity": "safe"
+                  },
+                  "sexual": {
+                    "filtered": false,
+                    "severity": "safe"
+                  },
+                  "violence": {
+                    "filtered": false,
+                    "severity": "safe"
+                  }
+                }
+              }
+            ],
+            "finish_reason": "stop",
+            "logprobs": null,
+            "content_filter_results": {
+              "hate": {
+                "filtered": false,
+                "severity": "safe"
+              },
+              "protected_material_code": {
+                "filtered": false,
+                "detected": false
+              },
+              "protected_material_text": {
+                "filtered": false,
+                "detected": false
+              },
+              "self_harm": {
+                "filtered": false,
+                "severity": "safe"
+              },
+              "sexual": {
+                "filtered": false,
+                "severity": "safe"
+              },
+              "violence": {
+                "filtered": false,
+                "severity": "safe"
+              }
+            }
           },
-          "self_harm": {
-            "filtered": false,
-            "severity": "safe"
-          },
-          "sexual": {
-            "filtered": false,
-            "severity": "safe"
-          },
-          "violence": {
-            "filtered": false,
-            "severity": "safe"
+          "type": "ai",
+          "name": null,
+          "id": "run--cd867984-bc42-48fa-8efa-000356028781-0",
+          "example": false,
+          "tool_calls": [],
+          "invalid_tool_calls": [],
+          "usage_metadata": {
+            "input_tokens": 1008,
+            "output_tokens": 14,
+            "total_tokens": 1022,
+            "input_token_details": {
+              "audio": 0,
+              "cache_read": 0
+            },
+            "output_token_details": {
+              "audio": 0,
+              "reasoning": 0
+            }
           }
         }
-      }
-    ],
-    "finish_reason": "stop",
-    "content_filter_results": {
-      "hate": {
-        "filtered": false,
-        "severity": "safe"
-      },
-      "protected_material_code": {
-        "filtered": false,
-        "detected": false
-      },
-      "protected_material_text": {
-        "filtered": false,
-        "detected": false
-      },
-      "self_harm": {
-        "filtered": false,
-        "severity": "safe"
-      },
-      "sexual": {
-        "filtered": false,
-        "severity": "safe"
-      },
-      "violence": {
-        "filtered": false,
-        "severity": "safe"
-      }
+      ]
+    }
+  },
+  ...
+]
+```
+
+### 2️⃣ /numerical
+
+  Returns aggregated numerical metrics with flexible groupby and aggregation.
+
+**Example request:**
+```bash
+http://localhost:8000/fred/metrics/nodes/numerical?start=2025-06-10T12:30:00&end=2025-07-10T23:00:00&agg=latency:avg&agg=total_tokens:sum&precision=hour&groupby=agent_name
+```
+
+**Example response:**
+```bash
+[
+  {
+    "time_bucket": "2025-06-30 14:00",
+    "values": {
+      "latency--avg": 2.5242,
+      "total_tokens--sum": 12628
     },
-    "user_id": "unknown-user",
-    "session_id": "unknown-session",
-    "latency": 1.171,
-    "timestamp": 1749633036.61935,
-    "model_type": "DefaultModel"
-  },...
-]
-```
-```bash
-# Input :
-curl "http://localhost:8000/fred/metrics/numerical?start=2025-06-11T10:30:00&end=2025-06-11T18:00:00&precision=sec&agg=sum"
-# Output:
-[
-  {
-    "bucket": "2025-06-11 11:10:36",
-    "latency": 1.171,
-    "token_usage.total_tokens": 39,
-    "token_usage.prompt_tokens": 32,
-    "token_usage.completion_tokens": 7,
-    "token_usage.completion_tokens_details.accepted_prediction_tokens": 0,
-    "token_usage.completion_tokens_details.audio_tokens": 0,
-    "token_usage.completion_tokens_details.reasoning_tokens": 0,
-    "token_usage.completion_tokens_details.rejected_prediction_tokens": 0,
-    "token_usage.prompt_tokens_details.audio_tokens": 0,
-    "token_usage.prompt_tokens_details.cached_tokens": 0
+    "agent_name": "MonitoringExpert"
   },
   {
-    "bucket": "2025-06-11 11:10:38",
-    "latency": 1.171,
-    "token_usage.total_tokens": 39,
-    "token_usage.prompt_tokens": 28,
-    "token_usage.completion_tokens": 11,
-    "token_usage.completion_tokens_details.accepted_prediction_tokens": 0,
-    "token_usage.completion_tokens_details.audio_tokens": 0,
-    "token_usage.completion_tokens_details.reasoning_tokens": 0,
-    "token_usage.completion_tokens_details.rejected_prediction_tokens": 0,
-    "token_usage.prompt_tokens_details.audio_tokens": 0,
-    "token_usage.prompt_tokens_details.cached_tokens": 0
-  },...
-]
-```
-```bash
-# Input :
-curl "http://localhost:8000/fred/metrics/categorical?start=2025-06-11T10:30:00&end=2025-06-11T18:00:00"
-# Output:
-[
-  {
-    "timestamp": 1749633036.61935,
-    "user_id": "unknown-user",
-    "session_id": "unknown-session",
-    "model_name": "gpt-4o-2024-11-20",
-    "model_type": "DefaultModel",
-    "finish_reason": "stop",
-    "id": "chatcmpl-BhBlcfKmlNxKR5ltZvfUnDKr9DcTM",
-    "system_fingerprint": "fp_ee1d74bde0",
-    "service_tier": null
+    "time_bucket": "2025-06-30 15:00",
+    "values": {
+      "latency--avg": 1.2262,
+      "total_tokens--sum": 256
+    },
+    "agent_name": "GeneralistExpert"
   },
   {
-    "timestamp": 1749633038.06572,
+    "time_bucket": "2025-06-30 15:00",
+    "values": {
+      "latency--avg": 1.4275,
+      "total_tokens--sum": 1022
+    },
+    "agent_name": "MonitoringExpert"
+  },
+  ...
+]
+```
+
+✅ Features:
+
+  - Dynamic groupby fields (e.g., agent_name, model_name, user_id).
+
+  - Flexible aggregation (avg, sum, min, max).
+
+  - Time bucketing with precision (sec, min, hour, day).
+
+### 3️⃣ /categorical
+
+  Returns reduced records with only categorical fields.
+
+**Example request:**
+```bash
+http://localhost:8000/fred/metrics/nodes/categorical?start=2025-06-10T12:30:00&end=2025-07-10T23:00:00
+```
+
+**Example response:**
+```bash
+[
+  {
+    "timestamp": 1751286058.90173,
     "user_id": "admin@mail.com",
-    "session_id": "xltYsdRK5uY",
+    "session_id": "b7G9wfuDpmw",
+    "agent_name": "MonitoringExpert",
     "model_name": "gpt-4o-2024-11-20",
-    "model_type": "DocumentsExpert",
-    "finish_reason": "stop",
-    "id": "chatcmpl-BhBlduskisak8wKTCPZBf3DrV01Fu",
-    "system_fingerprint": "fp_ee1d74bde0",
+    "model_type": null,
+    "finish_reason": null,
+    "id": null,
+    "system_fingerprint": null,
     "service_tier": null
-  },...
+  },
+  ...
 ]
 ```
 
----
+✅ Use it to:
 
-## 🧠 Components Overview
+- List distinct users/sessions.
 
-### 🔹 `MonitoredLanguageModel`
+- Analyze model usage patterns.
 
-This is a universal wrapper for any `BaseLanguageModel` (LangChain-compatible) that automatically logs:
+- Filter and join with external data.
 
-- Execution latency
-- Model metadata (name/type)
-- Token usage (if available)
-- User/session context (via `LoggingContext`)
 
-It transparently wraps sync/async methods like `invoke()`, `predict()`, `generate_prompt()`, etc. and logs structured data into a `MetricStore`.
+## Storage Format
 
-> ✅ Safe to use inside LangChain agents, LangGraph flows, or app logic.
+  - JSONL file per store (nodes, tools).
 
----
+  - Each line = 1 event.
 
-### 🔹 `MetricStore`
+  - Append-only.
 
-A lightweight **in-memory** metric store that supports:
+  - Easily human-readable and debuggable.
 
-- Adding metrics at runtime
-
----
-
-### 🔹 `MetricStoreController`
-
-That provides API endpoints to get the data from the current MetricStore
-- Date range filtering
-- Aggregating by time precision (e.g., minute, hour)
-- Exporting metrics for dashboards or inspection
-
-### 🔹 `LoggingContext`
-
-A tiny utility using `contextvars` to inject `user_id` and `session_id` across async tasks. This avoids passing identifiers explicitly through every function.
-
-**Usage:**
-```python
-set_logging_context(user_id="alice@example.com", session_id="xyz123")
-ctx = get_logging_context()
-print(ctx["user_id"])  # alice@example.com
-```
-
-This is automatically used by the `MonitoredLanguageModel` to enrich every log.
-
----
-
-## 🧱 Folder Structure
-
-```text
-fred/
-├── monitoring/
-│   ├── logging_context.py       # Context-local user/session management
-│   ├── metadata                 # Generic class to send and receive data
-│   ├── metric_store.py          # MetricStore logic (in-memory + file)
-│   ├── metric_store_controller.py            # FastAPI service exposing metrics initialize in fred/main.py
-│   ├── monitored_language_model.py    # Wrapper for LangChain models
-
-```
-
----
-## 🔜 Possible Improvements
-
-- Add filtering by `user_id`, `model_type`, or `session_id`
-- Add a `/metrics/summary` for global stats (avg latency, token total, etc.)
-- Export as CSV or Excel
-- Add authentication for production use
-
----

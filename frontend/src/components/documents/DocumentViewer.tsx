@@ -124,7 +124,7 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
       window.document.body.removeChild(link);
     }
   };
-  console.log("DocumentViewer rendering docContent: ", docContent);
+  //console.log("DocumentViewer rendering docContent: ", docContent);
   return (
     <Drawer anchor="right" open={open} onClose={onClose}>
       <Box
@@ -157,12 +157,15 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
               <CircularProgress />
             </Box>
           ) : (
-            <MarkdownRendererWithHighlights
-              highlightedParts={[...highlightedParts, ...highlightedPartsFromExtracts]}
-              content={docContent}
-              size="medium"
-              enableEmojiSubstitution={true}
-            />
+            <>
+              <MarkdownRendererWithHighlights
+                highlightedParts={[...highlightedParts, ...highlightedPartsFromExtracts]}
+                content={docContent}
+                size="medium"
+                enableEmojiSubstitution={true}
+              />
+              {/* <CustomMarkdownRenderer content={docContent} size="small" /> */}
+            </>
           )}
         </Box>
       </Box>

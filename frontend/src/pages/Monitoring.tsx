@@ -14,14 +14,14 @@
 
 import { TopBar } from "../common/TopBar";
 import MetricsDashboard from "../components/monitoring/MetricDashboard";
+import { useTranslation } from "react-i18next";
 
 export const Monitoring = () => {
+  const { t } = useTranslation();
+
   return (
     <>
-      <TopBar
-        title="Agent & AI Service Monitoring"
-        description="Track usage, performance, and costs across all AI agents and services — including tokens, latency, and activity trends."
-      ></TopBar>
+      <TopBar title={t("monitoring.title")} description={t("monitoring.description")} />
       <MetricsDashboard />
     </>
   );

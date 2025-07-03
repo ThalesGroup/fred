@@ -1,0 +1,214 @@
+{
+    "sidebar": {
+        "cluster": "Cluster",
+        "facts": "Facts",
+        "audit": "Audit",
+        "optimize": "Optimize",
+        "chat": "Chat",
+        "monitoring": "Monitoring",
+        "documentLibrary": "Documents",
+        "agent": "Agent Hub",
+        "workspaces": "Workspaces",
+        "account": "Profile",
+        "tooltip": {
+            "cluster": "Explain the cluster",
+            "facts": "Checkout the business and usage facts associated with the cluster",
+            "audit": "View a complete eco-score audit of the selected cluster",
+            "optimize": "Check the optimization gains on the selected cluster",
+            "chat": "Chat with the AI assistant team",
+            "monitoring": "Monitor the backend AI calls",
+            "documentLibrary": "Consult document library",
+            "agent": "View agents",
+            "workspaces": "View Workspace",
+            "account": "View your account",
+            "selectCluster": "Please select a cluster first"
+        },
+        "theme": {
+            "light": "light",
+            "dark": "dark"
+        },
+        "footer": {
+            "innovationHub": "Innovation hub",
+            "website": "Website"
+        }
+    },
+    "chatbot": {
+        "startNew": "Start a new conversation with {{name}}",
+        "changeAssistant": "You can select another assistant in the settings panel.",
+        "tooltip": {
+            "tokenUsage": "This conversation has used {{input}} prompt tokens and {{output}} response tokens",
+            "tokenCount": "This conversation has used {{total}} tokens"
+        }
+    },
+    "settings": {
+        "profile": {
+            "title": "Profile",
+            "tooltip": {
+                "intro": "Custom profiles allow you to personalize and improve your interactions with the assistants.",
+                "uses": "Unlike one-time file uploads, a profile is reusable across multiple conversations and can contain:",
+                "example1": "Information about a client or project",
+                "example2": "Reference documents (PDF, Word, Excel...)",
+                "example3": "Technical specifications"
+            },
+            "add": "Add new profiles",
+            "select": "Select a profile...",
+            "none": "None"
+        },
+        "assistants": "Assistants",
+        "conversations": "Conversations",
+        "newConversation": "New conversation",
+        "noConversation": "No conversation",
+        "delete": "Delete"
+    },
+    "monitoring": {
+        "title": "Agent & AI Service Monitoring",
+        "description": "Track usage, performance, and costs across all AI agents and services — including tokens, latency, and activity trends."
+    },
+    "metrics": {
+        "error": "❌ Failed to load metrics",
+        "from": "From",
+        "to": "To",
+        "tokenUsage": "Token usage over time",
+        "range": {
+            "today": "Today",
+            "yesterday": "Yesterday",
+            "thisWeek": "This week",
+            "thisMonth": "This month",
+            "thisYear": "This year",
+            "last12h": "Last 12 hours",
+            "last24h": "Last 24 hours",
+            "last7d": "Last 7 days",
+            "last30d": "Last 30 days"
+        }
+    },
+    "agentHub": {
+        "title": "Agent Hub",
+        "description": "Explore and manage available AI agents",
+        "allAgents": "All Agents",
+        "favoriteAgents": "Favorite Agents",
+        "agents": "Agents",
+        "search": "Search",
+        "filter": "Filter",
+        "noAgents": "No agents found",
+        "noFavorites": "You haven't added any agents to your favorites yet",
+        "noTag": "No agents with tag \"{{tag}}\"",
+        "categories": {
+            "all": "All",
+            "favorites": "Favorites"
+        }
+    },
+    "agentCard": {
+        "taggedWith": "Tagged: {{tag}}",
+        "expertIntegrations": "Expert integrations:"
+    },
+    "workspaces": {
+        "title": "Workspaces",
+        "description": "Manage workspaces",
+        "searchPlaceholder": "Search workspaces...",
+        "noResults": "No workspaces found.",
+        "drawerTitle": "Workspace description",
+        "noDescription": "No description provided.",
+        "createDialogTitle": "Workspace",
+        "editDialogTitle": "Workspace"
+    },
+    "dialogs": {
+        "create": {
+            "title": "New {{type}}",
+            "name": "Name",
+            "description": "Description",
+            "documentDescription": "Document description (optional)",
+            "dropHere": "Drop files here",
+            "dragOrClick": "Click or drag and drop files here",
+            "loading": "Creating...",
+            "confirm": "Create",
+            "errorSummary": "Creation failed",
+            "errorDetail": "Could not create context: {{message}}"
+        },
+        "cancel": "Cancel",
+        "edit": {
+            "title": "Edit {{context}}",
+            "name": "Name",
+            "description": "Description",
+            "dropDefault": "Click or drag and drop files here",
+            "dropActive": "Drop files here",
+            "existingDocuments": "Existing documents:",
+            "newDocuments": "New documents:",
+            "documentDescription": "Document description (optional)",
+            "cancel": "Cancel",
+            "save": "Save"
+        }
+    },
+    "profile": {
+        "title": "User Profile",
+        "description": "Manage your user preferences and chat profiles",
+        "menu": {
+            "account": "Account",
+            "token": "Token",
+            "chat": "Chat Profiles"
+        },
+        "noUser": "No user connected",
+        "login": "Log in",
+        "notAvailable": "Not available",
+        "email": "Email",
+        "userId": "User ID",
+        "authTime": "Last Authentication",
+        "expTime": "Session Expiration",
+        "roles": "User Roles",
+        "logout": "Logout",
+        "token": {
+            "title": "Token Information",
+            "none": "No available token"
+        },
+        "language": "Interface language",
+        "chat": {
+            "searchPlaceholder": "Search profiles...",
+            "noProfiles": "No profiles found.",
+            "dialogTitle": "Chat profile",
+            "drawerTitle": "Profile description",
+            "noDescription": "No description provided.",
+            "updateError": "Could not update profile",
+            "deleteError": "Could not delete profile",
+            "reloadError": "Could not reload profile"
+        }
+    },
+    "documentLibrary": {
+        "title": "Document Library",
+        "description": "Access the knowledge base documents",
+        "upload": "Upload a document",
+        "uploadDrawerTitle": "Upload a document",
+        "dropFiles": "Drop your files here",
+        "maxSize": "or click to select (max 200Mb per file)",
+        "searchPlaceholder": "Search a document",
+        "clearSearch": "Clear search",
+        "documents": "{{count}} document(s)",
+        "noDocument": "No document found",
+        "modifySearch": "Try to modify your search criteria",
+        "addDocuments": "Add documents",
+        "cancel": "Cancel",
+        "save": "Save",
+        "saving": "Saving..."
+    },
+    "documentTable": {
+        "selectedCount": "{{count}} selected",
+        "deleteSelected": "Delete",
+        "downloadSelected": "Download",
+        "fileName": "File Name",
+        "dateAdded": "Date Added",
+        "dateAddedTooltip": "Date added to knowledge base",
+        "retrievable": "Retrievable",
+        "actions": "Actions",
+        "loadingMetadata": "Loading metadata...",
+        "noMetadata": "No metadata available.",
+        "yes": "Yes",
+        "no": "No"
+    },
+    "documentDrawerTable": {
+        "deleteFile": "Delete file"
+    },
+    "documentActions": {
+        "menuLabel": "Open document actions menu",
+        "preview": "Preview",
+        "download": "Download",
+        "delete": "Delete"
+    }
+}

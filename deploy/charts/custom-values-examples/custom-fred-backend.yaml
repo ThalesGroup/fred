@@ -1,0 +1,49 @@
+# spe backend
+
+imagePullSecrets: []
+
+ingress:
+  className: "traefik"
+
+dotenv:
+  openai_api_key: "sk-proj-*****"
+
+env:
+  - name: OPENAI_API_KEY
+    value: "sk-proj-*****"
+
+kubeconfig:
+  data:
+    kubeconfig: |
+      apiVersion: v1
+      clusters:
+      - cluster:
+          certificate-authority-data: *****
+          extensions:
+          - extension:
+              last-update: Tue, 10 Jun 2025 11:21:54 CEST
+              provider: minikube.sigs.k8s.io
+              version: v1.35.0
+            name: cluster_info
+          server: https://yyy.yyy.yyy.yyy:8443
+        name: minikube
+      contexts:
+      - context:
+          cluster: minikube
+          extensions:
+          - extension:
+              last-update: Tue, 10 Jun 2025 11:21:54 CEST
+              provider: minikube.sigs.k8s.io
+              version: v1.35.0
+            name: context_info
+          namespace: default
+          user: minikube
+        name: minikube
+      current-context: minikube
+      kind: Config
+      preferences: {}
+      users:
+      - name: minikube
+        user:
+          client-certificate-data: kkkkkk
+          client-key-data: mmmmmmm

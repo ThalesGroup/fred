@@ -20,6 +20,7 @@ import FredUi from "./app/App.tsx";
 import { store } from "./common/store.tsx";
 import { KeyCloakService } from "./security/KeycloakService.ts";
 import { loadConfig } from "./common/config.tsx";
+import './i18n';
 
 const startApp = async () => {
   console.info("Starting Fred UI...");
