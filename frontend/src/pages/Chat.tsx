@@ -109,8 +109,7 @@ export const Chat = () => {
   };
 
   useEffect(() => {
-    if (isCreatingNewConversation && currentChatBotSession === null) {
-      // reset le flag dès qu'on a bien annulé la session
+    if (isCreatingNewConversation && currentChatBotSession !== null) {
       setIsCreatingNewConversation(false);
     }
   }, [isCreatingNewConversation, currentChatBotSession]);
