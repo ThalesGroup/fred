@@ -63,7 +63,7 @@ class ChatbotController:
         self.ai_service = ai_service
         self.cluster_consumption_service = ClusterConsumptionService()
         self.agent_manager = AgentManager()
-        self.session_manager = SessionManager(get_sessions_store())
+        self.session_manager = SessionManager(get_sessions_store(), self.agent_manager)
         # For import-export operations
         match get_configuration().dao.type:
             case DAOTypeEnum.file:
