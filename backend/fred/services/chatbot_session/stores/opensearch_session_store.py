@@ -74,9 +74,6 @@ class OpensearchSessionStorage(AbstractSessionStorage, AbstractSecuredResourceAc
         try:
             response = self.client.get(index=self.sessions_index, id=session_id)
             session_data = response["_source"]
-            if session_data.get("user_id") != user_id:
-                logger.warning(f"Unauthorized access attempt to session {session_id} by user {user_id}")
-                return None
             return SessionSchema(**session_data)
         except Exception as e:
             logger.error(f"Failed to retrieve session {session_id}: {e}")
@@ -86,9 +83,18 @@ class OpensearchSessionStorage(AbstractSessionStorage, AbstractSecuredResourceAc
     def delete_session(self, session_id: str, user_id: str) -> bool:
         try:
             self.client.delete(index=self.sessions_index, id=session_id)
+            query = {
+                "query": {
+                    "term": {
+                        "session_id.keyword": {
+                            "value": session_id
+                            }
+                        }
+                    }
+                }
             self.client.delete_by_query(
                 index=self.history_index,
-                body={"query": {"term": {"session_id": session_id}}}
+                body = query
             )
             logger.info(f"Deleted session {session_id} and its messages")
             return True
@@ -96,12 +102,15 @@ class OpensearchSessionStorage(AbstractSessionStorage, AbstractSecuredResourceAc
             logger.error(f"Failed to delete session {session_id}: {e}")
             return False
 
+    
     def get_sessions_for_user(self, user_id: str) -> List[SessionSchema]:
         try:
             query = {
                 "query": {
                     "term": {
-                        "user_id": user_id
+                        "user_id": {
+                            "value": user_id
+                        }
                     }
                 }
             }
@@ -141,7 +150,9 @@ class OpensearchSessionStorage(AbstractSessionStorage, AbstractSecuredResourceAc
             query = {
                 "query": {
                     "term": {
-                        "session_id": session_id
+                        "session_id.keyword": {
+                            "value": session_id
+                        }
                     }
                 },
                 "sort": [
