@@ -4,21 +4,6 @@
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
 #    http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
@@ -28,7 +13,7 @@
 # limitations under the License.
 
 """
-Pydantic structure definitions to use in the carbon microservice
+Pydantic structure definitions to use in the various microservice
 """
 
 from datetime import datetime
@@ -235,6 +220,45 @@ class AIConfig(BaseModel):
 
 
 # ----------------------------------------------------------------------
+# Storage configurations (metrics, sessions, feedback)
+# ----------------------------------------------------------------------
+
+class FeedbackStorageSettings(BaseModel):
+    local_path: str = Field(..., description="The path of the local metrics store")
+
+class FeedbackStorageConfig(BaseModel):
+    type: str = Field(..., description="The storage backend to use (e.g., 'local', 'opensearch')")
+    settings: FeedbackStorageSettings
+
+class MetricsStorageSettings(BaseModel):
+    local_path: str = Field(..., description="The path of the local metrics store")
+
+class MetricsStorageConfig(BaseModel):
+    type: str = Field(..., description="The metrics store to use (e.g., 'local')")
+    settings: MetricsStorageSettings
+
+class OpenSearchSettings(BaseModel):
+    host: str = Field(default="https://localhost:9200", description="URL of the Opensearch host")
+    username: str = Field(default="app_rw", description="Opensearch username")
+    password: str = Field(description="Opensearch user password")
+    secure: bool = Field(default=False, description="Use TLS with Opensearch")
+    verify_certs: bool = Field(default=False, description="Verify certificates")
+    sessions_index: str = Field(default="sessions", description="Index where sessions are stored")
+    history_index: str = Field(default="history", description="Index where messages histories are stored")
+
+class SessionStorageConfig(BaseModel):
+    type: str = Field(default="in_memory", description="Session storage type: 'in_memory' or 'opensearch'")
+    settings: Optional[OpenSearchSettings] = Field(default=None, description="Opensearch connection settings")
+    # in_memory type does not need a settings but opensearch does so we validate it here:
+    @model_validator(mode="after")
+    def validate_settings_required_for_opensearch(self):
+        if self.type == "opensearch" and self.settings is None:
+            raise ValueError("settings must be provided when type is 'opensearch'")
+        if self.type != "opensearch" and self.settings is not None:
+            raise ValueError("settings should be None unless type is 'opensearch'")
+        return self
+
+# ----------------------------------------------------------------------
 # Other configurations
 # ----------------------------------------------------------------------
 
@@ -262,20 +286,6 @@ class FrontendSettings(BaseModel):
     feature_flags: FrontendFlags
     properties: Properties
 
-class MetricsStorageSettings(BaseModel):
-    local_path: str = Field(..., description="The path of the local metrics store")
-
-class FeedbackStorageSettings(BaseModel):
-    local_path: str = Field(..., description="The path of the local metrics store")
-
-class FeedbackStorageConfig(BaseModel):
-    type: str = Field(..., description="The storage backend to use (e.g., 'local', 'opensearch')")
-    settings: FeedbackStorageSettings
-
-class MetricsStorageConfig(BaseModel):
-    type: str = Field(..., description="The metrics store to use (e.g., 'local')")
-    settings: MetricsStorageSettings
-
 class Configuration(BaseModel):
     frontend_settings: FrontendSettings
     database: DatabaseConfiguration
@@ -286,6 +296,7 @@ class Configuration(BaseModel):
     feedback_storage: FeedbackStorageConfig = Field(..., description="Feedback Storage configuration")
     node_metrics_storage:  MetricsStorageConfig = Field(..., description="Node Monitoring Storage configuration")
     tool_metrics_storage:  MetricsStorageConfig = Field(..., description="Tool Monitoring Storage configuration")
+    session_storage: SessionStorageConfig = Field(..., description="Session Storage configuration")
 
 class OfflineStatus(BaseModel):
     is_offline: bool

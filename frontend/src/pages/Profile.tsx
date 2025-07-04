@@ -46,12 +46,12 @@ export function Profile() {
   const theme = useTheme<Theme>();
   const { t } = useTranslation();
 
-  const username = KeyCloakService.GetUserName();
-  const userRoles = KeyCloakService.GetUserRoles();
-  const tokenParsed = KeyCloakService.GetTokenParsed();
-  const fullName = tokenParsed?.name || username || t("profile.notAvailable");
-  const userEmail = tokenParsed?.email || t("profile.notAvailable");
-  const userId = tokenParsed?.sub?.substring(0, 8) || t("profile.notAvailable");
+  const username = KeyCloakService.GetUserName() || t("profile.notAvailable");
+  const userRoles = KeyCloakService.GetUserRoles() || [t("profile.notAvailable")];
+  const tokenParsed = KeyCloakService.GetTokenParsed() || t("profile.notAvailable");
+  const fullName = KeyCloakService.GetUserFullName() || username || t("profile.notAvailable");
+  const userEmail = KeyCloakService.GetUserMail() || t("profile.notAvailable");
+  const userId = KeyCloakService.GetUserId().substring(0, 8) || t("profile.notAvailable");
 
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get("tab");
