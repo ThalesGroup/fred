@@ -206,8 +206,8 @@ session_storage:
   # type: in_memory # default value
   type: opensearch
   settings:
-    host: https:localhost:9200
-    user: admin
+    host: https://localhost:9200
+    username: admin
     password: Azerty123_ # @TODO pass it as an env variable
     secure: false
     verify_certs: false
