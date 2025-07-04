@@ -13,7 +13,8 @@
 // limitations under the License.
 
 import { useTheme } from "@mui/material";
-import ReactMarkdown from "react-markdown";
+import ReactMarkdown, { type Components } from "react-markdown";
+import type { PluggableList } from "unified";
 import { getMarkdownComponents } from "./GetMarkdownComponents";
 import remarkGfm from "remark-gfm";
 
@@ -21,6 +22,8 @@ export interface MarkdownRendererProps {
   content: string;
   size?: "small" | "medium" | "large";
   enableEmojiSubstitution?: boolean;
+  remarkPlugins?: PluggableList;
+  components?: Components;
 }
 
 function replaceStageDirectionsWithEmoji(text: string): string {
@@ -59,6 +62,8 @@ function replaceStageDirectionsWithEmoji(text: string): string {
  * @param {string} content - Markdown string to render.
  * @param {'small' | 'medium' | 'large'} [size='medium'] - Optional size control for font scaling.
  * @param {boolean} [enableEmojiSubstitution=false] - If true, replaces stage directions like "shrugs" or "smiles" with emojis.
+ * @param {PluggableList} [remarkPlugins] - Optional list of remark plugins to customize markdown parsing and rendering.
+ * @param {Components} [components] - Optional custom components to override default markdown rendering.
  *
  * @returns {JSX.Element} A React component that renders styled markdown content.
  */
@@ -66,6 +71,8 @@ export default function MarkdownRenderer({
   content,
   size = "medium",
   enableEmojiSubstitution = false,
+  remarkPlugins,
+  ...props
 }: MarkdownRendererProps) {
   const theme = useTheme();
   const components = getMarkdownComponents({
@@ -77,5 +84,15 @@ export default function MarkdownRenderer({
     ? replaceStageDirectionsWithEmoji(content || "")
     : content || "No markdown content provided.";
 
-  return <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>{finalContent}</ReactMarkdown>;
+  return (
+    <ReactMarkdown
+      components={{
+        ...components,
+        ...(props.components || {}),
+      }}
+      remarkPlugins={[remarkGfm, ...remarkPlugins]}
+    >
+      {finalContent}
+    </ReactMarkdown>
+  );
 }

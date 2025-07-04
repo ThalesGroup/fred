@@ -35,7 +35,6 @@ import {
   useUpdateKnowledgeContextMutation,
   useLazyGetKnowledgeContextsQuery,
 } from "../slices/knowledgeContextApi";
-import { PageBodyWrapper } from "../common/PageBodyWrapper";
 import {
   KnowledgeContext,
   KnowledgeContextEditDialog,
@@ -122,7 +121,7 @@ export const Workspaces = () => {
   };
 
   const filteredWorkspaces = workspaces.filter((workspace) =>
-    workspace.title.toLowerCase().includes(search.toLowerCase())
+    workspace.title.toLowerCase().includes(search.toLowerCase()),
   );
 
   const handleReloadProfile = async () => {
@@ -144,7 +143,7 @@ export const Workspaces = () => {
   };
 
   return (
-    <PageBodyWrapper>
+    <>
       <TopBar title={t("workspaces.title")} description={t("workspaces.description")}>
         <Grid2 sx={{ display: "flex", justifyContent: "flex-end", mt: { xs: 1, md: 0 } }}></Grid2>
       </TopBar>
@@ -225,9 +224,7 @@ export const Workspaces = () => {
           PaperProps={{ sx: { width: { xs: "100%", sm: 500 }, p: 3 } }}
         >
           <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-            <Typography variant="h6">
-              {openDescription?.title || t("workspaces.drawerTitle")}
-            </Typography>
+            <Typography variant="h6">{openDescription?.title || t("workspaces.drawerTitle")}</Typography>
             <IconButton onClick={() => setOpenDescription(null)}>
               <CloseIcon />
             </IconButton>
@@ -246,6 +243,6 @@ export const Workspaces = () => {
           </Box>
         </Drawer>
       </Container>
-    </PageBodyWrapper>
+    </>
   );
 };

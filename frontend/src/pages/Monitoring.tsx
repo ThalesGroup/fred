@@ -12,21 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { PageBodyWrapper } from "../common/PageBodyWrapper"
-import { TopBar } from "../common/TopBar"
-import MetricsDashboard from "../components/monitoring/MetricDashboard"
+import { TopBar } from "../common/TopBar";
+import MetricsDashboard from "../components/monitoring/MetricDashboard";
 import { useTranslation } from "react-i18next";
 
 export const Monitoring = () => {
-   const { t } = useTranslation();
+  const { t } = useTranslation();
 
-   return (
-      <PageBodyWrapper>
-         <TopBar
-            title={t("monitoring.title")}
-            description={t("monitoring.description")}
-         />
-         <MetricsDashboard />
-      </PageBodyWrapper>
-   );
+  return (
+    <>
+      <TopBar title={t("monitoring.title")} description={t("monitoring.description")} />
+      <MetricsDashboard />
+    </>
+  );
 };
