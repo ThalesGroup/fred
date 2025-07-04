@@ -20,6 +20,7 @@ from fred.services.chatbot_session.abstract_user_authentication_backend import A
 from fred.services.chatbot_session.session_manager import SessionSchema
 from fred.services.chatbot_session.structure.chat_schema import ChatMessagePayload
 from fred.common.utils import authorization_required
+from fred.common.error import AuthorizationSentinel, SESSION_NOT_INITIALIZED
 
 logger = logging.getLogger(__name__)
 
@@ -51,14 +52,14 @@ class OpensearchSessionStorage(AbstractSessionStorage, AbstractSecuredResourceAc
             else:
                 logger.debug(f"Opensearch index '{index}' already exists.")
 
-    def get_authorized_user_id(self, session_id: str) -> Optional[str]:
+    def get_authorized_user_id(self, session_id: str) -> str | None | AuthorizationSentinel:
         try:
             session = self.client.get(index=self.sessions_index, id=session_id)
             return session["_source"].get("user_id")
         except Exception as e:
             logger.warning(f"Could not get user_id for session {session_id}: {e}")
-            return None
-
+            return SESSION_NOT_INITIALIZED
+    
     def save_session(self, session: SessionSchema) -> None:
         try:
             session_dict = session.model_dump()
