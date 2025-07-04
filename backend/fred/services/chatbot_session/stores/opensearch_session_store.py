@@ -108,7 +108,7 @@ class OpensearchSessionStorage(AbstractSessionStorage, AbstractSecuredResourceAc
             query = {
                 "query": {
                     "term": {
-                        "user_id": {
+                        "user_id.keyword": {
                             "value": user_id
                         }
                     }
