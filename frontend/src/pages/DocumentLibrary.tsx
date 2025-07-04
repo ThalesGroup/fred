@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { PageBodyWrapper } from "../common/PageBodyWrapper";
 import { useDropzone } from "react-dropzone";
 import {
   Box,
@@ -47,7 +46,7 @@ import {
   useGetDocumentMarkdownPreviewMutation,
   useGetDocumentsWithFilterMutation,
   useLazyGetDocumentRawContentQuery,
-  useUpdateDocumentRetrievableMutation
+  useUpdateDocumentRetrievableMutation,
 } from "../slices/documentApi";
 
 import { streamProcessDocument } from "../slices/streamDocumentUpload";
@@ -57,7 +56,7 @@ import { DocumentTable } from "../components/documents/DocumentTable";
 import { DocumentDrawerTable } from "../components/documents/DocumentDrawerTable";
 import DocumentViewer from "../components/documents/DocumentViewer";
 import { TopBar } from "../common/TopBar";
-import { useTranslation } from 'react-i18next';
+import { useTranslation } from "react-i18next";
 
 /**
  * DocumentLibrary.tsx
@@ -202,7 +201,6 @@ export const DocumentLibrary = () => {
       setIsLoading(false);
     }
   };
-
 
   useEffect(() => {
     setShowElements(true);
@@ -358,11 +356,8 @@ export const DocumentLibrary = () => {
   };
 
   return (
-    <PageBodyWrapper>
-      <TopBar
-        title={t("documentLibrary.title")}
-        description={t("documentLibrary.description")}
-      >
+    <>
+      <TopBar title={t("documentLibrary.title")} description={t("documentLibrary.description")}>
         {userInfo.canManageDocuments && (
           <Grid2
             size={{ xs: 12, md: 12 }}
@@ -388,7 +383,8 @@ export const DocumentLibrary = () => {
               {t("documentLibrary.upload")}
             </Button>
           </Grid2>
-        )}</TopBar>
+        )}
+      </TopBar>
 
       {/* Search Section */}
       <Container maxWidth="xl" sx={{ mb: 3 }}>
@@ -512,7 +508,12 @@ export const DocumentLibrary = () => {
                   {t("documentLibrary.modifySearch")}
                 </Typography>
                 {userInfo.canManageDocuments && (
-                  <Button variant="outlined" startIcon={<UploadIcon />} onClick={() => setOpenSide(true)} sx={{ mt: 2 }}>
+                  <Button
+                    variant="outlined"
+                    startIcon={<UploadIcon />}
+                    onClick={() => setOpenSide(true)}
+                    sx={{ mt: 2 }}
+                  >
                     {t("documentLibrary.addDocuments")}
                   </Button>
                 )}
@@ -610,6 +611,6 @@ export const DocumentLibrary = () => {
         </Drawer>
       )}
       <DocumentViewer document={selectedDocument} open={documentViewerOpen} onClose={handleCloseDocumentViewer} />
-    </PageBodyWrapper>
+    </>
   );
 };

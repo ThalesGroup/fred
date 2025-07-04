@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { PageBodyWrapper } from "../common/PageBodyWrapper.tsx";
 import "dayjs/locale/en-gb";
 import { ApplicationContext } from "../app/ApplicationContextProvider.tsx";
 import { useContext, useEffect, useState } from "react";
@@ -67,26 +66,18 @@ export const Audit = () => {
   }, [clusterFullName, currentClusterOverview?.alias]);
 
   if (!currentClusterOverview || currentClusterOverview?.fullname !== clusterFullName) {
-    return (
-      <PageBodyWrapper>
-        <LoadingWithProgress />
-      </PageBodyWrapper>
-    );
+    return <LoadingWithProgress />;
   }
   if (!currentClusterScores) {
-    return (
-      <PageBodyWrapper>
-        <LoadingWithProgress />
-      </PageBodyWrapper>
-    );
+    return <LoadingWithProgress />;
   }
   console.log("currentClusterScores", currentClusterScores);
   return (
-    <PageBodyWrapper>
+    <>
       <TopBar title="Resource Scores" description="Review your cluster resource scores" />
       <Box padding={4} paddingTop={12}>
         <ClusterScoresTable clusterScores={currentClusterScores} />
       </Box>
-    </PageBodyWrapper>
+    </>
   );
 };

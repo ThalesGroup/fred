@@ -12,11 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useState } from "react";
-import { useTheme } from "@mui/material/styles";
-import { Box, Button, Collapse, Fade, Grid2, IconButton, Modal, Tooltip, Typography } from "@mui/material";
 import Editor from "@monaco-editor/react";
-import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import EmojiObjectsIcon from "@mui/icons-material/EmojiObjects";
+import PsychologyAltIcon from "@mui/icons-material/PsychologyAlt";
+import WebhookIcon from "@mui/icons-material/Webhook";
 import {
   Timeline,
   TimelineConnector,
@@ -26,26 +25,25 @@ import {
   timelineItemClasses,
   TimelineSeparator,
 } from "@mui/lab";
-import PsychologyAltIcon from "@mui/icons-material/PsychologyAlt";
-import WebhookIcon from "@mui/icons-material/Webhook";
+import { Box, Fade, Grid2, IconButton, Modal, Tooltip, Typography } from "@mui/material";
+import { useTheme } from "@mui/material/styles";
+import { useState } from "react";
 import { ChatMessagePayload } from "../../slices/chatApiStructures.ts";
+import FoldableChatSection from "./FoldableChatSection";
 
 export default function Thoughts({
   messages,
-  expandThoughts = false,
-  enableThoughts = false,
+  isOpenByDefault = false,
 }: {
   messages: Record<string, ChatMessagePayload[]>;
-  expandThoughts: boolean;
-  enableThoughts: boolean;
+  isOpenByDefault: boolean;
 }) {
   const theme = useTheme();
-  const isDark = theme.palette.mode === "dark";
-  const [openThoughts, setOpenThoughts] = useState<boolean>(expandThoughts);
 
   const [thoughtsDetails, setThoughtsDetails] = useState<string>("");
   const [modalThoughtsDetails, setModalThoughtsDetails] = useState<boolean>(false);
   console.log("Thoughts component received messages:", messages);
+
   const handleOpenModalThoughtsToolDetails = (messages: ChatMessagePayload[]) => {
     let content = "";
     // Add expert name from the first message
@@ -99,107 +97,86 @@ export default function Thoughts({
   };
   return (
     <>
-      <Grid2 container marginBottom={1}>
-        {/* Display the avatar for message on the right side */}
-        {enableThoughts && Object.keys(messages).length > 0 && (
-          <Grid2 size={12} paddingTop={2}>
-            <Tooltip title={openThoughts ? "Close Thoughts" : "Expand Thoughts"}>
-              <Button
-                onClick={() => setOpenThoughts(!openThoughts)}
-                style={{ textTransform: "none", padding: 0, margin: 0 }}
-              >
-                <Typography variant="body2">Thoughts</Typography>
-                <ExpandMoreIcon
-                  sx={{
-                    transform: openThoughts ? "rotate(180deg)" : "rotate(0deg)",
-                    transition: "transform 0.3s",
-                    color: isDark ? "white" : "black",
+      {Object.keys(messages).length > 0 && (
+        <FoldableChatSection title="Thoughts" icon={<EmojiObjectsIcon />} defaultOpen={isOpenByDefault} sx={{ mt: 2 }}>
+          <Timeline
+            sx={{
+              [`& .${timelineItemClasses.root}:before`]: {
+                flex: 0,
+                padding: 0,
+              },
+              margin: "0px",
+            }}
+          >
+            {Object.entries(messages).map(([key, msgs], index) => {
+              return (
+                <TimelineItem
+                  key={`thought-${key}-${index}`}
+                  // key={index}
+                  style={{
+                    minHeight: index < Object.keys(messages).length - 1 ? "60px" : "0px",
                   }}
-                />
-              </Button>
-            </Tooltip>
-            <Collapse in={openThoughts} timeout={1000} unmountOnExit>
-              <Timeline
-                sx={{
-                  [`& .${timelineItemClasses.root}:before`]: {
-                    flex: 0,
-                    padding: 0,
-                  },
-                  margin: "0px",
-                }}
-              >
-                {Object.entries(messages).map(([key, msgs], index) => {
-                  return (
-                    <TimelineItem
-                      key={`thought-${key}-${index}`}
-                      // key={index}
+                >
+                  <TimelineSeparator>
+                    <TimelineDot
                       style={{
-                        minHeight: index < Object.keys(messages).length - 1 ? "60px" : "0px",
+                        backgroundColor: theme.palette.primary.main,
                       }}
-                    >
-                      <TimelineSeparator>
-                        <TimelineDot
-                          style={{
-                            backgroundColor: theme.palette.primary.main,
-                          }}
-                        />
-                        {index < Object.keys(messages).length - 1 && <TimelineConnector />}
-                      </TimelineSeparator>
-                      <TimelineContent>
-                        <Grid2 container display="flex" flexDirection="row">
-                          <Grid2 size={11}>
-                            <Typography variant="body2">{key}</Typography>
-                          </Grid2>
-                          <Grid2
-                            size={1}
-                            display="flex"
-                            flexDirection="row"
-                            alignItems="flex-start"
-                            justifyContent="center"
-                            gap={0}
+                    />
+                    {index < Object.keys(messages).length - 1 && <TimelineConnector />}
+                  </TimelineSeparator>
+                  <TimelineContent>
+                    <Grid2 container display="flex" flexDirection="row">
+                      <Grid2 size={11}>
+                        <Typography variant="body2">{key}</Typography>
+                      </Grid2>
+                      <Grid2
+                        size={1}
+                        display="flex"
+                        flexDirection="row"
+                        alignItems="flex-start"
+                        justifyContent="center"
+                        gap={0}
+                      >
+                        <Tooltip title={"View the reasoning path"}>
+                          <IconButton
+                            aria-label="View details"
+                            style={{
+                              color: theme.palette.primary.main,
+                              padding: 0,
+                            }}
+                            onClick={() => handleOpenModalThoughtsDetails(msgs)}
                           >
-                            <Tooltip title={"View the reasoning path"}>
-                              <IconButton
-                                aria-label="View details"
-                                style={{
-                                  color: theme.palette.primary.main,
-                                  padding: 0,
-                                }}
-                                onClick={() => handleOpenModalThoughtsDetails(msgs)}
-                              >
-                                <PsychologyAltIcon color="primary" sx={{ fontSize: "1.8rem" }} />
-                              </IconButton>
-                            </Tooltip>
-                            {/* Display the tool icon if thoughts include a tool message */}
-                            {msgs.filter((thought) => thought.type === "tool").length > 0 && (
-                              <Tooltip title={"View the tools used and their results"}>
-                                <IconButton
-                                  aria-label="View tools usage"
-                                  style={{
-                                    color: theme.palette.warning.main,
-                                    padding: 0,
-                                  }}
-                                  onClick={() =>
-                                    handleOpenModalThoughtsToolDetails(
-                                      msgs.filter((thought) => thought.type === "tool"),
-                                    )
-                                  }
-                                >
-                                  <WebhookIcon color="primary" sx={{ fontSize: "1.8rem" }} />
-                                </IconButton>
-                              </Tooltip>
-                            )}
-                          </Grid2>
-                        </Grid2>
-                      </TimelineContent>
-                    </TimelineItem>
-                  );
-                })}
-              </Timeline>
-            </Collapse>
-          </Grid2>
-        )}
-      </Grid2>
+                            <PsychologyAltIcon color="primary" sx={{ fontSize: "1.8rem" }} />
+                          </IconButton>
+                        </Tooltip>
+                        {/* Display the tool icon if thoughts include a tool message */}
+                        {msgs.filter((thought) => thought.type === "tool").length > 0 && (
+                          <Tooltip title={"View the tools used and their results"}>
+                            <IconButton
+                              aria-label="View tools usage"
+                              style={{
+                                color: theme.palette.warning.main,
+                                padding: 0,
+                              }}
+                              onClick={() =>
+                                handleOpenModalThoughtsToolDetails(msgs.filter((thought) => thought.type === "tool"))
+                              }
+                            >
+                              <WebhookIcon color="primary" sx={{ fontSize: "1.8rem" }} />
+                            </IconButton>
+                          </Tooltip>
+                        )}
+                      </Grid2>
+                    </Grid2>
+                  </TimelineContent>
+                </TimelineItem>
+              );
+            })}
+          </Timeline>
+        </FoldableChatSection>
+      )}
+
       <Modal open={modalThoughtsDetails} onClose={handleCloseModalThoughtsDetails}>
         <Fade in={modalThoughtsDetails} timeout={100}>
           <Box

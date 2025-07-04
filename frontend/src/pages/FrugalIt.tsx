@@ -22,7 +22,6 @@ import { ClusterFilter } from "../common/ClusterFilter.tsx";
 import { useContext, useState, useEffect } from "react";
 import { FootprintContext } from "../app/FootprintContextProvider.tsx";
 import { InspectCard } from "../common/InspectCard.tsx";
-import { PageBodyWrapper } from "../common/PageBodyWrapper.tsx";
 import { TopBar } from "../common/TopBar.tsx";
 
 // Import icons
@@ -53,7 +52,7 @@ export const FrugalIt = () => {
   }
 
   return (
-    <PageBodyWrapper>
+    <>
       <TopBar
         title="Footprint Overview"
         description="Monitor and analyze your clusters' cost, carbon, and energy metrics"
@@ -207,6 +206,6 @@ export const FrugalIt = () => {
           </Grid2>
         </Grid2>
       </Container>
-    </PageBodyWrapper>
+    </>
   );
 };

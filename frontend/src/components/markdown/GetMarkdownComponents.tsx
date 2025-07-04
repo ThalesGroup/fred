@@ -12,8 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import Mermaid from "./Mermaid.tsx"; // adjust path if needed
-import { Theme } from "@mui/material";
+import Mermaid from "./Mermaid.tsx";
+import {
+  alpha,
+  Paper,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Theme,
+} from "@mui/material";
 
 interface GetMarkdownComponentsOptions {
   theme: Theme;
@@ -21,52 +31,27 @@ interface GetMarkdownComponentsOptions {
   enableEmojiFix?: boolean;
 }
 
-/**
- * GetMarkdownComponents
- *
- * A factory function that returns a mapping of custom React components
- * to be used with `react-markdown` for rendering markdown content.
- *
- * This function supports:
- * - Dynamic theming based on MUI's `theme.typography.markdown` styles
- * - Font size scaling (`small`, `medium`, `large`)
- * - Optional emoji fix for emphasis or stage direction rendering (e.g., disables italics on emojis)
- * - Mermaid diagram rendering from fenced code blocks (```mermaid)
- *
- * It is designed to be used in markdown-rendering UIs like chat messages,
- * documentation viewers, or markdown previews.
- *
- * ---
- *
- * Usage Example:
- * ```tsx
- * import ReactMarkdown from "react-markdown";
- * import { useTheme } from "@mui/material";
- * import { GetMarkdownComponents } from "./GetMarkdownComponents";
- *
- * const theme = useTheme();
- * const components = GetMarkdownComponents({ theme, size: "small" });
- *
- * <ReactMarkdown components={components}>{markdownText}</ReactMarkdown>
- * ```
- *
- * ---
- *
- * @param {Object} options
- * @param {Theme} options.theme - MUI theme object, used for consistent typography.
- * @param {'small' | 'medium' | 'large'} options.size - Controls font size scaling.
- * @param {boolean} [options.enableEmojiFix=true] - When true, disables italics on <em> and <p> to improve emoji rendering.
- *
- * @returns {Object} Components map to be passed to `react-markdown`.
- */
-export function getMarkdownComponents({ theme, size, enableEmojiFix = true }: GetMarkdownComponentsOptions) {
-  const baseStyle = (style: any) => (size === "small" ? { ...style, fontSize: "0.85rem" } : style);
+export function getMarkdownComponents({
+  theme,
+  size,
+  enableEmojiFix = true,
+}: GetMarkdownComponentsOptions) {
+  const baseStyle = (style: any) =>
+    size === "small" ? { ...style, fontSize: "0.85rem" } : style;
 
   return {
-    h1: ({ node, ...props }) => <h1 style={baseStyle(theme.typography.markdown.h1)} {...props} />,
-    h2: ({ node, ...props }) => <h2 style={baseStyle(theme.typography.markdown.h2)} {...props} />,
-    h3: ({ node, ...props }) => <h3 style={baseStyle(theme.typography.markdown.h3)} {...props} />,
-    h4: ({ node, ...props }) => <h4 style={baseStyle(theme.typography.markdown.h4)} {...props} />,
+    h1: ({ node, ...props }) => (
+      <h1 style={baseStyle(theme.typography.markdown.h1)} {...props} />
+    ),
+    h2: ({ node, ...props }) => (
+      <h2 style={baseStyle(theme.typography.markdown.h2)} {...props} />
+    ),
+    h3: ({ node, ...props }) => (
+      <h3 style={baseStyle(theme.typography.markdown.h3)} {...props} />
+    ),
+    h4: ({ node, ...props }) => (
+      <h4 style={baseStyle(theme.typography.markdown.h4)} {...props} />
+    ),
     p: ({ node, ...props }) => (
       <p
         style={{
@@ -84,9 +69,15 @@ export function getMarkdownComponents({ theme, size, enableEmojiFix = true }: Ge
         {...props}
       />
     ),
-    a: ({ node, ...props }) => <a style={baseStyle(theme.typography.markdown.a)} {...props} />,
-    ul: ({ node, ...props }) => <ul style={baseStyle(theme.typography.markdown.ul)} {...props} />,
-    li: ({ node, ...props }) => <li style={baseStyle(theme.typography.markdown.li)} {...props} />,
+    a: ({ node, ...props }) => (
+      <a style={baseStyle(theme.typography.markdown.a)} {...props} />
+    ),
+    ul: ({ node, ...props }) => (
+      <ul style={baseStyle(theme.typography.markdown.ul)} {...props} />
+    ),
+    li: ({ node, ...props }) => (
+      <li style={baseStyle(theme.typography.markdown.li)} {...props} />
+    ),
     code: ({ node, inline, className, children, ...props }) => {
       const isMermaid = /language-mermaid/.test(className || "");
       if (isMermaid && children) {
@@ -98,5 +89,67 @@ export function getMarkdownComponents({ theme, size, enableEmojiFix = true }: Ge
         </code>
       );
     },
+
+    // Markdown tables rendered with MUI Table components
+    table: ({ node, ...props }) => (
+      <TableContainer
+        component={Paper}
+        sx={{
+          marginTop: theme.spacing(1),
+          overflowX: "auto",
+        }}
+      >
+        <Table
+          size={size === "small" ? "small" : "medium"}
+          sx={{
+            borderCollapse: "collapse",
+            minWidth: "100%",
+            "& td, & th": {
+              border: `1px solid ${theme.palette.divider}`,
+              padding: theme.spacing(1),
+              textAlign: "left",
+            },
+          }}
+          {...props}
+        />
+      </TableContainer>
+    ),
+    thead: ({ node, ...props }) => (
+      <TableHead
+        sx={{
+          backgroundColor:
+            theme.palette.mode === "dark"
+              ? alpha(theme.palette.primary.main, 0.2)
+              : alpha(theme.palette.primary.main, 0.1),
+        }}
+        {...props}
+      />
+    ),
+    tbody: ({ node, ...props }) => <TableBody {...props} />,
+    tr: ({ node, ...props }) => <TableRow {...props} />,
+    th: ({ node, ...props }) => (
+      <TableCell
+        component="th"
+        sx={{
+          fontWeight: theme.typography.fontWeightBold,
+          color: theme.palette.text.primary,
+          border: `1px solid ${theme.palette.divider}`,
+          padding: theme.spacing(1),
+          textAlign: "left",
+        }}
+        {...props}
+      />
+    ),
+    td: ({ node, ...props }) => (
+      <TableCell
+        sx={{
+          color: theme.palette.text.primary,
+          border: `1px solid ${theme.palette.divider}`,
+          padding: theme.spacing(1),
+          textAlign: "left",
+        }}
+        {...props}
+      />
+    ),
   };
 }
