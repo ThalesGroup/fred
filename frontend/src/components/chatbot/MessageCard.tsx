@@ -135,10 +135,10 @@ export default function Message({
                     display: "flex",
                     flexDirection: "column",
                     backgroundColor:
-                      side === "right" ? theme.palette.background.paper : theme.palette.background.default,
-                    paddingTop: "0.8em", // TODO rewrite MarkdownRenderer or adjust css to remove this
-                    paddingLeft: side === "right" ? 2 : 0,
-                    paddingRight: side === "right" ? 2 : 0,
+                      side === "right"
+                        ? theme.palette.background.paper
+                        : theme.palette.background.default,
+                    padding: side === "right" ? "0.8em 16px 0 16px" : "0.8em 0 0 0", // consistent top padding, conditional horizontal
                     marginTop: side === "right" ? 1 : 0,
                     borderRadius: 3,
                     wordBreak: "break-word",
@@ -150,6 +150,7 @@ export default function Message({
                   //  enableEmojiSubstitution={side === "left"} // only apply for assistant replies
                   />
                 </Box>
+
               </Grid2>
               {side === "left" ? (
                 <Grid2 size={12} display="flex" alignItems="center" gap={1} flexWrap="wrap">

@@ -15,7 +15,7 @@
 import json
 import logging
 from datetime import datetime
-from typing import List, Optional
+from typing import Optional
 
 from fred.flow import AgentFlow
 from fred.agents.documents.documents_expert_toolkit import DocumentsToolkit
@@ -118,7 +118,8 @@ class DocumentsExpert(AgentFlow):
                                 "I found some documents but couldn't process them correctly. Please try again later."
                             )])
                             return {"messages": [ai_message]}
-                        response.response_metadata.update({"sources": [s.model_dump() for s in sources]})
+
+                        response.response_metadata["sources"] = response.response_metadata.get("sources", []) + [s.model_dump() for s in sources]
                     except Exception as e:
                         logger.error(f"Error extracting sources from ToolMessage response: {e}")    
             return {"messages": [response]}    
@@ -134,8 +135,8 @@ class DocumentsExpert(AgentFlow):
         logger.info(f"Received response with {len(documents_data)} documents")
         
         # Process documents with error handling
-        documents = []
-        sources: List[ChatSource] = []
+        documents: list[DocumentSource] = []
+        sources: list[ChatSource] = []
                 
         for doc in documents_data:
             try:
@@ -143,7 +144,7 @@ class DocumentsExpert(AgentFlow):
                 if "uid" in doc and "document_uid" not in doc:
                     doc["document_uid"] = doc["uid"]
                         
-                        # Create DocumentSource instance
+                # Create DocumentSource instance
                 doc_source = DocumentSource(**doc)
                 documents.append(doc_source)
                         

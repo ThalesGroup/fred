@@ -26,7 +26,7 @@ import {
   ListItemText,
   Tooltip,
 } from "@mui/material";
-import MonitorHeartIcon from '@mui/icons-material/MonitorHeart';
+import MonitorHeartIcon from "@mui/icons-material/MonitorHeart";
 
 import AssistantIcon from "@mui/icons-material/Assistant";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
@@ -41,7 +41,7 @@ import LightModeIcon from "@mui/icons-material/LightMode";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
-import WorkspacesIcon from '@mui/icons-material/Workspaces';
+import WorkspacesIcon from "@mui/icons-material/Workspaces";
 import { ImageComponent } from "../utils/image.tsx";
 import { useContext } from "react";
 import { ApplicationContext } from "./ApplicationContextProvider.tsx";
@@ -72,57 +72,57 @@ export default function SideBar({ darkMode, onThemeChange }) {
   const menuItems = [
     ...(isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES)
       ? [
-        {
-          key: "explain",
-          label: t("sidebar.cluster"),
-          icon: <AssistantIcon />,
-          url: `/explain?cluster=${currentClusterFullname}`,
-          canBeDisabled: true,
-          tooltip: t("sidebar.tooltip.cluster"),
-        },
-        {
-          key: "facts",
-          label: t("sidebar.facts"),
-          icon: <AssistantIcon />,
-          url: `/facts?cluster=${currentClusterFullname}`,
-          canBeDisabled: true,
-          tooltip: t("sidebar.tooltip.facts"),
-        },
-        {
-          key: "audit",
-          label: t("sidebar.audit"),
-          icon: <AssessmentIcon />,
-          url: `/audit?cluster=${currentClusterFullname}`,
-          canBeDisabled: true,
-          tooltip: t("sidebar.tooltip.audit"),
-        },
-        {
-          key: "optimize",
-          label: t("sidebar.optimize"),
-          icon: <TuneIcon />,
-          url: `/optimize?cluster=${currentClusterFullname}`,
-          canBeDisabled: true,
-          tooltip: t("sidebar.tooltip.optimize"),
-        },
-        {
-          key: "chat",
-          label: t("sidebar.chat"),
-          icon: <ChatIcon />,
-          url: `/chat?cluster=${currentClusterFullname}`,
-          canBeDisabled: false,
-          tooltip: t("sidebar.tooltip.chat"),
-        },
-      ]
+          {
+            key: "explain",
+            label: t("sidebar.cluster"),
+            icon: <AssistantIcon />,
+            url: `/explain?cluster=${currentClusterFullname}`,
+            canBeDisabled: true,
+            tooltip: t("sidebar.tooltip.cluster"),
+          },
+          {
+            key: "facts",
+            label: t("sidebar.facts"),
+            icon: <AssistantIcon />,
+            url: `/facts?cluster=${currentClusterFullname}`,
+            canBeDisabled: true,
+            tooltip: t("sidebar.tooltip.facts"),
+          },
+          {
+            key: "audit",
+            label: t("sidebar.audit"),
+            icon: <AssessmentIcon />,
+            url: `/audit?cluster=${currentClusterFullname}`,
+            canBeDisabled: true,
+            tooltip: t("sidebar.tooltip.audit"),
+          },
+          {
+            key: "optimize",
+            label: t("sidebar.optimize"),
+            icon: <TuneIcon />,
+            url: `/optimize?cluster=${currentClusterFullname}`,
+            canBeDisabled: true,
+            tooltip: t("sidebar.tooltip.optimize"),
+          },
+          {
+            key: "chat",
+            label: t("sidebar.chat"),
+            icon: <ChatIcon />,
+            url: `/chat?cluster=${currentClusterFullname}`,
+            canBeDisabled: false,
+            tooltip: t("sidebar.tooltip.chat"),
+          },
+        ]
       : [
-        {
-          key: "chat",
-          label: t("sidebar.chat"),
-          icon: <ChatIcon />,
-          url: `/chat`,
-          canBeDisabled: false,
-          tooltip: t("sidebar.tooltip.chat"),
-        },
-      ]),
+          {
+            key: "chat",
+            label: t("sidebar.chat"),
+            icon: <ChatIcon />,
+            url: `/chat`,
+            canBeDisabled: false,
+            tooltip: t("sidebar.tooltip.chat"),
+          },
+        ]),
     {
       key: "monitoring",
       label: t("sidebar.monitoring"),
@@ -183,7 +183,6 @@ export default function SideBar({ darkMode, onThemeChange }) {
   return (
     <Box
       height="100vh"
-      position="fixed"
       width={sidebarWidth}
       sx={{
         bgcolor: sideBarBgColor,
@@ -293,6 +292,8 @@ export default function SideBar({ darkMode, onThemeChange }) {
           pt: 3,
           px: isSidebarSmall ? 1 : 2,
           flexGrow: 1,
+          overflowX: "hidden",
+          overflowY: "auto",
         }}
       >
         {menuItems.map((item) => {
@@ -354,7 +355,6 @@ export default function SideBar({ darkMode, onThemeChange }) {
                       </Typography>
                     }
                   />
-
                 )}
                 {active && !isSidebarSmall && (
                   <Box

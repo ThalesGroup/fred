@@ -16,7 +16,6 @@ import { useContext, useEffect } from "react";
 import { ApplicationContext } from "../app/ApplicationContextProvider";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { Skeleton } from "@mui/material";
-import { PageBodyWrapper } from "../common/PageBodyWrapper";
 
 const withClusterSync = (Component) => {
   return (props) => {
@@ -34,11 +33,7 @@ const withClusterSync = (Component) => {
     }, [clusterName, currentClusterOverview, location.pathname, navigate]);
 
     if (!currentClusterOverview || currentClusterOverview?.alias !== clusterName) {
-      return (
-        <PageBodyWrapper>
-          <Skeleton animation="wave" width={"80%"} height={"200px"} />
-        </PageBodyWrapper>
-      );
+      return <Skeleton animation="wave" width={"80%"} height={"200px"} />;
     }
 
     return <Component {...props} />;
