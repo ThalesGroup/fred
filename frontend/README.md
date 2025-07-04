@@ -6,6 +6,15 @@ A makefile is available to help you compile package and run, with or without doc
 Note that the package-lock.json is generated from a dockerfile to avoid macos/linux issues with natives packages. It is then
 committed to ensure all developers share the same configuration.
 
+
+## Run the Dev Server
+
+```bash
+make run          # installs deps (if missing) and starts `npm run dev`
+```
+
+The Vite server starts on <http://localhost:5173> with hot module reload.
+
 ## UI Architecture Overview
 
 ### High-Level Flow

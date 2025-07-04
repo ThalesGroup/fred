@@ -39,7 +39,6 @@
 import { useContext, useEffect } from "react";
 import { ApplicationContext } from "../../app/ApplicationContextProvider";
 import { useSearchParams } from "react-router-dom";
-import { PageBodyWrapper } from "../../common/PageBodyWrapper";
 import LoadingWithProgress from "../../components/LoadingWithProgress";
 import { ClusterConsumption } from "../slices/api";
 import { FootprintContext } from "../../app/FootprintContextProvider";
@@ -81,96 +80,90 @@ const Inspect = () => {
       }));
   };
   if (!currentClusterOverview || currentClusterOverview?.fullname !== clusterFullName) {
-    return (
-      <PageBodyWrapper>
-        <LoadingWithProgress />
-      </PageBodyWrapper>
-    );
+    return <LoadingWithProgress />;
   }
 
   return (
-    <PageBodyWrapper>
-      <Grid2 container spacing={4} p={2}>
-        <Grid2 container justifyContent="space-between" alignItems="center" size={12} spacing={4}>
-          <PeriodPicker></PeriodPicker>
+    <Grid2 container spacing={4} p={2}>
+      <Grid2 container justifyContent="space-between" alignItems="center" size={12} spacing={4}>
+        <PeriodPicker></PeriodPicker>
+      </Grid2>
+      <Grid2 size={{ xs: 12 }}>
+        <Box width="100%">
+          <ChartCard
+            data={{
+              name: "name",
+              color: "color",
+              unit: "cm",
+              serieTypes: [
+                {
+                  logos: ["cost_circle", "cost_white"],
+                  color: theme.palette.chart.highBlue,
+                  series: inspect_context.currentCostConsumption
+                    ? [
+                        transformClusterConsumptionToSerie(
+                          inspect_context.currentCostConsumption,
+                          "Total charge",
+                          theme.palette.chart.highBlue,
+                        ),
+                      ]
+                    : [],
+                },
+                {
+                  logos: ["carbon_circle", "carbon_white"],
+                  color: theme.palette.chart.highGreen,
+                  series: inspect_context.currentCarbonConsumption
+                    ? [
+                        transformClusterConsumptionToSerie(
+                          inspect_context.currentCarbonConsumption,
+                          "Estimated Carbon footprint",
+                          theme.palette.chart.highGreen,
+                        ),
+                      ]
+                    : [],
+                },
+                {
+                  logos: ["energy_circle", "energy_white"],
+                  color: theme.palette.chart.highYellow,
+                  series: inspect_context.currentEnergyConsumption
+                    ? [
+                        transformClusterConsumptionToSerie(
+                          inspect_context.currentEnergyConsumption,
+                          "Esitmated Energy footprint",
+                          theme.palette.chart.highYellow,
+                        ),
+                      ]
+                    : [],
+                },
+              ],
+            }}
+            height="25vh"
+            type="bar"
+          />
+        </Box>
+      </Grid2>
+      <Grid2 size={{ xs: 12 }}>
+        <NamespaceFilter></NamespaceFilter>
+      </Grid2>
+      <Grid2 container size={{ xs: 12 }} spacing={2}>
+        <Grid2 size={{ xs: 12, lg: 6 }}>
+          <InspectCard
+            title="Estimated carbon footprint"
+            logo="carbon_circle"
+            clusters={getNamespacesFootprint(inspect_context.currentCarbonConsumption)}
+            unit={inspect_context.currentCarbonConsumption ? inspect_context.currentCarbonConsumption.unit : null}
+          ></InspectCard>
         </Grid2>
-        <Grid2 size={{ xs: 12 }}>
-          <Box width="100%">
-            <ChartCard
-              data={{
-                name: "name",
-                color: "color",
-                unit: "cm",
-                serieTypes: [
-                  {
-                    logos: ["cost_circle", "cost_white"],
-                    color: theme.palette.chart.highBlue,
-                    series: inspect_context.currentCostConsumption
-                      ? [
-                          transformClusterConsumptionToSerie(
-                            inspect_context.currentCostConsumption,
-                            "Total charge",
-                            theme.palette.chart.highBlue,
-                          ),
-                        ]
-                      : [],
-                  },
-                  {
-                    logos: ["carbon_circle", "carbon_white"],
-                    color: theme.palette.chart.highGreen,
-                    series: inspect_context.currentCarbonConsumption
-                      ? [
-                          transformClusterConsumptionToSerie(
-                            inspect_context.currentCarbonConsumption,
-                            "Estimated Carbon footprint",
-                            theme.palette.chart.highGreen,
-                          ),
-                        ]
-                      : [],
-                  },
-                  {
-                    logos: ["energy_circle", "energy_white"],
-                    color: theme.palette.chart.highYellow,
-                    series: inspect_context.currentEnergyConsumption
-                      ? [
-                          transformClusterConsumptionToSerie(
-                            inspect_context.currentEnergyConsumption,
-                            "Esitmated Energy footprint",
-                            theme.palette.chart.highYellow,
-                          ),
-                        ]
-                      : [],
-                  },
-                ],
-              }}
-              height="25vh"
-              type="bar"
-            />
-          </Box>
-        </Grid2>
-        <Grid2 size={{ xs: 12 }}>
-          <NamespaceFilter></NamespaceFilter>
-        </Grid2>
-        <Grid2 container size={{ xs: 12 }} spacing={2}>
-          <Grid2 size={{ xs: 12, lg: 6 }}>
-            <InspectCard
-              title="Estimated carbon footprint"
-              logo="carbon_circle"
-              clusters={getNamespacesFootprint(inspect_context.currentCarbonConsumption)}
-              unit={inspect_context.currentCarbonConsumption ? inspect_context.currentCarbonConsumption.unit : null}
-            ></InspectCard>
-          </Grid2>
-          <Grid2 size={{ xs: 12, lg: 6 }}>
-            <InspectCard
-              title="Estimated energy footprint"
-              logo="energy_circle"
-              clusters={getNamespacesFootprint(inspect_context.currentEnergyConsumption)}
-              unit={inspect_context.currentEnergyConsumption ? inspect_context.currentEnergyConsumption.unit : null}
-            ></InspectCard>
-          </Grid2>
+        <Grid2 size={{ xs: 12, lg: 6 }}>
+          <InspectCard
+            title="Estimated energy footprint"
+            logo="energy_circle"
+            clusters={getNamespacesFootprint(inspect_context.currentEnergyConsumption)}
+            unit={inspect_context.currentEnergyConsumption ? inspect_context.currentEnergyConsumption.unit : null}
+          ></InspectCard>
         </Grid2>
       </Grid2>
-    </PageBodyWrapper>
+    </Grid2>
   );
 };
 export default Inspect;
