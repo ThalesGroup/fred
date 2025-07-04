@@ -25,6 +25,7 @@ Includes:
 - Context service management
 """
 
+from builtins import ExceptionGroup
 import importlib
 from threading import Lock
 from typing import Dict, List, Type
@@ -410,7 +411,7 @@ class ApplicationContext:
                         env=server.env,
                         sse_read_timeout=server.sse_read_timeout
                     )
-                except* Exception as eg:
+                except Exception as eg:
                     for sub in eg.exceptions:
                         log_exception(sub, f"Failed to connect to MCP server: {server.name}")
                         exceptions.append(sub)
