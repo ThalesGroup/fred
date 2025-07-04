@@ -39,7 +39,6 @@
 import { useContext, useEffect } from "react";
 import { ApplicationContext } from "../app/ApplicationContextProvider";
 import { useNavigate, useParams } from "react-router-dom";
-import { PageBodyWrapper } from "../common/PageBodyWrapper";
 import LoadingWithProgress from "../components/LoadingWithProgress";
 
 const Debug = () => {
@@ -57,18 +56,14 @@ const Debug = () => {
   }, [clusterName, currentClusterOverview]);
 
   if (!currentClusterOverview || currentClusterOverview?.alias !== clusterName) {
-    return (
-      <PageBodyWrapper>
-        <LoadingWithProgress />
-      </PageBodyWrapper>
-    );
+    return <LoadingWithProgress />;
   }
 
   return (
-    <PageBodyWrapper>
+    <>
       <h1>DEBUG PAGE </h1>
       <h2>Cluster Name: {currentClusterOverview.alias}</h2>
-    </PageBodyWrapper>
+    </>
   );
 };
 export default Debug;

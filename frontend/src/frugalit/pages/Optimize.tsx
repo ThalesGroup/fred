@@ -16,7 +16,6 @@ import { Box, FormControl, Grid2, InputLabel, MenuItem, Select, useTheme } from 
 import "dayjs/locale/en-gb";
 import { useContext, useEffect, useState } from "react";
 import { Serie, transformClusterConsumptionToSerie } from "../../utils/serie.tsx";
-import { PageBodyWrapper } from "../../common/PageBodyWrapper.tsx";
 import { ApplicationContext } from "../../app/ApplicationContextProvider.tsx";
 import { ChartCard } from "../../common/ChartCard.tsx";
 import dayjs, { Dayjs } from "dayjs";
@@ -36,7 +35,6 @@ import { useSearchParams } from "react-router-dom";
 import LoadingWithProgress from "../../components/LoadingWithProgress.tsx";
 import { TopBar } from "../../common/TopBar.tsx";
 import { DatePicker } from "@mui/x-date-pickers/DatePicker";
-
 
 enum Delta {
   DAY = "day",
@@ -82,11 +80,11 @@ export const Optimize = () => {
   const [previousEnergyMixDetails, setPreviousEnergyMixDetails] = useState<Detail[]>([]);
 
   const today = dayjs();
-  const startOfThisMonth = today.startOf('month');
+  const startOfThisMonth = today.startOf("month");
 
   // Use last full month as "current", and the one before as "previous"
-  const defaultCurrentMonth = startOfThisMonth.subtract(1, 'month'); // e.g. May if now is June
-  const defaultPreviousMonth = startOfThisMonth.subtract(2, 'month'); // e.g. April if now is June
+  const defaultCurrentMonth = startOfThisMonth.subtract(1, "month"); // e.g. May if now is June
+  const defaultPreviousMonth = startOfThisMonth.subtract(2, "month"); // e.g. April if now is June
 
   const [currentMonth, setCurrentMonth] = useState<Dayjs | null>(defaultCurrentMonth);
   const [previousMonth, setPreviousMonth] = useState<Dayjs | null>(defaultPreviousMonth);
@@ -148,12 +146,9 @@ export const Optimize = () => {
       precision: string;
     }) => Promise<{ data: any } | { error: any }>,
     setData: (serie: Serie) => void,
-    setLoading: (loading: boolean) => void
+    setLoading: (loading: boolean) => void,
   ) => {
-    if (
-      application_context.currentClusterOverview &&
-      application_context.currentPrecision
-    ) {
+    if (application_context.currentClusterOverview && application_context.currentPrecision) {
       setLoading(true);
       const response = await getData({
         start: start.toISOString(),
@@ -170,7 +165,6 @@ export const Optimize = () => {
       setLoading(false);
     }
   };
-
 
   // Check if the current cluster overview is available and the alias matches the clusterName
   // If not, navigate to the correct cluster overview page. This is typically used to sync the URL
@@ -201,7 +195,7 @@ export const Optimize = () => {
         theme.palette.chart.veryHighBlue,
         getFinopsCost,
         setNewFinops,
-        setLoadingFinops
+        setLoadingFinops,
       );
       fetchData(
         currentStart,
@@ -210,7 +204,7 @@ export const Optimize = () => {
         theme.palette.chart.veryHighGreen,
         getCarbonConsumption,
         setNewCarbon,
-        setLoadingCarbon
+        setLoadingCarbon,
       );
       fetchData(
         currentStart,
@@ -219,7 +213,7 @@ export const Optimize = () => {
         theme.palette.chart.veryHighYellow,
         getEnergyConsumption,
         setNewEnergy,
-        setLoadingEnergy
+        setLoadingEnergy,
       );
 
       // Previous month data
@@ -230,7 +224,7 @@ export const Optimize = () => {
         theme.palette.chart.mediumBlue,
         getFinopsCost,
         setLastFinops,
-        setLoadingFinops
+        setLoadingFinops,
       );
       fetchData(
         previousStart,
@@ -239,7 +233,7 @@ export const Optimize = () => {
         theme.palette.chart.mediumGreen,
         getCarbonConsumption,
         setLastCarbon,
-        setLoadingCarbon
+        setLoadingCarbon,
       );
       fetchData(
         previousStart,
@@ -248,31 +242,22 @@ export const Optimize = () => {
         theme.palette.chart.mediumYellow,
         getEnergyConsumption,
         setLastEnergy,
-        setLoadingEnergy
+        setLoadingEnergy,
       );
 
       // Energy mix (only for current range)
       fetchEnergyMix(currentStart, currentEnd, selectedDelta as Delta);
     }
-  }, [
-    currentMonth,
-    previousMonth,
-    application_context.currentClusterOverview,
-    application_context.currentPrecision,
-  ]);
+  }, [currentMonth, previousMonth, application_context.currentClusterOverview, application_context.currentPrecision]);
 
   //const handleChange = (event) => {
   //  setSelectedDelta(event.target.value);
   //};
   if (!currentClusterOverview || currentClusterOverview?.fullname !== clusterFullName) {
-    return (
-      <PageBodyWrapper>
-        <LoadingWithProgress />
-      </PageBodyWrapper>
-    );
+    return <LoadingWithProgress />;
   }
   return (
-    <PageBodyWrapper>
+    <>
       <TopBar title="Optimize" description="Optimize your cloud resources" leftLg={4}>
         <Grid2 container size={12} alignItems="center" justifyContent="space-between">
           <Grid2 size={{ xs: 4, sm: 6, md: 6, lg: 6, xl: 6 }} display="flex" justifyContent="flex-start">
@@ -282,24 +267,23 @@ export const Optimize = () => {
                 <Grid2>
                   <DatePicker
                     label="Current month"
-                    views={['year', 'month']}
+                    views={["year", "month"]}
                     value={currentMonth}
                     onChange={(newValue) => setCurrentMonth(newValue)}
-                    slotProps={{ textField: { size: 'small' } }} // optional for compact styling
+                    slotProps={{ textField: { size: "small" } }} // optional for compact styling
                   />
                 </Grid2>
                 <Grid2>
                   <DatePicker
                     label="Previous month"
-                    views={['year', 'month']}
+                    views={["year", "month"]}
                     value={previousMonth}
                     onChange={(newValue) => setPreviousMonth(newValue)}
-                    slotProps={{ textField: { size: 'small' } }}
+                    slotProps={{ textField: { size: "small" } }}
                   />
                 </Grid2>
               </Grid2>
             </LocalizationProvider>
-
           </Grid2>
 
           <Grid2 size={{ xs: 3, sm: 3, md: 3, lg: 3, xl: 2 }} display="flex" justifyContent="flex-end">
@@ -426,6 +410,6 @@ export const Optimize = () => {
           </Grid2>
         </Grid2>
       </Grid2>
-    </PageBodyWrapper>
+    </>
   );
 };
