@@ -50,6 +50,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token", auto_error=False)
 
 class KeycloakUser(BaseModel):
     """Represents an authenticated Keycloak user."""
+    uid: str
     username: str
     roles: list[str]
     email: Optional[str] = None
@@ -58,7 +59,7 @@ def decode_jwt(token: str) -> KeycloakUser:
     """Decodes a JWT token using PyJWT and retrieves user information."""
     if not KEYCLOAK_ENABLED:
         logger.warning("Authentication is DISABLED. Returning a mock user.")
-        return KeycloakUser(username="admin", roles=["admin"], email="dev@localhost")
+        return KeycloakUser(uid="admin", username="admin", roles=["admin"], email="dev@localhost")
     
     logger.debug("Starting JWT decoding process...")
 
@@ -113,6 +114,7 @@ def decode_jwt(token: str) -> KeycloakUser:
         # Extract user information
         logger.debug("Extracting user information from token...")
         user = KeycloakUser(
+            uid=payload.get("sub"), # Unique identifier in OIDC login
             username=payload.get("preferred_username", ""),
             roles=client_roles,
             email=payload.get("email"),
@@ -129,11 +131,11 @@ def get_current_user(token: str = Security(oauth2_scheme)) -> KeycloakUser:
     """Fetches the current user from Keycloak token."""
     if not KEYCLOAK_ENABLED:
         logger.warning("Authentication is DISABLED. Returning a mock user.")
-        return KeycloakUser(username="admin", roles=["admin"], email="admin@mail.com")
+        return KeycloakUser(uid="admin", username="admin", roles=["admin"], email="admin@mail.com")
     else:
         logger.info("Authentication is ENABLED")
     if not token:
         raise HTTPException(status_code=401, detail="No authentication token provided")
     
-    logger.debug(f"Received token: {token}")
+    logger.debug(f"Received token: {token[:10]}...") # Display only the first 10 characters to avoid spamming the debug logs 
     return decode_jwt(token)

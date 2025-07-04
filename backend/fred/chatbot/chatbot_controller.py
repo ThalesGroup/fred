@@ -103,7 +103,7 @@ class ChatbotController:
 
                 session, messages = await self.session_manager.chat_ask_websocket(
                     callback=capture_callback,
-                    user_id=user.email,
+                    user_id=user.uid,
                     session_id=event.session_id,
                     message=event.message,
                     agent_name=event.agent_name,
@@ -143,7 +143,7 @@ class ChatbotController:
                     
                     session, final_messages = await self.session_manager.chat_ask_websocket(
                         callback=callback,
-                        user_id=user.email,
+                        user_id=user.uid,
                         session_id=event.session_id,
                         message=event.message,
                         agent_name=event.agent_name,
@@ -236,7 +236,7 @@ class ChatbotController:
             summary="Get the list of active chatbot sessions.",
         )
         def get_sessions(user: KeycloakUser = Depends(get_current_user)) -> list[SessionWithFiles]:
-            return self.session_manager.get_sessions(user.email)
+            return self.session_manager.get_sessions(user.uid)
         
         @app.get(
             "/chatbot/session/{session_id}/history",
@@ -246,7 +246,7 @@ class ChatbotController:
             response_model=List[ChatMessagePayload]
         )
         def get_session_history(session_id: str, user: KeycloakUser = Depends(get_current_user)) -> list[ChatMessagePayload]:
-            return self.session_manager.get_session_history(session_id)
+            return self.session_manager.get_session_history(session_id, user.uid)
 
         @app.delete(
             "/chatbot/session/{session_id}",
@@ -255,7 +255,7 @@ class ChatbotController:
             tags=fastapi_tags,
         )
         def delete_session(session_id: str, user: KeycloakUser = Depends(get_current_user)) -> bool:
-            return self.session_manager.delete_session(session_id)
+            return self.session_manager.delete_session(session_id, user.uid)
 
 
         @app.post(

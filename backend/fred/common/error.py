@@ -23,6 +23,10 @@ class UnavailableError(HTTPException):
 class InvalidCacheError(FileNotFoundError):
     ...
 
+# ------------------------------
+# MCP & Agent setup Exceptions
+# ------------------------------
+
 class UnsupportedTransportError(ValueError):
     ...
     
@@ -31,3 +35,17 @@ class MCPToolFetchError(ValueError):
     
 class NoToolkitProvidedError(ValueError):
     ...
+
+# ------------------------------
+# Session storage exceptions
+# ------------------------------
+
+class SessionNotFoundError(Exception):
+    def __init__(self, session_id: str):
+        self.session_id = session_id
+        super().__init__(f"Session '{session_id}' not found")
+
+class AuthorizationSentinel:
+    ...
+
+SESSION_NOT_INITIALIZED = AuthorizationSentinel()
