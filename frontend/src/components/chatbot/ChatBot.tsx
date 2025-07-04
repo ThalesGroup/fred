@@ -421,7 +421,6 @@ const ChatBot = ({
     <Box width={"100%"} height="100%" display="flex" flexDirection="column" alignItems="center">
       <Box
         width="80%"
-        paddingX={5}
         maxWidth="768px"
         display="flex"
         height="100vh"
@@ -429,8 +428,8 @@ const ChatBot = ({
         alignItems="center"
         paddingBottom={1}
       >
-        {/* Conversation start */}
-        {messages?.length === 0 && (
+        {/* Conversation start: new conversation without message */}
+        {isCreatingNewConversation && messages.length === 0 && (
           <Box
             display="flex"
             flexDirection="column"
@@ -462,14 +461,15 @@ const ChatBot = ({
           </Box>
         )}
 
-        {/* Ongoing conversation */}
-        {messages?.length > 0 && (
+        {/* Ongoing conversation: has messages OR no messages yet (we are fetching them) but not creating new conversation */}
+        {(messages.length > 0 || !isCreatingNewConversation) && (
           <>
             {/* Chatbot messages area */}
             <Grid2
               display="flex"
               flexDirection="column"
               flex="1"
+              width="100%"
               p={2}
               sx={{
                 overflowY: "scroll",
