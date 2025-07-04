@@ -16,7 +16,6 @@ import { useContext, useEffect, useState } from "react";
 import ReactECharts from "echarts-for-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { ApplicationContext } from "../../app/ApplicationContextProvider.tsx";
-import { PageBodyWrapper } from "../../common/PageBodyWrapper.tsx";
 import { Theme, useTheme } from "@mui/material";
 import LoadingWithProgress from "../../components/LoadingWithProgress.tsx";
 import { ClusterDescription } from "../slices/api.tsx";
@@ -145,23 +144,16 @@ export const Explain = () => {
     ],
   });
   if (loading || !currentClusterOverview || currentClusterOverview?.fullname !== clusterFullName) {
-    return (
-      <PageBodyWrapper>
-        <LoadingWithProgress />
-      </PageBodyWrapper>
-    );
+    return <LoadingWithProgress />;
   }
   return (
-    <PageBodyWrapper>
-      <TopBar
-        title="Cluster Overview"
-        description="Navigate your selected cluster and its resources"
-      ></TopBar>
+    <>
+      <TopBar title="Cluster Overview" description="Navigate your selected cluster and its resources"></TopBar>
       <ReactECharts
         option={getOption()}
         onEvents={{ click: handleTreeClick }}
         style={{ height: "100%", width: "100%" }}
       />
-    </PageBodyWrapper>
+    </>
   );
 };

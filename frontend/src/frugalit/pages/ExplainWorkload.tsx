@@ -14,7 +14,6 @@
 
 import { useEffect, useContext } from "react";
 import { useSearchParams } from "react-router-dom";
-import { PageBodyWrapper } from "../../common/PageBodyWrapper.tsx";
 import { ExplainContext } from "../../app/ExplainContextProvider.tsx";
 import { ApplicationContext } from "../../app/ApplicationContextProvider.tsx";
 import LoadingWithProgress from "../../components/LoadingWithProgress.tsx";
@@ -53,11 +52,7 @@ export const ExplainWorkload = () => {
   }, [currentClusterDescription, currentClusterOverview, clusterFullName, namespace, workload]); // Re-run when params or cluster overview change
 
   if (!currentClusterOverview || currentClusterOverview?.fullname !== clusterFullName) {
-    return (
-      <PageBodyWrapper>
-        <LoadingWithProgress />
-      </PageBodyWrapper>
-    );
+    return <LoadingWithProgress />;
   }
   // Guard: If resource data is missing in the ExplainContext, show a loading spinner.
   if (
@@ -68,27 +63,21 @@ export const ExplainWorkload = () => {
     !explainContext?.advanced ||
     !explainContext?.factList
   ) {
-    return (
-      <PageBodyWrapper>
-        <LoadingWithProgress />
-      </PageBodyWrapper>
-    );
+    return <LoadingWithProgress />;
   }
   // Render the resource details when everything is loaded.
   return (
-    <PageBodyWrapper>
-      <WorkloadCard
-        cluster={currentClusterOverview}
-        namespace={explainContext.currentNamespace}
-        id={explainContext.id}
-        score={explainContext.score}
-        factList={explainContext.factList}
-        advanced={explainContext.advanced?.data}
-        essentials={explainContext.essentials}
-        summary={explainContext.summary}
-        resource={explainContext.resource}
-      />
-    </PageBodyWrapper>
+    <WorkloadCard
+      cluster={currentClusterOverview}
+      namespace={explainContext.currentNamespace}
+      id={explainContext.id}
+      score={explainContext.score}
+      factList={explainContext.factList}
+      advanced={explainContext.advanced?.data}
+      essentials={explainContext.essentials}
+      summary={explainContext.summary}
+      resource={explainContext.resource}
+    />
   );
 };
 

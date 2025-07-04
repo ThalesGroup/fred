@@ -12,18 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import {
-  Box,
-  Typography,
-  useTheme,
-  Container,
-  Paper,
-  Button,
-  Chip,
-  Fade,
-  Tabs,
-  Tab,
-} from "@mui/material";
+import { Box, Typography, useTheme, Container, Paper, Button, Chip, Fade, Tabs, Tab } from "@mui/material";
 import { useState, useEffect, SyntheticEvent, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import SearchIcon from "@mui/icons-material/Search";
@@ -147,9 +136,8 @@ export const AgentHub = () => {
   };
 
   return (
-    <PageBodyWrapper>
+    <>
       <TopBar title={t("agentHub.title")} description={t("agentHub.description")} />
-
       <Container maxWidth="xl" sx={{ mb: 3 }}>
         <Fade in={showElements} timeout={1200}>
           <Paper elevation={2} sx={{ p: 2, borderRadius: 4, border: `1px solid ${theme.palette.divider}` }}>
@@ -181,14 +169,26 @@ export const AgentHub = () => {
                         <Chip
                           size="small"
                           label={favoriteAgents.length}
-                          sx={{ ml: 1, height: 20, fontSize: "0.7rem", bgcolor: theme.palette.primary.main, color: "white" }}
+                          sx={{
+                            ml: 1,
+                            height: 20,
+                            fontSize: "0.7rem",
+                            bgcolor: theme.palette.primary.main,
+                            color: "white",
+                          }}
                         />
                       )}
                       {category.isTag && (
                         <Chip
                           size="small"
                           label={agenticFlows.filter((a) => a.tag === category.name).length}
-                          sx={{ ml: 1, height: 20, fontSize: "0.7rem", bgcolor: theme.palette.primary.main, color: "white" }}
+                          sx={{
+                            ml: 1,
+                            height: 20,
+                            fontSize: "0.7rem",
+                            bgcolor: theme.palette.primary.main,
+                            color: "white",
+                          }}
                         />
                       )}
                     </Box>
@@ -247,7 +247,13 @@ export const AgentHub = () => {
                     ))}
                   </Grid2>
                 ) : (
-                  <Box display="flex" flexDirection="column" alignItems="center" justifyContent="center" minHeight="300px">
+                  <Box
+                    display="flex"
+                    flexDirection="column"
+                    alignItems="center"
+                    justifyContent="center"
+                    minHeight="300px"
+                  >
                     <Typography variant="h6" color="textSecondary" align="center">
                       {t("agentHub.noAgents")}
                     </Typography>
@@ -268,6 +274,6 @@ export const AgentHub = () => {
           </Paper>
         </Fade>
       </Container>
-    </PageBodyWrapper>
+    </>
   );
 };
