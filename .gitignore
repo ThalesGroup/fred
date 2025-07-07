@@ -200,5 +200,4 @@ secrets/openai-api-key.sh
 /media/
 
 # Helm dependency files
-*.lock
 *.tgz
