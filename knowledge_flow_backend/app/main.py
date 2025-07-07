@@ -57,7 +57,7 @@ else:
 # FASTAPI APP + ROUTES
 # -----------------------
 
-def create_app(config_path: str = "./config/configuration.yaml", base_url: str = "/knowledge/v1") -> FastAPI:
+def create_app(config_path: str = "./config/configuration.yaml", base_url: str = "/knowledge-flow/v1") -> FastAPI:
     logger = logging.getLogger(__name__)
     logger.info(f"🛠️ create_app() called with base_url={base_url}")
     configuration: Configuration = parse_server_configuration(config_path)
