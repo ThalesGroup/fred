@@ -16,8 +16,8 @@
 
 import json
 import requests
-from knowledge_flow_app.config.ollama_settings import OllamaSettings
-from knowledge_flow_app.core.processors.input.common.base_image_describer import BaseImageDescriber
+from app.config.ollama_settings import OllamaSettings
+from app.core.processors.input.common.base_image_describer import BaseImageDescriber
 
 
 class OllamaImageDescriber(BaseImageDescriber):

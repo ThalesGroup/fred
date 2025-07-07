@@ -16,7 +16,7 @@ import tempfile
 from pathlib import Path
 import pytest
 
-from knowledge_flow_app.core.processors.input.pps_tabular_processor.pps_tabular_processor import PpsTabularProcessor
+from app.core.processors.input.pps_tabular_processor.pps_tabular_processor import PpsTabularProcessor
 
 
 @pytest.fixture

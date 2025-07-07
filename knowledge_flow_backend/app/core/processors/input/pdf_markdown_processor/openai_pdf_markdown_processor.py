@@ -16,8 +16,8 @@
 
 
 
-from knowledge_flow_app.core.processors.input.common.image_describers.openai_image_describer import OpenaiImageDescriber
-from knowledge_flow_app.core.processors.input.pdf_markdown_processor.pdf_markdown_processor import PdfMarkdownProcessor
+from app.core.processors.input.common.image_describers.openai_image_describer import OpenaiImageDescriber
+from app.core.processors.input.pdf_markdown_processor.pdf_markdown_processor import PdfMarkdownProcessor
 
 
 class OpenaiPdfMarkdownProcessor(PdfMarkdownProcessor):

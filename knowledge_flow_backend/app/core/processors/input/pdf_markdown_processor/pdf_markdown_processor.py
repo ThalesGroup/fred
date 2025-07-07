@@ -22,8 +22,8 @@ from docling.datamodel.pipeline_options import PdfPipelineOptions
 from docling.datamodel.base_models import InputFormat
 from docling_core.types.doc import ImageRefMode
 
-from knowledge_flow_app.core.processors.input.common.base_image_describer import BaseImageDescriber
-from knowledge_flow_app.core.processors.input.common.base_input_processor import BaseMarkdownProcessor
+from app.core.processors.input.common.base_image_describer import BaseImageDescriber
+from app.core.processors.input.common.base_input_processor import BaseMarkdownProcessor
 
 
 logger = logging.getLogger(__name__)

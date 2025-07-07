@@ -13,8 +13,8 @@
 # limitations under the License.
 
 import pathlib
-from knowledge_flow_app.application_context import ApplicationContext
-from knowledge_flow_app.common.structures import OutputProcessorResponse
+from app.application_context import ApplicationContext
+from app.common.structures import OutputProcessorResponse
 
 
 class OutputProcessorService:

@@ -18,9 +18,9 @@ from typing import List, Tuple
 from langchain.schema.document import Document
 from langchain_community.vectorstores import OpenSearchVectorSearch
 
-from knowledge_flow_app.common.utils import get_embedding_model_name
-from knowledge_flow_app.config.opensearch_settings import OpenSearchSettings
-from knowledge_flow_app.core.processors.output.vectorization_processor.interfaces import BaseEmbeddingModel, BaseVectoreStore
+from app.common.utils import get_embedding_model_name
+from app.config.opensearch_settings import OpenSearchSettings
+from app.core.processors.output.vectorization_processor.interfaces import BaseEmbeddingModel, BaseVectoreStore
 
 logger = logging.getLogger(__name__)
 

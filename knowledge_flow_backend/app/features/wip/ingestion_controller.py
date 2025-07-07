@@ -19,13 +19,13 @@ from fastapi import APIRouter, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from knowledge_flow_app.application_context import ApplicationContext
-from knowledge_flow_app.common.structures import Status
-from knowledge_flow_app.core.stores.content.content_storage_factory import get_content_store
-from knowledge_flow_app.core.stores.metadata.metadata_storage_factory import get_metadata_store
-from knowledge_flow_app.features.wip.output_processor_service import OutputProcessorService
-from knowledge_flow_app.features.wip.ingestion_service import IngestionService
-from knowledge_flow_app.features.wip.input_processor_service import InputProcessorService
+from app.application_context import ApplicationContext
+from app.common.structures import Status
+from app.core.stores.content.content_storage_factory import get_content_store
+from app.core.stores.metadata.metadata_storage_factory import get_metadata_store
+from app.features.wip.output_processor_service import OutputProcessorService
+from app.features.wip.ingestion_service import IngestionService
+from app.features.wip.input_processor_service import InputProcessorService
 
 logger = logging.getLogger(__name__)
 

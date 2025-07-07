@@ -17,8 +17,8 @@
 import base64
 import logging
 import requests
-from knowledge_flow_app.core.processors.input.common.base_image_describer import BaseImageDescriber
-from knowledge_flow_app.config.embedding_openai_settings import EmbeddingOpenAISettings
+from app.core.processors.input.common.base_image_describer import BaseImageDescriber
+from app.config.embedding_openai_settings import EmbeddingOpenAISettings
 
 logger = logging.getLogger(__name__)
 

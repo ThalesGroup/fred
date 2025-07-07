@@ -16,7 +16,7 @@ import json
 from pathlib import Path
 from typing import List, Dict, Any
 
-from knowledge_flow_app.core.stores.base_metadata_store import BaseMetadataStore
+from app.core.stores.base_metadata_store import BaseMetadataStore
 
 
 

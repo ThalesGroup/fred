@@ -16,8 +16,8 @@ from datetime import datetime, timezone
 from typing import List
 from fastapi import APIRouter
 from langchain.schema.document import Document
-from knowledge_flow_app.features.vector_search.structures import DocumentSource, SearchRequest
-from knowledge_flow_app.features.vector_search.service import VectorSearchService
+from app.features.vector_search.structures import DocumentSource, SearchRequest
+from app.features.vector_search.service import VectorSearchService
 
 class VectorSearchController:
     """knowledge_flow_app/features/tabular/__init__.py

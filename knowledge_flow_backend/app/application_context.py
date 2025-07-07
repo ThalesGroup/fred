@@ -15,25 +15,25 @@
 import importlib
 import logging
 from typing import Dict, Type, Union, Optional
-from knowledge_flow_app.common.structures import Configuration
-from knowledge_flow_app.common.utils import validate_settings_or_exit
-from knowledge_flow_app.config.embedding_azure_apim_settings import EmbeddingAzureApimSettings
-from knowledge_flow_app.config.embedding_azure_openai_settings import EmbeddingAzureOpenAISettings
-from knowledge_flow_app.config.ollama_settings import OllamaSettings
-from knowledge_flow_app.config.embedding_openai_settings import EmbeddingOpenAISettings
-from knowledge_flow_app.config.opensearch_settings import OpenSearchSettings
+from app.common.structures import Configuration
+from app.common.utils import validate_settings_or_exit
+from app.config.embedding_azure_apim_settings import EmbeddingAzureApimSettings
+from app.config.embedding_azure_openai_settings import EmbeddingAzureOpenAISettings
+from app.config.ollama_settings import OllamaSettings
+from app.config.embedding_openai_settings import EmbeddingOpenAISettings
+from app.config.opensearch_settings import OpenSearchSettings
 from langchain_openai import OpenAIEmbeddings, AzureOpenAIEmbeddings
 from langchain_ollama import OllamaEmbeddings
 
-from knowledge_flow_app.core.processors.input.common.base_input_processor import BaseInputProcessor, BaseMarkdownProcessor, BaseTabularProcessor
-from knowledge_flow_app.core.processors.output.base_output_processor import BaseOutputProcessor
-from knowledge_flow_app.core.processors.output.vectorization_processor.azure_apim_embedder import AzureApimEmbedder
-from knowledge_flow_app.core.processors.output.vectorization_processor.embedder import Embedder
-from knowledge_flow_app.core.processors.output.vectorization_processor.in_memory_langchain_vector_store import InMemoryLangchainVectorStore
-from knowledge_flow_app.core.processors.output.vectorization_processor.interfaces import BaseDocumentLoader, BaseEmbeddingModel, BaseTextSplitter, BaseVectoreStore
-from knowledge_flow_app.core.processors.output.vectorization_processor.local_file_loader import LocalFileLoader
-from knowledge_flow_app.core.processors.output.vectorization_processor.opensearch_vector_store import OpenSearchVectorStoreAdapter
-from knowledge_flow_app.core.processors.output.vectorization_processor.recursive_splitter import RecursiveSplitter
+from app.core.processors.input.common.base_input_processor import BaseInputProcessor, BaseMarkdownProcessor, BaseTabularProcessor
+from app.core.processors.output.base_output_processor import BaseOutputProcessor
+from app.core.processors.output.vectorization_processor.azure_apim_embedder import AzureApimEmbedder
+from app.core.processors.output.vectorization_processor.embedder import Embedder
+from app.core.processors.output.vectorization_processor.in_memory_langchain_vector_store import InMemoryLangchainVectorStore
+from app.core.processors.output.vectorization_processor.interfaces import BaseDocumentLoader, BaseEmbeddingModel, BaseTextSplitter, BaseVectoreStore
+from app.core.processors.output.vectorization_processor.local_file_loader import LocalFileLoader
+from app.core.processors.output.vectorization_processor.opensearch_vector_store import OpenSearchVectorStoreAdapter
+from app.core.processors.output.vectorization_processor.recursive_splitter import RecursiveSplitter
 
 # Union of supported processor base classes
 BaseProcessorType = Union[BaseMarkdownProcessor, BaseTabularProcessor]

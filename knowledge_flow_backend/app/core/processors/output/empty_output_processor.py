@@ -16,7 +16,7 @@
 
 import logging
 
-from knowledge_flow_app.core.processors.output.base_output_processor import BaseOutputProcessor
+from app.core.processors.output.base_output_processor import BaseOutputProcessor
 
 logger = logging.getLogger(__name__)
 

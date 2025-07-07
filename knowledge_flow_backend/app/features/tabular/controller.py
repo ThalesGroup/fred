@@ -16,8 +16,8 @@ import logging
 from typing import List
 from fastapi import APIRouter, HTTPException
 
-from knowledge_flow_app.features.tabular.service import TabularService
-from knowledge_flow_app.features.tabular.structures import TabularDatasetMetadata, TabularQueryRequest, TabularQueryResponse, TabularSchemaResponse
+from app.features.tabular.service import TabularService
+from app.features.tabular.structures import TabularDatasetMetadata, TabularQueryRequest, TabularQueryResponse, TabularSchemaResponse
 
 logger = logging.getLogger(__name__)
 

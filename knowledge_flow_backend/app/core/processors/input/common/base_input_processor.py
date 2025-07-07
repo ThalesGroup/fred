@@ -18,7 +18,7 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 import pandas
 
-from knowledge_flow_app.common.utils import utc_now_iso
+from app.common.utils import utc_now_iso
 
 logger = logging.getLogger(__name__)
 

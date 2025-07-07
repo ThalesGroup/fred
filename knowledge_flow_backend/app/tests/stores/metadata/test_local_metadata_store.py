@@ -27,7 +27,7 @@ All tests use a temporary JSON file in a clean temp directory.
 
 import pytest
 
-from knowledge_flow_app.core.stores.metadata.local_metadata_store import LocalMetadataStore
+from app.core.stores.metadata.local_metadata_store import LocalMetadataStore
 
 
 # ----------------------------

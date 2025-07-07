@@ -16,7 +16,7 @@ import json
 from typing import Optional
 from fastapi import APIRouter, HTTPException, Query, UploadFile, File, Form
 from pydantic import BaseModel
-from knowledge_flow_app.common.business_exception import (
+from app.common.business_exception import (
     BusinessException,
     DocumentDeletionError,
     DocumentNotFound,
@@ -26,8 +26,8 @@ from knowledge_flow_app.common.business_exception import (
     KnowledgeContextNotFound,
     TokenLimitExceeded,
 )
-from knowledge_flow_app.common.utils import log_exception
-from knowledge_flow_app.features.wip.knowledge_context_service import KnowledgeContextService
+from app.common.utils import log_exception
+from app.features.wip.knowledge_context_service import KnowledgeContextService
 import tempfile
 from pathlib import Path
 

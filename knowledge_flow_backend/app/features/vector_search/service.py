@@ -15,7 +15,7 @@
 # knowledge_flow_app/services/vector_search_service.py
 from typing import List
 from langchain.schema.document import Document
-from knowledge_flow_app.application_context import ApplicationContext
+from app.application_context import ApplicationContext
 
 
 class VectorSearchService:

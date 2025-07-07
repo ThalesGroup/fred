@@ -83,7 +83,7 @@ class ContentController:
         """
         Initialize the controller with a FastAPI router and content service.
         """
-        from knowledge_flow_app.features.content.service import ContentService
+        from app.features.content.service import ContentService
 
         self.service = ContentService()
         self._register_routes(router)

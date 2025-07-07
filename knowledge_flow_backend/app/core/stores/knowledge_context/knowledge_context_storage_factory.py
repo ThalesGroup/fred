@@ -12,8 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from knowledge_flow_app.application_context import ApplicationContext
-from knowledge_flow_app.core.stores.base_knowledge_context_store import BaseKnowledgeContextStore
+from app.application_context import ApplicationContext
+from app.core.stores.base_knowledge_context_store import BaseKnowledgeContextStore
 from .local_knowledge_context_store import LocalKnowledgeContextStore
 from pathlib import Path
 

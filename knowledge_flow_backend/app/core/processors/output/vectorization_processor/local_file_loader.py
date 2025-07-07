@@ -15,7 +15,7 @@
 from pathlib import Path
 from langchain.schema.document import Document
 
-from knowledge_flow_app.core.processors.output.vectorization_processor.interfaces import BaseDocumentLoader
+from app.core.processors.output.vectorization_processor.interfaces import BaseDocumentLoader
 
 
 

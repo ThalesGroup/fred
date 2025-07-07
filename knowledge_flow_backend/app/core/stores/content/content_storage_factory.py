@@ -12,15 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from knowledge_flow_app.application_context import ApplicationContext
-from knowledge_flow_app.common.utils import validate_settings_or_exit
-from knowledge_flow_app.config.content_store_local_settings import ContentStoreLocalSettings
-from knowledge_flow_app.config.content_store_minio_settings import ContentStoreMinioSettings
+from app.application_context import ApplicationContext
+from app.common.utils import validate_settings_or_exit
+from app.config.content_store_local_settings import ContentStoreLocalSettings
+from app.config.content_store_minio_settings import ContentStoreMinioSettings
 from pathlib import Path
 
-from knowledge_flow_app.core.stores.base_content_store import BaseContentStore
-from knowledge_flow_app.core.stores.content.local_content_store import LocalStorageBackend
-from knowledge_flow_app.core.stores.content.minio_content_store import MinioContentStore
+from app.core.stores.base_content_store import BaseContentStore
+from app.core.stores.content.local_content_store import LocalStorageBackend
+from app.core.stores.content.minio_content_store import MinioContentStore
 
 
 def get_content_store() -> BaseContentStore:

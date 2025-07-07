@@ -16,7 +16,7 @@ from typing import List
 from langchain.schema.document import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 
-from knowledge_flow_app.core.processors.output.vectorization_processor.interfaces import BaseTextSplitter
+from app.core.processors.output.vectorization_processor.interfaces import BaseTextSplitter
 
 
 

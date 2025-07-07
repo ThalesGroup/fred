@@ -16,8 +16,8 @@ import logging
 import mimetypes
 from typing import BinaryIO, Dict, Tuple
 
-from knowledge_flow_app.core.stores.content.content_storage_factory import get_content_store
-from knowledge_flow_app.core.stores.metadata.metadata_storage_factory import get_metadata_store
+from app.core.stores.content.content_storage_factory import get_content_store
+from app.core.stores.metadata.metadata_storage_factory import get_metadata_store
 
 
 logger = logging.getLogger(__name__)
@@ -31,7 +31,7 @@ class ContentService:
 
     def __init__(self):
         """Initialize content service with necessary stores."""
-        from knowledge_flow_app.application_context import ApplicationContext
+        from app.application_context import ApplicationContext
 
         self.metadata_store = get_metadata_store()
         self.content_store = get_content_store()

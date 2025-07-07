@@ -17,7 +17,7 @@ import tempfile
 import pandas as pd
 from pathlib import Path
 
-from knowledge_flow_app.core.processors.input.csv_tabular_processor.csv_tabular_processor import CsvTabularProcessor
+from app.core.processors.input.csv_tabular_processor.csv_tabular_processor import CsvTabularProcessor
 
 
 def test_valid_csv():

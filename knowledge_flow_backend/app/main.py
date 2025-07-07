@@ -19,15 +19,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi_mcp import FastApiMCP
 from rich.logging import RichHandler
 
-from knowledge_flow_app.application_context import ApplicationContext
-from knowledge_flow_app.common.structures import Configuration
-from knowledge_flow_app.common.utils import parse_server_configuration
-from knowledge_flow_app.features.content.controller import ContentController
-from knowledge_flow_app.features.metadata.controller import MetadataController
-from knowledge_flow_app.features.vector_search.controller import VectorSearchController
-from knowledge_flow_app.features.tabular.controller import TabularController
-from knowledge_flow_app.features.wip.ingestion_controller import IngestionController
-from knowledge_flow_app.features.wip.knowledge_context_controller import KnowledgeContextController
+from app.application_context import ApplicationContext
+from app.common.structures import Configuration
+from app.common.utils import parse_server_configuration
+from app.features.content.controller import ContentController
+from app.features.metadata.controller import MetadataController
+from app.features.vector_search.controller import VectorSearchController
+from app.features.tabular.controller import TabularController
+from app.features.wip.ingestion_controller import IngestionController
+from app.features.wip.knowledge_context_controller import KnowledgeContextController
 
 
 # -----------------------

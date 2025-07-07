@@ -21,11 +21,11 @@ import json
 from fastapi import UploadFile
 import logging
 
-from knowledge_flow_app.common.business_exception import KnowledgeContextError, DocumentDeletionError, DocumentNotFound, DocumentProcessingError, KnowledgeContextNotFound, TokenLimitExceeded
-from knowledge_flow_app.common.structures import KnowledgeContext, KnowledgeContextDocument
-from knowledge_flow_app.common.utils import count_tokens, log_exception, utc_now_iso
-from knowledge_flow_app.core.stores.knowledge_context.knowledge_context_storage_factory import get_knowledge_context_store
-from knowledge_flow_app.features.wip.input_processor_service import InputProcessorService
+from app.common.business_exception import KnowledgeContextError, DocumentDeletionError, DocumentNotFound, DocumentProcessingError, KnowledgeContextNotFound, TokenLimitExceeded
+from app.common.structures import KnowledgeContext, KnowledgeContextDocument
+from app.common.utils import count_tokens, log_exception, utc_now_iso
+from app.core.stores.knowledge_context.knowledge_context_storage_factory import get_knowledge_context_store
+from app.features.wip.input_processor_service import InputProcessorService
 
 logger = logging.getLogger(__name__)
 

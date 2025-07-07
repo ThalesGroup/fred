@@ -12,15 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from knowledge_flow_app.application_context import ApplicationContext
-from knowledge_flow_app.config.metadata_store_local_settings import MetadataStoreLocalSettings
-from knowledge_flow_app.config.opensearch_settings import OpenSearchSettings
-from knowledge_flow_app.common.utils import validate_settings_or_exit
+from app.application_context import ApplicationContext
+from app.config.metadata_store_local_settings import MetadataStoreLocalSettings
+from app.config.opensearch_settings import OpenSearchSettings
+from app.common.utils import validate_settings_or_exit
 from pathlib import Path
 
-from knowledge_flow_app.core.stores.base_metadata_store import BaseMetadataStore
-from knowledge_flow_app.core.stores.metadata.local_metadata_store import LocalMetadataStore
-from knowledge_flow_app.core.stores.metadata.opensearch_metadata_store import OpenSearchMetadataStore
+from app.core.stores.base_metadata_store import BaseMetadataStore
+from app.core.stores.metadata.local_metadata_store import LocalMetadataStore
+from app.core.stores.metadata.opensearch_metadata_store import OpenSearchMetadataStore
 
 
 

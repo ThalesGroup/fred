@@ -20,8 +20,8 @@ from langchain_core.vectorstores import InMemoryVectorStore
 from langchain.embeddings.base import Embeddings
 from langchain.schema.document import Document
 
-from knowledge_flow_app.common.utils import get_embedding_model_name
-from knowledge_flow_app.core.processors.output.vectorization_processor.interfaces import BaseVectoreStore
+from app.common.utils import get_embedding_model_name
+from app.core.processors.output.vectorization_processor.interfaces import BaseVectoreStore
 
 logger = logging.getLogger(__name__)
 

@@ -25,9 +25,9 @@ Covers:
 
 import pytest
 
-from knowledge_flow_app.core.stores.metadata.local_metadata_store import LocalMetadataStore
-from knowledge_flow_app.core.stores.metadata.metadata_storage_factory import get_metadata_store
-from knowledge_flow_app.core.stores.metadata.opensearch_metadata_store import OpenSearchMetadataStore
+from app.core.stores.metadata.local_metadata_store import LocalMetadataStore
+from app.core.stores.metadata.metadata_storage_factory import get_metadata_store
+from app.core.stores.metadata.opensearch_metadata_store import OpenSearchMetadataStore
 import knowledge_flow_app.core.stores.metadata.opensearch_metadata_store as oms
 
 class DummyConfig:
