@@ -3,6 +3,8 @@ import { Box, Modal } from "@mui/material";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
 import mermaid from "mermaid";
+import katex from "katex";
+import "katex/dist/katex.min.css";
 import CropFreeIcon from "@mui/icons-material/CropFree";
 import ReactDOMServer from "react-dom/server";
 interface Props {
@@ -13,9 +15,9 @@ interface Props {
 }
 
 const fontSizeMap = {
-    small: "0.85rem",
-    medium: "1rem",
-    large: "1.15rem",
+    small: "14px",
+    medium: "16px",
+    large: "18px",
 } as const;
 
 function replaceStageDirectionsWithEmoji(text: string): string {
@@ -83,6 +85,53 @@ export default function CustomMarkdownRenderer({
             return `<pre><code>${DOMPurify.sanitize(text)}</code></pre>`;
         };
 
+        // --- KaTeX extension ---
+        const katexExtension = {
+            name: "katex",
+            level: "inline" as const,
+            start(src: string) {
+                const match = src.match(/\$+/);
+                return match ? match.index : undefined;
+            },
+            tokenizer(src: string) {
+                const inlineMath = /^\$([^\$\n]+?)\$/; // $...$
+                const blockMath = /^\$\$([\s\S]+?)\$\$/; // $$...$$
+
+                let match = blockMath.exec(src);
+                if (match) {
+                    return {
+                        type: "katex",
+                        raw: match[0],
+                        text: match[1].trim(),
+                        displayMode: true,
+                    };
+                }
+
+                match = inlineMath.exec(src);
+                if (match) {
+                    return {
+                        type: "katex",
+                        raw: match[0],
+                        text: match[1].trim(),
+                        displayMode: false,
+                    };
+                }
+
+                return undefined;
+            },
+            renderer(token: any) {
+                try {
+                    return katex.renderToString(token.text, {
+                        throwOnError: false,
+                        displayMode: token.displayMode,
+                    });
+                } catch (e) {
+                    console.error("KaTeX render error:", e);
+                    return token.raw;
+                }
+            },
+        };
+
         // :::details
         const detailsExtension = {
             name: "details",
@@ -108,7 +157,7 @@ export default function CustomMarkdownRenderer({
 
         marked.use({
             renderer,
-            extensions: [detailsExtension],
+            extensions: [detailsExtension, katexExtension],
             walkTokens(t: any) {
                 if (t.type === "details" && t.tokens) t.text = marked.parser(t.tokens);
             },
@@ -163,20 +212,43 @@ export default function CustomMarkdownRenderer({
             <Box
                 ref={containerRef}
                 sx={{
+                    fontFamily: `"Inter", sans-serif`,
+                    fontWeight: 300,
                     fontSize: fontSizeMap[size],
                     lineHeight: 1.6,
                     overflowX: "auto",
                     wordBreak: "break-word",
+
+                    /* Paragraphs & Lists */
+                    "& p": { mb: 1.5 },
+                    "& li": { mb: 0.5 },
+
+                    /* Code blocks & inline code */
+                    "& pre": {
+                        fontFamily: "ui-monospace, SFMono-Regular, Consolas, monospace",
+                        fontSize: "0.8rem",
+                        bgcolor: "#f5f5f5",
+                        p: 2,
+                        borderRadius: 2,
+                        overflowX: "auto",
+                    },
+                    "& code": {
+                        fontFamily: "ui-monospace, SFMono-Regular, Consolas, monospace",
+                        fontSize: "0.8rem",
+                        bgcolor: "#f5f5f5",
+                        px: "0.2rem",
+                        py: "0.1rem",
+                        borderRadius: "4px",
+                    },
+
                     /* tables */
                     "& table": { width: "100%", borderCollapse: "collapse", my: 2 },
                     "& th, & td": { border: "1px solid #ddd", p: "0.5rem", textAlign: "left" },
                     "& th": { bgcolor: "#f3f3f3", fontWeight: 600 },
                     /* headings */
-                    "& h1": { fontSize: "1.6rem", mt: 2 },
-                    "& h2": { fontSize: "1.4rem", mt: 2 },
-                    "& h3": { fontSize: "1.15rem", mt: 1.5 },
-                    /* code blocks */
-                    "& pre": { bgcolor: "#f5f5f5", p: 2, borderRadius: 2, overflowX: "auto" },
+                    "& h1": { fontSize: "1.5rem", fontWeight: 600, mt: 2 },
+                    "& h2": { fontSize: "1.3rem", fontWeight: 600, mt: 2 },
+                    "& h3": { fontSize: "1.1rem", fontWeight: 600, mt: 1.5 },
                     /* details */
                     "& details": { bgcolor: "#fafafa", border: "1px solid #ccc", borderRadius: 1, p: 1, my: 2 },
 

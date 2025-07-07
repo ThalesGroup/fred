@@ -4,6 +4,7 @@
   "dependencies": {
     "@emotion/react": "^11.11.3",
     "@emotion/styled": "^11.11.0",
+    "@fontsource/inter": "^5.2.6",
     "@fontsource/roboto": "^5.1.0",
     "@monaco-editor/react": "^4.6.0",
     "@mui/icons-material": "^6.0.2",
@@ -19,6 +20,7 @@
     "http-proxy-middleware": "^3.0.2",
     "i18next": "^25.2.1",
     "i18next-browser-languagedetector": "^8.2.0",
+    "katex": "^0.16.22",
     "keycloak-js": "^25.0.1",
     "leaflet": "^1.9.4",
     "lodash": "^4.17.21",

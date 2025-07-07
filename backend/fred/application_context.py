@@ -208,6 +208,7 @@ def get_mcp_agent_tools(mcp_client: MultiServerMCPClient) -> list[BaseTool]:
     """
     return get_app_context().get_mcp_agent_tools(mcp_client)
 
+
 # -------------------------------
 # Runtime status class
 # -------------------------------
