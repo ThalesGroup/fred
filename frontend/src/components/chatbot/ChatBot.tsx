@@ -101,7 +101,7 @@ const ChatBot = ({
     console.debug("[📩 ChatBot] initiate new connection:");
 
     return new Promise((resolve, reject) => {
-      const wsUrl = `${getConfig().backend_url_api || "ws://localhost"}/fred/chatbot/query/ws`;
+      const wsUrl = `${getConfig().backend_url_api || "ws://localhost"}/agentic/v1/chatbot/query/ws`;
       const socket = new WebSocket(wsUrl);
 
       socket.onopen = () => {
@@ -260,7 +260,7 @@ const ChatBot = ({
         formData.append("file", file);
 
         try {
-          const response = await fetch(`${getConfig().backend_url_api}/fred/chatbot/upload`, {
+          const response = await fetch(`${getConfig().backend_url_api}/agentic/v1/chatbot/upload`, {
             method: "POST",
             body: formData,
           });
