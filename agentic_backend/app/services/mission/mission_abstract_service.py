@@ -14,7 +14,7 @@
 
 from abc import ABC, abstractmethod
 
-from fred.services.mission.mission_structures import MissionSeries
+from app.services.mission.mission_structures import MissionSeries
 
 class AbstractMissionService(ABC):
     """

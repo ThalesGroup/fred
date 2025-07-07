@@ -17,11 +17,11 @@ import pytest
 from fastapi.testclient import TestClient
 from fastapi import APIRouter, FastAPI
 
-from fred.application_context import ApplicationContext
-from fred.chatbot.chatbot_controller import ChatbotController
-from fred.common.utils import parse_server_configuration
-from fred.services.ai.ai_service import AIService
-from fred.services.kube.kube_service import KubeService
+from app.application_context import ApplicationContext
+from app.chatbot.chatbot_controller import ChatbotController
+from app.common.utils import parse_server_configuration
+from app.services.ai.ai_service import AIService
+from app.services.kube.kube_service import KubeService
 
 # TODO REVIEW THESE TESTS AND MAKE SURE THEY WORK WITHOUT REQUIRING LLM REMOTE ACCESS. 
 @pytest.fixture(scope="module")

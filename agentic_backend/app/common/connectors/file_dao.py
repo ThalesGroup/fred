@@ -22,8 +22,8 @@ from typing import Type, List, AnyStr, Any, TypeVar, Dict
 
 from pydantic import BaseModel, ValidationError
 
-from fred.common.error import InvalidCacheError
-from fred.common.structure import WorkloadKind, DAOConfiguration
+from app.common.error import InvalidCacheError
+from app.common.structure import WorkloadKind, DAOConfiguration
 
 # 🔹 Create a module-level logger
 logger = logging.getLogger(__name__)

@@ -2,9 +2,9 @@
 
 import time
 import pytest
-from fred.monitoring.metric_util import translate_response_metadata_to_metric
-from fred.monitoring.metric_store import Metric
-from fred.monitoring.metric_types import TokenUsage, TokenDetails
+from app.monitoring.metric_util import translate_response_metadata_to_metric
+from app.monitoring.metric_store import Metric
+from app.monitoring.metric_types import TokenUsage, TokenDetails
 
 
 def test_translate_response_metadata_to_metric_valid_dict():

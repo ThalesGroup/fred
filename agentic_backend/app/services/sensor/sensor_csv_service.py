@@ -35,10 +35,10 @@ import pathlib
 import sys
 import pandas as pd
 
-from fred.application_context import get_configuration
-from fred.services.sensor.sensor_structures import SensorSeries, FreqBand
-from fred.services.sensor.sensor_structures import SensorConfigurationSeries, SensorConfiguration
-from fred.common.utils import format_to_en
+from app.application_context import get_configuration
+from app.services.sensor.sensor_structures import SensorSeries, FreqBand
+from app.services.sensor.sensor_structures import SensorConfigurationSeries, SensorConfiguration
+from app.common.utils import format_to_en
 
 logger = logging.getLogger(__name__)
 

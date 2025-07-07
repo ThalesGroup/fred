@@ -84,7 +84,7 @@ ai:
     #   temperature: 0.0
   leader:
     name: "Fred"
-    class_path: "fred.leader.leader.Leader"
+    class_path: "app.leader.leader.Leader"
     enabled: true
     max_steps: 5
     model: {}
@@ -96,7 +96,7 @@ ai:
     recursion_limit: 40 # Number or max recursion use by the agents while using the model
   agents:
     - name: "JiraExpert"
-      class_path: "fred.agents.jira.jira_expert.JiraExpert"
+      class_path: "app.agents.jira.jira_expert.JiraExpert"
       enabled: false
       mcp_servers:
         - name: jira-mcp-server
@@ -112,7 +112,7 @@ ai:
           sse_read_timeout: 600 # 10 minutes. It is 5 minutes by default but it is too short.
       model: {}
     - name: K8SOperatorExpert
-      class_path: "fred.agents.kubernetes_monitoring.k8s_operator_expert.K8SOperatorExpert"
+      class_path: "app.agents.kubernetes_monitoring.k8s_operator_expert.K8SOperatorExpert"
       enabled: true
       mcp_servers:
         - name: k8s-mcp-server
@@ -134,11 +134,11 @@ ai:
         #     PROMETHEUS_URL: "http://localhost:9091"
       model: {}
     - name: "GeneralistExpert"
-      class_path: "fred.agents.generalist.generalist_expert.GeneralistExpert"
+      class_path: "app.agents.generalist.generalist_expert.GeneralistExpert"
       enabled: true
       model: {}
     - name: "TabularExpert"
-      class_path: "fred.agents.tabular.expert.Expert"
+      class_path: "app.agents.tabular.expert.Expert"
       enabled: true
       mcp_servers:
         - name: knowledge-flow-mcp-server
@@ -147,7 +147,7 @@ ai:
           sse_read_timeout: 2000
       model: {}
     - name: "DocumentsExpert"
-      class_path: "fred.agents.documents.documents_expert.DocumentsExpert"
+      class_path: "app.agents.documents.documents_expert.DocumentsExpert"
       enabled: true
       mcp_servers:
         - name: knowledge-flow-mcp-server
@@ -168,7 +168,7 @@ ai:
       model: {}
     # The Monitoring expert requires you activate the 'enableK8Features' flags above
     - name: "MonitoringExpert"
-      class_path: "fred.agents.monitoring.monitoring_expert.MonitoringExpert"
+      class_path: "app.agents.monitoring.monitoring_expert.MonitoringExpert"
       enabled: true
       categories:
         - "monitoring"

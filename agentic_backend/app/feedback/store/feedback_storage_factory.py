@@ -15,12 +15,12 @@
 import os
 import logging
 from pathlib import Path
-from fred.main_utils import validate_settings_or_exit
-from fred.config.feedback_store_local_settings import FeedbackStoreLocalSettings
-from fred.config.feedback_store_opensearch_settings import FeedbackStoreOpenSearchSettings
-from fred.feedback.feedback_service import FeedbackService
-from fred.feedback.store.local_feedback_store import LocalFeedbackStore
-from fred.feedback.store.opensearch_feedback_store import OpenSearchFeedbackStore
+from app.main_utils import validate_settings_or_exit
+from app.config.feedback_store_local_settings import FeedbackStoreLocalSettings
+from app.config.feedback_store_opensearch_settings import FeedbackStoreOpenSearchSettings
+from app.feedback.feedback_service import FeedbackService
+from app.feedback.store.local_feedback_store import LocalFeedbackStore
+from app.feedback.store.opensearch_feedback_store import OpenSearchFeedbackStore
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +29,7 @@ def _create_feedback_service():
     Factory function to create a feedback service based on the configured storage backend.
     Supports 'local' and 'opensearch'.
     """
-    from fred.application_context import get_configuration
+    from app.application_context import get_configuration
     config = get_configuration().feedback_storage
 
     if config.type == "local":

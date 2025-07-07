@@ -19,9 +19,9 @@ Module that defines the structure of a cluster topology.
 from pydantic import BaseModel, Field
 import textwrap
 
-from fred.services.ai.structure.facts import Facts
-from fred.services.ai.structure.cluster_context import ClusterContext
-from fred.services.ai.structure.cluster_summary import ClusterSummary
+from app.services.ai.structure.facts import Facts
+from app.services.ai.structure.cluster_context import ClusterContext
+from app.services.ai.structure.cluster_summary import ClusterSummary
 
 
 class ClusterTopology(BaseModel):

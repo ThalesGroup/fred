@@ -15,13 +15,13 @@
 from datetime import datetime
 from typing import Optional
 
-from fred.flow import AgentFlow
+from app.flow import AgentFlow
 from langgraph.constants import START
 from langgraph.graph import MessagesState, StateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
 
-from fred.agents.theater_analysis.theater_analysis_toolkit import TheaterAnalysisToolkit
-from fred.application_context import get_agent_settings, get_model_for_agent
+from app.agents.theater_analysis.theater_analysis_toolkit import TheaterAnalysisToolkit
+from app.application_context import get_agent_settings, get_model_for_agent
 
 class TheaterAnalysisExpert(AgentFlow):
     """

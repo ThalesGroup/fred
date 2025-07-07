@@ -14,8 +14,8 @@
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
-from fred.common.connectors.database import get_db
-from fred.security.keycloak import KeycloakUser, get_current_user
+from app.common.connectors.database import get_db
+from app.security.keycloak import KeycloakUser, get_current_user
 from sqlalchemy.orm import Session
 from datetime import datetime
 from sqlalchemy.ext.declarative import declarative_base

@@ -30,15 +30,15 @@ import importlib
 from threading import Lock
 from typing import Dict, List, Type
 from pydantic import BaseModel
-from fred.model_factory import get_structured_chain
-from fred.common.structure import AgentSettings, Configuration, ServicesSettings
-from fred.model_factory import get_model
+from app.model_factory import get_structured_chain
+from app.common.structure import AgentSettings, Configuration, ServicesSettings
+from app.model_factory import get_model
 from langchain_core.language_models.base import BaseLanguageModel
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain_core.tools import BaseTool
-from fred.flow import AgentFlow, Flow  # Base class for all agent flows
-from fred.common.utils import log_exception
-from fred.common.error import UnsupportedTransportError, MCPToolFetchError
+from app.flow import AgentFlow, Flow  # Base class for all agent flows
+from app.common.utils import log_exception
+from app.common.error import UnsupportedTransportError, MCPToolFetchError
 
 import logging
 

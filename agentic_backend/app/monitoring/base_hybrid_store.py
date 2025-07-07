@@ -38,10 +38,10 @@ from typing import Type, TypeVar, Generic, List, Optional, Dict, DefaultDict, An
 from statistics import mean
 from collections import defaultdict
 
-from fred.common.structure import MetricsStorageConfig
-from fred.monitoring.metric_util import flatten_numeric_fields
-from fred.monitoring.metric_store import MetricStore, Aggregation, Precision
-from fred.monitoring.metric_types import NumericalMetric
+from app.common.structure import MetricsStorageConfig
+from app.monitoring.metric_util import flatten_numeric_fields
+from app.monitoring.metric_store import MetricStore, Aggregation, Precision
+from app.monitoring.metric_types import NumericalMetric
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)

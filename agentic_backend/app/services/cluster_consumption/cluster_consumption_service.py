@@ -12,10 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from fred.application_context import get_app_context, get_configuration
-from fred.services.cluster_consumption.cluster_consumption_abstract_service import AbstractClusterConsumptionService
-from fred.services.cluster_consumption.cluster_consumption_csv_service import ClusterConsumptionCsvService
-from fred.common.structure import Configuration, DatabaseTypeEnum
+from app.application_context import get_app_context, get_configuration
+from app.services.cluster_consumption.cluster_consumption_abstract_service import AbstractClusterConsumptionService
+from app.services.cluster_consumption.cluster_consumption_csv_service import ClusterConsumptionCsvService
+from app.common.structure import Configuration, DatabaseTypeEnum
 
 
 class ClusterConsumptionService:

@@ -34,8 +34,8 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
-from fred.common.structure import Series
-from fred.services.kube.structure import Cluster
+from app.common.structure import Series
+from app.services.kube.structure import Cluster
 
 
 class Detail(BaseModel):

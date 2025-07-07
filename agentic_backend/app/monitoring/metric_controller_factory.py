@@ -28,7 +28,7 @@ Designed to be reusable for both node and tool metrics by parameterizing store a
 from fastapi import APIRouter, Query, HTTPException
 from typing import List, Annotated
 from datetime import datetime
-from fred.monitoring.metric_store import Precision, Aggregation
+from app.monitoring.metric_store import Precision, Aggregation
 
 def register_metric_routes(router: APIRouter, store, MetricType, NumericalType, CategoricalType, prefix: str):
     """

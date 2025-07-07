@@ -19,12 +19,12 @@ Module that defines the structure of an overall workload topology.
 import textwrap
 from pydantic import BaseModel, Field
 
-from fred.services.ai.structure.facts import Facts
-from fred.services.ai.structure.ingress_essentials import IngressesEssentials
-from fred.services.ai.structure.service_essentials import ServicesEssentials
-from fred.services.ai.structure.workload_essentials import WorkloadEssentials
-from fred.services.ai.structure.workload_id import WorkloadId
-from fred.services.ai.structure.workload_summary import WorkloadSummary
+from app.services.ai.structure.facts import Facts
+from app.services.ai.structure.ingress_essentials import IngressesEssentials
+from app.services.ai.structure.service_essentials import ServicesEssentials
+from app.services.ai.structure.workload_essentials import WorkloadEssentials
+from app.services.ai.structure.workload_id import WorkloadId
+from app.services.ai.structure.workload_summary import WorkloadSummary
 
 
 class WorkloadTopology(BaseModel):

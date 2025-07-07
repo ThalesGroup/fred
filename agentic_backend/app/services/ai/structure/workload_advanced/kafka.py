@@ -22,8 +22,8 @@ from langchain_core.prompts import PromptTemplate
 from langfuse.callback import CallbackHandler
 from pydantic import Field, BaseModel
 
-from fred.application_context import get_structured_chain_for_service
-from fred.services.ai.structure.workload_context import WorkloadContext
+from app.application_context import get_structured_chain_for_service
+from app.services.ai.structure.workload_context import WorkloadContext
 
 
 class KafkaAdvanced(BaseModel):

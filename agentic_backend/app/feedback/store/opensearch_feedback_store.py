@@ -13,7 +13,7 @@
 # limitations under the License.
 
 from opensearchpy import OpenSearch, exceptions
-from fred.feedback.store.base_feedback_store import BaseFeedbackStore
+from app.feedback.store.base_feedback_store import BaseFeedbackStore
 import logging
 import json
 

@@ -34,13 +34,13 @@ from datetime import datetime
 
 from fastapi import Depends, HTTPException, Query, APIRouter
 
-from fred.security.keycloak import KeycloakUser, get_current_user
-from fred.services.cluster_consumption.cluster_consumption_abstract_service import AbstractClusterConsumptionService
-from fred.services.cluster_consumption.cluster_consumption_service import ClusterConsumptionService
-from fred.services.cluster_consumption.cluster_consumption_structures import ClusterConsumptionSeries
-from fred.common.structure import CompareResult
-from fred.common.structure import PrecisionEnum
-from fred.common.utils import API_COMPARE_DOC
+from app.security.keycloak import KeycloakUser, get_current_user
+from app.services.cluster_consumption.cluster_consumption_abstract_service import AbstractClusterConsumptionService
+from app.services.cluster_consumption.cluster_consumption_service import ClusterConsumptionService
+from app.services.cluster_consumption.cluster_consumption_structures import ClusterConsumptionSeries
+from app.common.structure import CompareResult
+from app.common.structure import PrecisionEnum
+from app.common.utils import API_COMPARE_DOC
 
 
 class EnergyController:

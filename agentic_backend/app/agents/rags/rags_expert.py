@@ -19,9 +19,9 @@ import requests
 from langchain_core.messages import HumanMessage
 from langgraph.graph import END, START, MessagesState, StateGraph
 
-from fred.flow import AgentFlow
-from fred.application_context import get_agent_settings, get_model_for_agent
-from fred.common.models.document_source import DocumentSource
+from app.flow import AgentFlow
+from app.application_context import get_agent_settings, get_model_for_agent
+from app.common.models.document_source import DocumentSource
 from services.chatbot_session.structure.chat_schema import ChatSource
 
 class RagsExpert(AgentFlow):

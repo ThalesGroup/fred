@@ -17,14 +17,14 @@ import logging
 from datetime import datetime
 from typing import Optional
 
-from fred.agents.tabular.toolkit import TabularToolkit
-from fred.flow import AgentFlow
-from fred.application_context import (
+from app.agents.tabular.toolkit import TabularToolkit
+from app.flow import AgentFlow
+from app.application_context import (
     get_agent_settings,
     get_mcp_client_for_agent,
     get_model_for_agent,
 )
-from fred.monitoring.node_monitoring.monitor_node import monitor_node
+from app.monitoring.node_monitoring.monitor_node import monitor_node
 from langchain_core.messages import HumanMessage, ToolMessage
 from langgraph.constants import START
 from langgraph.graph import MessagesState, StateGraph

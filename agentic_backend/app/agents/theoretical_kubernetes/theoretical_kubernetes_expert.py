@@ -15,7 +15,7 @@
 from datetime import datetime
 from typing import List, Optional
 
-from fred.flow import AgentFlow
+from app.flow import AgentFlow
 from langchain_core.messages import SystemMessage
 from langgraph.graph import START, MessagesState, StateGraph
 from langgraph.graph import MessagesState, StateGraph, START, END
@@ -28,7 +28,7 @@ from langchain_openai import OpenAIEmbeddings
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.vectorstores import VectorStoreRetriever
 
-from fred.application_context import get_agent_settings, get_model_for_agent
+from app.application_context import get_agent_settings, get_model_for_agent
 
 def load_documents(directory_path: str) -> List[Document]:
         """

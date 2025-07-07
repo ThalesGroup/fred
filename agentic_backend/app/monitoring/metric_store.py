@@ -30,7 +30,7 @@ from typing import List, Optional
 from pydantic import BaseModel
 from enum import Enum
 
-from fred.monitoring.metric_types import CategoricalMetric, NumericalMetric
+from app.monitoring.metric_types import CategoricalMetric, NumericalMetric
 
 
 class TokenDetails(BaseModel):

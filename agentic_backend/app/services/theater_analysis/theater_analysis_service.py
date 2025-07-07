@@ -12,10 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from fred.application_context import get_configuration
-from fred.services.theater_analysis.theater_analysis_abstract_service import AbstractTheaterAnalysisService
-from fred.services.theater_analysis.theater_analysis_csv_service import TheaterAnalysisCsvService
-from fred.common.structure import DatabaseTypeEnum
+from app.application_context import get_configuration
+from app.services.theater_analysis.theater_analysis_abstract_service import AbstractTheaterAnalysisService
+from app.services.theater_analysis.theater_analysis_csv_service import TheaterAnalysisCsvService
+from app.common.structure import DatabaseTypeEnum
 
 class TheaterAnalysisService:
     def __new__(cls) -> AbstractTheaterAnalysisService:

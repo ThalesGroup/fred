@@ -23,16 +23,16 @@ from uuid import uuid4
 from fastapi import UploadFile
 from collections import defaultdict
 import requests
-from fred.chatbot.agent_manager import AgentManager
-from fred.flow import AgentFlow
-from fred.services.chatbot_session.attachement_processing import AttachementProcessing
-from fred.services.chatbot_session.structure.chat_schema import ChatMessagePayload, ChatTokenUsage, SessionSchema, SessionWithFiles, clean_agent_metadata, clean_token_usage
-from fred.services.chatbot_session.abstract_session_backend import AbstractSessionStorage
+from app.chatbot.agent_manager import AgentManager
+from app.flow import AgentFlow
+from app.services.chatbot_session.attachement_processing import AttachementProcessing
+from app.services.chatbot_session.structure.chat_schema import ChatMessagePayload, ChatTokenUsage, SessionSchema, SessionWithFiles, clean_agent_metadata, clean_token_usage
+from app.services.chatbot_session.abstract_session_backend import AbstractSessionStorage
 from langchain_core.messages import (BaseMessage, HumanMessage, AIMessage, SystemMessage)
 from langgraph.graph.state import CompiledStateGraph
-from fred.application_context import get_app_context, get_configuration, get_default_model
+from app.application_context import get_app_context, get_configuration, get_default_model
 
-from fred.monitoring.logging_context import set_logging_context
+from app.monitoring.logging_context import set_logging_context
 
 import asyncio
 

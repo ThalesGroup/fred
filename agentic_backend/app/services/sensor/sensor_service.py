@@ -12,10 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from fred.application_context import get_app_context, get_configuration
-from fred.services.sensor.sensor_abstract_service import AbstractSensorService, AbstractSensorConfigurationService
-from fred.services.sensor.sensor_csv_service import SensorCsvService, SensorConfigurationCsvService
-from fred.common.structure import DatabaseTypeEnum
+from app.application_context import get_app_context, get_configuration
+from app.services.sensor.sensor_abstract_service import AbstractSensorService, AbstractSensorConfigurationService
+from app.services.sensor.sensor_csv_service import SensorCsvService, SensorConfigurationCsvService
+from app.common.structure import DatabaseTypeEnum
 
 
 class SensorService:

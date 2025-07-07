@@ -16,8 +16,8 @@ from typing import Optional
 
 from pydantic import BaseModel, Field
 
-from fred.services.chatbot_session.structure.chat_schema import SessionSchema
-from fred.chatbot.structures.agentic_flow import AgenticFlow
+from app.services.chatbot_session.structure.chat_schema import SessionSchema
+from app.chatbot.structures.agentic_flow import AgenticFlow
 
 
 class ChatBotEventConfiguration(BaseModel):

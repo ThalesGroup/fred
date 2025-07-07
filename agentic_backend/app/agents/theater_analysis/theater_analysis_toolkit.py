@@ -17,10 +17,10 @@ from typing import override, List
 from langchain_core.tools import BaseToolkit, BaseTool
 from pydantic import Field
 
-from fred.services.ai.structure.tools.theater_analysis import get_ship_identification_tool
-from fred.services.ai.structure.tools.theater_analysis_sensor_data import get_sensor_data_tool
-from fred.services.ai.structure.tools.theater_analysis_get_active_ships import get_active_ships_tool
-from fred.services.ai.structure.tools.mission import get_mission_tool
+from app.services.ai.structure.tools.theater_analysis import get_ship_identification_tool
+from app.services.ai.structure.tools.theater_analysis_sensor_data import get_sensor_data_tool
+from app.services.ai.structure.tools.theater_analysis_get_active_ships import get_active_ships_tool
+from app.services.ai.structure.tools.mission import get_mission_tool
 
 class TheaterAnalysisToolkit(BaseToolkit):
     """

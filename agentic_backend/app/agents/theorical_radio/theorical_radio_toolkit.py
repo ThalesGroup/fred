@@ -17,7 +17,7 @@ from typing import override, List
 from langchain_core.tools import BaseToolkit, BaseTool
 from pydantic import Field
 
-from fred.services.ai.structure.tools.theorical_radio import get_radio_data_tool
+from app.services.ai.structure.tools.theorical_radio import get_radio_data_tool
 
 class TheoricalRadioToolkit(BaseToolkit):
     """
