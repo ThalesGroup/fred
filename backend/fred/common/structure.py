@@ -18,9 +18,9 @@ Pydantic structure definitions to use in the various microservice
 
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Literal, Union, Annotated
 
-from pydantic import BaseModel, model_validator, Field, field_validator
+from pydantic import BaseModel, model_validator, Field
 
 
 # ----------------------------------------------------------------------
@@ -220,7 +220,7 @@ class AIConfig(BaseModel):
 
 
 # ----------------------------------------------------------------------
-# Storage configurations (metrics, sessions, feedback)
+# Metrics and feedback storage configurations
 # ----------------------------------------------------------------------
 
 class FeedbackStorageSettings(BaseModel):
@@ -237,26 +237,33 @@ class MetricsStorageConfig(BaseModel):
     type: str = Field(..., description="The metrics store to use (e.g., 'local')")
     settings: MetricsStorageSettings
 
+# ----------------------------------------------------------------------
+# Session storage configurations
+# ----------------------------------------------------------------------
+
+class SessionStorageBase(BaseModel):
+    type: str
+
+class InMemoryStorage(SessionStorageBase):
+    type: Literal["in_memory"]
+
 class OpenSearchSettings(BaseModel):
     host: str = Field(default="https://localhost:9200", description="URL of the Opensearch host")
     username: str = Field(default="app_rw", description="Opensearch username")
-    password: str = Field(description="Opensearch user password")
+    password: str = Field(..., description="Opensearch user password")
     secure: bool = Field(default=False, description="Use TLS with Opensearch")
     verify_certs: bool = Field(default=False, description="Verify certificates")
     sessions_index: str = Field(default="sessions", description="Index where sessions are stored")
     history_index: str = Field(default="history", description="Index where messages histories are stored")
 
-class SessionStorageConfig(BaseModel):
-    type: str = Field(default="in_memory", description="Session storage type: 'in_memory' or 'opensearch'")
-    settings: Optional[OpenSearchSettings] = Field(default=None, description="Opensearch connection settings")
-    # in_memory type does not need a settings but opensearch does so we validate it here:
-    @model_validator(mode="after")
-    def validate_settings_required_for_opensearch(self):
-        if self.type == "opensearch" and self.settings is None:
-            raise ValueError("settings must be provided when type is 'opensearch'")
-        if self.type != "opensearch" and self.settings is not None:
-            raise ValueError("settings should be None unless type is 'opensearch'")
-        return self
+class OpenSearchStorage(SessionStorageBase):
+    type: Literal["opensearch"]
+    settings: OpenSearchSettings
+
+SessionStorageConfig = Annotated[
+    Union[InMemoryStorage, OpenSearchStorage],
+    Field(discriminator="type")
+]
 
 # ----------------------------------------------------------------------
 # Other configurations

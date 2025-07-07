@@ -14,10 +14,6 @@
 
 from fred.application_context import get_configuration
 
-from fred.main_utils import validate_settings_or_exit
-
-from fred.common.structure import OpenSearchSettings
-
 from fred.services.chatbot_session.abstract_session_backend import AbstractSessionStorage
 from fred.services.chatbot_session.stores.in_memory_session_store import InMemorySessionStorage
 from fred.services.chatbot_session.stores.opensearch_session_store import OpensearchSessionStorage
