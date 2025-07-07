@@ -55,7 +55,7 @@ run: dev
 	PYTHONPATH=. \
 	LOG_LEVEL=$(LOG_LEVEL) \
 	ENV_FILE=$(ENV_FILE) \
-	$(PYTHON) ${PY_PACKAGE}/main.py --server.configurationPath ./config/configuration.yaml --server.baseUrlPath /app
+	$(PYTHON) ${PY_PACKAGE}/main.py --server.configurationPath ./config/configuration.yaml
 
 ##@ Clean
 
