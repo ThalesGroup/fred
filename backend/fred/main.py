@@ -32,7 +32,6 @@ from fred.monitoring.node_monitoring.node_metric_store import create_node_metric
 from fred.monitoring.node_monitoring.node_metric_store_controller import NodeMetricStoreController
 from fred.monitoring.node_monitoring.node_metric_store import NodeMetric
 
-from fred.common.structure import MetricsStorageConfig, MetricsStorageSettings
 from services.ai.ai_service import AIService
 from services.kube.kube_service import KubeService
 from dotenv import load_dotenv
