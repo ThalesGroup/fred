@@ -1,0 +1,74 @@
+[project]
+name = "knowledge-flow-app"
+readme = "README.md"
+version = "0.1"
+description = "A knowledge flow backend to manage and serve knowledge base."
+authors = [
+    {name = "Knowledge Flow", email = "noreply@example.com"}
+]
+requires-python = ">=3.12,<3.13"
+
+dependencies = [
+  "fastapi==0.115.7",
+  "uvicorn[standard]==0.34.0",
+  "azure-identity==1.19.0",
+  "openai==1.60.0",
+  "langchain==0.3.25",
+  "langchain-community==0.3.15",
+  "langchain-openai==0.3.1",
+  "coloredlogs==15.0.1",
+  "PyYAML==6.0.1",
+  "pydantic>=2.5.2,<3.0.0",
+  "pydantic-settings==2.7.1",
+  "ipython==8.31.0",
+  "python-multipart==0.0.20",
+  "opensearch-py==2.8.0",
+  "python-docx==1.1.2",
+  "minio==7.2.15",
+  "pypandoc-binary==1.15",
+  "pypandoc==1.15",
+  "pandas==2.2.3",
+  "pypdf==5.4.0",
+  "python-pptx==1.0.2",
+  "google-cloud-storage==3.1.0",
+  "rich==14.0.0",
+  "shortuuid==1.0.13",
+  "openpyxl==3.1.5",
+  "docling==2.34.0",
+  "hf-xet==1.1.1",
+  "torch==2.7.0",
+  "langchain-ollama==0.3.3",
+  "fastapi-mcp==0.3.4"
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest-cov==6.1.1",
+  "reportlab==4.3.1",
+  "pytest==8.3.5",
+  "pytest-asyncio==0.26.0",
+  "black==23.1.0",
+  "isort==5.10.1",
+  "tox==4.27.0",
+  "pre-commit==4.2.0",
+  "bandit==1.8.5",
+  "ruff==0.12.0"
+]
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+packages = [
+  { include = "knowledge_flow_app" }
+]
+
+[tool.ruff]
+line-length = 200
+
+[tool.setuptools.packages.find]
+include = ["knowledge_flow_app*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "strict"
+asyncio_default_fixture_loop_scope = "function"
+cache_dir = "/tmp/.pytest"
