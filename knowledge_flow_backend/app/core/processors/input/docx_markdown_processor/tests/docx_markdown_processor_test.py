@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-from knowledge_flow_app.core.processors.input.docx_markdown_processor.docx_markdown_processor import DocxMarkdownProcessor
+from app.core.processors.input.docx_markdown_processor.docx_markdown_processor import DocxMarkdownProcessor
 
 
 @pytest.fixture

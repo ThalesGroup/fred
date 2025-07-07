@@ -16,10 +16,10 @@ import logging
 from typing import Any, Dict
 from fastapi import APIRouter, Body, HTTPException
 
-from knowledge_flow_app.common.structures import Status
-from knowledge_flow_app.core.stores.content.content_storage_factory import get_content_store
-from knowledge_flow_app.features.metadata.service import InvalidMetadataRequest, MetadataNotFound, MetadataService, MetadataUpdateError
-from knowledge_flow_app.features.metadata.structures import DeleteDocumentMetadataResponse, GetDocumentMetadataResponse, GetDocumentsMetadataResponse, UpdateDocumentMetadataRequest, UpdateDocumentMetadataResponse, UpdateRetrievableRequest
+from app.common.structures import Status
+from app.core.stores.content.content_storage_factory import get_content_store
+from app.features.metadata.service import InvalidMetadataRequest, MetadataNotFound, MetadataService, MetadataUpdateError
+from app.features.metadata.structures import DeleteDocumentMetadataResponse, GetDocumentMetadataResponse, GetDocumentsMetadataResponse, UpdateDocumentMetadataRequest, UpdateDocumentMetadataResponse, UpdateRetrievableRequest
 from threading import Lock
 
 logger = logging.getLogger(__name__)

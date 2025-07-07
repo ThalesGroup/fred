@@ -32,7 +32,7 @@ Mocks are used to simulate metadata_store and content_store dependencies.
 
 from io import BytesIO
 import pytest
-from knowledge_flow_app.features.content.service import ContentService
+from app.features.content.service import ContentService
 
 
 # ----------------------------

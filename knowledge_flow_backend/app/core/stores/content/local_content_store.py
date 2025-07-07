@@ -19,7 +19,7 @@ from typing import BinaryIO
 
 import pandas as pd
 
-from knowledge_flow_app.core.stores.base_content_store import BaseContentStore
+from app.core.stores.base_content_store import BaseContentStore
 
 logger = logging.getLogger(__name__)
 

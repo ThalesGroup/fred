@@ -30,7 +30,7 @@ from pathlib import Path
 import pytest
 from minio.error import S3Error
 
-from knowledge_flow_app.core.stores.content.minio_content_store import MinioContentStore
+from app.core.stores.content.minio_content_store import MinioContentStore
 
 
 # ----------------------------

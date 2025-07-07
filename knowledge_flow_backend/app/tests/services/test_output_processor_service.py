@@ -26,10 +26,10 @@ This test suite includes:
 import shutil
 from pathlib import Path
 import pytest
-from knowledge_flow_app.features.wip.input_processor_service import InputProcessorService
-from knowledge_flow_app.features.wip.output_processor_service import OutputProcessorService
-from knowledge_flow_app.features.wip import output_processor_service
-from knowledge_flow_app.common.structures import OutputProcessorResponse
+from app.features.wip.input_processor_service import InputProcessorService
+from app.features.wip.output_processor_service import OutputProcessorService
+from app.features.wip import output_processor_service
+from app.common.structures import OutputProcessorResponse
 
 
 # ----------------------------

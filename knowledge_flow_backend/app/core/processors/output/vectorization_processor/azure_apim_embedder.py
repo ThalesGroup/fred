@@ -18,7 +18,7 @@ import httpx
 import logging
 from langchain.embeddings.base import Embeddings
 
-from knowledge_flow_app.config.embedding_azure_apim_settings import EmbeddingAzureApimSettings
+from app.config.embedding_azure_apim_settings import EmbeddingAzureApimSettings
 
 logger = logging.getLogger(__name__)
 

@@ -167,7 +167,7 @@ class OpenAIPdfMarkdownProcessor(PdfMarkdownProcessor):
 ```yaml
 input_processors:
   - prefix: ".pdf"
-    class_path: knowledge_flow_app.core.processors.input.pdf_markdown_processor.openai_pdf_processor.OpenAIPdfMarkdownProcessor
+    class_path: app.core.processors.input.pdf_markdown_processor.openai_pdf_processor.OpenAIPdfMarkdownProcessor
 ```
 
 > 🚨 Don't use dynamic logic in the factory. Always create a dedicated class with a known path.

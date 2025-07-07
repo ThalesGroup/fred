@@ -37,7 +37,7 @@ Mocks OpenSearch client entirely to avoid real HTTP calls.
 import pytest
 from opensearchpy.exceptions import OpenSearchException
 
-from knowledge_flow_app.core.stores.metadata.opensearch_metadata_store import OpenSearchMetadataStore
+from app.core.stores.metadata.opensearch_metadata_store import OpenSearchMetadataStore
 import knowledge_flow_app.core.stores.metadata.opensearch_metadata_store as oms
 
 

@@ -8,8 +8,8 @@ from pandas.api.types import (
     is_string_dtype, is_numeric_dtype, is_bool_dtype, is_datetime64_any_dtype
 )
 
-from knowledge_flow_app.features.tabular.structures import TabularColumnSchema, TabularDatasetMetadata, TabularQueryRequest, TabularQueryResponse, TabularSchemaResponse
-from knowledge_flow_app.features.content.service import ContentService
+from app.features.tabular.structures import TabularColumnSchema, TabularDatasetMetadata, TabularQueryRequest, TabularQueryResponse, TabularSchemaResponse
+from app.features.content.service import ContentService
 
 logger = logging.getLogger(__name__)
 

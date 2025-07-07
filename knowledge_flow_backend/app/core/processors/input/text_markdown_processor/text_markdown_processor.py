@@ -16,7 +16,7 @@
 
 from pathlib import Path
 
-from knowledge_flow_app.core.processors.input.common.base_input_processor import BaseMarkdownProcessor
+from app.core.processors.input.common.base_input_processor import BaseMarkdownProcessor
 
 
 

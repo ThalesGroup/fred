@@ -3,7 +3,7 @@
 VERSION=0.1-dev
 PROJECT_REGISTRY=registry.thalesdigital.io/tsn/projects/knowledge_flow_app
 PROJECT_NAME=knowledge-flow
-PY_PACKAGE=knowledge_flow_app
+PY_PACKAGE=app
 
 ROOT_DIR := $(realpath $(CURDIR))
 ENV_FILE := $(ROOT_DIR)/config/.env

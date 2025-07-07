@@ -18,8 +18,8 @@ import os
 from dotenv import load_dotenv
 import pytest
 from pathlib import Path
-from knowledge_flow_app.core.processors.input.common.base_image_describer import BaseImageDescriber
-from knowledge_flow_app.core.processors.input.pdf_markdown_processor.pdf_markdown_processor import PdfMarkdownProcessor
+from app.core.processors.input.common.base_image_describer import BaseImageDescriber
+from app.core.processors.input.pdf_markdown_processor.pdf_markdown_processor import PdfMarkdownProcessor
 
 
 dotenv_path = os.getenv("ENV_FILE", "./config/.env")

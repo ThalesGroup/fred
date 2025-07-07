@@ -21,7 +21,7 @@ import tiktoken
 import yaml
 from typing import Dict, Optional, TypeVar
 
-from knowledge_flow_app.common.structures import Configuration
+from app.common.structures import Configuration
 
 logger = logging.getLogger(__name__)
 
@@ -174,7 +174,7 @@ def count_tokens(text: str) -> int:
     Returns:
         int: Estimated token count.
     """
-    from knowledge_flow_app.application_context import ApplicationContext
+    from app.application_context import ApplicationContext
 
     embedder = ApplicationContext.get_instance().get_embedder()
 

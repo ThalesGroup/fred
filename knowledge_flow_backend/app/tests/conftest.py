@@ -14,14 +14,14 @@
 
 from unittest.mock import MagicMock
 import pytest
-from knowledge_flow_app.application_context import ApplicationContext
-from knowledge_flow_app.common.structures import Configuration, ContentStorageConfig, EmbeddingConfig, MetadataStorageConfig, ProcessorConfig, VectorStorageConfig
+from app.application_context import ApplicationContext
+from app.common.structures import Configuration, ContentStorageConfig, EmbeddingConfig, MetadataStorageConfig, ProcessorConfig, VectorStorageConfig
 
-from knowledge_flow_app.core.stores.content.content_storage_factory import get_content_store
-from knowledge_flow_app.core.stores.content.minio_content_store import MinioContentStore
-from knowledge_flow_app.core.stores.metadata.metadata_storage_factory import get_metadata_store
-from knowledge_flow_app.core.stores.metadata.opensearch_metadata_store import OpenSearchMetadataStore
-from knowledge_flow_app.main import create_app
+from app.core.stores.content.content_storage_factory import get_content_store
+from app.core.stores.content.minio_content_store import MinioContentStore
+from app.core.stores.metadata.metadata_storage_factory import get_metadata_store
+from app.core.stores.metadata.opensearch_metadata_store import OpenSearchMetadataStore
+from app.main import create_app
 from fastapi.testclient import TestClient
 from opensearchpy.exceptions import NotFoundError
 from langchain_community.embeddings import FakeEmbeddings

@@ -15,7 +15,7 @@
 from abc import ABC, abstractmethod
 import logging
 
-from knowledge_flow_app.common.structures import OutputProcessorResponse
+from app.common.structures import OutputProcessorResponse
 
 logger = logging.getLogger(__name__)
 

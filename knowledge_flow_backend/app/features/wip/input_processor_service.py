@@ -15,8 +15,8 @@
 import json
 import pathlib
 from fastapi import UploadFile
-from knowledge_flow_app.application_context import ApplicationContext
-from knowledge_flow_app.core.processors.input.common.base_input_processor import BaseMarkdownProcessor, BaseTabularProcessor
+from app.application_context import ApplicationContext
+from app.core.processors.input.common.base_input_processor import BaseMarkdownProcessor, BaseTabularProcessor
 
 
 class InputProcessorService:

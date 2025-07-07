@@ -23,8 +23,8 @@ Covers:
 
 import pytest
 from langchain.schema.document import Document
-from knowledge_flow_app.features.vector_search.service import VectorSearchService
-from knowledge_flow_app.features.vector_search import service
+from app.features.vector_search.service import VectorSearchService
+from app.features.vector_search import service
 
 
 class DummyVectorStore:

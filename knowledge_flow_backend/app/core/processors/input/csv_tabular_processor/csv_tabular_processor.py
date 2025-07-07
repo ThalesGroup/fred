@@ -18,7 +18,7 @@ from pathlib import Path
 
 import pandas
 
-from knowledge_flow_app.core.processors.input.common.base_input_processor import BaseTabularProcessor
+from app.core.processors.input.common.base_input_processor import BaseTabularProcessor
 
 
 class CsvTabularProcessor(BaseTabularProcessor):

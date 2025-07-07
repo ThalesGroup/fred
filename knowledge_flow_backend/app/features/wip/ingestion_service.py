@@ -20,9 +20,9 @@ from typing import Union
 from fastapi import UploadFile
 
 from starlette.datastructures import UploadFile as StarletteUploadFile
-from knowledge_flow_app.application_context import ApplicationContext
-from knowledge_flow_app.core.stores.content.content_storage_factory import get_content_store
-from knowledge_flow_app.features.wip.input_processor_service import InputProcessorService
+from app.application_context import ApplicationContext
+from app.core.stores.content.content_storage_factory import get_content_store
+from app.features.wip.input_processor_service import InputProcessorService
 
 logger = logging.getLogger(__name__)
 

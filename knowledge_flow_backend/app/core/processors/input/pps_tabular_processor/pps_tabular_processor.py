@@ -17,7 +17,7 @@ import logging
 from pathlib import Path
 import pandas as pd
 
-from knowledge_flow_app.core.processors.input.common.base_input_processor import BaseTabularProcessor
+from app.core.processors.input.common.base_input_processor import BaseTabularProcessor
 
 logger = logging.getLogger(__name__)
 
