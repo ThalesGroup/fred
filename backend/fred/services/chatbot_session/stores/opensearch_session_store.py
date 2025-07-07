@@ -14,7 +14,7 @@
 
 import logging
 from typing import List, Optional
-from opensearchpy import OpenSearch, RequestsHttpConnection, OpenSearchException
+from opensearchpy import OpenSearch, RequestsHttpConnection
 from fred.services.chatbot_session.abstract_session_backend import AbstractSessionStorage
 from fred.services.chatbot_session.abstract_user_authentication_backend import AbstractSecuredResourceAccess
 from fred.services.chatbot_session.session_manager import SessionSchema
@@ -139,6 +139,7 @@ class OpensearchSessionStorage(AbstractSessionStorage, AbstractSecuredResourceAc
 
             # OpenSearch Bulk API
             self.client.bulk(body=bulk_body)
+            self.client.indices.refresh(index=self.history_index) # Necessary due to indexing delay for whoever wants to access the newly stored data.
             logger.info(f"Saved {len(messages)} messages for session {session_id}")
         except Exception as e:
             logger.error(f"Failed to save messages for session {session_id}: {e}")
@@ -159,7 +160,7 @@ class OpensearchSessionStorage(AbstractSessionStorage, AbstractSecuredResourceAc
                     {
                         "rank": {
                             "order": "asc",
-                            "unmapped_type" : "long"
+                            "unmapped_type" : "integer"
                         }
                     }
                     
