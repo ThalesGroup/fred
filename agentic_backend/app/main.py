@@ -73,7 +73,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Fred microservice")
     parser.add_argument("--server.address", dest="server_address", default="0.0.0.0")
     parser.add_argument("--server.port", dest="server_port", type=int, default=8000)
-    parser.add_argument("--server.baseUrlPath", dest="server_base_url_path", default="/fred")
+    parser.add_argument("--server.baseUrlPath", dest="server_base_url_path", default="/agentic/v1")
     parser.add_argument("--server.configurationPath", dest="server_configuration_path", default="./config/configuration.yaml")
     parser.add_argument("--server.logLevel", dest="server_log_level", default="info")
     return parser.parse_args()

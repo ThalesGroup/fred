@@ -16,9 +16,7 @@
       },
       "args": [
         "--server.configurationPath",
-        "${workspaceFolder}/agentic_backend/config/configuration.yaml",
-        "--server.baseUrlPath",
-        "/app"
+        "${workspaceFolder}/agentic_backend/config/configuration.yaml"
       ],
       "python": "${workspaceFolder}/agentic_backend/.venv/bin/python",
     },
@@ -34,7 +32,7 @@
       ],
       "envFile": "${workspaceFolder}/knowledge_flow_backend/config/.env",
       "env": {
-        "PYTHONPATH": "${workspaceFolder}/knowledge_flow_app",
+        "PYTHONPATH": "${workspaceFolder}/knowledge_flow_backend/app",
         "PATH": "${workspaceFolder}/.venv/bin:${env:PATH}",
         "LOG_LEVEL": "DEBUG"
       }
