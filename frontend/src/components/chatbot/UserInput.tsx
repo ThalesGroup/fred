@@ -243,10 +243,10 @@ export default function UserInput({
                 onKeyDown={(event) => handleKeyDown(event)}
                 onChange={(event) => setUserInput(event.target.value)}
                 sx={{
-                  fontSize: "1.1rem",
+                  fontSize: "1rem",
                   padding: "12px",
                   width: "100%",
-                  maxHeight: "800px",
+                  maxHeight: "600px",
                   overflow: "auto", // Scrollbar appears when content exceeds maxHeight
                 }}
               />
