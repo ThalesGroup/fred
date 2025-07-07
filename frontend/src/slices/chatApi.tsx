@@ -32,38 +32,38 @@ const extendedChatApi = chatApiSlice.injectEndpoints({
   endpoints: (builder) => ({
     getChatBotMessages: builder.mutation<ChatMessagePayload[], { session_id: string }>({
       query: ({ session_id }) => ({
-        url: `/fred/chatbot/session/${session_id}/history`,
+        url: `/agentic/v1/chatbot/session/${session_id}/history`,
         method: "GET",
       }),
     }),
     getChatBotAgenticFlows: builder.mutation<AgenticFlow[], void>({
       query: () => ({
-        url: `/fred/chatbot/agenticflows`,
+        url: `/agentic/v1/chatbot/agenticflows`,
         method: "GET",
       }),
     }),
     getChatbotSessions: builder.mutation<SessionSchema[], void>({
       query: () => ({
-        url: `/fred/chatbot/sessions`,
+        url: `/agentic/v1/chatbot/sessions`,
         method: "GET",
       }),
     }),
     deleteChatbotSession: builder.mutation<{ success: boolean }, { session_id: string }>({
       query: ({ session_id }) => ({
-        url: `/fred/chatbot/session/${session_id}`,
+        url: `/agentic/v1/chatbot/session/${session_id}`,
         method: "DELETE",
       }),
     }),
     getAgentContexts: builder.mutation({
       query: (agentName) => ({
-        url: `/fred/contexts/${agentName}`,
+        url: `/agentic/v1/contexts/${agentName}`,
         method: "GET",
       }),
     }),
     // Créer ou mettre à jour un contexte
     saveAgentContext: builder.mutation({
       query: ({ agentName, context }) => ({
-        url: `/fred/contexts/${agentName}`,
+        url: `/agentic/v1/contexts/${agentName}`,
         method: "POST",
         body: context,
       }),
@@ -72,7 +72,7 @@ const extendedChatApi = chatApiSlice.injectEndpoints({
     // Supprimer un contexte
     deleteAgentContext: builder.mutation({
       query: ({ agentName, contextId }) => ({
-        url: `/fred/contexts/${agentName}/${contextId}`,
+        url: `/agentic/v1/contexts/${agentName}/${contextId}`,
         method: "DELETE",
       }),
     }),
@@ -87,7 +87,7 @@ const extendedChatApi = chatApiSlice.injectEndpoints({
       }
     >({
       query: ({ rating, comment, messageId, sessionId, agentName }) => ({
-        url: `/fred/chatbot/feedback`,
+        url: `/agentic/v1/chatbot/feedback`,
         method: "POST",
         body: { rating, comment, messageId, sessionId, agentName },
       }),
