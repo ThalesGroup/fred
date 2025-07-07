@@ -235,7 +235,7 @@ class TestMetadataController:
             raise Exception("DB error")
 
         monkeypatch.setattr(
-            "knowledge_flow_app.services.metadata_service.MetadataService.get_documents_metadata",
+            "app.services.metadata_service.MetadataService.get_documents_metadata",
             raise_exc,
         )
         response = client.post("/knowledge/v1/documents/metadata", json={})

@@ -43,7 +43,7 @@ def prepared_pdf_dir(tmp_path, monkeypatch):
         return "This is a test image description"
 
     monkeypatch.setattr(
-        "knowledge_flow_app.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor._describe_picture",
+        "app.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor._describe_picture",
         mock_describe,
     )
 

@@ -38,7 +38,7 @@ import pytest
 from opensearchpy.exceptions import OpenSearchException
 
 from app.core.stores.metadata.opensearch_metadata_store import OpenSearchMetadataStore
-import knowledge_flow_app.core.stores.metadata.opensearch_metadata_store as oms
+import app.core.stores.metadata.opensearch_metadata_store as oms
 
 
 # ----------------------------
@@ -91,7 +91,7 @@ def mock_opensearch(monkeypatch):
         def delete_by_query(self, index, body):
             return {"deleted": 1}
 
-    monkeypatch.setattr("knowledge_flow_app.stores.metadata.opensearch_metadata_store.OpenSearch", MockClient)
+    monkeypatch.setattr("app.stores.metadata.opensearch_metadata_store.OpenSearch", MockClient)
     return MockClient()
 
 
@@ -163,7 +163,7 @@ def test_get_all_metadata_with_match_all(monkeypatch):
                 }
             }
 
-    monkeypatch.setattr("knowledge_flow_app.stores.metadata.opensearch_metadata_store.OpenSearch", MockClient)
+    monkeypatch.setattr("app.stores.metadata.opensearch_metadata_store.OpenSearch", MockClient)
     store = OpenSearchMetadataStore("localhost", "meta", "vec")
     result = store.get_all_metadata({})
     assert any(doc["author"] == "alice" for doc in result)
@@ -203,7 +203,7 @@ def test_write_metadata_opensearch_exception(monkeypatch):
         def index(self, *args, **kwargs):
             raise OpenSearchException("fail")
 
-    monkeypatch.setattr("knowledge_flow_app.stores.metadata.opensearch_metadata_store.OpenSearch", MockClient)
+    monkeypatch.setattr("app.stores.metadata.opensearch_metadata_store.OpenSearch", MockClient)
     store = OpenSearchMetadataStore("localhost", "meta", "vec")
     with pytest.raises(ValueError, match="Failed to write metadata"):
         store.write_metadata("uid", {"some": "data"})
@@ -226,7 +226,7 @@ def test_update_metadata_field_exception(monkeypatch):
         def update_by_query(self, *a, **k):
             return {}
 
-    monkeypatch.setattr("knowledge_flow_app.stores.metadata.opensearch_metadata_store.OpenSearch", MockClient)
+    monkeypatch.setattr("app.stores.metadata.opensearch_metadata_store.OpenSearch", MockClient)
     store = OpenSearchMetadataStore("localhost", "meta", "vec")
     with pytest.raises(Exception, match="fail update"):
         store.update_metadata_field("uid", "field", "val")
@@ -269,7 +269,7 @@ def test_get_metadata_by_uid_exception(monkeypatch):
         def get(self, *args, **kwargs):
             raise OpenSearchException("fail")
 
-    monkeypatch.setattr("knowledge_flow_app.stores.metadata.opensearch_metadata_store.OpenSearch", MockClient)
+    monkeypatch.setattr("app.stores.metadata.opensearch_metadata_store.OpenSearch", MockClient)
     store = OpenSearchMetadataStore("localhost", "meta", "vec")
     assert store.get_metadata_by_uid("uid") == {}
 
@@ -288,7 +288,7 @@ def test_uid_exists_exception(monkeypatch):
         def exists(self, *args, **kwargs):
             raise OpenSearchException("fail")
 
-    monkeypatch.setattr("knowledge_flow_app.stores.metadata.opensearch_metadata_store.OpenSearch", MockClient)
+    monkeypatch.setattr("app.stores.metadata.opensearch_metadata_store.OpenSearch", MockClient)
     store = OpenSearchMetadataStore("localhost", "meta", "vec")
     assert store.uid_exists("uid") is False
 
@@ -307,7 +307,7 @@ def test_get_all_metadata_exception(monkeypatch):
         def search(self, *args, **kwargs):
             raise OpenSearchException("boom")
 
-    monkeypatch.setattr("knowledge_flow_app.stores.metadata.opensearch_metadata_store.OpenSearch", MockClient)
+    monkeypatch.setattr("app.stores.metadata.opensearch_metadata_store.OpenSearch", MockClient)
     store = OpenSearchMetadataStore("localhost", "meta", "vec")
     assert not store.get_all_metadata({})
 
@@ -326,6 +326,6 @@ def test_get_metadata_by_uid_not_found(monkeypatch):
         def get(self, index, id):
             return {"found": False}
 
-    monkeypatch.setattr("knowledge_flow_app.stores.metadata.opensearch_metadata_store.OpenSearch", MockClient)
+    monkeypatch.setattr("app.stores.metadata.opensearch_metadata_store.OpenSearch", MockClient)
     store = OpenSearchMetadataStore("localhost", "meta", "vec")
     assert store.get_metadata_by_uid("unknown") == {}

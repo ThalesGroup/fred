@@ -28,7 +28,7 @@ import pytest
 from app.core.stores.metadata.local_metadata_store import LocalMetadataStore
 from app.core.stores.metadata.metadata_storage_factory import get_metadata_store
 from app.core.stores.metadata.opensearch_metadata_store import OpenSearchMetadataStore
-import knowledge_flow_app.core.stores.metadata.opensearch_metadata_store as oms
+import app.core.stores.metadata.opensearch_metadata_store as oms
 
 class DummyConfig:
     """Mock config with configurable metadata storage type."""
@@ -58,7 +58,7 @@ def patch_context(monkeypatch):
 
     def _patch(store_type):
         dummy = DummyAppContext(DummyConfig(store_type))
-        monkeypatch.setattr("knowledge_flow_app.stores.metadata.metadata_storage_factory.ApplicationContext.get_instance", lambda: dummy)
+        monkeypatch.setattr("app.stores.metadata.metadata_storage_factory.ApplicationContext.get_instance", lambda: dummy)
 
     return _patch
 
@@ -72,7 +72,7 @@ def test_get_local_metadata_store(monkeypatch, patch_context):
     """Test: get_metadata_store returns LocalMetadataStore when type='local'."""
     patch_context("local")
     monkeypatch.setattr(
-        "knowledge_flow_app.stores.metadata.metadata_storage_factory.MetadataStoreLocalSettings",
+        "app.stores.metadata.metadata_storage_factory.MetadataStoreLocalSettings",
         lambda: type("Cfg", (), {"metadata_file": "/tmp/test.json", "root_path": "/tmp"}),
     )
     store = get_metadata_store()
@@ -88,7 +88,7 @@ def test_get_opensearch_metadata_store(monkeypatch, patch_context):
     """Test: get_metadata_store returns OpenSearchMetadataStore when type='opensearch'."""
     patch_context("opensearch")
     monkeypatch.setattr(
-        "knowledge_flow_app.stores.metadata.metadata_storage_factory.validate_settings_or_exit",
+        "app.stores.metadata.metadata_storage_factory.validate_settings_or_exit",
         lambda cls, name: type(
             "Cfg",
             (),
