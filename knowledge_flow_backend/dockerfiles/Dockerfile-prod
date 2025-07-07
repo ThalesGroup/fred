@@ -1,0 +1,57 @@
+# -----------------------------------------------------------------------------
+# BUILDER
+# -----------------------------------------------------------------------------
+FROM mirror.gcr.io/python:3.12.8-slim AS builder
+
+ARG UV_VERSION=0.7.12
+
+# Install dependencies
+RUN apt-get update && \
+    apt-get install -y curl && \
+    curl -Ls https://astral.sh/uv/${UV_VERSION}/install.sh | bash
+
+# Copy project files
+COPY .. /app
+
+# Add uv into the PATH
+ENV PATH=/root/.local/bin:$PATH
+
+# Move to workdir
+WORKDIR /app
+
+# Create python virtual env and install deps
+RUN uv venv && \
+    uv pip install -r uv.lock
+
+# -----------------------------------------------------------------------------
+# RUNTIME
+# -----------------------------------------------------------------------------
+FROM mirror.gcr.io/python:3.12.8-slim AS runtime
+
+ARG USER_NAME=python-user
+ARG USER_ID=1000
+ARG GROUP_ID=1000
+
+# Setup user
+RUN groupadd -g ${GROUP_ID} ${USER_NAME} && \
+    useradd -u ${USER_ID} -g ${GROUP_ID} -m ${USER_NAME}
+
+# Change user
+USER ${USER_NAME}
+
+# Copy source from builder
+COPY --from=builder --chown=${USER_ID}:${GROUP_ID} /app /app
+
+# Move to workdir
+WORKDIR /app
+
+# Activate the virtualenv
+ENV PATH=/app/.venv/bin:$PATH
+ENV PYTHONPATH=/app
+
+# Expose Fast API default port
+EXPOSE 8111
+
+# Define default entrypoint and command
+ENTRYPOINT ["python"]
+CMD ["/app/knowledge_flow_app/main.py"]

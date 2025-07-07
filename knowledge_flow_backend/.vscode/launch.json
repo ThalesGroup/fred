@@ -1,0 +1,20 @@
+{
+  "configurations": [
+    {
+      "name": "Debug knowledge-flow",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/knowledge_flow_app/main.py",
+      "args": [
+        "--config-path",
+        "${workspaceFolder}/config/configuration.yaml",
+        "--server.reload"
+      ],
+      "envFile": "${workspaceFolder}/config/.env",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/knowledge_flow_app",
+        "PATH": "${workspaceFolder}/.venv/bin:${env:PATH}",
+        "LOG_LEVEL": "DEBUG"
+      }
+    }
+}
