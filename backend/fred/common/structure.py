@@ -220,31 +220,40 @@ class AIConfig(BaseModel):
 
 
 # ----------------------------------------------------------------------
-# Metrics and feedback storage configurations
+# Storage configurations
 # ----------------------------------------------------------------------
 
-class FeedbackStorageSettings(BaseModel):
-    local_path: str = Field(..., description="The path of the local metrics store")
+## ---------------------------------------------------------------------
+## Base storage models 
+## ---------------------------------------------------------------------
+
+class ResourceStorageBase(BaseModel):
+    type: str
+
+class LocalStorageSettings(BaseModel):
+    local_path: str = Field(..., description="The path where local session data is stored")
+
+class LocalStorage(ResourceStorageBase):
+    type: Literal["local"]
+    settings: LocalStorageSettings
+
+## ----------------------------------------------------------------------
+## Metrics and feedback storage configurations
+## ----------------------------------------------------------------------
 
 class FeedbackStorageConfig(BaseModel):
     type: str = Field(..., description="The storage backend to use (e.g., 'local', 'opensearch')")
-    settings: FeedbackStorageSettings
-
-class MetricsStorageSettings(BaseModel):
-    local_path: str = Field(..., description="The path of the local metrics store")
+    settings: LocalStorageSettings
 
 class MetricsStorageConfig(BaseModel):
     type: str = Field(..., description="The metrics store to use (e.g., 'local')")
-    settings: MetricsStorageSettings
+    settings: LocalStorageSettings
 
-# ----------------------------------------------------------------------
-# Session storage configurations
-# ----------------------------------------------------------------------
+## ----------------------------------------------------------------------
+## Session storage configurations
+## ----------------------------------------------------------------------
 
-class SessionStorageBase(BaseModel):
-    type: str
-
-class InMemoryStorage(SessionStorageBase):
+class InMemoryStorage(ResourceStorageBase):
     type: Literal["in_memory"]
 
 class OpenSearchSettings(BaseModel):
@@ -256,7 +265,7 @@ class OpenSearchSettings(BaseModel):
     sessions_index: str = Field(default="sessions", description="Index where sessions are stored")
     history_index: str = Field(default="history", description="Index where messages histories are stored")
 
-class OpenSearchStorage(SessionStorageBase):
+class OpenSearchStorage(ResourceStorageBase):
     type: Literal["opensearch"]
     settings: OpenSearchSettings
 
