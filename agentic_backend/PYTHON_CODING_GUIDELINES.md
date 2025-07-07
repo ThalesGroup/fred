@@ -1,4 +1,4 @@
-# 🧑‍💻 Fred Backend Python Development Guide
+# 🧑‍💻 Python Development Guide
 
 > 📌 All developers MUST follow this guide when working on Python backend code in the Fred or KnowledgeFlow backend repositories.
 
