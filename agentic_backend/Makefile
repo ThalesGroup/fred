@@ -1,8 +1,8 @@
 .DEFAULT_GOAL := help
 
 VERSION=0.1.0
-PROJECT_NAME=fred-backend
-PY_PACKAGE=fred
+PROJECT_NAME=fred-agentic-backend
+PY_PACKAGE=app
 
 TARGET=$(CURDIR)/target
 VENV=$(CURDIR)/.venv
@@ -55,7 +55,7 @@ run: dev
 	PYTHONPATH=. \
 	LOG_LEVEL=$(LOG_LEVEL) \
 	ENV_FILE=$(ENV_FILE) \
-	$(PYTHON) ${PY_PACKAGE}/main.py --server.configurationPath ./config/configuration.yaml --server.baseUrlPath /fred
+	$(PYTHON) ${PY_PACKAGE}/main.py --server.configurationPath ./config/configuration.yaml --server.baseUrlPath /app
 
 ##@ Clean
 
@@ -70,7 +70,7 @@ clean: ## Remove virtualenv and build artifacts
 .PHONY: test
 test: dev  ## Run tests for test_translate_response_metadata.py
 	@echo "🧪 Running test_translate_response_metadata.py..."
-	PYTHONPATH=$(CURDIR)/fred $(VENV)/bin/pytest --maxfail=5 --disable-warnings -q fred/tests/test_translate_response_metadata.py
+	PYTHONPATH=$(CURDIR)/app $(VENV)/bin/pytest --maxfail=5 --disable-warnings -q app/tests/test_translate_response_metadata.py
 
 ##@ Help
 
