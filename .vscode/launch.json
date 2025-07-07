@@ -2,49 +2,49 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Run Fred Backend",
+      "name": "Debug Agentic Backend",
       "type": "debugpy",
       "request": "launch",
-      "cwd": "${workspaceFolder}/backend",
-      "program": "${workspaceFolder}/backend/fred/main.py",
+      "cwd": "${workspaceFolder}/agentic_backend",
+      "program": "${workspaceFolder}/agentic_backend/app/main.py",
       "console": "integratedTerminal",
       "justMyCode": false,
       "env": {
-        "PYTHONPATH": "${workspaceFolder}/backend",
-        "PATH": "${workspaceFolder}/backend/.venv/bin:${env:PATH}",
+        "PYTHONPATH": "${workspaceFolder}/agentic_backend",
+        "PATH": "${workspaceFolder}/agentic_backend/.venv/bin:${env:PATH}",
         "LOG_LEVEL": "DEBUG"
       },
       "args": [
         "--server.configurationPath",
-        "${workspaceFolder}/backend/config/configuration.yaml",
+        "${workspaceFolder}/agentic_backend/config/configuration.yaml",
         "--server.baseUrlPath",
-        "/fred"
+        "/app"
       ],
-      "python": "${workspaceFolder}/backend/.venv/bin/python",
+      "python": "${workspaceFolder}/agentic_backend/.venv/bin/python",
     },
     {
-      "name": "Run Fred Frontend",
-      "type": "node-terminal",
-      "request": "launch",
-      "command": "npm run dev",
-      "cwd": "${workspaceFolder}/frontend"
-    },
-    {
-      "name": "Debug knowledge-flow",
+      "name": "Debug Knowledge Flow Backend",
       "type": "debugpy",
       "request": "launch",
-      "program": "${workspaceFolder}/knowledge_flow_app/main.py",
+      "program": "${workspaceFolder}/knowledge_flow_backend/app/main.py",
       "args": [
         "--config-path",
-        "${workspaceFolder}/config/configuration.yaml",
+        "${workspaceFolder}/knowledge_flow_backend/config/configuration.yaml",
         "--server.reload"
       ],
-      "envFile": "${workspaceFolder}/config/.env",
+      "envFile": "${workspaceFolder}/knowledge_flow_backend/config/.env",
       "env": {
         "PYTHONPATH": "${workspaceFolder}/knowledge_flow_app",
         "PATH": "${workspaceFolder}/.venv/bin:${env:PATH}",
         "LOG_LEVEL": "DEBUG"
       }
+    },
+    {
+      "name": "Debug Fred Frontend",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "npm run dev",
+      "cwd": "${workspaceFolder}/frontend"
     }
   ]
 }
