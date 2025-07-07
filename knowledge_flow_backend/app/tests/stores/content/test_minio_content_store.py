@@ -78,7 +78,7 @@ def minio_store(monkeypatch):
             return BytesIO(self.objects[object_name])
 
     client = MockMinioClient()
-    monkeypatch.setattr("knowledge_flow_app.stores.content.minio_content_store.Minio", lambda *args, **kwargs: client)
+    monkeypatch.setattr("app.stores.content.minio_content_store.Minio", lambda *args, **kwargs: client)
     store = MinioContentStore("localhost:9000", "access", "secret", "bucket", secure=False)
     return store, client
 

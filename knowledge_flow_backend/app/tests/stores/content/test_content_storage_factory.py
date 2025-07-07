@@ -73,7 +73,7 @@ def patch_app_context(monkeypatch):
     def _patch_with_backend(store_type):
         dummy_context = DummyAppContext(DummyConfig(store_type))
         monkeypatch.setattr(
-            "knowledge_flow_app.stores.content.content_storage_factory.ApplicationContext.get_instance",
+            "app.stores.content.content_storage_factory.ApplicationContext.get_instance",
             lambda: dummy_context,
         )
 
@@ -92,7 +92,7 @@ def test_get_local_content_store(monkeypatch):
     # Patch le chemin local de manière sécurisée
     with tempfile.TemporaryDirectory() as tmpdir:
         monkeypatch.setattr(
-            "knowledge_flow_app.stores.content.content_storage_factory.ContentStoreLocalSettings",
+            "app.stores.content.content_storage_factory.ContentStoreLocalSettings",
             lambda: type("DummySettings", (), {"root_path": tmpdir}),
         )
 
@@ -119,11 +119,11 @@ def test_get_minio_content_store(monkeypatch, patch_app_context):
 
     # Patch settings loading
     monkeypatch.setattr(
-        "knowledge_flow_app.stores.content.content_storage_factory.validate_settings_or_exit",
+        "app.stores.content.content_storage_factory.validate_settings_or_exit",
         lambda cls, _: dummy_settings,
     )
 
-    monkeypatch.setattr("knowledge_flow_app.stores.content.minio_content_store.Minio", lambda *args, **kwargs: DummyMinio())
+    monkeypatch.setattr("app.stores.content.minio_content_store.Minio", lambda *args, **kwargs: DummyMinio())
 
     store = get_content_store()
     assert isinstance(store, MinioContentStore)

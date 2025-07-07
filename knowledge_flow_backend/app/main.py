@@ -123,7 +123,7 @@ def main():
 
     import uvicorn
     uvicorn.run(
-        "knowledge_flow_app.main:app",
+        "app.main:app",
         host=args.server_address,
         port=args.server_port,
         log_level=args.server_log_level,

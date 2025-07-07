@@ -166,7 +166,7 @@ class TestMetadataController:
             raise Exception("Internal server error")
 
         monkeypatch.setattr(
-            "knowledge_flow_app.services.content_service.ContentService.get_markdown_preview",
+            "app.services.content_service.ContentService.get_markdown_preview",
             raise_exc,
         )
         response = client.get("/knowledge/v1/markdown/test")
@@ -190,7 +190,7 @@ class TestMetadataController:
             raise ValueError("Value error")
 
         monkeypatch.setattr(
-            "knowledge_flow_app.services.content_service.ContentService.get_markdown_preview",
+            "app.services.content_service.ContentService.get_markdown_preview",
             raise_exc,
         )
         response = client.get("/knowledge/v1/markdown/test")
@@ -249,7 +249,7 @@ class TestMetadataController:
             raise ValueError("Value error")
 
         monkeypatch.setattr(
-            "knowledge_flow_app.services.content_service.ContentService.get_original_content",
+            "app.services.content_service.ContentService.get_original_content",
             raise_exc,
         )
         response = client.get("/knowledge/v1/raw_content/test")
@@ -271,7 +271,7 @@ class TestMetadataController:
             raise Exception("Internal server error")
 
         monkeypatch.setattr(
-            "knowledge_flow_app.services.content_service.ContentService.get_original_content",
+            "app.services.content_service.ContentService.get_original_content",
             raise_exc,
         )
         response = client.get("/knowledge/v1/raw_content/test")

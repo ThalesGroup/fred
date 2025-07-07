@@ -101,15 +101,15 @@ def app_context(request):
         input_processors=[
             ProcessorConfig(
                 prefix=".docx",
-                class_path="knowledge_flow_app.core.processors.input.docx_markdown_processor.docx_markdown_processor.DocxMarkdownProcessor",
+                class_path="app.core.processors.input.docx_markdown_processor.docx_markdown_processor.DocxMarkdownProcessor",
             ),
             ProcessorConfig(
                 prefix=".pdf",
-                class_path="knowledge_flow_app.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor",
+                class_path="app.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor",
             ),
             ProcessorConfig(
                 prefix=".pptx",
-                class_path="knowledge_flow_app.core.processors.input.pptx_markdown_processor.pptx_markdown_processor.PptxMarkdownProcessor",
+                class_path="app.core.processors.input.pptx_markdown_processor.pptx_markdown_processor.PptxMarkdownProcessor",
             ),
         ],
     )
@@ -147,7 +147,7 @@ def fake_embedder(monkeypatch):
     """
     Monkeypatches the Embedder class's __init__ method to use a fake embedder for testing purposes.
     This function replaces the original __init__ method of the Embedder class in
-    'knowledge_flow_app.core.processors.output.vectorization_processor.embedder' with a fake implementation
+    'app.core.processors.output.vectorization_processor.embedder' with a fake implementation
     that initializes the model attribute with a FakeEmbeddings instance of size 1352.
 
     Args:
@@ -157,7 +157,7 @@ def fake_embedder(monkeypatch):
     def fake_embedder_init(self, config=None):
         self.model = FakeEmbeddings(size=1352)
 
-    monkeypatch.setattr("knowledge_flow_app.core.processors.output.vectorization_processor.embedder.Embedder.__init__", fake_embedder_init)
+    monkeypatch.setattr("app.core.processors.output.vectorization_processor.embedder.Embedder.__init__", fake_embedder_init)
 
 
 @pytest.fixture(scope="function")
