@@ -17,7 +17,7 @@ from typing import override, List
 from langchain_core.tools import BaseToolkit, BaseTool
 from pydantic import Field
 from langchain_mcp_adapters.client import MultiServerMCPClient
-from fred.application_context import get_mcp_agent_tools
+from app.application_context import get_mcp_agent_tools
 
 class K8SOperatorToolkit(BaseToolkit):
     """

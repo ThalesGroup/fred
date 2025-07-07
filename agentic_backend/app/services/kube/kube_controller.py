@@ -39,11 +39,11 @@ from fastapi import APIRouter, Depends
 from fastapi.exceptions import HTTPException
 from kubernetes.client.exceptions import ApiException
 
-from fred.security.keycloak import KeycloakUser, get_current_user
-from fred.services.kube.kube_service import KubeService
-from fred.services.kube.structure import Cluster, Workload, WorkloadKind, WorkloadNameList, IngressesList
-from fred.services.kube.structure import NamespacesList, Namespace, ConfigMapsList, ServicesList
-from fred.common.structure import Configuration
+from app.security.keycloak import KeycloakUser, get_current_user
+from app.services.kube.kube_service import KubeService
+from app.services.kube.structure import Cluster, Workload, WorkloadKind, WorkloadNameList, IngressesList
+from app.services.kube.structure import NamespacesList, Namespace, ConfigMapsList, ServicesList
+from app.common.structure import Configuration
 # 🔹 Create a module-level logger
 logger = logging.getLogger(__name__)
 

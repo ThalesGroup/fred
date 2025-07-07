@@ -21,8 +21,8 @@ from typing import Optional
 from langfuse.callback import CallbackHandler
 from pydantic import BaseModel, Field
 
-from fred.application_context import get_model_for_service
-from fred.services.ai.structure.workload_context import WorkloadContext
+from app.application_context import get_model_for_service
+from app.services.ai.structure.workload_context import WorkloadContext
 
 
 class WorkloadSummary(BaseModel):

@@ -28,9 +28,9 @@ import time
 import logging
 import functools
 import inspect
-from fred.monitoring.logging_context import get_logging_context
-from fred.monitoring.node_monitoring.node_metric_type import NodeMetric
-from fred.monitoring.node_monitoring.node_metric_store import get_node_metric_store
+from app.monitoring.logging_context import get_logging_context
+from app.monitoring.node_monitoring.node_metric_type import NodeMetric
+from app.monitoring.node_monitoring.node_metric_store import get_node_metric_store
 
 logger = logging.getLogger(__name__)
 

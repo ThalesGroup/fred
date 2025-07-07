@@ -32,10 +32,10 @@ Controllers to expose the power kepler metrics endpoints
 import traceback
 from fastapi import Depends, HTTPException, APIRouter
 
-from fred.security.keycloak import KeycloakUser, get_current_user
-from fred.services.mission.mission_abstract_service import AbstractMissionService
-from fred.services.mission.mission_service import MissionService
-from fred.services.mission.mission_structures import MissionSeries
+from app.security.keycloak import KeycloakUser, get_current_user
+from app.services.mission.mission_abstract_service import AbstractMissionService
+from app.services.mission.mission_service import MissionService
+from app.services.mission.mission_structures import MissionSeries
 
 class MissionController:
     def __init__(self, app: APIRouter):

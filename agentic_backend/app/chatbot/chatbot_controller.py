@@ -17,11 +17,11 @@ import logging
 from typing import List
 from uuid import uuid4
 
-from fred.chatbot.agent_manager import AgentManager
-from fred.services.chatbot_session.in_memory_session_backend import InMemorySessionStorage
-from fred.services.chatbot_session.session_manager import SessionManager
-from fred.services.chatbot_session.structure.chat_schema import ChatMessagePayload, ErrorEvent, FinalEvent, SessionSchema, SessionWithFiles, StreamEvent
-from fred.chatbot.structures.chatbot_error import ChatBotError
+from app.chatbot.agent_manager import AgentManager
+from app.services.chatbot_session.in_memory_session_backend import InMemorySessionStorage
+from app.services.chatbot_session.session_manager import SessionManager
+from app.services.chatbot_session.structure.chat_schema import ChatMessagePayload, ErrorEvent, FinalEvent, SessionSchema, SessionWithFiles, StreamEvent
+from app.chatbot.structures.chatbot_error import ChatBotError
 from fastapi import (
     APIRouter,
     Body,
@@ -36,20 +36,20 @@ from fastapi import (
 from fastapi.responses import JSONResponse, StreamingResponse
 from starlette.websockets import WebSocketState
 
-from fred.chatbot.structures.agentic_flow import AgenticFlow
-from fred.chatbot.structures.chatbot_message import ChatAskInput
-from fred.common.connectors.file_dao import FileDAO
-from fred.common.structure import (
+from app.chatbot.structures.agentic_flow import AgenticFlow
+from app.chatbot.structures.chatbot_message import ChatAskInput
+from app.common.connectors.file_dao import FileDAO
+from app.common.structure import (
     DAOTypeEnum,
 )
-from fred.application_context import get_configuration
-from fred.common.utils import log_exception
-from fred.security.keycloak import KeycloakUser, get_current_user
-from fred.services.ai.ai_service import AIService
-from fred.services.cluster_consumption.cluster_consumption_service import (
+from app.application_context import get_configuration
+from app.common.utils import log_exception
+from app.security.keycloak import KeycloakUser, get_current_user
+from app.services.ai.ai_service import AIService
+from app.services.cluster_consumption.cluster_consumption_service import (
     ClusterConsumptionService,
 )
-from fred.services.chatbot_session.session_manager import CallbackType
+from app.services.chatbot_session.session_manager import CallbackType
 
 logger = logging.getLogger(__name__)
 

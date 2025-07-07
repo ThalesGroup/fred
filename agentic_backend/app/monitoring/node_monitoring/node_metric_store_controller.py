@@ -29,10 +29,10 @@ Routes are prefixed under /metrics/nodes
 from fastapi import APIRouter
 import logging
 
-from fred.monitoring.metric_controller_factory import register_metric_routes
-from fred.monitoring.node_monitoring.node_metric_type import NodeMetric
-from fred.monitoring.metric_types import NumericalMetric, CategoricalMetric
-from fred.monitoring.node_monitoring.node_metric_store import get_node_metric_store
+from app.monitoring.metric_controller_factory import register_metric_routes
+from app.monitoring.node_monitoring.node_metric_type import NodeMetric
+from app.monitoring.metric_types import NumericalMetric, CategoricalMetric
+from app.monitoring.node_monitoring.node_metric_store import get_node_metric_store
 
 logger = logging.getLogger(__name__)
 

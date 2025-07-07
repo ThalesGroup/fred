@@ -26,10 +26,10 @@ Features:
 """
 
 from typing import Optional
-from fred.monitoring.base_hybrid_store import HybridJsonlStore
-from fred.monitoring.tool_monitoring.tool_metric_type import ToolMetric
-from fred.monitoring.metric_types import CategoricalMetric
-from fred.common.structure import MetricsStorageConfig
+from app.monitoring.base_hybrid_store import HybridJsonlStore
+from app.monitoring.tool_monitoring.tool_metric_type import ToolMetric
+from app.monitoring.metric_types import CategoricalMetric
+from app.common.structure import MetricsStorageConfig
 from datetime import datetime
 import logging
 

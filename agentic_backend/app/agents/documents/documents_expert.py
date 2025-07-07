@@ -17,14 +17,14 @@ import logging
 from datetime import datetime
 from typing import Optional
 
-from fred.flow import AgentFlow
-from fred.agents.documents.documents_expert_toolkit import DocumentsToolkit
-from fred.application_context import (get_agent_settings,
+from app.flow import AgentFlow
+from app.agents.documents.documents_expert_toolkit import DocumentsToolkit
+from app.application_context import (get_agent_settings,
                                       get_mcp_client_for_agent,
                                       get_model_for_agent)
-from fred.monitoring.node_monitoring.monitor_node import monitor_node
-from fred.common.models.document_source import DocumentSource
-from fred.services.chatbot_session.structure.chat_schema import ChatSource
+from app.monitoring.node_monitoring.monitor_node import monitor_node
+from app.common.models.document_source import DocumentSource
+from app.services.chatbot_session.structure.chat_schema import ChatSource
 from langchain_core.messages import HumanMessage, ToolMessage
 from langgraph.constants import START
 from langgraph.graph import MessagesState, StateGraph

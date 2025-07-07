@@ -14,7 +14,7 @@
 
 from abc import ABC, abstractmethod
 
-from fred.services.theorical_radio.theorical_radio_structures import TheoricalRadioSeries
+from app.services.theorical_radio.theorical_radio_structures import TheoricalRadioSeries
 
 class AbstractTheoricalRadioService(ABC):
     """

@@ -28,7 +28,7 @@ from fastapi import (
     UploadFile,
 )
 from fastapi.responses import StreamingResponse
-from fred.application_context import get_app_context, get_configuration
+from app.application_context import get_app_context, get_configuration
 
 from security.keycloak import KeycloakUser, get_current_user
 from services.ai.ai_service import AIService

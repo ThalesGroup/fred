@@ -22,7 +22,7 @@ from langchain_core.prompts import PromptTemplate
 from langfuse.callback import CallbackHandler
 from pydantic import BaseModel, Field
 
-from fred.application_context import get_structured_chain_for_service
+from app.application_context import get_structured_chain_for_service
 
 
 class IngressEssentials(BaseModel):

@@ -17,10 +17,10 @@ from typing import override, List
 from langchain_core.tools import BaseToolkit, BaseTool
 from pydantic import Field
 
-from fred.monitoring.tool_monitoring.monitor_tool import monitor_tool
-from fred.services.ai.structure.tools.energy_consumption import get_energy_consumption_tool
-from fred.services.ai.structure.tools.energy_mix import get_energy_mix_tool
-from fred.services.ai.structure.tools.finops_consumption import get_finops_consumption_tool
+from app.monitoring.tool_monitoring.monitor_tool import monitor_tool
+from app.services.ai.structure.tools.energy_consumption import get_energy_consumption_tool
+from app.services.ai.structure.tools.energy_mix import get_energy_mix_tool
+from app.services.ai.structure.tools.finops_consumption import get_finops_consumption_tool
 
 
 class MonitoringToolkit(BaseToolkit):

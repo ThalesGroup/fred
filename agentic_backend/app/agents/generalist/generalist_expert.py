@@ -17,10 +17,10 @@ import logging
 from typing import Optional
 from langchain_core.messages import SystemMessage
 from langgraph.graph import END, START, MessagesState, StateGraph
-from fred.common.structure import AgentSettings, Configuration
-from fred.flow import AgentFlow
-from fred.application_context import get_agent_settings, get_model_for_agent
-from fred.monitoring.node_monitoring.monitor_node import monitor_node
+from app.common.structure import AgentSettings, Configuration
+from app.flow import AgentFlow
+from app.application_context import get_agent_settings, get_model_for_agent
+from app.monitoring.node_monitoring.monitor_node import monitor_node
 
 logger = logging.getLogger(__name__)
 class GeneralistExpert(AgentFlow):

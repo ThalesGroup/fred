@@ -14,7 +14,7 @@
 
 from abc import ABC, abstractmethod
 
-from fred.services.sensor.sensor_structures import SensorSeries, SensorConfigurationSeries
+from app.services.sensor.sensor_structures import SensorSeries, SensorConfigurationSeries
 
 class AbstractSensorService(ABC):
     """

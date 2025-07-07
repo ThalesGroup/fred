@@ -32,10 +32,10 @@ Controllers to expose the power kepler metrics endpoints
 import traceback
 from fastapi import Depends, HTTPException, APIRouter
 
-from fred.security.keycloak import KeycloakUser, get_current_user
-from fred.services.sensor.sensor_abstract_service import AbstractSensorService, AbstractSensorConfigurationService
-from fred.services.sensor.sensor_service import SensorService, SensorConfigurationService
-from fred.services.sensor.sensor_structures import SensorSeries, SensorConfigurationSeries
+from app.security.keycloak import KeycloakUser, get_current_user
+from app.services.sensor.sensor_abstract_service import AbstractSensorService, AbstractSensorConfigurationService
+from app.services.sensor.sensor_service import SensorService, SensorConfigurationService
+from app.services.sensor.sensor_structures import SensorSeries, SensorConfigurationSeries
 
 
 class SensorController:

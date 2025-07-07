@@ -46,13 +46,13 @@ import urllib3
 from kubernetes import client, config
 from kubernetes.client import ApiException
 
-from fred.application_context import get_app_context, get_configuration
-from fred.services.kube.structure import Cluster, ClusterList, WorkloadKind, WorkloadNameList, Workload, IngressesList, \
+from app.application_context import get_app_context, get_configuration
+from app.services.kube.structure import Cluster, ClusterList, WorkloadKind, WorkloadNameList, Workload, IngressesList, \
     CustomObject, CustomObjectInfo
-from fred.services.kube.structure import ConfigMapsList, NamespacesList, Namespace, ServicesList
-from fred.common.connectors.file_dao import FileDAO
-from fred.common.error import UnavailableError
-from fred.common.structure import Configuration, DAOTypeEnum
+from app.services.kube.structure import ConfigMapsList, NamespacesList, Namespace, ServicesList
+from app.common.connectors.file_dao import FileDAO
+from app.common.error import UnavailableError
+from app.common.structure import Configuration, DAOTypeEnum
 
 logger = logging.getLogger(__name__)
 

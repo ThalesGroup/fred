@@ -25,37 +25,37 @@ import os
 
 from fastapi import FastAPI, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
-from fred.monitoring.tool_monitoring.tool_metric_store import create_tool_metric_store
-from fred.monitoring.tool_monitoring.tool_metric_store_controller import ToolMetricStoreController
-from fred.monitoring.tool_monitoring.tool_metric_store import ToolMetric
-from fred.monitoring.node_monitoring.node_metric_store import create_node_metric_store
-from fred.monitoring.node_monitoring.node_metric_store_controller import NodeMetricStoreController
-from fred.monitoring.node_monitoring.node_metric_store import NodeMetric
+from app.monitoring.tool_monitoring.tool_metric_store import create_tool_metric_store
+from app.monitoring.tool_monitoring.tool_metric_store_controller import ToolMetricStoreController
+from app.monitoring.tool_monitoring.tool_metric_store import ToolMetric
+from app.monitoring.node_monitoring.node_metric_store import create_node_metric_store
+from app.monitoring.node_monitoring.node_metric_store_controller import NodeMetricStoreController
+from app.monitoring.node_monitoring.node_metric_store import NodeMetric
 
-from fred.common.structure import MetricsStorageConfig, MetricsStorageSettings
+from app.common.structure import MetricsStorageConfig, MetricsStorageSettings
 from services.ai.ai_service import AIService
 from services.kube.kube_service import KubeService
 from dotenv import load_dotenv
 import uvicorn
 
-from fred.common.structure import Configuration
-from fred.common.utils import parse_server_configuration
-from fred.application_context import ApplicationContext
-from fred.security.keycloak import initialize_keycloak
-from fred.main_utils import configure_logging
+from app.common.structure import Configuration
+from app.common.utils import parse_server_configuration
+from app.application_context import ApplicationContext
+from app.security.keycloak import initialize_keycloak
+from app.main_utils import configure_logging
 
-from fred.chatbot.chatbot_controller import ChatbotController
-from fred.feedback.feedback_controller import FeedbackController
-from fred.services.frontend.frontend_controller import UiController
-from fred.services.kube.kube_controller import KubeController
-from fred.services.ai.ai_controller import AIController
-from fred.services.carbon.carbon_controller import CarbonController
-from fred.services.energy.energy_controller import EnergyController
-from fred.services.finops.finops_controller import FinopsController
-from fred.services.theater_analysis.theater_analysis_controller import TheaterAnalysisController
-from fred.services.mission.mission_controller import MissionController
-from fred.services.theorical_radio.theorical_radio_controller import TheoricalRadioController
-from fred.services.sensor.sensor_controller import SensorController, SensorConfigurationController
+from app.chatbot.chatbot_controller import ChatbotController
+from app.feedback.feedback_controller import FeedbackController
+from app.services.frontend.frontend_controller import UiController
+from app.services.kube.kube_controller import KubeController
+from app.services.ai.ai_controller import AIController
+from app.services.carbon.carbon_controller import CarbonController
+from app.services.energy.energy_controller import EnergyController
+from app.services.finops.finops_controller import FinopsController
+from app.services.theater_analysis.theater_analysis_controller import TheaterAnalysisController
+from app.services.mission.mission_controller import MissionController
+from app.services.theorical_radio.theorical_radio_controller import TheoricalRadioController
+from app.services.sensor.sensor_controller import SensorController, SensorConfigurationController
 
 logger = logging.getLogger(__name__)
 

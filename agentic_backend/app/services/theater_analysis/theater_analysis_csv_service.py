@@ -29,21 +29,21 @@
 """
 Services to extract and transform data from theater of operation captured by a sensor
 """
-from fred.application_context import get_configuration
+from app.application_context import get_configuration
 import logging
 import os
 import pathlib
 import sys
 import pandas as pd
 
-from fred.services.theater_analysis.theater_analysis_structures import (
+from app.services.theater_analysis.theater_analysis_structures import (
     TheaterAnalysisSeries,
     ShipSignalLocation
     )
-from fred.services.theater_analysis.theater_analysis_structures import (
+from app.services.theater_analysis.theater_analysis_structures import (
     Mission, MissionSeries
     )
-from fred.services.theater_analysis.theater_analysis_structures import (
+from app.services.theater_analysis.theater_analysis_structures import (
     DetectedData, DetectedDataSeries
     )
 

@@ -22,9 +22,9 @@ from typing import Optional
 from langchain_core.prompts import PromptTemplate
 from langfuse.callback import CallbackHandler
 from pydantic import BaseModel, Field
-from fred.application_context import get_structured_chain_for_service
+from app.application_context import get_structured_chain_for_service
 
-from fred.services.ai.structure.workload_context import WorkloadContext
+from app.services.ai.structure.workload_context import WorkloadContext
 
 
 class WorkloadId(BaseModel):

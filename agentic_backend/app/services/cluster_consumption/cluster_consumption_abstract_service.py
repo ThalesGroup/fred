@@ -15,9 +15,9 @@
 from abc import ABC, abstractmethod
 from datetime import datetime
 
-from fred.common.structure import PrecisionEnum, CompareResult, Series
-from fred.common.utils import compare_two_windows
-from fred.services.cluster_consumption.cluster_consumption_structures import ClusterConsumptionSeries
+from app.common.structure import PrecisionEnum, CompareResult, Series
+from app.common.utils import compare_two_windows
+from app.services.cluster_consumption.cluster_consumption_structures import ClusterConsumptionSeries
 
 
 class AbstractClusterConsumptionService(ABC):

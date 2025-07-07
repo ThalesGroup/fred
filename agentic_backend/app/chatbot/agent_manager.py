@@ -15,9 +15,9 @@
 import logging
 import json
 from typing import cast
-from fred.application_context import get_agent_class, get_enabled_agent_names
-from fred.chatbot.structures.agentic_flow import AgenticFlow
-from fred.leader.leader import Leader
+from app.application_context import get_agent_class, get_enabled_agent_names
+from app.chatbot.structures.agentic_flow import AgenticFlow
+from app.leader.leader import Leader
 
 logger = logging.getLogger(__name__)
 

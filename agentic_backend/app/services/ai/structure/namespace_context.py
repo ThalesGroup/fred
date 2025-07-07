@@ -18,7 +18,7 @@ Module to represent the context of a namespace.
 
 from typing import List, Optional
 
-from fred.services.ai.structure.workload_topology import WorkloadTopology
+from app.services.ai.structure.workload_topology import WorkloadTopology
 from pydantic import BaseModel, Field
 
 

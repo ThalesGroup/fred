@@ -20,10 +20,10 @@ from langgraph.constants import START, END
 from langgraph.graph import StateGraph
 from langgraph.prebuilt import ToolNode
 
-from fred.flow import AgentFlow
-from fred.agents.keda.structures import KedaScaling, MessagesStateWithFinalStructuredResponse
-from fred.agents.keda.keda_toolkit import KedaToolkitBuilder
-from fred.application_context import get_app_context
+from app.flow import AgentFlow
+from app.agents.keda.structures import KedaScaling, MessagesStateWithFinalStructuredResponse
+from app.agents.keda.keda_toolkit import KedaToolkitBuilder
+from app.application_context import get_app_context
 
 
 class KedaExpert(AgentFlow):
@@ -46,7 +46,7 @@ class KedaExpert(AgentFlow):
         
         # Obtenir les paramètres de configuration de l'agent
         try:
-            from fred.application_context import get_agent_settings
+            from app.application_context import get_agent_settings
             agent_settings = get_agent_settings(self.name)
             categories = agent_settings.categories if agent_settings.categories else []
             # On conserve le tag de classe si agent_settings.tag est None ou vide

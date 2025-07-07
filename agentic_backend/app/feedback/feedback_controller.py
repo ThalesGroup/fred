@@ -15,10 +15,10 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from typing import Optional
-from fred.common.structure import FeedbackStorageConfig
-from fred.config.feedback_store_local_settings import FeedbackStoreLocalSettings
-from fred.feedback.feedback_service import FeedbackService
-from fred.feedback.store.local_feedback_store import LocalFeedbackStore
+from app.common.structure import FeedbackStorageConfig
+from app.config.feedback_store_local_settings import FeedbackStoreLocalSettings
+from app.feedback.feedback_service import FeedbackService
+from app.feedback.store.local_feedback_store import LocalFeedbackStore
 import logging
 
 logger = logging.getLogger(__name__)

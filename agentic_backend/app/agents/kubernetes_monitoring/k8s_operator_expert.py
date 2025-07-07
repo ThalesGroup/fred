@@ -15,13 +15,13 @@
 from datetime import datetime
 from typing import Optional
 
-from fred.flow import AgentFlow
+from app.flow import AgentFlow
 from langgraph.graph import MessagesState, StateGraph
 from langgraph.constants import START
 from langgraph.prebuilt import ToolNode, tools_condition
 
-from fred.application_context import get_agent_settings, get_model_for_agent, get_mcp_client_for_agent
-from fred.agents.kubernetes_monitoring.k8s_operator_toolkit import K8SOperatorToolkit
+from app.application_context import get_agent_settings, get_model_for_agent, get_mcp_client_for_agent
+from app.agents.kubernetes_monitoring.k8s_operator_toolkit import K8SOperatorToolkit
 
 class K8SOperatorExpert(AgentFlow):
     """

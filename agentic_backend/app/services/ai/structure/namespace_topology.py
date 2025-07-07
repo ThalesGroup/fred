@@ -19,9 +19,9 @@ Module that defines the structure of an overall namespace topology.
 from pydantic import BaseModel, Field
 import textwrap
 
-from fred.services.ai.structure.facts import Facts
-from fred.services.ai.structure.namespace_context import NamespaceContext
-from fred.services.ai.structure.namespace_summary import NamespaceSummary
+from app.services.ai.structure.facts import Facts
+from app.services.ai.structure.namespace_context import NamespaceContext
+from app.services.ai.structure.namespace_summary import NamespaceSummary
 
 
 class NamespaceTopology(BaseModel):

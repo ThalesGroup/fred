@@ -21,7 +21,7 @@ from langgraph.checkpoint.memory import MemorySaver
 from langchain_core.tools import BaseToolkit
 from langchain_core.messages import SystemMessage
 from langchain_mcp_adapters.client import MultiServerMCPClient
-from fred.common.error import NoToolkitProvidedError
+from app.common.error import NoToolkitProvidedError
 
 logger = logging.getLogger(__name__)
 
@@ -147,7 +147,7 @@ class AgentFlow:
                 "You must pass `toolkit` to super().__init__() when using mcp_client."
             )
         # Import here to avoid circular import
-        from fred.application_context import get_model_for_agent
+        from app.application_context import get_model_for_agent
         self.model = get_model_for_agent(self.name)
         if self.toolkit:
             self.model = self.model.bind_tools(self.toolkit.get_tools())

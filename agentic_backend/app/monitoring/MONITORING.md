@@ -24,7 +24,7 @@ Fred Monitoring lets you **record and analyze** the performance and usage of you
 
 ```python
 
-from fred.monitoring.node_monitoring.monitor_node import monitor_node
+from app.monitoring.node_monitoring.monitor_node import monitor_node
 
 def get_graph(self):
         """
@@ -49,7 +49,7 @@ What it does:
 ```python
 
 from langchain_core.tools import BaseToolkit
-from fred.monitoring.tool_monitoring.monitor_tool import monitor_tool
+from app.monitoring.tool_monitoring.monitor_tool import monitor_tool
 
 class MyToolkit(BaseToolkit):
     """

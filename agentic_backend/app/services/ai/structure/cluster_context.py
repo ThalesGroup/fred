@@ -18,7 +18,7 @@ Module to represent the condensed context of a cluster.
 
 from typing import List
 
-from fred.services.ai.structure.namespace_topology import NamespaceTopology
+from app.services.ai.structure.namespace_topology import NamespaceTopology
 from pydantic import BaseModel, Field
 
 

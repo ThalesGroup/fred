@@ -12,10 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from fred.application_context import get_configuration
-from fred.services.theorical_radio.theorical_radio_abstract_service import AbstractTheoricalRadioService
-from fred.services.theorical_radio.theorical_radio_csv_service import TheoricalRadioCsvService
-from fred.common.structure import DatabaseTypeEnum
+from app.application_context import get_configuration
+from app.services.theorical_radio.theorical_radio_abstract_service import AbstractTheoricalRadioService
+from app.services.theorical_radio.theorical_radio_csv_service import TheoricalRadioCsvService
+from app.common.structure import DatabaseTypeEnum
 
 
 class TheoricalRadioService:

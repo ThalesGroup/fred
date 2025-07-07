@@ -15,14 +15,14 @@
 from datetime import datetime
 from typing import Optional
 
-from fred.common.structure import AgentSettings
-from fred.flow import AgentFlow
+from app.common.structure import AgentSettings
+from app.flow import AgentFlow
 from langgraph.constants import START
 from langgraph.graph import MessagesState, StateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
 
-from fred.agents.sensor.sensor_toolkit import SensorToolkit
-from fred.application_context import get_agent_settings, get_model_for_agent
+from app.agents.sensor.sensor_toolkit import SensorToolkit
+from app.application_context import get_agent_settings, get_model_for_agent
 
 class SensorExpert(AgentFlow):
     """

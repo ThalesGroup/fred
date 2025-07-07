@@ -13,10 +13,10 @@
 # limitations under the License.
 
 
-from fred.application_context import get_configuration
-from fred.services.mission.mission_abstract_service import AbstractMissionService
-from fred.services.mission.mission_csv_service import MissionCsvService
-from fred.common.structure import DatabaseTypeEnum
+from app.application_context import get_configuration
+from app.services.mission.mission_abstract_service import AbstractMissionService
+from app.services.mission.mission_csv_service import MissionCsvService
+from app.common.structure import DatabaseTypeEnum
 
 
 class MissionService:

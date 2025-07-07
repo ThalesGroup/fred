@@ -14,7 +14,7 @@
 
 import uuid
 import json
-from fred.feedback.store.base_feedback_store import BaseFeedbackStore
+from app.feedback.store.base_feedback_store import BaseFeedbackStore
 
 class FeedbackService:
     def __init__(self, store: BaseFeedbackStore):
