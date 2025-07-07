@@ -1,6 +1,30 @@
+
 # Contributing Guidelines
 
 Thank you for your interest in contributing! This project is developed collaboratively by Thales and the open source community. Please follow the guidelines below to help us maintain a high-quality and efficient workflow.
+
+- [🧑‍💻 Team Organization](#-team-organization)
+  - [Roles](#roles)
+  - [Communication](#communication)
+- [🚀 How to Become a Contributor](#-how-to-become-a-contributor)
+  - [Contributor License Agreements](#contributor-license-agreements)
+- [✅ Pull Request Checklist](#-pull-request-checklist)
+- [🧾 License](#-license)
+- [🐛 Issues Management](#-issues-management)
+- [🎯 Coding Style](#-coding-style)
+  - [Code formatting](#code-formatting)
+    - [Frontend](#frontend)
+- [Commit Writing](#commit-writing)
+  - [Common Types](#common-types)
+  - [Examples](#examples)
+  - [Resources](#resources)
+  - [VSCode](#vscode)
+  - [Clean Commit History](#clean-commit-history)
+- [🎯 Pre-commit checks](#-pre-commit-checks)
+- [🧪 Testing](#-testing)
+  - [Recommended workflow:](#recommended-workflow)
+- [📬 Contact](#-contact)
+
 
 ---
 
@@ -24,24 +48,6 @@ This project is maintained by a core team at **Thales**, in collaboration with e
 
 - Internal team coordination is handled via Thales tools (email, GitLab).
 - External collaboration happens via **GitHub issues and pull requests**.
-
----
-
-## 🔄 Repository Structure
-
-This project uses two synchronized repositories:
-
-- **Internal GitLab** (for Thales developers):
-  [gitlab.thalesdigital.io/tsn/innovation/projects/fred-oss](https://gitlab.thalesdigital.io/tsn/innovation/projects/fred-oss)
-
-- **Public GitHub** (for open source contributions):
-  [github.com/ThalesGroup/fred](https://github.com/ThalesGroup/fred)
-
-### Synchronization Policy
-
-- The `main` branch is periodically synchronized **from GitLab to GitHub**.
-- **Thales teams work in GitLab**, including feature branches and CI/CD.
-- **External contributors work in GitHub**, following standard fork & pull request workflows.
 
 ---
 
@@ -82,12 +88,23 @@ All contributions must be compatible with the project’s open source license (s
 
 ---
 
+## 🐛 Issues Management
+
+- Use **plain English** when reporting issues or requesting features.
+- Apply only the **default GitHub labels** (e.g., `bug`, `enhancement`, `question`) — do not create custom labels.
+- Include:
+  - Clear and concise problem description
+  - Steps to reproduce (if a bug)
+  - Motivation and expected behavior (if a feature)
+
+---
+
 ## 🎯 Coding Style
 
 - Follow the existing formatting and structure.
 - Write **clear, consistent, and maintainable** code.
 - Prefer readability and clarity over cleverness.
-- We recommend using tools such as `prettier` in Javascript or `black` in Python to format your code.
+- We recommend using tools such as `prettier` in Javascript or `black` (or `ruff`) in Python to format your code.
 - Please respect the conventions in effect for the following languages : PEP8 in Python and ECMAScript in Javascript
 
 ### Code formatting
@@ -115,39 +132,11 @@ With the [prettier vscode extension](https://marketplace.visualstudio.com/items?
 ```
 
 You can also run it from the terminal to format all the frontend files in one command:
+
 ```sh
 cd frontend
 make format
 ```
-
----
-
-## 🧪 Testing
-
-Testing is mandatory for any non-trivial change. Both unit and integration tests are run using `pytest`.
-
-### Recommended workflow:
-
-```bash
-make build     # create virtual environment via Poetry
-make run       # start the app locally
-make test      # run all tests (unit + integration)
-```
-
-Ensure tests pass **before** opening a pull request.
-
----
-
-## 🐛 Issues Management
-
-- Use **plain English** when reporting issues or requesting features.
-- Apply only the **default GitHub labels** (e.g., `bug`, `enhancement`, `question`) — do not create custom labels.
-- Include:
-  - Clear and concise problem description
-  - Steps to reproduce (if a bug)
-  - Motivation and expected behavior (if a feature)
-
----
 
 ## Commit Writing
 
@@ -182,6 +171,7 @@ Ensure tests pass **before** opening a pull request.
 ### VSCode
 
 - Extension for easier commit writing : [VSCode Conventional Commits](https://marketplace.visualstudio.com/items?itemName=vivaxy.vscode-conventional-commits)
+- Extansion for ruff (python linter and formatter) : [Ruff extension for Visual Studio Code](https://marketplace.visualstudio.com/items?itemName=charliermarsh.ruff) 
 
 ### Clean Commit History
 
@@ -191,11 +181,54 @@ Squashing helps keep the main branch history clean, readable, and easier to debu
 
 Tip: Use git rebase -i or select "Squash and merge" when merging the PR.
 
+
+---
+
+## 🎯 Pre-commit checks
+
+To ensure the code you are about to push is quite clean and safe, we provide some pre-commit hooks:
+
+- Check PEP8 compliance and fix errors if possible: `ruff check --fix`
+- Format the code: `ruff format`
+- Detect secrets: `detect-secrets`  # pragma: allowlist secret
+
+- Analyzer the code: `bandit`
+
+To install the pre commit hooks on your environment after it is ready (see the `dev` target of the Makefile), type this command:
+```
+pre-commit install
+```
+
+Then you can test manually the hooks with this command:
+```
+pre-commit run --all-files
+```
+
+---
+
+## 🧪 Testing
+
+Testing is mandatory for any non-trivial change. Both unit and integration tests are run using `pytest`.
+
+### Recommended workflow:
+
+```bash
+make build     # create virtual environment via Poetry
+make run       # start the app locally
+make test      # run all tests (unit + integration)
+```
+
+Ensure tests pass **before** opening a pull request.
+
+---
+
 ## 📬 Contact
 
 For coordination or questions, please contact the internal maintainers:
 
 - romain.perennes@thalesgroup.com
 - fabien.le-solliec@thalesgroup.com
-- dimitri.tombroff@thalesgroup.com
+- dimitri.tombroff.e@thalesdigital.io
 - alban.capitant@thalesgroup.com
+- simon.cariou@thalesgroup.com
+- florian.muller@thalesgroup.com
