@@ -20,7 +20,6 @@ import FilterListIcon from "@mui/icons-material/FilterList";
 import StarIcon from "@mui/icons-material/Star";
 import Grid2 from "@mui/material/Grid2";
 import LocalOfferIcon from "@mui/icons-material/LocalOffer";
-import { PageBodyWrapper } from "../common/PageBodyWrapper";
 import { LoadingSpinner } from "../utils/loadingSpinner";
 import { useGetChatBotAgenticFlowsMutation } from "../slices/chatApi";
 import { TopBar } from "../common/TopBar";

@@ -294,193 +294,104 @@ const darkPalette = {
   },
 };
 
-// Define typography after palette is initialized
-const lightTypography = {
-  fontFamily: "Roboto, sans-serif",
+// Base common typography styles
+const baseTypography = {
+  fontFamily: "Inter, sans-serif",
   fontSize: 12,
   sidebar: {
-    fontSize: "0.85rem", // ~13.6px, compact but readable
-    fontWeight: 300,     // Light weight like OpenAI sidebar
+    fontSize: "14px",
+    fontWeight: 300,
     lineHeight: 1.5,
-    color: lightPalette.text.secondary,
-    fontFamily: "Roboto, sans-serif",
+    fontFamily: "Inter, sans-serif",
   },
-  h1: { fontSize: "2rem", fontWeight: 600, fontFamily: "Roboto, sans-serif" },
-  h2: { fontSize: "1.5rem", fontWeight: 500, fontFamily: "Roboto, sans-serif" },
-  body1: {
-    fontSize: "1rem",
-    fontWeight: 400,
-    fontFamily: "Roboto, sans-serif",
-  },
-  body2: {
-    fontSize: "0.875rem",
-    fontWeight: 400,
-    fontFamily: "Roboto, sans-serif",
-  },
+  h1: { fontSize: "2rem", fontWeight: 600 },
+  h2: { fontSize: "1.5rem", fontWeight: 500 },
+  body1: { fontSize: "1rem", fontWeight: 400 },
+  body2: { fontSize: "0.875rem", fontWeight: 400 },
   markdown: {
     h1: {
-      color: lightPalette.text.primary,
       lineHeight: 1.5,
       fontWeight: 500,
       fontSize: "1.2rem",
       marginBottom: "0.6rem",
-      fontFamily: "Roboto, sans-serif",
     },
     h2: {
-      color: lightPalette.text.primary,
       lineHeight: 1.5,
       fontWeight: 500,
       fontSize: "1.15rem",
       marginBottom: "0.6rem",
-      fontFamily: "Roboto, sans-serif",
     },
     h3: {
-      color: lightPalette.text.primary,
       lineHeight: 1.5,
       fontWeight: 400,
       fontSize: "1.10rem",
       marginBottom: "0.6rem",
-      fontFamily: "Roboto, sans-serif",
     },
     h4: {
-      color: lightPalette.text.primary,
       lineHeight: 1.5,
       fontWeight: 400,
       fontSize: "1.05rem",
       marginBottom: "0.6rem",
-      fontFamily: "Roboto, sans-serif",
     },
     p: {
       lineHeight: 1.8,
       fontWeight: 400,
       fontSize: "1.0rem",
       marginBottom: "0.8rem",
-      fontFamily: "Roboto, sans-serif",
     },
     code: {
-      color: lightPalette.text.primary,
       lineHeight: 1.5,
       fontSize: "0.9rem",
       borderRadius: "4px",
     },
     a: {
-      color: lightPalette.text.primary,
       textDecoration: "underline",
       lineHeight: 1.6,
       fontWeight: 400,
       fontSize: "0.9rem",
-      fontFamily: "Roboto, sans-serif",
     },
     ul: {
-      color: lightPalette.text.primary,
       marginLeft: "0.2rem",
       lineHeight: 1.4,
       fontWeight: 400,
       fontSize: "0.9rem",
-      fontFamily: "Roboto, sans-serif",
     },
     li: {
-      color: lightPalette.text.primary,
       marginBottom: "0.5rem",
       lineHeight: 1.4,
       fontSize: "0.9rem",
-      fontFamily: "Roboto, sans-serif",
     },
   },
 };
-const darkTypography = {
-  fontFamily: "Roboto, sans-serif",
-  fontSize: 12,
+
+// Light theme typography with color injection
+const lightTypography = {
+  ...baseTypography,
   sidebar: {
-    fontSize: "0.85rem",
-    fontWeight: 300,
-    lineHeight: 1.5,
+    ...baseTypography.sidebar,
+    color: lightPalette.text.secondary,
+  },
+  markdown: Object.fromEntries(
+    Object.entries(baseTypography.markdown).map(([k, v]) => [
+      k,
+      { ...v, color: lightPalette.text.primary, fontFamily: "Inter, sans-serif" },
+    ])
+  ),
+};
+
+// Dark theme typography with color injection
+const darkTypography = {
+  ...baseTypography,
+  sidebar: {
+    ...baseTypography.sidebar,
     color: darkPalette.text.secondary,
-    fontFamily: "Roboto, sans-serif",
   },
-  h1: { fontSize: "2rem", fontWeight: 600, fontFamily: "Roboto, sans-serif" },
-  h2: { fontSize: "1.5rem", fontWeight: 500, fontFamily: "Roboto, sans-serif" },
-  body1: {
-    fontSize: "1rem",
-    fontWeight: 400,
-    fontFamily: "Roboto, sans-serif",
-  },
-  body2: {
-    fontSize: "0.875rem",
-    fontWeight: 400,
-    fontFamily: "Roboto, sans-serif",
-  },
-  markdown: {
-    h1: {
-      color: darkPalette.text.primary,
-      lineHeight: 1.5,
-      fontWeight: 500,
-      fontSize: "1.2rem",
-      marginBottom: "0.6rem",
-      fontFamily: "Roboto, sans-serif",
-    },
-    h2: {
-      color: darkPalette.text.primary,
-      lineHeight: 1.5,
-      fontWeight: 500,
-      fontSize: "1.15rem",
-      marginBottom: "0.6rem",
-      fontFamily: "Roboto, sans-serif",
-    },
-    h3: {
-      color: darkPalette.text.primary,
-      lineHeight: 1.5,
-      fontWeight: 400,
-      fontSize: "1.10rem",
-      marginBottom: "0.6rem",
-      fontFamily: "Roboto, sans-serif",
-    },
-    h4: {
-      color: darkPalette.text.primary,
-      lineHeight: 1.5,
-      fontWeight: 400,
-      fontSize: "1.05rem",
-      marginBottom: "0.6rem",
-      fontFamily: "Roboto, sans-serif",
-    },
-    p: {
-      color: darkPalette.text.primary,
-      lineHeight: 1.8,
-      fontWeight: 400,
-      fontSize: "1.0rem",
-      marginBottom: "0.8rem",
-      fontFamily: "Roboto, sans-serif",
-    },
-    code: {
-      color: darkPalette.text.primary,
-      lineHeight: 1.5,
-      fontSize: "0.9rem",
-      borderRadius: "4px",
-    },
-    a: {
-      color: darkPalette.text.primary,
-      textDecoration: "underline",
-      lineHeight: 1.6,
-      fontWeight: 400,
-      fontSize: "0.9rem",
-      fontFamily: "Roboto, sans-serif",
-    },
-    ul: {
-      color: darkPalette.text.primary,
-      marginLeft: "0.2rem",
-      lineHeight: 1.4,
-      fontWeight: 400,
-      fontSize: "0.9rem",
-      fontFamily: "Roboto, sans-serif",
-    },
-    li: {
-      color: darkPalette.text.primary,
-      marginBottom: "0.5rem",
-      lineHeight: 1.4,
-      fontSize: "0.9rem",
-      fontFamily: "Roboto, sans-serif",
-    },
-  },
+  markdown: Object.fromEntries(
+    Object.entries(baseTypography.markdown).map(([k, v]) => [
+      k,
+      { ...v, color: darkPalette.text.primary, fontFamily: "Inter, sans-serif" },
+    ])
+  ),
 };
 
 // Create themes
@@ -513,7 +424,20 @@ const lightTheme = createTheme({
           color: lightPalette.text.primary, // Set the default text color to 'text.primary'
         },
       },
+      variants: [
+      {
+        props: { variant: "sidebar" },
+        style: {
+          fontSize: "14px",
+          fontWeight: 300,
+          lineHeight: 1.5,
+          fontFamily: "Inter, sans-serif",
+          color: lightPalette.text.secondary,
+        },
+      },
+    ],
     },
+    
   },
 });
 
@@ -546,6 +470,18 @@ const darkTheme = createTheme({
           color: darkPalette.text.primary, // Set the default text color to 'text.primary'
         },
       },
+      variants: [
+      {
+        props: { variant: "sidebar" },
+        style: {
+          fontSize: "14px",
+          fontWeight: 300,
+          lineHeight: 1.5,
+          fontFamily: "Inter, sans-serif",
+          color: darkPalette.text.secondary,
+        },
+      },
+    ],
     },
   },
 });

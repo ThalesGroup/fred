@@ -1,0 +1,223 @@
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
+frontend_settings:
+  feature_flags:
+    # If true acuivate the backend and frontend modules in charge of K8 
+    # and frugality monitoring
+    enableK8Features: false
+    # If true activate support for an electronic warfare demonstration
+    enableElecWarfare: false
+  properties:
+    logoName: "fred"
+
+database:
+  type: csv
+  csv_files:
+    # Can be absolute paths or relative paths to the main
+    energy_mix: './services/cluster_consumption/data/simulated_energy_mix.csv'
+    carbon_footprint: './services/cluster_consumption/data/simulated_cluster_consumption_gco2.csv'
+    energy_footprint: './services/cluster_consumption/data/simulated_cluster_consumption_wh.csv'
+    financial_footprint: './services/cluster_consumption/data/simulated_cluster_consumption_usd.csv'
+    # Guerre elec & ship identification service
+    frequencies: './services/sensor/data/bandes_freq.csv'
+    sensors_test_new: './services/theater_analysis/data/detections-capteur-donnees-test_new_scenario.csv'
+    mission: './services/mission/data/mission.csv'
+    radio: './services/theater_analysis/data/radio-maritime-donnees-tests_excel_light_militaire.csv'
+    signal_identification_guide: './services/theorical_radio/data/Signal_identification_guide_new.csv'
+
+kubernetes:
+  kube_config: '~/.kube/config'
+  aws_config: '~/.aws/config' # Optional, needed for aws EKS clusters.
+  # Timeout settings for the client
+  timeout:
+    connect: 5  # Time to wait for a connection in seconds
+    read: 15    # Time to wait for a response in seconds
+
+ai:
+  # Timeout settings for the client
+  timeout:
+    connect: 5  # Time to wait for a connection in seconds
+    read: 15    # Time to wait for a response in seconds
+  default_model:
+    # Required in .env:
+    # - OPENAI_API_KEY
+    provider: "openai"
+    name: "gpt-4o"
+    settings:
+      temperature: 0.0
+      max_retries: 2
+      request_timeout: 30
+
+    # --- OR uncomment for Azure OpenAI ---
+    # Required in .env:
+    # - AZURE_OPENAI_API_KEY
+    #
+    # Optional for token-based auth:
+    # - AZURE_TENANT_ID
+    # - AZURE_CLIENT_ID
+    # - AZURE_CLIENT_SECRET
+    #provider: "azure"
+    #name: "fred-gpt-4o"  
+    #settings:
+    #  api_version: "2024-05-01-preview"
+    #  temperature: 0.0
+    #  max_retries: 2
+    #  request_timeout: 30
+    #  azure_endpoint: "https://tehopenai.openai.azure.com/"
+
+    # --- OR uncomment for Ollama ---
+    # provider: "ollama"
+    # name: "llama2"
+    # settings:
+    #   base_url: "http://localhost:11434"
+    #   temperature: 0.0
+  leader:
+    name: "Fred"
+    class_path: "app.leader.leader.Leader"
+    enabled: true
+    max_steps: 5
+    model: {}
+  services:
+    - name: "kubernetes"
+      enabled: false
+      model: {}
+  recursion:
+    recursion_limit: 40 # Number or max recursion use by the agents while using the model
+  agents:
+    - name: "JiraExpert"
+      class_path: "app.agents.jira.jira_expert.JiraExpert"
+      enabled: false
+      mcp_servers:
+        - name: jira-mcp-server
+          transport: stdio
+          command: uvx
+          args:
+            - "mcp-atlassian"
+          env:
+            JIRA_URL: "@TO_CHANGE"
+            JIRA_USERNAME: "@TO_CHANGE"
+            JIRA_API_TOKEN: "@TO_CHANGE"
+            READ_ONLY_MODE: "true"
+          sse_read_timeout: 600 # 10 minutes. It is 5 minutes by default but it is too short.
+      model: {}
+    - name: K8SOperatorExpert
+      class_path: "app.agents.kubernetes_monitoring.k8s_operator_expert.K8SOperatorExpert"
+      enabled: true
+      mcp_servers:
+        - name: k8s-mcp-server
+          transport: sse
+          url: http://k8s-mcp:8081/sse
+          sse_read_timeout: 600 # 10 minutes. It is 5 minutes by default but it is too short.
+        #######################################
+        #### Example using STDIO transport ####
+        #######################################
+        # - name: prometheus-mcp-server
+        #   transport: stdio
+        #   command: uv
+        #   args:
+        #     - "--directory"
+        #     - "/home/xxx/Documents/github_repos/prometheus-mcp-server"
+        #     -  "run"
+        #     -  "src/prometheus_mcp_server/main.py"
+        #   env: 
+        #     PROMETHEUS_URL: "http://localhost:9091"
+      model: {}
+    - name: "GeneralistExpert"
+      class_path: "app.agents.generalist.generalist_expert.GeneralistExpert"
+      enabled: true
+      model: {}
+    - name: "TabularExpert"
+      class_path: "app.agents.tabular.expert.Expert"
+      enabled: true
+      mcp_servers:
+        - name: knowledge-flow-mcp-server
+          transport: sse
+          url: http://localhost:8111/mcp
+          sse_read_timeout: 2000
+      model: {}
+    - name: "DocumentsExpert"
+      class_path: "app.agents.documents.documents_expert.DocumentsExpert"
+      enabled: true
+      mcp_servers:
+        - name: knowledge-flow-mcp-server
+          transport: sse
+          url: http://localhost:8111/mcp
+          sse_read_timeout: 2000
+      model: {}
+      # The Rags expert essentially is the Document expert before using tools and the knownledge-flow backend as a MCP server
+    - name: "RagsExpert"
+      class_path: "agents.rags.rags_expert.RagsExpert"
+      enabled: true
+      categories:
+        - "rag"
+      settings:
+        chunk_size: 512
+        chunk_overlap: 64
+        knowledge_flow_url: "http://localhost:8111/knowledge/v1" 
+      model: {}
+    # The Monitoring expert requires you activate the 'enableK8Features' flags above
+    - name: "MonitoringExpert"
+      class_path: "app.agents.monitoring.monitoring_expert.MonitoringExpert"
+      enabled: true
+      categories:
+        - "monitoring"
+        - "observability"
+      model: {}
+
+# Where to save fred produced resources like Essentials or Scores
+# and external resources like Kubernetes Workload descriptions
+dao:
+  type: "file"  # Currently the only one supported
+  base_path: "~/.fred/dao-cache"
+  max_cached_delay_seconds: 300  # Cache delay in seconds. Use 0 for no cache or a negative value for limitless cache.
+
+# Security. As of today only keycloak is supported.
+security:
+  enabled: false
+  client_id: "fred"
+  keycloak_url: "http://keycloak:8080/realms/app"
+  authorized_origins:
+  - "http://localhost:5173"
+
+# Agentic metrics are stored in a prometheus or opensearch backend. To make development
+# easy by default they are stored on a local file. 
+node_metrics_storage:
+  type: "local" 
+  settings:
+    local_path: "~/.fred/node-metrics-store"
+
+tool_metrics_storage:
+  type: "local" 
+  settings:
+    local_path: "~/.fred/tool-metrics-store"
+
+# Feedbacks are store in a simple local file. It is plan to add 
+# additional backend like opensearch or minio.
+feedback_storage:
+  type: local
+  settings:
+    local_path: "~/.fred/feedback-store"
+
+# Sessions and messages are stored by default in_memory 
+# but it can be modified to use a backend like opensearch
+session_storage:
+  # type: in_memory # default value
+  type: opensearch
+  settings:
+    host: https://localhost:9200
+    username: admin
+    password: Azerty123_ # @TODO pass it as an env variable
+    secure: false
+    verify_certs: false
+    sessions_index: sessions

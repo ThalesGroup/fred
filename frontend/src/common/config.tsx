@@ -49,7 +49,7 @@ export const loadConfig = async () => {
   const baseConfig = await response.json();
 
   // then call backend for dynamic feature flags
-  const response_back = await fetch(`${baseConfig.backend_url_api}/fred/config/frontend_settings`);
+  const response_back = await fetch(`${baseConfig.backend_url_api}/agentic/v1/config/frontend_settings`);
   const frontendSettings = await response_back.json();
   console.log("Frontend Settings from the backend: ", frontendSettings);
   config = {

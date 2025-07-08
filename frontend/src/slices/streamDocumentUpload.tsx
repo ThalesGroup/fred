@@ -30,7 +30,7 @@ export async function streamProcessDocument(
     throw new Error("knowledged backend URL is not defined");
   }
   console.log("Backend URL:", backend_url_knowledge);
-  const response = await fetch(`${getConfig().backend_url_knowledge}/knowledge/v1/process-files`, {
+  const response = await fetch(`${getConfig().backend_url_knowledge}/knowledge-flow/v1/process-files`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
