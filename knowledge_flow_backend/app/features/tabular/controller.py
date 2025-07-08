@@ -69,7 +69,8 @@ class TabularController:
             "/tabular/{document_uid}/schema",
             response_model=TabularSchemaResponse,
             tags=["Tabular"],
-            summary="Get schema for a tabular (CSV) document"
+            summary="Get schema for a tabular (CSV) document",
+            operation_id="get_tabular_schema"
         )
         async def get_schema(document_uid: str):
             try:
@@ -84,7 +85,8 @@ class TabularController:
             "/tabular/{document_uid}/query",
             response_model=TabularQueryResponse,
             tags=["Tabular"],
-            summary="Query rows from a tabular (CSV) document"
+            summary="Query rows from a tabular (CSV) document",
+            operation_id="query_tabular_data"
         )
         async def query_tabular(document_uid: str, query: TabularQueryRequest):
             try:
@@ -99,7 +101,8 @@ class TabularController:
             "/tabular/list",
             response_model=List[TabularDatasetMetadata],
             tags=["Tabular"],
-            summary="List available tabular datasets (CSV)"
+            summary="List available tabular datasets (CSV)",
+            operation_id="list_tabular_datasets"
         )
         async def list_tabular_datasets():
             try:
