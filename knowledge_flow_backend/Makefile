@@ -102,7 +102,7 @@ docker-run: ## Run the app in Docker
 		-p 8111:8111 \
 		-v ~/.kube/:/home/fred-user/.kube/ \
 		-v ~/.aws/:/home/fred-user/.aws/ \
-		-v $(realpath knowledge_flow_app/config/configuration.yaml):/app/configuration.yaml \
+		-v $(realpath app/config/configuration.yaml):/app/configuration.yaml \
 		-e LOG_LEVEL="$(LOG_LEVEL)" \
 		$(IMG) --config-path /app/configuration.yaml
 
@@ -125,7 +125,7 @@ test-one: dev ## Run a specific test by setting TEST=...
 
 test: dev ## Run all tests
 	@echo "************ TESTING APP ************"
-	$(VENV)/bin/pytest --cov=. --cov-config=.coveragerc --cov-report=html knowledge_flow_app
+	$(VENV)/bin/pytest --cov=. --cov-config=.coveragerc --cov-report=html app
 	@echo "✅ Coverage report: htmlcov/index.html"
 	@xdg-open htmlcov/index.html || echo "📎 Open manually htmlcov/index.html"
 
@@ -172,7 +172,7 @@ format: ## Run the formatter (ruff)
 
 sast: ## Run bandit
 	@echo "************ Executing Ruff formatter with rules B101 (assert_used) and B108 (hardcoded_tmp_directory) ignored ************"
-	$(UV) run bandit -r knowledge_flow_app -s B101,B108
+	$(UV) run bandit -r app -s B101,B108
 
 code-quality: ## Run all pre-commit checks
 	@echo "************ Executing pre-commit ************"

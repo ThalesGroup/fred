@@ -15,7 +15,7 @@
 from unittest.mock import MagicMock
 import pytest
 from app.application_context import ApplicationContext
-from app.common.structures import Configuration, ContentStorageConfig, EmbeddingConfig, MetadataStorageConfig, ProcessorConfig, VectorStorageConfig
+from app.common.structures import Configuration, ContentStorageConfig, EmbeddingConfig, KnowledgeContextStorageConfig, MetadataStorageConfig, ProcessorConfig, VectorStorageConfig
 
 from app.core.stores.content.content_storage_factory import get_content_store
 from app.core.stores.content.minio_content_store import MinioContentStore
@@ -26,6 +26,8 @@ from fastapi.testclient import TestClient
 from opensearchpy.exceptions import NotFoundError
 from langchain_community.embeddings import FakeEmbeddings
 from minio.error import S3Error
+
+from app.core.processors.output.vectorization_processor.embedder import Embedder
 
 
 @pytest.fixture(scope="session", name="client")
@@ -97,6 +99,12 @@ def app_context(request):
         content_storage=ContentStorageConfig(type=content_storage_type),
         metadata_storage=MetadataStorageConfig(type=metadata_storage_type),
         vector_storage=VectorStorageConfig(type=vector_storage_type),
+        knowledge_context_storage=KnowledgeContextStorageConfig(
+            type="local",
+            settings={
+                "local_path": "/tmp"
+            }
+        ),
         embedding=EmbeddingConfig(type="openai"),
         input_processors=[
             ProcessorConfig(
@@ -157,8 +165,29 @@ def fake_embedder(monkeypatch):
     def fake_embedder_init(self, config=None):
         self.model = FakeEmbeddings(size=1352)
 
-    monkeypatch.setattr("app.core.processors.output.vectorization_processor.embedder.Embedder.__init__", fake_embedder_init)
+    monkeypatch.setattr(
+        Embedder,
+        "__init__", fake_embedder_init)
 
+@pytest.fixture
+def content_store(tmp_path):
+    return get_content_store()
+
+@pytest.fixture
+def metadata_store():
+    return get_metadata_store()   # returns LocalMetadataStore when type="local"
+
+@pytest.fixture(autouse=True)
+def _clear_stores_between_tests(metadata_store, content_store):
+    """
+    Wipe the in-memory Local*Store instances before **every** test so each case
+    starts with a clean slate.
+    """
+    # ――― test starts ―――
+    metadata_store.clear()      
+    content_store.clear()        
+    yield
+    # ――― test ends ―――
 
 @pytest.fixture(scope="function")
 def minio_content_store():

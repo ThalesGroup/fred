@@ -43,6 +43,48 @@
       "request": "launch",
       "command": "npm run dev",
       "cwd": "${workspaceFolder}/frontend"
+    },
+    {
+      // ────────────────────────────────────────────────────────────────
+      //  ❶  ▶  Debug Knowledge-Flow unit-tests (local stores only)
+      // ────────────────────────────────────────────────────────────────
+      "name": "Debug tests",
+      "type": "debugpy", // You can keep "debugpy" if you prefer – VS Code
+      "request": "launch", // accepts both.  Using the shorter alias is fine
+      "module": "pytest", // <-- run “python -m pytest …”
+      "cwd": "${workspaceFolder}/knowledge_flow_backend",
+      "args": [
+        "-s", // don’t capture stdout/stderr
+        "-q", // quieter header (optional)
+        // "app/tests/controllers/test_content_controller.py::TestContentController", 
+        // ↑ uncomment and point to ONE test/class if you want to debug a single target
+        "app/tests" // run the full suite under knowledge_flow_backend
+      ],
+      // You already declared the virtual-env & PYTHONPATH for the backend:
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/knowledge_flow_backend/app",
+        "PATH": "${workspaceFolder}/.venv/bin:${env:PATH}",
+        "LOG_LEVEL": "DEBUG"
+      },
+      "envFile": "${workspaceFolder}/knowledge_flow_backend/config/.env",
+      // Disable “just-my-code” so you can step into the framework if needed
+      "justMyCode": false,
+      // Optional: stop on first test failure
+      // "console": "integratedTerminal",
+      // "stopOnEntry": false
+    },
+    {
+      "name": "Debug current test file",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "pytest",
+      "cwd": "${workspaceFolder}/knowledge_flow_backend", 
+      "args": [
+        "-s",
+        "-vv",
+        "${file}"
+      ],
+      "justMyCode": false
     }
   ]
 }

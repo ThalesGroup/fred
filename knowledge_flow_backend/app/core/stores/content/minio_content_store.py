@@ -20,7 +20,7 @@ from typing import BinaryIO
 from minio import Minio
 from minio.error import S3Error
 import pandas as pd
-from app.core.stores.base_content_store import BaseContentStore
+from app.core.stores.content.base_content_store import BaseContentStore
 
 logger = logging.getLogger(__name__)
 

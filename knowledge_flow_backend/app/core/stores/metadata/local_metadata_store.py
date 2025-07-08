@@ -16,7 +16,7 @@ import json
 from pathlib import Path
 from typing import List, Dict, Any
 
-from app.core.stores.base_metadata_store import BaseMetadataStore
+from app.core.stores.metadata.base_metadata_store import BaseMetadataStore
 
 
 
@@ -69,6 +69,15 @@ class LocalMetadataStore(BaseMetadataStore):
         self.path.parent.mkdir(parents=True, exist_ok=True)
         if not self.path.exists():
             self.path.write_text("[]")  # Initialize empty list if file doesn't exist
+
+    def clear(self) -> None:
+        """Remove **all** documents from the local JSON file.
+
+        This is handy in the test-suite’s autouse fixture so every test
+        starts with a pristine, empty metadata store.
+        """
+        # Easiest: just overwrite the file with an empty list
+        self._save([])
 
     def _load(self) -> List[Dict[str, Any]]:
         """

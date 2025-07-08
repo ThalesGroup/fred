@@ -44,3 +44,8 @@ class BaseMetadataStore(ABC):
     @abstractmethod
     def delete_metadata(self, metadata: dict) -> None:
         pass
+
+    @abstractmethod
+    def clear(self) -> None:
+        """Remove every record in the store (test-only helper)."""
+        pass

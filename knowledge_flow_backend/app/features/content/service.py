@@ -38,14 +38,28 @@ class ContentService:
         self.config = ApplicationContext.get_instance().get_config()
 
     async def get_document_metadata(self, document_uid: str) -> Dict:
+        """
+        Return the metadata dict for a document UID.
+
+        Raises
+        -------
+        ValueError
+            If the UID is empty.
+        FileNotFoundError
+            If no metadata exists for that UID.
+        """
         if not document_uid:
             raise ValueError("Document UID is required")
 
         metadata = self.metadata_store.get_metadata_by_uid(document_uid)
-        if not metadata or "document_name" not in metadata:
-            metadata["document_name"] = f"{document_uid}.xxx"
-        # if not metadata:
-        #    raise FileNotFoundError(f"No metadata found for document {document_uid}")
+        if metadata is None:
+            # Let the controller map this to a 404
+            raise FileNotFoundError(
+                f"No metadata found for document {document_uid}"
+            )
+
+        # Optional: ensure the dict has a name; keep if you need it
+        metadata.setdefault("document_name", f"{document_uid}.xxx")
         return metadata
 
     async def get_original_content(self, document_uid: str) -> Tuple[BinaryIO, str, str]:

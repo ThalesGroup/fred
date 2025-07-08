@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# knowledge_flow_app/output_processors/empty_output_processor.py
+# app/core/processors/output/empty_output_processor.py
 
 import logging
 
