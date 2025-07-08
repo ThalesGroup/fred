@@ -13,27 +13,10 @@
 # limitations under the License.
 
 import sys
-import os
 import logging
-from rich.logging import RichHandler
 from pydantic import ValidationError
 
 logger = logging.getLogger(__name__)
-
-
-def configure_logging():
-    log_level = os.getenv("LOG_LEVEL", "INFO").upper()
-    valid_levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
-    if log_level not in valid_levels:
-        log_level = "INFO"
-    logging.basicConfig(
-        level=log_level,
-        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-        handlers=[RichHandler(rich_tracebacks=True, show_time=False)],
-    )
-    logging.getLogger().info(f"Logging configured at {log_level} level.")
-
 
 def validate_settings_or_exit(settings_class):
     try:

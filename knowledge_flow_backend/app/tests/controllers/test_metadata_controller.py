@@ -86,7 +86,10 @@ class TestMetadataController:
         metadata_store.save_metadata(document1)
         metadata_store.save_metadata(document2)
 
-        resp = client.post("/knowledge-flow/v1/documents/metadata", json={"agent_name": "Georges"})
+        resp = client.post(
+            "/knowledge-flow/v1/documents/metadata",
+            json={"front_metadata": {"agent_name": "Georges"}},
+        )
         assert resp.status_code == status.HTTP_200_OK
         assert len(resp.json()["documents"]) == 1
 
