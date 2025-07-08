@@ -128,8 +128,8 @@ def create_app(config_path: str, base_url: str) -> FastAPI:
     ApplicationContext(configuration)  # 🟢 harmonisation ici
 
     initialize_keycloak(configuration)
-    create_tool_metric_store(configuration.node_metrics_storage)
-    create_node_metric_store(configuration.tool_metrics_storage)
+    create_tool_metric_store(configuration.tool_metrics_storage)
+    create_node_metric_store(configuration.node_metrics_storage)
 
     app = FastAPI(
         docs_url=f"{base_url}/docs",
