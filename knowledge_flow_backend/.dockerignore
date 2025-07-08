@@ -1,0 +1,71 @@
+# Byte-compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+venv/
+.env/
+*.env
+.venv/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+# Logs
+*.log
+*.out
+*.err
+logs/
+*.pid
+
+# Tests and coverage reports
+.coverage
+*.cover
+.coverage.*
+.cache/
+pytest_cache/
+.tox/
+.nox/
+tests
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# macOS-specific files
+.DS_Store
+
+# Editor and IDE config files
+*.swp
+*.swo
+*.idea/
+.vscode/
+*.bak
+
+# Docker-related files
+Dockerfile*
+.dockerignore
+
+# Git-related files
+.git
+.gitignore
+
+# Local database files
+*.sqlite3
+db.sqlite3
+migrations/
+
+# Temporary files
+*.tmp
+*.temp
+tmp/
+
+# dockerfiles
+dockerfiles
+
+# Local development related files
+target/

@@ -197,7 +197,7 @@ const extendedApi = apiSlice.injectEndpoints({
   endpoints: (builder) => ({
     getTheaterOfOperationMapData: builder.mutation<ShipList, void>({
       query: () => ({
-        url: `/fred/guerre_elec/active_ships`,
+        url: `/agentic/v1/guerre_elec/active_ships`,
         method: "GET",
       }),
       transformResponse: (raw: { details: Ship[] }) => {
@@ -224,7 +224,7 @@ const extendedApi = apiSlice.injectEndpoints({
         cluster: string;
         precision: string | null;
       }) => ({
-        url: `/fred/carbon/consumption/?start=${start}&end=${end}&cluster=${cluster}&precision=${precision ? precision : "T"}`,
+        url: `/agentic/v1/carbon/consumption/?start=${start}&end=${end}&cluster=${cluster}&precision=${precision ? precision : "T"}`,
         method: "GET",
       }),
     }),
@@ -248,7 +248,7 @@ const extendedApi = apiSlice.injectEndpoints({
         cluster: string;
         precision: string | null;
       }) => ({
-        url: `/fred/energy/consumption/?start=${start}&end=${end}&cluster=${cluster}&precision=${precision ? precision : "T"}`,
+        url: `/agentic/v1/energy/consumption/?start=${start}&end=${end}&cluster=${cluster}&precision=${precision ? precision : "T"}`,
         method: "GET",
       }),
     }),
@@ -272,7 +272,7 @@ const extendedApi = apiSlice.injectEndpoints({
         cluster: string;
         precision: string | null;
       }) => ({
-        url: `/fred/energy/mix/?start=${start}&end=${end}&cluster=${cluster}&precision=${precision ? precision : "T"}`,
+        url: `/agentic/v1/energy/mix/?start=${start}&end=${end}&cluster=${cluster}&precision=${precision ? precision : "T"}`,
         method: "GET",
       }),
     }),
@@ -296,43 +296,43 @@ const extendedApi = apiSlice.injectEndpoints({
         cluster: string;
         precision: string | null;
       }) => ({
-        url: `/fred/finops/cloud-cost/?start=${start}&end=${end}&cluster=${cluster}&precision=${precision ? precision : "T"}`,
+        url: `/agentic/v1/finops/cloud-cost/?start=${start}&end=${end}&cluster=${cluster}&precision=${precision ? precision : "T"}`,
         method: "GET",
       }),
     }),
     getClusterList: builder.mutation<ClusterOverview[], void>({
       query: () => ({
-        url: `/fred/kube/clusters`,
+        url: `/agentic/v1/kube/clusters`,
         method: "GET",
       }),
     }),
     getClusterDescription: builder.mutation<ClusterDescription, { cluster: string }>({
       query: ({ cluster }: { cluster: string }) => ({
-        url: `/fred/ui/details?cluster_name=${cluster}`,
+        url: `/agentic/v1/ui/details?cluster_name=${cluster}`,
         method: "GET",
       }),
     }),
     getClusterScores: builder.mutation<ClusterScore, { cluster: string }>({
       query: ({ cluster }: { cluster: string }) => ({
-        url: `/fred/ui/scores?cluster_name=${cluster}`,
+        url: `/agentic/v1/ui/scores?cluster_name=${cluster}`,
         method: "GET",
       }),
     }),
     getClustersFootprints: builder.mutation<ClusterFootprint[], { start: string; end: string }>({
       query: ({ start, end }: { start: string; end: string }) => ({
-        url: `/fred/clusters/footprints?start=${start}&end=${end}`,
+        url: `/agentic/v1/clusters/footprints?start=${start}&end=${end}`,
         method: "GET",
       }),
     }),
     getNamespaceList: builder.mutation<NamespaceList, { cluster: string }>({
       query: ({ cluster }: { cluster: string }) => ({
-        url: `/fred/kube/namespaces?cluster_name=${cluster}`,
+        url: `/agentic/v1/kube/namespaces?cluster_name=${cluster}`,
         method: "GET",
       }),
     }),
     GetWorkloadList: builder.mutation<WorkloadNameList, { cluster: string; namespace: string }>({
       query: ({ cluster, namespace }: { cluster: string; namespace: string }) => ({
-        url: `/fred/kube/workloads?cluster_name=${cluster}&namespace=${namespace}`,
+        url: `/agentic/v1/kube/workloads?cluster_name=${cluster}&namespace=${namespace}`,
         method: "GET",
       }),
     }),
@@ -356,7 +356,7 @@ const extendedApi = apiSlice.injectEndpoints({
         workload: string;
         kind: string;
       }) => ({
-        url: `/fred/ai/workload/summary?kind=${kind}&cluster_name=${cluster}&namespace=${namespace}&workload_name=${workload}`,
+        url: `/agentic/v1/ai/workload/summary?kind=${kind}&cluster_name=${cluster}&namespace=${namespace}&workload_name=${workload}`,
         method: "GET",
       }),
     }),
@@ -367,7 +367,7 @@ const extendedApi = apiSlice.injectEndpoints({
       }
     >({
       query: ({ cluster }: { cluster: string }) => ({
-        url: `/fred/ai/cluster/summary?cluster_name=${cluster}`,
+        url: `/agentic/v1/ai/cluster/summary?cluster_name=${cluster}`,
         method: "GET",
       }),
     }),
@@ -379,7 +379,7 @@ const extendedApi = apiSlice.injectEndpoints({
       }
     >({
       query: ({ cluster, namespace }: { cluster: string; namespace: string; workload: string; kind: string }) => ({
-        url: `/fred/ai/namespace/summary?cluster_name=${cluster}&namespace=${namespace}`,
+        url: `/agentic/v1/ai/namespace/summary?cluster_name=${cluster}&namespace=${namespace}`,
         method: "GET",
       }),
     }),
@@ -403,7 +403,7 @@ const extendedApi = apiSlice.injectEndpoints({
         workload: string;
         kind: string;
       }) => ({
-        url: `/fred/ai/workload/essentials?kind=${kind}&cluster_name=${cluster}&namespace=${namespace}&workload_name=${workload}`,
+        url: `/agentic/v1/ai/workload/essentials?kind=${kind}&cluster_name=${cluster}&namespace=${namespace}&workload_name=${workload}`,
         method: "GET",
       }),
     }),
@@ -427,7 +427,7 @@ const extendedApi = apiSlice.injectEndpoints({
         workload: string;
         kind: string;
       }) => ({
-        url: `/fred/ai/workload/advanced?kind=${kind}&cluster_name=${cluster}&namespace=${namespace}&workload_name=${workload}`,
+        url: `/agentic/v1/ai/workload/advanced?kind=${kind}&cluster_name=${cluster}&namespace=${namespace}&workload_name=${workload}`,
         method: "GET",
       }),
     }),
@@ -451,7 +451,7 @@ const extendedApi = apiSlice.injectEndpoints({
         workload: string;
         kind: string;
       }) => ({
-        url: `/fred/ai/workload/id?kind=${kind}&cluster_name=${cluster}&namespace=${namespace}&workload_name=${workload}`,
+        url: `/agentic/v1/ai/workload/id?kind=${kind}&cluster_name=${cluster}&namespace=${namespace}&workload_name=${workload}`,
         method: "GET",
       }),
     }),
@@ -475,7 +475,7 @@ const extendedApi = apiSlice.injectEndpoints({
         workload: string;
         kind: string;
       }) => ({
-        url: `/fred/ai/workload/scores?kind=${kind}&cluster_name=${cluster}&namespace=${namespace}&workload_name=${workload}`,
+        url: `/agentic/v1/ai/workload/scores?kind=${kind}&cluster_name=${cluster}&namespace=${namespace}&workload_name=${workload}`,
         method: "GET",
       }),
     }),
@@ -500,19 +500,19 @@ const extendedApi = apiSlice.injectEndpoints({
         workload: string;
         kind: string;
       }) => ({
-        url: `/fred/ai/workload/facts?kind=${kind}&cluster_name=${cluster}&namespace=${namespace}&workload_name=${workload}`,
+        url: `/agentic/v1/ai/workload/facts?kind=${kind}&cluster_name=${cluster}&namespace=${namespace}&workload_name=${workload}`,
         method: "GET",
       }),
     }),
     GetNamespaceFacts: builder.mutation<FactList, { cluster: string; namespace: string }>({
       query: ({ cluster, namespace }: { cluster: string; namespace: string }) => ({
-        url: `/fred/ai/namespace/facts?cluster_name=${cluster}&namespace=${namespace}`,
+        url: `/agentic/v1/ai/namespace/facts?cluster_name=${cluster}&namespace=${namespace}`,
         method: "GET",
       }),
     }),
     GetClusterFacts: builder.mutation<FactList, { cluster: string }>({
       query: ({ cluster }: { cluster: string; namespace: string; workload: string; kind: string }) => ({
-        url: `/fred/ai/cluster/facts?cluster_name=${cluster}`,
+        url: `/agentic/v1/ai/cluster/facts?cluster_name=${cluster}`,
         method: "GET",
       }),
     }),
@@ -539,7 +539,7 @@ const extendedApi = apiSlice.injectEndpoints({
         kind: string;
         fact: Fact;
       }) => ({
-        url: `/fred/ai/workload/fact?kind=${kind}&cluster_name=${cluster}&namespace=${namespace}&workload_name=${workload}`,
+        url: `/agentic/v1/ai/workload/fact?kind=${kind}&cluster_name=${cluster}&namespace=${namespace}&workload_name=${workload}`,
         method: "PUT",
         body: fact,
       }),
@@ -552,7 +552,7 @@ const extendedApi = apiSlice.injectEndpoints({
       }
     >({
       query: ({ cluster, fact }: { cluster: string; fact: Fact }) => ({
-        url: `/fred/ai/cluster/fact?cluster_name=${cluster}`,
+        url: `/agentic/v1/ai/cluster/fact?cluster_name=${cluster}`,
         method: "PUT",
         body: fact,
       }),
@@ -566,7 +566,7 @@ const extendedApi = apiSlice.injectEndpoints({
       }
     >({
       query: ({ cluster, namespace, fact }: { cluster: string; namespace: string; fact: Fact }) => ({
-        url: `/fred/ai/namespace/fact?cluster_name=${cluster}&namespace=${namespace}`,
+        url: `/agentic/v1/ai/namespace/fact?cluster_name=${cluster}&namespace=${namespace}`,
         method: "PUT",
         body: fact,
       }),
@@ -594,7 +594,7 @@ const extendedApi = apiSlice.injectEndpoints({
         kind: string;
         fact: Fact;
       }) => ({
-        url: `/fred/ai/workload/fact?kind=${kind}&cluster_name=${cluster}&namespace=${namespace}&workload_name=${workload}`,
+        url: `/agentic/v1/ai/workload/fact?kind=${kind}&cluster_name=${cluster}&namespace=${namespace}&workload_name=${workload}`,
         method: "DELETE",
         body: fact,
       }),
@@ -608,7 +608,7 @@ const extendedApi = apiSlice.injectEndpoints({
       }
     >({
       query: ({ cluster, namespace, fact }: { cluster: string; namespace: string; fact: Fact }) => ({
-        url: `/fred/ai/namespace/fact?cluster_name=${cluster}&namespace=${namespace}`,
+        url: `/agentic/v1/ai/namespace/fact?cluster_name=${cluster}&namespace=${namespace}`,
         method: "DELETE",
         body: fact,
       }),
@@ -621,7 +621,7 @@ const extendedApi = apiSlice.injectEndpoints({
       }
     >({
       query: ({ cluster, fact }: { cluster: string; fact: Fact }) => ({
-        url: `/fred/ai/cluster/fact?cluster_name=${cluster}`,
+        url: `/agentic/v1/ai/cluster/fact?cluster_name=${cluster}`,
         method: "DELETE",
         body: fact,
       }),
@@ -632,7 +632,7 @@ const extendedApi = apiSlice.injectEndpoints({
         formData.append("file", file); // Append the file as part of the form data
 
         return {
-          url: `/fred/ai/transcribe`,
+          url: `/agentic/v1/ai/transcribe`,
           method: "POST",
           body: formData, // Send the FormData object in the body
           headers: {
@@ -643,7 +643,7 @@ const extendedApi = apiSlice.injectEndpoints({
     }),
     postSpeechText: builder.mutation<Blob, string>({
       query: (text) => ({
-        url: `/fred/ai/speech`,
+        url: `/agentic/v1/ai/speech`,
         method: "POST",
         body: text,
         headers: {
@@ -662,7 +662,7 @@ const extendedApi = apiSlice.injectEndpoints({
       }
     >({
       query: ({ rating, reason, feedbackType, messageId }) => ({
-        url: `/fred/feedback`,
+        url: `/agentic/v1/feedback`,
         method: "POST",
         body: { rating, reason, feedbackType, messageId },
       }),
