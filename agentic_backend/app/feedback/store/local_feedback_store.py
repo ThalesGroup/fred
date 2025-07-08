@@ -19,7 +19,7 @@ from app.feedback.store.base_feedback_store import BaseFeedbackStore
 
 class LocalFeedbackStore(BaseFeedbackStore):
     def __init__(self, root_path: str):
-        self.root_path = root_path
+        self.root_path = os.path.expanduser(root_path)
         os.makedirs(self.root_path, exist_ok=True)
 
     def _file_path(self, key: str) -> str:
