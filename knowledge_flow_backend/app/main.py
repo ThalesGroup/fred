@@ -122,16 +122,6 @@ def create_app(config_path: str, base_url: str) -> FastAPI:
         allow_headers=["Content-Type", "Authorization"],
     )
 
-    mcp = FastApiMCP(
-        app,
-        name="Knowledge Flow MCP",
-        description="MCP server for Knowledge Flow",
-        include_tags=["Vector Search", "Tabular"],
-        describe_all_responses=True,
-        describe_full_response_schema=True,
-    )
-    mcp.mount()
-
     router = APIRouter(prefix=base_url)
 
     # Register controllers
@@ -145,6 +135,17 @@ def create_app(config_path: str, base_url: str) -> FastAPI:
     logger.info("🧩 All controllers registered.")
     app.include_router(router)
     logger.info("🧩 All controllers registered.")
+
+    mcp = FastApiMCP(
+        app,
+        name="Knowledge Flow MCP",
+        description="MCP server for Knowledge Flow",
+        include_tags=["Vector Search", "Tabular"],
+        describe_all_responses=True,
+        describe_full_response_schema=True,
+    )
+    mcp.mount()
+
     return app
 
 
