@@ -16,9 +16,10 @@
 Pydantic structure definitions to use in the various microservice
 """
 
+from typing import Any, Dict, List, Optional, Literal, Union, Annotated
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional, Literal, Union, Annotated
+import os
 
 from pydantic import BaseModel, model_validator, Field
 
@@ -258,8 +259,8 @@ class InMemoryStorage(ResourceStorageBase):
 
 class OpenSearchSettings(BaseModel):
     host: str = Field(default="https://localhost:9200", description="URL of the Opensearch host")
-    username: str = Field(default="app_rw", description="Opensearch username")
-    password: str = Field(..., description="Opensearch user password")
+    username: Optional[str] = Field(default_factory=lambda: os.getenv("OPENSEARCH_USERNAME"), description="Opensearch username")
+    password: Optional[str] = Field(default_factory=lambda: os.getenv("OPENSEARCH_PASSWORD"), description="Opensearch user password")
     secure: bool = Field(default=False, description="Use TLS with Opensearch")
     verify_certs: bool = Field(default=False, description="Verify certificates")
     sessions_index: str = Field(default="sessions", description="Index where sessions are stored")

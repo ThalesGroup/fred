@@ -214,10 +214,9 @@ feedback_storage:
 session_storage:
   # type: in_memory # default value
   type: opensearch
-  settings:
+  settings: # username and password are passed via the OPENSEARCH_USERNAME and OPENSEARCH_PASSWORD env variables defined in thes .env file
     host: https://localhost:9200
-    username: admin
-    password: Azerty123_ # @TODO pass it as an env variable
+    # username: Admin # Overrides the OPENSEARCH_USERNAME environment variable
+    # password: xxx # Overrides the OPENSEARCH_PASSWORD environment variable
     secure: false
     verify_certs: false
-    sessions_index: sessions
