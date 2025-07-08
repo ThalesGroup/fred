@@ -2,6 +2,7 @@
 .idea/
 .vscode/*
 !.vscode/launch.json
+!.vscode/extensions.json
 ### Python ###
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -43,7 +44,7 @@ pip-delete-this-directory.txt
 
 # Monitoring logs
 
-backend/fred/monitoring/logs/*.jsonl
+agentic_backend/app/monitoring/logs/*.jsonl
 
 # Unit test / coverage reports
 htmlcov/
@@ -129,13 +130,13 @@ celerybeat.pid
 *.sage.py
 
 # Environments
-.env
 .venv
 env/
 venv/
 ENV/
 env.bak/
 venv.bak/
+*.env
 
 # Spyder project settings
 .spyderproject
@@ -195,3 +196,8 @@ pyrightconfig.json
 secrets/openai-api-key.sh
 
 /Makefile
+*.code-workspace
+/media/
+
+# Helm dependency files
+*.tgz

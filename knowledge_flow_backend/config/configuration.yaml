@@ -1,0 +1,169 @@
+# Enable or disable the security layer
+security:
+  enabled: false
+  keycloak_url: "http://fred-keycloak:8080/realms/fred"
+  authorized_origins:
+  - "http://localhost:5173"
+
+# -----------------------------------------------------------------------------
+# INPUT PROCESSORS
+# -----------------------------------------------------------------------------
+# Mandatory: Input processors MUST be explicitly defined.
+# These classes parse incoming files (e.g., PDFs, DOCXs, CSVs) into structured documents.
+
+input_processors:
+  - prefix: ".pdf"
+    class_path: app.core.processors.input.pdf_markdown_processor.ollama_pdf_mardown_processor.OllamaPdfMarkdownProcessor
+  - prefix: ".docx"
+    class_path: app.core.processors.input.docx_markdown_processor.docx_markdown_processor.DocxMarkdownProcessor
+  - prefix: ".pptx"
+    class_path: app.core.processors.input.pptx_markdown_processor.pptx_markdown_processor.PptxMarkdownProcessor
+  - prefix: ".csv"
+    class_path: app.core.processors.input.csv_tabular_processor.csv_tabular_processor.CsvTabularProcessor
+  - prefix: ".txt"
+    class_path: app.core.processors.input.text_markdown_processor.text_markdown_processor.TextMarkdownProcessor
+  - prefix: ".md"
+    class_path: app.core.processors.input.markdown_markdown_processor.markdown_markdown_processor.MarkdownMarkdownProcessor
+  - prefix: ".xlsm"
+    class_path: app.core.processors.input.pps_tabular_processor.pps_tabular_processor.PpsTabularProcessor
+
+
+# -----------------------------------------------------------------------------
+# OUTPUT PROCESSORS (Optional)
+# -----------------------------------------------------------------------------
+# Optional: You can override the default behavior for output processing.
+# If not defined, the system automatically selects based on input type:
+#   - Markdown files → VectorizationProcessor
+#   - Tabular files (CSV, XLSX) → TabularProcessor
+#
+# You can specialize behavior by mapping file extensions to custom classes.
+#
+# Example to OVERRIDE default behavior:
+#
+# output_processors:
+#   - prefix: ".docx"
+#     class_path: app.core.processors.output.vectorization_processor.vectorization_processor.VectorizationProcessor
+#   - prefix: ".csv"
+#     class_path: app.core.processors.output.tabular_processor.tabular_processor.TabularProcessor
+#   - prefix: ".xlsx"
+#     class_path: app.core.processors.output.tabular_processor.tabular_processor.TabularProcessor
+#   - prefix: ".pptx"
+#     class_path: app.core.processors.output.vectorization_processor.vectorization_processor.VectorizationProcessor
+#
+# To SKIP processing for a specific file type, you can specify an empty output processor.
+#
+# output_processors:
+#  - prefix: ".txt"
+#    class_path: app.core.processors.output.empty_output_processor.EmptyOutputProcessor
+
+content_storage:
+  # The content store type can be either "local" or "minio" or "gcs"
+  # If you are using minio, make sure to set the following environment variables:
+  # - MINIO_ENDPOINT
+  # - MINIO_ACCESS_KEY
+  # - MINIO_SECRET_KEY
+  # - MINIO_BUCKET
+  # - MINIO_SECURE
+  # If you are using gcs, make sure to set the following environment variables:
+  # - GCS_PROJECT_ID
+  # - GCS_BUCKET_NAME
+  # - GCS_CREDENTIALS_PATH
+  # If you are using local storage, make sure to set the following environment variable:
+  # - LOCAL_STORAGE_PATH default to '~/.knowledge-flow/content-store'
+  type: "local"
+
+metadata_storage:
+  # The metadata store type can be either "local" or "opensearch
+  # If you are using opensearch, make sure to set the following environment variables:
+  # - OPENSEARCH_HOST
+  # - OPENSEARCH_PORT
+  # - OPENSEARCH_USERNAME
+  # - OPENSEARCH_PASSWORD
+  # - OPENSEARCH_METADATA_INDEX = "fred-dev-metadata"
+  # If you are using local storage, make sure to set the following environment variable:
+  # - LOCAL_STORAGE_PATH default to '~/.knowledge-flow/metadata-store.json'
+  type: "local"
+
+vector_storage:
+  # The vector store type can be either "in_memory" or "opensearch"
+  # If you are using opensearch, make sure to set the following environment variables:
+  # - OPENSEARCH_HOST="https://localhost:9200"
+  # - OPENSEARCH_USER="admin"
+  # - OPENSEARCH_PASSWORD="Azerty123_"
+  # - OPENSEARCH_SECURE="false"
+  # - OPENSEARCH_VERIFY_CERTS="false"
+  # - OPENSEARCH_VECTOR_INDEX = "fred-dev-embeddings"
+  #type: "opensearch"
+  # If you are using local storage, make sure to set the following environment variable:
+  # - LOCAL_VECTOR_STORAGE_PATH default to '~/.knowledge-flow/vector-store.json'
+  type: "in_memory"
+
+embedding:
+  # -----------------------------------------------------------------------------
+  # EMBEDDING BACKEND
+  # -----------------------------------------------------------------------------
+  # Set the embedding backend to use:
+  #   - "openai"      → Use OpenAI's public API
+  #   - "azureopenai" → Use Azure OpenAI service directly
+  #   - "azureapim"   → Use Azure OpenAI via Azure APIM Gateway (OAuth2 + subscription key)
+  #   - "ollama"      → Use Ollama's API
+  #
+  # Required environment variables based on the selected backend:
+  #
+  # BACKEND: "openai"
+  # -------------------------------------
+  # - OPENAI_API_KEY
+  # - OPENAI_API_BASE (optional if using default)
+  # - OPENAI_API_VERSION (optional)
+  #
+  # BACKEND: "azureopenai"
+  # -------------------------------------
+  # - AZURE_OPENAI_API_KEY
+  # - AZURE_OPENAI_BASE_URL
+  # - AZURE_API_VERSION
+  # - AZURE_DEPLOYMENT_EMBEDDING
+  #
+  # BACKEND: "azureapim"
+  # -------------------------------------
+  # - AZURE_TENANT_ID
+  # - AZURE_CLIENT_ID
+  # - AZURE_CLIENT_SECRET
+  # - AZURE_CLIENT_SCOPE
+  # - AZURE_APIM_BASE_URL
+  # - AZURE_APIM_KEY
+  # - AZURE_API_VERSION
+  # - AZURE_RESOURCE_PATH_EMBEDDINGS
+  # - AZURE_DEPLOYMENT_EMBEDDING
+  #
+  # BACKEND: "ollama"
+  # -------------------------------------
+  # - OLLAMA_API_URL (optional)
+  # - OLLAMA_EMBEDDING_MODEL_NAME
+  # - OLLAMA_VISION_MODEL_NAME (optional, for vision tasks)
+  #
+  # All environment variables are expected to be present in the .env file
+  # pointed to by the ENV_FILE variable in your Makefile.
+  #
+  type: "openai"  # can be "openai" or "azureopenai" or "azureapim" or "ollama"
+
+knowledge_context_storage:
+  # -----------------------------------------------------------------------------
+  # KNOWLEDGE CONTEXT STORAGE BACKEND
+  # -----------------------------------------------------------------------------
+  # Backend used to store Knowledge Contexts (Workspaces) and user profiles.
+  # Both can have associated files. 
+  # -------------------------------------
+  type: local  # as of now only local storage is supported
+  settings:
+    local_path: "~/.fred/knowledge-context"
+
+knowledge_context_max_tokens: 8000
+# -----------------------------------------------------------------------------
+# TOKEN LIMIT PER KNOWLEDGE CONTEXT
+# -----------------------------------------------------------------------------
+# Maximum total token count allowed for all documents in a single knowledge context.
+# This limit ensures consistent performance and avoids processing overhead.
+# If the total tokens of uploaded documents exceeds this value,
+# the upload or update will fail with a clear error (400).
+#
+# Use a value aligned with your model capabilities (e.g. 8192 for GPT-4 Turbo).

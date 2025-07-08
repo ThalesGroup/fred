@@ -149,7 +149,7 @@ export const DocumentTable: React.FC<FileTableProps> = ({
               onClick={() =>
                 selected.forEach((uid) => {
                   const link = document.createElement("a");
-                  link.href = `/knowledge/v1/fullDocument/${uid}`;
+                  link.href = `/knowledge-flow/v1/fullDocument/${uid}`;
                   link.download = "";
                   document.body.appendChild(link);
                   link.click();
