@@ -1078,7 +1078,7 @@ wheels = [
 ]
 
 [[package]]
-name = "knowledge-flow-app"
+name = "knowledge-flow-backend-app"
 version = "0.1"
 source = { editable = "." }
 dependencies = [

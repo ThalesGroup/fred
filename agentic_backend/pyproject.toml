@@ -1,7 +1,8 @@
 [project]
-name = "fred"
+name = "agentic-backend-app"
+readme = "README.md"
 version = "0.1.0"
-description = "Fred backend"
+description = "Agentic Backend App"
 authors = [
     {name = "Fred", email = "noreply@example.com"}
 ]
