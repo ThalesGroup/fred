@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 #
 # Copyright Thales 2025
-# Licensed under the Apache License, Version 2.0 (the "License");
+# Licensed under the Apache License, Version 2.0
 # http://www.apache.org/licenses/LICENSE-2.0
 
 """
@@ -34,32 +34,30 @@ from app.features.wip.knowledge_context_controller import KnowledgeContextContro
 # LOGGING + ENVIRONMENT
 # -----------------------
 
-def configure_logging():
-    log_level = os.getenv("LOG_LEVEL", "INFO").upper()
+def configure_logging(log_level: str):
     logging.basicConfig(
-        level=log_level,
+        level=log_level.upper(),
         format="%(asctime)s - %(levelname)s - %(filename)s - %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
         handlers=[RichHandler(rich_tracebacks=False, show_time=False, show_path=False)],
     )
-    logging.getLogger().info(f"Logging configured at {log_level} level.")
+    logging.getLogger().info(f"Logging configured at {log_level.upper()} level.")
 
-configure_logging()
-
-dotenv_path = os.getenv("ENV_FILE", "./config/.env")
-if load_dotenv(dotenv_path):
-    logging.getLogger().info(f"✅ Loaded environment variables from: {dotenv_path}")
-else:
-    logging.getLogger().warning(f"⚠️ No .env file found at: {dotenv_path}")
+def load_environment(dotenv_path: str = "./config/.env"):
+    if load_dotenv(dotenv_path):
+        logging.getLogger().info(f"✅ Loaded environment variables from: {dotenv_path}")
+    else:
+        logging.getLogger().warning(f"⚠️ No .env file found at: {dotenv_path}")
 
 
 # -----------------------
-# FASTAPI APP + ROUTES
+# APP CREATION
 # -----------------------
 
-def create_app(config_path: str = "./config/configuration.yaml", base_url: str = "/knowledge-flow/v1") -> FastAPI:
+def create_app(config_path: str, base_url: str) -> FastAPI:
     logger = logging.getLogger(__name__)
     logger.info(f"🛠️ create_app() called with base_url={base_url}")
+
     configuration: Configuration = parse_server_configuration(config_path)
     ApplicationContext(configuration)
 
@@ -89,19 +87,6 @@ def create_app(config_path: str = "./config/configuration.yaml", base_url: str =
 
     return app
 
-# Global ASGI app instance (used by both CLI and uvicorn)
-app = create_app()
-
-mcp = FastApiMCP(
-    app,
-    name="Knowledge Flow MCP",
-    description="MCP server for Knowledge Flow",
-    include_tags=["Vector Search", "Tabular"],
-    describe_all_responses=True,
-    describe_full_response_schema=True,
-)
-mcp.mount()
-
 
 # -----------------------
 # CLI MODE
@@ -109,26 +94,42 @@ mcp.mount()
 
 def parse_cli_opts():
     parser = argparse.ArgumentParser(description="Start the knowledge_flow_app microservice")
-    parser.add_argument("--config-path", dest="server_configuration_path", default="./config/configuration.yaml", help="Path to configuration YAML file")
-    parser.add_argument("--base-url", dest="server_base_url_path", default="/knowledge-flow/v1", help="Base path for all API endpoints")
-    parser.add_argument("--server-address", dest="server_address", default="127.0.0.1", help="Server binding address")
-    parser.add_argument("--server-port", dest="server_port", type=int, default=8111, help="Server port")
-    parser.add_argument("--log-level", dest="server_log_level", default="info", help="Logging level")
-    parser.add_argument("--server.reload", dest="server_reload", action="store_true", help="Enable auto-reload (for dev only)")
-    parser.add_argument("--server.reloadDir", dest="server_reload_dir", type=str, default=".", help="Watch for changes in these directories")
+    parser.add_argument("--config-path", default="./config/configuration.yaml", help="Path to configuration YAML file")
+    parser.add_argument("--base-url", default="/knowledge-flow/v1", help="Base path for all API endpoints")
+    parser.add_argument("--server-address", default="127.0.0.1", help="Server binding address")
+    parser.add_argument("--server-port", type=int, default=8111, help="Server port")
+    parser.add_argument("--log-level", default="info", help="Logging level")
+    parser.add_argument("--reload", dest="reload", action="store_true", help="Enable auto-reload (for dev only)")
+    parser.add_argument("--reload-dir", dest="reload_dirs", default=".", help="Watch for changes in these directories")
+
     return parser.parse_args()
+
 
 def main():
     args = parse_cli_opts()
+    configure_logging(args.log_level)
+    load_environment()
+
+    app = create_app(config_path=args.config_path, base_url=args.base_url)
+
+    mcp = FastApiMCP(
+        app,
+        name="Knowledge Flow MCP",
+        description="MCP server for Knowledge Flow",
+        include_tags=["Vector Search", "Tabular"],
+        describe_all_responses=True,
+        describe_full_response_schema=True,
+    )
+    mcp.mount()
 
     import uvicorn
     uvicorn.run(
-        "app.main:app",
+        app,
         host=args.server_address,
         port=args.server_port,
-        log_level=args.server_log_level,
-        reload=args.server_reload,
-        reload_dirs=args.server_reload_dir,
+        log_level=args.log_level,
+        reload=args.reload,
+        reload_dirs=args.reload_dirs,
     )
 
 if __name__ == "__main__":
