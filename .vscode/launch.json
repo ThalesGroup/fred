@@ -45,21 +45,36 @@
       "console": "integratedTerminal"
     },
     {
-      "name": "Debug all KF tests",
+      "name": "Debug all Kknowledge flow tests",
       "type": "debugpy",
       "request": "launch",
       "module": "pytest",
       "cwd": "${workspaceFolder}/knowledge_flow_backend",
       "args": [
         "-s",
-        "-q",
-        "app/tests/controllers/test_content_controller.py::",
-        "TestMetadataController::",
-        "test_get_documents_metadata_with_filters"
+        "-q"
       ],
       "envFile": "config/.env",
       "env": {
         "PYTHONPATH": "${workspaceFolder}/knowledge_flow_backend/app",
+        "PATH": "${workspaceFolder}/.venv/bin:${env:PATH}",
+        "LOG_LEVEL": "DEBUG"
+      },
+      "justMyCode": false
+    },
+    {
+      "name": "Debug all agentic tests",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "pytest",
+      "cwd": "${workspaceFolder}/agentic_backend",
+      "args": [
+        "-s",
+        "-q"
+      ],
+      "envFile": "config/.env",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/agentic_backend/app",
         "PATH": "${workspaceFolder}/.venv/bin:${env:PATH}",
         "LOG_LEVEL": "DEBUG"
       },
