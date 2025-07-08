@@ -28,7 +28,7 @@ import {
 const FactsTable = ({ hexData, selectedFact, setSelectedFact }) => {
   const theme = useTheme();
   const [page, setPage] = useState(0); // Current page
-  const [rowsPerPage, setRowsPerPage] = useState(5); // Number of rows per page
+  const [rowsPerPage, setRowsPerPage] = useState(4); // Number of rows per page
 
   // Handle page change
   const handlePageChange = (_event, newPage) => {
