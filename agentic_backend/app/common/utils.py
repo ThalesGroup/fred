@@ -259,8 +259,10 @@ def authorization_required(method):
                 f"{self.__class__.__name__} must implement 'get_authorized_user_id'"
             )
 
+        # Get the value of the authorized_user that can access the method. The way to get it depends on the storage type so we have it defined here
         authorized_user_id = self.get_authorized_user_id(session_id)
 
+        # In case we want to load messages for a user with a non initialized session (i.e when first loading the page, we should not throw an unauthorized exception)
         if authorized_user_id is SESSION_NOT_INITIALIZED:
             logger.debug(f"Session '{session_id}' not yet initialized — skipping auth check for method '{method.__name__}'")
             return method(self, *args, **kwargs)
