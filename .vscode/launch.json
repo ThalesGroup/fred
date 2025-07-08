@@ -74,9 +74,7 @@
       "args": [
         "-s",
         "-vv",
-        "app/tests/controllers/test_metadata_controller.py::",
-        "TestMetadataController::",
-        "test_get_documents_metadata_with_filters"
+        "app/tests/controllers/test_metadata_controller.py::TestMetadataController::test_get_documents_metadata_with_filters"
       ],
       "justMyCode": false,
       "envFile": "config/.env",
