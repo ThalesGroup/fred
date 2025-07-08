@@ -1,9 +1,6 @@
 {
   "version": "0.2.0",
   "configurations": [
-    /* ────────────────────────────────
-       ①  Agentic-backend (Python) 
-       ──────────────────────────────── */
     {
       "name": "Debug Agentic Backend",
       "type": "debugpy",
@@ -14,7 +11,7 @@
       "program": "app/main.py",
       /* 3️⃣  Pass your CLI flags */
       "args": [
-        "--server.configurationPath",
+        "--config-path",
         "config/configuration.yaml"
       ],
       /* 4️⃣  Use the agentic venv and expose the *parent* folder on PYTHONPATH */
@@ -24,12 +21,9 @@
         "PATH": "${workspaceFolder}/agentic_backend/.venv/bin:${env:PATH}",
         "LOG_LEVEL": "DEBUG"
       },
-      "justMyCode": false,
+      "justMyCode": true,
       "console": "integratedTerminal"
     },
-    /* ────────────────────────────────
-       ②  Knowledge-Flow backend
-       ──────────────────────────────── */
     {
       "name": "Debug Knowledge Flow Backend",
       "type": "debugpy",
@@ -50,19 +44,15 @@
       "justMyCode": false,
       "console": "integratedTerminal"
     },
-    /* ────────────────────────────────
-       ③  Unit-tests for Knowledge-Flow
-       ──────────────────────────────── */
     {
-      "name": "Debug all tests (KF)",
+      "name": "Debug all Kknowledge flow tests",
       "type": "debugpy",
       "request": "launch",
       "module": "pytest",
       "cwd": "${workspaceFolder}/knowledge_flow_backend",
       "args": [
         "-s",
-        "-q",
-        "app/tests"
+        "-q"
       ],
       "envFile": "config/.env",
       "env": {
@@ -72,11 +62,46 @@
       },
       "justMyCode": false
     },
-    /* ────────────────────────────────
-       ④  Debug the *current* test file
-       ──────────────────────────────── */
     {
-      "name": "Debug current test file",
+      "name": "Debug all agentic tests",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "pytest",
+      "cwd": "${workspaceFolder}/agentic_backend",
+      "args": [
+        "-s",
+        "-q"
+      ],
+      "envFile": "config/.env",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/agentic_backend/app",
+        "PATH": "${workspaceFolder}/.venv/bin:${env:PATH}",
+        "LOG_LEVEL": "DEBUG"
+      },
+      "justMyCode": false
+    },
+    {
+      "name": "Debug ONE KF test",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "pytest",
+      "cwd": "${workspaceFolder}/knowledge_flow_backend",
+      "args": [
+        "-s",
+        "-vv",
+        "app/tests/controllers/test_metadata_controller.py::TestMetadataController::test_get_documents_metadata_with_filters"
+      ],
+      "justMyCode": false,
+      "envFile": "config/.env",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/knowledge_flow_backend/app",
+        "PATH": "${workspaceFolder}/.venv/bin:${env:PATH}",
+        "LOG_LEVEL": "DEBUG"
+      },
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Debug current KF test file",
       "type": "debugpy",
       "request": "launch",
       "module": "pytest",
@@ -94,9 +119,6 @@
       },
       "justMyCode": false
     },
-    /* ────────────────────────────────
-       ⑤  Front-end
-       ──────────────────────────────── */
     {
       "name": "Debug Fred Frontend",
       "type": "node-terminal",

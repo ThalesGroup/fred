@@ -12,9 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import logging
 from pathlib import Path
 from abc import ABC, abstractmethod
 from typing import BinaryIO
+
+logger = logging.getLogger(__name__)
 
 
 class BaseContentStore(ABC):
@@ -59,6 +62,8 @@ class BaseContentStore(ABC):
     @abstractmethod
     def clear(self) -> None:
         """
-        Clear the store. This method is only supported by test friendly stores
+        Optional: Clear the store. Only supported by test-friendly stores.
+
+        Default implementation does nothing and logs a debug message.
         """
-        pass
+        logger.debug("clear() called on BaseContentStore: no-op by default.")

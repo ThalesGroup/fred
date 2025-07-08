@@ -1,10 +1,10 @@
 [project]
-name = "knowledge-flow-app"
+name = "knowledge-flow-backend-app"
 readme = "README.md"
 version = "0.1"
-description = "A knowledge flow backend to manage and serve knowledge base."
+description = "Knowledge Flow Backend App"
 authors = [
-    {name = "Knowledge Flow", email = "noreply@example.com"}
+    {name = "Fred", email = "noreply@example.com"}
 ]
 requires-python = ">=3.12,<3.13"
 
