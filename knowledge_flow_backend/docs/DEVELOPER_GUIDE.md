@@ -131,7 +131,7 @@ This project uses a modular architecture that separates domain features from cor
 ### 🔩 Root Layout
 
 ```
-knowledge_flow_app/
+app/
 ├── main.py                       # FastAPI + MCP entrypoint
 ├── application_context.py        # Shared runtime context (DI / singleton-style config)
 ├── config/                       # YAML and Python-based configuration modules

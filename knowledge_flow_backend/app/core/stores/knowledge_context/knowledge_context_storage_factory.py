@@ -13,7 +13,7 @@
 # limitations under the License.
 
 from app.application_context import ApplicationContext
-from app.core.stores.base_knowledge_context_store import BaseKnowledgeContextStore
+from app.core.stores.knowledge_context.base_knowledge_context_store import BaseKnowledgeContextStore
 from .local_knowledge_context_store import LocalKnowledgeContextStore
 from pathlib import Path
 

@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# knowledge_flow_app/input_processors/pdf_markdown_processor/openai_pdf_markdown_processor.py
+# app/core/processors/input/pdf_markdown_processor/openai_pdf_markdown_processor.py
 
 
 

@@ -52,5 +52,5 @@ EXPOSE 8111
 
 # Run the application
 ENV PYTHONPATH=/app
-ENTRYPOINT ["python", "knowledge_flow_app/main.py"]
+ENTRYPOINT ["python", "app/main.py"]
 CMD ["--server.reload", "--server.reloadDir=/app"]

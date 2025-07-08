@@ -15,7 +15,7 @@
 import logging
 from opensearchpy import OpenSearch, RequestsHttpConnection, OpenSearchException
 
-from app.core.stores.base_metadata_store import BaseMetadataStore
+from app.core.stores.metadata.base_metadata_store import BaseMetadataStore
 
 
 logger = logging.getLogger(__name__)

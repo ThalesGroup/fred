@@ -18,7 +18,7 @@ from app.config.opensearch_settings import OpenSearchSettings
 from app.common.utils import validate_settings_or_exit
 from pathlib import Path
 
-from app.core.stores.base_metadata_store import BaseMetadataStore
+from app.core.stores.metadata.base_metadata_store import BaseMetadataStore
 from app.core.stores.metadata.local_metadata_store import LocalMetadataStore
 from app.core.stores.metadata.opensearch_metadata_store import OpenSearchMetadataStore
 

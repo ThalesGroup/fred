@@ -18,7 +18,7 @@ from app.config.content_store_local_settings import ContentStoreLocalSettings
 from app.config.content_store_minio_settings import ContentStoreMinioSettings
 from pathlib import Path
 
-from app.core.stores.base_content_store import BaseContentStore
+from app.core.stores.content.base_content_store import BaseContentStore
 from app.core.stores.content.local_content_store import LocalStorageBackend
 from app.core.stores.content.minio_content_store import MinioContentStore
 

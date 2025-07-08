@@ -47,7 +47,7 @@ def prepared_pdf_dir(tmp_path, monkeypatch):
         mock_describe,
     )
 
-    source_file = Path("knowledge_flow_app/tests/assets/sample.pdf")
+    source_file = Path("app/tests/assets/sample.pdf")
     target_file = tmp_path / source_file.name
     shutil.copy(source_file, target_file)
     input_service = InputProcessorService()
@@ -58,7 +58,7 @@ def prepared_pdf_dir(tmp_path, monkeypatch):
 @pytest.fixture
 def prepared_docx_dir(tmp_path):
     """Prepare a temporary DOCX file and run input processing on it."""
-    source_file = Path("knowledge_flow_app/tests/assets/sample.docx")
+    source_file = Path("app/tests/assets/sample.docx")
     target_file = tmp_path / source_file.name
     shutil.copy(source_file, target_file)
     input_service = InputProcessorService()

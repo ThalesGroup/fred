@@ -55,3 +55,10 @@ class BaseContentStore(ABC):
         Returns the markdown content (from output/output.md).
         """
         pass
+
+    @abstractmethod
+    def clear(self) -> None:
+        """
+        Clear the store. This method is only supported by test friendly stores
+        """
+        pass

@@ -59,16 +59,22 @@ dev = [
 requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 packages = [
-  { include = "knowledge_flow_app" }
+  { include = "app" }
 ]
 
 [tool.ruff]
 line-length = 200
 
 [tool.setuptools.packages.find]
-include = ["knowledge_flow_app*"]
+include = ["app*"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "strict"
 asyncio_default_fixture_loop_scope = "function"
 cache_dir = "/tmp/.pytest"
+
+markers = [
+  "content_storage_type(type): mark test to select a content store backend",
+  "metadata_storage_type(type): mark test to select a metadata store backend",
+  "vector_storage_type(type): mark test to select a vector store backend"
+]

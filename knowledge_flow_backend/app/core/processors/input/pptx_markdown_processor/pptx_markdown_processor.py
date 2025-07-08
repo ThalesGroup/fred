@@ -12,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# knowledge_flow_app/processors/pptx/pptx_processor.py
-
 import logging
 from pathlib import Path
 

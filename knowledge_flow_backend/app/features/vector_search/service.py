@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# knowledge_flow_app/services/vector_search_service.py
 from typing import List
 from langchain.schema.document import Document
 from app.application_context import ApplicationContext

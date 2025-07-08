@@ -12,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# knowledge_flow_app/image_description/base_image_describer.py
-
 from abc import ABC, abstractmethod
 
 

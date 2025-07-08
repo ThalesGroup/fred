@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# knowledge_flow_app/input_processors/openai_image_describer.py
+# app/core/processors/input/openai_image_describer.py
 
 import base64
 import logging

@@ -20,7 +20,7 @@ from app.features.vector_search.structures import DocumentSource, SearchRequest
 from app.features.vector_search.service import VectorSearchService
 
 class VectorSearchController:
-    """knowledge_flow_app/features/tabular/__init__.py
+    """app/features/tabular/__init__.py
     Controller responsible for document search using vector similarity.
 
     This controller exposes a REST API endpoint for embedding-based search

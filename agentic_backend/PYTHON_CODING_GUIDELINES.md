@@ -46,7 +46,7 @@ raise HTTPException(404, "Not found")
 All exception types must live in:
 
 ```
-knowledge_flow_app/common/business_exception.py
+app/common/business_exception.py
 ```
 
 Use subclasses:
@@ -187,7 +187,7 @@ make test
 ### Run a specific test file:
 
 ```bash
-make test-one TEAT=knowledge_flow_app/path/to/my_test_file.py
+make test-one TEST=app/path/to/my_test_file.py
 ```
 
 ### List all available tests:
@@ -199,7 +199,7 @@ make list-tests
 ### Example output:
 
 ```
-knowledge_flow_app/input_processors/pdf_markdown_processor/tests/pdf_markdown_processor_test.py::test_pdf_processor_end_to_end
+app/core/processors/input/pdf_markdown_processor/tests/pdf_markdown_processor_test.py::test_pdf_processor_end_to_end
 ```
 
 > ℹ️ Use this to locate and run your test interactively.

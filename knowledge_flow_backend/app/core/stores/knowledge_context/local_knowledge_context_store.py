@@ -18,7 +18,7 @@ import shutil
 from pathlib import Path
 from typing import BinaryIO, List
 
-from app.core.stores.base_knowledge_context_store import BaseKnowledgeContextStore
+from app.core.stores.knowledge_context.base_knowledge_context_store import BaseKnowledgeContextStore
 
 logger = logging.getLogger(__name__)
 

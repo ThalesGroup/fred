@@ -58,7 +58,7 @@ def patch_context(monkeypatch):
 
     def _patch(store_type):
         dummy = DummyAppContext(DummyConfig(store_type))
-        monkeypatch.setattr("app.stores.metadata.metadata_storage_factory.ApplicationContext.get_instance", lambda: dummy)
+        monkeypatch.setattr("app.core.stores.metadata.metadata_storage_factory.ApplicationContext.get_instance", lambda: dummy)
 
     return _patch
 
@@ -72,7 +72,7 @@ def test_get_local_metadata_store(monkeypatch, patch_context):
     """Test: get_metadata_store returns LocalMetadataStore when type='local'."""
     patch_context("local")
     monkeypatch.setattr(
-        "app.stores.metadata.metadata_storage_factory.MetadataStoreLocalSettings",
+        "app.core.stores.metadata.metadata_storage_factory.MetadataStoreLocalSettings",
         lambda: type("Cfg", (), {"metadata_file": "/tmp/test.json", "root_path": "/tmp"}),
     )
     store = get_metadata_store()
@@ -88,7 +88,7 @@ def test_get_opensearch_metadata_store(monkeypatch, patch_context):
     """Test: get_metadata_store returns OpenSearchMetadataStore when type='opensearch'."""
     patch_context("opensearch")
     monkeypatch.setattr(
-        "app.stores.metadata.metadata_storage_factory.validate_settings_or_exit",
+        "app.core.stores.metadata.metadata_storage_factory.validate_settings_or_exit",
         lambda cls, name: type(
             "Cfg",
             (),

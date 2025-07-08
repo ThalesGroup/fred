@@ -12,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# knowledge_flow_app/processors/processor_example_tabular/example_tabular_processor.py
-
 from pathlib import Path
 
 import pandas

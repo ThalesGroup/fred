@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# knowledge_flow_app/input_processors/pdf_markdown_processor/ollama_pdf_markdown_processor.py
+# app/core/processors/input/pdf_markdown_processor/ollama_pdf_markdown_processor.py
 
 
 from app.core.processors.input.common.image_describers.ollama_image_describer import OllamaImageDescriber

@@ -12,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# knowledge_flow_app/image_description/ollama_describer.py
-
 import json
 import requests
 from app.config.ollama_settings import OllamaSettings

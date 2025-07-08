@@ -19,7 +19,7 @@ from typing import BinaryIO
 
 import pandas as pd
 
-from app.core.stores.base_content_store import BaseContentStore
+from app.core.stores.content.base_content_store import BaseContentStore
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +27,16 @@ logger = logging.getLogger(__name__)
 class LocalStorageBackend(BaseContentStore):
     def __init__(self, destination_root: Path):
         self.destination_root = destination_root
+
+    def clear(self) -> None:          # ← NEW
+        """
+        Delete every document that was previously saved in this local
+        store.  Meant for unit-tests; no-op if the folder does not exist.
+        """
+        if self.destination_root.exists():
+            shutil.rmtree(self.destination_root)
+        self.destination_root.mkdir(parents=True, exist_ok=True)
+        logger.info("🧹 LocalStorageBackend cleared")
 
     def save_content(self, document_uid: str, document_dir: Path) -> None:
         destination = self.destination_root / document_uid

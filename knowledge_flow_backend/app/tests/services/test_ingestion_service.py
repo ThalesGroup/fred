@@ -41,7 +41,7 @@ def test_ingestion_service():
     Verifies file saving and metadata extraction.
     """
     ingestion_service = IngestionService()
-    temp_file = ingestion_service.save_file_to_temp(Path("knowledge_flow_app/tests/assets/sample.docx"))
+    temp_file = ingestion_service.save_file_to_temp(Path("app/tests/assets/sample.docx"))
     assert temp_file.exists()
     assert temp_file.is_file()
     assert temp_file.name == "sample.docx"

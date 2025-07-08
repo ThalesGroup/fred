@@ -54,4 +54,4 @@ EXPOSE 8111
 
 # Define default entrypoint and command
 ENTRYPOINT ["python"]
-CMD ["/app/knowledge_flow_app/main.py"]
+CMD ["/app/app/main.py"]
