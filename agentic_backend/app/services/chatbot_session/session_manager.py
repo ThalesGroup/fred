@@ -27,14 +27,14 @@ import requests
 from app.chatbot.agent_manager import AgentManager
 from app.flow import AgentFlow
 from app.services.chatbot_session.attachement_processing import AttachementProcessing
-from app.services.chatbot_session.structure.chat_schema import ChatMessagePayload, ChatTokenUsage, SessionSchema, SessionWithFiles, clean_agent_metadata, clean_token_usage
+from app.services.chatbot_session.structure.chat_schema import ChatMessagePayload, SessionSchema, SessionWithFiles, clean_agent_metadata, clean_token_usage
 from app.services.chatbot_session.abstract_session_backend import AbstractSessionStorage
-from langchain_core.messages import (BaseMessage, HumanMessage, AIMessage, SystemMessage)
 
-from langgraph.graph.state import CompiledStateGraph
-from app.application_context import get_app_context, get_configuration, get_default_model
-
+from app.application_context import get_configuration, get_default_model
 from app.monitoring.logging_context import set_logging_context
+
+from langchain_core.messages import (BaseMessage, HumanMessage, AIMessage, SystemMessage)
+from langgraph.graph.state import CompiledStateGraph
 
 import asyncio
 
@@ -42,9 +42,6 @@ logger = logging.getLogger(__name__)
 
 # Type for callback functions (synchronous or asynchronous)
 CallbackType = Union[Callable[[Dict], None], Callable[[Dict], Awaitable[None]]]
-_session_counter = 0
-
-
 
 class SessionManager:
     """
