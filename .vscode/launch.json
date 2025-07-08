@@ -1,90 +1,108 @@
 {
   "version": "0.2.0",
   "configurations": [
+    /* ────────────────────────────────
+       ①  Agentic-backend (Python) 
+       ──────────────────────────────── */
     {
       "name": "Debug Agentic Backend",
       "type": "debugpy",
       "request": "launch",
+      /* 1️⃣  Start inside the service folder */
       "cwd": "${workspaceFolder}/agentic_backend",
-      "program": "${workspaceFolder}/agentic_backend/app/main.py",
-      "console": "integratedTerminal",
-      "justMyCode": false,
+      /* 2️⃣  Run it as ascript */
+      "program": "app/main.py",
+      /* 3️⃣  Pass your CLI flags */
+      "args": [
+        "--server.configurationPath",
+        "config/configuration.yaml"
+      ],
+      /* 4️⃣  Use the agentic venv and expose the *parent* folder on PYTHONPATH */
+      "python": "${workspaceFolder}/agentic_backend/.venv/bin/python",
       "env": {
-        "PYTHONPATH": "${workspaceFolder}/agentic_backend",
+        "PYTHONPATH": "${workspaceFolder}/agentic_backend:${env:PYTHONPATH}",
         "PATH": "${workspaceFolder}/agentic_backend/.venv/bin:${env:PATH}",
         "LOG_LEVEL": "DEBUG"
       },
-      "args": [
-        "--server.configurationPath",
-        "${workspaceFolder}/agentic_backend/config/configuration.yaml"
-      ],
-      "python": "${workspaceFolder}/agentic_backend/.venv/bin/python",
+      "justMyCode": false,
+      "console": "integratedTerminal"
     },
+    /* ────────────────────────────────
+       ②  Knowledge-Flow backend
+       ──────────────────────────────── */
     {
       "name": "Debug Knowledge Flow Backend",
       "type": "debugpy",
       "request": "launch",
-      "program": "${workspaceFolder}/knowledge_flow_backend/app/main.py",
+      "cwd": "${workspaceFolder}/knowledge_flow_backend",
+      "program": "app/main.py",
       "args": [
-        "--config-path",
-        "${workspaceFolder}/knowledge_flow_backend/config/configuration.yaml",
+        "--config-path", // <- create_app() expects this
+        "config/configuration.yaml",
         "--server.reload"
       ],
-      "envFile": "${workspaceFolder}/knowledge_flow_backend/config/.env",
+      "envFile": "config/.env",
       "env": {
         "PYTHONPATH": "${workspaceFolder}/knowledge_flow_backend/app",
         "PATH": "${workspaceFolder}/.venv/bin:${env:PATH}",
         "LOG_LEVEL": "DEBUG"
-      }
+      },
+      "justMyCode": false,
+      "console": "integratedTerminal"
     },
+    /* ────────────────────────────────
+       ③  Unit-tests for Knowledge-Flow
+       ──────────────────────────────── */
+    {
+      "name": "Debug all tests (KF)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "pytest",
+      "cwd": "${workspaceFolder}/knowledge_flow_backend",
+      "args": [
+        "-s",
+        "-q",
+        "app/tests"
+      ],
+      "envFile": "config/.env",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/knowledge_flow_backend/app",
+        "PATH": "${workspaceFolder}/.venv/bin:${env:PATH}",
+        "LOG_LEVEL": "DEBUG"
+      },
+      "justMyCode": false
+    },
+    /* ────────────────────────────────
+       ④  Debug the *current* test file
+       ──────────────────────────────── */
+    {
+      "name": "Debug current test file",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "pytest",
+      "cwd": "${workspaceFolder}/knowledge_flow_backend",
+      "args": [
+        "-s",
+        "-vv",
+        "${file}"
+      ],
+      "envFile": "config/.env",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/knowledge_flow_backend/app",
+        "PATH": "${workspaceFolder}/.venv/bin:${env:PATH}",
+        "LOG_LEVEL": "DEBUG"
+      },
+      "justMyCode": false
+    },
+    /* ────────────────────────────────
+       ⑤  Front-end
+       ──────────────────────────────── */
     {
       "name": "Debug Fred Frontend",
       "type": "node-terminal",
       "request": "launch",
       "command": "npm run dev",
       "cwd": "${workspaceFolder}/frontend"
-    },
-    {
-      // ────────────────────────────────────────────────────────────────
-      //  ❶  ▶  Debug Knowledge-Flow unit-tests (local stores only)
-      // ────────────────────────────────────────────────────────────────
-      "name": "Debug tests",
-      "type": "debugpy", // You can keep "debugpy" if you prefer – VS Code
-      "request": "launch", // accepts both.  Using the shorter alias is fine
-      "module": "pytest", // <-- run “python -m pytest …”
-      "cwd": "${workspaceFolder}/knowledge_flow_backend",
-      "args": [
-        "-s", // don’t capture stdout/stderr
-        "-q", // quieter header (optional)
-        // "app/tests/controllers/test_content_controller.py::TestContentController", 
-        // ↑ uncomment and point to ONE test/class if you want to debug a single target
-        "app/tests" // run the full suite under knowledge_flow_backend
-      ],
-      // You already declared the virtual-env & PYTHONPATH for the backend:
-      "env": {
-        "PYTHONPATH": "${workspaceFolder}/knowledge_flow_backend/app",
-        "PATH": "${workspaceFolder}/.venv/bin:${env:PATH}",
-        "LOG_LEVEL": "DEBUG"
-      },
-      "envFile": "${workspaceFolder}/knowledge_flow_backend/config/.env",
-      // Disable “just-my-code” so you can step into the framework if needed
-      "justMyCode": false,
-      // Optional: stop on first test failure
-      // "console": "integratedTerminal",
-      // "stopOnEntry": false
-    },
-    {
-      "name": "Debug current test file",
-      "type": "debugpy",
-      "request": "launch",
-      "module": "pytest",
-      "cwd": "${workspaceFolder}/knowledge_flow_backend", 
-      "args": [
-        "-s",
-        "-vv",
-        "${file}"
-      ],
-      "justMyCode": false
     }
   ]
 }
