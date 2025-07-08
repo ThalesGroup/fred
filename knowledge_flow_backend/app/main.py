@@ -136,15 +136,25 @@ def create_app(config_path: str, base_url: str) -> FastAPI:
     app.include_router(router)
     logger.info("🧩 All controllers registered.")
 
-    mcp = FastApiMCP(
+    mcp_tabular = FastApiMCP(
         app,
-        name="Knowledge Flow MCP",
-        description="MCP server for Knowledge Flow",
-        include_tags=["Vector Search", "Tabular"],
+        name="Knowledge Flow Tabular MCP",
+        description="MCP server for Knowledge Flow Tabular",
+        include_tags=["Tabular"],
+        describe_all_responses=True,
+        describe_full_response_schema=True,
+        
+    )
+    mcp_tabular.mount(mount_path="/mcp_tabular")
+    mcp_text = FastApiMCP(
+        app,
+        name="Knowledge Flow Text MCP",
+        description="MCP server for Knowledge Flow Text",
+        include_tags=["Vector Search"],
         describe_all_responses=True,
         describe_full_response_schema=True,
     )
-    mcp.mount()
+    mcp_text.mount(mount_path="/mcp_text")
 
     return app
 

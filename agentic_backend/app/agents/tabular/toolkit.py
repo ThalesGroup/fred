@@ -31,14 +31,7 @@ class TabularToolkit(BaseToolkit):
     def __init__(self, mcp_client: MultiServerMCPClient):
         super().__init__()
         raw_tools = get_mcp_agent_tools(mcp_client)
-
-        tabular_tools = [
-            tool for tool in raw_tools
-            if "/tabular/" in getattr(tool, "name", "").lower()
-            or "tabular" in getattr(tool, "description", "").lower()
-        ]
-
-        self.tools = [monitor_tool(tool) for tool in tabular_tools]
+        self.tools = [monitor_tool(tool) for tool in raw_tools]
 
     @override
     def get_tools(self) -> list[BaseTool]:
