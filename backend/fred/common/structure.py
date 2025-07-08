@@ -231,7 +231,7 @@ class ResourceStorageBase(BaseModel):
     type: str
 
 class LocalStorageSettings(BaseModel):
-    local_path: str = Field(..., description="The path where local session data is stored")
+    local_path: str = Field(..., description="The path where local data is stored")
 
 class LocalStorage(ResourceStorageBase):
     type: Literal["local"]
