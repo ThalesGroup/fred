@@ -7,6 +7,82 @@ resolution-markers = [
 ]
 
 [[package]]
+name = "agentic-backend-app"
+version = "0.1.0"
+source = { editable = "." }
+dependencies = [
+    { name = "croniter" },
+    { name = "cryptography" },
+    { name = "fastapi" },
+    { name = "ipython" },
+    { name = "kubernetes" },
+    { name = "langchain" },
+    { name = "langchain-community" },
+    { name = "langchain-core" },
+    { name = "langchain-mcp-adapters" },
+    { name = "langchain-ollama" },
+    { name = "langchain-openai" },
+    { name = "langfuse" },
+    { name = "langgraph" },
+    { name = "minio" },
+    { name = "nest-asyncio" },
+    { name = "openai" },
+    { name = "opensearch-py" },
+    { name = "pandas" },
+    { name = "pydantic-settings" },
+    { name = "pyjwt" },
+    { name = "pytest-asyncio" },
+    { name = "python-multipart" },
+    { name = "pyyaml" },
+    { name = "requests" },
+    { name = "rich" },
+    { name = "uvicorn", extra = ["standard"] },
+]
+
+[package.optional-dependencies]
+dev = [
+    { name = "pip-audit" },
+    { name = "pylint" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "croniter", specifier = "==2.0.2" },
+    { name = "cryptography", specifier = ">=45.0.4" },
+    { name = "fastapi", specifier = "==0.115.6" },
+    { name = "ipython", specifier = ">=8.30.0,<9.0.0" },
+    { name = "kubernetes", specifier = "==30.1.0" },
+    { name = "langchain", specifier = ">=0.3.21,<0.4.0" },
+    { name = "langchain-community", specifier = ">=0.3.20,<0.4.0" },
+    { name = "langchain-core", specifier = ">=0.3.47,<0.4.0" },
+    { name = "langchain-mcp-adapters", specifier = ">=0.0.11,<0.0.12" },
+    { name = "langchain-ollama", specifier = ">=0.3.0,<0.4.0" },
+    { name = "langchain-openai", specifier = ">=0.3.9,<0.4.0" },
+    { name = "langfuse", specifier = ">=2.52.0,<3.0.0" },
+    { name = "langgraph", specifier = ">=0.2.34,<0.3.0" },
+    { name = "minio", specifier = ">=7.2.15,<8.0.0" },
+    { name = "nest-asyncio", specifier = ">=1.6.0,<2.0.0" },
+    { name = "openai", specifier = ">=1.54.0,<2.0.0" },
+    { name = "opensearch-py", specifier = ">=2.8.0,<3.0.0" },
+    { name = "pandas", specifier = ">=2.2.2,<3.0.0" },
+    { name = "pip-audit", marker = "extra == 'dev'", specifier = ">=2.7.3,<3.0.0" },
+    { name = "pydantic-settings", specifier = ">=2.7.1,<3.0.0" },
+    { name = "pyjwt", specifier = ">=2.10.1,<3.0.0" },
+    { name = "pylint", marker = "extra == 'dev'", specifier = ">=3.3.1,<4.0.0" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.3.5,<9.0.0" },
+    { name = "pytest-asyncio", specifier = ">=0.26.0,<0.27.0" },
+    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=6.1.1,<7.0.0" },
+    { name = "python-multipart", specifier = ">=0.0.20,<0.0.21" },
+    { name = "pyyaml", specifier = "==6.0.1" },
+    { name = "requests", specifier = ">=2.32.3,<3.0.0" },
+    { name = "rich", specifier = ">=14.0.0" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.30.6,<0.31.0" },
+]
+provides-extras = ["dev"]
+
+[[package]]
 name = "aiohappyeyeballs"
 version = "2.6.1"
 source = { registry = "https://pypi.org/simple" }
@@ -434,82 +510,6 @@ sdist = { url = "https://files.pythonhosted.org/packages/0a/10/c23352565a6544bdc
 wheels = [
     { url = "https://files.pythonhosted.org/packages/4d/36/2a115987e2d8c300a974597416d9de88f2444426de9571f4b59b2cca3acc/filelock-3.18.0-py3-none-any.whl", hash = "sha256:c401f4f8377c4464e6db25fff06205fd89bdd83b65eb0488ed1b160f780e21de", size = 16215, upload-time = "2025-03-14T07:11:39.145Z" },
 ]
-
-[[package]]
-name = "fred"
-version = "0.1.0"
-source = { editable = "." }
-dependencies = [
-    { name = "croniter" },
-    { name = "cryptography" },
-    { name = "fastapi" },
-    { name = "ipython" },
-    { name = "kubernetes" },
-    { name = "langchain" },
-    { name = "langchain-community" },
-    { name = "langchain-core" },
-    { name = "langchain-mcp-adapters" },
-    { name = "langchain-ollama" },
-    { name = "langchain-openai" },
-    { name = "langfuse" },
-    { name = "langgraph" },
-    { name = "minio" },
-    { name = "nest-asyncio" },
-    { name = "openai" },
-    { name = "opensearch-py" },
-    { name = "pandas" },
-    { name = "pydantic-settings" },
-    { name = "pyjwt" },
-    { name = "pytest-asyncio" },
-    { name = "python-multipart" },
-    { name = "pyyaml" },
-    { name = "requests" },
-    { name = "rich" },
-    { name = "uvicorn", extra = ["standard"] },
-]
-
-[package.optional-dependencies]
-dev = [
-    { name = "pip-audit" },
-    { name = "pylint" },
-    { name = "pytest" },
-    { name = "pytest-cov" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "croniter", specifier = "==2.0.2" },
-    { name = "cryptography", specifier = ">=45.0.4" },
-    { name = "fastapi", specifier = "==0.115.6" },
-    { name = "ipython", specifier = ">=8.30.0,<9.0.0" },
-    { name = "kubernetes", specifier = "==30.1.0" },
-    { name = "langchain", specifier = ">=0.3.21,<0.4.0" },
-    { name = "langchain-community", specifier = ">=0.3.20,<0.4.0" },
-    { name = "langchain-core", specifier = ">=0.3.47,<0.4.0" },
-    { name = "langchain-mcp-adapters", specifier = ">=0.0.11,<0.0.12" },
-    { name = "langchain-ollama", specifier = ">=0.3.0,<0.4.0" },
-    { name = "langchain-openai", specifier = ">=0.3.9,<0.4.0" },
-    { name = "langfuse", specifier = ">=2.52.0,<3.0.0" },
-    { name = "langgraph", specifier = ">=0.2.34,<0.3.0" },
-    { name = "minio", specifier = ">=7.2.15,<8.0.0" },
-    { name = "nest-asyncio", specifier = ">=1.6.0,<2.0.0" },
-    { name = "openai", specifier = ">=1.54.0,<2.0.0" },
-    { name = "opensearch-py", specifier = ">=2.8.0,<3.0.0" },
-    { name = "pandas", specifier = ">=2.2.2,<3.0.0" },
-    { name = "pip-audit", marker = "extra == 'dev'", specifier = ">=2.7.3,<3.0.0" },
-    { name = "pydantic-settings", specifier = ">=2.7.1,<3.0.0" },
-    { name = "pyjwt", specifier = ">=2.10.1,<3.0.0" },
-    { name = "pylint", marker = "extra == 'dev'", specifier = ">=3.3.1,<4.0.0" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.3.5,<9.0.0" },
-    { name = "pytest-asyncio", specifier = ">=0.26.0,<0.27.0" },
-    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=6.1.1,<7.0.0" },
-    { name = "python-multipart", specifier = ">=0.0.20,<0.0.21" },
-    { name = "pyyaml", specifier = "==6.0.1" },
-    { name = "requests", specifier = ">=2.32.3,<3.0.0" },
-    { name = "rich", specifier = ">=14.0.0" },
-    { name = "uvicorn", extras = ["standard"], specifier = ">=0.30.6,<0.31.0" },
-]
-provides-extras = ["dev"]
 
 [[package]]
 name = "frozenlist"

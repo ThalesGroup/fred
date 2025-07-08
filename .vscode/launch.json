@@ -11,7 +11,7 @@
       "program": "app/main.py",
       /* 3️⃣  Pass your CLI flags */
       "args": [
-        "--server.configurationPath",
+        "--config-path",
         "config/configuration.yaml"
       ],
       /* 4️⃣  Use the agentic venv and expose the *parent* folder on PYTHONPATH */
@@ -21,7 +21,7 @@
         "PATH": "${workspaceFolder}/agentic_backend/.venv/bin:${env:PATH}",
         "LOG_LEVEL": "DEBUG"
       },
-      "justMyCode": false,
+      "justMyCode": true,
       "console": "integratedTerminal"
     },
     {

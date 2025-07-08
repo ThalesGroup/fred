@@ -1,11 +1,10 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
+# Copyright Thales 2025
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#    http://www.apache.org/licenses/LICENSE-2.0
+#     http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -13,35 +12,39 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
 
 """
-Entrypoint for the knowledge_flow_app microservice.
+Entrypoint for the Knowledge Flow Backend App.
 """
 
 import argparse
 import logging
-import os
 
+import uvicorn
+from app.application_context import ApplicationContext
+from app.common.structures import Configuration
+from app.common.utils import parse_server_configuration
+from app.features.content.controller import ContentController
+from app.features.metadata.controller import MetadataController
+from app.features.tabular.controller import TabularController
+from app.features.vector_search.controller import VectorSearchController
+from app.features.wip.ingestion_controller import IngestionController
+from app.features.wip.knowledge_context_controller import KnowledgeContextController
 from dotenv import load_dotenv
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi_mcp import FastApiMCP
 from rich.logging import RichHandler
 
-from app.application_context import ApplicationContext
-from app.common.structures import Configuration
-from app.common.utils import parse_server_configuration
-from app.features.content.controller import ContentController
-from app.features.metadata.controller import MetadataController
-from app.features.vector_search.controller import VectorSearchController
-from app.features.tabular.controller import TabularController
-from app.features.wip.ingestion_controller import IngestionController
-from app.features.wip.knowledge_context_controller import KnowledgeContextController
-
 
 # -----------------------
 # LOGGING + ENVIRONMENT
 # -----------------------
+
+logger = logging.getLogger(__name__)
+
 
 def configure_logging(log_level: str):
     logging.basicConfig(
@@ -50,7 +53,10 @@ def configure_logging(log_level: str):
         datefmt="%Y-%m-%d %H:%M:%S",
         handlers=[RichHandler(rich_tracebacks=False, show_time=False, show_path=False)],
     )
-    logging.getLogger().info(f"Logging configured at {log_level.upper()} level.")
+    logging.getLogger(__name__).info(
+        f"Logging configured at {log_level.upper()} level."
+    )
+
 
 def load_environment(dotenv_path: str = "./config/.env"):
     if load_dotenv(dotenv_path):
@@ -60,11 +66,44 @@ def load_environment(dotenv_path: str = "./config/.env"):
 
 
 # -----------------------
+# CLI ARGUMENTS
+# -----------------------
+
+
+def parse_cli_opts():
+    parser = argparse.ArgumentParser(description="Start the Knowledge Flow Backend App")
+    parser.add_argument(
+        "--config-path",
+        default="./config/configuration.yaml",
+        help="Path to configuration YAML file",
+    )
+    parser.add_argument(
+        "--base-url",
+        default="/knowledge-flow/v1",
+        help="Base path for all API endpoints",
+    )
+    parser.add_argument(
+        "--server-address", default="127.0.0.1", help="Server binding address"
+    )
+    parser.add_argument("--server-port", type=int, default=8111, help="Server port")
+    parser.add_argument("--log-level", default="info", help="Logging level")
+    parser.add_argument(
+        "--reload", action="store_true", help="Enable auto-reload (for dev only)"
+    )
+    parser.add_argument(
+        "--reload-dir", default=".", help="Watch for changes in these directories"
+    )
+
+    return parser.parse_args()
+
+
+# -----------------------
 # APP CREATION
 # -----------------------
 
+
 def create_app(config_path: str, base_url: str) -> FastAPI:
-    logger = logging.getLogger(__name__)
+
     logger.info(f"🛠️ create_app() called with base_url={base_url}")
 
     configuration: Configuration = parse_server_configuration(config_path)
@@ -79,47 +118,9 @@ def create_app(config_path: str, base_url: str) -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=configuration.security.authorized_origins,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=["GET", "POST", "PUT", "DELETE"],
+        allow_headers=["Content-Type", "Authorization"],
     )
-
-    router = APIRouter()
-    IngestionController(router)
-    VectorSearchController(router)
-    MetadataController(router)
-    ContentController(router)
-    KnowledgeContextController(router)
-    TabularController(router)
-
-    logger.info("🧩 All controllers registered.")
-    app.include_router(router, prefix=base_url)
-
-    return app
-
-
-# -----------------------
-# CLI MODE
-# -----------------------
-
-def parse_cli_opts():
-    parser = argparse.ArgumentParser(description="Start the knowledge_flow_app microservice")
-    parser.add_argument("--config-path", default="./config/configuration.yaml", help="Path to configuration YAML file")
-    parser.add_argument("--base-url", default="/knowledge-flow/v1", help="Base path for all API endpoints")
-    parser.add_argument("--server-address", default="127.0.0.1", help="Server binding address")
-    parser.add_argument("--server-port", type=int, default=8111, help="Server port")
-    parser.add_argument("--log-level", default="info", help="Logging level")
-    parser.add_argument("--reload", dest="reload", action="store_true", help="Enable auto-reload (for dev only)")
-    parser.add_argument("--reload-dir", dest="reload_dirs", default=".", help="Watch for changes in these directories")
-
-    return parser.parse_args()
-
-
-def main():
-    args = parse_cli_opts()
-    configure_logging(args.log_level)
-    load_environment()
-
-    app = create_app(config_path=args.config_path, base_url=args.base_url)
 
     mcp = FastApiMCP(
         app,
@@ -131,15 +132,43 @@ def main():
     )
     mcp.mount()
 
-    import uvicorn
+    router = APIRouter(prefix=base_url)
+
+    # Register controllers
+    IngestionController(router)
+    VectorSearchController(router)
+    MetadataController(router)
+    ContentController(router)
+    KnowledgeContextController(router)
+    TabularController(router)
+
+    logger.info("🧩 All controllers registered.")
+    app.include_router(router)
+    logger.info("🧩 All controllers registered.")
+    return app
+
+
+# -----------------------
+# MAIN ENTRYPOINT
+# -----------------------
+
+
+def main():
+    args = parse_cli_opts()
+    configure_logging(args.log_level)
+    load_environment()
+
+    app = create_app(config_path=args.config_path, base_url=args.base_url)
+
     uvicorn.run(
         app,
         host=args.server_address,
         port=args.server_port,
         log_level=args.log_level,
         reload=args.reload,
-        reload_dirs=args.reload_dirs,
+        reload_dirs=args.reload_dir,
     )
+
 
 if __name__ == "__main__":
     main()
