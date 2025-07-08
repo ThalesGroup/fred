@@ -12,28 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 from datetime import datetime, timedelta
 from typing import Tuple, Dict, Optional
+from fastapi import HTTPException
 import logging
 import traceback
 import pandas as pd
 import yaml
+from functools import wraps
+import inspect
 
 logger = logging.getLogger(__name__)
 
 from app.common.structure import Configuration, PrecisionEnum, SampleDataType, Series, CompareResult, Window, Difference
+from app.common.error import SESSION_NOT_INITIALIZED
 
 def parse_server_configuration(configuration_path: str) -> Configuration:
     """
@@ -241,3 +233,46 @@ def log_exception(e: Exception, context_message: Optional[str] = None) -> str:
     logger.error("🧵 Stack trace:\n%s", stack_trace, stacklevel=2)
 
     return summary
+
+# Decorator for wrapping methods to protect by authentication
+def authorization_required(method):
+    @wraps(method)
+    def wrapper(self, *args, **kwargs):
+        sig = inspect.signature(method)
+        bound_args = sig.bind(self, *args, **kwargs)
+        bound_args.apply_defaults()
+
+        arguments = bound_args.arguments
+        session_id = arguments.get('session_id')
+        user_id = arguments.get('user_id')
+
+        if user_id is None:
+            raise ValueError(f"Missing 'user_id' in method '{method.__name__}'")
+        if session_id is None:
+            raise ValueError(f"Missing 'session_id' in method '{method.__name__}'")
+        if not isinstance(user_id, str):
+            raise ValueError(f"'user_id' must be of type 'str'")
+        if not isinstance(session_id, str):
+            raise ValueError(f"'session_id' must be of type 'str'")
+        if not hasattr(self, "get_authorized_user_id") or not callable(getattr(self, "get_authorized_user_id")):
+            raise NotImplementedError(
+                f"{self.__class__.__name__} must implement 'get_authorized_user_id'"
+            )
+
+        # Get the value of the authorized_user that can access the method. The way to get it depends on the storage type so we have it defined here
+        authorized_user_id = self.get_authorized_user_id(session_id)
+
+        # In case we want to load messages for a user with a non initialized session (i.e when first loading the page, we should not throw an unauthorized exception)
+        if authorized_user_id is SESSION_NOT_INITIALIZED:
+            logger.debug(f"Session '{session_id}' not yet initialized — skipping auth check for method '{method.__name__}'")
+            return method(self, *args, **kwargs)
+
+        if authorized_user_id != user_id:
+            logger.warning(f"Unauthorized access: user {user_id} to session {session_id} in method '{method.__name__}'")
+            raise HTTPException(
+                status_code=403,
+                detail=f"Unauthorized access: user {user_id} to session {session_id}"
+            )
+
+        return method(self, *args, **kwargs)
+    return wrapper
