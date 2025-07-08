@@ -143,7 +143,7 @@ ai:
       mcp_servers:
         - name: knowledge-flow-mcp-server
           transport: sse
-          url: http://localhost:8111/mcp
+          url: http://localhost:8111/mcp_tabular
           sse_read_timeout: 2000
       model: {}
     - name: "DocumentsExpert"
@@ -152,7 +152,7 @@ ai:
       mcp_servers:
         - name: knowledge-flow-mcp-server
           transport: sse
-          url: http://localhost:8111/mcp
+          url: http://localhost:8111/mcp_text
           sse_read_timeout: 2000
       model: {}
       # The Rags expert essentially is the Document expert before using tools and the knownledge-flow backend as a MCP server
