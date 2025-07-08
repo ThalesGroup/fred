@@ -4,21 +4,6 @@
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
 #    http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
@@ -28,14 +13,15 @@
 # limitations under the License.
 
 """
-Pydantic structure definitions to use in the carbon microservice
+Pydantic structure definitions to use in the various microservice
 """
 
+from typing import Any, Dict, List, Optional, Literal, Union, Annotated
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional
+import os
 
-from pydantic import BaseModel, model_validator, Field, field_validator
+from pydantic import BaseModel, model_validator, Field
 
 
 # ----------------------------------------------------------------------
@@ -235,6 +221,61 @@ class AIConfig(BaseModel):
 
 
 # ----------------------------------------------------------------------
+# Storage configurations
+# ----------------------------------------------------------------------
+
+## ---------------------------------------------------------------------
+## Base storage models 
+## ---------------------------------------------------------------------
+
+class ResourceStorageBase(BaseModel):
+    type: str
+
+class LocalStorageSettings(BaseModel):
+    local_path: str = Field(..., description="The path where local data is stored")
+
+class LocalStorage(ResourceStorageBase):
+    type: Literal["local"]
+    settings: LocalStorageSettings
+
+## ----------------------------------------------------------------------
+## Metrics and feedback storage configurations
+## ----------------------------------------------------------------------
+
+class FeedbackStorageConfig(BaseModel):
+    type: str = Field(..., description="The storage backend to use (e.g., 'local', 'opensearch')")
+    settings: LocalStorageSettings
+
+class MetricsStorageConfig(BaseModel):
+    type: str = Field(..., description="The metrics store to use (e.g., 'local')")
+    settings: LocalStorageSettings
+
+## ----------------------------------------------------------------------
+## Session storage configurations
+## ----------------------------------------------------------------------
+
+class InMemoryStorage(ResourceStorageBase):
+    type: Literal["in_memory"]
+
+class OpenSearchSettings(BaseModel):
+    host: str = Field(default="https://localhost:9200", description="URL of the Opensearch host")
+    username: Optional[str] = Field(default_factory=lambda: os.getenv("OPENSEARCH_USERNAME"), description="Opensearch username")
+    password: Optional[str] = Field(default_factory=lambda: os.getenv("OPENSEARCH_PASSWORD"), description="Opensearch user password")
+    secure: bool = Field(default=False, description="Use TLS with Opensearch")
+    verify_certs: bool = Field(default=False, description="Verify certificates")
+    sessions_index: str = Field(default="sessions", description="Index where sessions are stored")
+    history_index: str = Field(default="history", description="Index where messages histories are stored")
+
+class OpenSearchStorage(ResourceStorageBase):
+    type: Literal["opensearch"]
+    settings: OpenSearchSettings
+
+SessionStorageConfig = Annotated[
+    Union[InMemoryStorage, OpenSearchStorage],
+    Field(discriminator="type")
+]
+
+# ----------------------------------------------------------------------
 # Other configurations
 # ----------------------------------------------------------------------
 
@@ -262,20 +303,6 @@ class FrontendSettings(BaseModel):
     feature_flags: FrontendFlags
     properties: Properties
 
-class MetricsStorageSettings(BaseModel):
-    local_path: str = Field(..., description="The path of the local metrics store")
-
-class FeedbackStorageSettings(BaseModel):
-    local_path: str = Field(..., description="The path of the local metrics store")
-
-class FeedbackStorageConfig(BaseModel):
-    type: str = Field(..., description="The storage backend to use (e.g., 'local', 'opensearch')")
-    settings: FeedbackStorageSettings
-
-class MetricsStorageConfig(BaseModel):
-    type: str = Field(..., description="The metrics store to use (e.g., 'local')")
-    settings: MetricsStorageSettings
-
 class Configuration(BaseModel):
     frontend_settings: FrontendSettings
     database: DatabaseConfiguration
@@ -286,6 +313,7 @@ class Configuration(BaseModel):
     feedback_storage: FeedbackStorageConfig = Field(..., description="Feedback Storage configuration")
     node_metrics_storage:  MetricsStorageConfig = Field(..., description="Node Monitoring Storage configuration")
     tool_metrics_storage:  MetricsStorageConfig = Field(..., description="Tool Monitoring Storage configuration")
+    session_storage: SessionStorageConfig = Field(..., description="Session Storage configuration")
 
 class OfflineStatus(BaseModel):
     is_offline: bool

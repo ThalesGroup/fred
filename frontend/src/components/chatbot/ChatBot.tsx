@@ -248,7 +248,7 @@ const ChatBot = ({
   // Catch the user input
   const handleSend = async (content: UserInputContent) => {
     // Currently the logic is to send the first non-null content in the order of text, audio and file
-    const userId = KeyCloakService.GetUserMail();
+    const userId = KeyCloakService.GetUserId();
     const sessionId = currentChatBotSession?.id;
     const agentName = currentAgenticFlow.name;
     if (content.files && content.files.length > 0) {
@@ -372,7 +372,7 @@ const ChatBot = ({
 
     console.log("[📤 ChatBot] About to send, session_id =", currentChatBotSession?.id);
     const event: ChatBotEventSend & { chat_profile_id?: string } = {
-      user_id: KeyCloakService.GetUserMail(),
+      user_id: KeyCloakService.GetUserId(),
       message: input,
       agent_name: agent ? agent.name : currentAgenticFlow.name,
       session_id: currentChatBotSession?.id,
