@@ -18,9 +18,8 @@ from typing import List
 from uuid import uuid4
 
 from app.chatbot.agent_manager import AgentManager
-from app.services.chatbot_session.in_memory_session_backend import InMemorySessionStorage
 from app.services.chatbot_session.session_manager import SessionManager
-from app.services.chatbot_session.structure.chat_schema import ChatMessagePayload, ErrorEvent, FinalEvent, SessionSchema, SessionWithFiles, StreamEvent
+from app.services.chatbot_session.structure.chat_schema import ChatMessagePayload, ErrorEvent, FinalEvent, SessionWithFiles, StreamEvent
 from app.chatbot.structures.chatbot_error import ChatBotError
 from fastapi import (
     APIRouter,
@@ -42,14 +41,15 @@ from app.common.connectors.file_dao import FileDAO
 from app.common.structure import (
     DAOTypeEnum,
 )
+
 from app.application_context import get_configuration
+from app.services.chatbot_session.stores.sessions_storage_factory import get_sessions_store
 from app.common.utils import log_exception
 from app.security.keycloak import KeycloakUser, get_current_user
 from app.services.ai.ai_service import AIService
 from app.services.cluster_consumption.cluster_consumption_service import (
     ClusterConsumptionService,
 )
-from app.services.chatbot_session.session_manager import CallbackType
 
 logger = logging.getLogger(__name__)
 
@@ -63,8 +63,7 @@ class ChatbotController:
         self.ai_service = ai_service
         self.cluster_consumption_service = ClusterConsumptionService()
         self.agent_manager = AgentManager()
-        self.session_manager = SessionManager(InMemorySessionStorage(), self.agent_manager)
-
+        self.session_manager = SessionManager(get_sessions_store(), self.agent_manager)
         # For import-export operations
         match get_configuration().dao.type:
             case DAOTypeEnum.file:
@@ -103,7 +102,7 @@ class ChatbotController:
 
                 session, messages = await self.session_manager.chat_ask_websocket(
                     callback=capture_callback,
-                    user_id=user.email,
+                    user_id=user.uid,
                     session_id=event.session_id,
                     message=event.message,
                     agent_name=event.agent_name,
@@ -143,7 +142,7 @@ class ChatbotController:
                     
                     session, final_messages = await self.session_manager.chat_ask_websocket(
                         callback=callback,
-                        user_id=user.email,
+                        user_id=user.uid,
                         session_id=event.session_id,
                         message=event.message,
                         agent_name=event.agent_name,
@@ -236,7 +235,7 @@ class ChatbotController:
             summary="Get the list of active chatbot sessions.",
         )
         def get_sessions(user: KeycloakUser = Depends(get_current_user)) -> list[SessionWithFiles]:
-            return self.session_manager.get_sessions(user.email)
+            return self.session_manager.get_sessions(user.uid)
         
         @app.get(
             "/chatbot/session/{session_id}/history",
@@ -246,7 +245,7 @@ class ChatbotController:
             response_model=List[ChatMessagePayload]
         )
         def get_session_history(session_id: str, user: KeycloakUser = Depends(get_current_user)) -> list[ChatMessagePayload]:
-            return self.session_manager.get_session_history(session_id)
+            return self.session_manager.get_session_history(session_id, user.uid)
 
         @app.delete(
             "/chatbot/session/{session_id}",
@@ -255,7 +254,7 @@ class ChatbotController:
             tags=fastapi_tags,
         )
         def delete_session(session_id: str, user: KeycloakUser = Depends(get_current_user)) -> bool:
-            return self.session_manager.delete_session(session_id)
+            return self.session_manager.delete_session(session_id, user.uid)
 
 
         @app.post(

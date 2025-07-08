@@ -208,3 +208,15 @@ feedback_storage:
   type: local
   settings:
     local_path: "~/.fred/feedback-store"
+
+# Sessions and messages are stored by default in_memory 
+# but it can be modified to use a backend like opensearch
+session_storage:
+  # type: in_memory # default value
+  type: opensearch
+  settings: # username and password are passed via the OPENSEARCH_USERNAME and OPENSEARCH_PASSWORD env variables defined in thes .env file
+    host: https://localhost:9200
+    # username: Admin # Overrides the OPENSEARCH_USERNAME environment variable
+    # password: xxx # Overrides the OPENSEARCH_PASSWORD environment variable
+    secure: false
+    verify_certs: false

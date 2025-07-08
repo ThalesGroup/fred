@@ -23,16 +23,18 @@ from uuid import uuid4
 from fastapi import UploadFile
 from collections import defaultdict
 import requests
+
 from app.chatbot.agent_manager import AgentManager
 from app.flow import AgentFlow
 from app.services.chatbot_session.attachement_processing import AttachementProcessing
-from app.services.chatbot_session.structure.chat_schema import ChatMessagePayload, ChatTokenUsage, SessionSchema, SessionWithFiles, clean_agent_metadata, clean_token_usage
+from app.services.chatbot_session.structure.chat_schema import ChatMessagePayload, SessionSchema, SessionWithFiles, clean_agent_metadata, clean_token_usage
 from app.services.chatbot_session.abstract_session_backend import AbstractSessionStorage
+
+from app.application_context import get_configuration, get_default_model
+from app.monitoring.logging_context import set_logging_context
+
 from langchain_core.messages import (BaseMessage, HumanMessage, AIMessage, SystemMessage)
 from langgraph.graph.state import CompiledStateGraph
-from app.application_context import get_app_context, get_configuration, get_default_model
-
-from app.monitoring.logging_context import set_logging_context
 
 import asyncio
 
@@ -40,9 +42,6 @@ logger = logging.getLogger(__name__)
 
 # Type for callback functions (synchronous or asynchronous)
 CallbackType = Union[Callable[[Dict], None], Callable[[Dict], Awaitable[None]]]
-_session_counter = 0
-
-
 
 class SessionManager:
     """
@@ -118,7 +117,7 @@ class SessionManager:
             A tuple of (SessionSchema, is_new_session)
         """
         if session_id:
-            session = self.storage.get_session(session_id)
+            session = self.storage.get_session(session_id, user_id)
             if session:
                 logger.info(f"Resumed existing session {session_id} for user {user_id}")
                 return session, False
@@ -243,7 +242,7 @@ class SessionManager:
         # 💾 Save all messages in correct order
         session.updated_at = datetime.now()
         self.storage.save_session(session)
-        self.storage.save_messages(session.id, all_payloads)
+        self.storage.save_messages(session.id, all_payloads, user_id)
 
         return session, all_payloads
 
@@ -277,7 +276,7 @@ class SessionManager:
         # Build up message history
         history: List[BaseMessage] = []
         if not is_new_session:
-            messages = self.get_session_history(session.id)
+            messages = self.get_session_history(session.id, user_id)
 
             for msg in messages:
                 logger.debug(f"[RESTORED] session_id={msg.session_id} exchange_id={msg.exchange_id} rank={msg.rank} | type={msg.type} | subtype={msg.subtype} | fred.task={msg.metadata.get('fred', {}).get('task')}")
@@ -297,8 +296,8 @@ class SessionManager:
 
         return session, history, agent, is_new_session
 
-    def delete_session(self, session_id: str) -> bool:
-        return self.storage.delete_session(session_id)
+    def delete_session(self, session_id: str, user_id: str) -> bool:
+        return self.storage.delete_session(session_id, user_id)
 
     def get_sessions(self, user_id: str) -> List[SessionWithFiles]:
         """
@@ -331,8 +330,8 @@ class SessionManager:
         return enriched_sessions
 
 
-    def get_session_history(self, session_id: str) -> List[ChatMessagePayload]:
-        return self.storage.get_message_history(session_id)
+    def get_session_history(self, session_id: str, user_id: str) -> List[ChatMessagePayload]:
+        return self.storage.get_message_history(session_id, user_id)
     
 
     async def _stream_agent_response(
