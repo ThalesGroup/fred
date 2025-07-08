@@ -245,7 +245,7 @@ class SessionManager:
         # 💾 Save all messages in correct order
         session.updated_at = datetime.now()
         self.storage.save_session(session)
-        self.storage.save_messages(session.id, all_payloads)
+        self.storage.save_messages(session.id, all_payloads, user_id)
 
         return session, all_payloads
 
