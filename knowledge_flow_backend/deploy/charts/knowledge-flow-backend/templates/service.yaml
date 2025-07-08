@@ -1,0 +1,36 @@
+{{- if .Values.service.enabled -}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.applicationName }}
+  namespace: {{ .Release.Namespace }}
+  {{- if .Values.service.annotations }}
+  annotations:
+{{ toYaml .Values.service.annotations | indent 4 }}
+  {{- end }}
+  labels:
+    name : "{{ .Values.applicationName }}"
+    app: {{ .Chart.Name }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: "{{ .Values.applicationName }}"
+    heritage: "{{ .Release.Service }}"
+    {{- if .Values.extraLabels }}
+{{ toYaml .Values.extraLabels.data | indent 4 }}
+    {{- end }}
+spec:
+  type: {{ .Values.service.Type }}
+  {{- if .Values.service.clusterIP }}
+  clusterIP: {{ .Values.service.clusterIP }}
+  {{- end }}
+  {{- if .Values.service.loadBalancerIP }}
+  loadBalancerIP: "{{ .Values.service.loadBalancerIP }}"
+  {{- end }}
+  externalTrafficPolicy: {{ .Values.service.ExternalTrafficPolicy | quote }}
+  ports:
+{{ toYaml .Values.service.data | indent 4 }} 
+
+  selector:
+      app: {{ .Chart.Name }}
+
+{{- end -}}

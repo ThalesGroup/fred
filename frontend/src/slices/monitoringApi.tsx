@@ -49,7 +49,7 @@ export const monitoringApi = createApi({
       groupby?: string[];       // Ex: "agent_name"
     }>({
       query: ({ start, end, precision = "min", agg, groupby }) => ({
-        url: `/fred/metrics/nodes/numerical`,
+        url: `/agentic/v1/metrics/nodes/numerical`,
         method: "GET",
         params: {
           start,
@@ -66,7 +66,7 @@ export const monitoringApi = createApi({
       end: string;
     }>({
       query: ({ start, end }) => ({
-        url: `/fred/metrics/nodes/categorical`,
+        url: `/agentic/v1/metrics/nodes/categorical`,
         method: "GET",
         params: { start, end },
       }),

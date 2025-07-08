@@ -1,5 +1,5 @@
 {
   "backend_url_api": "http://localhost:8000",
   "backend_url_knowledge": "http://localhost:8111",
-  "websocket_url": "ws://localhost:8000/fred/chatbot/query"
+  "websocket_url": "ws://localhost:8000/agentic/v1/chatbot/query"
 }

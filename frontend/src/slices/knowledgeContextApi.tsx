@@ -14,7 +14,7 @@ const knowledgeContextApiEndpoints = knowledgeContextApiSlice.injectEndpoints({
   endpoints: (builder) => ({
     getKnowledgeContexts: builder.query<KnowledgeContext[], { tag: string }>({
       query: ({ tag }) => ({
-        url: `/knowledge/v1/knowledgeContexts?tag=${encodeURIComponent(tag)}`,
+        url: `/knowledge-flow/v1/knowledgeContexts?tag=${encodeURIComponent(tag)}`,
         method: "GET",
       }),
     }),
@@ -39,7 +39,7 @@ const knowledgeContextApiEndpoints = knowledgeContextApiSlice.injectEndpoints({
         formData.append("file_descriptions", JSON.stringify(fileDescriptions));
 
         return {
-          url: `/knowledge/v1/knowledgeContexts`,
+          url: `/knowledge-flow/v1/knowledgeContexts`,
           method: "POST",
           body: formData,
         };
@@ -68,7 +68,7 @@ const knowledgeContextApiEndpoints = knowledgeContextApiSlice.injectEndpoints({
         }
         
         return {
-          url: `/knowledge/v1/knowledgeContexts/${knowledgeContext_id}`,
+          url: `/knowledge-flow/v1/knowledgeContexts/${knowledgeContext_id}`,
           method: "PUT",
           body: formData,
         };
@@ -78,14 +78,14 @@ const knowledgeContextApiEndpoints = knowledgeContextApiSlice.injectEndpoints({
 
     deleteKnowledgeContext: builder.mutation<{ success: boolean }, { knowledgeContext_id: string }>({
       query: ({ knowledgeContext_id }) => ({
-        url: `/knowledge/v1/knowledgeContexts/${knowledgeContext_id}`,
+        url: `/knowledge-flow/v1/knowledgeContexts/${knowledgeContext_id}`,
         method: "DELETE",
       }),
     }),
 
     deleteKnowledgeContextDocument: builder.mutation<{ success: boolean }, { knowledgeContext_id: string; document_id: string }>({
       query: ({ knowledgeContext_id, document_id }) => ({
-        url: `/knowledge/v1/knowledgeContexts/${knowledgeContext_id}/documents/${document_id}`,
+        url: `/knowledge-flow/v1/knowledgeContexts/${knowledgeContext_id}/documents/${document_id}`,
         method: "DELETE",
       }),
     }),
