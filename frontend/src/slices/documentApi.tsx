@@ -41,40 +41,40 @@ const extendedDocumentApi = documentApiSlice.injectEndpoints({
   endpoints: (builder) => ({
     getDocumentMarkdownPreview: builder.mutation<MarkdownDocumentPreview, { document_uid: string }>({
       query: ({ document_uid }) => ({
-        url: `/knowledge/v1/markdown/${document_uid}`,
+        url: `/knowledge-flow/v1/markdown/${document_uid}`,
         method: "GET",
       }),
     }),
     getDocumentRawContent: builder.query<Blob, { document_uid: string }>({
       query: ({ document_uid }) => ({
-        url: `/knowledge/v1/raw_content/${document_uid}`,
+        url: `/knowledge-flow/v1/raw_content/${document_uid}`,
         method: "GET",
         responseHandler: async (response) => await response.blob(),
       }),
     }),
     getDocumentMetadata: builder.mutation<Metadata, { document_uid: string }>({
       query: ({ document_uid }) => ({
-        url: `/knowledge/v1/document/${document_uid}`,
+        url: `/knowledge-flow/v1/document/${document_uid}`,
         method: "GET",
       }),
     }),
     getDocumentsWithFilter: builder.mutation<{ documents: KnowledgeDocument[] }, Record<string, any>>({
       query: (filters) => ({
-        url: `/knowledge/v1/documents/metadata`, // Single endpoint
+        url: `/knowledge-flow/v1/documents/metadata`, // Single endpoint
         method: "POST",
         body: filters ?? {}, // If filters are undefined, send empty object
       }),
     }),
     updateDocumentRetrievable: builder.mutation<void, { document_uid: string; retrievable: boolean }>({
       query: ({ document_uid, retrievable }) => ({
-        url: `/knowledge/v1/document/${document_uid}`,
+        url: `/knowledge-flow/v1/document/${document_uid}`,
         method: "PUT",
         body: { retrievable },
       }),
     }),
     deleteDocument: builder.mutation<void, string>({
       query: (documentUid) => ({
-        url: `/knowledge/v1/document/${documentUid}`,
+        url: `/knowledge-flow/v1/document/${documentUid}`,
         method: "DELETE",
       }),
     }),

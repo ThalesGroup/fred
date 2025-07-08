@@ -1,12 +1,14 @@
 # Fred
 
-**Fred** is a multi-agent AI assistant that helps you manage and understand Kubernetes applications.
+Fred is both:
+- An innovation lab — to help developers rapidly explore agentic patterns, domain-specific logic, and custom tools.
+- A production-ready platform — already integrated with real enterprise constraints: auth, security, document lifecycle, and deployment best practices.
 
 It is composed of:
 
 * a **Python agentic backend** (FastAPI + LangGraph)  
+* a **Python knowledge flow backend** (FastAPI) for document ingestion and vector search
 * a **React frontend**  
-* an optional **Knowledge Flow backend** (separate repository) for document ingestion and vector search
 
 Fred is not a framework, but a full reference implementation that shows how to build practical multi-agent applications with LangChain and LangGraph. Agents cooperate to answer technical, context-aware questions.
 
@@ -19,7 +21,7 @@ See the project site: <https://fredk8.dev>
 Fred works out of the box when you provide **one secret**—your OpenAI API key.  
 Defaults:
 
-* Keycloak is bypassed by a mock `admin / admin` user  
+* Keycloak is bypassed by a mock `admin/admin` user  
 * All data (metrics, conversations, uploads) is stored on the local filesystem  
 * No external services are required
 
@@ -40,14 +42,21 @@ git clone https://github.com/ThalesGroup/fred.git
 cd fred
 ```
 
-Backend:
+#### Agentic Backend
 
 ```bash
-cd backend
-make build            # uses uv for the virtualenv
+cd agentic_backend
+make run            # uses uv for the virtualenv
 ```
 
-Frontend:
+#### Knowledge Flow Backend
+
+```bash
+cd knowledge_flow_backend
+make run            # uses uv for the virtualenv
+```
+
+#### Frontend
 
 ```bash
 cd ../frontend
@@ -57,15 +66,19 @@ make build
 ### 3 · Add your OpenAI key
 
 ```bash
-echo "OPENAI_API_KEY=sk-..." > config/.env
+echo "OPENAI_API_KEY=sk-..." > {agentic_backend,knowledge_flow_backend}/config/.env
 ```
 
 ### 4 · Run the services
 
 ```bash
-# Terminal 1 – backend
-export OPENAI_API_KEY=sk-...
-cd backend && make run
+# Terminal 1 – agentic backend
+cd agentic_backend && make run
+```
+
+```bash
+# Terminal 1 – knowledge flow backend
+cd knowledge_flow_backend && make run
 ```
 
 ```bash
