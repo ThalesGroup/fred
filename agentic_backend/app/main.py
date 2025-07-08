@@ -25,14 +25,12 @@ import os
 
 from fastapi import FastAPI, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
+
 from app.monitoring.tool_monitoring.tool_metric_store import create_tool_metric_store
 from app.monitoring.tool_monitoring.tool_metric_store_controller import ToolMetricStoreController
-from app.monitoring.tool_monitoring.tool_metric_store import ToolMetric
 from app.monitoring.node_monitoring.node_metric_store import create_node_metric_store
 from app.monitoring.node_monitoring.node_metric_store_controller import NodeMetricStoreController
-from app.monitoring.node_monitoring.node_metric_store import NodeMetric
 
-from app.common.structure import MetricsStorageConfig, MetricsStorageSettings
 from services.ai.ai_service import AIService
 from services.kube.kube_service import KubeService
 from dotenv import load_dotenv
