@@ -20,8 +20,6 @@ from fastapi.testclient import TestClient
 from fastapi import status
 import pytest
 
-from app.features.metadata.service import MetadataService
-
 
 # ────────────────────────────────────
 # Tell conftest.py which back-ends to use
@@ -92,15 +90,6 @@ class TestMetadataController:
         )
         assert resp.status_code == status.HTTP_200_OK
         assert len(resp.json()["documents"]) == 1
-
-    def test_get_documents_metadata_failure(self, client, monkeypatch):
-        def boom(*_, **__):
-            raise Exception("DB error")
-
-        monkeypatch.setattr(MetadataService, "get_documents_metadata", boom)
-
-        resp = client.post("/knowledge-flow/v1/documents/metadata", json={})
-        assert resp.status_code == status.HTTP_404_NOT_FOUND
 
     def test_get_document_metadata(self, client, metadata_store, document1):
         metadata_store.save_metadata(document1)

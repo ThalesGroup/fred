@@ -22,6 +22,7 @@ from fastapi.testclient import TestClient
 from langchain_community.embeddings import FakeEmbeddings
 
 from app.core.processors.output.vectorization_processor.embedder import Embedder
+from app.tests.test_utils.test_processors import TestMarkdownProcessor, TestTabularProcessor
 
 
 @pytest.fixture(scope="function", name="client")
@@ -68,15 +69,19 @@ def app_context(monkeypatch):
         input_processors=[
             ProcessorConfig(
                 prefix=".docx",
-                class_path="app.core.processors.input.docx_markdown_processor.docx_markdown_processor.DocxMarkdownProcessor",
+                class_path=f"{TestMarkdownProcessor.__module__}.{TestMarkdownProcessor.__qualname__}",
             ),
             ProcessorConfig(
                 prefix=".pdf",
-                class_path="app.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor",
+                class_path=f"{TestMarkdownProcessor.__module__}.{TestMarkdownProcessor.__qualname__}",
             ),
             ProcessorConfig(
-                prefix=".pptx",
-                class_path="app.core.processors.input.pptx_markdown_processor.pptx_markdown_processor.PptxMarkdownProcessor",
+                prefix=".md",
+                class_path=f"{TestMarkdownProcessor.__module__}.{TestMarkdownProcessor.__qualname__}",
+            ),
+            ProcessorConfig(
+                prefix=".csv",
+                class_path=f"{TestMarkdownProcessor.__module__}.{TestTabularProcessor.__qualname__}",
             ),
         ],
         knowledge_context_max_tokens=50000

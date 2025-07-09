@@ -81,7 +81,7 @@
       "justMyCode": false
     },
     {
-      "name": "Debug ONE KF test",
+      "name": "Debug one knowledge flow test",
       "type": "debugpy",
       "request": "launch",
       "module": "pytest",
@@ -89,7 +89,7 @@
       "args": [
         "-s",
         "-vv",
-        "app/tests/controllers/test_metadata_controller.py::TestMetadataController::test_get_documents_metadata_with_filters"
+        "app/tests/services/test_input_processor_service.py::TestInputProcessorService::test_process_markdown"
       ],
       "justMyCode": false,
       "envFile": "config/.env",
@@ -101,7 +101,7 @@
       "console": "integratedTerminal"
     },
     {
-      "name": "Debug current KF test file",
+      "name": "Debug current knowledge flow test file",
       "type": "debugpy",
       "request": "launch",
       "module": "pytest",
