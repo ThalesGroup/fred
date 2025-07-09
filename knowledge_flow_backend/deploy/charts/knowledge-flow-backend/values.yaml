@@ -260,8 +260,7 @@ configuration:
   # -------------------------------------
   knowledge_context_storage:
     type: "local"   # as of now only local storage is supported
-    settings:
-      local_path: "~/.fred/knowledge-context"
+    local_path: "~/.fred/knowledge-context"
 
   knowledge_context_max_tokens: 8000
 

@@ -43,8 +43,7 @@ data:
 
     knowledge_context_storage:
       type: "{{ .Values.configuration.knowledge_context_storage.type }}"
-      settings:
-        local_path: "{{ .Values.configuration.knowledge_context_storage.settings.local_path }}"
+      local_path: "{{ .Values.configuration.knowledge_context_storage.local_path }}"
 
     knowledge_context_max_tokens: {{ .Values.configuration.knowledge_context_max_tokens }}
 
