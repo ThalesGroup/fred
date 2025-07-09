@@ -74,54 +74,54 @@ class TestContentController:
         }
 
     # ─────────────────────────────── tests ────────────────────────────────
-    def test_get_markdown_preview(self, client: TestClient, markdown_file, content_store):
+    def test_get_markdown_preview(self, client_fixture: TestClient, markdown_file, content_store):
         """The `/markdown/{uid}` endpoint should return the rendered markdown."""
         content_store.save_content(markdown_file["document_uid"], markdown_file["document_dir"])
 
-        resp = client.get(f"/knowledge-flow/v1/markdown/{markdown_file['document_uid']}")
+        resp = client_fixture.get(f"/knowledge-flow/v1/markdown/{markdown_file['document_uid']}")
         assert resp.status_code == status.HTTP_200_OK
         body = resp.json()["content"]
         assert "# Main Title" in body
         assert "dummy Markdown file" in body
 
-    def test_get_markdown_preview_not_found(self, client: TestClient):
-        resp = client.get("/knowledge-flow/v1/markdown/does_not_exist")
+    def test_get_markdown_preview_not_found(self, client_fixture: TestClient):
+        resp = client_fixture.get("/knowledge-flow/v1/markdown/does_not_exist")
         assert resp.status_code == status.HTTP_404_NOT_FOUND
 
-    def test_get_markdown_preview_failure(self, client: TestClient, monkeypatch):
+    def test_get_markdown_preview_failure(self, client_fixture: TestClient, monkeypatch):
         monkeypatch.setattr(ContentService, "get_markdown_preview", lambda *_: (_ for _ in ()).throw(Exception("boom")))
-        resp = client.get("/knowledge-flow/v1/markdown/whatever")
+        resp = client_fixture.get("/knowledge-flow/v1/markdown/whatever")
         assert resp.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
 
-    def test_get_markdown_preview_value_error(self, client: TestClient, monkeypatch):
+    def test_get_markdown_preview_value_error(self, client_fixture: TestClient, monkeypatch):
         monkeypatch.setattr(ContentService, "get_markdown_preview", lambda *_: (_ for _ in ()).throw(ValueError("oops")))
-        resp = client.get("/knowledge-flow/v1/markdown/whatever")
+        resp = client_fixture.get("/knowledge-flow/v1/markdown/whatever")
         assert resp.status_code == status.HTTP_400_BAD_REQUEST
         assert resp.json()["detail"] == "oops"
 
-    def test_download_document_success(self, client, markdown_file, content_store, metadata_store, document1):
+    def test_download_document_success(self, client_fixture, markdown_file, content_store, metadata_store, document1):
         """Happy‑path: raw download available from local stores."""
         content_store.save_content(markdown_file["document_uid"], markdown_file["document_dir"])
         metadata_store.save_metadata(document1)
 
-        resp = client.get(f"/knowledge-flow/v1/raw_content/{markdown_file['document_uid']}")
+        resp = client_fixture.get(f"/knowledge-flow/v1/raw_content/{markdown_file['document_uid']}")
         assert resp.status_code == 200
         assert resp.headers["content-type"].startswith("text/markdown")
         assert resp.headers["content-disposition"].endswith('filename="document.md"')
 
-    def test_download_document_not_found(self, client: TestClient):
-        resp = client.get("/knowledge-flow/v1/raw_content/does_not_exist")
+    def test_download_document_not_found(self, client_fixture: TestClient):
+        resp = client_fixture.get("/knowledge-flow/v1/raw_content/does_not_exist")
         assert resp.status_code == status.HTTP_404_NOT_FOUND
         assert "No metadata found" in resp.json()["detail"]
 
-    def test_download_document_value_error(self, client: TestClient, monkeypatch):
+    def test_download_document_value_error(self, client_fixture: TestClient, monkeypatch):
         monkeypatch.setattr(ContentService, "get_original_content", lambda *_: (_ for _ in ()).throw(ValueError("bad")))
-        resp = client.get("/knowledge-flow/v1/raw_content/whatever")
+        resp = client_fixture.get("/knowledge-flow/v1/raw_content/whatever")
         assert resp.status_code == status.HTTP_400_BAD_REQUEST
         assert resp.json()["detail"] == "bad"
 
-    def test_download_document_failure(self, client: TestClient, monkeypatch):
+    def test_download_document_failure(self, client_fixture: TestClient, monkeypatch):
         monkeypatch.setattr(ContentService, "get_original_content", lambda *_: (_ for _ in ()).throw(Exception("boom")))
-        resp = client.get("/knowledge-flow/v1/raw_content/whatever")
+        resp = client_fixture.get("/knowledge-flow/v1/raw_content/whatever")
         assert resp.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
         assert resp.json()["detail"] == "Internal server error"

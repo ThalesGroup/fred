@@ -63,9 +63,9 @@ def minimal_generalist_config() -> Configuration:
         },
         dao={"type": "file", "base_path": "/tmp/fred-dao"},
         security={"enabled": False, "keycloak_url": "", "client_id": "fred", "authorized_origins": []},
-        node_metrics_storage={"type": "local", "settings": {"local_path": "/tmp/node-metrics"}},
-        tool_metrics_storage={"type": "local", "settings": {"local_path": "/tmp/tool-metrics"}},
-        feedback_storage={"type": "local", "settings": {"local_path": "/tmp/feedback"}},
+        node_metrics_storage={"type": "local", "local_path": "/tmp/node-metrics"},
+        tool_metrics_storage={"type": "local", "local_path": "/tmp/tool-metrics"},
+        feedback_storage={"type": "local", "local_path": "/tmp/feedback"},
         session_storage={"type": "in_memory"},
     )
 

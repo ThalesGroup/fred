@@ -13,58 +13,63 @@
 # limitations under the License.
 
 import pytest
-from app.application_context import ApplicationContext
-from app.common.structures import Configuration, ContentStorageConfig, EmbeddingConfig, InMemoryVectorStore, KnowledgeContextStorageConfig, KnowledgeContextStorageSettings, LocalMetadataStorage, ProcessorConfig
-
-from app.core.stores.content.content_storage_factory import get_content_store
-from app.main import create_app
 from fastapi.testclient import TestClient
 from langchain_community.embeddings import FakeEmbeddings
 
+from app.application_context import ApplicationContext
+from app.common.structures import (
+    Configuration,
+    ContentStorageConfig,
+    EmbeddingConfig,
+    InMemoryVectorStorage,
+    KnowledgeContextStorageConfig,
+    LocalMetadataStorage,
+    ProcessorConfig,
+)
+from app.core.stores.vector.in_memory_langchain_vector_store import InMemoryLangchainVectorStore
+from app.core.stores.content.content_storage_factory import get_content_store
+from app.main import create_app
 from app.core.processors.output.vectorization_processor.embedder import Embedder
 from app.tests.test_utils.test_processors import TestMarkdownProcessor, TestTabularProcessor
 
 
-@pytest.fixture(scope="function", name="client")
-def client_fixture(app_context):  # depends on app_context fixture
+@pytest.fixture(scope="function", autouse=True)
+def fake_embedder(monkeypatch):
     """
-    Fixture that provides a test client for the FastAPI application.
-    Uses a dummy config_path since ApplicationContext is already initialized in app_context.
+    Monkeypatch the Embedder to avoid real API calls during tests.
     """
-    app = create_app(config_path="dummy", base_url="/knowledge-flow/v1")
-    with TestClient(app) as test_client:
-        yield test_client
+    def fake_embedder_init(self, config=None):
+        self.model = FakeEmbeddings(size=1352)
+
+    monkeypatch.setattr(Embedder, "__init__", fake_embedder_init)
 
 
 @pytest.fixture(scope="function", autouse=True)
-def app_context(monkeypatch):
+def app_context(monkeypatch, fake_embedder):
     """
-    Initializes the application context for testing using local metadata and vector storage.
-    This avoids needing environment variables or OpenSearch during test runs.
+    Initializes the ApplicationContext with fake storage and a test vector store.
     """
-
     ApplicationContext._instance = None  # 🧼 Reset singleton
-    # Prevent SystemExit by faking OpenAI key
-    monkeypatch.setenv("OPENAI_API_KEY", "test")
+
+    monkeypatch.setenv("OPENAI_API_KEY", "test")  # Avoid system exit due to missing API key
+
     config = Configuration(
         security={
             "enabled": False,
             "keycloak_url": "http://fake",
             "client_id": "test-client",
-            "authorized_origins": []
+            "authorized_origins": [],
         },
         metadata_storage=LocalMetadataStorage(
             type="local",
-            root_path="/tmp/test-metadata-store.json"
+            root_path="/tmp/test-metadata-store.json",
         ),
-        vector_storage=InMemoryVectorStore(
-            type="in_memory"
-        ),
+        vector_storage=InMemoryVectorStorage(type="in_memory"),
         content_storage=ContentStorageConfig(type="local"),
-        embedding=EmbeddingConfig(type="openai"),  # ✅ safe default, monkeypatched by `fake_embedder`
+        embedding=EmbeddingConfig(type="openai"),
         knowledge_context_storage=KnowledgeContextStorageConfig(
             type="local",
-            settings=KnowledgeContextStorageSettings(local_path="/tmp")
+            local_path="/tmp",
         ),
         input_processors=[
             ProcessorConfig(
@@ -88,48 +93,34 @@ def app_context(monkeypatch):
                 class_path=f"{TestMarkdownProcessor.__module__}.{TestTabularProcessor.__qualname__}",
             ),
         ],
-        knowledge_context_max_tokens=50000
+        knowledge_context_max_tokens=50000,
     )
 
     ApplicationContext(config)
 
 
-@pytest.fixture(scope="function", autouse=True)
-def fake_embedder(monkeypatch):
+@pytest.fixture(scope="function")
+def client_fixture(app_context):
     """
-    Monkeypatches the Embedder class's __init__ method to use a fake embedder for testing purposes.
-    This function replaces the original __init__ method of the Embedder class in
-    'app.core.processors.output.vectorization_processor.embedder' with a fake implementation
-    that initializes the model attribute with a FakeEmbeddings instance of size 1352.
-
-    Args:
-        monkeypatch: pytest's monkeypatch fixture used to modify or replace attributes for testing.
+    TestClient for FastAPI app. ApplicationContext is preloaded.
     """
+    app = create_app(config_path="dummy", base_url="/knowledge-flow/v1")
+    with TestClient(app) as test_client:
+        yield test_client
 
-    def fake_embedder_init(self, config=None):
-        self.model = FakeEmbeddings(size=1352)
-
-    monkeypatch.setattr(
-        Embedder,
-        "__init__", fake_embedder_init)
 
 @pytest.fixture
-def content_store(tmp_path):
+def content_store(app_context, tmp_path):
+    """
+    Returns the content store after ApplicationContext is initialized.
+    """
     return get_content_store()
+
 
 @pytest.fixture
 def metadata_store(app_context):
+    """
+    Returns the metadata store from the initialized ApplicationContext.
+    """
     return ApplicationContext.get_instance().get_metadata_store()
-
-@pytest.fixture(autouse=True)
-def _clear_stores_between_tests(metadata_store, content_store):
-    """
-    Wipe the in-memory Local*Store instances before **every** test so each case
-    starts with a clean slate.
-    """
-    # ――― test starts ―――
-    metadata_store.clear()      
-    content_store.clear()        
-    yield
-    # ――― test ends ―――
 
