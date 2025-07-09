@@ -250,8 +250,8 @@ class OpenSearchStorageConfig(BaseModel):
     password: Optional[str] = Field(default_factory=lambda: os.getenv("OPENSEARCH_PASSWORD"), description="Opensearch user password")
     secure: bool = Field(default=False, description="Use TLS with Opensearch")
     verify_certs: bool = Field(default=False, description="Verify certificates")
-    sessions_index: str = Field(default="sessions", description="Index where sessions are stored")
-    history_index: str = Field(default="history", description="Index where messages histories are stored")
+    sessions_index: str = Field(default="active-sessions-index", description="Index where sessions are stored")
+    history_index: str = Field(default="chat-interactions-index", description="Index where messages histories are stored")
 
 SessionStorageConfig = Annotated[
     Union[InMemoryStorageConfig, OpenSearchStorageConfig],
