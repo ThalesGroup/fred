@@ -103,12 +103,7 @@ This is the recommended way to test a production-grade Fred deployment.
 
 ## Documentation
 
-- [Developer Guide](docs/DEVELOPER_GUIDE.md)
-- [Contributing Guide](docs/CONTRIBUTING.md)
-- [Coding Guidelines](docs/CODING_GUIDELINES.md)
-- [Security Policy](docs/SECURITY.md)
-- [Dev Container](docs/DEV_CONTAINER.md)
-- [Code of Conduct](docs/CODE_OF_CONDUCT.md)
+- [Knowledge Backend Developer Guide](docs/DEVELOPER_GUIDE.md)
 
 ---
 

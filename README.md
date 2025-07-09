@@ -154,11 +154,13 @@ See the **deployment factory**: <https://github.com/ThalesGroup/fred-deployment-
 
 ## Documentation
 
-* Main docs: <https://fredk8.dev/docs>  
+* Web site: <https://fredk8.dev/docs>  
 * [Backend README](./backend/README.md)  
 * [Frontend README](./frontend/README.md)  
-* [Knowledge Flow](https://github.com/ThalesGroup/knowledge-flow)  
-* [Deployment factory](https://github.com/ThalesGroup/fred-deployment-factory)
+* [Developer Guide](docs/DEVELOPER_GUIDE.md)
+* [Python Coding Guidelines](docs/PYTHON_CODING_GUIDELINES.md)
+* [License](docs/LICENSE.md)
+* [Security](docs/SECURITY.md)
 
 ---
 
