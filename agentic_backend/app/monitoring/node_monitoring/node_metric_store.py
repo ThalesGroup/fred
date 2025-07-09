@@ -82,7 +82,7 @@ def create_node_metric_store(config: MetricsStorageConfig) -> NodeMetricStore:
     if _instance is None:
         _instance = NodeMetricStore(
             config=config,
-            filename="tool_metrics.jsonl",
+            filename="node_metrics.jsonl",
             model=NodeMetric
         )
     return _instance
