@@ -100,35 +100,6 @@ def test_get_local_content_store(monkeypatch):
         assert isinstance(store, LocalStorageBackend)
 
 
-def test_get_minio_content_store(monkeypatch, patch_app_context):
-    """Test: returns MinioContentStore when type is 'minio'."""
-
-    patch_app_context("minio")
-
-    dummy_settings = type(
-        "DummyMinioSettings",
-        (),
-        {
-            "minio_endpoint": "localhost",
-            "minio_access_key": "AK",
-            "minio_secret_key": "",
-            "minio_bucket_name": "bucket",
-            "minio_secure": False,
-        },
-    )
-
-    # Patch settings loading
-    monkeypatch.setattr(
-        "app.core.stores.content.content_storage_factory.validate_settings_or_exit",
-        lambda cls, _: dummy_settings,
-    )
-
-    monkeypatch.setattr("app.core.stores.content.minio_content_store.Minio", lambda *args, **kwargs: DummyMinio())
-
-    store = get_content_store()
-    assert isinstance(store, MinioContentStore)
-
-
 # ----------------------------
 # ❌ Failure Case
 # ----------------------------

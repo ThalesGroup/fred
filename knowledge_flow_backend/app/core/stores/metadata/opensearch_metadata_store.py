@@ -22,7 +22,13 @@ logger = logging.getLogger(__name__)
 
 
 class OpenSearchMetadataStore(BaseMetadataStore):
-    def __init__(self, host: str, metadata_index_name: str, vector_index_name: str, username: str = None, password: str = None, secure: bool = False, verify_certs: bool = False):
+    def __init__(self, host: str, 
+                 metadata_index_name: str, 
+                 vector_index_name: str, 
+                 username: str = None, 
+                 password: str = None, 
+                 secure: bool = False, 
+                 verify_certs: bool = False):
         self.client = OpenSearch(
             host,
             http_auth=(username, password),
@@ -155,7 +161,7 @@ class OpenSearchMetadataStore(BaseMetadataStore):
             # Delete from the vector index
             query_delete_document_vector_index = {"query": {"match": {"metadata.document_uid": document_uid}}}
             self.client.delete_by_query(index=self.vector_index_name, body=query_delete_document_vector_index)
-            logger.info(f"Metadata with UID '{document_uid}' deleted from index '{self.vector_index_name}'.")
+            logger.info(f"Metadata with UID '{document_uid}' -deleted from index '{self.vector_index_name}'.")
 
         except Exception as e:
             logger.error(f"Error while deleting metadata for UID '{metadata.get('document_uid', 'N/A')}': {e}")
@@ -172,3 +178,14 @@ class OpenSearchMetadataStore(BaseMetadataStore):
         except Exception as e:
             logger.error(f"❌ Failed to write metadata with UID {metadata.get('document_uid')}: {e}")
             raise ValueError(e)
+
+    def clear(self) -> None:
+        """Remove every record in both metadata and vector indexes."""
+        try:
+            self.client.delete_by_query(index=self.metadata_index_name, body={"query": {"match_all": {}}})
+            logger.info(f"✅ Cleared all documents from metadata index '{self.metadata_index_name}'.")
+            self.client.delete_by_query(index=self.vector_index_name, body={"query": {"match_all": {}}})
+            logger.info(f"✅ Cleared all documents from vector index '{self.vector_index_name}'.")
+        except Exception as e:
+            logger.error(f"❌ Failed to clear metadata store: {e}")
+            raise e

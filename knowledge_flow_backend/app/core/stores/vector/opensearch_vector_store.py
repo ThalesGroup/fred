@@ -14,13 +14,13 @@
 
 from datetime import datetime, timezone
 import logging
+import os
 from typing import List, Tuple
 from langchain.schema.document import Document
 from langchain_community.vectorstores import OpenSearchVectorSearch
 
 from app.common.utils import get_embedding_model_name
-from app.config.opensearch_settings import OpenSearchSettings
-from app.core.processors.output.vectorization_processor.interfaces import BaseEmbeddingModel, BaseVectoreStore
+from app.core.stores.vector.base_vector_store import BaseEmbeddingModel, BaseVectoreStore
 
 logger = logging.getLogger(__name__)
 
@@ -36,16 +36,24 @@ class OpenSearchVectorStoreAdapter(BaseVectoreStore):
 
     It accepts documents + embeddings and stores them into the configured OpenSearch vector index.
     """
-
-    def __init__(self, embedding_model: BaseEmbeddingModel, settings: OpenSearchSettings):
-        self.settings = settings
+    def __init__(
+        self,
+        embedding_model: BaseEmbeddingModel,
+        host: str,
+        vector_index: str,
+        username: str,
+        password: str,
+        secure: bool = False,
+        verify_certs: bool = False,
+    ):
+        self.vector_index = vector_index
         self.opensearch_vector_search = OpenSearchVectorSearch(
-            opensearch_url=self.settings.opensearch_host,
-            index_name=self.settings.opensearch_vector_index,
+            opensearch_url=host,
+            index_name=vector_index,
             embedding_function=embedding_model,
-            use_ssl=self.settings.opensearch_secure,
-            verify_certs=settings.opensearch_verify_certs,
-            http_auth=(self.settings.opensearch_user, self.settings.opensearch_password),
+            use_ssl=secure,
+            verify_certs=verify_certs,
+            http_auth=(username, password),
         )
 
     def add_documents(self, documents: List[Document]) -> None:
@@ -72,7 +80,7 @@ class OpenSearchVectorStoreAdapter(BaseVectoreStore):
             doc.metadata["rank"] = rank
             doc.metadata["retrieved_at"] = datetime.now(timezone.utc).isoformat()
             doc.metadata["embedding_model"] = get_embedding_model_name(self.opensearch_vector_search.embedding_function)
-            doc.metadata["vector_index"] = self.settings.opensearch_vector_index
+            doc.metadata["vector_index"] = self.vector_index
             doc.metadata["token_count"] = len(doc.page_content.split())  # simple estimation
             enriched.append((doc, score))
 

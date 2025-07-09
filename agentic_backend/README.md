@@ -151,6 +151,3 @@ Yes — everything works out of the box on a developer laptop. You can later plu
 
 ---
 
-## License
-
-Licensed under the [Apache License 2.0](LICENSE).

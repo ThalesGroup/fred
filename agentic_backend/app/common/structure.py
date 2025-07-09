@@ -224,54 +224,37 @@ class AIConfig(BaseModel):
 # Storage configurations
 # ----------------------------------------------------------------------
 
-## ---------------------------------------------------------------------
-## Base storage models 
-## ---------------------------------------------------------------------
-
-class ResourceStorageBase(BaseModel):
-    type: str
-
-class LocalStorageSettings(BaseModel):
-    local_path: str = Field(..., description="The path where local data is stored")
-
-class LocalStorage(ResourceStorageBase):
-    type: Literal["local"]
-    settings: LocalStorageSettings
-
 ## ----------------------------------------------------------------------
 ## Metrics and feedback storage configurations
 ## ----------------------------------------------------------------------
 
 class FeedbackStorageConfig(BaseModel):
-    type: str = Field(..., description="The storage backend to use (e.g., 'local', 'opensearch')")
-    settings: LocalStorageSettings
+    type: str = Field(default="local", description="The storage backend to use (e.g., 'local', 'opensearch')")
+    local_path: str = Field(default="~/.fred/feedback-store", description="The path where local data is stored")
 
 class MetricsStorageConfig(BaseModel):
-    type: str = Field(..., description="The metrics store to use (e.g., 'local')")
-    settings: LocalStorageSettings
+    type: str = Field(default="local", description="The metrics store to use (e.g., 'local')")
+    local_path: str = Field(..., description="The path where local data is stored")
 
 ## ----------------------------------------------------------------------
 ## Session storage configurations
 ## ----------------------------------------------------------------------
 
-class InMemoryStorage(ResourceStorageBase):
+class InMemoryStorageConfig(BaseModel):
     type: Literal["in_memory"]
 
-class OpenSearchSettings(BaseModel):
+class OpenSearchStorageConfig(BaseModel):
+    type: Literal["opensearch"]
     host: str = Field(default="https://localhost:9200", description="URL of the Opensearch host")
-    username: Optional[str] = Field(default_factory=lambda: os.getenv("OPENSEARCH_USERNAME"), description="Opensearch username")
+    username: Optional[str] = Field(default_factory=lambda: os.getenv("OPENSEARCH_USER"), description="Opensearch username")
     password: Optional[str] = Field(default_factory=lambda: os.getenv("OPENSEARCH_PASSWORD"), description="Opensearch user password")
     secure: bool = Field(default=False, description="Use TLS with Opensearch")
     verify_certs: bool = Field(default=False, description="Verify certificates")
-    sessions_index: str = Field(default="sessions", description="Index where sessions are stored")
-    history_index: str = Field(default="history", description="Index where messages histories are stored")
-
-class OpenSearchStorage(ResourceStorageBase):
-    type: Literal["opensearch"]
-    settings: OpenSearchSettings
+    sessions_index: str = Field(default="active-sessions-index", description="Index where sessions are stored")
+    history_index: str = Field(default="chat-interactions-index", description="Index where messages histories are stored")
 
 SessionStorageConfig = Annotated[
-    Union[InMemoryStorage, OpenSearchStorage],
+    Union[InMemoryStorageConfig, OpenSearchStorageConfig],
     Field(discriminator="type")
 ]
 

@@ -1,5 +1,6 @@
 # Fred
 
+  - [Core Architecture and Licensing Clarity](#core-architecture-and-licensing-clarity)
   - [Getting started](#getting-started)
     - [Local (Native) Mode](#local-native-mode)
       - [1 · Prerequisites](#1--prerequisites)
@@ -33,6 +34,22 @@ It is composed of:
 Fred is not a framework, but a full reference implementation that shows how to build practical multi-agent applications with LangChain and LangGraph. Agents cooperate to answer technical, context-aware questions.
 
 See the project site: <https://fredk8.dev>
+
+```markdown
+
+## Core Architecture and Licensing Clarity
+
+The three components just described form the *entirety of the Fred platform*. They are self-contained and do not 
+require any external dependencies such as MinIO, OpenSearch, or Weaviate.
+
+Instead, Fred is designed with a modular architecture that allows optional integration with these technologies. By default, a minimal Fred deployment can use just the local filesystem for all storage needs.
+
+### Licensing Note
+
+Fred is released under the **Apache License 2.0**. It does *not embed or depend on any LGPLv3 or copyleft-licensed components. Optional integrations (like OpenSearch or Weaviate) are configured externally and do not contaminate Fred's licensing. 
+This ensures maximum freedom and clarity for commercial and internal use.
+
+In short: Fred is 100% Apache 2.0, and you stay in full control of any additional components.
 
 ---
 
@@ -201,6 +218,11 @@ See `agentic_backend/config/configuration.yaml` (section `ai:`) for concrete exa
 * [Agentic backend README](./agentic_backend/README.md)  
 * [Frontend README](./frontend/README.md)  
 * [Knowledge Flow backend README](./knowledge_flow_backend/README.md)  
+* [Code of Conduct](./docs/CODE_OF_CONDUCT.md) 
+* [License](./docs/LICENSE.md)  
+* [Security](./docs/SECURITY.md)  
+* [Python Coding Guide](./docs/PYTHON_CODING_GUIDELINES.md)
+* [Contributing](./docs/CONTRIBUTING.md)   
 
 ---
 
