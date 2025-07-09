@@ -22,7 +22,13 @@ logger = logging.getLogger(__name__)
 
 
 class OpenSearchMetadataStore(BaseMetadataStore):
-    def __init__(self, host: str, metadata_index_name: str, vector_index_name: str, username: str = None, password: str = None, secure: bool = False, verify_certs: bool = False):
+    def __init__(self, host: str, 
+                 metadata_index_name: str, 
+                 vector_index_name: str, 
+                 username: str = None, 
+                 password: str = None, 
+                 secure: bool = False, 
+                 verify_certs: bool = False):
         self.client = OpenSearch(
             host,
             http_auth=(username, password),

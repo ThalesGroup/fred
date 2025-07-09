@@ -20,6 +20,7 @@ Entrypoint for the Knowledge Flow Backend App.
 """
 
 import argparse
+import atexit
 import logging
 
 import uvicorn
@@ -37,6 +38,8 @@ from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi_mcp import FastApiMCP
 from rich.logging import RichHandler
+
+from app.features.code_search.controller import CodeSearchController
 
 
 # -----------------------
@@ -106,8 +109,14 @@ def create_app(config_path: str, base_url: str) -> FastAPI:
 
     logger.info(f"🛠️ create_app() called with base_url={base_url}")
 
-    configuration: Configuration = parse_server_configuration(config_path)
-    ApplicationContext(configuration)
+    if ApplicationContext._instance is None:
+        if config_path is None:
+            raise ValueError("config_path is required if ApplicationContext is not already initialized")
+        configuration: Configuration = parse_server_configuration(config_path)
+        ApplicationContext(configuration)
+    else:
+        # Get config from pre-initialized ApplicationContext (e.g. in tests)
+        configuration = ApplicationContext.get_instance().get_config()
 
     app = FastAPI(
         docs_url=f"{base_url}/docs",
@@ -131,6 +140,7 @@ def create_app(config_path: str, base_url: str) -> FastAPI:
     ContentController(router)
     KnowledgeContextController(router)
     TabularController(router)
+    CodeSearchController(router)
 
     logger.info("🧩 All controllers registered.")
     app.include_router(router)
@@ -155,6 +165,15 @@ def create_app(config_path: str, base_url: str) -> FastAPI:
         describe_full_response_schema=True,
     )
     mcp_text.mount(mount_path="/mcp_text")
+    mcp_code = FastApiMCP(
+        app,
+        name="Knowledge Flow Code MCP",
+        description="MCP server for Knowledge Flow Codebase features",
+        include_tags=["Code Search"],
+        describe_all_responses=True,
+        describe_full_response_schema=True,
+    )
+    mcp_code.mount(mount_path="/mcp_code")
 
     return app
 
@@ -170,6 +189,8 @@ def main():
     load_environment()
 
     app = create_app(config_path=args.config_path, base_url=args.base_url)
+    # ✅ Register graceful shutdown
+    atexit.register(ApplicationContext.get_instance().close_connections)
 
     uvicorn.run(
         app,

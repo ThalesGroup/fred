@@ -21,7 +21,7 @@ from langchain.embeddings.base import Embeddings
 from langchain.schema.document import Document
 
 from app.common.utils import get_embedding_model_name
-from app.core.processors.output.vectorization_processor.interfaces import BaseVectoreStore
+from app.core.stores.vector.base_vector_store import BaseVectoreStore
 
 logger = logging.getLogger(__name__)
 

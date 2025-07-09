@@ -19,7 +19,6 @@ from langchain.schema.document import Document
 from app.application_context import ApplicationContext
 from app.common.structures import Status, OutputProcessorResponse
 from app.core.processors.output.base_output_processor import BaseOutputProcessor
-from app.core.stores.metadata.metadata_storage_factory import get_metadata_store
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +43,7 @@ class VectorizationProcessor(BaseOutputProcessor):
         self.vector_store = self.context.get_vector_store(self.embedder)
         logger.info(f"🗃️ Vector store initialized: {self.vector_store.__class__.__name__}")
 
-        self.metadata_store = get_metadata_store()
+        self.metadata_store = ApplicationContext.get_instance().get_metadata_store()
         logger.info(f"📝 Metadata store initialized: {self.metadata_store.__class__.__name__}")
 
     def process(self, file_path: str, metadata: dict) -> OutputProcessorResponse:

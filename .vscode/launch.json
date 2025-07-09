@@ -33,7 +33,7 @@
       "args": [
         "--config-path", // <- create_app() expects this
         "config/configuration.yaml",
-        "--server.reload"
+        "--reload"
       ],
       "envFile": "config/.env",
       "env": {

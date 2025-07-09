@@ -1,8 +1,8 @@
 import logging
 
 from app.common.structures import Status
-from app.core.stores.metadata.metadata_storage_factory import get_metadata_store
 from app.features.metadata.structures import GetDocumentMetadataResponse, GetDocumentsMetadataResponse, UpdateDocumentMetadataResponse
+from app.application_context import ApplicationContext
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +27,7 @@ class MetadataService:
     """
 
     def __init__(self):
-        self.metadata_store = get_metadata_store()
+        self.metadata_store = ApplicationContext.get_instance().get_metadata_store()
 
     def get_documents_metadata(self, filters_dict: dict) -> GetDocumentsMetadataResponse:
         try:

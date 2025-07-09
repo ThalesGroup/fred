@@ -1,0 +1,67 @@
+import logging
+import weaviate
+
+from datetime import datetime, timezone
+from typing import List, Tuple
+
+from langchain_community.vectorstores import Weaviate
+from langchain.embeddings.base import Embeddings
+from langchain.schema.document import Document
+
+from app.core.stores.vector.base_vector_store import BaseVectoreStore
+from app.common.utils import get_embedding_model_name
+
+logger = logging.getLogger(__name__)
+
+
+class WeaviateVectorStore(BaseVectoreStore):
+    def __init__(
+        self,
+        embedding_model: Embeddings,
+        host: str,
+        index_name: str = "CodeDocuments",
+        text_key: str = "content",
+    ):
+        self.embedding_model = embedding_model
+        self.index_name = index_name
+        self.text_key = text_key
+        self.client = weaviate.Client(host)  # v3 syntax
+
+        if not self.client.is_ready():
+            raise RuntimeError(f"Weaviate at {host} is not ready.")
+
+        self.vectorstore = Weaviate(
+            client=self.client,
+            index_name=self.index_name,
+            text_key=self.text_key,
+            embedding=self.embedding_model,
+            by_text=False  # We handle embedding ourselves
+        )
+
+        logger.info(f"✅ Weaviate vector store initialized on {host} (index: {index_name})")
+
+    def add_documents(self, documents: List[Document]) -> None:
+        self.vectorstore.add_documents(documents)
+        logger.info(f"✅ Added {len(documents)} documents to Weaviate.")
+
+    def similarity_search_with_score(self, query: str, k: int = 5) -> List[Tuple[Document, float]]:
+        results = self.vectorstore.similarity_search_with_score(query, k=k)
+        enriched = []
+
+        for rank, (doc, score) in enumerate(results):
+            doc.metadata["score"] = score
+            doc.metadata["rank"] = rank
+            doc.metadata["retrieved_at"] = datetime.now(timezone.utc).isoformat()
+            doc.metadata["embedding_model"] = get_embedding_model_name(self.embedding_model)
+            doc.metadata["vector_index"] = self.index_name
+            doc.metadata["token_count"] = len(doc.page_content.split())
+            enriched.append((doc, score))
+
+        return enriched
+
+    def close(self):
+        try:
+            self.client.close()
+            logger.info("🔒 Closed Weaviate connection cleanly.")
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to close Weaviate client: {e}")

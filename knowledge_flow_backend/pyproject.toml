@@ -38,7 +38,8 @@ dependencies = [
   "hf-xet==1.1.1",
   "torch==2.7.1",
   "langchain-ollama==0.3.3",
-  "fastapi-mcp==0.3.4"
+  "fastapi-mcp==0.3.4",
+  "weaviate-client<4.0.0",
 ]
 
 [project.optional-dependencies]
