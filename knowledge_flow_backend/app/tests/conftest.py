@@ -30,7 +30,7 @@ def client_fixture(app_context):  # depends on app_context fixture
     Fixture that provides a test client for the FastAPI application.
     Uses a dummy config_path since ApplicationContext is already initialized in app_context.
     """
-    app = create_app(config_path="dummy", base_url="/test-api")
+    app = create_app(config_path="dummy", base_url="/knowledge-flow/v1")
     with TestClient(app) as test_client:
         yield test_client
 
