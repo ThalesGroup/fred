@@ -87,13 +87,11 @@ metadata_storage:
   # --- Example: OpenSearch configuration
   #
   # type: opensearch
-  # settings:
-  #   host: https://localhost:9200              # OpenSearch host
-  #   secure: true                              # Use HTTPS (set to false for HTTP)
-  #   verify_certs: false                       # Whether to verify TLS certificates
-  #   metadata_index: fred-dev-metadata         # Index for storing metadata
-  #   vector_index: fred-dev-vectors            # Vector index (required if reusing OpenSearch backend)
-  #
+  # host: https://localhost:9200              # OpenSearch host
+  # secure: true                              # Use HTTPS (set to false for HTTP)
+  # verify_certs: false                       # Whether to verify TLS certificates
+  # metadata_index: fred-dev-metadata         # Index for storing metadata
+  # vector_index: fred-dev-vectors            # Vector index (required if reusing OpenSearch backend)
   # ➤ Required environment variables (not stored in this file):
   #   OPENSEARCH_USERNAME=admin
   #   OPENSEARCH_PASSWORD=xxx
@@ -111,23 +109,20 @@ vector_storage:
   # --- Example: OpenSearch configuration
   #
   # type: opensearch
-  # settings:
-  #   host: https://localhost:9200              # Opensearch HTTP URL
-  #   secure: true                              # Use HTTPS (set to false for HTTP)
-  #   verify_certs: false                       # Whether to verify TLS certificates
-  #   sessions_index: sessions                  # Index name for session metadata
-  #   history_index: history                    # Index name for chat histories
+  # host: https://localhost:9200              # Opensearch HTTP URL
+  # secure: true                              # Use HTTPS (set to false for HTTP)
+  # verify_certs: false                       # Whether to verify TLS certificates
+  # vector_index: sessions                    # Index name for vectors
   #
   # ➤ Required environment variables (not stored in this file):
-  #   OPENSEARCH_USERNAME=admin
-  #   OPENSEARCH_PASSWORD=xxx
+  # OPENSEARCH_USERNAME=admin
+  # OPENSEARCH_PASSWORD=xxx
   #
   # --- Example: Weaviate configuration
   #
   # type: weaviate
-  # settings:
-  #   host: http://localhost:8080               # Weaviate HTTP host
-  #   index_name: CodeDocuments                 # Class name used to store chunks
+  # host: http://localhost:8080               # Weaviate HTTP host
+  # index_name: CodeDocuments                 # Class name used to store chunks
   # 
 
 
@@ -187,8 +182,7 @@ knowledge_context_storage:
   # Both can have associated files. 
   # -------------------------------------
   type: local  # as of now only local storage is supported
-  settings:
-    local_path: "~/.fred/knowledge-context"
+  local_path: "~/.fred/knowledge-context"
 
 knowledge_context_max_tokens: 8000
 # -----------------------------------------------------------------------------

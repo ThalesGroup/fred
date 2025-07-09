@@ -73,7 +73,7 @@ class HybridJsonlStore(Generic[T], MetricStore):
         self._metrics: List[T] = []
         self.model_cls = model
 
-        raw_path = config.settings.local_path
+        raw_path = config.local_path
         self.data_path = os.path.expanduser(os.path.join(raw_path, filename))
         os.makedirs(os.path.dirname(self.data_path), exist_ok=True)
 
