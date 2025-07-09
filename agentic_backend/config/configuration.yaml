@@ -113,7 +113,7 @@ ai:
       model: {}
     - name: K8SOperatorExpert
       class_path: "app.agents.kubernetes_monitoring.k8s_operator_expert.K8SOperatorExpert"
-      enabled: true
+      enabled: false
       mcp_servers:
         - name: k8s-mcp-server
           transport: sse
@@ -164,7 +164,7 @@ ai:
       settings:
         chunk_size: 512
         chunk_overlap: 64
-        knowledge_flow_url: "http://localhost:8111/knowledge/v1" 
+        knowledge_flow_url: "http://localhost:8111/knowledge-flow/v1" 
       model: {}
     # The Monitoring expert requires you activate the 'enableK8Features' flags above
     - name: "MonitoringExpert"

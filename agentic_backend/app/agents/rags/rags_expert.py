@@ -46,7 +46,7 @@ class RagsExpert(AgentFlow):
         """
         self.agent_settings = get_agent_settings(self.name)
         self.knowledge_flow_url = self.agent_settings.settings.get(
-            "knowledge_flow_url", "http://localhost:8111/knowledge/v1"
+            "knowledge_flow_url", "http://localhost:8111/knowledge-flow/v1"
         )
         self.document_directory = self.agent_settings.settings.get("document_directory", "./resources/knowledge/imported")
         self.chunk_size = self.agent_settings.settings.get("chunk_size", 512)
