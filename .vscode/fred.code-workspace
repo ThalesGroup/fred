@@ -1,0 +1,23 @@
+{
+	"folders": [
+		{
+			"path": ".."		
+		},
+		{
+			"path": "../agentic_backend"
+		},
+		{
+			"path": "../knowledge_flow_backend"
+		},
+		{
+			"path": "../frontend"
+		}
+	],
+	"settings": {
+		"files.exclude": {
+			"agentic_backend/": true,
+			"knowledge_flow_backend/": true,
+			"frontend/": true
+		}
+	}
+}
