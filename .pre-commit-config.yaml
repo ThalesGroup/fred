@@ -17,5 +17,5 @@ repos:
     rev: 1.8.5
     hooks:
       - id: bandit
-        args: ["-r", "-s", "B101,B108", "--", "app", "app/tests"]
+        args: ["-r", "-s", "B101,B108", "--", "agentic_backend/app", "knowledge_flow_backend/app"]
         name: sast
