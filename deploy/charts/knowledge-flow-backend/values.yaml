@@ -2,7 +2,7 @@ applicationName: knowledge-flow-backend
 
 image:
   repository: registry.thalesdigital.io/tsn/projects/knowledge_flow_app/knowledge-flow-backend
-  tag: 0.1-dev
+  tag: 0.1
 
 Deployment:
   enabled: true

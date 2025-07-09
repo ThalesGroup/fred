@@ -1,5 +1,25 @@
 # Fred
 
+  - [Getting started](#getting-started)
+    - [Local (Native) Mode](#local-native-mode)
+      - [1 · Prerequisites](#1--prerequisites)
+      - [2 · Clone](#2--clone)
+      - [3 · Add your OpenAI key](#3--add-your-openai-key)
+      - [4 · Run the services](#4--run-the-services)
+      - [Advanced developer tips](#advanced-developer-tips)
+        - [Prerequisites](#prerequisites)
+    - [Dev-Container mode](#dev-container-mode)
+  - [Advanced configuration](#advanced-configuration)
+    - [Supported Model Providers](#supported-model-providers)
+    - [Configuration Files](#configuration-files)
+    - [System Architecture](#system-architecture)
+    - [Advanced Integrations](#advanced-integrations)
+  - [Documentation](#documentation)
+  - [Contributing](#contributing)
+  - [License](#license)
+  - [Contacts](#contacts)
+
+
 Fred is both:
 - An innovation lab — to help developers rapidly explore agentic patterns, domain-specific logic, and custom tools.
 - A production-ready platform — already integrated with real enterprise constraints: auth, security, document lifecycle, and deployment best practices.
@@ -16,9 +36,9 @@ See the project site: <https://fredk8.dev>
 
 ---
 
-## Local Developer Setup (recommended)
+## Getting started
 
-Fred works out of the box when you provide **one secret**—your OpenAI API key.  
+Fred works out of the box when you provide **one secret** — your OpenAI API key.  
 Defaults:
 
 * Keycloak is bypassed by a mock `admin/admin` user  
@@ -27,49 +47,30 @@ Defaults:
 
 Production services and databases can be added later or via the **deployment factory** repository.
 
-### 1 · Prerequisites
+### Local (Native) Mode
 
-| Tool   | Version | Install hint            |
-|--------|---------|-------------------------|
-| Python | 3.12.8  | `pyenv install 3.12.8`  |
-| Node   | 22.13.0 | `nvm install 22.13.0`   |
-| Make   | any     | install from your OS    |
+#### 1 · Prerequisites
 
-### 2 · Clone & Build
+| Tool   | Version | Install hint           |
+| ------ | ------- | ---------------------- |
+| Python | 3.12.8  | `pyenv install 3.12.8` |
+| Node   | 22.13.0 | `nvm install 22.13.0`  |
+| Make   | any     | install from your OS   |
+
+#### 2 · Clone
 
 ```bash
 git clone https://github.com/ThalesGroup/fred.git
 cd fred
 ```
 
-#### Agentic Backend
-
-```bash
-cd agentic_backend
-make run            # uses uv for the virtualenv
-```
-
-#### Knowledge Flow Backend
-
-```bash
-cd knowledge_flow_backend
-make run            # uses uv for the virtualenv
-```
-
-#### Frontend
-
-```bash
-cd ../frontend
-make build
-```
-
-### 3 · Add your OpenAI key
+#### 3 · Add your OpenAI key
 
 ```bash
 echo "OPENAI_API_KEY=sk-..." > {agentic_backend,knowledge_flow_backend}/config/.env
 ```
 
-### 4 · Run the services
+#### 4 · Run the services
 
 ```bash
 # Terminal 1 – agentic backend
@@ -77,24 +78,57 @@ cd agentic_backend && make run
 ```
 
 ```bash
-# Terminal 1 – knowledge flow backend
+# Terminal 2 – knowledge flow backend
 cd knowledge_flow_backend && make run
 ```
 
 ```bash
-# Terminal 2 – frontend
+# Terminal 3 – frontend
 cd frontend && make run
 ```
 
 Open <http://localhost:5173> in your browser.
 
+#### Advanced developer tips
+
+To get full VS Code Python support (linting, IntelliSense, debugging, etc.) across our repo, we provide:
+
+1. A VS Code workspace file `fred.code-workspace` that loads all sub‑projects.
+2. Per‑folder `.vscode/settings.json` files in each Python backend to pin the interpreter.
+
+##### Prerequisites
+
+- [Visual Studio Code](https://code.visualstudio.com/)  
+- VS Code extensions:
+  - **Python** (ms-python.python)  
+  - **Pylance** (ms-python.vscode-pylance)  
+
+1. Open the workspace
+
+  After cloning the repo, you can open Fred's VS Code workspace with `code fred.code-workspace`
+
+  When you open Fred's VS Code workspace, VS Code will load four folders:
+
+  - fred – for any repo‑wide scripts
+  - agentic_backend – first Python backend
+  - knowledge_flow_backend – second Python backend
+  - frontend – UI
+
+2. Per‑folder Python interpreters
+  Each backend ships its own virtual environment under .venv. We’ve added a per‑folder VS Code setting (see for instance ``agentic_backend/.vscode/settings.json``) to automatically pick it:
+
+  This ensures that as soon as you open a Python file under agentic_backend/ (or knowledge_flow_backend/), VS Code will:
+  
+  - Activate that folder’s virtual environment
+  - Provide linting, IntelliSense, formatting, and debugging using the correct Python
+
 ---
 
-## Optional VS Code Dev-Container
+### Dev-Container mode
 
 If you prefer a fully containerised IDE with all dependencies running:
 
-1. Install Docker, VS Code, and the *Dev Containers* extension.  
+1. Install Docker, VS Code (or an equivalent IDE that supports Dev Containers), and the *Dev Containers* extension.  
 2. Create `~/.fred/openai-api-key.env` containing `OPENAI_API_KEY=sk-…`.  
 3. In VS Code, press <kbd>F1</kbd> → **Dev Containers: Reopen in Container**.
 
@@ -103,64 +137,75 @@ The Dev Container starts the `devcontainer` service plus Postgres, OpenSearch, a
 Inside the container, start the servers:
 
 ```bash
-# integrated terminal
-cd backend && make run     # API
-# new terminal
-cd frontend && make run    # UI
+# Terminal 1 – agentic backend
+cd agentic_backend && make run
+```
+
+```bash
+# Terminal 2 – knowledge flow backend
+cd knowledge_flow_backend && make run
+```
+
+```bash
+# Terminal 3 – frontend
+cd frontend && make run
 ```
 
 ---
 
-## Supported Model Providers
+## Advanced configuration
 
-| Provider               | How to enable                                                          |
-|------------------------|------------------------------------------------------------------------|
-| OpenAI (default)       | Add `OPENAI_API_KEY` to `config/.env`                                  |
-| Azure OpenAI           | Add `AZURE_OPENAI_API_KEY` and endpoint variables; adjust `configuration.yaml` |
-| Ollama (local models)  | Set `OLLAMA_BASE_URL` and model name in `configuration.yaml`           |
+### Supported Model Providers
 
-See `backend/config/configuration.yaml` (section `ai:`) for concrete examples.
+| Provider              | How to enable                                                                  |
+| --------------------- | ------------------------------------------------------------------------------ |
+| OpenAI (default)      | Add `OPENAI_API_KEY` to `config/.env`                                          |
+| Azure OpenAI          | Add `AZURE_OPENAI_API_KEY` and endpoint variables; adjust `configuration.yaml` |
+| Ollama (local models) | Set `OLLAMA_BASE_URL` and model name in `configuration.yaml`                   |
 
----
-
-## Configuration Files
-
-| File                        | Purpose                                                    |
-|-----------------------------|------------------------------------------------------------|
-| `config/.env`               | Secrets (API keys, passwords). Not committed to Git.       |
-| `config/configuration.yaml` | Functional settings (providers, agents, feature flags).    |
+See `agentic_backend/config/configuration.yaml` (section `ai:`) for concrete examples.
 
 ---
 
-## System Architecture
+### Configuration Files
 
-| Component          | Location                           | Role                                |
-|--------------------|------------------------------------|-------------------------------------|
-| Frontend UI        | `./frontend`                       | React-based chatbot                 |
-| Agentic backend    | `./backend`                        | Multi-agent API server              |
-| Knowledge backend  | <https://github.com/ThalesGroup/knowledge-flow> | Optional document ingestion & RAG |
+| File                                               | Purpose                                                 | Tip                                                                 |
+| -------------------------------------------------- | ------------------------------------------------------- | ------------------------------------------------------------------- |
+| `agentic_backend/config/.env`                      | Secrets (API keys, passwords). Not committed to Git.    | Copy `.env.template` to `.env` and then fill in any missing values. |
+| `knowledge_flow_backend/config/.env`               | Same as above                                           | Same as above                                                       |
+| `agentic_backend/config/configuration.yaml`        | Functional settings (providers, agents, feature flags). | -                                                                   |
+| `knowledge_flow_backend/config/configuration.yaml` | Same as above                                           | -                                                                   |
 
 ---
 
-## Advanced Integrations
+### System Architecture
+
+| Component         | Location                   | Role                                                                  |
+| ----------------- | -------------------------- | --------------------------------------------------------------------- |
+| Frontend UI       | `./frontend`               | React-based chatbot                                                   |
+| Agentic backend   | `./agentic_backend`        | Multi-agent API server                                                |
+| Knowledge Flow backend | `./knowledge_flow_backend` | **Optional** knowledge management component (document ingestion & Co) |
+
+---
+
+### Advanced Integrations
 
 * Enable Keycloak or another OIDC provider for authentication  
 * Persist metrics and files in OpenSearch and MinIO  
-* Use the Knowledge Flow backend for retrieval-augmented generation  
-
-See the **deployment factory**: <https://github.com/ThalesGroup/fred-deployment-factory>
 
 ---
 
 ## Documentation
 
-* Web site: <https://fredk8.dev/docs>  
-* [Backend README](./backend/README.md)  
+* Main docs: <https://fredk8.dev/docs>  
+* [Agentic backend README](./agentic_backend/README.md)  
 * [Frontend README](./frontend/README.md)  
-* [Developer Guide](docs/DEVELOPER_GUIDE.md)
-* [Python Coding Guidelines](docs/PYTHON_CODING_GUIDELINES.md)
-* [License](docs/LICENSE.md)
-* [Security](docs/SECURITY.md)
+* [Knowledge Flow backend README](./knowledge_flow_backend/README.md)  
+* [Code of Conduct](./docs/CODE_OF_CONDUCT.md) 
+* [License](./docs/LICENSE.md)  
+* [Security](./docs/SECURITY.md)  
+* [Python Coding Guide](./docs/PYTHON_CODING_GUIDELINES.md)
+* [Contributing](./docs/CONTRIBUTING.md)   
 
 ---
 
@@ -180,6 +225,6 @@ Apache 2.0 — see [LICENSE](./LICENSE)
 
 - alban.capitant@thalesgroup.com
 - fabien.le-solliec@thalesgroup.com
-- florian.mueller@thalesgroup.com
+- florian.muller@thalesgroup.com
 - simon.cariou@thalesgroup.com 
 - dimitri.tombroff@thalesgroup.com

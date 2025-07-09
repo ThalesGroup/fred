@@ -47,11 +47,29 @@ services:
     ports:
       - "0.0.0.0:5173:5173/tcp"
 
+  knowledge-flow-backend:
+    image: registry.thalesdigital.io/tsn/projects/knowledge_flow_app/knowledge-flow-backend:0.1
+    container_name: knowledge-flow-backend
+    build:
+      context: ../../
+      dockerfile: dockerfiles/Dockerfile-dev
+    environment:
+      NO_PROXY: "*"
+    command:
+      - --config-path 
+      - /app/config/configuration.yaml
+    volumes:
+      # Mount the whole project (RW mode)
+      - ../../:/app:rw
+    networks:
+      - app-network
+    ports:
+      - "0.0.0.0:8111:8111/tcp"
+
 volumes:
   vol-kubeconfig:
     external: true
     name: vol-kubeconfig
-
 
 networks:
   app-network:
