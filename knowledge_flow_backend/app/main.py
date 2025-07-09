@@ -33,13 +33,16 @@ from app.features.tabular.controller import TabularController
 from app.features.vector_search.controller import VectorSearchController
 from app.features.wip.ingestion_controller import IngestionController
 from app.features.wip.knowledge_context_controller import KnowledgeContextController
+from app.features.tag.controller import TagController
+from app.security.keycloak import initialize_keycloak
+from app.features.code_search.controller import CodeSearchController
 from dotenv import load_dotenv
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi_mcp import FastApiMCP
 from rich.logging import RichHandler
 
-from app.features.code_search.controller import CodeSearchController
+
 
 
 # -----------------------
@@ -118,6 +121,8 @@ def create_app(config_path: str, base_url: str) -> FastAPI:
         # Get config from pre-initialized ApplicationContext (e.g. in tests)
         configuration = ApplicationContext.get_instance().get_config()
 
+    initialize_keycloak(configuration)
+
     app = FastAPI(
         docs_url=f"{base_url}/docs",
         redoc_url=f"{base_url}/redoc",
@@ -141,6 +146,7 @@ def create_app(config_path: str, base_url: str) -> FastAPI:
     KnowledgeContextController(router)
     TabularController(router)
     CodeSearchController(router)
+    TagController(router)
 
     logger.info("🧩 All controllers registered.")
     app.include_router(router)
