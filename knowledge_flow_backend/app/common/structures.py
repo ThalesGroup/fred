@@ -77,7 +77,7 @@ class LocalMetadataStorage(BaseModel):
     type: Literal["local"]
     root_path: str = Field(default=str(Path("~/.fred/knowledge/metadata-store.json")), description="Local storage directory")
 
-class OpenSearchMetadataStorage(BaseModel):
+class OpenSearchStorage(BaseModel):
     type: Literal["opensearch"]
     host: str = Field(..., description="OpenSearch host URL")
     secure: bool = Field(default=False, description="Use TLS (https)")
@@ -90,7 +90,7 @@ class OpenSearchMetadataStorage(BaseModel):
 
 # --- Final union config (with discriminator)
 MetadataStorageConfig = Annotated[
-    Union[LocalMetadataStorage, OpenSearchMetadataStorage],
+    Union[LocalMetadataStorage, OpenSearchStorage],
     Field(discriminator="type")
 ]
 
@@ -102,22 +102,13 @@ MetadataStorageConfig = Annotated[
 class InMemoryVectorStorage(BaseModel):
     type: Literal["in_memory"]
 
-class OpenSearchVectorStorage(BaseModel):
-    type: Literal["opensearch"]
-    host: str = Field(..., description="OpenSearch host URL")
-    secure: bool = Field(default=False, description="Use TLS (https)")
-    verify_certs: bool = Field(default=False, description="Verify TLS certs")
-    vector_index: str = Field(..., description="OpenSearch index name for vectors")
-    username: Optional[str] = Field(default_factory=lambda: os.getenv("OPENSEARCH_USER"), description="Username from env")
-    password: Optional[str] = Field(default_factory=lambda: os.getenv("OPENSEARCH_PASSWORD"), description="Password from env")
-
 class WeaviateVectorStorage(BaseModel):
     type: Literal["weaviate"]
     host: str = Field(default="https://localhost:8080", description="Weaviate host")
     index_name: str = Field(default="CodeDocuments", description="Weaviate class (collection) name")
 
 VectorStorageConfig = Annotated[
-    Union[InMemoryVectorStorage, OpenSearchVectorStorage, WeaviateVectorStorage],
+    Union[InMemoryVectorStorage, OpenSearchStorage, WeaviateVectorStorage],
     Field(discriminator="type")
 ]
 

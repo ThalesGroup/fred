@@ -328,7 +328,7 @@ class ApplicationContext:
         backend_type = self.config.vector_storage.type
 
         if backend_type == "opensearch":
-            s = self.config.vector_storage.settings  
+            s = self.config.vector_storage
             if not s.username or not s.password:
                 raise ValueError("Missing required environment variables: OPENSEARCH_USER and OPENSEARCH_PASSWORD")
             
@@ -344,7 +344,7 @@ class ApplicationContext:
                 )
             return self._vector_store_instance
         elif backend_type == "weaviate":
-            s = self.config.vector_storage.settings  
+            s = self.config.vector_storage
             if self._vector_store_instance is None:
                 self._vector_store_instance = WeaviateVectorStore(embedding_model, s.host, s.index_name)
             return self._vector_store_instance
@@ -364,22 +364,21 @@ class ApplicationContext:
             self._metadata_store_instance = LocalMetadataStore(path)
 
         elif config.type == "opensearch":
-            settings = config.settings  # This is a parsed OpenSearchMetadataSettings
 
-            username = settings.username
-            password = settings.password
+            username = config.username
+            password = config.password
 
             if not username or not password:
                 raise ValueError("Missing OpenSearch credentials: OPENSEARCH_USER and/or OPENSEARCH_PASSWORD")
 
             self._metadata_store_instance = OpenSearchMetadataStore(
-                host=settings.host,
+                host=config.host,
                 username=username,
                 password=password,
-                secure=settings.secure,
-                verify_certs=settings.verify_certs,
-                metadata_index_name=settings.metadata_index,
-                vector_index_name=settings.vector_index
+                secure=config.secure,
+                verify_certs=config.verify_certs,
+                metadata_index_name=config.metadata_index,
+                vector_index_name=config.vector_index
             )
 
         else:
@@ -442,7 +441,7 @@ class ApplicationContext:
         logger.info(f"  📚 Vector store backend: {vector_type}")
         if vector_type == "opensearch":
             try:
-                s = self.config.vector_storage.settings
+                s = self.config.vector_storage
                 if vector_type == "opensearch":
                     logger.info(f"     ↳ Host: {s.host}")
                     logger.info(f"     ↳ Vector Index: {s.vector_index}")
