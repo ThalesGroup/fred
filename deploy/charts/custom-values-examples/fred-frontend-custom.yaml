@@ -30,9 +30,3 @@ env:
 oidc:
   config:
     authServerUrl: "https://keycloak.dev.fred.thalesgroup.com/"
-
-# feedback_storage:
-#   type: minio
-#   minio_endpoint: "minio:9000"
-#   minio_bucket_name: "fred-feedback"
-#   minio_secure: false
