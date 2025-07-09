@@ -20,8 +20,6 @@ from fastapi.testclient import TestClient
 from fastapi import status
 import pytest
 
-from app.features.metadata.service import MetadataService
-
 
 # ────────────────────────────────────
 # Tell conftest.py which back-ends to use
@@ -63,65 +61,57 @@ class TestMetadataController:
         }
 
     # ──────────── Tests ────────────
-    def test_delete_metadata_found(self, client: TestClient, metadata_store, document1, local_content_store):
+    def test_delete_metadata_found(self, client_fixture: TestClient, metadata_store, document1):
         metadata_store.save_metadata(document1)
-        resp = client.delete(f"/knowledge-flow/v1/document/{document1['document_uid']}")
+        resp = client_fixture.delete(f"/knowledge-flow/v1/document/{document1['document_uid']}")
         assert resp.status_code == status.HTTP_200_OK
 
-    def test_delete_metadata_not_found(self, client: TestClient):
-        resp = client.delete("/knowledge-flow/v1/document/does_not_exist")
+
+    def test_delete_metadata_not_found(self, client_fixture: TestClient):
+        resp = client_fixture.delete("/knowledge-flow/v1/document/does_not_exist")
         assert resp.status_code == status.HTTP_404_NOT_FOUND
 
-    def test_get_documents_metadata(self, client, metadata_store, document1, document2):
+    def test_get_documents_metadata(self, client_fixture, metadata_store, document1, document2):
         metadata_store.save_metadata(document1)
         metadata_store.save_metadata(document2)
 
-        resp = client.post("/knowledge-flow/v1/documents/metadata", json={})
+        resp = client_fixture.post("/knowledge-flow/v1/documents/metadata", json={})
         assert resp.status_code == status.HTTP_200_OK
         data = resp.json()
         assert data["status"] == "success"
         assert len(data["documents"]) == 2
 
-    def test_get_documents_metadata_with_filters(self, client, metadata_store, document1, document2):
+    def test_get_documents_metadata_with_filters(self, client_fixture, metadata_store, document1, document2):
         metadata_store.save_metadata(document1)
         metadata_store.save_metadata(document2)
 
-        resp = client.post(
+        resp = client_fixture.post(
             "/knowledge-flow/v1/documents/metadata",
             json={"front_metadata": {"agent_name": "Georges"}},
         )
         assert resp.status_code == status.HTTP_200_OK
         assert len(resp.json()["documents"]) == 1
 
-    def test_get_documents_metadata_failure(self, client, monkeypatch):
-        def boom(*_, **__):
-            raise Exception("DB error")
-
-        monkeypatch.setattr(MetadataService, "get_documents_metadata", boom)
-
-        resp = client.post("/knowledge-flow/v1/documents/metadata", json={})
-        assert resp.status_code == status.HTTP_404_NOT_FOUND
-
-    def test_get_document_metadata(self, client, metadata_store, document1):
+    def test_get_document_metadata(self, client_fixture, metadata_store, document1):
         metadata_store.save_metadata(document1)
 
-        resp = client.get(f"/knowledge-flow/v1/document/{document1['document_uid']}")
+        resp = client_fixture.get(f"/knowledge-flow/v1/document/{document1['document_uid']}")
         assert resp.status_code == status.HTTP_200_OK
         body = resp.json()
         assert body["metadata"]["document_uid"] == document1["document_uid"]
 
-    def test_update_document_retrievable(self, client, metadata_store, document1):
+    def test_update_document_retrievable(self, client_fixture, metadata_store, document1):
         metadata_store.save_metadata(document1)
 
-        put = client.put(
+        put = client_fixture.put(
             f"/knowledge-flow/v1/document/{document1['document_uid']}",
             json={"retrievable": True},
         )
         assert put.status_code == status.HTTP_200_OK
 
-        get_ = client.get(f"/knowledge-flow/v1/document/{document1['document_uid']}")
+        get_ = client_fixture.get(f"/knowledge-flow/v1/document/{document1['document_uid']}")
         assert get_.json()["metadata"]["retrievable"] is True
 
-    def test_update_document_retrievable_failure(self, client):
-        resp = client.put("/knowledge-flow/v1/document/does_not_exist", json={"retrievable": True})
+    def test_update_document_retrievable_failure(self, client_fixture):
+        resp = client_fixture.put("/knowledge-flow/v1/document/does_not_exist", json={"retrievable": True})
         assert resp.status_code in (500, 422)

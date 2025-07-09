@@ -31,15 +31,14 @@ def get_sessions_store() -> AbstractSessionStorage:
     if config.type == "in_memory":
         return InMemorySessionStorage()
     elif config.type == "opensearch":
-        settings = config.settings
         return OpensearchSessionStorage(
-            host=settings.host,
-            username=settings.username,
-            password=settings.password,
-            secure=settings.secure,
-            verify_certs=settings.verify_certs,
-            sessions_index=settings.sessions_index,
-            history_index=settings.history_index
+            host=config.host,
+            username=config.username,
+            password=config.password,
+            secure=config.secure,
+            verify_certs=config.verify_certs,
+            sessions_index=config.sessions_index,
+            history_index=config.history_index
         )
     else:   
         raise ValueError(f"Unsupported sessions storage backend: {config.type}")

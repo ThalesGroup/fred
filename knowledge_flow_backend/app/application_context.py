@@ -14,6 +14,8 @@
 
 import importlib
 import logging
+import os
+from pathlib import Path
 from typing import Dict, Type, Union, Optional
 from app.common.structures import Configuration
 from app.common.utils import validate_settings_or_exit
@@ -21,7 +23,6 @@ from app.config.embedding_azure_apim_settings import EmbeddingAzureApimSettings
 from app.config.embedding_azure_openai_settings import EmbeddingAzureOpenAISettings
 from app.config.ollama_settings import OllamaSettings
 from app.config.embedding_openai_settings import EmbeddingOpenAISettings
-from app.config.opensearch_settings import OpenSearchSettings
 from langchain_openai import OpenAIEmbeddings, AzureOpenAIEmbeddings
 from langchain_ollama import OllamaEmbeddings
 
@@ -29,11 +30,15 @@ from app.core.processors.input.common.base_input_processor import BaseInputProce
 from app.core.processors.output.base_output_processor import BaseOutputProcessor
 from app.core.processors.output.vectorization_processor.azure_apim_embedder import AzureApimEmbedder
 from app.core.processors.output.vectorization_processor.embedder import Embedder
-from app.core.processors.output.vectorization_processor.in_memory_langchain_vector_store import InMemoryLangchainVectorStore
-from app.core.processors.output.vectorization_processor.interfaces import BaseDocumentLoader, BaseEmbeddingModel, BaseTextSplitter, BaseVectoreStore
+from app.core.stores.metadata.base_metadata_store import BaseMetadataStore
+from app.core.stores.metadata.local_metadata_store import LocalMetadataStore
+from app.core.stores.metadata.opensearch_metadata_store import OpenSearchMetadataStore
+from app.core.stores.vector.in_memory_langchain_vector_store import InMemoryLangchainVectorStore
+from app.core.stores.vector.base_vector_store import BaseDocumentLoader, BaseEmbeddingModel, BaseTextSplitter, BaseVectoreStore
 from app.core.processors.output.vectorization_processor.local_file_loader import LocalFileLoader
-from app.core.processors.output.vectorization_processor.opensearch_vector_store import OpenSearchVectorStoreAdapter
+from app.core.stores.vector.opensearch_vector_store import OpenSearchVectorStoreAdapter
 from app.core.processors.output.vectorization_processor.recursive_splitter import RecursiveSplitter
+from app.core.stores.vector.weaviate_vector_store import WeaviateVectorStore
 
 # Union of supported processor base classes
 BaseProcessorType = Union[BaseMarkdownProcessor, BaseTabularProcessor]
@@ -94,6 +99,7 @@ class ApplicationContext:
     _instance: Optional["ApplicationContext"] = None
     _output_processor_instances: Dict[str, BaseOutputProcessor] = {}
     _vector_store_instance: Optional[BaseVectoreStore] = None
+    _metadata_store_instance: Optional[BaseMetadataStore] = None
 
     def __init__(self, config: Configuration):
         # Allow reuse if already initialized with same config
@@ -156,6 +162,13 @@ class ApplicationContext:
             self._output_processor_instances[class_path] = processor_class()
 
         return self._output_processor_instances[class_path]
+
+    @classmethod
+    def close_connections(cls):
+        if cls._instance and cls._instance._vector_store_instance:
+            vector_store = cls._instance._vector_store_instance
+            if hasattr(vector_store, "close"):
+                vector_store.close()
 
     @classmethod
     def get_instance(cls) -> "ApplicationContext":
@@ -315,15 +328,65 @@ class ApplicationContext:
         backend_type = self.config.vector_storage.type
 
         if backend_type == "opensearch":
-            settings = validate_settings_or_exit(OpenSearchSettings, "OpenSearch Settings")
-            return OpenSearchVectorStoreAdapter(embedding_model, settings)
+            s = self.config.vector_storage
+            if not s.username or not s.password:
+                raise ValueError("Missing required environment variables: OPENSEARCH_USER and OPENSEARCH_PASSWORD")
+            
+            if self._vector_store_instance is None:
+                self._vector_store_instance = OpenSearchVectorStoreAdapter(
+                    embedding_model=embedding_model,
+                    host=s.host,
+                    vector_index=s.vector_index,
+                    username=s.username,
+                    password=s.password,
+                    secure=s.secure,
+                    verify_certs=s.verify_certs,
+                )
+            return self._vector_store_instance
+        elif backend_type == "weaviate":
+            s = self.config.vector_storage
+            if self._vector_store_instance is None:
+                self._vector_store_instance = WeaviateVectorStore(embedding_model, s.host, s.index_name)
+            return self._vector_store_instance
         elif backend_type == "in_memory":
             if self._vector_store_instance is None:
                 self._vector_store_instance = InMemoryLangchainVectorStore(embedding_model)
             return self._vector_store_instance
-        # Future: Add more backends like Chroma, FAISS, Pinecone, etc.
         raise ValueError(f"Unsupported vector store backend: {backend_type}")
 
+    def get_metadata_store(self) -> BaseMetadataStore:
+
+        if self._metadata_store_instance is not None:
+            return self._metadata_store_instance
+        config = self.config.metadata_storage
+        if config.type == "local":
+            path = Path(config.root_path).expanduser()
+            self._metadata_store_instance = LocalMetadataStore(path)
+
+        elif config.type == "opensearch":
+
+            username = config.username
+            password = config.password
+
+            if not username or not password:
+                raise ValueError("Missing OpenSearch credentials: OPENSEARCH_USER and/or OPENSEARCH_PASSWORD")
+
+            self._metadata_store_instance = OpenSearchMetadataStore(
+                host=config.host,
+                username=username,
+                password=password,
+                secure=config.secure,
+                verify_certs=config.verify_certs,
+                metadata_index_name=config.metadata_index,
+                vector_index_name=config.vector_index
+            )
+
+        else:
+            raise ValueError(f"Unsupported metadata storage backend: {config.type}")
+
+        return self._metadata_store_instance
+
+        
     def get_document_loader(self) -> BaseDocumentLoader:
         """
         Factory method to create a document loader instance based on configuration.
@@ -378,13 +441,22 @@ class ApplicationContext:
         logger.info(f"  📚 Vector store backend: {vector_type}")
         if vector_type == "opensearch":
             try:
-                s = validate_settings_or_exit(OpenSearchSettings, "OpenSearch Settings")
-                logger.info(f"     ↳ OPENSEARCH_HOST: {s.opensearch_host}")
-                logger.info(f"     ↳ OPENSEARCH_VECTOR_INDEX: {s.opensearch_vector_index}")
-                self._log_sensitive("OPENSEARCH_USER", s.opensearch_user)
-                self._log_sensitive("OPENSEARCH_PASSWORD", s.opensearch_password)
+                s = self.config.vector_storage
+                if vector_type == "opensearch":
+                    logger.info(f"     ↳ Host: {s.host}")
+                    logger.info(f"     ↳ Vector Index: {s.vector_index}")
+                    logger.info(f"     ↳ Metadata Index: {s.metadata_index}")
+                    logger.info(f"     ↳ Secure (TLS): {s.secure}")
+                    logger.info(f"     ↳ Verify Certs: {s.verify_certs}")
+                    self._log_sensitive("OPENSEARCH_USER", os.getenv("OPENSEARCH_USER"))
+                    self._log_sensitive("OPENSEARCH_PASSWORD", os.getenv("OPENSEARCH_PASSWORD"))
+                elif vector_type == "weaviate":
+                    logger.info(f"     ↳ Host: {s.host}")
+                    logger.info(f"     ↳ Index Name: {s.index_name}")
+                    logger.info(f"     ↳ Secure (TLS): {s.secure}")
+                    self._log_sensitive("WEAVIATE_API_KEY", os.getenv("WEAVIATE_API_KEY"))
             except Exception:
-                logger.warning("⚠️ Failed to load OpenSearch settings — some variables may be missing.")
+                logger.warning("⚠️ Failed to load vector store settings — some variables may be missing or misconfigured.")
 
         metadata_type = self.config.metadata_storage.type
         logger.info(f"  🗃️ Metadata storage backend: {metadata_type}")

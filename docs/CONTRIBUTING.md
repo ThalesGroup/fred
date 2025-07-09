@@ -213,12 +213,31 @@ Testing is mandatory for any non-trivial change. Both unit and integration tests
 ### Recommended workflow:
 
 ```bash
-make build     # create virtual environment via Poetry
 make run       # start the app locally
 make test      # run all tests (unit + integration)
 ```
 
 Ensure tests pass **before** opening a pull request.
+
+### 🧩 `conftest.py` and Configuration for Local Testing
+
+Both the `agentic_backend` and `knowledge_flow_backend` components include a centralized `app/tests/conftest.py` file. This shared testing convention plays a crucial role in keeping the test environments **robust, isolated, and developer-friendly**.
+
+#### Why this matters:
+
+- **Isolated unit testing**: Each backend runs with a minimal local configuration (no OpenSearch, Keycloak, or external LLMs). This avoids coupling unit tests with infrastructure.
+- **Reliable app context**: The `ApplicationContext` is initialized with a handcrafted in-memory config (e.g., `minimal_generalist_config()` in `agentic_backend`), which provides just enough structure for testing core logic.
+- **No noise from immature configs**: Since the production `configuration.yaml` files are still evolving, using a custom `conftest.py` config helps avoid boilerplate or fragile test setups.
+- **Developer clarity**: The fixtures make it obvious how to initialize services, mock agents, or plug in `TestClient` with mounted routers—without needing to run the whole stack.
+- **Scalable to integration tests**: You can keep using this base and extend it later with additional marks (`@pytest.mark.integration`) or Docker-based services.
+
+#### How to use it:
+
+- For **unit tests**, rely on the `client` or `test_app` fixture in `conftest.py` to get a ready-to-use FastAPI client.
+- For **controller or agent logic**, use the initialized context and override only what’s necessary.
+- When needed, you can mock service behavior using `monkeypatch` or swap components like `AIService`, `SessionStorage`, etc.
+
+By following this pattern consistently in both backends, we ensure clean separation of concerns, easier debugging, and faster CI iterations.
 
 ---
 

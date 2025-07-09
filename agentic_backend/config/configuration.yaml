@@ -194,30 +194,26 @@ security:
 # easy by default they are stored on a local file. 
 node_metrics_storage:
   type: "local" 
-  settings:
-    local_path: "~/.fred/node-metrics-store"
+  local_path: "~/.fred/node-metrics-store"
 
 tool_metrics_storage:
   type: "local" 
-  settings:
-    local_path: "~/.fred/tool-metrics-store"
+  local_path: "~/.fred/tool-metrics-store"
 
 # Feedbacks are store in a simple local file. It is plan to add 
 # additional backend like opensearch or minio.
 feedback_storage:
   type: local
-  settings:
-    local_path: "~/.fred/feedback-store"
+  local_path: "~/.fred/feedback-store"
 
 # Sessions and messages are stored by default in_memory 
 # but it can be modified to use a backend like opensearch
 session_storage:
-  type: in_memory
+  # type: in_memory
   ## Session Storage using OpenSearch:
-  # type: opensearch
-  # settings: # username and password are passed via the OPENSEARCH_USERNAME and OPENSEARCH_PASSWORD env variables defined in thes .env file
-  #   host: https://localhost:9200
-  #   # username: Admin # Overrides the OPENSEARCH_USERNAME environment variable
-  #   # password: xxx # Overrides the OPENSEARCH_PASSWORD environment variable
-  #   secure: false
-  #   verify_certs: false
+  type: opensearch # username and password are passed via the OPENSEARCH_USER and OPENSEARCH_PASSWORD env variables defined in thes .env file
+  host: https://localhost:9200
+  # username: Admin # Overrides the OPENSEARCH_USER environment variable
+  # password: xxx # Overrides the OPENSEARCH_PASSWORD environment variable
+  secure: false
+  verify_certs: false

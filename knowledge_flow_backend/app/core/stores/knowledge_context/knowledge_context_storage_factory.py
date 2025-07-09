@@ -49,7 +49,7 @@ def get_knowledge_context_store() -> BaseKnowledgeContextStore:
         # For the "local" backend, we store all profile context data (text/files)
         # in a user-defined directory path on the local filesystem.
         # Expand ~ if present (e.g., "~/myapp/data")
-        local_path = Path(config.knowledge_context_storage.settings.local_path).expanduser()
+        local_path = Path(config.knowledge_context_storage.local_path).expanduser()
 
         # Ensure that the directory exists. If it doesn't, create it (including parents).
         # This allows the application to initialize correctly without manual setup.

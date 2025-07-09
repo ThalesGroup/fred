@@ -12,7 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List
+import os
+from pathlib import Path
+from typing import Annotated, List, Literal, Union
 from pydantic import BaseModel, Field
 from typing import Optional
 from enum import Enum
@@ -65,26 +67,57 @@ class ContentStorageConfig(BaseModel):
     type: str = Field(..., description="The storage backend to use (e.g., 'local', 'minio')")
 
 
-class MetadataStorageConfig(BaseModel):
-    type: str = Field(..., description="The storage backend to use (e.g., 'local', 'opensearch')")
+
+###########################################################
+#
+#  --- Metadata Storage Configuration
+#
+
+class LocalMetadataStorage(BaseModel):
+    type: Literal["local"]
+    root_path: str = Field(default=str(Path("~/.fred/knowledge/metadata-store.json")), description="Local storage directory")
+
+class OpenSearchStorage(BaseModel):
+    type: Literal["opensearch"]
+    host: str = Field(..., description="OpenSearch host URL")
+    secure: bool = Field(default=False, description="Use TLS (https)")
+    verify_certs: bool = Field(default=False, description="Verify TLS certs")
+    metadata_index: str = Field(..., description="OpenSearch index name for metadata")
+    vector_index: str = Field(..., description="OpenSearch index name for vectors")
+    username: Optional[str] = Field(default_factory=lambda: os.getenv("OPENSEARCH_USER"), description="Username from env")
+    password: Optional[str] = Field(default_factory=lambda: os.getenv("OPENSEARCH_PASSWORD"), description="Password from env")
 
 
-class VectorStorageConfig(BaseModel):
-    type: str = Field(..., description="The vector backend to use (e.g., 'opensearch', 'chromadb')")
+# --- Final union config (with discriminator)
+MetadataStorageConfig = Annotated[
+    Union[LocalMetadataStorage, OpenSearchStorage],
+    Field(discriminator="type")
+]
 
+###########################################################
+#
+# --- Vector Storage Configuration
+#
+
+class InMemoryVectorStorage(BaseModel):
+    type: Literal["in_memory"]
+
+class WeaviateVectorStorage(BaseModel):
+    type: Literal["weaviate"]
+    host: str = Field(default="https://localhost:8080", description="Weaviate host")
+    index_name: str = Field(default="CodeDocuments", description="Weaviate class (collection) name")
+
+VectorStorageConfig = Annotated[
+    Union[InMemoryVectorStorage, OpenSearchStorage, WeaviateVectorStorage],
+    Field(discriminator="type")
+]
 
 class EmbeddingConfig(BaseModel):
     type: str = Field(..., description="The embedding backend to use (e.g., 'openai', 'azureopenai')")
 
-
-class KnowledgeContextStorageSettings(BaseModel):
-    local_path: str = Field(..., description="The path of the local metrics store")
-
-
 class KnowledgeContextStorageConfig(BaseModel):
     type: str = Field(..., description="The storage backend to use (e.g., 'local', 'minio')")
-    settings: KnowledgeContextStorageSettings
-
+    local_path: str = Field(default="~/.fred/knowledge-context", description="The path of the local metrics store")
 
 class Configuration(BaseModel):
     security: Security

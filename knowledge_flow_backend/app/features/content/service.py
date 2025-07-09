@@ -17,7 +17,6 @@ import mimetypes
 from typing import BinaryIO, Dict, Tuple
 
 from app.core.stores.content.content_storage_factory import get_content_store
-from app.core.stores.metadata.metadata_storage_factory import get_metadata_store
 
 
 logger = logging.getLogger(__name__)
@@ -33,7 +32,7 @@ class ContentService:
         """Initialize content service with necessary stores."""
         from app.application_context import ApplicationContext
 
-        self.metadata_store = get_metadata_store()
+        self.metadata_store = ApplicationContext.get_instance().get_metadata_store()
         self.content_store = get_content_store()
         self.config = ApplicationContext.get_instance().get_config()
 

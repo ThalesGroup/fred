@@ -16,7 +16,7 @@ from typing import List
 from langchain.schema.document import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 
-from app.core.processors.output.vectorization_processor.interfaces import BaseTextSplitter
+from app.core.stores.vector.base_vector_store import BaseTextSplitter
 
 
 
