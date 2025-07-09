@@ -61,10 +61,11 @@ class TestMetadataController:
         }
 
     # ──────────── Tests ────────────
-    def test_delete_metadata_found(self, client: TestClient, metadata_store, document1, local_content_store):
+    def test_delete_metadata_found(self, client: TestClient, metadata_store, document1):
         metadata_store.save_metadata(document1)
         resp = client.delete(f"/knowledge-flow/v1/document/{document1['document_uid']}")
         assert resp.status_code == status.HTTP_200_OK
+
 
     def test_delete_metadata_not_found(self, client: TestClient):
         resp = client.delete("/knowledge-flow/v1/document/does_not_exist")

@@ -76,7 +76,7 @@ def app_context(monkeypatch):
                 class_path=f"{TestMarkdownProcessor.__module__}.{TestMarkdownProcessor.__qualname__}",
             ),
             ProcessorConfig(
-                prefix=".xlxs",
+                prefix=".xlsx",
                 class_path=f"{TestMarkdownProcessor.__module__}.{TestTabularProcessor.__qualname__}",
             ),
             ProcessorConfig(

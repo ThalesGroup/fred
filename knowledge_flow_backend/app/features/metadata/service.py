@@ -1,7 +1,7 @@
 import logging
 
 from app.common.structures import Status
-from app.features.metadata.structures import GetDocumentMetadataResponse, GetDocumentsMetadataResponse, UpdateDocumentMetadataResponse
+from app.features.metadata.structures import GetDocumentMetadataResponse, GetDocumentsMetadataResponse, UpdateDocumentMetadataResponse, UpdateRetrievableRequest
 from app.application_context import ApplicationContext
 
 logger = logging.getLogger(__name__)
