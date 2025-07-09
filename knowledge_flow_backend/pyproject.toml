@@ -39,7 +39,10 @@ dependencies = [
   "torch==2.7.1",
   "langchain-ollama==0.3.3",
   "fastapi-mcp==0.3.4",
+<<<<<<< HEAD
   "weaviate-client<4.0.0",
+=======
+>>>>>>> dc644db (#120 feat (tabular expert): tabular expert with duckdb access)
   "duckdb>=1.3.2",
 ]
 

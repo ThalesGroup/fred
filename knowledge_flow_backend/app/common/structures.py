@@ -121,6 +121,15 @@ class TabularStorageConfig(BaseModel):
     settings: TabularStorageSettings
 
 
+class TabularStorageSettings(BaseModel):
+    duckdb_path: str = Field(..., description="Path to the DuckDB database file for tabular storage.")
+
+
+class TabularStorageConfig(BaseModel):
+    type: str = Field(..., description="Backend type for tabular storage (e.g. 'duckdb').")
+    settings: TabularStorageSettings
+
+
 class EmbeddingConfig(BaseModel):
     type: str = Field(..., description="The embedding backend to use (e.g., 'openai', 'azureopenai')")
 
