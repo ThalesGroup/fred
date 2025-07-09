@@ -3,6 +3,7 @@
 .vscode/*
 !.vscode/launch.json
 !.vscode/extensions.json
+!.vscode/*.code-workspace
 ### Python ###
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -196,7 +197,6 @@ pyrightconfig.json
 secrets/openai-api-key.sh
 
 /Makefile
-*.code-workspace
 /media/
 
 # Helm dependency files
