@@ -14,51 +14,33 @@
 
 import logging
 from typing import List
+
 from fastapi import APIRouter, HTTPException
 
 from app.features.tabular.service import TabularService
-from app.features.tabular.structures import TabularDatasetMetadata, TabularQueryRequest, TabularQueryResponse, TabularSchemaResponse
+from app.features.tabular.structures import (
+    TabularDatasetMetadata,
+    TabularQueryRequest,
+    TabularQueryResponse,
+    TabularSchemaResponse,
+)
 
 logger = logging.getLogger(__name__)
 
+
 class TabularController:
     """
-    Controller responsible for interacting with tabular (CSV) datasets within the knowledge ingestion system.
+    Controller for interacting with SQL-like tabular datasets
+    stored in DuckDB within the Knowledge Flow system.
 
-    This controller exposes three core endpoints to:
-      - Retrieve the **schema** (columns and types) of a CSV document
-      - **Query** rows dynamically via a structured query interface
-      - **List** all tabular datasets registered in the system
+    Exposes endpoints to:
+      - Retrieve the schema (columns and types) of a table
+      - Query rows using SQL-like filters
+      - List all registered tabular datasets
 
-    Exposure:
-    ---------
-    This controller is **exposed as an MCP tool** via `main.py`, allowing agents to
-    programmatically discover and interact with tabular datasets. It supports:
-      - schema inspection (`/mcp/tabular/{uid}/schema`)
-      - structured row queries (`/mcp/tabular/{uid}/query`)
-      - available dataset enumeration (`/mcp/tabular/list`)
-
-    Role and Positioning:
-    ---------------------
-    Serves as the access layer for **structured tabular data** ingested through Knowledge Flow,
-    enabling downstream tools, agents (like Dominic), and user interfaces to:
-      - Understand dataset shape and column semantics
-      - Execute structured queries over tabular documents
-      - Discover datasets tagged and indexed within the system
-
-    Roadmap and Design Intent:
-    --------------------------
-    The current implementation is optimized for local CSV-backed datasets.
-    Planned improvements include:
-      - Semantic tagging and filtering of datasets
-      - Schema enhancement (e.g., column types, missing value stats)
-      - Backend flexibility (parquet, database, remote URLs)
-      - Pagination, sorting, and value previewing
-
-    This controller is **foundational** to building agentic workflows grounded
-    in structured tabular knowledge and supports both REST and MCP use cases.
+    This controller is exposed as an MCP tool, enabling agentic
+    workflows over structured tabular data stored in DuckDB.
     """
-
 
     def __init__(self, router: APIRouter):
         self.service = TabularService()
@@ -73,12 +55,14 @@ class TabularController:
             operation_id="get_tabular_schema"
         )
         async def get_schema(document_uid: str):
+            logger.info(f"Received schema request for table UID: {document_uid}")
             try:
                 return self.service.get_schema(document_uid)
             except FileNotFoundError:
-                raise HTTPException(status_code=404, detail="CSV file not found")
-            except Exception:
-                logger.exception("Error fetching schema")
+                logger.warning(f"Table not found for UID: {document_uid}")
+                raise HTTPException(status_code=404, detail="Table not found")
+            except Exception as e:
+                logger.exception(f"Error fetching schema for UID {document_uid}: {e}")
                 raise HTTPException(status_code=500, detail="Internal server error")
 
         @router.post(
@@ -89,14 +73,16 @@ class TabularController:
             operation_id="query_tabular_data"
         )
         async def query_tabular(document_uid: str, query: TabularQueryRequest):
+            logger.info(f"Received query for table UID: {document_uid} with parameters: {query}")
             try:
                 return self.service.query(document_uid, query)
             except FileNotFoundError:
-                raise HTTPException(status_code=404, detail="CSV file not found")
-            except Exception:
-                logger.exception("Error querying tabular data")
+                logger.warning(f"Table not found for UID: {document_uid}")
+                raise HTTPException(status_code=404, detail="Table not found")
+            except Exception as e:
+                logger.exception(f"Error querying table for UID {document_uid}: {e}")
                 raise HTTPException(status_code=500, detail="Internal server error")
-            
+
         @router.get(
             "/tabular/list",
             response_model=List[TabularDatasetMetadata],
@@ -105,8 +91,9 @@ class TabularController:
             operation_id="list_tabular_datasets"
         )
         async def list_tabular_datasets():
+            logger.info("Received request to list all tabular datasets")
             try:
                 return self.service.list_tabular_datasets()
-            except Exception:
-                logger.exception("Error listing tabular datasets")
+            except Exception as e:
+                logger.exception(f"Error listing tabular datasets: {e}")
                 raise HTTPException(status_code=500, detail="Internal server error")
