@@ -1,5 +1,6 @@
 # app/tests/features/test_input_processor_service.py
 
+from unittest.mock import AsyncMock
 import pytest
 from types import SimpleNamespace
 from app.features.wip.input_processor_service import InputProcessorService
@@ -64,17 +65,22 @@ class TestInputProcessorService:
     @pytest.mark.asyncio
     async def test_process_file_success(self, tmp_path, service):
         content = b"hello world"
-        file = SimpleNamespace(filename="demo.md", read=lambda: content)
+
+        file = SimpleNamespace(
+            filename="demo.md",
+            read=AsyncMock(return_value=content)
+        )
 
         await service.process_file(file, {}, tmp_path)
 
         output_dir = tmp_path / "demo.md"
         assert output_dir.exists()
-        # Expect 1 UID subdir
-        subdirs = list(output_dir.iterdir())
-        assert len(subdirs) == 1
-        uid_dir = subdirs[0]
+
+        # Ignore file copy ("demo.md") and look only for subdirectories (UIDs)
+        uid_dirs = [p for p in output_dir.iterdir() if p.is_dir()]
+        assert len(uid_dirs) == 1
+
+        uid_dir = uid_dirs[0]
         assert (uid_dir / "metadata.json").exists()
         assert (uid_dir / "file.md").exists()
         assert (uid_dir / "file.md").read_text() == "# Test Markdown Content"
-
