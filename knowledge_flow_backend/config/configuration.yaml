@@ -94,7 +94,7 @@ metadata_storage:
   # metadata_index: metadata-index            # Index for storing metadata
   # vector_index: vector-index                # Vector index (required if reusing OpenSearch backend)
   # ➤ Required environment variables (not stored in this file):
-  #   OPENSEARCH_USERNAME=admin
+  #   OPENSEARCH_USER=admin
   #   OPENSEARCH_PASSWORD=xxx
 
 
@@ -117,7 +117,7 @@ vector_storage:
   # metadata_index: metadata-index            # Index name for metadata
   #
   # ➤ Required environment variables (not stored in this file):
-  # OPENSEARCH_USERNAME=admin
+  # OPENSEARCH_USER=admin
   # OPENSEARCH_PASSWORD=xxx
   #
   # --- Example: Weaviate configuration
