@@ -73,6 +73,15 @@ class VectorStorageConfig(BaseModel):
     type: str = Field(..., description="The vector backend to use (e.g., 'opensearch', 'chromadb')")
 
 
+class TabularStorageSettings(BaseModel):
+    duckdb_path: str = Field(..., description="Path to the DuckDB database file for tabular storage.")
+
+
+class TabularStorageConfig(BaseModel):
+    type: str = Field(..., description="Backend type for tabular storage (e.g. 'duckdb').")
+    settings: TabularStorageSettings
+
+
 class EmbeddingConfig(BaseModel):
     type: str = Field(..., description="The embedding backend to use (e.g., 'openai', 'azureopenai')")
 
@@ -93,6 +102,7 @@ class Configuration(BaseModel):
     content_storage: ContentStorageConfig = Field(..., description="Content Storage configuration")
     metadata_storage: MetadataStorageConfig = Field(..., description="Metadata storage configuration")
     vector_storage: VectorStorageConfig = Field(..., description="Vector storage configuration")
+    tabular_storage: TabularStorageConfig = Field(..., description="Tabular storage configuration")
     embedding: EmbeddingConfig = Field(..., description="Embedding configuration")
     knowledge_context_storage: KnowledgeContextStorageConfig = Field(..., description="Knowledge context storage configuration")
     knowledge_context_max_tokens: int = 50000
