@@ -4,11 +4,11 @@ services:
 # Fred frontend and backend
 # -----------------------------------------------------------------------------
 
-  backend:
-    image: registry.thalesdigital.io/tsn/innovation/projects/fred/backend:0.1
-    container_name: fred-backend
+  agentic-backend:
+    image: registry.thalesdigital.io/tsn/innovation/projects/fred/agentic-backend:0.1
+    container_name: agentic-backend
     build:
-      context: ../../backend
+      context: ../../agentic_backend
       dockerfile: dockerfiles/Dockerfile-dev
     env_file: "~/.fred/openai-api-key.env"
     environment:
@@ -20,7 +20,7 @@ services:
       - --server.baseUrlPath
       - /fred
     volumes:
-      - ../../backend:/app
+      - ../../agentic_backend:/app
       - vol-kubeconfig:/home/fred-user/.kube:ro
     networks:
       - app-network
@@ -51,7 +51,7 @@ services:
     image: registry.thalesdigital.io/tsn/projects/knowledge_flow_app/knowledge-flow-backend:0.1
     container_name: knowledge-flow-backend
     build:
-      context: ../../
+      context: ../../knowledge_flow_backend
       dockerfile: dockerfiles/Dockerfile-dev
     environment:
       NO_PROXY: "*"
@@ -60,7 +60,7 @@ services:
       - /app/config/configuration.yaml
     volumes:
       # Mount the whole project (RW mode)
-      - ../../:/app:rw
+      - ../../knowledge_flow_backend:/app:rw
     networks:
       - app-network
     ports:
