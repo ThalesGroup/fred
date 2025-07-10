@@ -65,7 +65,7 @@ class DocxMarkdownProcessor(BaseMarkdownProcessor):
         lua_filters = [
             filters_dir / "remove_toc.lua",
             filters_dir / "remove_images.lua",
-            filters_dir / "remove_tables.lua",
+            # filters_dir / "remove_tables.lua",
         ]
 
         extra_args = ["--extract-media=."]
@@ -74,7 +74,7 @@ class DocxMarkdownProcessor(BaseMarkdownProcessor):
             shutil.copy(lua_filter, copied)
             extra_args.append(f"--lua-filter={copied}")
 
-        pypandoc.convert_file(str(file_path), to="markdown", outputfile=str(md_path), extra_args=extra_args)
+        pypandoc.convert_file(str(file_path), to="markdown_strict+pipe_tables", outputfile=str(md_path), extra_args=extra_args)
 
         for f in output_dir.glob("*.lua"):
             f.unlink()

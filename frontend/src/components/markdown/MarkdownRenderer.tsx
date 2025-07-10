@@ -17,6 +17,8 @@ import ReactMarkdown, { type Components } from "react-markdown";
 import type { PluggableList } from "unified";
 import { getMarkdownComponents } from "./GetMarkdownComponents";
 import remarkGfm from "remark-gfm";
+import rehypeRaw from "rehype-raw";
+import rehypeSanitize from "rehype-sanitize";
 
 export interface MarkdownRendererProps {
   content: string;
@@ -38,6 +40,12 @@ function replaceStageDirectionsWithEmoji(text: string): string {
     .replace(/\bwinks\b/gi, "😉")
     .replace(/\bclears throat\b/gi, "😶‍🌫️");
 }
+
+const CustomImage = ({ src, alt }: { src?: string; alt?: string }) => {
+  if (!src) return null;
+  return <img src={src} alt={alt || ''} style={{ maxWidth: '100%' }} />;
+};
+
 /**
  * MarkdownRenderer
  *
@@ -88,9 +96,11 @@ export default function MarkdownRenderer({
     <ReactMarkdown
       components={{
         ...components,
+        img: CustomImage,
         ...(props.components || {}),
       }}
       remarkPlugins={[remarkGfm, ...remarkPlugins]}
+      rehypePlugins={[rehypeRaw, rehypeSanitize]}
     >
       {finalContent}
     </ReactMarkdown>
