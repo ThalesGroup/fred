@@ -21,12 +21,25 @@ from docx import Document
 import pypandoc
 
 from app.core.processors.input.common.base_input_processor import BaseMarkdownProcessor
+import subprocess
 
 logger = logging.getLogger(__name__)
 
 
 def default_or_unknown(value: str, default="None") -> str:
     return value.strip() if value and value.strip() else default
+
+import os
+from contextlib import contextmanager
+
+@contextmanager
+def working_directory(path: Path):
+    prev_cwd = os.getcwd()
+    os.chdir(path)
+    try:
+        yield
+    finally:
+        os.chdir(prev_cwd)
 
 
 class DocxMarkdownProcessor(BaseMarkdownProcessor):
@@ -63,18 +76,42 @@ class DocxMarkdownProcessor(BaseMarkdownProcessor):
 
         filters_dir = Path(__file__).parent / "filters"
         lua_filters = [
-            filters_dir / "remove_toc.lua",
-            filters_dir / "remove_images.lua",
+            # filters_dir / "remove_toc.lua",
+            # filters_dir / "remove_images.lua",
             # filters_dir / "remove_tables.lua",
         ]
+        images_dir = output_dir
+        extra_args = [
+            f"--extract-media={images_dir}",
+            "--preserve-tabs",
+            "--wrap=none",
+            "--reference-links"
+        ]
 
-        extra_args = ["--extract-media=."]
         for lua_filter in lua_filters:
             copied = output_dir / lua_filter.name
             shutil.copy(lua_filter, copied)
             extra_args.append(f"--lua-filter={copied}")
 
-        pypandoc.convert_file(str(file_path), to="markdown_strict+pipe_tables", outputfile=str(md_path), extra_args=extra_args)
+        with working_directory(output_dir):
+            pypandoc.convert_file(str(file_path), to="markdown_strict+pipe_tables", outputfile=str(md_path), extra_args=extra_args)
+
+        # Convert EMF to SVG
+        for img_path in (images_dir / "media").glob("*.emf"):
+            svg_path = img_path.with_suffix('.svg')
+            subprocess.run(["inkscape", str(img_path), "--export-filename=" + str(svg_path)])
+
+            # Remove the original EMF file
+            img_path.unlink()
+
+        # Update references in the markdown file
+        with open(md_path, 'r', encoding='utf-8') as f:
+            md_content = f.read()
+
+        md_content = md_content.replace('.emf', '.svg')
+
+        with open(md_path, 'w', encoding='utf-8') as f:
+            f.write(md_content)
 
         for f in output_dir.glob("*.lua"):
             f.unlink()
