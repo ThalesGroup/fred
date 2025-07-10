@@ -7,130 +7,95 @@ from typing import List
 from pandas.api.types import (
     is_string_dtype, is_numeric_dtype, is_bool_dtype, is_datetime64_any_dtype
 )
+import duckdb
 
 from app.features.tabular.structures import TabularColumnSchema, TabularDatasetMetadata, TabularQueryRequest, TabularQueryResponse, TabularSchemaResponse
-from app.features.content.service import ContentService
+from app.features.tabular.utils import plan_to_sql
+from app.features.tabular.structures import SQLQueryPlan
+from app.core.stores.tabular.duckdb_tabular_store_factory import get_tabular_store
 
 logger = logging.getLogger(__name__)
 
 
 class TabularService:
     def __init__(self):
-        self.content_service = ContentService()
+        self.tabular_store = get_tabular_store()
 
-    def _read_csv(self, document_uid: str) -> pd.DataFrame:
-        stream = self._read_stream(document_uid)
-        try:
-            df = pd.read_csv(stream)
-            logger.debug(f"Raw columns from CSV [{document_uid}]: {list(df.columns)}")
-            df.columns = [col.strip() for col in df.columns]
-            logger.debug(f"Normalized columns for [{document_uid}]: {list(df.columns)}")
-            return df
-        except Exception as e:
-            logger.exception(f"Failed to read CSV for {document_uid}")
-            raise ValueError(f"Failed to read CSV for {document_uid}: {str(e)}")
+    def _map_duckdb_type_to_literal(self, duckdb_type: str) -> str:
+        """
+        Map DuckDB SQL types to TabularColumnSchema dtype Literal.
+        """
+        duckdb_type = duckdb_type.lower()
 
-    def _read_stream(self, document_uid: str) -> io.StringIO:
-        stream = self.content_service.content_store.get_content(document_uid)
-        raw_bytes = stream.read()
-        return io.StringIO(raw_bytes.decode("utf-8"))
+        if any(x in duckdb_type for x in ["varchar", "string", "text"]):
+            return "string"
+        if "boolean" in duckdb_type:
+            return "boolean"
+        if "timestamp" in duckdb_type or "date" in duckdb_type or "time" in duckdb_type:
+            return "datetime"
+        if "double" in duckdb_type or "real" in duckdb_type or "float" in duckdb_type:
+            return "float"
+        if "int" in duckdb_type:
+            return "integer"
 
-    def get_schema(self, document_uid: str) -> TabularSchemaResponse:
-        df = self._read_csv(document_uid)
+        return "unknown"
 
-        columns: List[TabularColumnSchema] = []
-        for col in df.columns:
-            dtype = self._map_dtype(df[col])
-            columns.append(TabularColumnSchema(name=col, dtype=dtype))
+    def get_schema(self, document_name: str) -> TabularSchemaResponse:
+        table_name = document_name.replace('-', '_')
+        schema_info = self.tabular_store.get_table_schema(table_name)
+
+        columns = [
+            TabularColumnSchema(name=col_name, dtype=self._map_duckdb_type_to_literal(col_type))
+            for col_name, col_type in schema_info
+        ]
+
+        # Count rows
+        count_sql = f"SELECT COUNT(*) AS count FROM {table_name}"
+        count_df = self.tabular_store.execute_sql_query(count_sql)
+        row_count = count_df['count'][0]
 
         return TabularSchemaResponse(
-            document_uid=document_uid,
+            document_name=document_name,
             columns=columns,
-            row_count=len(df)
+            row_count=row_count
         )
 
-    def query(self, document_uid: str, query: TabularQueryRequest) -> TabularQueryResponse:
-        df = self._read_csv(document_uid)
-        logger.debug(f"Query request on [{document_uid}]: {query.model_dump()}")
-
-        if query.filters:
-            for col, value in query.filters.items():
-                if col not in df.columns:
-                    logger.error(f"Filter error: column '{col}' not in {list(df.columns)}")
-                    raise KeyError(f"Column '{col}' not found in CSV columns: {list(df.columns)}")
-                logger.debug(f"Applying filter: {col} == {value}")
-                df = df[df[col] == value]
-
-        if query.columns:
-            logger.debug(f"Selecting columns: {query.columns}")
-            df = df[query.columns]
-
-        if query.limit:
-            logger.debug(f"Applying limit: {query.limit}")
-            df = df.head(query.limit)
-
-        rows = df.to_dict(orient="records")
-        logger.debug(f"Returning {len(rows)} rows for [{document_uid}]")
-        return TabularQueryResponse(
-            document_uid=document_uid,
-            rows=rows
-        )
-
-    def rquery(self, document_uid: str, query: TabularQueryRequest) -> TabularQueryResponse:
-        df = self._read_csv(document_uid)
-        logger.debug(f"Query request on [{document_uid}]: {query.model_dump()}")
-
-        if query.columns:
-            logger.debug(f"Selecting columns: {query.columns}")
-            df = df[query.columns]
-
-        if query.filters:
-            for col, value in query.filters.items():
-                if col not in df.columns:
-                    logger.error(f"Filter error: column '{col}' not in {list(df.columns)}")
-                    raise KeyError(f"Column '{col}' not found in CSV columns: {list(df.columns)}")
-                logger.debug(f"Applying filter: {col} == {value}")
-                df = df[df[col] == value]
-
-        if query.limit:
-            logger.debug(f"Applying limit: {query.limit}")
-            df = df.head(query.limit)
-
-        rows = df.to_dict(orient="records")
-        logger.debug(f"Returning {len(rows)} rows for [{document_uid}]")
-        return TabularQueryResponse(
-            document_uid=document_uid,
-            rows=rows
-        )
-
-    def _map_dtype(self, series: pd.Series) -> str:
-        if is_string_dtype(series):
-            return "string"
-        elif is_numeric_dtype(series):
-            return "float" if any(series.apply(lambda x: isinstance(x, float))) else "integer"
-        elif is_bool_dtype(series):
-            return "boolean"
-        elif is_datetime64_any_dtype(series):
-            return "datetime"
-        else:
-            return "unknown"
+    def query(self, document_name: str, request: TabularQueryRequest) -> TabularQueryResponse:
         
+        if isinstance(request.query, str):
+            sql = request.query
+        elif isinstance(request.query, SQLQueryPlan):
+            sql = plan_to_sql(request.query)
+
+        logger.info(f"Executing SQL: {sql}")
+        df = self.tabular_store.execute_sql_query(sql)
+        rows = df.to_dict(orient="records")
+
+        return TabularQueryResponse(
+            document_name=document_name,
+            rows=rows
+        )
+
     def list_tabular_datasets(self) -> List[TabularDatasetMetadata]:
-        all_metadata = self.content_service.metadata_store.get_all_metadata(filters={})
-        tabular_metadata = []
+        datasets = []
 
-        for meta in all_metadata:
-            file_name = meta.get("document_name", "")
-            if not file_name.lower().endswith(".csv"):
-                continue
+        tables = self.tabular_store.list_tables()
+        for table_name in tables:
+            # Count rows
+            count_sql = f"SELECT COUNT(*) AS count FROM {table_name}"
+            count_df = self.tabular_store.execute_sql_query(count_sql)
+            count = count_df['count'][0]
 
-            tabular_metadata.append(TabularDatasetMetadata(
-                document_uid=meta["document_uid"],
-                title=meta.get("title", file_name),
-                description=meta.get("description", ""),
-                tags=meta.get("tags", []),
-                domain=meta.get("domain", ""),
-                row_count=meta.get("row_count")  # optional: populate during ingestion
+            # Reverse UID convention
+            document_name = table_name
+
+            datasets.append(TabularDatasetMetadata(
+                document_name=document_name,
+                title=document_name,
+                description="",
+                tags=[],
+                domain="",
+                row_count=count
             ))
 
-        return tabular_metadata
+        return datasets
