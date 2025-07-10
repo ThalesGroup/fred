@@ -126,6 +126,11 @@ vector_storage:
   # 
 
 
+tabular_storage:
+  type: "duckdb"
+  settings:
+    duckdb_path: "./data/tabular_data.duckdb"
+
 embedding:
   # -----------------------------------------------------------------------------
   # EMBEDDING BACKEND
@@ -172,7 +177,7 @@ embedding:
   # All environment variables are expected to be present in the .env file
   # pointed to by the ENV_FILE variable in your Makefile.
   #
-  type: "openai"  # can be "openai" or "azureopenai" or "azureapim" or "ollama"
+  type: "azureopenai"  # can be "openai" or "azureopenai" or "azureapim" or "ollama"
 
 knowledge_context_storage:
   # -----------------------------------------------------------------------------
