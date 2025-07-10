@@ -35,7 +35,7 @@ Fred is not a framework, but a full reference implementation that shows how to b
 
 See the project site: <https://fredk8.dev>
 
-```markdown
+---
 
 ## Core Architecture and Licensing Clarity
 
