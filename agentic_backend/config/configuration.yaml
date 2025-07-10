@@ -209,11 +209,12 @@ feedback_storage:
 # Sessions and messages are stored by default in_memory 
 # but it can be modified to use a backend like opensearch
 session_storage:
-  # type: in_memory
+  ## Session Storage in memory:
+  type: in_memory
   ## Session Storage using OpenSearch:
-  type: opensearch # username and password are passed via the OPENSEARCH_USER and OPENSEARCH_PASSWORD env variables defined in thes .env file
-  host: https://localhost:9200
+  # type: opensearch # username and password are passed via the OPENSEARCH_USER and OPENSEARCH_PASSWORD env variables defined in thes .env file
+  # host: https://localhost:9200
   # username: Admin # Overrides the OPENSEARCH_USER environment variable
   # password: xxx # Overrides the OPENSEARCH_PASSWORD environment variable
-  secure: false
-  verify_certs: false
+  # secure: false
+  # verify_certs: false
