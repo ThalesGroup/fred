@@ -30,7 +30,7 @@ class DocumentsToolkit(BaseToolkit):
     def __init__(self, mcp_client: MultiServerMCPClient):
         super().__init__()
         raw_tools = get_mcp_agent_tools(mcp_client)
-        self.tools = [monitor_tool(tool) for tool in raw_tools]
+        self.tools = [monitor_tool(tool) for tool in raw_tools if tool.name=="search_documents_using_vectorization"]
 
     @override
     def get_tools(self) -> list[BaseTool]:

@@ -51,8 +51,8 @@ class TabularController:
             "/tabular/{document_uid}/schema",
             response_model=TabularSchemaResponse,
             tags=["Tabular"],
-            summary="Get schema for a tabular (CSV) document",
-            operation_id="get_tabular_schema"
+            operation_id="get_schema",
+            summary="Get schema (columns/types) of a SQL-like table"
         )
         async def get_schema(document_uid: str):
             logger.info(f"Received schema request for table UID: {document_uid}")
@@ -69,8 +69,26 @@ class TabularController:
             "/tabular/{document_uid}/query",
             response_model=TabularQueryResponse,
             tags=["Tabular"],
-            summary="Query rows from a tabular (CSV) document",
-            operation_id="query_tabular_data"
+            operation_id="make_query",
+            summary="""
+            Respond with a **JSON object** describing the SQL query plan. This will be transformed into SQL by the server.
+
+            ## Fields:
+            - `table` *(REQUIRED)*: main table.
+            - `columns` *(OPTIONAL)*: columns to SELECT, `*` or empty for all.
+            - `filters` *(OPTIONAL)*: simple WHERE conditions as `{column: value}`.
+            - `group_by`, `order_by`, `limit` *(OPTIONAL)*: standard SQL clauses.
+            - `joins` *(OPTIONAL)*: list of joins with other tables.
+            ### JoinSpec:
+            - `table`: table to join.
+            - `on`: join condition.
+            - `type`: join type (INNER, LEFT, etc.).
+            ### AggregationSpec:
+            - `function`: aggregation function (SUM, COUNT, etc.).
+            - `column`: column to aggregate.
+            - `alias`: result alias.
+            - `aggregations` *(OPTIONAL)*: list of aggregations to compute.
+            Always specify `table`. Use `joins`, `filters`, `aggregations`, `group_by`, `order_by`, `limit` as needed."""
         )
         async def query_tabular(document_uid: str, query: TabularQueryRequest):
             logger.info(f"Received query for table UID: {document_uid} with parameters: {query}")
@@ -87,8 +105,8 @@ class TabularController:
             "/tabular/list",
             response_model=List[TabularDatasetMetadata],
             tags=["Tabular"],
-            summary="List available tabular datasets (CSV)",
-            operation_id="list_tabular_datasets"
+            operation_id="list_tables",
+            summary="List available SQL-like tabular datasets"
         )
         async def list_tabular_datasets():
             logger.info("Received request to list all tabular datasets")
