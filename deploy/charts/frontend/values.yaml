@@ -25,9 +25,9 @@ ingress:
         - fred.dev.local
 
 config:
-  backendUrlApi: "http://fred-backend.dev.fred.thalesgroup.com"
+  backendUrlApi: "http://agentic-backend.dev.fred.thalesgroup.com"
   backendUrlKnowledge: "http://knowledge-flow-backend.dev.fred.thalesgroup.com"
-  websocketUrl: "ws://fred-backend.dev.fred.thalesgroup.com/fred/chatbot/query"
+  websocketUrl: "ws://agentic-backend.dev.fred.thalesgroup.com/fred/chatbot/query"
 
 env:
   - name: VITE_ALLOWED_HOSTS
@@ -45,7 +45,7 @@ oidc:
     clientId: "app"
 
 feedback_storage:
-  type: local  # ou "minio"
+  type: local
   minio_endpoint: "localhost:9000"
   minio_bucket_name: "fred-feedback"
   minio_secure: false

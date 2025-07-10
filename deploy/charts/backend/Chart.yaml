@@ -1,5 +1,0 @@
-apiVersion: v2
-name: fred-backend
-description: A Helm chart for deploying the Fred backend
-version: 0.1.0
-appVersion: 0.1.0
