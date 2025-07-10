@@ -5,16 +5,12 @@
       "name": "Debug Agentic Backend",
       "type": "debugpy",
       "request": "launch",
-      /* 1️⃣  Start inside the service folder */
       "cwd": "${workspaceFolder}/agentic_backend",
-      /* 2️⃣  Run it as ascript */
       "program": "app/main.py",
-      /* 3️⃣  Pass your CLI flags */
       "args": [
         "--config-path",
         "config/configuration.yaml"
       ],
-      /* 4️⃣  Use the agentic venv and expose the *parent* folder on PYTHONPATH */
       "python": "${workspaceFolder}/agentic_backend/.venv/bin/python",
       "env": {
         "PYTHONPATH": "${workspaceFolder}/agentic_backend:${env:PYTHONPATH}",
@@ -31,17 +27,16 @@
       "cwd": "${workspaceFolder}/knowledge_flow_backend",
       "program": "app/main.py",
       "args": [
-        "--config-path", // <- create_app() expects this
+        "--config-path",
         "config/configuration.yaml",
-        "--reload"
       ],
-      "envFile": "config/.env",
+      "python": "${workspaceFolder}/knowledge_flow_backend/.venv/bin/python",
       "env": {
         "PYTHONPATH": "${workspaceFolder}/knowledge_flow_backend/app",
-        "PATH": "${workspaceFolder}/.venv/bin:${env:PATH}",
+        "PATH": "${workspaceFolder}/knowledge_flow_backend/.venv/bin:${env:PATH}",
         "LOG_LEVEL": "DEBUG"
       },
-      "justMyCode": false,
+      "justMyCode": true,
       "console": "integratedTerminal"
     },
     {
