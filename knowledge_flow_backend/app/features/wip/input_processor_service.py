@@ -85,7 +85,7 @@ class InputProcessorService:
         processing_dir.mkdir(parents=True, exist_ok=True)
 
         if isinstance(processor, BaseMarkdownProcessor):
-            processor.convert_file_to_markdown(file_path, processing_dir)
+            processor.convert_file_to_markdown(file_path, processing_dir, input_file_metadata["document_uid"])
         elif isinstance(processor, BaseTabularProcessor):
             df = processor.convert_file_to_table(file_path)
             df.to_csv(processing_dir / "table.csv", index=False)
