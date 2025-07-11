@@ -12,10 +12,10 @@ class KeycloakUser(BaseModel):
 
 
 class Security(BaseModel):
-    enabled: bool
+    enabled: bool = True
     keycloak_url: str
     client_id: str
-    authorized_origins: list[str]
+    authorized_origins: list[str] = ["http://localhost:5173"]
 
 
 class ConfigurationWithSecurity(Protocol):

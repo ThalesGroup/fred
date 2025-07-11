@@ -127,14 +127,12 @@ class KnowledgeContextStorageConfig(BaseModel):
     type: str = Field(..., description="The storage backend to use (e.g., 'local', 'minio')")
     local_path: str = Field(default="~/.fred/knowledge-context", description="The path of the local metrics store")
 
+class AppSecurity(Security):
+    client_id: str = "knowledge-flow"
+    keycloak_url: str = "http://localhost:9080/realms/knowledge-flow"
 
 class Configuration(BaseModel):
-    security: Security = Security(
-        enabled=True,
-        keycloak_url="http://localhost:9080/realms/knowledge-flow",
-        client_id="knowledge-flow",
-        authorized_origins=["http://localhost:5173"],
-    )
+    security: AppSecurity
     input_processors: List[ProcessorConfig]
     output_processors: Optional[List[ProcessorConfig]] = None
     content_storage: ContentStorageConfig = Field(..., description="Content Storage configuration")

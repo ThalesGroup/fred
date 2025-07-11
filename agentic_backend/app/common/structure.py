@@ -280,18 +280,17 @@ class FrontendSettings(BaseModel):
     feature_flags: FrontendFlags
     properties: Properties
 
+class AppSecurity(Security):
+    client_id: str = "fred"
+    keycloak_url: str = "http://localhost:9080/realms/fred"
+
 class Configuration(BaseModel):
     frontend_settings: FrontendSettings
     database: DatabaseConfiguration
     kubernetes: KubernetesConfiguration
     ai: AIConfig
     dao: DAOConfiguration
-    security: Security = Security(
-        enabled = True,
-        keycloak_url = "http://localhost:9080/realms/fred",
-        client_id = "fred",
-        authorized_origins = ["http://localhost:5173"],
-    )
+    security: AppSecurity
     feedback_storage: FeedbackStorageConfig = Field(..., description="Feedback Storage configuration")
     node_metrics_storage:  MetricsStorageConfig = Field(..., description="Node Monitoring Storage configuration")
     tool_metrics_storage:  MetricsStorageConfig = Field(..., description="Tool Monitoring Storage configuration")
