@@ -1,7 +1,7 @@
 from typing import List
 
 from app.features.tag.structure import TagModel
-from fred_core.security.keycloak import KeycloakUser
+from fred_core import KeycloakUser
 
 
 class TagAuthorizationError(Exception):

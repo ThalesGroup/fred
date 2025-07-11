@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from app.features.tag.service import TagAuthorizationError, TagNotFoundError, TagService
 from app.features.tag.structure import TagModel
-from fred_core.security.keycloak import KeycloakUser, get_current_user
+from fred_core import KeycloakUser, get_current_user
 
 class TagController:
     """

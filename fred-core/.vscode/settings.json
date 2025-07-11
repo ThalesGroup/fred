@@ -1,0 +1,11 @@
+{
+    "search.exclude": {
+        "**/.venv": true,
+        "**/__pycache__": true,
+    },
+    "editor.formatOnSave": true,
+    "[python]": {
+        "editor.wordBasedSuggestions": "off",
+        "editor.defaultFormatter": "charliermarsh.ruff"
+    }
+}

@@ -13,14 +13,13 @@
 # limitations under the License.
 
 import logging
-from typing import Any, Optional
-from fastapi.security import OAuth2PasswordBearer
-from fastapi import Security, HTTPException
-import jwt
-from jwt import PyJWKClient
-from pydantic import BaseModel
 
-# from app.common.structures import Configuration
+import jwt
+from fastapi import HTTPException, Security
+from fastapi.security import OAuth2PasswordBearer
+from jwt import PyJWKClient
+
+from fred_core.security.structure import ConfigurationWithSecurity, KeycloakUser
 
 # 🔹 Create a module-level logger
 logger = logging.getLogger(__name__)
@@ -31,36 +30,35 @@ KEYCLOAK_URL = ""
 KEYCLOAK_JWKS_URL = ""
 KEYCLOAK_CLIENT_ID = ""
 
-def initialize_keycloak(config: Any):
+
+def initialize_keycloak(config: ConfigurationWithSecurity):
     """
     Initialize the Keycloak authentication settings from the given configuration.
     """
     global KEYCLOAK_ENABLED, KEYCLOAK_URL, KEYCLOAK_JWKS_URL, KEYCLOAK_CLIENT_ID
 
-    KEYCLOAK_ENABLED = config.security.enabled if hasattr(config, "security") and config.security else False
-    KEYCLOAK_URL = config.security.keycloak_url if hasattr(config, "security") and config.security else "http://localhost:9080/realms/fred"
-    KEYCLOAK_CLIENT_ID = config.security.client_id if hasattr(config, "security") and config.security else "fred"
+    KEYCLOAK_ENABLED = config.security.enabled
+    KEYCLOAK_URL = config.security.keycloak_url
+    KEYCLOAK_CLIENT_ID = config.security.client_id
     KEYCLOAK_JWKS_URL = f"{KEYCLOAK_URL}/protocol/openid-connect/certs"
 
-    logger.info(f"Keycloak initialized. Enabled: {KEYCLOAK_ENABLED}, URL: {KEYCLOAK_URL}")
+    logger.info(
+        f"Keycloak initialized. Enabled: {KEYCLOAK_ENABLED}, URL: {KEYCLOAK_URL}"
+    )
 
 
 # OAuth2 Password Bearer
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token", auto_error=False)
 
-class KeycloakUser(BaseModel):
-    """Represents an authenticated Keycloak user."""
-    uid: str
-    username: str
-    roles: list[str]
-    email: Optional[str] = None
 
 def decode_jwt(token: str) -> KeycloakUser:
     """Decodes a JWT token using PyJWT and retrieves user information."""
     if not KEYCLOAK_ENABLED:
         logger.warning("Authentication is DISABLED. Returning a mock user.")
-        return KeycloakUser(uid="admin", username="admin", roles=["admin"], email="dev@localhost")
-    
+        return KeycloakUser(
+            uid="admin", username="admin", roles=["admin"], email="dev@localhost"
+        )
+
     logger.debug("Starting JWT decoding process...")
 
     try:
@@ -81,7 +79,7 @@ def decode_jwt(token: str) -> KeycloakUser:
                 token,
                 signing_key,
                 algorithms=["RS256"],
-                options={"verify_exp": True, "verify_aud": False}
+                options={"verify_exp": True, "verify_aud": False},
             )
             logger.debug("JWT token successfully decoded")
 
@@ -102,7 +100,7 @@ def decode_jwt(token: str) -> KeycloakUser:
         # if KEYCLOAK_CLIENT_ID not in aud:
         #    logger.warning(f"Invalid audience in token: {aud}")
         #    raise HTTPException(status_code=401, detail="Invalid audience in token")
- 
+
         # Extract roles (Only client roles are used)
         client_roles = []
         if "resource_access" in payload:
@@ -114,7 +112,7 @@ def decode_jwt(token: str) -> KeycloakUser:
         # Extract user information
         logger.debug("Extracting user information from token...")
         user = KeycloakUser(
-            uid=payload.get("sub"), # Unique identifier in OIDC login
+            uid=payload.get("sub"),  # Unique identifier in OIDC login
             username=payload.get("preferred_username", ""),
             roles=client_roles,
             email=payload.get("email"),
@@ -125,17 +123,24 @@ def decode_jwt(token: str) -> KeycloakUser:
 
     except Exception as e:
         logger.error(f"Unexpected error while decoding JWT: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error during token validation")
+        raise HTTPException(
+            status_code=500, detail="Internal server error during token validation"
+        )
+
 
 def get_current_user(token: str = Security(oauth2_scheme)) -> KeycloakUser:
     """Fetches the current user from Keycloak token."""
     if not KEYCLOAK_ENABLED:
         logger.warning("Authentication is DISABLED. Returning a mock user.")
-        return KeycloakUser(uid="admin", username="admin", roles=["admin"], email="admin@mail.com")
+        return KeycloakUser(
+            uid="admin", username="admin", roles=["admin"], email="admin@mail.com"
+        )
     else:
         logger.info("Authentication is ENABLED")
     if not token:
         raise HTTPException(status_code=401, detail="No authentication token provided")
-    
-    logger.debug(f"Received token: {token[:10]}...") # Display only the first 10 characters to avoid spamming the debug logs 
+
+    logger.debug(
+        f"Received token: {token[:10]}..."
+    )  # Display only the first 10 characters to avoid spamming the debug logs
     return decode_jwt(token)
