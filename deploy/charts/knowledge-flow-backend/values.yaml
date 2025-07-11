@@ -182,11 +182,11 @@ configuration:
   metadata_storage:
     type: "opensearch"
   # type: "opensearch"
-  # host: https://localhost:9200              # OpenSearch host
-  # secure: true                              # Use HTTPS (set to false for HTTP)
-  # verify_certs: false                       # Whether to verify TLS certificates
-  # metadata_index: metadata-index            # Index for storing metadata
-  # vector_index: vector-index                # Vector index (required if reusing OpenSearch backend)
+  # host: https://opensearch.dev.svc.cluster.local:9200              # OpenSearch host
+  # secure: true                                                     # Use HTTPS (set to false for HTTP)
+  # verify_certs: false                                              # Whether to verify TLS certificates
+  # metadata_index: metadata-index                                   # Index for storing metadata
+  # vector_index: vector-index                                       # Vector index (required if reusing OpenSearch backend)
   # ➤ Required environment variables (not stored in this file):
   #   OPENSEARCH_USER=admin
   #   OPENSEARCH_PASSWORD=xxx
@@ -206,11 +206,11 @@ configuration:
   # --- Example: OpenSearch configuration
   #
   # type: opensearch
-  # host: https://localhost:9200              # OpenSearch host
-  # secure: true                              # Use HTTPS (set to false for HTTP)
-  # verify_certs: false                       # Whether to verify TLS certificates
-  # metadata_index: metadata-index            # Index for storing metadata
-  # vector_index: vector-index                # Vector index (required if reusing OpenSearch backend)
+  # host: https://opensearch.dev.svc.cluster.local:9200              # OpenSearch host
+  # secure: true                                                     # Use HTTPS (set to false for HTTP)
+  # verify_certs: false                                              # Whether to verify TLS certificates
+  # metadata_index: metadata-index                                   # Index for storing metadata
+  # vector_index: vector-index                                       # Vector index (required if reusing OpenSearch backend)
   # ➤ Required environment variables (not stored in this file):
   #   OPENSEARCH_USER=admin
   #   OPENSEARCH_PASSWORD=xxx
