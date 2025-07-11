@@ -12,7 +12,7 @@ TARGET=$(CURDIR)/target
 VENV=$(CURDIR)/.venv
 PIP=$(VENV)/bin/pip
 PYTHON=$(VENV)/bin/python
-UV=uv
+UV=$(VENV)/bin/uv
 
 IMG=$(PROJECT_REGISTRY)/$(PROJECT_NAME):$(VERSION)
 HELM_ARCHIVE=./knowledge_flow_app-0.1.0.tgz

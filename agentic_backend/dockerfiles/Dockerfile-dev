@@ -51,5 +51,5 @@ EXPOSE 8000
 
 # Run the application
 ENV PYTHONPATH=/app
-ENTRYPOINT ["python", "fred/main.py"]
+ENTRYPOINT ["python", "app/main.py"]
 CMD ["--server.configurationPath /app/config/configuration.yaml --server.baseUrlPath /fred"]
