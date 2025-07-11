@@ -4,9 +4,9 @@
 
 - A fully functional Kubernetes cluster
 - [Install helm](https://helm.sh/docs/intro/install/)
-- An SQL database engine (dire our quelle utilisation - déjà vu, keycloak mais on s'en fiche) 
-- A S3 bucket (dire pour quelle utilisation)
-- An IDP provider (dire pour quelle utilisation)
+- An SQL database engine
+- A S3 bucket
+- An IDP provider (such as keycloak or alternative)
 - A full-text search engine (such as opensearch or alternative)
 
 ## Build images
@@ -87,7 +87,7 @@ Then deploy the backend :
 
 ```
 cd deploy/charts/
-helm upgrade -i agentic-backend ./agentic-backend/ --values ./custom-agentic-backend.yaml -n dev
+helm upgrade -i agentic-backend ./agentic-backend/ --values ./custom-values-examples/agentic-backend-custom.yaml -n dev
 ```
 
 ## Install the Fred frontend
