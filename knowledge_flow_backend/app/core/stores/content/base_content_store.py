@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 class BaseContentStore(ABC):
     @abstractmethod
-    def save_content(self, document_id: str, directory: Path) -> None:
+    def save_content(self, document_uid: str, directory_dir: Path) -> None:
         """
         Uploads the content of a directory (recursively) to storage.
         The directory should contain all files related to the document.
@@ -56,6 +56,13 @@ class BaseContentStore(ABC):
     def get_markdown(self, document_uid: str) -> str:
         """
         Returns the markdown content (from output/output.md).
+        """
+        pass
+
+    @abstractmethod
+    def get_media(self, document_uid: str, media_id: str) -> BinaryIO:
+        """
+        Returns the media file associated with a document.
         """
         pass
 
