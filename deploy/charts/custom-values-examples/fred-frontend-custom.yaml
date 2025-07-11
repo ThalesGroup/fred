@@ -29,4 +29,4 @@ env:
 
 oidc:
   config:
-    authServerUrl: "https://keycloak.dev.fred.thalesgroup.com/"
+    authServerUrl: "https://idp.dev.fred.thalesgroup.com/"

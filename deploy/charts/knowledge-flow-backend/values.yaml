@@ -2,7 +2,7 @@ applicationName: knowledge-flow-backend
 
 image:
   repository: registry.thalesdigital.io/tsn/projects/knowledge_flow_app/knowledge-flow-backend
-  tag: 0.1
+  tag: "0.1"
 
 Deployment:
   enabled: true
@@ -28,7 +28,7 @@ command:
     # - -c
     # - tail -f /dev/null
     - python
-    - /app/knowledge_flow_app/main.py
+    - /app/app/main.py
     - --config-path
     - /app/config/configuration.yaml
 
