@@ -13,7 +13,6 @@ from app.features.tabular.structures import TabularColumnSchema, TabularDatasetM
 from app.features.tabular.utils import plan_to_sql
 from app.features.tabular.structures import SQLQueryPlan
 from app.application_context import ApplicationContext
-from app.core.stores.tabular.duckdb_tabular_store_factory import get_tabular_store
 
 logger = logging.getLogger(__name__)
 
