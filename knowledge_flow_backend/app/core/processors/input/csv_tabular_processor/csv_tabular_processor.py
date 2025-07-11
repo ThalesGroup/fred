@@ -31,7 +31,7 @@ class CsvTabularProcessor(BaseTabularProcessor):
     def extract_file_metadata(self, file_path: Path) -> dict:
         df = pandas.read_csv(file_path, nrows=5)
         return {
-            "format": "CSV",
+            "suffix": "CSV",
             "row_count": len(pandas.read_csv(file_path)),  # optional: use nrows param if needed
             "num_columns": len(df.columns),
             "sample_columns": df.columns.tolist(),

@@ -45,8 +45,8 @@ make run
 
 Then visit:
 
-- Swagger UI: http://localhost:8111/knowledge/v1/docs  
-- ReDoc: http://localhost:8111/knowledge/v1/redoc
+- Swagger UI: http://localhost:8111/knowledge-flow/v1/docs  
+- ReDoc: http://localhost:8111/knowledge-flow/v1/redoc
 
 Prefer a zero-install workflow? Open the project in VS Code’s Dev Container and get a full stack (Knowledge-Flow + OpenSearch + MinIO) in one click. See **[docs/DEV_CONTAINER.md](docs/DEV_CONTAINER.md)** for step-by-step instructions.
 

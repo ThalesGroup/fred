@@ -127,6 +127,10 @@ vector_storage:
   # index_name: CodeDocuments                 # Class name used to store chunks
   # 
 
+tabular_storage:
+  type: "duckdb"
+  duckdb_path: "~/.fred/tabular/tabular_data.duckdb"
+
 embedding:
   # -----------------------------------------------------------------------------
   # EMBEDDING BACKEND

@@ -14,51 +14,33 @@
 
 import logging
 from typing import List
+
 from fastapi import APIRouter, HTTPException
 
 from app.features.tabular.service import TabularService
-from app.features.tabular.structures import TabularDatasetMetadata, TabularQueryRequest, TabularQueryResponse, TabularSchemaResponse
+from app.features.tabular.structures import (
+    TabularDatasetMetadata,
+    TabularQueryRequest,
+    TabularQueryResponse,
+    TabularSchemaResponse,
+)
 
 logger = logging.getLogger(__name__)
 
+
 class TabularController:
     """
-    Controller responsible for interacting with tabular (CSV) datasets within the knowledge ingestion system.
+    Controller for interacting with SQL-like tabular datasets
+    stored in DuckDB within the Knowledge Flow system.
 
-    This controller exposes three core endpoints to:
-      - Retrieve the **schema** (columns and types) of a CSV document
-      - **Query** rows dynamically via a structured query interface
-      - **List** all tabular datasets registered in the system
+    Exposes endpoints to:
+      - Retrieve the schema (columns and types) of a table
+      - Query rows using SQL-like filters
+      - List all registered tabular datasets
 
-    Exposure:
-    ---------
-    This controller is **exposed as an MCP tool** via `main.py`, allowing agents to
-    programmatically discover and interact with tabular datasets. It supports:
-      - schema inspection (`/mcp/tabular/{uid}/schema`)
-      - structured row queries (`/mcp/tabular/{uid}/query`)
-      - available dataset enumeration (`/mcp/tabular/list`)
-
-    Role and Positioning:
-    ---------------------
-    Serves as the access layer for **structured tabular data** ingested through Knowledge Flow,
-    enabling downstream tools, agents (like Dominic), and user interfaces to:
-      - Understand dataset shape and column semantics
-      - Execute structured queries over tabular documents
-      - Discover datasets tagged and indexed within the system
-
-    Roadmap and Design Intent:
-    --------------------------
-    The current implementation is optimized for local CSV-backed datasets.
-    Planned improvements include:
-      - Semantic tagging and filtering of datasets
-      - Schema enhancement (e.g., column types, missing value stats)
-      - Backend flexibility (parquet, database, remote URLs)
-      - Pagination, sorting, and value previewing
-
-    This controller is **foundational** to building agentic workflows grounded
-    in structured tabular knowledge and supports both REST and MCP use cases.
+    This controller is exposed as an MCP tool, enabling agentic
+    workflows over structured tabular data stored in DuckDB.
     """
-
 
     def __init__(self, router: APIRouter):
         self.service = TabularService()
@@ -69,44 +51,85 @@ class TabularController:
             "/tabular/{document_uid}/schema",
             response_model=TabularSchemaResponse,
             tags=["Tabular"],
-            summary="Get schema for a tabular (CSV) document",
-            operation_id="get_tabular_schema"
+            operation_id="get_schema",
+            summary="Get schema (columns/types) of a SQL-like table"
         )
         async def get_schema(document_uid: str):
+            logger.info(f"Received schema request for table UID: {document_uid}")
             try:
                 return self.service.get_schema(document_uid)
             except FileNotFoundError:
-                raise HTTPException(status_code=404, detail="CSV file not found")
-            except Exception:
-                logger.exception("Error fetching schema")
+                logger.warning(f"Table not found for UID: {document_uid}")
+                raise HTTPException(status_code=404, detail="Table not found")
+            except Exception as e:
+                logger.exception(f"Error fetching schema for UID {document_uid}: {e}")
                 raise HTTPException(status_code=500, detail="Internal server error")
 
         @router.post(
             "/tabular/{document_uid}/query",
             response_model=TabularQueryResponse,
             tags=["Tabular"],
-            summary="Query rows from a tabular (CSV) document",
-            operation_id="query_tabular_data"
+            operation_id="make_query",
+            summary="""
+                Respond with a **JSON object** describing the SQL query plan. This will be transformed into SQL by the server.
+
+                ## Fields:
+                - `table` *(REQUIRED)*: main table to query.
+                - `columns` *(OPTIONAL)*: columns to SELECT. Use `*` or leave empty to select all.
+                - `filters` *(OPTIONAL)*: list of conditions for the WHERE clause.
+                - `group_by`, `order_by`, `limit` *(OPTIONAL)*: standard SQL clauses.
+                - `joins` *(OPTIONAL)*: list of joins with other tables.
+
+                ### Filters:
+                - `column`: the column to filter on.
+                - `op`: SQL operator (e.g. '=', '<>', '>', '<', 'LIKE', 'IN').
+                - `value` (can be scalar or list for IN).
+                exemple: "filters": [{"column": "status", "op": "=", "value": "active"}]"
+
+                ### OrderBySpec:
+                - `column`: column.
+                - `direction`: ASC or DESC, defaults to ASC.
+                exemple: "order_by": [{"column": "user_id", "direction": "DESC"}]
+
+                ### JoinSpec:
+                - `table`: name of the table to join.
+                - `on`: join condition.
+                - `type`: join type (INNER, LEFT, etc.).
+
+                ### AggregationSpec:
+                - `function`: aggregation function (e.g. SUM, COUNT, AVG, etc.).
+                - `column`: column to aggregate.
+                - `alias`: result alias for the aggregated value.
+                - `distinct` *(OPTIONAL)*: boolean. If true, applies DISTINCT to the aggregation (e.g. `COUNT(DISTINCT column)`).
+                - `filter` *(OPTIONAL)*: dictionary of conditions applied *within* the aggregation using SQL FILTER (WHERE ...) syntax. Example: `{"status": "active"}` will generate `FILTER (WHERE status = 'active')`.
+
+                - `aggregations` *(OPTIONAL)*: list of aggregation specifications to compute in SELECT.
+
+                Always specify `table`. Use `joins`, `filters`, `aggregations`, `group_by`, `order_by`, `limit` as needed.
+                """
         )
         async def query_tabular(document_uid: str, query: TabularQueryRequest):
+            logger.info(f"Received query for table UID: {document_uid} with parameters: {query}")
             try:
                 return self.service.query(document_uid, query)
             except FileNotFoundError:
-                raise HTTPException(status_code=404, detail="CSV file not found")
-            except Exception:
-                logger.exception("Error querying tabular data")
+                logger.warning(f"Table not found for UID: {document_uid}")
+                raise HTTPException(status_code=404, detail="Table not found")
+            except Exception as e:
+                logger.exception(f"Error querying table for UID {document_uid}: {e}")
                 raise HTTPException(status_code=500, detail="Internal server error")
-            
+
         @router.get(
             "/tabular/list",
             response_model=List[TabularDatasetMetadata],
             tags=["Tabular"],
-            summary="List available tabular datasets (CSV)",
-            operation_id="list_tabular_datasets"
+            operation_id="list_tables",
+            summary="List available SQL-like tabular datasets"
         )
         async def list_tabular_datasets():
+            logger.info("Received request to list all tabular datasets")
             try:
                 return self.service.list_tabular_datasets()
-            except Exception:
-                logger.exception("Error listing tabular datasets")
+            except Exception as e:
+                logger.exception(f"Error listing tabular datasets: {e}")
                 raise HTTPException(status_code=500, detail="Internal server error")

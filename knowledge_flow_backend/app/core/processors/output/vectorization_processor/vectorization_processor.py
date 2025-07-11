@@ -104,8 +104,8 @@ class VectorizationProcessor(BaseOutputProcessor):
                 result = self.vector_store.add_documents(chunks)
                 logger.debug(f"Documents added to Vector Store: {result}")
             except Exception as e:
-                logger.exception("Failed to add documents to OpenSearch: %s", e)
-                raise HTTPException(status_code=500, detail="Failed to add documents to OpenSearch") from e
+                logger.exception("Failed to add documents to Vectore Store: %s", e)
+                raise HTTPException(status_code=500, detail="Failed to add documents to Vectore Store") from e
 
             return OutputProcessorResponse(status=Status.SUCCESS, chunks=len(chunks))
 

@@ -67,9 +67,9 @@ ai:
     # - AZURE_TENANT_ID
     # - AZURE_CLIENT_ID
     # - AZURE_CLIENT_SECRET
-    #provider: "azure"
-    #name: "fred-gpt-4o"  
-    #settings:
+    # provider: "azure"
+    # name: "fred-gpt-4o"  
+    # settings:
     #  api_version: "2024-05-01-preview"
     #  temperature: 0.0
     #  max_retries: 2
@@ -113,7 +113,7 @@ ai:
       model: {}
     - name: K8SOperatorExpert
       class_path: "app.agents.kubernetes_monitoring.k8s_operator_expert.K8SOperatorExpert"
-      enabled: true
+      enabled: false
       mcp_servers:
         - name: k8s-mcp-server
           transport: sse
@@ -138,7 +138,7 @@ ai:
       enabled: true
       model: {}
     - name: "TabularExpert"
-      class_path: "app.agents.tabular.expert.Expert"
+      class_path: "app.agents.tabular.tabular_expert.TabularExpert"
       enabled: true
       mcp_servers:
         - name: knowledge-flow-mcp-server
@@ -164,7 +164,7 @@ ai:
       settings:
         chunk_size: 512
         chunk_overlap: 64
-        knowledge_flow_url: "http://localhost:8111/knowledge/v1" 
+        knowledge_flow_url: "http://localhost:8111/knowledge-flow/v1" 
       model: {}
     # The Monitoring expert requires you activate the 'enableK8Features' flags above
     - name: "MonitoringExpert"
@@ -216,5 +216,5 @@ session_storage:
   # host: https://localhost:9200
   # username: Admin # Overrides the OPENSEARCH_USER environment variable
   # password: xxx # Overrides the OPENSEARCH_PASSWORD environment variable
-  # secure: false
-  # verify_certs: false
+  secure: false
+  verify_certs: false

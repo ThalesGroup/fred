@@ -35,6 +35,8 @@ from app.core.stores.metadata.local_metadata_store import LocalMetadataStore
 from app.core.stores.metadata.opensearch_metadata_store import OpenSearchMetadataStore
 from app.core.stores.vector.in_memory_langchain_vector_store import InMemoryLangchainVectorStore
 from app.core.stores.vector.base_vector_store import BaseDocumentLoader, BaseEmbeddingModel, BaseTextSplitter, BaseVectoreStore
+from app.core.stores.tabular.base_tabular_store import BaseTabularStore
+from app.core.stores.tabular.duckdb_tabular_store import DuckDBTabularStore
 from app.core.processors.output.vectorization_processor.local_file_loader import LocalFileLoader
 from app.core.stores.vector.opensearch_vector_store import OpenSearchVectorStoreAdapter
 from app.core.processors.output.vectorization_processor.recursive_splitter import RecursiveSplitter
@@ -100,6 +102,7 @@ class ApplicationContext:
     _output_processor_instances: Dict[str, BaseOutputProcessor] = {}
     _vector_store_instance: Optional[BaseVectoreStore] = None
     _metadata_store_instance: Optional[BaseMetadataStore] = None
+    _tabular_store_instance: Optional[BaseTabularProcessor] = None
 
     def __init__(self, config: Configuration):
         # Allow reuse if already initialized with same config
@@ -385,6 +388,25 @@ class ApplicationContext:
             raise ValueError(f"Unsupported metadata storage backend: {config.type}")
 
         return self._metadata_store_instance
+    
+    
+    def get_tabular_store(self) -> BaseTabularStore:
+        """
+        Lazy-initialize and return the configured tabular store backend.
+        Currently supports only DuckDB.
+        """
+        if hasattr(self, "_tabular_store_instance") and self._tabular_store_instance is not None:
+            return self._tabular_store_instance
+
+        config = self.config.tabular_storage
+
+        if config.type == "duckdb":
+            db_path = Path(config.duckdb_path).expanduser()
+            self._tabular_store_instance = DuckDBTabularStore(db_path)
+        else:
+            raise ValueError(f"Unsupported tabular storage backend: {config.type}")
+
+        return self._tabular_store_instance
 
         
     def get_document_loader(self) -> BaseDocumentLoader:
