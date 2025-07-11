@@ -34,7 +34,7 @@ data:
 
     metadata_storage:
       type: {{ default "opensearch" .Values.configuration.metadata_storage.type | quote }}
-      {{- if eq (default "in_memory" .Values.configuration.metadata_storage.type) "opensearch" }}
+      {{- if eq .Values.configuration.metadata_storage.type "opensearch" }}
       host: {{ default "https://opensearch.dev.svc.cluster.local:9200" .Values.configuration.metadata_storage.host | quote }}
       secure: {{ default true .Values.configuration.metadata_storage.secure }}
       verify_certs: {{ default false .Values.configuration.metadata_storage.verify_certs }}
@@ -44,13 +44,13 @@ data:
 
     vector_storage:
       type: {{ default "opensearch" .Values.configuration.vector_storage.type | quote }}
-      {{- if eq (default "in_memory" .Values.configuration.vector_storage.type) "opensearch" }}
+      {{- if eq .Values.configuration.vector_storage.type "opensearch" }}
       host: {{ default "https://opensearch.dev.svc.cluster.local:9200" .Values.configuration.vector_storage.host | quote }}
       secure: {{ default true .Values.configuration.vector_storage.secure }}
       verify_certs: {{ default false .Values.configuration.vector_storage.verify_certs }}
       metadata_index: {{ default "metadata-index" .Values.configuration.vector_storage.metadata_index | quote }}
       vector_index: {{ default "vector-index" .Values.configuration.vector_storage.vector_index | quote }}
-      {{- else if eq (default "in_memory" .Values.configuration.vector_storage.type) "weaviate" }}
+      {{- else if eq .Values.configuration.vector_storage.type "weaviate" }}
       host: {{ default "http://localhost:8080" .Values.configuration.vector_storage.host | quote }}
       index_name: {{ default "CodeDocuments" .Values.configuration.vector_storage.index_name | quote }}
       {{- end }}
