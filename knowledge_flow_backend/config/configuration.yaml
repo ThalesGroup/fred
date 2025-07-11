@@ -126,6 +126,10 @@ vector_storage:
   # 
 
 
+tabular_storage:
+  type: "duckdb"
+  duckdb_path: "~/.fred/tabular/tabular_data.duckdb"
+
 embedding:
   # -----------------------------------------------------------------------------
   # EMBEDDING BACKEND

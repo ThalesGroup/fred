@@ -92,7 +92,7 @@ class SessionManager:
 
         return None
     
-    def get_chat_profile_data(self, chat_profile_id: str, knowledge_base_url: str = "http://localhost:8111/knowledge/v1") -> dict:
+    def get_chat_profile_data(self, chat_profile_id: str, knowledge_base_url: str = "http://localhost:8111/knowledge-flow/v1") -> dict:
         try:
             response = requests.get(f"{knowledge_base_url}/chatProfiles/{chat_profile_id}", timeout=5)
             response.raise_for_status()

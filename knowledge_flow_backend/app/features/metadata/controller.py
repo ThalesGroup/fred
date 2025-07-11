@@ -17,6 +17,7 @@ from typing import Any, Dict
 from fastapi import APIRouter, Body, HTTPException
 
 from app.common.structures import Status
+from app.application_context import ApplicationContext
 from app.core.stores.content.content_storage_factory import get_content_store
 from app.features.metadata.service import InvalidMetadataRequest, MetadataNotFound, MetadataService, MetadataUpdateError
 from app.features.metadata.structures import DeleteDocumentMetadataResponse, GetDocumentMetadataResponse, GetDocumentsMetadataResponse, UpdateDocumentMetadataRequest, UpdateDocumentMetadataResponse, UpdateRetrievableRequest
@@ -63,8 +64,10 @@ class MetadataController:
     """
 
     def __init__(self, router: APIRouter):
+        self.context = ApplicationContext.get_instance()
         self.service = MetadataService()
         self.content_store = get_content_store()
+        self.tabular_store = self.context.get_tabular_store()
 
         def handle_exception(e: Exception) -> HTTPException:
             if isinstance(e, MetadataNotFound):
@@ -120,8 +123,14 @@ class MetadataController:
         def delete_document_metadata(document_uid: str):
             try:
                 with lock:
-                    self.service.delete_document_metadata(document_uid)
+                    try:
+                        document_metadata = self.service.get_document_metadata(document_uid).metadata
+                    except Exception as e:
+                        document_metadata = {}
                     self.content_store.delete_content(document_uid)
+                    if document_metadata.get("suffix") in ("CSV", "XLSX", "XLS"):
+                        self.tabular_store.delete_table(document_metadata["document_name"])
+                    self.service.delete_document_metadata(document_uid)
                     return DeleteDocumentMetadataResponse(
                         status=Status.SUCCESS,
                         message=f"Metadata for document {document_uid} has been deleted.",
