@@ -21,6 +21,13 @@ from app.core.stores.vector.base_vector_store import BaseTextSplitter
 class SemanticSplitter(BaseTextSplitter):
     
     def __init__(self, chunk_size: int = 1000, chunk_overlap: int = 100):
+        """
+        Initializes the SemanticSplitter with specified chunk size and overlap.
+        Args:
+            chunk_size (int, optional): The maximum number of characters in each chunk. Defaults to 1000.
+            chunk_overlap (int, optional): The number of overlapping characters between consecutive chunks. Defaults to 100.
+        """
+        
         self.chunk_size = chunk_size
         self.overlap = chunk_overlap
     
@@ -36,19 +43,17 @@ class SemanticSplitter(BaseTextSplitter):
             List[Document]: A list of Document objects representing the semantically split and size-constrained chunks of the input text.
         """
     
-        headers_to_split_on = [
-            ("#", "Header 1"),
-            ("##", "Header 2"),
-            ("###", "Header 3"),
-            ("####", "Header 4"),
-            ("#####", "Header 5"),
-        ]
-        
         markdown_splitter = MarkdownHeaderTextSplitter(
-            headers_to_split_on=headers_to_split_on
+            headers_to_split_on=[
+                ("#", "Header 1"),
+                ("##", "Header 2"),
+                ("###", "Header 3"),
+                ("####", "Header 4"),
+                ("#####", "Header 5"),
+            ]
         )
         
-        md_header_splits = markdown_splitter.split_text(text)
+        md_chunks = markdown_splitter.split_text(text)
         
         text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=self.chunk_size,
@@ -58,17 +63,17 @@ class SemanticSplitter(BaseTextSplitter):
         
         final_chunks = []
         
-        for doc in md_header_splits:
+        for chunk in md_chunks:
             
-            if len(doc.page_content) > self.chunk_size:
-                sub_chunks = text_splitter.split_documents([doc])
+            if len(chunk.page_content) > self.chunk_size:
+                sub_chunks = text_splitter.split_documents([chunk])
                 final_chunks.extend(sub_chunks)
             else:
-                final_chunks.append(doc)
+                final_chunks.append(chunk)
         
         return final_chunks
     
-    def split(self, document) -> List[Document]:
+    def split(self, document: Document) -> List[Document]:
         """
         Splits a given document into semantically meaningful chunks and updates their metadata.
         This method uses semantic chunking to divide the input document's content into smaller chunks.
@@ -80,19 +85,16 @@ class SemanticSplitter(BaseTextSplitter):
             List[Document]: A list of semantically split document chunks with updated metadata.
         """
         
-        all_chunks = []
-        chunk_id = 0
+        semantic_chunks = self.semantic_chunking(document.page_content)
         
-        hybrid_chunks = self.semantic_chunking(document.page_content)
+        base_metadata = document.metadata.copy()
+        base_metadata['original_doc_length'] = len(document.page_content)
         
-        for chunk in hybrid_chunks:
+        for chunk_id, chunk in enumerate(semantic_chunks):
             chunk.metadata.update({
-                'original_doc_length': len(document.page_content),
+                **base_metadata,
                 'chunk_id': chunk_id
             })
-            chunk_id += 1
         
-        all_chunks.extend(hybrid_chunks)
-        
-        return all_chunks
+        return semantic_chunks
         
