@@ -52,12 +52,12 @@ ai:
   default_model:
     # Required in .env:
     # - OPENAI_API_KEY
-    # provider: "openai"
-    # name: "gpt-4o"
-    # settings:
-    #   temperature: 0.0
-    #   max_retries: 2
-    #   request_timeout: 30
+    provider: "openai"
+    name: "gpt-4o"
+    settings:
+      temperature: 0.0
+      max_retries: 2
+      request_timeout: 30
 
     # --- OR uncomment for Azure OpenAI ---
     # Required in .env:
@@ -67,14 +67,14 @@ ai:
     # - AZURE_TENANT_ID
     # - AZURE_CLIENT_ID
     # - AZURE_CLIENT_SECRET
-    provider: "azure"
-    name: "fred-gpt-4o"  
-    settings:
-     api_version: "2024-05-01-preview"
-     temperature: 0.0
-     max_retries: 2
-     request_timeout: 30
-     azure_endpoint: "https://tehopenai.openai.azure.com/"
+    # provider: "azure"
+    # name: "fred-gpt-4o"  
+    # settings:
+    #  api_version: "2024-05-01-preview"
+    #  temperature: 0.0
+    #  max_retries: 2
+    #  request_timeout: 30
+    #  azure_endpoint: "https://tehopenai.openai.azure.com/"
 
     # --- OR uncomment for Ollama ---
     # provider: "ollama"
