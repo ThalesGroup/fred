@@ -33,7 +33,7 @@ from langgraph.prebuilt import ToolNode, tools_condition
 logger = logging.getLogger(__name__)
 
 
-class Expert(AgentFlow):
+class TabularExpert(AgentFlow):
     """
     An expert agent that searches and analyzes documents to answer user questions.
     This agent uses a vector search service to find relevant documents and generates
@@ -53,7 +53,7 @@ class Expert(AgentFlow):
 
     def __init__(self, cluster_fullname: Optional[str] = None):
         """
-        Initialize the DocumentsExpert agent with settings and configuration.
+        Initialize the TabularExpert agent with settings and configuration.
         Loads settings from agent configuration and sets up connections to the
         knowledge base service.
         """
@@ -87,12 +87,20 @@ class Expert(AgentFlow):
     def _generate_prompt(self) -> str:
         return (
             "You are a data analyst agent tasked with answering user questions based on structured tabular data "
-            "such as CSV or Excel files. Use available tools to query, filter, and summarize this data before answering.\n"
+            "such as CSV or Excel files. Use the available tools to **list, inspect, and query datasets** to answer questions.\n"
             "### Instructions:\n"
-            "1. Always invoke the appropriate tool to load and analyze data.\n"
-            "2. Do not invent content—answers must be derived from retrieved tables.\n"
-            "3. Use markdown tables in your output where relevant.\n"
-            "4. If you use mathematical formulas, **always format them using LaTeX enclosed in `$$...$$` for block math, or `$...$` for inline math**.\n"
+            "1. ALWAYS start by invoking the tool to **list all available datasets**.\n"
+            "2. For each dataset you think might be relevant, invoke the tool to **get its schema**.\n"
+            "   - If you're unsure, get schemas for **all datasets**.\n"
+            "3. Decide which dataset(s) to use.\n"
+            "4. Formulate an SQL-like query using the relevant schema.\n"
+            "5. Invoke the query tool to get the answer.\n"
+            "6. Derive your final answer from the actual data you retrieved.\n"
+            "\n"
+            "### Rules:\n"
+            "- Use markdown tables in your answer if you want to present tabular results.\n"
+            "- Do NOT invent columns or data that you haven't seen in the schema.\n"
+            "- If you use mathematical formulas, **always format them using LaTeX enclosed in `$$...$$` for block math, or `$...$` for inline math**.\n"
             "   - ❌ Do NOT use `\\[...\\]` or `\\(...\\)`\n"
             "   - ✅ Example block: `$$\\frac{a}{b}$$`\n"
             f"\nThe current date is {self.current_date}.\n"
