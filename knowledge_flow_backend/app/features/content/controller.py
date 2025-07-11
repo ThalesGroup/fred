@@ -116,6 +116,18 @@ class ContentController:
                 logger.exception("Unexpected error in get_document_preview")
                 raise HTTPException(status_code=500, detail="Internal server error")
 
+        @router.get('/markdown/{document_uid}/media/{media_id}', tags=["Content"])
+        async def download_document_media(document_uid: str, media_id: str):
+            try:
+                stream, file_name, content_type  = await self.service.get_document_media(document_uid, media_id)
+
+                return StreamingResponse(content=stream, media_type=content_type, headers={"Content-Disposition": f'attachment; filename="{file_name}"'})
+            except FileNotFoundError as e:
+                raise HTTPException(status_code=404, detail=str(e))
+            except Exception:
+                logger.exception("Unexpected error in download_document")
+                raise HTTPException(status_code=500, detail="Internal server error")
+
         @router.get(
             "/raw_content/{document_uid}", tags=["Content"], summary="Download the original document content", description="Serves the raw file associated with the given UID as a downloadable stream."
         )
@@ -131,3 +143,5 @@ class ContentController:
             except Exception:
                 logger.exception("Unexpected error in download_document")
                 raise HTTPException(status_code=500, detail="Internal server error")
+
+        
