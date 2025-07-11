@@ -288,7 +288,7 @@ config:
     host: https://opensearch.dev.svc.cluster.local:9200
     # username: admin # Overrides the OPENSEARCH_USER env variable
     # password: xxx  # Overrides the OPENSEARCH_PASSWORD env variable
-    secure: false
+    secure: true
     verify_certs: false
 
 dotenv:
