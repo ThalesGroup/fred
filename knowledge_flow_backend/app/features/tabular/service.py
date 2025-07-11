@@ -12,6 +12,7 @@ import duckdb
 from app.features.tabular.structures import TabularColumnSchema, TabularDatasetMetadata, TabularQueryRequest, TabularQueryResponse, TabularSchemaResponse
 from app.features.tabular.utils import plan_to_sql
 from app.features.tabular.structures import SQLQueryPlan
+from app.application_context import ApplicationContext
 from app.core.stores.tabular.duckdb_tabular_store_factory import get_tabular_store
 
 logger = logging.getLogger(__name__)
@@ -19,7 +20,8 @@ logger = logging.getLogger(__name__)
 
 class TabularService:
     def __init__(self):
-        self.tabular_store = get_tabular_store()
+        self.context = ApplicationContext.get_instance()
+        self.tabular_store = self.context.get_tabular_store()
 
     def _map_duckdb_type_to_literal(self, duckdb_type: str) -> str:
         """

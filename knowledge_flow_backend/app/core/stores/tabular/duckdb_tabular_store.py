@@ -11,11 +11,12 @@ import shutil
 
 import pandas as pd
 import duckdb
+from app.core.stores.tabular.base_tabular_store import BaseTabularStore
 
 logger = logging.getLogger(__name__)
 
 
-class DuckDBTabularStore:
+class DuckDBTabularStore(BaseTabularStore):
     """
     DuckDB-based tabular store.
 

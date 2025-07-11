@@ -17,8 +17,8 @@ from typing import Any, Dict
 from fastapi import APIRouter, Body, HTTPException
 
 from app.common.structures import Status
+from app.application_context import ApplicationContext
 from app.core.stores.content.content_storage_factory import get_content_store
-from app.core.stores.tabular.duckdb_tabular_store_factory import get_tabular_store
 from app.features.metadata.service import InvalidMetadataRequest, MetadataNotFound, MetadataService, MetadataUpdateError
 from app.features.metadata.structures import DeleteDocumentMetadataResponse, GetDocumentMetadataResponse, GetDocumentsMetadataResponse, UpdateDocumentMetadataRequest, UpdateDocumentMetadataResponse, UpdateRetrievableRequest
 from threading import Lock
@@ -64,9 +64,10 @@ class MetadataController:
     """
 
     def __init__(self, router: APIRouter):
+        self.context = ApplicationContext.get_instance()
         self.service = MetadataService()
         self.content_store = get_content_store()
-        self.tabular_store = get_tabular_store()
+        self.tabular_store = self.context.get_tabular_store()
 
         def handle_exception(e: Exception) -> HTTPException:
             if isinstance(e, MetadataNotFound):

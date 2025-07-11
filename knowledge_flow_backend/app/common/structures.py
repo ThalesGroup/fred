@@ -112,31 +112,19 @@ VectorStorageConfig = Annotated[
     Field(discriminator="type")
 ]
 
-class TabularStorageSettings(BaseModel):
-    duckdb_path: str = Field(..., description="Path to the DuckDB database file for tabular storage.")
+###########################################################
+#
+# --- Tabular Storage Configuration
+#
 
+class DuckDBTabularStorage(BaseModel):
+    type: Literal["duckdb"]
+    duckdb_path: str = Field(default="~/.fred/tabular/tabular_data.duckdb", description="Path to the DuckDB database file for tabular storage.")
 
-class TabularStorageConfig(BaseModel):
-    type: str = Field(..., description="Backend type for tabular storage (e.g. 'duckdb').")
-    settings: TabularStorageSettings
-
-
-class TabularStorageSettings(BaseModel):
-    duckdb_path: str = Field(..., description="Path to the DuckDB database file for tabular storage.")
-
-
-class TabularStorageConfig(BaseModel):
-    type: str = Field(..., description="Backend type for tabular storage (e.g. 'duckdb').")
-    settings: TabularStorageSettings
-
-
-class TabularStorageSettings(BaseModel):
-    duckdb_path: str = Field(..., description="Path to the DuckDB database file for tabular storage.")
-
-
-class TabularStorageConfig(BaseModel):
-    type: str = Field(..., description="Backend type for tabular storage (e.g. 'duckdb').")
-    settings: TabularStorageSettings
+TabularStorageConfig = Annotated[
+    Union[DuckDBTabularStorage,],
+    Field(discriminator="type")
+]
 
 
 class EmbeddingConfig(BaseModel):

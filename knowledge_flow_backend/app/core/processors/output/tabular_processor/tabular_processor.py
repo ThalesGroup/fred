@@ -23,8 +23,6 @@ from app.application_context import ApplicationContext
 from app.common.structures import Status, OutputProcessorResponse
 from app.core.processors.output.base_output_processor import BaseOutputProcessor
 
-from app.core.stores.tabular.duckdb_tabular_store_factory import get_tabular_store
-
 logger = logging.getLogger(__name__)
 
 
@@ -38,7 +36,7 @@ class TabularProcessor(BaseOutputProcessor):
         self.file_loader = self.context.get_document_loader()
         logger.info(f"📄 Document loader initialized: {self.file_loader.__class__.__name__}")
 
-        self.tabular_store = get_tabular_store()
+        self.tabular_store = self.context.get_tabular_store()
         logger.info("Initializing TabularPipeline")
 
     def process(self, file_path: str, metadata: dict) -> OutputProcessorResponse:
