@@ -75,7 +75,7 @@ class ContentStorageConfig(BaseModel):
 
 class LocalMetadataStorage(BaseModel):
     type: Literal["local"]
-    root_path: str = Field(default=str(Path("~/.fred/knowledge/metadata-store.json")), description="Local storage directory")
+    root_path: str = Field(default=str(Path("~/.knowledge-flow/metadata-store.json")), description="Local storage directory")
 
 class OpenSearchStorage(BaseModel):
     type: Literal["opensearch"]

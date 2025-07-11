@@ -24,7 +24,7 @@ class ContentStoreLocalSettings:
         if env_value:
             self.root_path = Path(env_value)
         else:
-            self.root_path = Path.home() / ".fred" / "knowledge" / "content-store"
+            self.root_path = Path.home() / ".knowledge-flow" / "content-store"
 
         # Ensure parent folder exists
         self.root_path.parent.mkdir(parents=True, exist_ok=True)
