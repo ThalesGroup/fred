@@ -123,9 +123,12 @@ class MetadataController:
         def delete_document_metadata(document_uid: str):
             try:
                 with lock:
-                    document_metadata = self.service.get_document_metadata(document_uid).metadata
+                    try:
+                        document_metadata = self.service.get_document_metadata(document_uid).metadata
+                    except Exception as e:
+                        document_metadata = {}
                     self.content_store.delete_content(document_uid)
-                    if document_metadata["suffix"] in ("CSV", "XLSX", "XLS"):
+                    if document_metadata.get("suffix") in ("CSV", "XLSX", "XLS"):
                         self.tabular_store.delete_table(document_metadata["document_name"])
                     self.service.delete_document_metadata(document_uid)
                     return DeleteDocumentMetadataResponse(

@@ -25,6 +25,7 @@ from app.common.structures import (
     KnowledgeContextStorageConfig,
     LocalMetadataStorage,
     ProcessorConfig,
+    DuckDBTabularStorage
 )
 from app.core.stores.vector.in_memory_langchain_vector_store import InMemoryLangchainVectorStore
 from app.core.stores.content.content_storage_factory import get_content_store
@@ -66,6 +67,7 @@ def app_context(monkeypatch, fake_embedder):
         ),
         vector_storage=InMemoryVectorStorage(type="in_memory"),
         content_storage=ContentStorageConfig(type="local"),
+        tabular_storage=DuckDBTabularStorage(type="duckdb"),
         embedding=EmbeddingConfig(type="openai"),
         knowledge_context_storage=KnowledgeContextStorageConfig(
             type="local",
