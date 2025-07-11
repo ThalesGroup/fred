@@ -35,11 +35,12 @@ spec:
           {{- end }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          # command: ["/bin/bash", "-c", "tail -f /dev/null"]
+          #command: ["/bin/bash", "-c", "tail -f /dev/null"]
+          command: ["python", "/app/app/main.py"]
           args:
-            - --server.configurationPath
+            - --config-path
             - /usr/local/etc/configuration.yaml
-            - --server.baseUrlPath
+            - --base-url
             - {{ .Values.baseUrlPath }}
           ports:
             - containerPort: 8000
