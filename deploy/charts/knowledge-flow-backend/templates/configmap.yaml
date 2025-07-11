@@ -34,7 +34,7 @@ data:
 
     metadata_storage:
       type: {{ default "opensearch" .Values.configuration.metadata_storage.type | quote }}
-      {{- if eq (default "in_memory" .Values.configuration.metadata_storage.type) "opensearch" }}
+      {{- if eq .Values.configuration.metadata_storage.type "opensearch" }}
       host: {{ default "https://localhost:9200" .Values.configuration.metadata_storage.host | quote }}
       secure: {{ default true .Values.configuration.metadata_storage.secure }}
       verify_certs: {{ default false .Values.configuration.metadata_storage.verify_certs }}
