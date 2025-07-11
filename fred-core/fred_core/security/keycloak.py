@@ -13,14 +13,14 @@
 # limitations under the License.
 
 import logging
-from typing import Optional
+from typing import Any, Optional
 from fastapi.security import OAuth2PasswordBearer
 from fastapi import Security, HTTPException
 import jwt
 from jwt import PyJWKClient
 from pydantic import BaseModel
 
-from app.common.structures import Configuration
+# from app.common.structures import Configuration
 
 # 🔹 Create a module-level logger
 logger = logging.getLogger(__name__)
@@ -31,7 +31,7 @@ KEYCLOAK_URL = ""
 KEYCLOAK_JWKS_URL = ""
 KEYCLOAK_CLIENT_ID = ""
 
-def initialize_keycloak(config: Configuration):
+def initialize_keycloak(config: Any):
     """
     Initialize the Keycloak authentication settings from the given configuration.
     """
