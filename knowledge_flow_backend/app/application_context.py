@@ -37,7 +37,7 @@ from app.core.stores.vector.in_memory_langchain_vector_store import InMemoryLang
 from app.core.stores.vector.base_vector_store import BaseDocumentLoader, BaseEmbeddingModel, BaseTextSplitter, BaseVectoreStore
 from app.core.processors.output.vectorization_processor.local_file_loader import LocalFileLoader
 from app.core.stores.vector.opensearch_vector_store import OpenSearchVectorStoreAdapter
-from app.core.processors.output.vectorization_processor.recursive_splitter import RecursiveSplitter
+from app.core.processors.output.vectorization_processor.semantic_splitter import SemanticSplitter
 from app.core.stores.vector.weaviate_vector_store import WeaviateVectorStore
 
 # Union of supported processor base classes
@@ -400,7 +400,7 @@ class ApplicationContext:
         Factory method to create a text splitter instance based on configuration.
         Currently returns RecursiveSplitter.
         """
-        return RecursiveSplitter()
+        return SemanticSplitter()
 
     def _log_sensitive(self, name: str, value: Optional[str]):
         logger.info(f"     ↳ {name} set: {'✅' if value else '❌'}")
