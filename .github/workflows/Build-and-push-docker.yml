@@ -20,8 +20,8 @@ jobs:
       matrix:
         include:
           - name: agentic-backend
-            context: ./agentic-backend
-            dockerfile: ./agentic-backend/dockerfiles/Dockerfile-dev
+            context: ./agentic_backend
+            dockerfile: ./agentic_backend/dockerfiles/Dockerfile-dev
             image: agentic-backend
           - name: knowledge-flow-backend
             context: ./knowledge_flow_backend
