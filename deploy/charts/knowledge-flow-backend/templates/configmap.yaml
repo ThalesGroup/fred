@@ -33,10 +33,27 @@ data:
       type: "{{ .Values.configuration.content_storage.type }}"
 
     metadata_storage:
-      type: "{{ .Values.configuration.metadata_storage.type }}"
+      type: {{ default "opensearch" .Values.configuration.metadata_storage.type | quote }}
+      {{- if eq .Values.configuration.metadata_storage.type "opensearch" }}
+      host: {{ default "https://opensearch.dev.svc.cluster.local:9200" .Values.configuration.metadata_storage.host | quote }}
+      secure: {{ default true .Values.configuration.metadata_storage.secure }}
+      verify_certs: {{ default false .Values.configuration.metadata_storage.verify_certs }}
+      metadata_index: {{ default "metadata-index" .Values.configuration.metadata_storage.metadata_index | quote }}
+      vector_index: {{ default "vector-index" .Values.configuration.metadata_storage.vector_index | quote }}
+      {{- end }}
 
     vector_storage:
-      type: "{{ .Values.configuration.vector_storage.type }}"
+      type: {{ default "opensearch" .Values.configuration.vector_storage.type | quote }}
+      {{- if eq .Values.configuration.vector_storage.type "opensearch" }}
+      host: {{ default "https://opensearch.dev.svc.cluster.local:9200" .Values.configuration.vector_storage.host | quote }}
+      secure: {{ default true .Values.configuration.vector_storage.secure }}
+      verify_certs: {{ default false .Values.configuration.vector_storage.verify_certs }}
+      metadata_index: {{ default "metadata-index" .Values.configuration.vector_storage.metadata_index | quote }}
+      vector_index: {{ default "vector-index" .Values.configuration.vector_storage.vector_index | quote }}
+      {{- else if eq .Values.configuration.vector_storage.type "weaviate" }}
+      host: {{ default "http://localhost:8080" .Values.configuration.vector_storage.host | quote }}
+      index_name: {{ default "CodeDocuments" .Values.configuration.vector_storage.index_name | quote }}
+      {{- end }}
 
     embedding:
       type: "{{ .Values.configuration.embedding.type }}"
@@ -131,13 +148,8 @@ data:
     # -----------------------------------------------------------------------------
     # 🔵 OPENSEARCH SETTINGS
     # -----------------------------------------------------------------------------
-    OPENSEARCH_HOST="{{ .Values.dotenv.OPENSEARCH_HOST }}"
     OPENSEARCH_USER="{{ .Values.dotenv.OPENSEARCH_USER }}"
     OPENSEARCH_PASSWORD="{{ .Values.dotenv.OPENSEARCH_PASSWORD }}"
-    OPENSEARCH_SECURE="{{ .Values.dotenv.OPENSEARCH_SECURE }}"
-    OPENSEARCH_VERIFY_CERTS="{{ .Values.dotenv.OPENSEARCH_VERIFY_CERTS }}"
-    OPENSEARCH_METADATA_INDEX="{{ .Values.dotenv.OPENSEARCH_METADATA_INDEX }}"
-    OPENSEARCH_VECTOR_INDEX="{{ .Values.dotenv.OPENSEARCH_VECTOR_INDEX }}"
 
     # -----------------------------------------------------------------------------
     # 🔵 MINIO

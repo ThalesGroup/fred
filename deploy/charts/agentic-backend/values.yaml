@@ -268,19 +268,28 @@ config:
     options:
       path: "/home/fred-user/.fred/context-store"
 
-  metrics_storage:
-    type: "local"
-    settings:
-      local_path: "/home/fred-user/.fred/metrics-store"
-
   feedback:
     db_host: postgres
 
   feedback_storage:
     type: local
-    settings:
-      local_path: "/home/fred-user/.fred/feedback-store"
+    local_path: "/home/fred-user/.fred/feedback-store"
 
+  node_metrics_storage:
+    type: "local" 
+    local_path:  "/home/fred-user/.fred/metrics-store"
+
+  tool_metrics_storage:
+    type: "local" 
+    local_path: "/home/fred-user/.fred/metrics-store"
+
+  session_storage:
+    type: opensearch
+    host: https://opensearch.dev.svc.cluster.local:9200
+    # username: admin # Overrides the OPENSEARCH_USER env variable
+    # password: xxx  # Overrides the OPENSEARCH_PASSWORD env variable
+    secure: true
+    verify_certs: false
 
 dotenv:
   azure_tenant_id: ""
@@ -305,7 +314,8 @@ dotenv:
   keycloak_client_id: "app"
   local_context_storage_path: "/home/fred-user/.fred/context-store"
   local_metadata_storage_path: "/home/fred-user/.knowledge-flow/metadata-store.json"
-
+  opensearch_user: "admin"
+  opensearch_password: "Azerty123_"
 
 kubeconfig:
   data:

@@ -69,7 +69,7 @@ content_storage:
   # - GCS_BUCKET_NAME
   # - GCS_CREDENTIALS_PATH
   # If you are using local storage, make sure to set the following environment variable:
-  # - LOCAL_STORAGE_PATH default to '~/.knowledge-flow/content-store'
+  # - LOCAL_CONTENT_STORAGE_PATH default to '~/.knowledge-flow/content-store'
   type: "local"
 
 metadata_storage:
@@ -80,9 +80,10 @@ metadata_storage:
   # - opensearch  → stores metadata in a persistent OpenSearch index (recommended for production)
   #
   # ✅ Default is "local" for easy startup. No external services are needed.
-  # ❗ If using OpenSearch, make sure required environment variables are defined (see below).
+  # If you are using local storage, make sure to set the following environment variable:
+  # - LOCAL_METADATA_STORAGE_PATH default to '~/.knowledge-flow/metadata-store.json'
   type: "local"
-  root_path: ~/.fred/knowledge/metadata-store.json
+  root_path: ~/.knowledge-flow/metadata-store.json
 
   # --- Example: OpenSearch configuration
   #
@@ -90,10 +91,10 @@ metadata_storage:
   # host: https://localhost:9200              # OpenSearch host
   # secure: true                              # Use HTTPS (set to false for HTTP)
   # verify_certs: false                       # Whether to verify TLS certificates
-  # metadata_index: fred-dev-metadata         # Index for storing metadata
-  # vector_index: fred-dev-vectors            # Vector index (required if reusing OpenSearch backend)
+  # metadata_index: metadata-index            # Index for storing metadata
+  # vector_index: vector-index                # Vector index (required if reusing OpenSearch backend)
   # ➤ Required environment variables (not stored in this file):
-  #   OPENSEARCH_USERNAME=admin
+  #   OPENSEARCH_USER=admin
   #   OPENSEARCH_PASSWORD=xxx
 
 
@@ -112,10 +113,11 @@ vector_storage:
   # host: https://localhost:9200              # Opensearch HTTP URL
   # secure: true                              # Use HTTPS (set to false for HTTP)
   # verify_certs: false                       # Whether to verify TLS certificates
-  # vector_index: sessions                    # Index name for vectors
+  # vector_index: vector-index                # Index name for vectors
+  # metadata_index: metadata-index            # Index name for metadata
   #
   # ➤ Required environment variables (not stored in this file):
-  # OPENSEARCH_USERNAME=admin
+  # OPENSEARCH_USER=admin
   # OPENSEARCH_PASSWORD=xxx
   #
   # --- Example: Weaviate configuration
@@ -124,7 +126,6 @@ vector_storage:
   # host: http://localhost:8080               # Weaviate HTTP host
   # index_name: CodeDocuments                 # Class name used to store chunks
   # 
-
 
 tabular_storage:
   type: "duckdb"
