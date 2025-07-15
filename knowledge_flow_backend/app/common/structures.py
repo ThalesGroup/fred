@@ -73,7 +73,7 @@ class MinioStorage(BaseModel):
     access_key: Optional[str] = Field(default_factory=lambda: os.getenv("MINIO_ACCESS_KEY"), description="MinIO access key from env")
     secret_key: Optional[str] = Field(default_factory=lambda: os.getenv("MINIO_SECRET_KEY"), description="MinIO secret key from env")
     content_bucket_name: str = Field(default="app-bucket", description="Content store bucket name")
-    context_bucket_name: str = Field(default="content-storage", description="Content store bucket name")
+    context_bucket_name: str = Field(default="agent-contexts", description="Context bucket name")
     secure: bool = Field(default=False, description="Use TLS (https)")
 
 class LocalContentStorage(BaseModel):
