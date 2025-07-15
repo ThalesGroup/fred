@@ -1,0 +1,100 @@
+name: Build and Push Docker Image
+
+on:
+  push:
+    tags: [ 'code/v*' ]
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    #if: github.ref_type == 'tag' && github.event.base_ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: write
+
+    strategy:
+      # matrix will trigger the creation of a different parallel job for each case
+      matrix:
+        include:
+          - name: agentic-backend
+            context: ./agentic_backend
+            dockerfile: ./agentic_backend/dockerfiles/Dockerfile-dev
+            image: agentic-backend
+          - name: knowledge-flow-backend
+            context: ./knowledge_flow_backend
+            dockerfile: ./knowledge_flow_backend/dockerfiles/Dockerfile-dev
+            image: knowledge-flow-backend
+          - name: frontend
+            context: ./frontend
+            dockerfile: ./frontend/dockerfiles/Dockerfile-dev
+            image: frontend
+
+    # what each job will play
+
+    steps:
+      # For those preconfigured github actions, look here https://github.com/marketplace?type=actions
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
+      - name: Login to Github Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # the next step define an "meta" variable
+      # containing the image path with associated tags
+      # Here only one tag : oci://registry/image:tag
+      
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/thalesgroup/fred-agent/${{ matrix.image }}
+          tags: |
+            type=match,pattern=code/(v.*),group=1
+
+      # push on ghcr.io/thalesgroup/fred-agent/myimage:vX.Y.Z
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}      # oci://<registry>/<image>:<version>
+          labels: ${{ steps.meta.outputs.labels }}  # many various informations
+
+  create-release:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: dummy                           # we do not care about the image, we only want to extract the version
+          tags: |
+            type=match,pattern=code/(v.*),group=1
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Release ${{ steps.meta.outputs.version }}
+          body: |
+            # images:
+            ```
+            oci://${{ env.REGISTRY }}/thalesgroup/fred-agent/agentic-backend:${{ steps.meta.outputs.version }}
+            oci://${{ env.REGISTRY }}/thalesgroup/fred-agent/knowledge-flow-backend:${{ steps.meta.outputs.version }}
+            oci://${{ env.REGISTRY }}/thalesgroup/fred-agent/frontend:${{ steps.meta.outputs.version }}
+            ```
+          draft: false
+          prerelease: false
+
