@@ -60,42 +60,42 @@ jobs:
 
       # push on ghcr.io/thalesgroup/fred-agent/myimage:vX.Y.Z
         
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v5
+      # - name: Build and push Docker image
+      #   uses: docker/build-push-action@v5
+      #   with:
+      #     context: ${{ matrix.context }}
+      #     file: ${{ matrix.dockerfile }}
+      #     push: true
+      #     tags: ${{ steps.meta.outputs.tags }}      # oci://<registry>/<image>:<version>
+      #     labels: ${{ steps.meta.outputs.labels }}  # many various informations
+
+  create-release:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
         with:
-          context: ${{ matrix.context }}
-          file: ${{ matrix.dockerfile }}
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}      # oci://<registry>/<image>:<version>
-          labels: ${{ steps.meta.outputs.labels }}  # many various informations
+          images: dummy                           # we do not care about the image, we only want to extract the version
+          tags: |
+            type=match,pattern=code/(v.*),group=1
 
-  # create-release:
-  #   needs: build-and-push
-  #   runs-on: ubuntu-latest
-  #   permissions:
-  #     contents: write
-  #   steps:
-
-  #     - name: Extract metadata
-  #       id: meta
-  #       uses: docker/metadata-action@v5
-  #       with:
-  #         images: dummy                           # we do not care about the image, we only want to extract the version
-  #         tags: |
-  #           type=match,pattern=code/(v.*),group=1
-
-  #     - name: Create Release
-  #       uses: softprops/action-gh-release@v2
-  #       with:
-  #         tag_name: ${{ github.ref_name }}
-  #         name: Release ${{ steps.meta.outputs.version }}
-  #         body: |
-  #           # images:
-  #           ```
-  #           oci://${{ env.REGISTRY }}/thalesgroup/fred-agent/agentic-backend:${{ steps.meta.outputs.version }}
-  #           oci://${{ env.REGISTRY }}/thalesgroup/fred-agent/knowledge-flow-backend:${{ steps.meta.outputs.version }}
-  #           oci://${{ env.REGISTRY }}/thalesgroup/fred-agent/frontend:${{ steps.meta.outputs.version }}
-  #           ```
-  #         draft: false
-  #         prerelease: false
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Release ${{ steps.meta.outputs.version }}
+          body: |
+            # images:
+            ```
+            oci://${{ env.REGISTRY }}/thalesgroup/fred-agent/agentic-backend:${{ steps.meta.outputs.version }}
+            oci://${{ env.REGISTRY }}/thalesgroup/fred-agent/knowledge-flow-backend:${{ steps.meta.outputs.version }}
+            oci://${{ env.REGISTRY }}/thalesgroup/fred-agent/frontend:${{ steps.meta.outputs.version }}
+            ```
+          draft: false
+          prerelease: false
 
