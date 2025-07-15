@@ -60,14 +60,14 @@ jobs:
 
       # push on ghcr.io/thalesgroup/fred-agent/myimage:vX.Y.Z
         
-  #     - name: Build and push Docker image
-  #       uses: docker/build-push-action@v5
-  #       with:
-  #         context: ${{ matrix.context }}
-  #         file: ${{ matrix.dockerfile }}
-  #         push: true
-  #         tags: ${{ steps.meta.outputs.tags }}      # oci://<registry>/<image>:<version>
-  #         labels: ${{ steps.meta.outputs.labels }}  # many various informations
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}      # oci://<registry>/<image>:<version>
+          labels: ${{ steps.meta.outputs.labels }}  # many various informations
 
   # create-release:
   #   needs: build-and-push
@@ -88,13 +88,13 @@ jobs:
   #       uses: softprops/action-gh-release@v2
   #       with:
   #         tag_name: ${{ github.ref_name }}
-  #         name: Release ${{ github.ref_name }}
+  #         name: Release ${{ steps.meta.outputs.version }}
   #         body: |
   #           # images:
   #           ```
-  #           oci://${{ env.REGISTRY }}/thalesgroup/fred-agent/agentic-backend:${{ github.ref_name }}
-  #           oci://${{ env.REGISTRY }}/thalesgroup/fred-agent/knowledge-flow-backend:${{ github.ref_name }}
-  #           oci://${{ env.REGISTRY }}/thalesgroup/fred-agent/frontend:${{ github.ref_name }}
+  #           oci://${{ env.REGISTRY }}/thalesgroup/fred-agent/agentic-backend:${{ steps.meta.outputs.version }}
+  #           oci://${{ env.REGISTRY }}/thalesgroup/fred-agent/knowledge-flow-backend:${{ steps.meta.outputs.version }}
+  #           oci://${{ env.REGISTRY }}/thalesgroup/fred-agent/frontend:${{ steps.meta.outputs.version }}
   #           ```
   #         draft: false
   #         prerelease: false
