@@ -25,7 +25,7 @@ jobs:
             image: agentic-backend
           - name: knowledge-flow-backend
             context: ./knowledge_flow_backend
-            dockerfile: ./other-knowledge_flow_backend/dockerfiles/Dockerfile-dev
+            dockerfile: ./knowledge_flow_backend/dockerfiles/Dockerfile-dev
             image: knowledge-flow-backend
           - name: frontend
             context: ./frontend
@@ -54,39 +54,48 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/fred-agent/${{ matrix.image }}
+          images: ${{ env.REGISTRY }}/thalesgroup/fred-agent/${{ matrix.image }}
           tags: |
-            type=semver,pattern={{version}},prefix=code/
+            type=match,pattern=chart/(v.*),group=1
 
-      # push on ghcr.io/fred-agent/myimage:vX.Y.Z
+      # push on ghcr.io/thalesgroup/fred-agent/myimage:vX.Y.Z
         
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v5
-        with:
-          context: ${{ matrix.context }}
-          file: ${{ matrix.dockerfile }}
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}      # oci://<registry>/<image>:<version>
-          labels: ${{ steps.meta.outputs.labels }}  # many various informations
+  #     - name: Build and push Docker image
+  #       uses: docker/build-push-action@v5
+  #       with:
+  #         context: ${{ matrix.context }}
+  #         file: ${{ matrix.dockerfile }}
+  #         push: true
+  #         tags: ${{ steps.meta.outputs.tags }}      # oci://<registry>/<image>:<version>
+  #         labels: ${{ steps.meta.outputs.labels }}  # many various informations
 
-  create-release:
-    needs: build-and-push
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.ref_name }}
-          name: Release ${{ github.ref_name }}
-          body: |
-            # images:
-            ```
-            oci://${{ env.REGISTRY }}/fred-agent/agentic-backend:${{ github.ref_name }}
-            oci://${{ env.REGISTRY }}/fred-agent/knowledge-flow-backend:${{ github.ref_name }}
-            oci://${{ env.REGISTRY }}/fred-agent/frontend:${{ github.ref_name }}
-            ```
-          draft: false
-          prerelease: false
+  # create-release:
+  #   needs: build-and-push
+  #   runs-on: ubuntu-latest
+  #   permissions:
+  #     contents: write
+  #   steps:
+
+  #     - name: Extract metadata
+  #       id: meta
+  #       uses: docker/metadata-action@v5
+  #       with:
+  #         images: dummy                           # we do not care about the image, we only want to extract the version
+  #         tags: |
+  #           type=match,pattern=chart/(v.*),group=1
+
+  #     - name: Create Release
+  #       uses: softprops/action-gh-release@v2
+  #       with:
+  #         tag_name: ${{ github.ref_name }}
+  #         name: Release ${{ github.ref_name }}
+  #         body: |
+  #           # images:
+  #           ```
+  #           oci://${{ env.REGISTRY }}/thalesgroup/fred-agent/agentic-backend:${{ github.ref_name }}
+  #           oci://${{ env.REGISTRY }}/thalesgroup/fred-agent/knowledge-flow-backend:${{ github.ref_name }}
+  #           oci://${{ env.REGISTRY }}/thalesgroup/fred-agent/frontend:${{ github.ref_name }}
+  #           ```
+  #         draft: false
+  #         prerelease: false
 

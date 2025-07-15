@@ -58,7 +58,8 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/fred-agent/helm/${{ matrix.registry_name }}
+          #images: ${{ env.REGISTRY }}/fred-agent/helm/${{ matrix.registry_name }}
+          images: dummy                   # We do not care about the image, we just want the version
           tags: |
             type=match,pattern=chart/(v.*),group=1
       
@@ -69,19 +70,19 @@ jobs:
             --version ${{ steps.meta.outputs.version }} \
             --destination ./packages
 
-      - name: Debug - List packages directory
-        run: |
-          echo "=== Contenu du répertoire ./packages ==="
-          ls -la ./packages/
-          echo ""
-          echo "=== Fichiers .tgz trouvés ==="
-          find ./packages/ -name "*.tgz" -type f || echo "Aucun fichier .tgz trouvé"
-          echo ""
-          echo "=== Variables matrix pour référence ==="
-          echo "matrix.name: ${{ matrix.name }}"
-          echo "matrix.registry_name: ${{ matrix.registry_name }}"
-          echo "matrix.chart_path: ${{ matrix.chart_path }}"
-          echo "steps.meta.outputs.version: ${{ steps.meta.outputs.version }}"
+      # - name: Debug - List packages directory
+      #   run: |
+      #     echo "=== Contenu du répertoire ./packages ==="
+      #     ls -la ./packages/
+      #     echo ""
+      #     echo "=== Fichiers .tgz trouvés ==="
+      #     find ./packages/ -name "*.tgz" -type f || echo "Aucun fichier .tgz trouvé"
+      #     echo ""
+      #     echo "=== Variables matrix pour référence ==="
+      #     echo "matrix.name: ${{ matrix.name }}"
+      #     echo "matrix.registry_name: ${{ matrix.registry_name }}"
+      #     echo "matrix.chart_path: ${{ matrix.chart_path }}"
+      #     echo "steps.meta.outputs.version: ${{ steps.meta.outputs.version }}"
 
       - name: Debug namespace
         run: |
@@ -104,8 +105,6 @@ jobs:
       #     push: true
       #     tags: ${{ steps.meta.outputs.tags }}      # oci://<registry>/<image>:<version>
       #     labels: ${{ steps.meta.outputs.labels }}  # many various informations
-
-
 
   create-release:
     needs: package-and-push
