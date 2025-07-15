@@ -29,7 +29,7 @@ jobs:
             image: knowledge-flow-backend
           - name: frontend
             context: ./frontend
-            dockerfile: ./frontend/Dockerfile
+            dockerfile: ./frontend/dockerfiles/Dockerfile-dev
             image: frontend
 
     # what each job will play
