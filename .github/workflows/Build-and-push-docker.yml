@@ -56,7 +56,7 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/thalesgroup/fred-agent/${{ matrix.image }}
           tags: |
-            type=match,pattern=chart/(v.*),group=1
+            type=match,pattern=code/(v.*),group=1
 
       # push on ghcr.io/thalesgroup/fred-agent/myimage:vX.Y.Z
         
@@ -82,7 +82,7 @@ jobs:
   #       with:
   #         images: dummy                           # we do not care about the image, we only want to extract the version
   #         tags: |
-  #           type=match,pattern=chart/(v.*),group=1
+  #           type=match,pattern=code/(v.*),group=1
 
   #     - name: Create Release
   #       uses: softprops/action-gh-release@v2
