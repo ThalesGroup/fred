@@ -1,0 +1,92 @@
+name: Build and Push Docker Image
+
+on:
+  push:
+    tags: [ 'code/v*' ]
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    if: github.ref_type == 'tag' && github.event.base_ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: write
+
+    strategy:
+      # matrix will trigger the creation of a different parallel job for each case
+      matrix:
+        include:
+          - name: agentic-backend
+            context: ./agentic-backend
+            dockerfile: ./agentic-backend/dockerfiles/Dockerfile-dev
+            image: agentic-backend
+          - name: knowledge-flow-backend
+            context: ./knowledge_flow_backend
+            dockerfile: ./other-knowledge_flow_backend/dockerfiles/Dockerfile-dev
+            image: knowledge-flow-backend
+          - name: frontend
+            context: ./frontend
+            dockerfile: ./frontend/Dockerfile
+            image: frontend
+
+    # what each job will play
+
+    steps:
+      # For those preconfigured github actions, look here https://github.com/marketplace?type=actions
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
+      - name: Login to Github Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # the next step define an "meta" variable
+      # containing the image path with associated tags
+      # Here only one tag : oci://registry/image:tag
+      
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/fred-agent/${{ matrix.image }}
+          tags: |
+            type=semver,pattern={{version}},prefix=code/
+
+      # push on ghcr.io/fred-agent/myimage:vX.Y.Z
+        
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}      # oci://<registry>/<image>:<version>
+          labels: ${{ steps.meta.outputs.labels }}  # many various informations
+
+  create-release:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
+          body: |
+            # images:
+            ```
+            oci://${{ env.REGISTRY }}/fred-agent/agentic-backend:${{ github.ref_name }}
+            oci://${{ env.REGISTRY }}/fred-agent/knowledge-flow-backend:${{ github.ref_name }}
+            oci://${{ env.REGISTRY }}/fred-agent/frontend:${{ github.ref_name }}
+            ```
+          draft: false
+          prerelease: false
+

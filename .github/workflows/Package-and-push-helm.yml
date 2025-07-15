@@ -1,0 +1,110 @@
+name: Package and push Helm Charts
+
+on:
+  push:
+    tags: [ 'chart/v*' ]
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  package-and-push:
+    runs-on: ubuntu-latest
+    if: github.ref_type == 'tag' && github.event.base_ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: write
+
+    strategy:
+      # matrix will trigger the creation of a different parallel job for each case
+      matrix:
+        include:
+          - name: agentic-backend
+            chart_path: ./deploy/charts/agentic-backend
+            registry_name: agentic-backend
+          - name: knowledge-flow-backend
+            chart_path: ./deploy/charts/knowledge-flow-backend
+            registry_name: knowledge-flow-backend
+          - name: frontend
+            chart_path: ./deploy/charts/frontend
+            registry_name: frontend
+
+    # what each job will play
+
+    steps:
+      # For those preconfigured github actions, look here https://github.com/marketplace?type=actions
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v3
+
+      - name: Login to Github Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # the next step define an "meta" variable
+      # containing the image path with associated tags
+      # Here only one tag : oci://registry/image:tag
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/fred-agent/helm/${{ matrix.registry_name }}
+          tags: |
+            type=semver,pattern={{version}},prefix=chart/
+
+      - name: Package chart ${{ matrix.name }}
+        run: |
+          echo "Packaging ${{ matrix.name }} chart with version {{steps.meta.outputs.version}}"
+          helm package ${{ matrix.chart_path }} \
+            --version {{steps.meta.outputs.version}} \
+            --destination ./packages
+
+
+      - name: Push ${{ matrix.name }} to registry
+        run: |
+          PACKAGE_FILE=$(ls ./packages/${{ matrix.registry_name }}-*.tgz)
+          echo "Pushing $PACKAGE_FILE"
+          helm push "$PACKAGE_FILE" oci://${{ env.REGISTRY }}/fred-agent/helm
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}      # oci://<registry>/<image>:<version>
+          labels: ${{ steps.meta.outputs.labels }}  # many various informations
+
+  create-release:
+    needs: package-and-push
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Charts Release ${{ github.ref_name }}
+          body: |
+            # Helm Charts Release ${{ steps.meta.outputs.version }}
+            
+            ## Setup
+            
+            ```bash
+            # Add the repository
+            helm repo add fred-agent oci://${{ env.REGISTRY }}/fred-agent/helm
+            
+            # Install charts
+            helm install agentic-backend fred-agent/agentic-backend --version ${{ steps.meta.outputs.version }}
+            helm install knowledge-flow-backend fred-agent/knowledge-flow-backend --version ${{ steps.meta.outputs.version }}
+            helm install frontend fred-agent/frontend --version ${{ steps.meta.outputs.version }}
+            ```
+          draft: false
+          prerelease: false
