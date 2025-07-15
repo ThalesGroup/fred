@@ -62,11 +62,28 @@ class Security(BaseModel):
     client_id: str = "knowledge-flow"
     authorized_origins: List[str] = ["http://localhost:5173"]
 
+###########################################################
+#
+#  --- Content Storage Configuration
+#
 
-class ContentStorageConfig(BaseModel):
-    type: str = Field(..., description="The storage backend to use (e.g., 'local', 'minio')")
+class MinioStorage(BaseModel):
+    type: Literal["minio"]
+    endpoint: str = Field(default="localhost:9000", description="MinIO API URL")
+    access_key: Optional[str] = Field(default_factory=lambda: os.getenv("MINIO_ACCESS_KEY"), description="MinIO access key from env")
+    secret_key: Optional[str] = Field(default_factory=lambda: os.getenv("MINIO_SECRET_KEY"), description="MinIO secret key from env")
+    content_bucket_name: str = Field(default="app-bucket", description="Content store bucket name")
+    context_bucket_name: str = Field(default="content-storage", description="Content store bucket name")
+    secure: bool = Field(default=False, description="Use TLS (https)")
 
+class LocalContentStorage(BaseModel):
+    type: Literal["local"]
+    root_path: str = Field(default=str(Path("~/.knowledge-flow/content-store")), description="² storage directory")
 
+ContentStorageConfig = Annotated[
+    Union[LocalContentStorage, MinioStorage],
+    Field(discriminator="type")
+]
 
 ###########################################################
 #

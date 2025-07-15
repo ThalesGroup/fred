@@ -13,14 +13,12 @@
 # limitations under the License.
 
 from app.application_context import ApplicationContext
-from app.common.utils import validate_settings_or_exit
 from app.config.content_store_local_settings import ContentStoreLocalSettings
-from app.config.content_store_minio_settings import ContentStoreMinioSettings
 from pathlib import Path
 
 from app.core.stores.content.base_content_store import BaseContentStore
 from app.core.stores.content.local_content_store import LocalStorageBackend
-from app.core.stores.content.minio_content_store import MinioContentStore
+from app.core.stores.content.minio_content_store import MinioStorageBackend
 
 
 def get_content_store() -> BaseContentStore:
@@ -30,13 +28,16 @@ def get_content_store() -> BaseContentStore:
         StorageBackend: An instance of the storage backend.
     """
     # Get the singleton application context and configuration
-    config = ApplicationContext.get_instance().get_config()
-    backend_type = config.content_storage.type
+    config = ApplicationContext.get_instance().get_config().content_storage
+    backend_type = config.type
 
     if backend_type == "minio":
-        settings = validate_settings_or_exit(ContentStoreMinioSettings, "MinIO Settings")
-        return MinioContentStore(
-            endpoint=settings.minio_endpoint, access_key=settings.minio_access_key, secret_key=settings.minio_secret_key, bucket_name=settings.minio_bucket_name, secure=settings.minio_secure
+        return MinioStorageBackend(
+            endpoint=config.endpoint,
+            access_key=config.access_key,
+            secret_key=config.secret_key,
+            bucket_name=config.bucket_name,
+            secure=config.secure
         )
     elif backend_type == "local":
         settings = ContentStoreLocalSettings()

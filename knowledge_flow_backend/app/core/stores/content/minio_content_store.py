@@ -25,7 +25,7 @@ from app.core.stores.content.base_content_store import BaseContentStore
 logger = logging.getLogger(__name__)
 
 
-class MinioContentStore(BaseContentStore):
+class MinioStorageBackend(BaseContentStore):
     """
     MinIO content store for uploading files to a MinIO bucket.
     This class implements the BaseContentStore interface.
