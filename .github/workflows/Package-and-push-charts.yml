@@ -10,7 +10,7 @@ env:
 jobs:
   package-and-push:
     runs-on: ubuntu-latest
-    if: github.ref_type == 'tag' && github.event.base_ref == 'refs/heads/main'
+    #if: github.ref_type == 'tag' && github.event.base_ref == 'refs/heads/main'
     permissions:
       contents: read
       packages: write
