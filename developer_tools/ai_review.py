@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import fnmatch
 import os
 import argparse
 import subprocess  # nosec B404
@@ -25,7 +26,7 @@ console = Console()
 
 # Constants
 SCRIPT_NAME = "developer_tools/ai_review.py"
-SUPPORTED_MODES = ["committed", "uncommitted", "all"]
+SUPPORTED_MODES = ["committed", "uncommitted", "all", "working"]
 DOTENV_PATH = Path("config/.env")
 GUIDELINES_PATH = Path("../docs/PYTHON_CODING_GUIDELINES.md")
 CONTRIBUTING_PATH = Path("../docs/CONTRIBUTING.md")
@@ -53,29 +54,56 @@ def load_guidelines() -> str:
 def get_git_diff(mode: str, patterns: List[str]) -> Tuple[str, List[str]]:
     logger.info(f"Getting git diff in {mode} mode for patterns: {patterns}")
     if mode == "committed":
-        cmd = ["git", "diff", "origin/main...HEAD", "--"]
+        cmd = ["git", "diff", "origin/main...HEAD", "--name-only"]
     elif mode == "uncommitted":
-        cmd = ["git", "diff", "--cached", "--"]
+        cmd = ["git", "diff", "--cached", "--name-only"]
+    elif mode == "working":
+        cmd = ["git", "ls-files", "--modified", "--others", "--exclude-standard"]
     else:
         cmd = ["git", "status", "--porcelain"]
 
-    result = subprocess.run(cmd, capture_output=True, text=True)  # nosec B603
+    project_root = Path(__file__).resolve().parent.parent  # go up to project root
+    logger.debug(f"Running command in root: {project_root}")
+    result = subprocess.run(cmd, capture_output=True, text=True, cwd=project_root)  # nosec B603
     lines = result.stdout.strip().splitlines()
+    logger.debug(f"Raw output from git command:\n{result.stdout}")
+
     collected, files = [], []
 
-    logger.debug(f"Found {len(lines)} changed lines")
+    logger.debug(f"Found {len(lines)} changed entries")
 
     for line in lines:
-        path = line[3:].strip() if mode == "all" else line
-        if os.path.isfile(path) and SCRIPT_NAME not in path:
-            if any(path.endswith(pat) or Path(path).match(pat) for pat in patterns):
-                logger.debug(f"Processing file: {path}")
-                try:
-                    content = Path(path).read_text(encoding="utf-8")
-                    files.append(path)
-                    collected.append(f"# ==== FILE: {path} ====\n{content}\n")
-                except Exception as e:
-                    logger.warning(f"Could not read {path}: {e}")
+        logger.debug(f"Raw line: {line}")
+        if mode == "all":
+            parts = line.strip().split(maxsplit=1)
+            path = parts[1] if len(parts) > 1 else ""
+        else:
+            path = line.strip()
+
+        if not path:
+            logger.debug("Skipping empty path")
+            continue
+
+        full_path = (project_root / path).resolve()
+        logger.debug(f"Resolved path: {full_path}")
+        if not full_path.is_file():
+                logger.debug(f"Skipping non-file path: {full_path}")
+                continue
+
+        if SCRIPT_NAME in str(full_path):
+            logger.debug(f"Skipping script file itself: {full_path}")
+            continue
+
+        matched = any(fnmatch.fnmatch(full_path.name, pat) for pat in patterns)
+        logger.debug(f"Does file match any pattern? {matched}")
+        if matched:
+            logger.info(f"Processing file: {full_path}")
+            try:
+                content = full_path.read_text(encoding="utf-8")
+                files.append(str(full_path))
+                collected.append(f"# ==== FILE: {path} ====\n{content}\n")
+            except Exception as e:
+                logger.warning(f"Could not read {path}: {e}")
 
     logger.info(f"Collected {len(files)} file(s) for review")
     return "\n".join(collected), files
