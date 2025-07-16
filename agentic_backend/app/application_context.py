@@ -39,7 +39,7 @@ from langchain_core.tools import BaseTool
 from app.flow import AgentFlow, Flow  # Base class for all agent flows
 from app.common.utils import log_exception
 from app.common.error import UnsupportedTransportError, MCPToolFetchError
-
+from app.services.chatbot_session.abstract_session_backend import AbstractSessionStorage
 import logging
 
 logger = logging.getLogger(__name__)
@@ -76,6 +76,16 @@ def get_configuration() -> Configuration:
         Configuration: The singleton application configuration.
     """
     return get_app_context().configuration
+
+def get_sessions_store() -> AbstractSessionStorage:
+    """
+    Factory function to create a sessions store instance based on the configuration.
+    As of now, it supports in_memory and OpenSearch sessions storage.
+    
+    Returns:
+        AbstractSessionStorage: An instance of the sessions store.
+    """
+    return get_app_context().get_sessions_store()
 
 def get_enabled_agent_names() -> List[str]:
     """
@@ -482,4 +492,32 @@ class ApplicationContext:
             list[str]: List of available agent names.
         """
         return list(self.agent_classes.keys())
+    
+    # --- Session storage factory helper ---
+    
+    def get_sessions_store(self) -> AbstractSessionStorage:
+        """
+        Factory function to create a sessions store instance based on the configuration.
+        As of now, it supports in_memory and OpenSearch sessions storage.
         
+        Returns:
+            AbstractSessionStorage: An instance of the sessions store.
+        """
+        # Import here to avoid avoid circular dependencies:
+        from app.services.chatbot_session.stores.in_memory_session_store import InMemorySessionStorage
+        from app.services.chatbot_session.stores.opensearch_session_store import OpensearchSessionStorage
+        config = get_configuration().session_storage
+        if config.type == "in_memory":
+            return InMemorySessionStorage()
+        elif config.type == "opensearch":
+            return OpensearchSessionStorage(
+                host=config.host,
+                username=config.username,
+                password=config.password,
+                secure=config.secure,
+                verify_certs=config.verify_certs,
+                sessions_index=config.sessions_index,
+                history_index=config.history_index
+            )
+        else:
+            raise ValueError(f"Unsupported sessions storage backend: {config.type}")
