@@ -68,7 +68,7 @@ class ContentStorageConfig(BaseModel):
 
 class LocalMetadataStorage(BaseModel):
     type: Literal["local"]
-    root_path: str = Field(default=str(Path("~/.fred/knowledge/metadata-store.json")), description="Local storage directory")
+    root_path: str = Field(default=str(Path("~/.fred/knowledge/metadata-store.json")), description="Local storage json file")
 
 
 class OpenSearchStorage(BaseModel):
@@ -84,6 +84,18 @@ class OpenSearchStorage(BaseModel):
 
 # --- Final union config (with discriminator)
 MetadataStorageConfig = Annotated[Union[LocalMetadataStorage, OpenSearchStorage], Field(discriminator="type")]
+
+###########################################################
+#
+# --- Tag Storage Configuration
+#
+
+class LocalTagStore(BaseModel):
+    type: Literal["local"]
+    root_path: str = Field(default=str(Path("~/.fred/knowledge/tags-store.json")), description="Local storage json file")
+
+TagStorageConfig = Annotated[Union[LocalTagStore], Field(discriminator="type")]
+
 
 ###########################################################
 #
@@ -137,6 +149,7 @@ class Configuration(BaseModel):
     output_processors: Optional[List[ProcessorConfig]] = None
     content_storage: ContentStorageConfig = Field(..., description="Content Storage configuration")
     metadata_storage: MetadataStorageConfig = Field(..., description="Metadata storage configuration")
+    tag_storage: TagStorageConfig = Field(..., description="Tag storage configuration")
     vector_storage: VectorStorageConfig = Field(..., description="Vector storage configuration")
     tabular_storage: TabularStorageConfig = Field(..., description="Tabular storage configuration")
     embedding: EmbeddingConfig = Field(..., description="Embedding configuration")
