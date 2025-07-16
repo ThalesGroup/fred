@@ -24,6 +24,8 @@ from docling_core.types.doc import ImageRefMode
 
 from app.core.processors.input.common.base_image_describer import BaseImageDescriber
 from app.core.processors.input.common.base_input_processor import BaseMarkdownProcessor
+from docling_core.types.doc import DescriptionAnnotation
+import re
 
 
 logger = logging.getLogger(__name__)
@@ -113,6 +115,20 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
             # Replace placeholders with picture descriptions in the markdown file
             with open(output_markdown_path, "r", encoding="utf-8") as f:
                 md_content = f.read()
+                
+            # Add comments to identify tables
+            if doc.tables:
+                for i, table in enumerate(doc.tables):
+                    table_id = i
+                    table_md = table.export_to_markdown(doc=doc).strip()
+                    if not table_md:
+                        logger.warning(f"Table export to markdown returned empty despite table having rows : ID {table_id}")
+                    else :
+                        annotated_table = f"""<!-- TABLE_START:id={table_id} -->\n{table_md}\n<!-- TABLE_END -->"""
+                        pattern = re.escape(table_md)
+                        md_content, count = re.subn(pattern, annotated_table, md_content, count=1)
+                        if count == 0:
+                            logger.warning(f"Table {table_id} not found in Markdown content.")
 
             for desc in pictures_desc:
                 md_content = md_content.replace("%%ANNOTATION%%", desc, 1)
