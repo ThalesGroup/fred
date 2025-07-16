@@ -1,0 +1,47 @@
+[project]
+name = "ai-review-tools"
+version = "0.1.0"
+description = "AI-based code and deploy review tooling"
+authors = [
+  { name = "Your Name", email = "you@example.com" }
+]
+dependencies = [
+  "python-dotenv",
+  "rich",
+  "openai",
+  "langchain",
+  "langchain-community",
+  "langchain_openai",
+  "faiss-cpu", # or faiss-gpu if using GPU
+  "pydantic>=1.10,<3", # compatibility with LangChain for now
+  "tiktoken",
+  "ruamel-yaml>=0.18.14",
+]
+
+
+[project.optional-dependencies]
+dev = [
+  "ruff",
+  "bandit",
+  "pre-commit",
+  "pytest",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-select = ["I", "N", "UP", "TID", "F", "E", "W"]
+extend-ignore = []
+
+[tool.bandit]
+exclude_dirs = ["tests"]
+skips = ["B101", "B108"]
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+addopts = "-ra -q"
+testpaths = ["tests"]
+
+[tool.coverage.run]
+branch = true
+source = ["developer_tools"]
