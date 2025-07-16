@@ -30,7 +30,14 @@ data:
     {{- end }}
 
     content_storage:
-      type: "{{ .Values.configuration.content_storage.type }}"
+      type: {{ default "minio" .Values.configuration.content_storage.type | quote }}
+      {{- if eq .Values.configuration.content_storage.type "minio" }}
+      endpoint: {{ default "minio:9000" .Values.configuration.content_storage.endpoint | quote }}
+      access_key: {{ .Values.configuration.content_storage.access_key }}
+      secret_key: {{ .Values.configuration.content_storage.secret_key }}
+      secure: {{ default false .Values.configuration.content_storage.secure }}
+      bucket_name: {{ default "app-bucket" .Values.configuration.content_storage.bucket_name }}
+      {{- end }}
 
     metadata_storage:
       type: {{ default "opensearch" .Values.configuration.metadata_storage.type | quote }}
@@ -154,11 +161,8 @@ data:
     # -----------------------------------------------------------------------------
     # 🔵 MINIO
     # -----------------------------------------------------------------------------
-    MINIO_ENDPOINT="{{ .Values.dotenv.MINIO_ENDPOINT }}"
     MINIO_ACCESS_KEY="{{ .Values.dotenv.MINIO_ACCESS_KEY }}"
     MINIO_SECRET_KEY="{{ .Values.dotenv.MINIO_SECRET_KEY }}"
-    MINIO_BUCKET_NAME="{{ .Values.dotenv.MINIO_BUCKET_NAME }}"
-    MINIO_SECURE={{ .Values.dotenv.MINIO_SECURE }}
 
     # -----------------------------------------------------------------------------
     # 🔵 GCS
@@ -172,5 +176,3 @@ data:
     # -----------------------------------------------------------------------------
     LOCAL_CONTENT_STORAGE_PATH="{{ .Values.dotenv.LOCAL_CONTENT_STORAGE_PATH }}"
     LOCAL_METADATA_STORAGE_PATH="{{ .Values.dotenv.LOCAL_METADATA_STORAGE_PATH }}"
-
-
