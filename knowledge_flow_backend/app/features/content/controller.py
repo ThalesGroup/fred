@@ -143,5 +143,4 @@ class ContentController:
             except Exception:
                 logger.exception("Unexpected error in download_document")
                 raise HTTPException(status_code=500, detail="Internal server error")
-
-        
+ 
