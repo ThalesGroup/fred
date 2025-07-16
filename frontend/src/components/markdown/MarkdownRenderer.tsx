@@ -86,6 +86,7 @@ export default function MarkdownRenderer({
 
   return (
     <ReactMarkdown
+      skipHtml={true}
       components={{
         ...components,
         ...(props.components || {}),
