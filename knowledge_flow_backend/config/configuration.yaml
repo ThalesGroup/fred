@@ -79,7 +79,7 @@ content_storage:
   # access_key: minioadmin # Overrides the MINIO_ACCESS_KEY environment variable
   # secret_key: minioadmin # Overrides the MINIO_SECRET_KEY environment variable
   # secure: False
-  # context_bucket_name: agent-contexts
+  # bucket_name: app-bucket
 
 metadata_storage:
   # Metadata Storage Configuration
