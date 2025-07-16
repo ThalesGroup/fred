@@ -120,7 +120,8 @@ class SemanticSplitter(BaseTextSplitter):
                 ("###", "Header 3"),
                 ("####", "Header 4"),
                 ("#####", "Header 5"),
-            ]
+            ],
+            strip_headers=False
         )
         md_chunks = markdown_splitter.split_text(text_with_placeholders)
 
