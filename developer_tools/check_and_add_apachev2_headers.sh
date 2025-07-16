@@ -1,6 +1,7 @@
 #!/bin/bash
 
-# Define the Apache header
+ROOT_PATH="${1:-.}"
+
 HEADER='# Copyright Thales 2025
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,12 +17,10 @@ HEADER='# Copyright Thales 2025
 # limitations under the License.
 '
 
-# Find .py files, excluding .venv, .git, __pycache__, htmlcov
-FILES=$(find . \
-  -type d \( -path './.venv' -o -path './.git' -o -path './__pycache__' -o -path './htmlcov' \) -prune -false \
+FILES=$(find "$ROOT_PATH" \
+  -type d \( -path "$ROOT_PATH/.venv" -o -path "$ROOT_PATH/.git" -o -path "$ROOT_PATH/__pycache__" -o -path "$ROOT_PATH/htmlcov" \) -prune -false \
   -o -name "*.py" -type f)
 
-# Loop through files and check for missing header
 for file in $FILES; do
   if ! grep -q "Copyright Thales 2025" "$file"; then
     echo "📄 Updating: $file"
