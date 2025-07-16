@@ -36,7 +36,7 @@ def get_content_store() -> BaseContentStore:
             endpoint=config.endpoint,
             access_key=config.access_key,
             secret_key=config.secret_key,
-            bucket_name=config.content_bucket_name,
+            bucket_name=config.bucket_name,
             secure=config.secure
         )
     elif backend_type == "local":
