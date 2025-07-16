@@ -11,9 +11,11 @@ dependencies = [
   "openai",
   "langchain",
   "langchain-community",
-  "faiss-cpu",        # or faiss-gpu if using GPU
-  "pydantic>=1.10,<3",  # compatibility with LangChain for now
+  "langchain_openai",
+  "faiss-cpu", # or faiss-gpu if using GPU
+  "pydantic>=1.10,<3", # compatibility with LangChain for now
   "tiktoken",
+  "ruamel-yaml>=0.18.14",
 ]
 
 

@@ -1,6 +1,7 @@
 .DEFAULT_GOAL := help
 
 ROOT_DIR := $(realpath $(CURDIR))
+PROJECT_ROOT=$(ROOT_DIR)/..
 TARGET   := $(ROOT_DIR)/target
 VENV     := $(ROOT_DIR)/.venv
 PIP      := $(VENV)/bin/pip
@@ -37,32 +38,38 @@ $(TARGET)/.compiled: pyproject.toml $(TARGET)/.uv-installed
 ##@ Review Commands
 
 .PHONY: review-pull-request
-review-pull-request: dev ## Review committed Python changes
+review-code-pull-request: dev ## Review committed Python changes
 	@echo "🤖 Reviewing Python changes (committed)..."
-	OPENAI_API_KEY=$$(grep OPENAI_API_KEY $(ENV_FILE) | cut -d '=' -f2) \
 	LOG_LEVEL=$(LOG_LEVEL) \
-	$(PYTHON) ai_review.py --mode committed --review-type code
+	PROJECT_ROOT=$(PROJECT_ROOT) \
+	$(PYTHON) ai_code_review.py --mode committed
 
 .PHONY: review-uncommitted
-review-uncommitted: dev ## Review staged Python changes
+review-code-uncommitted: dev ## Review staged Python changes
 	@echo "🤖 Reviewing Python changes (staged)..."
-	OPENAI_API_KEY=$$(grep OPENAI_API_KEY $(ENV_FILE) | cut -d '=' -f2) \
 	LOG_LEVEL=$(LOG_LEVEL) \
-	$(PYTHON) ai_review.py --mode uncommitted --review-type code
+	PROJECT_ROOT=$(PROJECT_ROOT) \
+	$(PYTHON) ai_code_review.py --mode uncommitted
 
 .PHONY: review-all
-review-all: dev ## Review all modified Python files
+review-code-all: dev ## Review all modified Python files
 	@echo "🤖 Reviewing all Python files..."
-	OPENAI_API_KEY=$$(grep OPENAI_API_KEY $(ENV_FILE) | cut -d '=' -f2) \
 	LOG_LEVEL=$(LOG_LEVEL) \
-	$(PYTHON) ai_review.py --mode all --review-type code
+	PROJECT_ROOT=$(PROJECT_ROOT) \
+	$(PYTHON) ai_code_review.py --mode all
 
 .PHONY: review-deploy
 review-deploy: dev ## Review config vs deployment consistency
 	@echo "🛠️ Reviewing backend ↔️ deploy consistency..."
-	OPENAI_API_KEY=$$(grep OPENAI_API_KEY $(ENV_FILE) | cut -d '=' -f2) \
 	LOG_LEVEL=$(LOG_LEVEL) \
-	$(PYTHON) ai_review.py --mode all --review-type deploy
+	PROJECT_ROOT=$(PROJECT_ROOT) \
+	$(PYTHON) ai_deployment_review.py --path ..
+
+.PHONY: check-headers
+check-headers: ## Check and add missing Apache 2.0 headers
+	@echo "🔍 Checking and adding Apache 2.0 headers in project..."
+	PROJECT_ROOT=$(PROJECT_ROOT) \
+	bash check_and_add_apachev2_headers.sh $(PROJECT_ROOT)
 
 ##@ Clean
 
