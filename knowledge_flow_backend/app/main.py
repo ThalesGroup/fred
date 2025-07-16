@@ -28,7 +28,7 @@ from dotenv import load_dotenv
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi_mcp import FastApiMCP
-from fred_core.security.keycloak import initialize_keycloak
+from fred_core import initialize_keycloak
 from rich.logging import RichHandler
 
 from app.application_context import ApplicationContext

@@ -3,6 +3,7 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.core.stores.tags.base_tag_store import TagAlreadyExistsError, TagNotFoundError
+from app.features.metadata.service import MetadataNotFound
 from app.features.tag.service import TagService
 from app.features.tag.structure import Tag, TagCreate, TagUpdate
 from fred_core import KeycloakUser, get_current_user
@@ -20,6 +21,9 @@ class TagController:
                 return HTTPException(status_code=404, detail="Tag not found")
             if isinstance(e, TagAlreadyExistsError):
                 return HTTPException(status_code=409, detail="Tag already exists")
+            # Invalid document id was passed
+            if isinstance(e, MetadataNotFound):
+                return HTTPException(status_code=404, detail=str(e))
 
             # Todo: handle authorization exception
             # if isinstance(e, AuthorizationError):

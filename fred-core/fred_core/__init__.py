@@ -4,6 +4,12 @@ from fred_core.security.structure import (
     Security,
     ConfigurationWithSecurity,
 )
+from fred_core.store.local_json_store import (
+    LocalJsonStore,
+    BaseModelWithId,
+    ResourceNotFoundError,
+    ResourceAlreadyExistsError,
+)
 
 __all__ = [
     "get_current_user",
@@ -11,4 +17,8 @@ __all__ = [
     "KeycloakUser",
     "Security",
     "ConfigurationWithSecurity",
+    "LocalJsonStore",
+    "BaseModelWithId",
+    "ResourceNotFoundError",
+    "ResourceAlreadyExistsError",
 ]

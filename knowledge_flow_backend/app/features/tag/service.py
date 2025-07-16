@@ -1,9 +1,8 @@
 from datetime import datetime
-from typing import List
 from uuid import uuid4
 
 from app.application_context import ApplicationContext
-from app.core.stores.tags.base_tag_store import TagNotFoundError
+from app.features.metadata.service import MetadataService
 from app.features.tag.structure import Tag, TagCreate, TagUpdate
 from fred_core import KeycloakUser
 
@@ -17,7 +16,9 @@ class TagService:
         context = ApplicationContext.get_instance()
         self._tag_store = context.get_tag_store()
 
-    def list_tags_for_user(self, user: KeycloakUser) -> List[Tag]:
+        self.document_metadata_service = MetadataService()
+
+    def list_tags_for_user(self, user: KeycloakUser) -> list[Tag]:
         # Todo: check if user is authorized
         return self._tag_store.list_tags_for_user(user)
 
@@ -28,9 +29,11 @@ class TagService:
     def create_tag_for_user(self, tag_data: TagCreate, user: KeycloakUser) -> Tag:
         # Todo: check if user is authorized to create tags
 
-        now = datetime.now()
+        # Check that document ids are valid
+        self.validate_documents_ids(tag_data.document_ids)
 
         # Create tag from input data
+        now = datetime.now()
         tag = Tag(
             name=tag_data.name,
             description=tag_data.description,
@@ -49,6 +52,9 @@ class TagService:
     def update_tag_for_user(self, tag_id: str, tag_data: TagUpdate, user: KeycloakUser) -> Tag:
         # Todo: check if user is authorized
 
+        # Check that document ids are valid
+        self.validate_documents_ids(tag_data.document_ids)
+
         # Retrieve the existing tag
         tag = self._tag_store.get_tag_by_id(tag_id)
 
@@ -63,3 +69,9 @@ class TagService:
     def delete_tag_for_user(self, tag_id: str, user: KeycloakUser) -> None:
         # Todo: check if user is authorized
         return self._tag_store.delete_tag_by_id(tag_id)
+
+    def validate_documents_ids(self, document_ids: list[str]) -> None:
+        for doc_id in document_ids:
+            # If doucment id doesn't exist, a `MetadataNotFound` exeception will be raised
+            _ = self.document_metadata_service.get_document_metadata(doc_id)
+

@@ -6,6 +6,7 @@
     "editor.formatOnSave": true,
     "[python]": {
         "editor.wordBasedSuggestions": "off",
-        "editor.defaultFormatter": "charliermarsh.ruff"
-    }
+        "editor.defaultFormatter": "charliermarsh.ruff",
+    },
+    "python.analysis.typeCheckingMode": "standard"
 }

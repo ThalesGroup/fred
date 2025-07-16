@@ -3,7 +3,7 @@ from typing import List
 from app.core.stores.tags.base_tag_store import BaseTagStore, TagNotFoundError, TagAlreadyExistsError
 from app.features.tag.structure import Tag
 from fred_core import KeycloakUser
-from fred_core.store.local_json_store import LocalJsonStore, ResourceNotFoundError, ResourceAlreadyExistsError
+from fred_core import LocalJsonStore, ResourceNotFoundError, ResourceAlreadyExistsError
 
 
 class LocalTagStore(BaseTagStore):

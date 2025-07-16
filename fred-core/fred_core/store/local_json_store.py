@@ -1,9 +1,14 @@
-import json
 from pathlib import Path
-from typing import TypeVar, Generic, List, Callable, Any
-from pydantic import BaseModel
+from typing import Callable, Generic, List, TypeVar
 
-T = TypeVar("T", bound=BaseModel)
+from pydantic import BaseModel, TypeAdapter
+
+
+class BaseModelWithId(BaseModel):
+    id: str
+
+
+T = TypeVar("T", bound=BaseModelWithId)
 
 
 class ResourceNotFoundError(Exception):
@@ -19,6 +24,7 @@ class ResourceAlreadyExistsError(Exception):
 
 
 class LocalJsonStore(Generic[T]):
+    # class LocalJsonStore:
     """
     Generic file-based store for resources marshable to JSON (e.g., Pydantic models).
     Handles CRUD operations for any resource type, using a specified id field.
@@ -35,60 +41,59 @@ class LocalJsonStore(Generic[T]):
         self.path = json_path
         self.id_field = id_field
         self.model = model
+        self.modelListAdapter = TypeAdapter(list[model])
+
         self.path.parent.mkdir(parents=True, exist_ok=True)
         if not self.path.exists():
             self.path.write_text("[]")
 
-    def _load(self) -> List[dict]:
+    def _load(self) -> list[T]:
         if not self.path.exists():
             return []
-        return json.loads(self.path.read_text())
+        return self.modelListAdapter.validate_json(self.path.read_text())
 
-    def _save(self, data: List[dict]) -> None:
-        self.path.write_text(json.dumps(data, indent=2))
+    def _save(self, data: list[T]) -> None:
+        self.path.write_bytes(self.modelListAdapter.dump_json(data))
 
     def list(self, filter_fn: Callable[[T], bool] = lambda x: True) -> List[T]:
-        return [
-            self.model(**item) for item in self._load() if filter_fn(self.model(**item))
-        ]
+        return [item for item in self._load() if filter_fn(item)]
 
-    def get_by_id(self, resource_id: Any) -> T:
+    def get_by_id(self, resource_id: str) -> T:
         for item in self._load():
-            if item.get(self.id_field) == resource_id:
-                return self.model(**item)
+            if item.id == resource_id:
+                return item
         raise ResourceNotFoundError(
             f"No resource found with {self.id_field}={resource_id}"
         )
 
     def create(self, resource: T) -> T:
         data = self._load()
-        resource_dict = resource.model_dump()
         for item in data:
-            if item.get(self.id_field) == resource_dict[self.id_field]:
+            if item.id == resource.id:
                 raise ResourceAlreadyExistsError(
-                    f"Resource with {self.id_field}={resource_dict[self.id_field]} already exists"
+                    f"Resource with {self.id_field}={resource.id} already exists"
                 )
-        data.append(resource_dict)
+        data.append(resource)
         self._save(data)
-        return self.model(**resource_dict)
+        return resource
 
-    def update(self, resource_id: Any, resource: T) -> T:
+    def update(self, resource_id: str, resource: T) -> T:
         data = self._load()
         for i, item in enumerate(data):
-            if item.get(self.id_field) == resource_id:
-                resource_dict = resource.model_dump()
-                data[i] = resource_dict
+            if item.id == resource_id:
+                resource.id = resource_id
+                data[i] = resource
                 self._save(data)
-                return self.model(**resource_dict)
+                return resource
         raise ResourceNotFoundError(
             f"No resource found with {self.id_field}={resource_id}"
         )
 
-    def delete(self, resource_id: Any) -> None:
+    def delete(self, resource_id: str) -> None:
         data = self._load()
         original_len = len(data)
         data_without_resource_to_delete = [
-            item for item in data if not (item.get(self.id_field) == resource_id)
+            item for item in data if not (item.id == resource_id)
         ]
         if len(data_without_resource_to_delete) == original_len:
             raise ResourceNotFoundError(
