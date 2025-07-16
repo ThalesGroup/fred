@@ -121,3 +121,19 @@ class MinioContentStore(BaseContentStore):
             logger.error(f"Error reading or converting CSV for {document_uid}: {e}")
 
         raise FileNotFoundError(f"Neither markdown nor CSV preview found for document: {document_uid}")
+
+    def get_media(self, document_uid: str, media_id: str) -> BinaryIO:
+        """
+        Returns a binary stream for the specified media file.
+        """
+        media_object = f"{document_uid}/output/media/{media_id}"
+        try:
+            response = self.client.get_object(self.bucket_name, media_object)
+            media_bytes = response.read()
+            return io.BytesIO(media_bytes)
+        except S3Error as e:
+            logger.error(f"Error fetching media {media_id} for document {document_uid}: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error fetching media {media_id} for document {document_uid}: {e}")
+            raise
