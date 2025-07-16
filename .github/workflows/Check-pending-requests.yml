@@ -46,6 +46,11 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
       
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.13.0'
+
       - name: Frontend build
         run: |
           cd frontend/
