@@ -41,11 +41,6 @@ function replaceStageDirectionsWithEmoji(text: string): string {
     .replace(/\bclears throat\b/gi, "😶‍🌫️");
 }
 
-const CustomImage = ({ src, alt }: { src?: string; alt?: string }) => {
-  if (!src) return null;
-  return <img src={src} alt={alt || ''} style={{ maxWidth: '100%' }} />;
-};
-
 /**
  * MarkdownRenderer
  *
@@ -96,7 +91,6 @@ export default function MarkdownRenderer({
     <ReactMarkdown
       components={{
         ...components,
-        img: CustomImage,
         ...(props.components || {}),
       }}
       remarkPlugins={[remarkGfm, ...remarkPlugins]}
