@@ -1,4 +1,5 @@
 from typing import List
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -8,11 +9,12 @@ from app.features.tag.service import TagService
 from app.features.tag.structure import Tag, TagCreate, TagUpdate
 from fred_core import KeycloakUser, get_current_user
 
+logger = logging.getLogger(__name__)
+
 class TagController:
     """
     Controller for CRUD operations on Tag resource.
     """
-
     def __init__(self, router: APIRouter):
         self.service = TagService()
 
@@ -25,10 +27,11 @@ class TagController:
             if isinstance(e, MetadataNotFound):
                 return HTTPException(status_code=404, detail=str(e))
 
-            # Todo: handle authorization exception
+            # Todo: handle authorization exception(s)
             # if isinstance(e, AuthorizationError):
             #     return HTTPException(status_code=403, detail="Not authorized to perform this tag operation")
 
+            logger.error(f"Internal server error: {e}", exc_info=True)
             return HTTPException(status_code=500, detail="Internal server error")
 
         self._register_routes(router, handle_exception)

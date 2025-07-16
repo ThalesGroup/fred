@@ -37,6 +37,7 @@ class TagService:
         tag = Tag(
             name=tag_data.name,
             description=tag_data.description,
+            type=tag_data.type,
             document_ids=tag_data.document_ids,
             # Set a unique id
             id=str(uuid4()),
@@ -61,7 +62,9 @@ class TagService:
         # Update tag with input data
         tag.name = tag_data.name
         tag.description = tag_data.description
+        tag.type = tag_data.type
         tag.document_ids = tag_data.document_ids
+        # Update the updated_at timestamp
         tag.updated_at = datetime.now()
 
         return self._tag_store.update_tag_by_id(tag_id, tag)
