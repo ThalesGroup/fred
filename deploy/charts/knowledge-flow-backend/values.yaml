@@ -166,11 +166,8 @@ configuration:
   content_storage:
   # The content store type can be either "local" or "minio" or "gcs"
   # If you are using minio, make sure to set the following environment variables:
-  # - MINIO_ENDPOINT
   # - MINIO_ACCESS_KEY
   # - MINIO_SECRET_KEY
-  # - MINIO_BUCKET
-  # - MINIO_SECURE
   # If you are using gcs, make sure to set the following environment variables:
   # - GCS_PROJECT_ID
   # - GCS_BUCKET_NAME
@@ -178,7 +175,11 @@ configuration:
   # If you are using local storage, make sure to set the following environment variable:
   # - LOCAL_CONTENT_STORAGE_PATH default to '~/.knowledge-flow/content-store'
     type: "minio"
-
+    endpoint: minio:9000
+    # access_key: minioadmin # Overrides the MINIO_ACCESS_KEY environment variable
+    # secret_key: minioadmin # Overrides the MINIO_SECRET_KEY environment variable
+    secure: False
+    bucket_name: app-bucket
   metadata_storage:
     type: "opensearch"
   # type: "opensearch"
@@ -347,11 +348,8 @@ dotenv:
   OPENSEARCH_PASSWORD: "Azerty123_"
 
   # MINIO
-  MINIO_ENDPOINT: "minio:9000"
   MINIO_ACCESS_KEY: "admin"
   MINIO_SECRET_KEY: "Azerty123_"
-  MINIO_BUCKET_NAME: "app"
-  MINIO_SECURE: "false"
 
   # GCS
   GCS_CREDENTIALS_PATH: "/path/to/sa-key.json"

@@ -59,11 +59,8 @@ input_processors:
 content_storage:
   # The content store type can be either "local" or "minio" or "gcs"
   # If you are using minio, make sure to set the following environment variables:
-  # - MINIO_ENDPOINT
   # - MINIO_ACCESS_KEY
   # - MINIO_SECRET_KEY
-  # - MINIO_BUCKET
-  # - MINIO_SECURE
   # If you are using gcs, make sure to set the following environment variables:
   # - GCS_PROJECT_ID
   # - GCS_BUCKET_NAME
