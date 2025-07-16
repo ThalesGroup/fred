@@ -79,7 +79,6 @@ content_storage:
   # access_key: minioadmin # Overrides the MINIO_ACCESS_KEY environment variable
   # secret_key: minioadmin # Overrides the MINIO_SECRET_KEY environment variable
   # secure: False
-  # content_bucket_name: fred-storage
   # context_bucket_name: agent-contexts
 
 metadata_storage:
