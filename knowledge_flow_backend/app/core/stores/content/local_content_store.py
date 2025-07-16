@@ -28,7 +28,7 @@ class LocalStorageBackend(BaseContentStore):
     def __init__(self, destination_root: Path):
         self.destination_root = destination_root
 
-    def clear(self) -> None:          # ← NEW
+    def clear(self) -> None:
         """
         Delete every document that was previously saved in this local
         store.  Meant for unit-tests; no-op if the folder does not exist.
@@ -115,3 +115,10 @@ class LocalStorageBackend(BaseContentStore):
                 raise
 
         raise FileNotFoundError(f"Neither markdown nor CSV preview found for document: {document_uid}")
+
+    def get_media(self, document_uid: str, media_id: str) -> BinaryIO:
+        """
+        Returns a file stream (BinaryIO) for the given file URI.
+        """
+        return open(self.destination_root / document_uid / "output" / "media" / media_id, "rb")
+    
