@@ -31,7 +31,7 @@ class MinioSettings(BaseSettings):
     minio_bucket_name: str = Field("fred-storage", validation_alias="MINIO_BUCKET_NAME")
     minio_secure: bool = Field(False, validation_alias="MINIO_SECURE")
     minio_bucket_context_name: str = Field("agent-contexts", validation_alias="MINIO_BUCKET_CONTEXT_NAME")
-    
+
     # Configuration du modèle
     model_config = {
         "extra": "ignore"

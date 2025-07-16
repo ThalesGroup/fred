@@ -25,7 +25,7 @@ from app.core.stores.content.base_content_store import BaseContentStore
 logger = logging.getLogger(__name__)
 
 
-class MinioContentStore(BaseContentStore):
+class MinioStorageBackend(BaseContentStore):
     """
     MinIO content store for uploading files to a MinIO bucket.
     This class implements the BaseContentStore interface.
@@ -152,7 +152,7 @@ class MinioContentStore(BaseContentStore):
                     deleted_any = True
 
                 if not deleted_any:
-                    logger.warning(f"⚠️ No objects found to delete.")
+                    logger.warning("⚠️ No objects found to delete.")
 
             except S3Error as e:
                 logger.error(f"❌ Failed to delete objects from bucket{self.bucket_name}: {e}")
