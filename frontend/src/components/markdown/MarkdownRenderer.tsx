@@ -17,6 +17,8 @@ import ReactMarkdown, { type Components } from "react-markdown";
 import type { PluggableList } from "unified";
 import { getMarkdownComponents } from "./GetMarkdownComponents";
 import remarkGfm from "remark-gfm";
+import rehypeRaw from "rehype-raw";
+import rehypeSanitize from "rehype-sanitize";
 
 export interface MarkdownRendererProps {
   content: string;
@@ -38,6 +40,7 @@ function replaceStageDirectionsWithEmoji(text: string): string {
     .replace(/\bwinks\b/gi, "😉")
     .replace(/\bclears throat\b/gi, "😶‍🌫️");
 }
+
 /**
  * MarkdownRenderer
  *
@@ -91,6 +94,7 @@ export default function MarkdownRenderer({
         ...(props.components || {}),
       }}
       remarkPlugins={[remarkGfm, ...remarkPlugins]}
+      rehypePlugins={[rehypeRaw, rehypeSanitize]}
     >
       {finalContent}
     </ReactMarkdown>

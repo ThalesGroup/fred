@@ -163,47 +163,65 @@ configuration:
   #    class_path: app.core.processors.output.empty_output_processor.EmptyOutputProcessor
   output_processors: []
 
+  content_storage:
   # The content store type can be either "local" or "minio" or "gcs"
   # If you are using minio, make sure to set the following environment variables:
-  # - MINIO_ENDPOINT
   # - MINIO_ACCESS_KEY
   # - MINIO_SECRET_KEY
-  # - MINIO_BUCKET
-  # - MINIO_SECURE
   # If you are using gcs, make sure to set the following environment variables:
   # - GCS_PROJECT_ID
   # - GCS_BUCKET_NAME
   # - GCS_CREDENTIALS_PATH
   # If you are using local storage, make sure to set the following environment variable:
-  # - LOCAL_STORAGE_PATH default to '~/.knowledge-flow/content-store'
-  content_storage:
+  # - LOCAL_CONTENT_STORAGE_PATH default to '~/.knowledge-flow/content-store'
     type: "minio"
-
-  # The metadata store type can be either "local" or "opensearch
-  # If you are using opensearch, make sure to set the following environment variables:
-  # - OPENSEARCH_HOST
-  # - OPENSEARCH_PORT
-  # - OPENSEARCH_USERNAME
-  # - OPENSEARCH_PASSWORD
-  # - OPENSEARCH_METADATA_INDEX = "fred-dev-metadata"
-  # If you are using local storage, make sure to set the following environment variable:
-  # - LOCAL_STORAGE_PATH default to '~/.knowledge-flow/metadata-store.json'
+    endpoint: minio:9000
+    # access_key: minioadmin # Overrides the MINIO_ACCESS_KEY environment variable
+    # secret_key: minioadmin # Overrides the MINIO_SECRET_KEY environment variable
+    secure: False
+    bucket_name: app-bucket
   metadata_storage:
     type: "opensearch"
-
-  # The vector store type can be either "in_memory" or "opensearch"
-  # If you are using opensearch, make sure to set the following environment variables:
-  # - OPENSEARCH_HOST="https://localhost:9200"
-  # - OPENSEARCH_USER="admin"
-  # - OPENSEARCH_PASSWORD="Azerty123_"
-  # - OPENSEARCH_SECURE="false"
-  # - OPENSEARCH_VERIFY_CERTS="false"
-  # - OPENSEARCH_VECTOR_INDEX = "fred-dev-embeddings"
+  # type: "opensearch"
+  # host: https://opensearch.dev.svc.cluster.local:9200              # OpenSearch host
+  # secure: true                                                     # Use HTTPS (set to false for HTTP)
+  # verify_certs: false                                              # Whether to verify TLS certificates
+  # metadata_index: metadata-index                                   # Index for storing metadata
+  # vector_index: vector-index                                       # Vector index (required if reusing OpenSearch backend)
+  # ➤ Required environment variables (not stored in this file):
+  #   OPENSEARCH_USER=admin
+  #   OPENSEARCH_PASSWORD=xxx
   # If you are using local storage, make sure to set the following environment variable:
-  # - LOCAL_VECTOR_STORAGE_PATH default to '~/.knowledge-flow/vector-store.json'
+  # - LOCAL_METADATA_STORAGE_PATH default to '~/.knowledge-flow/metadata-store.json'
+  
   vector_storage:
-    type: "opensearch"
-
+    type: opensearch 
+  # Available backends:
+  # - in_memory  → ephemeral, dev-only (no persistence)
+  # - opensearch → persistent, secure, production-ready
+  # - weaviate   → persistent, fast, lightweight alternative. Still beta
+  #
+  # ⚠️ in_memory is used by default to ensure startup always succeeds, but it does NOT persist vectors between restarts.
+  # Use it only for testing or development.
+  #
+  # --- Example: OpenSearch configuration
+  #
+  # type: opensearch
+  # host: https://opensearch.dev.svc.cluster.local:9200              # OpenSearch host
+  # secure: true                                                     # Use HTTPS (set to false for HTTP)
+  # verify_certs: false                                              # Whether to verify TLS certificates
+  # metadata_index: metadata-index                                   # Index for storing metadata
+  # vector_index: vector-index                                       # Vector index (required if reusing OpenSearch backend)
+  # ➤ Required environment variables (not stored in this file):
+  #   OPENSEARCH_USER=admin
+  #   OPENSEARCH_PASSWORD=xxx
+  #
+  # --- Example: Weaviate configuration
+  #
+  # type: weaviate
+  # host: http://localhost:8080               # Weaviate HTTP host
+  # index_name: CodeDocuments                 # Class name used to store chunks
+  # 
   # -----------------------------------------------------------------------------
   # EMBEDDING BACKEND
   # -----------------------------------------------------------------------------
@@ -326,20 +344,12 @@ dotenv:
   KEYCLOAK_CLIENT_ID: "app"
 
   # OPENSEARCH
-  OPENSEARCH_HOST: "https://opensearch:9200"
   OPENSEARCH_USER: "admin"
   OPENSEARCH_PASSWORD: "Azerty123_"
-  OPENSEARCH_SECURE: "false"
-  OPENSEARCH_VERIFY_CERTS: "false"
-  OPENSEARCH_METADATA_INDEX: "metadata-index"
-  OPENSEARCH_VECTOR_INDEX: "vector-index"
 
   # MINIO
-  MINIO_ENDPOINT: "minio:9000"
   MINIO_ACCESS_KEY: "admin"
   MINIO_SECRET_KEY: "Azerty123_"
-  MINIO_BUCKET_NAME: "app"
-  MINIO_SECURE: "false"
 
   # GCS
   GCS_CREDENTIALS_PATH: "/path/to/sa-key.json"

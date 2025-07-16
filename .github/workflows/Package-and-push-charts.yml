@@ -1,0 +1,126 @@
+name: Package and push Helm Charts
+
+on:
+  push:
+    tags: [ 'chart/v*' ]
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  package-and-push:
+    runs-on: ubuntu-latest
+    #if: github.ref_type == 'tag' && github.event.base_ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: write
+
+    strategy:
+      # matrix will trigger the creation of a different parallel job for each case
+      matrix:
+        include:
+          - name: agentic-backend
+            chart_path: ./deploy/charts/agentic-backend
+            registry_name: agentic-backend
+          - name: knowledge-flow-backend
+            chart_path: ./deploy/charts/knowledge-flow-backend
+            registry_name: knowledge-flow-backend
+          - name: frontend
+            chart_path: ./deploy/charts/frontend
+            registry_name: frontend
+
+    # what each job will play
+
+    steps:
+      # For those preconfigured github actions, look here https://github.com/marketplace?type=actions
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v3
+
+      - name: Login to Helm registry
+        run: |
+          echo ${{ secrets.GITHUB_TOKEN }} | helm registry login ${{ env.REGISTRY }} --username ${{ github.actor }} --password-stdin
+
+      # the next step define an "meta" variable
+      # containing the image path with associated tags
+      # Here only one tag : oci://registry/image:tag
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          #images: ${{ env.REGISTRY }}/fred-agent/helm/${{ matrix.registry_name }}
+          images: dummy                   # We do not care about the image, we just want the version
+          tags: |
+            type=match,pattern=chart/(v.*),group=1
+      
+      - name: Package chart ${{ matrix.name }}
+        run: |
+          echo "Packaging ${{ matrix.name }} chart with version ${{steps.meta.outputs.version}}"
+          helm package ${{ matrix.chart_path }} \
+            --version ${{ steps.meta.outputs.version }} \
+            --destination ./packages
+
+      # - name: Debug - List packages directory
+      #   run: |
+      #     echo "=== Contenu du répertoire ./packages ==="
+      #     ls -la ./packages/
+      #     echo ""
+      #     echo "=== Fichiers .tgz trouvés ==="
+      #     find ./packages/ -name "*.tgz" -type f || echo "Aucun fichier .tgz trouvé"
+      #     echo ""
+      #     echo "=== Variables matrix pour référence ==="
+      #     echo "matrix.name: ${{ matrix.name }}"
+      #     echo "matrix.registry_name: ${{ matrix.registry_name }}"
+      #     echo "matrix.chart_path: ${{ matrix.chart_path }}"
+      #     echo "steps.meta.outputs.version: ${{ steps.meta.outputs.version }}"
+
+      # - name: Debug namespace
+      #   run: |
+      #     echo "Repository owner: ${{ github.repository_owner }}"
+      #     echo "Full repository: ${{ github.repository }}"
+      #     echo "Actor: ${{ github.actor }}"
+
+      - name: Push ${{ matrix.name }} to registry
+        run: |
+          PACKAGE_FILE=$(ls ./packages/${{ matrix.registry_name }}-${{steps.meta.outputs.version}}.tgz)
+          echo "Pushing $PACKAGE_FILE"
+          REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          helm push "$PACKAGE_FILE" oci://${{ env.REGISTRY }}/${REPO_OWNER}/fred-helm
+
+  create-release:
+    needs: package-and-push
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: dummy  # We do not care the image name, we just want to extract the version
+          tags: |
+            type=match,pattern=chart/(v.*),group=1
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Helm Charts Release ${{ steps.meta.outputs.version }}
+          body: |
+           ## Setup
+            
+            ```bash
+            # Add the repository
+            helm repo add fred-agent oci://${{ env.REGISTRY }}/thalesgroup/fred-helm
+            
+            # Install charts
+            helm install agentic-backend fred-agent/agentic-backend --version ${{ steps.meta.outputs.version }}
+            helm install knowledge-flow-backend fred-agent/knowledge-flow-backend --version ${{ steps.meta.outputs.version }}
+            helm install frontend fred-agent/frontend --version ${{ steps.meta.outputs.version }}
+            ```
+          draft: false
+          prerelease: false

@@ -43,8 +43,7 @@ from app.common.structure import (
     DAOTypeEnum,
 )
 
-from app.application_context import get_configuration
-from app.services.chatbot_session.stores.sessions_storage_factory import get_sessions_store
+from app.application_context import get_configuration, get_sessions_store
 from app.common.utils import log_exception
 from app.services.ai.ai_service import AIService
 from app.services.cluster_consumption.cluster_consumption_service import (

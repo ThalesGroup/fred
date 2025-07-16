@@ -56,9 +56,28 @@ class ProcessorConfig(BaseModel):
     class_path: str = Field(..., description="Dotted import path of the processor class")
 
 
-class ContentStorageConfig(BaseModel):
-    type: str = Field(..., description="The storage backend to use (e.g., 'local', 'minio')")
 
+###########################################################
+#
+#  --- Content Storage Configuration
+#
+
+class MinioStorage(BaseModel):
+    type: Literal["minio"]
+    endpoint: str = Field(default="localhost:9000", description="MinIO API URL")
+    access_key: Optional[str] = Field(default_factory=lambda: os.getenv("MINIO_ACCESS_KEY"), description="MinIO access key from env")
+    secret_key: Optional[str] = Field(default_factory=lambda: os.getenv("MINIO_SECRET_KEY"), description="MinIO secret key from env")
+    bucket_name: str = Field(default="app-bucket", description="Content store bucket name")
+    secure: bool = Field(default=False, description="Use TLS (https)")
+
+class LocalContentStorage(BaseModel):
+    type: Literal["local"]
+    root_path: str = Field(default=str(Path("~/.knowledge-flow/content-store")), description="Local storage directory")
+
+ContentStorageConfig = Annotated[
+    Union[LocalContentStorage, MinioStorage],
+    Field(discriminator="type")
+]
 
 ###########################################################
 #
@@ -68,18 +87,17 @@ class ContentStorageConfig(BaseModel):
 
 class LocalMetadataStorage(BaseModel):
     type: Literal["local"]
-    root_path: str = Field(default=str(Path("~/.fred/knowledge/metadata-store.json")), description="Local storage json file")
-
+    root_path: str = Field(default=str(Path("~/.knowledge-flow/metadata-store.json")), description="Local storage json file")
 
 class OpenSearchStorage(BaseModel):
     type: Literal["opensearch"]
     host: str = Field(..., description="OpenSearch host URL")
+    username: Optional[str] = Field(default_factory=lambda: os.getenv("OPENSEARCH_USER"), description="Username from env")
+    password: Optional[str] = Field(default_factory=lambda: os.getenv("OPENSEARCH_PASSWORD"), description="Password from env")
     secure: bool = Field(default=False, description="Use TLS (https)")
     verify_certs: bool = Field(default=False, description="Verify TLS certs")
     metadata_index: str = Field(..., description="OpenSearch index name for metadata")
     vector_index: str = Field(..., description="OpenSearch index name for vectors")
-    username: Optional[str] = Field(default_factory=lambda: os.getenv("OPENSEARCH_USER"), description="Username from env")
-    password: Optional[str] = Field(default_factory=lambda: os.getenv("OPENSEARCH_PASSWORD"), description="Password from env")
 
 
 # --- Final union config (with discriminator)

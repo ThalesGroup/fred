@@ -99,12 +99,13 @@ class BaseMarkdownProcessor(BaseInputProcessor):
     """For processors that convert to Markdown."""
 
     @abstractmethod
-    def convert_file_to_markdown(self, file_path: Path, output_dir: Path) -> dict:
+    def convert_file_to_markdown(self, file_path: Path, output_dir: Path, document_uid: str | None) -> dict:
         """
         Convert the input file to a Markdown format and save it in the output directory.
         Args:
             file_path (Path): The path to the input file.
             output_dir (Path): The directory where the converted file will be saved.
+            document_uid (str): The unique identifier for the document.
         Returns:
             dict: A dictionary containing the paths to the converted files.
         """
