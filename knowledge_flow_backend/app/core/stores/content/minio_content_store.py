@@ -121,3 +121,23 @@ class MinioStorageBackend(BaseContentStore):
             logger.error(f"Error reading or converting CSV for {document_uid}: {e}")
 
         raise FileNotFoundError(f"Neither markdown nor CSV preview found for document: {document_uid}")
+
+    def clear(self) -> None:
+        """
+        Deletes all objects in the MinIO bucket.
+        """
+        try:
+            objects_to_delete = self.client.list_objects(self.bucket_name, recursive=True)
+            deleted_any = False
+
+            for obj in objects_to_delete:
+                self.client.remove_object(self.bucket_name, obj.object_name)
+                logger.info(f"🗑️ Deleted '{obj.object_name}' from bucket '{self.bucket_name}'.")
+                deleted_any = True
+
+            if not deleted_any:
+                logger.warning(f"⚠️ No objects found to delete.")
+
+        except S3Error as e:
+            logger.error(f"❌ Failed to delete objects from bucket{self.bucket_name}: {e}")
+            raise ValueError(f"Failed to delete document content from MinIO: {e}")
