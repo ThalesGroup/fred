@@ -44,6 +44,8 @@ data:
       {{- if eq .Values.configuration.metadata_storage.type "opensearch" }}
       host: {{ default "https://opensearch.dev.svc.cluster.local:9200" .Values.configuration.metadata_storage.host | quote }}
       secure: {{ default true .Values.configuration.metadata_storage.secure }}
+      username: {{ .Values.configuration.metadata_storage.username }}
+      password: {{ .Values.configuration.metadata_storage.password }}
       verify_certs: {{ default false .Values.configuration.metadata_storage.verify_certs }}
       metadata_index: {{ default "metadata-index" .Values.configuration.metadata_storage.metadata_index | quote }}
       vector_index: {{ default "vector-index" .Values.configuration.metadata_storage.vector_index | quote }}
@@ -53,6 +55,8 @@ data:
       type: {{ default "opensearch" .Values.configuration.vector_storage.type | quote }}
       {{- if eq .Values.configuration.vector_storage.type "opensearch" }}
       host: {{ default "https://opensearch.dev.svc.cluster.local:9200" .Values.configuration.vector_storage.host | quote }}
+      username: {{ .Values.configuration.vector_storage.username }}
+      password: {{ .Values.configuration.vector_storage.password }}
       secure: {{ default true .Values.configuration.vector_storage.secure }}
       verify_certs: {{ default false .Values.configuration.vector_storage.verify_certs }}
       metadata_index: {{ default "metadata-index" .Values.configuration.vector_storage.metadata_index | quote }}

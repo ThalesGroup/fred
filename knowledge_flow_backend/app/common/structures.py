@@ -77,7 +77,7 @@ class MinioStorage(BaseModel):
 
 class LocalContentStorage(BaseModel):
     type: Literal["local"]
-    root_path: str = Field(default=str(Path("~/.knowledge-flow/content-store")), description="² storage directory")
+    root_path: str = Field(default=str(Path("~/.knowledge-flow/content-store")), description="Local storage directory")
 
 ContentStorageConfig = Annotated[
     Union[LocalContentStorage, MinioStorage],
@@ -96,12 +96,12 @@ class LocalMetadataStorage(BaseModel):
 class OpenSearchStorage(BaseModel):
     type: Literal["opensearch"]
     host: str = Field(..., description="OpenSearch host URL")
+    username: Optional[str] = Field(default_factory=lambda: os.getenv("OPENSEARCH_USER"), description="Username from env")
+    password: Optional[str] = Field(default_factory=lambda: os.getenv("OPENSEARCH_PASSWORD"), description="Password from env")
     secure: bool = Field(default=False, description="Use TLS (https)")
     verify_certs: bool = Field(default=False, description="Verify TLS certs")
     metadata_index: str = Field(..., description="OpenSearch index name for metadata")
     vector_index: str = Field(..., description="OpenSearch index name for vectors")
-    username: Optional[str] = Field(default_factory=lambda: os.getenv("OPENSEARCH_USER"), description="Username from env")
-    password: Optional[str] = Field(default_factory=lambda: os.getenv("OPENSEARCH_PASSWORD"), description="Password from env")
 
 
 # --- Final union config (with discriminator)
