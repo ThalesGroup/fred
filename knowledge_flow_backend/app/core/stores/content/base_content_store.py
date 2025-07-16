@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 class BaseContentStore(ABC):
     @abstractmethod
-    def save_content(self, document_uid: str, directory_dir: Path) -> None:
+    def save_content(self, document_uid: str, document_dir: Path) -> None:
         """
         Uploads the content of a directory (recursively) to storage.
         The directory should contain all files related to the document.
