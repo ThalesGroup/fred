@@ -28,7 +28,7 @@ class LocalStorageBackend(BaseContentStore):
     def __init__(self, destination_root: Path):
         self.destination_root = destination_root
 
-    def clear(self) -> None:          # ← NEW
+    def clear(self) -> None:
         """
         Delete every document that was previously saved in this local
         store.  Meant for unit-tests; no-op if the folder does not exist.
