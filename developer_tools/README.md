@@ -2,6 +2,16 @@
 
 This folder provides AI-powered developer utilities to improve code quality and deployment consistency for the [Fred](https://fredk8.dev) project. It also includes a license header enforcement script.
 
+> ⚠️ **Notice**:  
+> These tools require an OpenAI API key to function.  
+> Create a file at `config/.env` with the following content:
+>
+> ```env
+> OPENAI_API_KEY=sk-...
+> ```
+>
+> Currently, **only OpenAI** is supported as a provider. However, this is a temporary limitation — the Fred backend already includes rich support for other providers (Azure, Ollama, etc.). These tools are designed first as minimal standalone utilities. Later, they may be integrated as Fred agents or LangGraph flows, once their usage patterns and value are validated.
+
 ---
 
 ## 📦 1. `ai_code_review.py` — Python Code Quality Review
@@ -43,6 +53,8 @@ Checks whether Python config model changes (e.g., `BaseModel` fields) are reflec
 ```bash
 make review-deploy
 ```
+
+This helps bridge the gap between developers and DevOps engineers by catching mismatches **before** they cause runtime issues.
 
 ---
 
@@ -93,3 +105,4 @@ make clean
 - These tools are designed to run **from the `developer_tools/` folder**.
 - `Makefile` targets handle virtualenv activation and path configuration.
 - All prompts and responses use OpenAI's GPT models with structured input for consistent results.
+- These utilities are intentionally implemented as **minimal, decoupled apps** rather than Fred agents. This avoids bootstrapping complexity and keeps experimentation simple. Later, once their usefulness is proven, they may be integrated into Fred’s agentic architecture.
