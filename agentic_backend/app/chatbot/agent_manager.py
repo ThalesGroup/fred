@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import logging
-import json
 from typing import cast
 from app.application_context import get_agent_class, get_enabled_agent_names
 from app.chatbot.structures.agentic_flow import AgenticFlow
@@ -53,7 +52,6 @@ class AgentManager:
         if cache_key in self.agent_cache:
             logger.debug(f"Reusing cached agent for key: {cache_key}")
             return self.agent_cache[cache_key]
-
         agent_class = get_agent_class(name)
         if not agent_class:
             raise ValueError(f"Agent '{name}' not found in configuration")

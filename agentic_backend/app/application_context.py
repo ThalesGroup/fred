@@ -472,14 +472,4 @@ class ApplicationContext:
             raise ValueError(f"Leader class '{leader_cfg.class_path}' must inherit from AgentFlow.")
 
         return cls
-
-
-    def list_agent_names(self) -> list[str]:
-        """
-        Lists all available agent names from the configuration.
-
-        Returns:
-            list[str]: List of available agent names.
-        """
-        return list(self.agent_classes.keys())
         

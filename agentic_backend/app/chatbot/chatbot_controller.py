@@ -15,8 +15,8 @@
 import json
 import logging
 from typing import List
-from uuid import uuid4
 
+from agentic_backend.app.features.dynamic_agent.service import get_dynamic_agent_manager
 from app.chatbot.agent_manager import AgentManager
 from app.services.chatbot_session.session_manager import SessionManager
 from app.services.chatbot_session.structure.chat_schema import ChatMessagePayload, ErrorEvent, FinalEvent, SessionWithFiles, StreamEvent
@@ -62,8 +62,11 @@ class ChatbotController:
     def __init__(self, app: APIRouter, ai_service: AIService):
         self.ai_service = ai_service
         self.cluster_consumption_service = ClusterConsumptionService()
-        self.agent_manager = AgentManager()
-        self.session_manager = SessionManager(get_sessions_store(), self.agent_manager)
+        self.static_agent_manager = AgentManager()
+        self.dynamic_agent_manager = get_dynamic_agent_manager()
+        self.session_manager = SessionManager(get_sessions_store(), 
+                                              self.static_agent_manager,
+                                              self.dynamic_agent_manager)
         # For import-export operations
         match get_configuration().dao.type:
             case DAOTypeEnum.file:
@@ -79,8 +82,9 @@ class ChatbotController:
             summary="Get the list of available agentic flows",
         )
         def get_agentic_flows(user: KeycloakUser = Depends(get_current_user)) -> list[AgenticFlow]:
-            return self.agent_manager.get_agentic_flows()
-
+            static_flows = self.agent_manager.get_agentic_flows()
+            dynamic_flows = self.dynamic_agent_manager.get_agentic_flows()
+            return static_flows + dynamic_flows
 
         @app.post(
             "/chatbot/query",
