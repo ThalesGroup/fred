@@ -17,17 +17,21 @@ HEADER='# Copyright Thales 2025
 # limitations under the License.
 '
 
+# Use find with multiple -prune rules to exclude dirs named .venv, .git, etc., anywhere
 FILES=$(find "$ROOT_PATH" \
-  -type d \( -path "$ROOT_PATH/.venv" -o -path "$ROOT_PATH/.git" -o -path "$ROOT_PATH/__pycache__" -o -path "$ROOT_PATH/htmlcov" \) -prune -false \
-  -o -name "*.py" -type f)
+  \( -type d \( -name ".venv" -o -name ".git" -o -name "__pycache__" -o -name "htmlcov" \) -prune \) -o \
+  -type f -name "*.py" -print)
 
 for file in $FILES; do
-  if ! grep -q "Copyright Thales 2025" "$file"; then
-    echo "📄 Updating: $file"
-    tmp_file=$(mktemp)
-    echo "$HEADER" > "$tmp_file"
-    cat "$file" >> "$tmp_file"
-    mv "$tmp_file" "$file"
+  # Check it's a real Python script (avoid .pyc or bad encoding files)
+  if file "$file" | grep -q "Python script"; then
+    if ! grep -q "Copyright Thales 2025" "$file"; then
+      echo "📄 Updating: $file"
+      tmp_file=$(mktemp)
+      echo "$HEADER" > "$tmp_file"
+      cat "$file" >> "$tmp_file"
+      mv "$tmp_file" "$file"
+    fi
   fi
 done
 

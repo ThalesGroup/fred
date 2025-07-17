@@ -22,7 +22,7 @@ including latency, user/session identifiers, and timestamp.
 """
 
 from pydantic import BaseModel
-from typing import Optional,Dict
+from typing import Optional
 
 class ToolMetric(BaseModel):
     """

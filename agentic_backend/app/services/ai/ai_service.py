@@ -24,7 +24,7 @@ from typing import Dict, Optional
 
 import openai
 import yaml
-from fastapi import HTTPException, UploadFile, WebSocket
+from fastapi import HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 from kubernetes import config
 from langfuse.callback import CallbackHandler
