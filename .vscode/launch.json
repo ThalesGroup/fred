@@ -116,6 +116,25 @@
       "justMyCode": false
     },
     {
+      "name": "Debug current agentic test file",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "pytest",
+      "cwd": "${workspaceFolder}/agentic_backend",
+      "args": [
+        "-s",
+        "-vv",
+        "${file}"
+      ],
+      "envFile": "config/.env",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/agentic_backend/app",
+        "PATH": "${workspaceFolder}/.venv/bin:${env:PATH}",
+        "LOG_LEVEL": "DEBUG"
+      },
+      "justMyCode": false
+    },
+    {
       "name": "Debug Fred Frontend",
       "type": "node-terminal",
       "request": "launch",

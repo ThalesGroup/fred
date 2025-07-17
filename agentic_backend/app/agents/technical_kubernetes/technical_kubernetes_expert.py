@@ -22,8 +22,8 @@ from app.agents.technical_kubernetes.technical_kubernetes_toolkit import (
     TechnicalKubernetesToolkitBuilder,
 )
 from app.application_context import get_agent_settings, get_model_for_agent
-from app.services.ai.ai_service import AIService
-from app.services.kube.kube_service import KubeService
+from app.features.frugal.ai_service import AIService
+from app.features.k8.kube_service import KubeService
 from app.model_factory import get_model
 
 class TechnicalKubernetesExpert(AgentFlow):

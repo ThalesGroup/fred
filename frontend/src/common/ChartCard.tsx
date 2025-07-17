@@ -36,13 +36,13 @@ import { useContext, useEffect, useState } from "react";
 import { ChartSeries, SerieType } from "../utils/chartSeries";
 import HorizontalRuleIcon from "@mui/icons-material/HorizontalRule";
 import { DurationPrecision } from "../utils/period.tsx";
-import { ApplicationContext } from "../app/ApplicationContextProvider.tsx";
+import { K8ApplicationContext } from "../app/K8ApplicationContextProvider.tsx";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
 
 export const ChartCard = (props: { data: ChartSeries; height: string; type: string }) => {
-  const ctx = useContext(ApplicationContext);
+  const ctx = useContext(K8ApplicationContext);
   const [chartType, setChartType] = useState("bar");
   const [chartSerieType, setChartSerieType] = useState<SerieType | undefined>(undefined);
 

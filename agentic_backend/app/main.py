@@ -22,14 +22,17 @@ Entrypoint for the Agentic Backend App.
 import argparse
 import logging
 
-from app.services.ai.ai_service import AIService
-from app.services.kube.kube_service import KubeService
+from app.features.feedback.feedback_controller import FeedbackController
+from app.features.frugal.ai_service import AIService
+from app.features.frugal.carbon.carbon_controller import CarbonController
+from app.features.frugal.energy.energy_controller import EnergyController
+from app.features.frugal.finops.finops_controller import FinopsController
+from app.features.k8.kube_service import KubeService
 import uvicorn
 from app.application_context import ApplicationContext
 from app.chatbot.chatbot_controller import ChatbotController
 from app.common.structure import Configuration
 from app.common.utils import parse_server_configuration
-from app.feedback.feedback_controller import FeedbackController
 from app.monitoring.node_monitoring.node_metric_store import \
     create_node_metric_store
 from app.monitoring.node_monitoring.node_metric_store_controller import \
@@ -38,19 +41,9 @@ from app.monitoring.tool_monitoring.tool_metric_store import \
     create_tool_metric_store
 from app.monitoring.tool_monitoring.tool_metric_store_controller import \
     ToolMetricStoreController
-from app.services.ai.ai_controller import AIController
-from app.services.carbon.carbon_controller import CarbonController
-from app.services.energy.energy_controller import EnergyController
-from app.services.finops.finops_controller import FinopsController
+from app.features.frugal.ai_controller import AIController
 from app.services.frontend.frontend_controller import UiController
-from app.services.kube.kube_controller import KubeController
-from app.services.mission.mission_controller import MissionController
-from app.services.sensor.sensor_controller import (
-    SensorConfigurationController, SensorController)
-from app.services.theater_analysis.theater_analysis_controller import \
-    TheaterAnalysisController
-from app.services.theorical_radio.theorical_radio_controller import \
-    TheoricalRadioController
+from app.features.k8.kube_controller import KubeController
 from dotenv import load_dotenv
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -145,24 +138,19 @@ def create_app(config_path: str, base_url: str) -> FastAPI:
     )
 
     router = APIRouter(prefix=base_url)
-
-    # Initialize services
-    kube_service = KubeService()
-    ai_service = AIService(kube_service)
+    enable_k8_features = configuration.frontend_settings.feature_flags.enableK8Features
+    if enable_k8_features:
+        kube_service = KubeService()
+        ai_service = AIService(kube_service)
+        KubeController(router)
+        AIController(router, ai_service)
+        UiController(router, kube_service, ai_service)
+        CarbonController(router)
+        EnergyController(router)
+        FinopsController(router)
 
     # Register controllers
-    SensorController(router)
-    SensorConfigurationController(router)
-    TheaterAnalysisController(router)
-    MissionController(router)
-    TheoricalRadioController(router)
-    CarbonController(router)
-    EnergyController(router)
-    FinopsController(router)
-    KubeController(router)
-    AIController(router, ai_service)
-    UiController(router, kube_service, ai_service)
-    ChatbotController(router, ai_service)
+    ChatbotController(router)
     FeedbackController(router, configuration.feedback_storage)
     ToolMetricStoreController(router)
     NodeMetricStoreController(router)
