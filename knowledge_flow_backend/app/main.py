@@ -24,23 +24,24 @@ import atexit
 import logging
 
 import uvicorn
-from app.application_context import ApplicationContext
-from app.common.structures import Configuration
-from app.common.utils import parse_server_configuration
-from app.features.content.controller import ContentController
-from app.features.metadata.controller import MetadataController
-from app.features.tabular.controller import TabularController
-from app.features.vector_search.controller import VectorSearchController
-from app.features.wip.ingestion_controller import IngestionController
-from app.features.wip.knowledge_context_controller import KnowledgeContextController
 from dotenv import load_dotenv
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi_mcp import FastApiMCP
+from fred_core import initialize_keycloak
 from rich.logging import RichHandler
 
+from app.application_context import ApplicationContext
+from app.common.structures import Configuration
+from app.common.utils import parse_server_configuration
 from app.features.code_search.controller import CodeSearchController
-
+from app.features.content.controller import ContentController
+from app.features.metadata.controller import MetadataController
+from app.features.tabular.controller import TabularController
+from app.features.tag.controller import TagController
+from app.features.vector_search.controller import VectorSearchController
+from app.features.wip.ingestion_controller import IngestionController
+from app.features.wip.knowledge_context_controller import KnowledgeContextController
 
 # -----------------------
 # LOGGING + ENVIRONMENT
@@ -118,6 +119,8 @@ def create_app(config_path: str, base_url: str) -> FastAPI:
         # Get config from pre-initialized ApplicationContext (e.g. in tests)
         configuration = ApplicationContext.get_instance().get_config()
 
+    initialize_keycloak(configuration)
+
     app = FastAPI(
         docs_url=f"{base_url}/docs",
         redoc_url=f"{base_url}/redoc",
@@ -141,6 +144,7 @@ def create_app(config_path: str, base_url: str) -> FastAPI:
     KnowledgeContextController(router)
     TabularController(router)
     CodeSearchController(router)
+    TagController(router)
 
     logger.info("🧩 All controllers registered.")
     app.include_router(router)
@@ -153,7 +157,6 @@ def create_app(config_path: str, base_url: str) -> FastAPI:
         include_tags=["Tabular"],
         describe_all_responses=True,
         describe_full_response_schema=True,
-        
     )
     mcp_tabular.mount(mount_path="/mcp_tabular")
     mcp_text = FastApiMCP(

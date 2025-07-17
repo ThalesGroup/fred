@@ -32,7 +32,7 @@ Controllers to expose the radio data endpoints
 import traceback
 from fastapi import Depends, HTTPException, APIRouter
 
-from app.security.keycloak import KeycloakUser, get_current_user
+from fred_core import KeycloakUser, get_current_user
 from app.services.theorical_radio.theorical_radio_abstract_service import AbstractTheoricalRadioService
 from app.services.theorical_radio.theorical_radio_service import TheoricalRadioService
 from app.services.theorical_radio.theorical_radio_structures import TheoricalRadioSeries
@@ -52,7 +52,7 @@ class TheoricalRadioController:
                                          ) -> TheoricalRadioSeries:
             """
             Retrieves theorical radio data.
-            
+
             Returns:
                 TheoricalRadioSeries: The object containing the radio data information.
             """

@@ -22,6 +22,7 @@ from enum import Enum
 import os
 
 from pydantic import BaseModel, model_validator, Field
+from fred_core import Security
 
 
 # ----------------------------------------------------------------------
@@ -112,7 +113,7 @@ class MCPServerConfiguration(BaseModel):
     command: Optional[str] = Field(None, description="Command to run for stdio transport. Can be uv, uvx, npx and so on.")
     args: Optional[List[str]] = Field(None, description="Args to give the command as a list. ex:  ['--directory', '/directory/to/mcp', 'run', 'server.py']")
     env: Optional[Dict[str, str]] = Field(None, description="Environment variables to give the MCP server")
-    
+
 class PathOrIndexPrefix(BaseModel):
     energy_mix: str
     carbon_footprint: str
@@ -160,7 +161,7 @@ class KubernetesConfiguration(BaseModel):
 
 class RecursionConfig(BaseModel):
     recursion_limit: int
-    
+
 class ServicesSettings(BaseModel):
     name: str = Field(..., description="Service identifier name.")
     enabled: bool = Field(default=True, description="Whether the service is enabled.")
@@ -268,13 +269,6 @@ class DAOConfiguration(BaseModel):
     max_cached_delay_seconds: Optional[int] = Field(60)
 
 
-class Security(BaseModel):
-    enabled: bool = True
-    keycloak_url: str = "http://localhost:9080/realms/fred"
-    client_id: str = "fred"
-    authorized_origins: List[str] = ["http://localhost:5173"]
-
-
 class FrontendFlags(BaseModel):
     enableK8Features: bool = False
     enableElecWarfare: bool = False
@@ -286,13 +280,17 @@ class FrontendSettings(BaseModel):
     feature_flags: FrontendFlags
     properties: Properties
 
+class AppSecurity(Security):
+    client_id: str = "fred"
+    keycloak_url: str = "http://localhost:9080/realms/fred"
+
 class Configuration(BaseModel):
     frontend_settings: FrontendSettings
     database: DatabaseConfiguration
     kubernetes: KubernetesConfiguration
     ai: AIConfig
     dao: DAOConfiguration
-    security: Security
+    security: AppSecurity
     feedback_storage: FeedbackStorageConfig = Field(..., description="Feedback Storage configuration")
     node_metrics_storage:  MetricsStorageConfig = Field(..., description="Node Monitoring Storage configuration")
     tool_metrics_storage:  MetricsStorageConfig = Field(..., description="Tool Monitoring Storage configuration")

@@ -32,7 +32,7 @@ Controllers to expose the power kepler metrics endpoints
 import traceback
 from fastapi import Depends, HTTPException, APIRouter
 
-from app.security.keycloak import KeycloakUser, get_current_user
+from fred_core import KeycloakUser, get_current_user
 from app.services.theater_analysis.theater_analysis_abstract_service import AbstractTheaterAnalysisService
 from app.services.theater_analysis.theater_analysis_service import TheaterAnalysisService
 from app.services.theater_analysis.theater_analysis_structures import TheaterAnalysisSeries, DetectedDataSeries
@@ -75,7 +75,7 @@ class TheaterAnalysisController:
                                          ) -> DetectedDataSeries:
             """
             Retrieves information on data captured by the sensor
-            
+
             Returns:
                 DetectedDataSeries: The object containing detected sensor data.
             """
@@ -84,7 +84,7 @@ class TheaterAnalysisController:
             except Exception as e:
                 traceback.print_exc()
                 raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
-            
+
         @app.get("/guerre_elec/active_ships",
                  tags=fastapi_tags,
                  description="Get data of active ships",

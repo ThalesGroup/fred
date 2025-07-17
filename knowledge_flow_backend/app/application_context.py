@@ -33,6 +33,8 @@ from app.core.processors.output.vectorization_processor.embedder import Embedder
 from app.core.stores.metadata.base_metadata_store import BaseMetadataStore
 from app.core.stores.metadata.local_metadata_store import LocalMetadataStore
 from app.core.stores.metadata.opensearch_metadata_store import OpenSearchMetadataStore
+from app.core.stores.tags.base_tag_store import BaseTagStore
+from app.core.stores.tags.local_tag_store import LocalTagStore
 from app.core.stores.vector.in_memory_langchain_vector_store import InMemoryLangchainVectorStore
 from app.core.stores.vector.base_vector_store import BaseDocumentLoader, BaseEmbeddingModel, BaseTextSplitter, BaseVectoreStore
 from app.core.stores.tabular.base_tabular_store import BaseTabularStore
@@ -102,6 +104,7 @@ class ApplicationContext:
     _output_processor_instances: Dict[str, BaseOutputProcessor] = {}
     _vector_store_instance: Optional[BaseVectoreStore] = None
     _metadata_store_instance: Optional[BaseMetadataStore] = None
+    _tag_store_instance: Optional[BaseTagStore] = None
     _tabular_store_instance: Optional[BaseTabularProcessor] = None
 
     def __init__(self, config: Configuration):
@@ -334,7 +337,7 @@ class ApplicationContext:
             s = self.config.vector_storage
             if not s.username or not s.password:
                 raise ValueError("Missing required environment variables: OPENSEARCH_USER and OPENSEARCH_PASSWORD")
-            
+
             if self._vector_store_instance is None:
                 self._vector_store_instance = OpenSearchVectorStoreAdapter(
                     embedding_model=embedding_model,
@@ -388,8 +391,20 @@ class ApplicationContext:
             raise ValueError(f"Unsupported metadata storage backend: {config.type}")
 
         return self._metadata_store_instance
-    
-    
+
+    def get_tag_store(self) -> BaseTagStore:
+        if self._tag_store_instance is not None:
+            return self._tag_store_instance
+
+        config = self.config.tag_storage
+
+        if config.type == "local":
+            path = Path(config.root_path).expanduser()
+            self._tag_store_instance = LocalTagStore(path)
+            return self._tag_store_instance
+
+        raise ValueError(f"Unsupported tag storage backend: {config.type}")
+
     def get_tabular_store(self) -> BaseTabularStore:
         """
         Lazy-initialize and return the configured tabular store backend.
@@ -408,7 +423,7 @@ class ApplicationContext:
 
         return self._tabular_store_instance
 
-        
+
     def get_document_loader(self) -> BaseDocumentLoader:
         """
         Factory method to create a document loader instance based on configuration.

@@ -30,7 +30,7 @@ from fastapi import (
 from fastapi.responses import StreamingResponse
 from app.application_context import get_app_context, get_configuration
 
-from security.keycloak import KeycloakUser, get_current_user
+from fred_core import KeycloakUser, get_current_user
 from services.ai.ai_service import AIService
 from services.cluster_consumption.cluster_consumption_service import (
     ClusterConsumptionService,
@@ -173,7 +173,7 @@ class UiController:
             else:
                 app_context.status.disable_offline()
             return toggle_status
-        
+
         @app.get(
             "/clusters/footprints",
             tags=fastapi_tags,
@@ -185,7 +185,7 @@ class UiController:
             user: KeycloakUser = Depends(get_current_user)
         ) -> list[ClusterFootprint]:
             logger.info(f"User {user.username} with roles {user.roles} is fetching cluster footprints")
-    
+
             if start >= end:
                 raise HTTPException(
                     status_code=400, detail="Start date must be before end date"
@@ -377,7 +377,7 @@ class UiController:
                                         kind=workload_kind,
                                         facts=factList.facts,
                                     )
-                                ) 
+                                )
                         except FileNotFoundError:
                             # Log and continue if no workloads of this kind are found
                             logger.info(

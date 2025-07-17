@@ -18,11 +18,11 @@ from typing import Annotated, List, Literal, Union
 from pydantic import BaseModel, Field
 from typing import Optional
 from enum import Enum
-
+from fred_core import Security
 
 """
 This module defines the top level data structures used by controllers, processors
-unit tests. It helps to decouple the different components of the application and allows 
+unit tests. It helps to decouple the different components of the application and allows
 to define clear workflows and data structures.
 """
 
@@ -56,11 +56,6 @@ class ProcessorConfig(BaseModel):
     class_path: str = Field(..., description="Dotted import path of the processor class")
 
 
-class Security(BaseModel):
-    enabled: bool = True
-    keycloak_url: str = "http://localhost:9080/realms/knowledge-flow"
-    client_id: str = "knowledge-flow"
-    authorized_origins: List[str] = ["http://localhost:5173"]
 
 ###########################################################
 #
@@ -89,9 +84,10 @@ ContentStorageConfig = Annotated[
 #  --- Metadata Storage Configuration
 #
 
+
 class LocalMetadataStorage(BaseModel):
     type: Literal["local"]
-    root_path: str = Field(default=str(Path("~/.knowledge-flow/metadata-store.json")), description="Local storage directory")
+    root_path: str = Field(default=str(Path("~/.knowledge-flow/metadata-store.json")), description="Local storage json file")
 
 class OpenSearchStorage(BaseModel):
     type: Literal["opensearch"]
@@ -105,28 +101,38 @@ class OpenSearchStorage(BaseModel):
 
 
 # --- Final union config (with discriminator)
-MetadataStorageConfig = Annotated[
-    Union[LocalMetadataStorage, OpenSearchStorage],
-    Field(discriminator="type")
-]
+MetadataStorageConfig = Annotated[Union[LocalMetadataStorage, OpenSearchStorage], Field(discriminator="type")]
+
+###########################################################
+#
+# --- Tag Storage Configuration
+#
+
+class LocalTagStore(BaseModel):
+    type: Literal["local"]
+    root_path: str = Field(default=str(Path("~/.fred/knowledge/tags-store.json")), description="Local storage json file")
+
+TagStorageConfig = Annotated[Union[LocalTagStore], Field(discriminator="type")]
+
 
 ###########################################################
 #
 # --- Vector Storage Configuration
 #
 
+
 class InMemoryVectorStorage(BaseModel):
     type: Literal["in_memory"]
+
 
 class WeaviateVectorStorage(BaseModel):
     type: Literal["weaviate"]
     host: str = Field(default="https://localhost:8080", description="Weaviate host")
     index_name: str = Field(default="CodeDocuments", description="Weaviate class (collection) name")
 
-VectorStorageConfig = Annotated[
-    Union[InMemoryVectorStorage, OpenSearchStorage, WeaviateVectorStorage],
-    Field(discriminator="type")
-]
+
+VectorStorageConfig = Annotated[Union[InMemoryVectorStorage, OpenSearchStorage, WeaviateVectorStorage], Field(discriminator="type")]
+
 
 ###########################################################
 #
@@ -146,16 +152,22 @@ TabularStorageConfig = Annotated[
 class EmbeddingConfig(BaseModel):
     type: str = Field(..., description="The embedding backend to use (e.g., 'openai', 'azureopenai')")
 
+
 class KnowledgeContextStorageConfig(BaseModel):
     type: str = Field(..., description="The storage backend to use (e.g., 'local', 'minio')")
     local_path: str = Field(default="~/.fred/knowledge-context", description="The path of the local metrics store")
 
+class AppSecurity(Security):
+    client_id: str = "knowledge-flow"
+    keycloak_url: str = "http://localhost:9080/realms/knowledge-flow"
+
 class Configuration(BaseModel):
-    security: Security
+    security: AppSecurity
     input_processors: List[ProcessorConfig]
     output_processors: Optional[List[ProcessorConfig]] = None
     content_storage: ContentStorageConfig = Field(..., description="Content Storage configuration")
     metadata_storage: MetadataStorageConfig = Field(..., description="Metadata storage configuration")
+    tag_storage: TagStorageConfig = Field(..., description="Tag storage configuration")
     vector_storage: VectorStorageConfig = Field(..., description="Vector storage configuration")
     tabular_storage: TabularStorageConfig = Field(..., description="Tabular storage configuration")
     embedding: EmbeddingConfig = Field(..., description="Embedding configuration")

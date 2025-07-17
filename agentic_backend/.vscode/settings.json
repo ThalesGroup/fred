@@ -1,3 +1,7 @@
 {
     "python.defaultInterpreterPath": ".venv/bin/python",
+    "search.exclude": {
+        "**/.venv": true,
+        "**/__pycache__": true,
+    }
 }
