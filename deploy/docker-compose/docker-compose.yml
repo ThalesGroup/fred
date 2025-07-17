@@ -5,11 +5,11 @@ services:
 # -----------------------------------------------------------------------------
 
   agentic-backend:
-    image: registry.thalesdigital.io/tsn/innovation/projects/fred/agentic-backend:0.1
+    image: ghcr.io/thalesgroup/fred-agent/agentic-backend:0.1
     container_name: agentic-backend
     build:
-      context: ../../agentic_backend
-      dockerfile: dockerfiles/Dockerfile-dev
+      context: ../../
+      dockerfile: agentic_backend/dockerfiles/Dockerfile
     env_file: "~/.fred/openai-api-key.env"
     environment:
       NO_PROXY: "*"
@@ -30,16 +30,16 @@ services:
 
 
   frontend:
-    image: registry.thalesdigital.io/tsn/innovation/projects/fred/frontend:0.1
+    image: ghcr.io/thalesgroup/fred-agent/frontend:0.1
     container_name: fred-frontend
     build:
-      context: ../../frontend
-      dockerfile: dockerfiles/Dockerfile-dev
+      context: ../../
+      dockerfile: frontend/dockerfiles/Dockerfile
     environment:
       NO_PROXY: "*"
       VITE_BACKEND_URL_API: http://localhost:8000
       VITE_WEBSOCKET_URL: ws://localhost:8000/fred/chatbot/query
-      VITE_USE_AUTH: false
+      VITE_USE_AUTH: "false"
     volumes:
       - ../../frontend:/app
     networks:
@@ -48,11 +48,11 @@ services:
       - "0.0.0.0:5173:5173/tcp"
 
   knowledge-flow-backend:
-    image: registry.thalesdigital.io/tsn/projects/knowledge_flow_app/knowledge-flow-backend:0.1
+    image: ghcr.io/thalesgroup/fred-agent/knowledge-flow-backend:0.1
     container_name: knowledge-flow-backend
     build:
-      context: ../../knowledge_flow_backend
-      dockerfile: dockerfiles/Dockerfile-dev
+      context: ../../
+      dockerfile: knowledge_flow_backend/dockerfiles/Dockerfile
     environment:
       NO_PROXY: "*"
     command:
