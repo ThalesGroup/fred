@@ -1,18 +1,7 @@
 import LibraryBooksIcon from "@mui/icons-material/LibraryBooks";
-import {
-  Box,
-  Checkbox,
-  FormControlLabel,
-  IconButton,
-  Popover,
-  Stack,
-  TextField,
-  Tooltip,
-  Typography,
-  useTheme,
-} from "@mui/material";
+import { Box, Checkbox, IconButton, Popover, Stack, TextField, Tooltip, Typography, useTheme } from "@mui/material";
 import { useState } from "react";
-import { useListTagsKnowledgeFlowV1TagsGetQuery } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { Tag, useListTagsKnowledgeFlowV1TagsGetQuery } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 
 // Icon that open / close the libraries selection
 export function ChatLibrariesSelection() {
@@ -68,18 +57,18 @@ export function ChatLibrariesSelection() {
 // List of libraries with search and selection
 export function LibrariesSelectionCard() {
   const theme = useTheme();
-  const { data: tags } = useListTagsKnowledgeFlowV1TagsGetQuery();
-  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
+  const { data: libraries } = useListTagsKnowledgeFlowV1TagsGetQuery();
+  const [selectedLibrariesIds, setSelectedLibrariesIds] = useState<string[]>([]);
   const [search, setSearch] = useState("");
-  const [hoveredTag, setHoveredTag] = useState<string | null>(null);
+  const [hoveredLibrary, setHoveredLibrary] = useState<string | null>(null);
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
 
-  const handleTagToggle = (tagId: string) => {
-    setSelectedTagIds((prev) => (prev.includes(tagId) ? prev.filter((id) => id !== tagId) : [...prev, tagId]));
+  const handleLibraryToggle = (id: string) => {
+    setSelectedLibrariesIds((prev) => (prev.includes(id) ? prev.filter((id) => id !== id) : [...prev, id]));
   };
 
-  const filteredTags = tags
-    ?.filter((tag: { id: string; name: string }) => tag.name.toLowerCase().includes(search.toLowerCase()))
+  const filteredLibraries = libraries
+    ?.filter((lib: Tag) => lib.name.toLowerCase().includes(search.toLowerCase()))
     .sort((a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name));
 
   return (
@@ -106,7 +95,7 @@ export function LibrariesSelectionCard() {
           px: 1,
         }}
       >
-        {filteredTags?.map((tag: { id: string; name: string; description?: string }) => (
+        {filteredLibraries?.map((lib: Tag) => (
           <Box
             sx={{
               width: "100%",
@@ -121,19 +110,19 @@ export function LibrariesSelectionCard() {
               // Ensure minHeight for better click/hover area
               minHeight: 40,
             }}
-            key={tag.id}
+            key={lib.id}
             onMouseEnter={(e) => {
-              setHoveredTag(tag.id);
+              setHoveredLibrary(lib.id);
               setAnchorEl(e.currentTarget);
             }}
             onMouseLeave={() => {
-              setHoveredTag(null);
+              setHoveredLibrary(null);
               setAnchorEl(null);
             }}
-            onClick={() => handleTagToggle(tag.id)}
+            onClick={() => handleLibraryToggle(lib.id)}
           >
             <Checkbox
-              checked={selectedTagIds.includes(tag.id)}
+              checked={selectedLibrariesIds.includes(lib.id)}
               tabIndex={-1}
               disableRipple
               sx={{ mr: 1 }}
@@ -147,19 +136,19 @@ export function LibrariesSelectionCard() {
                 textOverflow: "ellipsis",
               }}
             >
-              {tag.name}
+              {lib.name}
             </Typography>
 
             {/* Tooltip */}
-            {hoveredTag === tag.id && anchorEl && (
+            {hoveredLibrary === lib.id && anchorEl && (
               <Tooltip
                 open
                 title={
                   <>
-                    <Typography color="inherit">{tag.name}</Typography>
-                    {tag.description && (
+                    <Typography color="inherit">{lib.name}</Typography>
+                    {lib.description && (
                       <Typography color="inherit" fontWeight="light" fontSize=".95rem" fontStyle="italic">
-                        {tag.description}
+                        {lib.description}
                       </Typography>
                     )}
                   </>
