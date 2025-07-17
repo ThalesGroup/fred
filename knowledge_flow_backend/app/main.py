@@ -19,11 +19,9 @@
 Entrypoint for the Knowledge Flow Backend App.
 """
 
-import argparse
-import atexit
 import logging
+import os
 
-import uvicorn
 from dotenv import load_dotenv
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -68,56 +66,28 @@ def load_environment(dotenv_path: str = "./config/.env"):
     else:
         logging.getLogger().warning(f"⚠️ No .env file found at: {dotenv_path}")
 
-
-# -----------------------
-# CLI ARGUMENTS
-# -----------------------
-
-
-def parse_cli_opts():
-    parser = argparse.ArgumentParser(description="Start the Knowledge Flow Backend App")
-    parser.add_argument(
-        "--config-path",
-        default="./config/configuration.yaml",
-        help="Path to configuration YAML file",
-    )
-    parser.add_argument(
-        "--base-url",
-        default="/knowledge-flow/v1",
-        help="Base path for all API endpoints",
-    )
-    parser.add_argument(
-        "--server-address", default="127.0.0.1", help="Server binding address"
-    )
-    parser.add_argument("--server-port", type=int, default=8111, help="Server port")
-    parser.add_argument("--log-level", default="info", help="Logging level")
-    parser.add_argument(
-        "--reload", action="store_true", help="Enable auto-reload (for dev only)"
-    )
-    parser.add_argument(
-        "--reload-dir", default=".", help="Watch for changes in these directories"
-    )
-
-    return parser.parse_args()
-
-
 # -----------------------
 # APP CREATION
 # -----------------------
 
 
-def create_app(config_path: str, base_url: str) -> FastAPI:
+def create_app() -> FastAPI:
+    load_environment()
+    configure_logging(os.getenv("LOG_LEVEL", "info"))
 
-    logger.info(f"🛠️ create_app() called with base_url={base_url}")
-
+    # Retrieve config path
+    config_file = os.getenv("CONFIG_FILE")
     if ApplicationContext._instance is None:
-        if config_path is None:
-            raise ValueError("config_path is required if ApplicationContext is not already initialized")
-        configuration: Configuration = parse_server_configuration(config_path)
+        if config_file is None:
+            raise ValueError("CONFIG_FILE is required if ApplicationContext is not already initialized")
+        configuration: Configuration = parse_server_configuration(config_file)
         ApplicationContext(configuration)
     else:
         # Get config from pre-initialized ApplicationContext (e.g. in tests)
         configuration = ApplicationContext.get_instance().get_config()
+
+    base_url = configuration.v1_base_url
+    logger.info(f"🛠️ create_app() called with base_url={base_url}")
 
     initialize_keycloak(configuration)
 
@@ -181,34 +151,6 @@ def create_app(config_path: str, base_url: str) -> FastAPI:
     return app
 
 
-# -----------------------
-# MAIN ENTRYPOINT
-# -----------------------
-
-
-def main():
-    args = parse_cli_opts()
-    configure_logging(args.log_level)
-    load_environment()
-
-    app = create_app(config_path=args.config_path, base_url=args.base_url)
-    # ✅ Register graceful shutdown
-    atexit.register(ApplicationContext.get_instance().close_connections)
-
-    uvicorn.run(
-        app,
-        host=args.server_address,
-        port=args.server_port,
-        log_level=args.log_level,
-        reload=args.reload,
-        reload_dirs=args.reload_dir,
-    )
-
-
 if __name__ == "__main__":
-    main()
-
-# Note: We do not define a global `app = FastAPI()` for ASGI (e.g., `uvicorn app.main:app`)
-# because this application is always launched via the CLI `main()` function.
-# This allows full control over configuration (e.g., --config-path, --base-url) and avoids
-# the need for a static app instance required by ASGI-based servers like Uvicorn in import mode.
+    print("To start the app, use uvicorn cli with:")
+    print("uv run uvicorn --factory app.main:create_app ...")
