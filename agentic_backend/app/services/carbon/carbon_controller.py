@@ -34,7 +34,7 @@ from datetime import datetime
 
 from fastapi import Depends, HTTPException, Query, APIRouter
 
-from security.keycloak import KeycloakUser, get_current_user
+from fred_core import KeycloakUser, get_current_user
 from app.services.cluster_consumption.cluster_consumption_abstract_service import AbstractClusterConsumptionService
 from app.services.cluster_consumption.cluster_consumption_service import ClusterConsumptionService
 from app.services.cluster_consumption.cluster_consumption_structures import ClusterConsumptionSeries

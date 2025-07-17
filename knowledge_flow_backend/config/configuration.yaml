@@ -103,6 +103,8 @@ metadata_storage:
   #   OPENSEARCH_USER=admin
   #   OPENSEARCH_PASSWORD=xxx
 
+tag_storage:
+  type: "local"
 
 vector_storage:
   # Available backends:
@@ -131,7 +133,7 @@ vector_storage:
   # type: weaviate
   # host: http://localhost:8080               # Weaviate HTTP host
   # index_name: CodeDocuments                 # Class name used to store chunks
-  # 
+  #
 
 tabular_storage:
   type: "duckdb"
@@ -190,7 +192,7 @@ knowledge_context_storage:
   # KNOWLEDGE CONTEXT STORAGE BACKEND
   # -----------------------------------------------------------------------------
   # Backend used to store Knowledge Contexts (Workspaces) and user profiles.
-  # Both can have associated files. 
+  # Both can have associated files.
   # -------------------------------------
   type: local  # as of now only local storage is supported
   local_path: "~/.fred/knowledge-context"

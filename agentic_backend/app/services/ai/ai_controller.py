@@ -22,7 +22,7 @@ from fastapi import (APIRouter, Body, Depends, FastAPI, File, HTTPException, Que
                      UploadFile)
 
 from app.common.utils import log_exception
-from app.security.keycloak import KeycloakUser, get_current_user
+from fred_core import KeycloakUser, get_current_user
 from app.services.ai.ai_service import AIService
 from app.services.ai.structure.cluster_summary import ClusterSummary
 from app.services.ai.structure.cluster_topology import ClusterTopology

@@ -53,12 +53,14 @@ class MetadataService:
             raise InvalidMetadataRequest("Document UID cannot be empty")
         try:
             metadata = self.metadata_store.get_metadata_by_uid(document_uid)
-            if metadata is None:
-                raise MetadataNotFound(f"No document found with UID {document_uid}")
-            return GetDocumentMetadataResponse(status=Status.SUCCESS, metadata=metadata)
         except Exception as e:
             logger.error(f"Error retrieving metadata for {document_uid}: {e}")
             raise MetadataUpdateError(f"Failed to get metadata: {e}")
+
+        if metadata is None:
+            raise MetadataNotFound(f"No document found with UID {document_uid}")
+
+        return GetDocumentMetadataResponse(status=Status.SUCCESS, metadata=metadata)
 
     def update_document_retrievable(self, document_uid: str, update) -> UpdateDocumentMetadataResponse:
         if not document_uid:

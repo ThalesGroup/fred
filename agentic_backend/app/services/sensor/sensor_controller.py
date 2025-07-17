@@ -32,7 +32,7 @@ Controllers to expose the power kepler metrics endpoints
 import traceback
 from fastapi import Depends, HTTPException, APIRouter
 
-from app.security.keycloak import KeycloakUser, get_current_user
+from fred_core import KeycloakUser, get_current_user
 from app.services.sensor.sensor_abstract_service import AbstractSensorService, AbstractSensorConfigurationService
 from app.services.sensor.sensor_service import SensorService, SensorConfigurationService
 from app.services.sensor.sensor_structures import SensorSeries, SensorConfigurationSeries
@@ -62,7 +62,7 @@ class SensorController:
             except Exception as e:
                 traceback.print_exc()
                 raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
-            
+
 class SensorConfigurationController:
     def __init__(self, app: APIRouter):
         service: AbstractSensorConfigurationService = SensorConfigurationService()
@@ -80,7 +80,7 @@ class SensorConfigurationController:
             """
             Get the list of sensor configurations for all the ships located in the
             provided neighbourhood_id.
-            
+
             Args:
                 neighbourhood_id (str): Naval neighbourhood id.
 
