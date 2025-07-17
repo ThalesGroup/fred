@@ -39,7 +39,7 @@ from langchain_core.tools import BaseTool
 from app.flow import AgentFlow, Flow  # Base class for all agent flows
 from app.common.utils import log_exception
 from app.common.error import UnsupportedTransportError, MCPToolFetchError
-
+from app.services.chatbot_session.abstract_session_backend import AbstractSessionStorage
 import logging
 
 logger = logging.getLogger(__name__)
@@ -76,6 +76,16 @@ def get_configuration() -> Configuration:
         Configuration: The singleton application configuration.
     """
     return get_app_context().configuration
+
+def get_sessions_store() -> AbstractSessionStorage:
+    """
+    Factory function to create a sessions store instance based on the configuration.
+    As of now, it supports in_memory and OpenSearch sessions storage.
+    
+    Returns:
+        AbstractSessionStorage: An instance of the sessions store.
+    """
+    return get_app_context().get_sessions_store()
 
 def get_enabled_agent_names() -> List[str]:
     """

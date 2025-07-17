@@ -228,7 +228,6 @@ Contains config classes (e.g., OpenAI, Ollama, GCS, MinIO):
 ```
 config/
 ├── embedding_openai_settings.py
-├── content_store_minio_settings.py
 ├── opensearch_settings.py
 └── ...
 ```

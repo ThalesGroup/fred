@@ -35,6 +35,7 @@ dependencies = [
   "opensearch-py>=2.8.0,<3.0.0",
   "rich>=14.0.0",
   "cryptography>=45.0.4",
+  "fred-core",
 ]
 
 [project.optional-dependencies]
@@ -54,3 +55,11 @@ packages = [
 
 [tool.setuptools.packages.find]
 include = ["fred*"]
+
+[tool.uv.sources]
+fred-core = { path = "../fred-core", editable = true }
+
+[tool.uv]
+# Using `editable_mode = "compat"` when installing fred-core to make editable install work with Pylance (vscode):
+# https://github.com/microsoft/pylance-release/blob/main/TROUBLESHOOTING.md#editable-install-modules-not-found
+config-settings = { editable_mode = "compat" }

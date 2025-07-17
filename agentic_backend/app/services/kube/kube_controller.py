@@ -39,7 +39,7 @@ from fastapi import APIRouter, Depends
 from fastapi.exceptions import HTTPException
 from kubernetes.client.exceptions import ApiException
 
-from app.security.keycloak import KeycloakUser, get_current_user
+from fred_core import KeycloakUser, get_current_user
 from app.services.kube.kube_service import KubeService
 from app.services.kube.structure import Cluster, Workload, WorkloadKind, WorkloadNameList, IngressesList
 from app.services.kube.structure import NamespacesList, Namespace, ConfigMapsList, ServicesList

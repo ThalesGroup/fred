@@ -12,15 +12,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from pydantic_settings import BaseSettings
-from pydantic import Field
+from typing import Protocol
+from pydantic import BaseModel
 
 
-class ContentStoreMinioSettings(BaseSettings):
-    minio_endpoint: str = Field(..., validation_alias="MINIO_ENDPOINT")
-    minio_access_key: str = Field(..., validation_alias="MINIO_ACCESS_KEY")
-    minio_secret_key: str = Field(..., validation_alias="MINIO_SECRET_KEY")
-    minio_bucket_name: str = Field(..., validation_alias="MINIO_BUCKET_NAME")
-    minio_secure: bool = Field(False, validation_alias="MINIO_SECURE")
+class KeycloakUser(BaseModel):
+    """Represents an authenticated Keycloak user."""
 
-    model_config = {"extra": "ignore"}
+    uid: str
+    username: str
+    roles: list[str]
+    email: str | None = None
+
+
+class Security(BaseModel):
+    enabled: bool = True
+    keycloak_url: str
+    client_id: str
+    authorized_origins: list[str] = ["http://localhost:5173"]
+
+
+class ConfigurationWithSecurity(Protocol):
+    security: Security

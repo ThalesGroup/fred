@@ -75,6 +75,19 @@ class ContentService:
             raise FileNotFoundError(f"Original input file not found for document {document_uid}")
         return stream, document_name, content_type
 
+    async def get_document_media(self, document_uid: str, media_id: str) -> Tuple[BinaryIO, str, str]:
+        """
+        Returns media file associated with a document if it exists.
+        """
+        content_type = mimetypes.guess_type(media_id)[0] or "application/octet-stream"
+        
+        try:
+            stream = self.content_store.get_media(document_uid, media_id)
+        except FileNotFoundError:
+            raise FileNotFoundError(f"No media found for document {document_uid} with media ID {media_id}")
+        
+        return stream, media_id, content_type
+
     async def get_markdown_preview(self, document_uid: str) -> str:
         """
         Returns content of output.md if it exists (as markdown).

@@ -22,6 +22,8 @@ Entrypoint for the Agentic Backend App.
 import argparse
 import logging
 
+from app.services.ai.ai_service import AIService
+from app.services.kube.kube_service import KubeService
 import uvicorn
 from app.application_context import ApplicationContext
 from app.chatbot.chatbot_controller import ChatbotController
@@ -36,7 +38,6 @@ from app.monitoring.tool_monitoring.tool_metric_store import \
     create_tool_metric_store
 from app.monitoring.tool_monitoring.tool_metric_store_controller import \
     ToolMetricStoreController
-from app.security.keycloak import initialize_keycloak
 from app.services.ai.ai_controller import AIController
 from app.services.carbon.carbon_controller import CarbonController
 from app.services.energy.energy_controller import EnergyController
@@ -53,9 +54,8 @@ from app.services.theorical_radio.theorical_radio_controller import \
 from dotenv import load_dotenv
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fred_core import initialize_keycloak
 from rich.logging import RichHandler
-from services.ai.ai_service import AIService
-from services.kube.kube_service import KubeService
 
 
 # -----------------------

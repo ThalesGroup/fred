@@ -84,7 +84,19 @@ class HybridJsonlStore(Generic[T], MetricStore):
         if os.path.exists(self.data_path):
             with open(self.data_path, "r") as f:
                 for line in f:
-                    self._metrics.append(self.model_cls(**json.loads(line)))
+                    try:
+                        self._metrics.append(self.model_cls(**json.loads(line)))
+                    except Exception as e:
+                        msg =(
+                            f"\n\n❌ Failed to load metric from JSONL file: {self.data_path}\n"
+                            f"   → invalid metric that does not match the expected schema for {self.model_cls.__name__}.\n"
+                            f"   → Offending line: {line.strip()}\n"
+                            f"   → Error: {type(e).__name__}: {e}\n\n"
+                            f"💡 To fix this, you can either:\n"
+                            f"   - Manually delete or fix the line in {self.data_path}\n"
+                            f"   - Or delete the file entirely if the data isn't critical.\n"
+                        )
+                        raise RuntimeError(msg) from e
             logger.info(f"HybridJsonlStore: Loaded {len(self._metrics)} metrics from {self.data_path}")
 
     def _save(self, metric: T):
@@ -95,7 +107,7 @@ class HybridJsonlStore(Generic[T], MetricStore):
         with self._lock:
             self._metrics.append(metric)
             self._save(metric)
-            logger.debug(f"HybridJsonlStore: Metric added and persisted.")
+            logger.debug("HybridJsonlStore: Metric added and persisted.")
 
     def get_all(self) -> List[T]:
         return self._metrics

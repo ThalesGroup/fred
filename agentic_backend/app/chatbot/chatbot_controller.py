@@ -33,6 +33,7 @@ from fastapi import (
 )
 
 from fastapi.responses import JSONResponse, StreamingResponse
+from fred_core import KeycloakUser, get_current_user
 from starlette.websockets import WebSocketState
 
 from app.chatbot.structures.agentic_flow import AgenticFlow
@@ -42,10 +43,8 @@ from app.common.structure import (
     DAOTypeEnum,
 )
 
-from app.application_context import get_configuration
-from app.services.chatbot_session.stores.sessions_storage_factory import get_sessions_store
+from app.application_context import get_configuration, get_sessions_store
 from app.common.utils import log_exception
-from app.security.keycloak import KeycloakUser, get_current_user
 from app.services.ai.ai_service import AIService
 from app.services.cluster_consumption.cluster_consumption_service import (
     ClusterConsumptionService,
@@ -56,7 +55,7 @@ logger = logging.getLogger(__name__)
 class ChatbotController:
     """
     This controller is responsible for handling the UI HTTP endpoints and
-    WebSocket endpoints. 
+    WebSocket endpoints.
     """
 
     def __init__(self, app: APIRouter, ai_service: AIService):
@@ -134,7 +133,7 @@ class ChatbotController:
             event: ChatAskInput = Body(...),
             user: KeycloakUser = Depends(get_current_user)
         ):
-            
+
             async def event_stream():
                 try:
                     streamed_messages: List[ChatMessagePayload] = []
@@ -143,7 +142,7 @@ class ChatbotController:
                         payload = ChatMessagePayload(**msg)
                         streamed_messages.append(payload)
                         yield json.dumps(StreamEvent(type="stream", message=payload).model_dump()) + "\n"
-                    
+
                     session, final_messages = await self.session_manager.chat_ask_websocket(
                         callback=callback,
                         user_id=user.uid,
@@ -240,7 +239,7 @@ class ChatbotController:
         )
         def get_sessions(user: KeycloakUser = Depends(get_current_user)) -> list[SessionWithFiles]:
             return self.session_manager.get_sessions(user.uid)
-        
+
         @app.get(
             "/chatbot/session/{session_id}/history",
             description="Get the history of a chatbot session.",
@@ -286,4 +285,3 @@ class ChatbotController:
                 dict: Response message.
             """
             return await self.session_manager.upload_file(user_id, session_id, agent_name, file)
-            

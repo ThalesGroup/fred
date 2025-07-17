@@ -32,7 +32,7 @@ Controllers to expose the power kepler metrics endpoints
 import traceback
 from fastapi import Depends, HTTPException, APIRouter
 
-from app.security.keycloak import KeycloakUser, get_current_user
+from fred_core import KeycloakUser, get_current_user
 from app.services.mission.mission_abstract_service import AbstractMissionService
 from app.services.mission.mission_service import MissionService
 from app.services.mission.mission_structures import MissionSeries
@@ -52,7 +52,7 @@ class MissionController:
                                          ) -> MissionSeries:
             """
             Retrieves data from ongoing mission.
-            
+
             Returns:
                 MissionSeries: The object containing ship location information.
             """
