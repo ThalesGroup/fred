@@ -83,10 +83,11 @@ export function LibrariesSelectionCard() {
     .sort((a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name));
 
   return (
-    <Box sx={{ width: "380px", maxHeight: "406px", display: "flex", flexDirection: "column" }}>
+    <Box sx={{ width: "380px", height: "406px", display: "flex", flexDirection: "column" }}>
       {/* Searchbar */}
       <Box sx={{ mx: 2, mt: 2, mb: 1 }}>
         <TextField
+          autoFocus
           label="Search libraries"
           variant="outlined"
           size="small"
