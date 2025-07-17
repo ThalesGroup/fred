@@ -22,7 +22,6 @@ import {
 } from "../frugalit/slices/api.tsx";
 import { NamespaceList } from "../utils/namespace.tsx";
 import { DurationPrecision } from "../utils/period.tsx";
-import { ApplicationContextStruct } from "./ApplicationContextStruct.tsx";
 import { useToast } from "../components/ToastProvider.tsx";
 import { extractHttpErrorMessage } from "../utils/extractHttpErrorMessage.tsx";
 import { K8ApplicationContextStruct } from "./K8ApplicationContextStruct.tsx";

@@ -15,18 +15,18 @@
 import { useContext, useEffect, useState } from "react";
 import ReactECharts from "echarts-for-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { ApplicationContext } from "../../app/ApplicationContextProvider.tsx";
 import { Theme, useTheme } from "@mui/material";
 import LoadingWithProgress from "../../components/LoadingWithProgress.tsx";
 import { ClusterDescription } from "../slices/api.tsx";
 import { TopBar } from "../../common/TopBar.tsx";
+import { K8ApplicationContext } from "../../app/K8ApplicationContextProvider.tsx";
 
 export const Explain = () => {
   const [searchParams] = useSearchParams();
   const clusterFullName = searchParams.get("cluster");
   const theme = useTheme<Theme>();
-  const application_context = useContext(ApplicationContext);
-  const { currentClusterOverview, currentClusterDescription } = useContext(ApplicationContext);
+  const application_context = useContext(K8ApplicationContext);
+  const { currentClusterOverview, currentClusterDescription } = useContext(K8ApplicationContext);
   const navigate = useNavigate();
   const [treeData, setTreeData] = useState([]);
   const [loading, setLoading] = useState(true);

@@ -17,7 +17,7 @@ import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
 import "dayjs/locale/en-gb";
-import { ApplicationContext } from "../app/ApplicationContextProvider.tsx";
+import { K8ApplicationContext } from "../app/K8ApplicationContextProvider.tsx";
 import { useContext } from "react";
 import { ClusterOverview } from "../frugalit/slices/api.tsx";
 import { ClusterScoreCard } from "./ClusterScoreCard.tsx";
@@ -26,7 +26,7 @@ dayjs.extend(utc);
 dayjs.extend(timezone);
 
 export const SingleClusterFilter = () => {
-  const ctx = useContext(ApplicationContext);
+  const ctx = useContext(K8ApplicationContext);
 
   const handleResetSelectedScopes = (c: ClusterOverview) => {
     if (c != null) {
