@@ -15,18 +15,18 @@
 import { useEffect, useContext } from "react";
 import { useSearchParams } from "react-router-dom";
 import { ExplainContext } from "../../app/ExplainContextProvider.tsx";
-import { ApplicationContext } from "../../app/ApplicationContextProvider.tsx";
 import LoadingWithProgress from "../../components/LoadingWithProgress.tsx";
 import { ClusterDescription } from "../slices/api.tsx";
 import { WorkloadCard } from "../component/WorkloadCard.tsx";
+import { K8ApplicationContext } from "../../app/K8ApplicationContextProvider.tsx";
 
 export const ExplainWorkload = () => {
   const [searchParams] = useSearchParams();
   const clusterFullName = searchParams.get("cluster");
   const namespace = searchParams.get("namespace");
   const workload = searchParams.get("workload");
-  const applicationContext = useContext(ApplicationContext);
-  const { currentClusterDescription, currentClusterOverview } = useContext(ApplicationContext);
+  const applicationContext = useContext(K8ApplicationContext);
+  const { currentClusterDescription, currentClusterOverview } = useContext(K8ApplicationContext);
   const explainContext = useContext(ExplainContext); // Access ExplainContext
 
   // Fetch the resource when the parameters change.

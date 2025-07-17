@@ -15,15 +15,15 @@
 import { Box } from "@mui/material";
 import { useContext, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
-import { ApplicationContext } from "../../app/ApplicationContextProvider.tsx";
 import FactsHexagonChart from "../component/FactsHexagonChart.tsx";
 import LoadingWithProgress from "../../components/LoadingWithProgress.tsx";
 import { TopBar } from "../../common/TopBar.tsx";
+import { K8ApplicationContext } from "../../app/K8ApplicationContextProvider.tsx";
 
 export const Facts = () => {
   const [searchParams] = useSearchParams();
   const clusterFullName = searchParams.get("cluster");
-  const application_context = useContext(ApplicationContext);
+  const application_context = useContext(K8ApplicationContext);
   const { currentClusterOverview, currentClusterDescription } = application_context;
 
   useEffect(() => {

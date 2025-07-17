@@ -15,12 +15,12 @@
 import { useSearchParams } from "react-router-dom";
 import { Box } from "@mui/material";
 import { useContext, useEffect, useState } from "react";
-import { ApplicationContext } from "../../app/ApplicationContextProvider.tsx";
 import { ClusterCard } from "../component/ClusterCard.tsx";
 import { createFactList, FactList } from "../slices/factsStructures.tsx";
 import { useGetClusterFactsMutation, useGetClusterSummaryMutation } from "../slices/api.tsx";
 import { ClusterSummary } from "../component/clusterSummaryStructures.tsx";
 import LoadingWithProgress from "../../components/LoadingWithProgress.tsx";
+import { K8ApplicationContext } from "../../app/K8ApplicationContextProvider.tsx";
 
 async function fetchClusterDescription({ cluster, getSummary, getFacts }) {
   const [summaryRes, factsRes] = await Promise.all([getSummary({ cluster: cluster }), getFacts({ cluster: cluster })]);
@@ -34,10 +34,10 @@ export const ExplainCluster = () => {
   const clusterFullName = searchParams.get("cluster");
   const [getClusterSummary] = useGetClusterSummaryMutation();
   const [getClusterFacts] = useGetClusterFactsMutation();
-  const { currentClusterOverview } = useContext(ApplicationContext);
+  const { currentClusterOverview } = useContext(K8ApplicationContext);
   const [clusterFacts, setClusterFacts] = useState<FactList | undefined>(undefined);
   const [clusterSummary, setClusterSummary] = useState<ClusterSummary | undefined>(undefined);
-  const applicationContext = useContext(ApplicationContext);
+  const applicationContext = useContext(K8ApplicationContext);
 
   const loadClusterData = async (clusterFullName: string) => {
     // Clear current resource data

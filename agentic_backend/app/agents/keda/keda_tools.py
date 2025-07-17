@@ -19,7 +19,7 @@ from uuid import uuid4
 import yaml
 from langchain_core.tools import tool
 
-from app.services.kube.kube_service import KubeService
+from app.features.k8.kube_service import KubeService
 from app.common.structure import WorkloadKind
 
 

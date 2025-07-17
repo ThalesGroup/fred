@@ -115,4 +115,4 @@ class InputProcessorService:
         with open(metadata_path, "w", encoding="utf-8") as meta_file:
             json.dump(metadata, meta_file, indent=4, ensure_ascii=False)
 
-        processor.convert_file_to_markdown(file_path, document_dir)
+        processor.convert_file_to_markdown(file_path, document_dir, document_uid)

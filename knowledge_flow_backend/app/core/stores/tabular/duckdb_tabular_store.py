@@ -24,6 +24,8 @@ class DuckDBTabularStore(BaseTabularStore):
 
     def __init__(self, db_path: Path):
         self.db_path = db_path
+         # Ensure parent directory exists
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
         logger.info(f"🗄️ DuckDBTabularStore initialized at {self.db_path}")
 
     def save_table(self, table_name: str, df: pd.DataFrame) -> None:

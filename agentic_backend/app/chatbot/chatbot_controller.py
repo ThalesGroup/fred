@@ -45,10 +45,6 @@ from app.common.structure import (
 
 from app.application_context import get_configuration, get_sessions_store
 from app.common.utils import log_exception
-from app.services.ai.ai_service import AIService
-from app.services.cluster_consumption.cluster_consumption_service import (
-    ClusterConsumptionService,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -57,15 +53,10 @@ class ChatbotController:
     This controller is responsible for handling the UI HTTP endpoints and
     WebSocket endpoints.
     """
-
-    def __init__(self, app: APIRouter, ai_service: AIService):
-        self.ai_service = ai_service
-        self.cluster_consumption_service = ClusterConsumptionService()
-        self.static_agent_manager = AgentManager()
+    def __init__(self, app: APIRouter):
+        self.agent_manager = AgentManager()
+        self.session_manager = SessionManager(get_sessions_store(), self.agent_manager)
         self.dynamic_agent_manager = get_dynamic_agent_manager()
-        self.session_manager = SessionManager(get_sessions_store(), 
-                                              self.static_agent_manager,
-                                              self.dynamic_agent_manager)
         # For import-export operations
         match get_configuration().dao.type:
             case DAOTypeEnum.file:
@@ -73,12 +64,19 @@ class ChatbotController:
             case dao_type:
                 raise NotImplementedError(f"DAO type {dao_type}")
 
-        fastapi_tags = ["Chatbot service"]
-
+        fastapi_tags = ["Fred UI"]
+        
+        @app.get("/config/frontend_settings",
+                 summary="Get the frontend dynamic configuration",
+                 tags=fastapi_tags)
+        def get_frontend_config():
+            return get_configuration().frontend_settings
+        
         @app.get(
             "/chatbot/agenticflows",
             description="Get the list of available agentic flows",
             summary="Get the list of available agentic flows",
+            tags=fastapi_tags,
         )
         def get_agentic_flows(user: KeycloakUser = Depends(get_current_user)) -> list[AgenticFlow]:
             static_flows = self.agent_manager.get_agentic_flows()
@@ -92,7 +90,9 @@ class ChatbotController:
             tags=fastapi_tags,
             response_model=FinalEvent
         )
-        @app.post("/chatbot/query", response_model=FinalEvent)
+        @app.post("/chatbot/query", 
+                  tags=fastapi_tags,
+                  response_model=FinalEvent)
         async def chatbot_query(
             event: ChatAskInput = Body(...),
             user: KeycloakUser = Depends(get_current_user)
@@ -128,7 +128,7 @@ class ChatbotController:
                     ).model_dump()
                 )
 
-        @app.post("/chatbot/query/stream", response_class=StreamingResponse)
+        @app.post("/chatbot/query/stream", tags=fastapi_tags, response_class=StreamingResponse)
         async def chatbot_query_stream(
             event: ChatAskInput = Body(...),
             user: KeycloakUser = Depends(get_current_user)
@@ -234,6 +234,7 @@ class ChatbotController:
 
         @app.get(
             "/chatbot/sessions",
+            tags=fastapi_tags,
             description="Get the list of active chatbot sessions.",
             summary="Get the list of active chatbot sessions.",
         )

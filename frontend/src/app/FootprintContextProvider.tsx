@@ -24,10 +24,10 @@ import {
   useGetEnergyConsumptionMutation,
   useGetFinopsCostMutation,
 } from "../frugalit/slices/api.tsx";
-import { ApplicationContext } from "./ApplicationContextProvider.tsx";
 import { useToast } from "../components/ToastProvider.tsx";
 import { extractHttpErrorMessage } from "../utils/extractHttpErrorMessage.tsx";
 import { debounce } from "lodash";
+import { K8ApplicationContext } from "./K8ApplicationContextProvider.tsx";
 
 /**
  * Context to provide footprint-related data and functionality throughout the application.
@@ -59,7 +59,7 @@ export const FootprintContextProvider = (props: PropsWithChildren<{}>) => {
   const [currentEnergyConsumption, setCurrentEnergyConsumption] = useState<ClusterConsumption>(undefined);
   const [currentCostConsumption, setCurrentCostConsumption] = useState<ClusterConsumption>(undefined);
 
-  const global_context = useContext(ApplicationContext);
+  const global_context = useContext(K8ApplicationContext);
 
   const contextValue: FootprintContextStruct = useMemo(
     () => ({
