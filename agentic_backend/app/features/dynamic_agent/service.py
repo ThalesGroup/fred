@@ -1,8 +1,8 @@
 from fastapi import HTTPException
 
-from agentic_backend.app.chatbot.dynamic_agent_manager import DynamicAgentManager
-from agentic_backend.app.features.dynamic_agent.mcp_agent import MCPAgent
-from agentic_backend.app.features.dynamic_agent.structures import MCPAgentRequest
+from app.chatbot.dynamic_agent_manager import DynamicAgentManager
+from app.features.dynamic_agent.mcp_agent import MCPAgent
+from app.features.dynamic_agent.structures import MCPAgentRequest
 
 # Singleton dynamic manager (can be moved to __init__.py or containerized later)
 dynamic_agent_manager = DynamicAgentManager()

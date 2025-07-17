@@ -24,7 +24,7 @@ from fastapi import UploadFile
 from collections import defaultdict
 import requests
 
-from agentic_backend.app.chatbot.dynamic_agent_manager import DynamicAgentManager
+from app.chatbot.dynamic_agent_manager import DynamicAgentManager
 from app.chatbot.agent_manager import AgentManager
 from app.flow import AgentFlow
 from app.services.chatbot_session.attachement_processing import AttachementProcessing

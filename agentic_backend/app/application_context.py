@@ -482,4 +482,31 @@ class ApplicationContext:
             raise ValueError(f"Leader class '{leader_cfg.class_path}' must inherit from AgentFlow.")
 
         return cls
+    
+    def get_sessions_store(self) -> AbstractSessionStorage:
+        """
+        Factory function to create a sessions store instance based on the configuration.
+        As of now, it supports in_memory and OpenSearch sessions storage.
+        
+        Returns:
+            AbstractSessionStorage: An instance of the sessions store.
+        """
+        # Import here to avoid avoid circular dependencies:
+        from app.services.chatbot_session.stores.in_memory_session_store import InMemorySessionStorage
+        from app.services.chatbot_session.stores.opensearch_session_store import OpensearchSessionStorage
+        config = get_configuration().session_storage
+        if config.type == "in_memory":
+            return InMemorySessionStorage()
+        elif config.type == "opensearch":
+            return OpensearchSessionStorage(
+                host=config.host,
+                username=config.username,
+                password=config.password,
+                secure=config.secure,
+                verify_certs=config.verify_certs,
+                sessions_index=config.sessions_index,
+                history_index=config.history_index
+            )
+        else:
+            raise ValueError(f"Unsupported sessions storage backend: {config.type}")
         

@@ -18,6 +18,7 @@ from langchain_community.embeddings import FakeEmbeddings
 
 from app.application_context import ApplicationContext
 from app.common.structures import (
+    AppConfig,
     Configuration,
     ContentStorageConfig,
     EmbeddingConfig,
@@ -27,7 +28,9 @@ from app.common.structures import (
     LocalMetadataStorage,
     LocalTagStore,
     ProcessorConfig,
-    DuckDBTabularStorage
+    DuckDBTabularStorage,
+    SchedulerConfig,
+    TemporalSchedulerConfig,
 )
 from app.core.stores.content.content_storage_factory import get_content_store
 from app.main import create_app
@@ -40,6 +43,7 @@ def fake_embedder(monkeypatch):
     """
     Monkeypatch the Embedder to avoid real API calls during tests.
     """
+
     def fake_embedder_init(self, config=None):
         self.model = FakeEmbeddings(size=1352)
 
@@ -56,12 +60,31 @@ def app_context(monkeypatch, fake_embedder):
     monkeypatch.setenv("OPENAI_API_KEY", "test")  # Avoid system exit due to missing API key
 
     config = Configuration(
+        app=AppConfig(
+            base_url="/knowledge-flow/v1",
+            address="127.0.0.1",
+            port=8888,
+            log_level="debug",
+            reload=False,
+            reload_dir=".",
+        ),
         security={
             "enabled": False,
             "keycloak_url": "http://fake",
             "client_id": "test-client",
             "authorized_origins": [],
         },
+        scheduler=SchedulerConfig(
+            backend="temporal",
+            enabled=False,
+            temporal=TemporalSchedulerConfig(
+                host="localhost:7233",
+                namespace="default",
+                task_queue="ingestion",
+                workflow_prefix="test-pipeline",
+                connect_timeout_seconds=3,
+            ),
+        ),
         metadata_storage=LocalMetadataStorage(
             type="local",
             root_path="/tmp/test-metadata-store.json",
@@ -127,4 +150,3 @@ def metadata_store(app_context):
     Returns the metadata store from the initialized ApplicationContext.
     """
     return ApplicationContext.get_instance().get_metadata_store()
-

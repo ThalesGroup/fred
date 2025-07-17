@@ -161,18 +161,7 @@ class AppSecurity(Security):
     client_id: str = "knowledge-flow"
     keycloak_url: str = "http://localhost:9080/realms/knowledge-flow"
 
-class Configuration(BaseModel):
-    security: AppSecurity
-    input_processors: List[ProcessorConfig]
-    output_processors: Optional[List[ProcessorConfig]] = None
-    content_storage: ContentStorageConfig = Field(..., description="Content Storage configuration")
-    metadata_storage: MetadataStorageConfig = Field(..., description="Metadata storage configuration")
-    tag_storage: TagStorageConfig = Field(..., description="Tag storage configuration")
-    vector_storage: VectorStorageConfig = Field(..., description="Vector storage configuration")
-    tabular_storage: TabularStorageConfig = Field(..., description="Tabular storage configuration")
-    embedding: EmbeddingConfig = Field(..., description="Embedding configuration")
-    knowledge_context_storage: KnowledgeContextStorageConfig = Field(..., description="Knowledge context storage configuration")
-    knowledge_context_max_tokens: int = 50000
+
 
 
 class KnowledgeContextDocument(BaseModel):
@@ -194,3 +183,39 @@ class KnowledgeContext(BaseModel):
     creator: str
     tokens: Optional[int] = Field(default=0)
     tag: Optional[str] = Field(default="workspace")
+
+class TemporalSchedulerConfig(BaseModel):
+    host: str = "localhost:7233"
+    namespace: str = "default"
+    task_queue: str = "ingestion"
+    workflow_prefix: str = "pipeline"
+    connect_timeout_seconds: Optional[int] = 5
+
+class SchedulerConfig(BaseModel):
+    enabled: bool = False
+    backend: str = "temporal"
+    temporal: TemporalSchedulerConfig
+   
+class AppConfig(BaseModel):
+    name: Optional[str] = "Knowledge Flow Backend"
+    base_url: str = "/"
+    address: str = "127.0.0.1"
+    port: int = 8000
+    log_level: str = "info"
+    reload: bool = False
+    reload_dir: str = "."
+
+class Configuration(BaseModel):
+    app: AppConfig
+    security: AppSecurity
+    input_processors: List[ProcessorConfig]
+    output_processors: Optional[List[ProcessorConfig]] = None
+    content_storage: ContentStorageConfig = Field(..., description="Content Storage configuration")
+    metadata_storage: MetadataStorageConfig = Field(..., description="Metadata storage configuration")
+    tag_storage: TagStorageConfig = Field(..., description="Tag storage configuration")
+    vector_storage: VectorStorageConfig = Field(..., description="Vector storage configuration")
+    tabular_storage: TabularStorageConfig = Field(..., description="Tabular storage configuration")
+    embedding: EmbeddingConfig = Field(..., description="Embedding configuration")
+    knowledge_context_storage: KnowledgeContextStorageConfig = Field(..., description="Knowledge context storage configuration")
+    knowledge_context_max_tokens: int = 50000
+    scheduler: SchedulerConfig

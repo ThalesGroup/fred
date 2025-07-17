@@ -49,7 +49,7 @@ import {
   useUpdateDocumentRetrievableMutation,
 } from "../slices/documentApi";
 
-import { streamProcessDocument } from "../slices/streamDocumentUpload";
+import { streamUploadOrProcessDocument } from "../slices/streamDocumentUpload";
 import { useToast } from "../components/ToastProvider";
 import { ProgressStep, ProgressStepper } from "../components/ProgressStepper";
 import { DocumentTable } from "../components/documents/DocumentTable";
@@ -117,6 +117,7 @@ import { useTranslation } from "react-i18next";
  */
 export const DocumentLibrary = () => {
   const { showInfo, showError } = useToast();
+  const [uploadMode, setUploadMode] = useState<"upload" | "process">("process");
 
   // API Hooks
   const [deleteDocument] = useDeleteDocumentMutation();
@@ -288,7 +289,7 @@ export const DocumentLibrary = () => {
       let uploadCount = 0;
       for (const file of tempFiles) {
         try {
-          await streamProcessDocument(file, (progress) => {
+          await streamUploadOrProcessDocument(file, uploadMode, (progress) => {
             setUploadProgressSteps((prev) => [
               ...prev,
               {
@@ -541,6 +542,20 @@ export const DocumentLibrary = () => {
           <Typography variant="h5" fontWeight="bold" gutterBottom>
             {t("documentLibrary.uploadDrawerTitle")}
           </Typography>
+          <FormControl fullWidth sx={{ mt: 2 }}>
+            <Typography variant="subtitle2" gutterBottom>
+              Ingestion Mode
+            </Typography>
+            <Select
+              value={uploadMode}
+              onChange={(e) => setUploadMode(e.target.value as "upload" | "process")}
+              size="small"
+              sx={{ borderRadius: "8px" }}
+            >
+              <MenuItem value="upload">Upload</MenuItem>
+              <MenuItem value="process">Upload and Process</MenuItem>
+            </Select>
+          </FormControl>
 
           <Paper
             sx={{

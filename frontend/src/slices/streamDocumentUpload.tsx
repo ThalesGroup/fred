@@ -16,21 +16,28 @@ import { getConfig } from "../common/config";
 import { KeyCloakService } from "../security/KeycloakService";
 import { ProcessingProgress } from "../types/ProcessingProgress";
 
-export async function streamProcessDocument(
+export async function streamUploadOrProcessDocument(
   file: File,
+  mode: "upload" | "process",
   onProgress: (update: ProcessingProgress) => void,
 ): Promise<void> {
   const token = KeyCloakService.GetToken();
   const formData = new FormData();
   formData.append("files", file);
-  const metadata = {};
+  const metadata = {}; // Can extend later if needed
   formData.append("metadata_json", JSON.stringify(metadata));
+
   const backend_url_knowledge = getConfig().backend_url_knowledge;
   if (!backend_url_knowledge) {
-    throw new Error("knowledged backend URL is not defined");
+    throw new Error("Knowledge backend URL is not defined");
   }
-  console.log("Backend URL:", backend_url_knowledge);
-  const response = await fetch(`${getConfig().backend_url_knowledge}/knowledge-flow/v1/process-files`, {
+
+  const endpoint =
+    mode === "upload"
+      ? "/knowledge-flow/v1/upload-files"
+      : "/knowledge-flow/v1/process-files";
+
+  const response = await fetch(`${backend_url_knowledge}${endpoint}`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
@@ -53,7 +60,6 @@ export async function streamProcessDocument(
     buffer += decoder.decode(value, { stream: true });
     let lines = buffer.split("\n");
 
-    // Keep the last partial line in the buffer
     buffer = lines.pop() || "";
 
     for (const line of lines) {

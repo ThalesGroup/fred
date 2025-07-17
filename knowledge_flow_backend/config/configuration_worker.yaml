@@ -3,7 +3,7 @@ app:
   name: "Knowledge Flow Backend"
   base_url: "/knowledge-flow/v1"
   address: "127.0.0.1"
-  port: 8111
+  port: 8112
   log_level: "info"
   reload: false
   reload_dir: "."

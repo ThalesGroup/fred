@@ -16,7 +16,9 @@ import json
 import logging
 from typing import List
 
-from agentic_backend.app.features.dynamic_agent.service import get_dynamic_agent_manager
+from app.application_context import get_app_context
+from app.application_context import get_sessions_store
+from app.features.dynamic_agent.service import get_dynamic_agent_manager
 from app.chatbot.agent_manager import AgentManager
 from app.services.chatbot_session.session_manager import SessionManager
 from app.services.chatbot_session.structure.chat_schema import ChatMessagePayload, ErrorEvent, FinalEvent, SessionWithFiles, StreamEvent
@@ -43,7 +45,7 @@ from app.common.structure import (
     DAOTypeEnum,
 )
 
-from app.application_context import get_configuration, get_sessions_store
+from app.application_context import get_configuration
 from app.common.utils import log_exception
 
 logger = logging.getLogger(__name__)
