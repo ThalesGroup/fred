@@ -137,6 +137,7 @@ To get full VS Code Python support (linting, IntelliSense, debugging, etc.) acr
   - fred – for any repo‑wide scripts
   - agentic_backend – first Python backend
   - knowledge_flow_backend – second Python backend
+  - fred-core - a common python library for both python backends
   - frontend – UI
 
 2. Per‑folder Python interpreters

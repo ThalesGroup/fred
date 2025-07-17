@@ -22,6 +22,8 @@ Entrypoint for the Agentic Backend App.
 import argparse
 import logging
 
+from app.services.ai.ai_service import AIService
+from app.services.kube.kube_service import KubeService
 import uvicorn
 from app.application_context import ApplicationContext
 from app.chatbot.chatbot_controller import ChatbotController
@@ -54,8 +56,6 @@ from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fred_core import initialize_keycloak
 from rich.logging import RichHandler
-from services.ai.ai_service import AIService
-from services.kube.kube_service import KubeService
 
 
 # -----------------------
