@@ -1,10 +1,26 @@
 import LibraryBooksIcon from "@mui/icons-material/LibraryBooks";
-import { Box, Checkbox, IconButton, Popover, Stack, TextField, Tooltip, Typography, useTheme } from "@mui/material";
+import {
+  Badge,
+  Box,
+  Checkbox,
+  IconButton,
+  Popover,
+  Stack,
+  TextField,
+  Tooltip,
+  Typography,
+  useTheme,
+} from "@mui/material";
 import { useState } from "react";
 import { Tag, useListTagsKnowledgeFlowV1TagsGetQuery } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 
+export interface ChatLibrariesSelectionProps {
+  selectedLibrariesIds: string[];
+  setSelectedLibrariesIds: (ids: string[]) => void;
+}
+
 // Icon that open / close the libraries selection
-export function ChatLibrariesSelection() {
+export function ChatLibrariesSelection({ selectedLibrariesIds, setSelectedLibrariesIds }: ChatLibrariesSelectionProps) {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
 
   const handleClick = (event: React.MouseEvent<HTMLElement>) => {
@@ -20,12 +36,16 @@ export function ChatLibrariesSelection() {
 
   return (
     <>
+      {/* Icon button to open the popover */}
       <Tooltip title="Select Libraries that will be available to the agent">
-        <IconButton sx={{ fontSize: "1.6rem", padding: "8px" }} onClick={handleClick}>
-          <LibraryBooksIcon fontSize="inherit" />
-        </IconButton>
+        <Badge badgeContent={selectedLibrariesIds.length > 0 ? selectedLibrariesIds.length : undefined} color="primary">
+          <IconButton sx={{ fontSize: "1.6rem", padding: "8px" }} onClick={handleClick}>
+            <LibraryBooksIcon fontSize="inherit" />
+          </IconButton>
+        </Badge>
       </Tooltip>
 
+      {/* Popover card */}
       <Popover
         id={id}
         open={open}
@@ -47,24 +67,34 @@ export function ChatLibrariesSelection() {
           },
         }}
       >
-        <LibrariesSelectionCard />
-        {/* Popover content goes here */}
+        <LibrariesSelectionCard
+          selectedLibrariesIds={selectedLibrariesIds}
+          setSelectedLibrariesIds={setSelectedLibrariesIds}
+        />
       </Popover>
     </>
   );
 }
 
+export interface LibrariesSelectionCardProps {
+  selectedLibrariesIds: string[];
+  setSelectedLibrariesIds: (ids: string[]) => void;
+}
+
 // List of libraries with search and selection
-export function LibrariesSelectionCard() {
+export function LibrariesSelectionCard({ selectedLibrariesIds, setSelectedLibrariesIds }: LibrariesSelectionCardProps) {
   const theme = useTheme();
   const { data: libraries } = useListTagsKnowledgeFlowV1TagsGetQuery();
-  const [selectedLibrariesIds, setSelectedLibrariesIds] = useState<string[]>([]);
   const [search, setSearch] = useState("");
   const [hoveredLibrary, setHoveredLibrary] = useState<string | null>(null);
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
 
   const handleLibraryToggle = (id: string) => {
-    setSelectedLibrariesIds((prev) => (prev.includes(id) ? prev.filter((id) => id !== id) : [...prev, id]));
+    setSelectedLibrariesIds(
+      selectedLibrariesIds.includes(id)
+        ? selectedLibrariesIds.filter((libId) => libId !== id)
+        : [...selectedLibrariesIds, id],
+    );
   };
 
   const filteredLibraries = libraries
