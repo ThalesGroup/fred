@@ -23,6 +23,10 @@ spec:
       imagePullSecrets:
       {{ toYaml .Values.imagePullSecrets | indent 2 }}
       {{- end }}
+      {{- if .Values.serviceAccount.enabled }}
+      serviceAccount: {{ .Values.serviceAccount.name }}
+      serviceAccountName: {{ .Values.serviceAccount.name }}
+      {{- end }}
       {{- with .Values.podSecurityContext }}
       securityContext:
         {{- toYaml . | nindent 8 }}
