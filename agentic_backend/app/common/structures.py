@@ -286,8 +286,6 @@ class AppConfig(BaseModel):
     address: str = "127.0.0.1"
     port: int = 8000
     log_level: str = "info"
-    reload: bool = False
-    reload_dir: str = "."
 
 class Configuration(BaseModel):
     app: AppConfig

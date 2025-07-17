@@ -19,13 +19,9 @@
 Entrypoint for the Knowledge Flow Backend App.
 """
 
-import asyncio
-import atexit
 import logging
-import threading
+import os
 
-from app.features.scheduler.controller import SchedulerController
-from app.features.scheduler.worker import run_worker
 import uvicorn
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -34,19 +30,41 @@ from fred_core import initialize_keycloak
 
 from app.application_context import ApplicationContext
 from app.common.structures import Configuration
-from app.common.utils import configure_logging, load_environment, parse_cli_opts, parse_server_configuration
+from app.common.utils import configure_logging, load_environment, parse_server_configuration
 from app.features.code_search.controller import CodeSearchController
 from app.features.content.controller import ContentController
+from app.features.ingestion.controller import IngestionController
 from app.features.metadata.controller import MetadataController
+from app.features.scheduler.controller import SchedulerController
 from app.features.tabular.controller import TabularController
 from app.features.tag.controller import TagController
 from app.features.vector_search.controller import VectorSearchController
-from app.features.ingestion.controller import IngestionController
 
 logger = logging.getLogger(__name__)
 
-def create_app(configuration: Configuration) -> FastAPI:
-    logger.info(f"🛠️ create_app() called with base_url={configuration.app.base_url}")
+# -----------------------
+# APP CREATION
+# -----------------------
+
+
+def create_app() -> FastAPI:
+    load_environment()
+
+    # Retrieve config path
+    config_file = os.environ["CONFIG_FILE"]
+    if ApplicationContext._instance is None:
+        if config_file is None:
+            raise ValueError("CONFIG_FILE is required if ApplicationContext is not already initialized")
+        configuration: Configuration = parse_server_configuration(config_file)
+        ApplicationContext(configuration)
+    else:
+        # Get config from pre-initialized ApplicationContext (e.g. in tests)
+        configuration = ApplicationContext.get_instance().get_config()
+
+    configure_logging(os.getenv("LOG_LEVEL") or configuration.app.log_level or "info")
+
+    base_url = configuration.app.base_url
+    logger.info(f"🛠️ create_app() called with base_url={base_url}")
 
     initialize_keycloak(configuration)
     app = FastAPI(
@@ -115,29 +133,21 @@ def create_app(configuration: Configuration) -> FastAPI:
 # -----------------------
 
 def main():
-    args = parse_cli_opts()
-    configuration: Configuration = parse_server_configuration(args.config_path)
-    configure_logging(configuration.app.log_level)
+    # Retrieve config
     load_environment()
-    ApplicationContext(configuration)
-    app = create_app(configuration)
-    # ✅ Register graceful shutdown
-    atexit.register(ApplicationContext.get_instance().close_connections)
+    config_file = os.environ["CONFIG_FILE"]
+    configuration: Configuration = parse_server_configuration(config_file)
 
-    if configuration.scheduler.enabled and configuration.scheduler.backend == "temporal":
-        logger.info("🛠️ Launching Temporal ingestion scheduler")
-        threading.Thread(
-            target=lambda: asyncio.run(run_worker(configuration.scheduler.temporal)), 
-            daemon=True).start()
-
+    # Start app in production mode (without reload and with options based on config)
     uvicorn.run(
-        app,
+        "app.main:create_app",
+        factory=True,
+        loop="asyncio",
         host=configuration.app.address,
         port=configuration.app.port,
         log_level=configuration.app.log_level,
-        reload=configuration.app.reload,
-        reload_dirs=configuration.app.reload_dir,
     )
+
 
 if __name__ == "__main__":
     main()

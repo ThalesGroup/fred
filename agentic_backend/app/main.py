@@ -19,39 +19,37 @@
 Entrypoint for the Agentic Backend App.
 """
 
-import argparse
-import atexit
 import logging
 import os
 
-from app.features.feedback.feedback_controller import FeedbackController
-from app.features.frugal.ai_service import AIService
-from app.features.frugal.carbon.carbon_controller import CarbonController
-from app.features.frugal.energy.energy_controller import EnergyController
-from app.features.frugal.finops.finops_controller import FinopsController
-from app.features.k8.kube_service import KubeService
 import uvicorn
-from app.application_context import ApplicationContext
-from app.chatbot.chatbot_controller import ChatbotController
-from app.common.structures import Configuration
-from app.common.utils import parse_server_configuration
-from app.monitoring.node_monitoring.node_metric_store import \
-    create_node_metric_store
-from app.monitoring.node_monitoring.node_metric_store_controller import \
-    NodeMetricStoreController
-from app.monitoring.tool_monitoring.tool_metric_store import \
-    create_tool_metric_store
-from app.monitoring.tool_monitoring.tool_metric_store_controller import \
-    ToolMetricStoreController
-from app.features.frugal.ai_controller import AIController
-from app.services.frontend.frontend_controller import UiController
-from app.features.k8.kube_controller import KubeController
 from dotenv import load_dotenv
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fred_core import initialize_keycloak
 from rich.logging import RichHandler
 
+from app.application_context import ApplicationContext
+from app.chatbot.chatbot_controller import ChatbotController
+from app.common.structures import Configuration
+from app.common.utils import parse_server_configuration
+from app.features.feedback.feedback_controller import FeedbackController
+from app.features.frugal.ai_controller import AIController
+from app.features.frugal.ai_service import AIService
+from app.features.frugal.carbon.carbon_controller import CarbonController
+from app.features.frugal.energy.energy_controller import EnergyController
+from app.features.frugal.finops.finops_controller import FinopsController
+from app.features.k8.kube_controller import KubeController
+from app.features.k8.kube_service import KubeService
+from app.monitoring.node_monitoring.node_metric_store import create_node_metric_store
+from app.monitoring.node_monitoring.node_metric_store_controller import (
+    NodeMetricStoreController,
+)
+from app.monitoring.tool_monitoring.tool_metric_store import create_tool_metric_store
+from app.monitoring.tool_monitoring.tool_metric_store_controller import (
+    ToolMetricStoreController,
+)
+from app.services.frontend.frontend_controller import UiController
 
 # -----------------------
 # LOGGING + ENVIRONMENT
@@ -82,19 +80,21 @@ def load_environment(dotenv_path: str = "./config/.env"):
 # -----------------------
 # APP CREATION
 # -----------------------
-def parse_cli_opts():
-    parser = argparse.ArgumentParser(description="Start the Knowledge Flow Backend App")
-    parser.add_argument(
-        "--config-path",
-        default="./config/configuration.yaml",
-        help="Path to configuration YAML file",
-    )
-    return parser.parse_args()
 
-def create_app(configuration: Configuration) -> FastAPI:
+
+def create_app() -> FastAPI:
+    load_environment()
+
+    # Retrieve config
+    config_file = os.environ["CONFIG_FILE"]
+    configuration: Configuration = parse_server_configuration(config_file)
+    ApplicationContext(configuration)
+
+    configure_logging(os.getenv("LOG_LEVEL") or configuration.app.log_level or "info")
 
     base_url = configuration.app.base_url
     logger.info(f"🛠️ create_app() called with base_url={base_url}")
+
 
     initialize_keycloak(configuration)
     create_tool_metric_store(configuration.tool_metrics_storage)
@@ -136,19 +136,19 @@ def create_app(configuration: Configuration) -> FastAPI:
     return app
 
 def main():
-    args = parse_cli_opts()
-    configuration: Configuration = parse_server_configuration(args.config_path)
-    configure_logging(configuration.app.log_level)
+    # Retrieve config
     load_environment()
-    ApplicationContext(configuration)
-    app = create_app(configuration)
+    config_file = os.environ["CONFIG_FILE"]
+    configuration: Configuration = parse_server_configuration(config_file)
+
+    # Start app in production mode (without reload and with options based on config)
     uvicorn.run(
-        app,
+        "app.main:create_app",
+        factory=True,
+        loop="asyncio",
         host=configuration.app.address,
         port=configuration.app.port,
         log_level=configuration.app.log_level,
-        reload=configuration.app.reload,
-        reload_dirs=configuration.app.reload_dir,
     )
 
 

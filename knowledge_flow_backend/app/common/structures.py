@@ -176,7 +176,7 @@ class SchedulerConfig(BaseModel):
     enabled: bool = False
     backend: str = "temporal"
     temporal: TemporalSchedulerConfig
-   
+
 class AppConfig(BaseModel):
     name: Optional[str] = "Knowledge Flow Backend"
     base_url: str = "/knowledge-flow/v1"
