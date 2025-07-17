@@ -1,4 +1,13 @@
-# Python
+# React Frontend
+
+- Use MUI components
+- Use MUI theme (in `theme.tsx`)
+
+## Formatting
+
+- Always use `prettier` to format your code.
+
+# Python backends
 
 ## Package manager
 
