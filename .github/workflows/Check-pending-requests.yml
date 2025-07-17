@@ -13,8 +13,8 @@ jobs:
     outputs:
       frontend: ${{ steps.changes.outputs.frontend }}
       agentic: ${{ steps.changes.outputs.agentic }}
-      knowlegde_flow: ${{ steps.changes.outputs.knowlegde-flow }}
-      deploy_chart: ${{ steps.changes.outputs.deploy-chart }}
+      knowledge-flow: ${{ steps.changes.outputs.knowledge-flow }}
+      deploy-chart: ${{ steps.changes.outputs.deploy-chart }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -32,7 +32,7 @@ jobs:
               - 'agentic_backend/**'
             deploy-chart:
               - 'deploy/charts/**'
-            knowlegde-flow:
+            knowledge-flow:
               - 'knowledge_flow_backend/**'
 
   # Job to check the frontend
