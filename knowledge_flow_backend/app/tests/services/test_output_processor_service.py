@@ -92,7 +92,11 @@ def prepared_pdf_dir(tmp_path, monkeypatch):
     target_file = tmp_path / source_file.name
     copy(source_file, target_file)
 
-    InputProcessorService().process(tmp_path, target_file.name, {"origin": "test"})
+    InputProcessorService().process(tmp_path, target_file.name, {
+        "origin": "test",
+        "document_uid": "pdf-uid-123"
+    })
+
     return tmp_path
 
 class TestOutputProcessorService:
@@ -105,7 +109,10 @@ class TestOutputProcessorService:
         source = Path("app/tests/assets/sample.docx")
         target = tmp_path / source.name
         shutil.copy(source, target)
-        InputProcessorService().process(tmp_path, target.name, {"origin": "test"})
+        InputProcessorService().process(tmp_path, target.name, {
+            "origin": "test",
+            "document_uid": "docx-uid-456"
+        })
         return tmp_path
 
     # ✅ Nominal

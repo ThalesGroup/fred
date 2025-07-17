@@ -27,11 +27,10 @@ class TestMarkdownProcessor(BaseMarkdownProcessor):
     def extract_file_metadata(self, file_path: Path) -> dict:
         return {"title": "test-markdown"}
 
-    def convert_file_to_markdown(self, file_path: Path, output_dir: Path) -> dict:
+    def convert_file_to_markdown(self, file_path: Path, output_dir: Path, document_uid: str) -> dict:
         output_path = output_dir / "file.md"
         output_path.write_text("# Test Markdown Content")
         return {"markdown_path": str(output_path)}
-
 
 class TestTabularProcessor(BaseTabularProcessor):
     def check_file_validity(self, file_path: Path) -> bool:

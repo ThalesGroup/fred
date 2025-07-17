@@ -42,11 +42,11 @@ class TestInputProcessorService:
         metadata = service.extract_metadata(test_file, {})
         assert "document_uid" in metadata
 
-    def test_process_markdown(self, tmp_path, service):
+    def test_process_markdown(self, tmp_path, service: InputProcessorService):
         input_file = tmp_path / "test.md"
         input_file.write_text("dummy")
 
-        service.process(tmp_path, input_file.name, {"doc": "meta"})
+        service.process(tmp_path, input_file.name, {"doc": "meta", "document_uid": "markdown-uid-001"})
         output_file = tmp_path / "output" / "file.md"
         assert output_file.exists()
         assert output_file.read_text() == "# Test Markdown Content"
