@@ -21,6 +21,7 @@ Entrypoint for the Agentic Backend App.
 
 import argparse
 import logging
+import os
 
 from app.features.feedback.feedback_controller import FeedbackController
 from app.features.frugal.ai_service import AIService
@@ -114,11 +115,18 @@ def parse_cli_opts():
 # -----------------------
 
 
-def create_app(config_path: str, base_url: str) -> FastAPI:
+def create_app() -> FastAPI:
+    load_environment()
+    configure_logging(os.getenv("LOG_LEVEL", "info"))
+
+    # Retrieve config
+    config_file = os.environ["CONFIG_FILE"]
+    configuration: Configuration = parse_server_configuration(config_file)
+    ApplicationContext(configuration)  # 🟢 harmonisation ici
+
+    base_url = configuration.v1_base_url
     logger.info(f"🛠️ create_app() called with base_url={base_url}")
 
-    configuration: Configuration = parse_server_configuration(config_path)
-    ApplicationContext(configuration)  # 🟢 harmonisation ici
 
     initialize_keycloak(configuration)
     create_tool_metric_store(configuration.tool_metrics_storage)
@@ -160,33 +168,6 @@ def create_app(config_path: str, base_url: str) -> FastAPI:
     return app
 
 
-# -----------------------
-# MAIN ENTRYPOINT
-# -----------------------
-
-
-def main():
-    args = parse_cli_opts()
-    configure_logging(args.log_level)
-    load_environment()
-
-    app = create_app(config_path=args.config_path, base_url=args.base_url)
-
-    uvicorn.run(
-        app,
-        host=args.server_address,
-        port=args.server_port,
-        log_level=args.log_level,
-        loop="asyncio",
-        reload=args.reload,
-        reload_dirs=args.reload_dir,
-    )
-
-
 if __name__ == "__main__":
-    main()
-
-# Note: We do not define a global `app = FastAPI()` for ASGI (e.g., `uvicorn app.main:app`)
-# because this application is always launched via the CLI `main()` function.
-# This allows full control over configuration (e.g., --config-path, --base-url) and avoids
-# the need for a static app instance required by ASGI-based servers like Uvicorn in import mode.
+    print("To start the app, use uvicorn cli with:")
+    print("uv run uvicorn --factory app.main:create_app ...")

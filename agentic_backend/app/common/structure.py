@@ -285,6 +285,7 @@ class AppSecurity(Security):
     keycloak_url: str = "http://localhost:9080/realms/fred"
 
 class Configuration(BaseModel):
+    v1_base_url: str = Field("/agentic/v1", description="Base URL for the v1 API")
     frontend_settings: FrontendSettings
     database: DatabaseConfiguration
     kubernetes: KubernetesConfiguration
