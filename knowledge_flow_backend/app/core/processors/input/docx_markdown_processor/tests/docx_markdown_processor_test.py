@@ -35,5 +35,5 @@ async def test_process_docx_file(processor):
 
     with tempfile.TemporaryDirectory() as tmpdir:
         output_dir = Path(tmpdir)
-        result = processor.convert_file_to_markdown(test_docx_path, output_dir)
+        result = processor.convert_file_to_markdown(test_docx_path, output_dir,  metadata["document_uid"] )
         print(result)

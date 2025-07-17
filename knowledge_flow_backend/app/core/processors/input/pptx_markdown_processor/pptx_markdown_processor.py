@@ -43,7 +43,7 @@ class PptxMarkdownProcessor(BaseMarkdownProcessor):
             metadata["error"] = str(e)
         return metadata
 
-    def convert_file_to_markdown(self, file_path: Path, output_dir: Path) -> dict:
+    def convert_file_to_markdown(self, file_path: Path, output_dir: Path, document_uid: str | None) -> dict:
         """Converts each slide's text content into Markdown."""
 
         md_path = output_dir / "output.md"

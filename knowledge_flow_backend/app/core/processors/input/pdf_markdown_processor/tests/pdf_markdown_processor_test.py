@@ -53,7 +53,7 @@ def test_pdf_processor_end_to_end(processor, sample_pdf_file):
     assert metadata["num_pages"] == 2
     assert "document_uid" in metadata
 
-    result = processor.convert_file_to_markdown(sample_pdf_file, output_dir)
+    result = processor.convert_file_to_markdown(sample_pdf_file, output_dir, metadata["document_uid"])
 
     assert result["status"] == "fallback_to_text"
     md_file = Path(result["md_file"])

@@ -15,12 +15,12 @@
 import { useSearchParams } from "react-router-dom";
 import { Box } from "@mui/material";
 import { useContext, useEffect, useState } from "react";
-import { ApplicationContext } from "../../app/ApplicationContextProvider.tsx";
 import { useGetNamespaceFactsMutation, useGetNamespaceSummaryMutation } from "../slices/api.tsx";
 import { createFactList, FactList } from "../slices/factsStructures.tsx";
 import { NamespaceSummary } from "../slices/namespaceSummaryStructures.tsx";
 import { NamespaceCard } from "../component/NamespaceCard.tsx";
 import LoadingWithProgress from "../../components/LoadingWithProgress.tsx";
+import { K8ApplicationContext } from "../../app/K8ApplicationContextProvider.tsx";
 
 async function fetchNamespaceData({ cluster, namespace, getSummary, getFacts }) {
   const [summaryRes, factsRes] = await Promise.all([
@@ -37,8 +37,8 @@ export const ExplainNamespace = () => {
   const namespace = searchParams.get("namespace");
   const [getNamespaceSummary] = useGetNamespaceSummaryMutation();
   const [getNamespaceFacts] = useGetNamespaceFactsMutation();
-  const applicationContext = useContext(ApplicationContext);
-  const { currentClusterOverview } = useContext(ApplicationContext);
+  const applicationContext = useContext(K8ApplicationContext);
+  const { currentClusterOverview } = useContext(K8ApplicationContext);
   const [namespaceFacts, setNamespaceFacts] = useState<FactList | undefined>(undefined);
   const [namespaceSummary, setNamespaceSummary] = useState<NamespaceSummary | undefined>(undefined);
 

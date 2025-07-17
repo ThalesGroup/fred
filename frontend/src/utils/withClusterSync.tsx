@@ -13,15 +13,15 @@
 // limitations under the License.
 
 import { useContext, useEffect } from "react";
-import { ApplicationContext } from "../app/ApplicationContextProvider";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { Skeleton } from "@mui/material";
+import { K8ApplicationContext } from "../app/K8ApplicationContextProvider";
 
 const withClusterSync = (Component) => {
   return (props) => {
     const navigate = useNavigate();
     const location = useLocation();
-    const { currentClusterOverview } = useContext(ApplicationContext);
+    const { currentClusterOverview } = useContext(K8ApplicationContext);
     const { clusterName } = useParams();
 
     useEffect(() => {

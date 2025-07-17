@@ -41,5 +41,5 @@ def test_sample_markdown_processor_end_to_end():
 
         output_dir.mkdir(parents=True, exist_ok=True)  # Ensure output_dir exists
         # Convert to markdown
-        result = processor.convert_file_to_markdown(input_file, output_dir)
+        result = processor.convert_file_to_markdown(input_file, output_dir, metadata["document_uid"])
         assert Path(result["md_file"]).exists()
