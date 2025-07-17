@@ -18,6 +18,9 @@ import shutil
 import traceback
 from datetime import datetime
 
+from app.features.frugal.cluster_consumption.cluster_consumption_service import ClusterConsumptionService
+from app.features.k8.kube_service import ClusterList, KubeService
+from app.services.frontend.frontend_structures import ClusterDescription, ClusterFootprint, ClusterScore, NamespaceDescription, Observation, WorkloadDescription, WorkloadScore
 from fastapi import (
     APIRouter,
     BackgroundTasks,
@@ -31,26 +34,13 @@ from fastapi.responses import StreamingResponse
 from app.application_context import get_app_context, get_configuration
 
 from fred_core import KeycloakUser, get_current_user
-from services.ai.ai_service import AIService
-from services.cluster_consumption.cluster_consumption_service import (
-    ClusterConsumptionService,
-)
-from services.kube.kube_service import KubeService
-from services.kube.structure import ClusterList, WorkloadKind
-from common.connectors.file_dao import FileDAO
-from common.structure import (
+from app.features.frugal.ai_service import AIService, WorkloadKind
+from app.common.connectors.file_dao import FileDAO
+
+from app.common.structure import (
     DAOTypeEnum,
     OfflineStatus,
     PrecisionEnum,
-)
-from services.frontend.frontend_structures import (
-    ClusterDescription,
-    ClusterFootprint,
-    ClusterScore,
-    NamespaceDescription,
-    Observation,
-    WorkloadDescription,
-    WorkloadScore
 )
 logger = logging.getLogger(__name__)
 

@@ -28,7 +28,6 @@ import pytest
 
 from app.core.stores.content.content_storage_factory import get_content_store
 from app.core.stores.content.local_content_store import LocalStorageBackend
-from app.core.stores.content.minio_content_store import MinioContentStore
 
 
 class DummyConfig:  # pylint: disable=too-few-public-methods

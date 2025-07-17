@@ -21,8 +21,8 @@ from fastapi import FastAPI, APIRouter
 from app.common.structure import Configuration, PathOrIndexPrefix
 from app.application_context import ApplicationContext
 from app.chatbot.chatbot_controller import ChatbotController
-from app.services.ai.ai_service import AIService
-from app.services.kube.kube_service import KubeService
+from app.features.frugal.ai_service import AIService
+from app.features.k8.kube_service import KubeService
 
 
 @pytest.fixture(scope="session")
@@ -90,12 +90,8 @@ def app_context(minimal_generalist_config):
 
 @pytest.fixture
 def client(app_context) -> TestClient:
-    kube_service = KubeService()
-    ai_service = AIService(kube_service)
-
     app = FastAPI()
     router = APIRouter(prefix="/agentic/v1")
-    ChatbotController(router, ai_service)
+    ChatbotController(router)
     app.include_router(router)
-
     return TestClient(app)

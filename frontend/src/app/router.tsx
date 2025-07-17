@@ -39,6 +39,7 @@ import { FrugalIt } from "../pages/FrugalIt";
 import Inspect from "../frugalit/pages/Inspect";
 import { Monitoring } from "../pages/Monitoring";
 import { Workspaces } from "../pages/Workspaces";
+import { K8ApplicationContextProvider } from "./K8ApplicationContextProvider";
 
 const RootLayout = ({ children }: React.PropsWithChildren<{}>) => (
   <ProtectedRoute permission="viewer">
@@ -54,70 +55,74 @@ export const routes: RouteObject[] = [
       {
         index: true,
         element: isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES) ? (
-          <FootprintContextProvider>
-            <FrugalIt />
-          </FootprintContextProvider>
+          <K8ApplicationContextProvider>
+            <FootprintContextProvider>
+              <FrugalIt />
+            </FootprintContextProvider>
+          </K8ApplicationContextProvider>
         ) : (
-          <FootprintContextProvider>
-            <Chat />
-          </FootprintContextProvider>
+          <Chat />
         ),
       },
 
       isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES) && {
         path: "score/:cluster/:namespace/:application",
-        element: <Scores />,
+        element:  <K8ApplicationContextProvider><Scores /></K8ApplicationContextProvider>,
       },
       isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES) && {
         path: "audit",
-        element: <Audit />,
+        element: <K8ApplicationContextProvider><Audit /></K8ApplicationContextProvider>,
       },
       isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES) && {
         path: "facts",
-        element: <Facts />,
+        element: <K8ApplicationContextProvider><Facts /></K8ApplicationContextProvider>,
       },
       isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES) && {
         path: "facts-workload",
-        element: <FactsWorkload />,
+        element: <K8ApplicationContextProvider><FactsWorkload /></K8ApplicationContextProvider>,
       },
       isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES) && {
         path: "facts-cluster",
-        element: <FactsCluster />,
+        element: <K8ApplicationContextProvider><FactsCluster /></K8ApplicationContextProvider>,
       },
       isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES) && {
         path: "facts-namespace",
-        element: <FactsNamespace />,
+        element: <K8ApplicationContextProvider><FactsNamespace /></K8ApplicationContextProvider>,
       },
       isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES) && {
         path: "explain",
-        element: <Explain />,
+        element: <K8ApplicationContextProvider><Explain /></K8ApplicationContextProvider>,
       },
       isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES) && {
         path: "explain-cluster",
-        element: <ExplainCluster />,
+        element: <K8ApplicationContextProvider><ExplainCluster /></K8ApplicationContextProvider>,
       },
       isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES) && {
         path: "explain-namespace",
-        element: <ExplainNamespace />,
+        element: <K8ApplicationContextProvider><ExplainNamespace /></K8ApplicationContextProvider>,
       },
       isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES) && {
         path: "explain-workload",
         element: (
+          <K8ApplicationContextProvider>
           <ExplainContextProvider>
             <ExplainWorkload />
           </ExplainContextProvider>
+          </K8ApplicationContextProvider>
         ),
       },
       isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES) && {
         path: "optimize",
-        element: <Optimize />,
+        element:  <K8ApplicationContextProvider><Optimize /></K8ApplicationContextProvider>,
       },
       isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES) && {
         path: "inspect",
         element: (
+           <K8ApplicationContextProvider>
           <FootprintContextProvider>
             <Inspect />
           </FootprintContextProvider>
+          </K8ApplicationContextProvider>
         ),
       },
       isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES) && {

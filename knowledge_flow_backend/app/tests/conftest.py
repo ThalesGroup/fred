@@ -23,11 +23,12 @@ from app.common.structures import (
     EmbeddingConfig,
     InMemoryVectorStorage,
     KnowledgeContextStorageConfig,
+    LocalContentStorage,
     LocalMetadataStorage,
+    LocalTagStore,
     ProcessorConfig,
     DuckDBTabularStorage
 )
-from app.core.stores.vector.in_memory_langchain_vector_store import InMemoryLangchainVectorStore
 from app.core.stores.content.content_storage_factory import get_content_store
 from app.main import create_app
 from app.core.processors.output.vectorization_processor.embedder import Embedder
@@ -66,9 +67,10 @@ def app_context(monkeypatch, fake_embedder):
             root_path="/tmp/test-metadata-store.json",
         ),
         vector_storage=InMemoryVectorStorage(type="in_memory"),
-        content_storage=ContentStorageConfig(type="local"),
+        content_storage=LocalContentStorage(type="local"),
         tabular_storage=DuckDBTabularStorage(type="duckdb"),
         embedding=EmbeddingConfig(type="openai"),
+        tag_storage=LocalTagStore(type="local"),
         knowledge_context_storage=KnowledgeContextStorageConfig(
             type="local",
             local_path="/tmp",

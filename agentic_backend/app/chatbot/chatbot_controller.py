@@ -45,10 +45,6 @@ from app.common.structure import (
 
 from app.application_context import get_configuration, get_sessions_store
 from app.common.utils import log_exception
-from app.services.ai.ai_service import AIService
-from app.services.cluster_consumption.cluster_consumption_service import (
-    ClusterConsumptionService,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -58,9 +54,7 @@ class ChatbotController:
     WebSocket endpoints.
     """
 
-    def __init__(self, app: APIRouter, ai_service: AIService):
-        self.ai_service = ai_service
-        self.cluster_consumption_service = ClusterConsumptionService()
+    def __init__(self, app: APIRouter):
         self.agent_manager = AgentManager()
         self.session_manager = SessionManager(get_sessions_store(), self.agent_manager)
         # For import-export operations
