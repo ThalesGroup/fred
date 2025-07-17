@@ -23,6 +23,7 @@ import StopIcon from "@mui/icons-material/Stop";
 import AudioController from "./AudioController.tsx";
 import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
 import Chip from "@mui/material/Chip";
+import { ChatLibrariesSelection } from "./ChatLibrariesSelection.tsx";
 
 export interface UserInputContent {
   text?: string;
@@ -288,6 +289,9 @@ export default function UserInput({
                   </Badge>
                 </Tooltip>
               )}
+
+              {/* Chat Libraries Selection */}
+              <ChatLibrariesSelection />
 
               {/* Audio Record Button */}
               {enableAudioAttachment && (
