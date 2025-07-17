@@ -162,6 +162,7 @@ class AppSecurity(Security):
     keycloak_url: str = "http://localhost:9080/realms/knowledge-flow"
 
 class Configuration(BaseModel):
+    v1_base_url: str = Field(default="/knowledge-flow/v1", description="Base URL for the Knowledge Flow v1 API")
     security: AppSecurity
     input_processors: List[ProcessorConfig]
     output_processors: Optional[List[ProcessorConfig]] = None
