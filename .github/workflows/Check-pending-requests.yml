@@ -27,9 +27,9 @@ jobs:
         with:
           filters: |
             frontend:
-              - 'agentic_backend/**'
-            agentic:
               - 'frontend/**'
+            agentic:
+              - 'agentic_backend/**'
             deploy-chart:
               - 'deploy/charts/**'
             knowlegde-flow:
