@@ -1,7 +1,7 @@
 replicaCount: 1
 
 image:
-  repository: registry.thalesdigital.io/tsn/innovation/projects/fred/frontend
+  repository: ghcr.io/thalesgroup/fred-agent/frontend
   tag: 0.1
   pullPolicy: IfNotPresent
 

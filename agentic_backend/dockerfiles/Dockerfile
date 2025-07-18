@@ -32,16 +32,18 @@ ENV OPENAI_API_KEY=<MUST_BE_DEFINED>
 WORKDIR /app
 
 # Copy only dependency files first to leverage Docker layer caching
-COPY pyproject.toml uv.lock* /app/
+COPY agentic_backend/pyproject.toml agentic_backend/uv.lock* /app/
+COPY fred-core /fred-core
 
 # Install dependencies with uv
 RUN uv sync
 
 # Copy the rest of the project files
-COPY . /app
+COPY agentic_backend/. /app
 
 # Adjust ownership of copied files
 RUN chown -R ${USER_ID}:${GROUP_ID} /app
+RUN chown -R ${USER_ID}:${GROUP_ID} /fred-core
 
 # Switch to the created user
 USER ${USER_NAME}

@@ -15,13 +15,13 @@ RUN apt-get update && \
 WORKDIR /app
 
 # Copy only package files first for cache efficiency
-COPY ../package*.json ./
+COPY frontend/package*.json ./
 
 # Install node modules (at build time)
 RUN npm install
 
 # Copy project files
-COPY .. /app
+COPY frontend/* /app
 
 # Setup user
 RUN userdel node && \

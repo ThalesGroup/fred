@@ -1,7 +1,7 @@
 applicationName: knowledge-flow-backend
 
 image:
-  repository: registry.thalesdigital.io/tsn/projects/knowledge_flow_app/knowledge-flow-backend
+  repository: ghcr.io/thalesgroup/fred-agent/knowledge-flow-backend
   tag: "0.1"
 
 Deployment:

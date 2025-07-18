@@ -49,7 +49,7 @@ helm-package: ## Package the Helm chart into a chart archive
 
 .PHONY: docker-build
 docker-build: ## Build the Docker image
-	docker build --no-cache -t $(IMG) -f dockerfiles/Dockerfile-dev .
+	docker build --no-cache -t $(IMG) -f dockerfiles/Dockerfile .
 
 ##@ Run
 
