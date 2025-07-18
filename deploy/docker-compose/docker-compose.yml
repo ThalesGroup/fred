@@ -9,7 +9,7 @@ services:
     container_name: agentic-backend
     build:
       context: ../../
-      dockerfile: agentic_backend/dockerfiles/Dockerfile
+      dockerfile: agentic_backend/dockerfiles/Dockerfile-dev
     env_file: "~/.fred/openai-api-key.env"
     environment:
       NO_PROXY: "*"
@@ -34,7 +34,7 @@ services:
     container_name: fred-frontend
     build:
       context: ../../
-      dockerfile: frontend/dockerfiles/Dockerfile
+      dockerfile: frontend/dockerfiles/Dockerfile-dev
     environment:
       NO_PROXY: "*"
       VITE_BACKEND_URL_API: http://localhost:8000
@@ -52,7 +52,7 @@ services:
     container_name: knowledge-flow-backend
     build:
       context: ../../
-      dockerfile: knowledge_flow_backend/dockerfiles/Dockerfile
+      dockerfile: knowledge_flow_backend/dockerfiles/Dockerfile-dev
     environment:
       NO_PROXY: "*"
     command:
