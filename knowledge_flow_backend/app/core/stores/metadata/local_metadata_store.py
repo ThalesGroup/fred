@@ -26,6 +26,8 @@ class LocalMetadataStore(BaseMetadataStore):
             self.path.write_text("[]")  # Start with an empty list
 
     def _load(self) -> List[DocumentMetadata]:
+        if not self.path.exists():
+            return []
         raw = json.loads(self.path.read_text())
         return [DocumentMetadata(**item) for item in raw]
 
