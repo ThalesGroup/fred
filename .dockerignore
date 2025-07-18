@@ -19,6 +19,7 @@
 
 # Ignore Docker-related files
 **/Dockerfile*
+**/dockerfiles
 **/.dockerignore
 
 # macOS-specific files
@@ -27,3 +28,7 @@
 # Git-related files
 **/.git
 **/.gitignore
+**/.github
+
+# VScode-related files
+**/.vscode
