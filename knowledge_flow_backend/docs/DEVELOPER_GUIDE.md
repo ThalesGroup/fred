@@ -12,7 +12,7 @@ The `knowledge_flow_app` exposes two API namespaces for different purposes:
 
 ### 1. REST API
 
-- **Base URL**: `/knowledge/v1`
+- **Base URL**: `/knowledge-flow/v1`
 - **Used by**: React frontend, CLI tools, admin scripts
 - **Includes**:
   - Ingestion endpoints
@@ -24,14 +24,14 @@ The `knowledge_flow_app` exposes two API namespaces for different purposes:
 You can access the Swagger UI at:
 
 ```
-http://localhost:8111/knowledge/v1/docs
+http://localhost:8111/knowledge-flow/v1/docs
 ```
 
 ---
 
 ### 2. MCP API
 
-- **Base URL**: `/mcp` (not nested under `/knowledge/v1`)
+- **Base URL**: `/mcp` (not nested under `/knowledge-flow/v1`)
 - **Used by**: Agents (e.g., Dominic) that follow the [LangGraph MCP spec](https://github.com/langchain-ai/langgraph/tree/main/libs/langgraph/experimental/mcp)
 - **Exposes only tagged endpoints**:
   - `Vector Search`
@@ -274,7 +274,7 @@ pytest tests/test_vector_search_service.py
 
 ## 📚 Docs and Swagger
 
-Docs available at: [http://localhost:8111/knowledge/v1/docs](http://localhost:8111/knowledge/v1/docs)
+Docs available at: [http://localhost:8111/knowledge-flow/v1/docs](http://localhost:8111/knowledge-flow/v1/docs)
 
 ---
 
