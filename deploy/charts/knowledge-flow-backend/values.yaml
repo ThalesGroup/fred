@@ -13,6 +13,33 @@ containers:
 spec:
   revisionHistoryLimit: 2
 
+serviceAccount:
+  enabled: true
+  name: fred-knowledge-fl-back
+  annotations: {}
+  labels: {}
+  automount: true
+  rbac:
+    enabled: true
+    permissions:
+    # Permissions at namespace level
+      namespaced:
+      - apiGroups: [""]
+        resources: ["pods", "configmaps", "secrets"]
+        verbs: ["get", "list", "watch"]
+      - apiGroups: ["apps"]
+        resources: ["deployments", "replicasets"]
+        verbs: ["get", "list", "watch", "create", "update", "patch"]
+      - apiGroups: [""]
+        resources: ["events"]
+        verbs: ["create"]
+    
+      # Permissions at cluster level
+      cluster:
+      - apiGroups: [""]
+        resources: ["nodes"]
+        verbs: ["get", "list", "watch"]
+
 ports:
   enabled: true
   data:

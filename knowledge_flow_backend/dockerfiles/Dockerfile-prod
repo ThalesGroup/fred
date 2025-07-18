@@ -11,7 +11,7 @@ RUN apt-get update && \
     curl -Ls https://astral.sh/uv/${UV_VERSION}/install.sh | bash
 
 # Copy project files
-COPY knowledge_flow_backend /app
+COPY knowledge_flow_backend/. /app
 COPY fred-core /fred-core
 
 # Add uv into the PATH
@@ -21,8 +21,8 @@ ENV PATH=/root/.local/bin:$PATH
 WORKDIR /app
 
 # Create python virtual env and install deps
-RUN uv venv /app/venv && \
-    uv sync --extra dev
+RUN uv venv && \
+    uv pip install -r uv.lock
 
 # -----------------------------------------------------------------------------
 # RUNTIME
@@ -55,5 +55,5 @@ ENV PYTHONPATH=/app
 EXPOSE 8111
 
 # Define default entrypoint and command
-ENTRYPOINT ["python", "app/main.py"]
-CMD ["--config-path", "/app/config/configuration.yaml"]
+ENTRYPOINT ["python"]
+CMD ["/app/app/main.py"]
