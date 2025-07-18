@@ -15,11 +15,10 @@
 import logging
 
 from app.common.structures import DocumentMetadata, Status
-from app.features.metadata.structures import GetDocumentMetadataResponse, GetDocumentsMetadataResponse, UpdateDocumentMetadataResponse, UpdateRetrievableRequest
+from app.features.metadata.structures import UpdateDocumentMetadataResponse
 from app.application_context import ApplicationContext
 
 logger = logging.getLogger(__name__)
-
 
 # --- Domain Exceptions ---
 

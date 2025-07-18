@@ -31,7 +31,7 @@ async def test_process_docx_file(processor: DocxMarkdownProcessor):
     test_docx_path = Path("app/core/processors/input/docx_markdown_processor/tests/assets/sample.docx")
 
     assert processor.check_file_validity(test_docx_path)
-    metadata = processor.process_metadata(test_docx_path)
+    metadata = processor.process_metadata(test_docx_path, [])
     assert isinstance(metadata, DocumentMetadata)
     assert metadata.document_uid
     assert metadata.document_name == "sample.docx"

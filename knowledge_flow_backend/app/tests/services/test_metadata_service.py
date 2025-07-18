@@ -14,7 +14,7 @@
 
 from types import SimpleNamespace
 import pytest
-from fastapi import HTTPException
+from app.common.structures import DocumentMetadata
 from app.features.metadata.service import (
     MetadataNotFound,
     MetadataUpdateError,
@@ -33,36 +33,43 @@ class TestMetadataService:
         self.service = MetadataService()
 
     def test_get_documents_metadata(self, monkeypatch):
-        dummy_docs = [{"uid": "1"}, {"uid": "2"}]
+        dummy_docs = [
+            DocumentMetadata(document_uid="1", document_name="doc1.md"),
+            DocumentMetadata(document_uid="2", document_name="doc2.md"),
+        ]
         monkeypatch.setattr(self.service.metadata_store, "get_all_metadata", lambda filters: dummy_docs)
 
         result = self.service.get_documents_metadata({"author": "john"})
-        assert result.status == "success"
-        assert result.documents == dummy_docs
+        assert isinstance(result, list)
+        assert result == dummy_docs
 
     def test_delete_document_metadata(self, monkeypatch):
-        monkeypatch.setattr(self.service.metadata_store, "get_metadata_by_uid", lambda uid: {"uid": "doc1"})
+        mock_doc = DocumentMetadata(document_uid="doc1", document_name="doc.md")
+        monkeypatch.setattr(self.service.metadata_store, "get_metadata_by_uid", lambda uid: mock_doc)
         monkeypatch.setattr(self.service.metadata_store, "delete_metadata", lambda m: True)
 
         result = self.service.delete_document_metadata("doc1")
         assert result is None
 
     def test_get_document_metadata(self, monkeypatch):
-        monkeypatch.setattr(self.service.metadata_store, "get_metadata_by_uid", lambda uid: {"title": "doc"})
+        doc = DocumentMetadata(document_uid="doc1", document_name="doc.md", title="doc")
+        monkeypatch.setattr(self.service.metadata_store, "get_metadata_by_uid", lambda uid: doc)
 
         result = self.service.get_document_metadata("doc1")
-        assert result.status == "success"
-        assert result.metadata["title"] == "doc"
+        assert isinstance(result, DocumentMetadata)
+        assert result.title == "doc"
 
     def test_update_document_retrievable(self, monkeypatch, dummy_update):
+        mock_updated = DocumentMetadata(document_uid="doc1", document_name="doc.md", retrievable=True)
         monkeypatch.setattr(
             self.service.metadata_store,
             "update_metadata_field",
-            lambda **kwargs: {"document_uid": "doc1", "retrievable": True}
+            lambda **kwargs: mock_updated
         )
 
         result = self.service.update_document_retrievable("doc1", dummy_update)
         assert result.status == "success"
+        assert result.metadata.retrievable is True
 
     def test_delete_document_metadata_not_found(self, monkeypatch):
         monkeypatch.setattr(self.service.metadata_store, "get_metadata_by_uid", lambda uid: None)
@@ -96,5 +103,5 @@ class TestMetadataService:
         monkeypatch.setattr(self.service.metadata_store, "get_all_metadata", lambda filters: [])
 
         result = self.service.get_documents_metadata({})
-        assert result.documents == []
-        assert result.status == "success"
+        assert isinstance(result, list)
+        assert result == []
