@@ -6,18 +6,26 @@
       "type": "debugpy",
       "request": "launch",
       "cwd": "${workspaceFolder}/agentic_backend",
-      "program": "app/main.py",
+      "module": "uv",
       "args": [
-        "--config-path",
-        "config/configuration.yaml"
+        "run",
+        "uvicorn",
+        "app.main:create_app",
+        "--factory",
+        "--port",
+        "8000",
+        "--env-file",
+        "config/.env",
+        "--log-level",
+        "info",
+        "--loop",
+        "asyncio"
       ],
-      "python": "${workspaceFolder}/agentic_backend/.venv/bin/python",
       "env": {
-        "PYTHONPATH": "${workspaceFolder}/agentic_backend:${env:PYTHONPATH}",
-        "PATH": "${workspaceFolder}/agentic_backend/.venv/bin:${env:PATH}",
-        "LOG_LEVEL": "DEBUG"
+        "PYTHONPATH": "${workspaceFolder}/agentic_backend",
+        "CONFIG_FILE": "${workspaceFolder}/agentic_backend/config/configuration.yaml"
       },
-      "justMyCode": true,
+      "justMyCode": false,
       "console": "integratedTerminal"
     },
     {
@@ -25,18 +33,25 @@
       "type": "debugpy",
       "request": "launch",
       "cwd": "${workspaceFolder}/knowledge_flow_backend",
-      "program": "app/main.py",
+      "module": "uv",
       "args": [
-        "--config-path",
-        "config/configuration.yaml",
+        "run",
+        "uvicorn",
+        "app.main:create_app",
+        "--factory",
+        "--port",
+        "8111",
+        "--env-file",
+        "config/.env",
+        "--log-level",
+        "debug",
+        "--reload"
       ],
-      "python": "${workspaceFolder}/knowledge_flow_backend/.venv/bin/python",
       "env": {
-        "PYTHONPATH": "${workspaceFolder}/knowledge_flow_backend/app",
-        "PATH": "${workspaceFolder}/knowledge_flow_backend/.venv/bin:${env:PATH}",
-        "LOG_LEVEL": "DEBUG"
+        "PYTHONPATH": "${workspaceFolder}/knowledge_flow_backend",
+        "CONFIG_FILE": "${workspaceFolder}/knowledge_flow_backend/config/configuration.yaml"
       },
-      "justMyCode": true,
+      "justMyCode": false,
       "console": "integratedTerminal"
     },
     {
@@ -84,7 +99,7 @@
       "args": [
         "-s",
         "-vv",
-         // "app/tests/services/test_metadata_service.py::TestMetadataService::test_delete_document_metadata_not_found"
+        // "app/tests/services/test_metadata_service.py::TestMetadataService::test_delete_document_metadata_not_found"
         "app/tests/services/test_output_processor_service.py::TestOutputProcessorService::test_process_real_pdf_success"
       ],
       "justMyCode": false,
