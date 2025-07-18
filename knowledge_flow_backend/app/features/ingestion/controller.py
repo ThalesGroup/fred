@@ -154,10 +154,10 @@ class IngestionController:
 
                         # check if metadata is already known if so delete it to replace it and process the
                         # document again
-                        if self.metadata_store.get_metadata_by_uid(metadata["document_uid"]):
+                        if self.metadata_store.get_metadata_by_uid(metadata.document_uid):
                             logger.info(f"Metadata already exists for {filename}: {metadata}")
                             self.metadata_store.delete_metadata(metadata)
-                            self.content_store.delete_content(metadata["document_uid"])
+                            self.content_store.delete_content(metadata.document_uid)
 
                         # Step 3: Processing
                         current_step = "document knowledge extraction"
@@ -178,7 +178,7 @@ class IngestionController:
                         yield ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n"
                         # Step 6: Uploading to backend storage
                         current_step = "raw content saving"
-                        self.content_store.save_content(metadata.get("document_uid"), output_temp_dir)
+                        self.content_store.save_content(metadata.document_uid, output_temp_dir)
                         yield ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n"
                         # ✅ At least one file succeeded
                         all_success_flag[0] = True

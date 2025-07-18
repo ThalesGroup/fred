@@ -86,7 +86,7 @@ class IngestionService:
         metadata = processor.process_metadata(file_path, tags=tags)
         return metadata
 
-    def process_input(self, output_dir: pathlib.Path, input_file: str, input_file_metadata: dict) -> None:
+    def process_input(self, output_dir: pathlib.Path, input_file: str, metadata: DocumentMetadata) -> None:
         """
         Processes input document
         ------------------------------------------------------
@@ -109,24 +109,26 @@ class IngestionService:
         processor = self.context.get_input_processor_instance(suffix)
         file_path = output_dir / input_file
 
-        # 📝 Save metadata.json
+        # 📝 Save metadata.json. This is a duplicate of the metadata stored in the
+        # global metadata store
         metadata_path = output_dir / "metadata.json"
         with open(metadata_path, "w", encoding="utf-8") as meta_file:
-            json.dump(input_file_metadata, meta_file, indent=4, ensure_ascii=False)
+            json.dump(metadata.model_dump(mode="json"), meta_file, indent=4, ensure_ascii=False)
+
 
         # 🗂️ Create a dedicated subfolder for the processor's output
         processing_dir = output_dir / "output"
         processing_dir.mkdir(parents=True, exist_ok=True)
 
         if isinstance(processor, BaseMarkdownProcessor):
-            processor.convert_file_to_markdown(file_path, processing_dir, input_file_metadata["document_uid"])
+            processor.convert_file_to_markdown(file_path, processing_dir, metadata.document_uid)
         elif isinstance(processor, BaseTabularProcessor):
             df = processor.convert_file_to_table(file_path)
             df.to_csv(processing_dir / "table.csv", index=False)
         else:
             raise RuntimeError(f"Unknown processor type for: {input_file}")
 
-    def process_output(self, working_dir: pathlib.Path, input_file: str, input_file_metadata: dict) -> OutputProcessorResponse:
+    def process_output(self, working_dir: pathlib.Path, input_file: str, input_file_metadata: DocumentMetadata) -> OutputProcessorResponse:
         """
         Processes data resulting from the input processing.
         """
