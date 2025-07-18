@@ -9,7 +9,7 @@ replicaCount: 1
 
 # This sets the container image more information can be found here: https://kubernetes.io/docs/concepts/containers/images/
 image:
-  repository: registry.thalesdigital.io/tsn/innovation/projects/fred/agentic_backend
+  repository: ghcr.io/thalesgroup/fred-agent/agentic-backend
   # This sets the pull policy for images.
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.

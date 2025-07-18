@@ -20,16 +20,16 @@ jobs:
       matrix:
         include:
           - name: agentic-backend
-            context: ./agentic_backend
-            dockerfile: ./agentic_backend/dockerfiles/Dockerfile-dev
+            context: ./
+            dockerfile: ./agentic_backend/dockerfiles/Dockerfile
             image: agentic-backend
           - name: knowledge-flow-backend
-            context: ./knowledge_flow_backend
-            dockerfile: ./knowledge_flow_backend/dockerfiles/Dockerfile-dev
+            context: ./
+            dockerfile: ./knowledge_flow_backend/dockerfiles/Dockerfile
             image: knowledge-flow-backend
           - name: frontend
-            context: ./frontend
-            dockerfile: ./frontend/dockerfiles/Dockerfile-dev
+            context: ./
+            dockerfile: ./frontend/dockerfiles/Dockerfile
             image: frontend
 
     # what each job will play

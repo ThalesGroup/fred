@@ -14,7 +14,7 @@ We currently use this practice
 
 Tag the `main` branch with a tag `code/vX.Y.Z`.
 
-It will trigger a workflow that build three packages based on dockerfile `/<package>/Dockerfiles/Dockerfile-dev`.
+It will trigger a workflow that build three packages based on dockerfile `/<package>/Dockerfiles/Dockerfile`.
 - `agentic-backend:<version>`
 - `knowledge-flow-backend:<version>`
 - `frontend:<version>`

@@ -3,7 +3,7 @@
 # -----------------------------------------------------------------------------
 FROM mirror.gcr.io/python:3.12.8-slim AS builder
 
-ARG UV_VERSION=0.7.12
+ARG UV_VERSION=0.7.21
 
 # Install dependencies
 RUN apt-get update && \
@@ -11,7 +11,8 @@ RUN apt-get update && \
     curl -Ls https://astral.sh/uv/${UV_VERSION}/install.sh | bash
 
 # Copy project files
-COPY .. /app
+COPY knowledge_flow_backend /app
+COPY fred-core /fred-core
 
 # Add uv into the PATH
 ENV PATH=/root/.local/bin:$PATH
@@ -20,8 +21,8 @@ ENV PATH=/root/.local/bin:$PATH
 WORKDIR /app
 
 # Create python virtual env and install deps
-RUN uv venv && \
-    uv pip install -r uv.lock
+RUN uv venv /app/venv && \
+    uv sync --extra dev
 
 # -----------------------------------------------------------------------------
 # RUNTIME
@@ -41,6 +42,7 @@ USER ${USER_NAME}
 
 # Copy source from builder
 COPY --from=builder --chown=${USER_ID}:${GROUP_ID} /app /app
+COPY --from=builder --chown=${USER_ID}:${GROUP_ID} /fred-core /fred-core
 
 # Move to workdir
 WORKDIR /app
@@ -53,5 +55,5 @@ ENV PYTHONPATH=/app
 EXPOSE 8111
 
 # Define default entrypoint and command
-ENTRYPOINT ["python"]
-CMD ["/app/app/main.py"]
+ENTRYPOINT ["python", "app/main.py"]
+CMD ["--config-path", "/app/config/configuration.yaml"]
