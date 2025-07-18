@@ -27,7 +27,7 @@ from pathlib import Path
 from io import BytesIO
 import pytest
 from fastapi import UploadFile
-from app.features.wip.ingestion_service import IngestionService
+from app.features.ingestion.service import IngestionService
 
 
 # ----------------------------

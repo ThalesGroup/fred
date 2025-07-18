@@ -100,15 +100,31 @@ run: dev ## Run the app from source
 		--log-level ${LOG_LEVEL} \
 		--reload
 
+.PHONY: run-worker
+
+run-worker: dev ## Run an ingestion worker this requires a temporal daemon
+	@echo "🚀 Running the app..."
+	PYTHONPATH=. \
+	LOG_LEVEL=$(LOG_LEVEL) \
+	ENV_FILE=$(ENV_FILE) \
+	$(PYTHON) ${PY_PACKAGE}/main_worker.py --config-path ./config/configuration_worker.yaml
+
+.PHONY: run-api
+
+run-api: dev ## Run an ingestion worker this requires a temporal daemon
+	@echo "🚀 Running the app..."
+	PYTHONPATH=. \
+	LOG_LEVEL=$(LOG_LEVEL) \
+	ENV_FILE=$(ENV_FILE) \
+	$(PYTHON) ${PY_PACKAGE}/main.py --config-path ./config/configuration.yaml
+
 .PHONY: docker-run
 
 docker-run: ## Run the app in Docker
 	docker run -it \
 		-p 8111:8111 \
 		-v ~/.kube/:/home/fred-user/.kube/ \
-		-v ~/.aws/:/home/fred-user/.aws/ \
 		-v $(realpath app/config/configuration.yaml):/app/configuration.yaml \
-		-e LOG_LEVEL="$(LOG_LEVEL)" \
 		$(IMG) --config-path /app/configuration.yaml
 
 ##@ Tests
@@ -182,23 +198,6 @@ sast: ## Run bandit
 code-quality: ## Run all pre-commit checks
 	@echo "************ Executing pre-commit ************"
 	$(UV) run pre-commit run --all-files
-
-##@ Review
-
-.PHONY: review-pull-request
-review-pull-request: dev ## Run AI-based PR review locally
-	@echo "🤖 Reviewing Python changes using AI..."
-	$(PYTHON) ../developer_tools/ai_review_pull_request.py --mode committed
-
-.PHONY: review-uncommitted
-review-uncommitted: dev ## Run AI-based PR review locally
-	@echo "🤖 Reviewing Python changes using AI..."
-	$(PYTHON) ../developer_tools/ai_review_pull_request.py --mode uncommitted
-
-.PHONY: review-all
-review-all: dev ## Run AI-based PR review locally
-	@echo "🤖 Reviewing Python changes using AI..."
-	$(PYTHON) ../developer_tools/ai_review_pull_request.py --mode all
 
 ##@ Help
 

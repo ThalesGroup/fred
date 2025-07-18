@@ -20,6 +20,7 @@ Entrypoint for the Agentic Backend App.
 """
 
 import argparse
+import atexit
 import logging
 import os
 
@@ -79,54 +80,21 @@ def load_environment(dotenv_path: str = "./config/.env"):
 
 
 # -----------------------
-# CLI ARGUMENTS
+# APP CREATION
 # -----------------------
-
-
 def parse_cli_opts():
-    parser = argparse.ArgumentParser(description="Start the Agentic Backend App")
+    parser = argparse.ArgumentParser(description="Start the Knowledge Flow Backend App")
     parser.add_argument(
         "--config-path",
         default="./config/configuration.yaml",
         help="Path to configuration YAML file",
     )
-    parser.add_argument(
-        "--base-url",
-        default="/agentic/v1",
-        help="Base path for all API endpoints",
-    )
-    parser.add_argument(
-        "--server-address", default="127.0.0.1", help="Server binding address"
-    )
-    parser.add_argument("--server-port", type=int, default=8000, help="Server port")
-    parser.add_argument("--log-level", default="info", help="Logging level")
-    parser.add_argument(
-        "--reload", action="store_true", help="Enable auto-reload (for dev only)"
-    )
-    parser.add_argument(
-        "--reload-dir", default=".", help="Watch for changes in these directories"
-    )
-
     return parser.parse_args()
 
+def create_app(configuration: Configuration) -> FastAPI:
 
-# -----------------------
-# APP CREATION
-# -----------------------
-
-
-def create_app() -> FastAPI:
-    load_environment()
-    configure_logging(os.getenv("LOG_LEVEL", "info"))
-
-    # Retrieve config
-    config_file = os.environ["CONFIG_FILE"]
-    configuration: Configuration = parse_server_configuration(config_file)
-    ApplicationContext(configuration)  # 🟢 harmonisation ici
-
-    base_url = configuration.v1_base_url
+    base_url = configuration.app.base_url
     logger.info(f"🛠️ create_app() called with base_url={base_url}")
-
 
     initialize_keycloak(configuration)
     create_tool_metric_store(configuration.tool_metrics_storage)
@@ -167,7 +135,22 @@ def create_app() -> FastAPI:
     logger.info("🧩 All controllers registered.")
     return app
 
+def main():
+    args = parse_cli_opts()
+    configuration: Configuration = parse_server_configuration(args.config_path)
+    configure_logging(configuration.app.log_level)
+    load_environment()
+    ApplicationContext(configuration)
+    app = create_app(configuration)
+    uvicorn.run(
+        app,
+        host=configuration.app.address,
+        port=configuration.app.port,
+        log_level=configuration.app.log_level,
+        reload=configuration.app.reload,
+        reload_dirs=configuration.app.reload_dir,
+    )
+
 
 if __name__ == "__main__":
-    print("To start the app, use uvicorn cli with:")
-    print("uv run uvicorn --factory app.main:create_app ...")
+    main()

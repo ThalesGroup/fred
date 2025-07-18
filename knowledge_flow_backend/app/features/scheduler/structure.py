@@ -12,19 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# settings_minio.py
 
-from pathlib import Path
-import os
+from pydantic import BaseModel
+from typing import List, Optional
 
 
-class ContentStoreLocalSettings:
-    def __init__(self):
-        env_value = os.getenv("LOCAL_CONTENT_STORAGE_PATH")
-        if env_value:
-            self.root_path = Path(env_value)
-        else:
-            self.root_path = Path.home() / ".knowledge-flow" / "content-store"
+class PipelineFile(BaseModel):
+    path: str  # absolute or relative path
+    original_filename: Optional[str] = None
 
-        # Ensure parent folder exists
-        self.root_path.parent.mkdir(parents=True, exist_ok=True)
+
+class PipelineDefinition(BaseModel):
+    name: str
+    files: List[PipelineFile]
+    metadata: dict

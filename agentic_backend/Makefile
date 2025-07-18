@@ -61,6 +61,14 @@ run: dev ## Run the app from source
 		--log-level ${LOG_LEVEL} \
 		--reload
 
+.PHONY: run-api
+run-api: dev ## Run the app from source
+	@echo "🚀 Running the app..."
+	PYTHONPATH=. \
+	LOG_LEVEL=$(LOG_LEVEL) \
+	ENV_FILE=$(ENV_FILE) \
+	$(PYTHON) ${PY_PACKAGE}/main.py --config-path ./config/configuration.yaml
+
 ##@ Clean
 
 .PHONY: clean

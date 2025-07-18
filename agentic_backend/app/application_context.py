@@ -482,18 +482,6 @@ class ApplicationContext:
             raise ValueError(f"Leader class '{leader_cfg.class_path}' must inherit from AgentFlow.")
 
         return cls
-
-
-    def list_agent_names(self) -> list[str]:
-        """
-        Lists all available agent names from the configuration.
-
-        Returns:
-            list[str]: List of available agent names.
-        """
-        return list(self.agent_classes.keys())
-    
-    # --- Session storage factory helper ---
     
     def get_sessions_store(self) -> AbstractSessionStorage:
         """
@@ -521,3 +509,4 @@ class ApplicationContext:
             )
         else:
             raise ValueError(f"Unsupported sessions storage backend: {config.type}")
+        

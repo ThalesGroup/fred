@@ -24,6 +24,7 @@ from fastapi import UploadFile
 from collections import defaultdict
 import requests
 
+from app.chatbot.dynamic_agent_manager import DynamicAgentManager
 from app.chatbot.agent_manager import AgentManager
 from app.flow import AgentFlow
 from app.services.chatbot_session.attachement_processing import AttachementProcessing
@@ -49,14 +50,18 @@ class SessionManager:
     This class is responsible for creating, retrieving, and deleting sessions,
     as well as handling chat interactions.
     """ 
-    def __init__(self, storage: AbstractSessionStorage, agent_manager: AgentManager = None):
+    def __init__(self, storage: AbstractSessionStorage, 
+                 agent_manager: AgentManager = None,
+                 dynamic_agent_manager: DynamicAgentManager = None):
         """
         Initializes the SessionManager with a storage backend and an optional agent manager.
         :param storage: An instance of AbstractSessionStorage for session management.
         :param agent_manager: An instance of AgentManager for managing agent instances.
+        :param dynamic_agent_manager: An instance of DynamicAgentManager for managing dynamic agent instances.
         """
         self.storage = storage
         self.agent_manager = agent_manager
+        self.dynamic_agent_manager = dynamic_agent_manager
         self.context_cache = {}  # Cache for agent contexts
         self.temp_files: dict[str, list[str]] = defaultdict(list)
         self.attachement_processing = AttachementProcessing()
@@ -291,8 +296,10 @@ class SessionManager:
 
         # Append the new question
         history.append(HumanMessage(message))
-
-        agent = self.agent_manager.get_create_agent_instance(agent_name, session.id, argument=argument)
+        if agent_name in self.dynamic_agent_manager.get_registered_names():
+            agent = self.dynamic_agent_manager.get_create_agent_instance(agent_name, session_id, argument)
+        else:
+            agent = self.agent_manager.get_create_agent_instance(agent_name, session.id, argument=argument)
 
         return session, history, agent, is_new_session
 

@@ -21,13 +21,12 @@ from pydantic import BaseModel
 
 from app.application_context import ApplicationContext
 from app.common.structures import Status
-from app.core.stores.content.content_storage_factory import get_content_store
-from app.features.wip.output_processor_service import OutputProcessorService
-from app.features.wip.ingestion_service import IngestionService
-from app.features.wip.input_processor_service import InputProcessorService
+from app.features.ingestion.service import IngestionService
 
 logger = logging.getLogger(__name__)
 
+class IngestionInput(BaseModel):
+    tags: Optional[List[str]] = None
 
 class ProcessingProgress(BaseModel):
     """
@@ -118,11 +117,9 @@ class IngestionController:
     def __init__(self, router: APIRouter):
         self.context = ApplicationContext.get_instance()
         self.logger = logging.getLogger(self.__class__.__name__)
-        self.ingestion_service = IngestionService()
+        self.service = IngestionService()
         self.metadata_store = ApplicationContext.get_instance().get_metadata_store()
-        self.content_store = get_content_store()
-        self.input_processor_service = InputProcessorService()
-        self.output_processor_service = OutputProcessorService()
+        self.content_store = ApplicationContext.get_instance().get_content_store()
         logger.info("IngestionController initialized.")
 
         @router.post("/process-files", tags=["Ingestion"])
@@ -130,13 +127,15 @@ class IngestionController:
             files: List[UploadFile] = File(...),
             metadata_json: str = Form(...),
         ) -> StreamingResponse:
-            input_metadata = json.loads(metadata_json)
+            parsed_input = IngestionInput(**json.loads(metadata_json))
+            tags = parsed_input.tags or []
+            #input_metadata = json.loads(metadata_json)
             # ✅ Preload: Call save_file_to_temp on all files before the generator runs
             # This is to ensure that the files are saved to temp storage before processing
             # and to avoid blocking the generator with file I/O operations.
             preloaded_files = []
             for file in files:
-                input_temp_file = self.ingestion_service.save_file_to_temp(file)
+                input_temp_file = self.service.save_file_to_temp(file)
                 logger.info(f"File {file.filename} saved to temp storage at {input_temp_file}")
                 preloaded_files.append((file.filename, input_temp_file))
             all_success_flag = [False]  # Track success across all files
@@ -149,9 +148,9 @@ class IngestionController:
                         output_temp_dir = input_temp_file.parent.parent
 
                         # Step 2: Metadata extraction
-                        metadata = self.input_processor_service.extract_metadata(input_temp_file, input_metadata)
+                        metadata = self.service.extract_metadata(input_temp_file, tags=tags)
                         logger.info(f"Metadata extracted for {filename}: {metadata}")
-                        yield ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata["document_uid"], filename=filename).model_dump_json() + "\n"
+                        yield ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n"
 
                         # check if metadata is already known if so delete it to replace it and process the
                         # document again
@@ -162,25 +161,81 @@ class IngestionController:
 
                         # Step 3: Processing
                         current_step = "document knowledge extraction"
-                        self.input_processor_service.process(output_temp_dir, input_temp_file, metadata)
+                        self.service.process_input(output_temp_dir, input_temp_file, metadata)
                         logger.info(f"Document processed for {filename}: {metadata}")
-                        yield ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata["document_uid"], filename=filename).model_dump_json() + "\n"
+                        yield ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n"
 
                         # Step 4: Post-processing (optional)
                         current_step = "knowledge post processing"
-                        vectorization_response = self.output_processor_service.process(output_temp_dir, input_temp_file, metadata)
+                        vectorization_response = self.service.process_output(output_temp_dir, input_temp_file, metadata)
                         logger.info(f"Post-processing completed for {filename}: {metadata}")
-                        yield ProcessingProgress(step=current_step, status=vectorization_response.status, document_uid=metadata["document_uid"], filename=filename).model_dump_json() + "\n"
+                        yield ProcessingProgress(step=current_step, status=vectorization_response.status, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n"
 
                         # Step 5: Metadata saving
                         current_step = "metadata saving"
                         self.metadata_store.save_metadata(metadata=metadata)
                         logger.info(f"Metadata saved for {filename}: {metadata}")
-                        yield ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata["document_uid"], filename=filename).model_dump_json() + "\n"
+                        yield ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n"
                         # Step 6: Uploading to backend storage
                         current_step = "raw content saving"
                         self.content_store.save_content(metadata.get("document_uid"), output_temp_dir)
-                        yield ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata["document_uid"], filename=filename).model_dump_json() + "\n"
+                        yield ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n"
+                        # ✅ At least one file succeeded
+                        all_success_flag[0] = True
+                    except Exception as e:
+                        logger.exception(f"Failed to process {file.filename}")
+                        # Send detailed error message (safe for frontend)
+                        error_message = f"{type(e).__name__}: {str(e).strip() or 'No error message'}"
+                        yield ProcessingProgress(step=current_step, status=Status.ERROR, error=error_message, filename=file.filename).model_dump_json() + "\n"
+                yield json.dumps({"step": "done", "status": Status.SUCCESS if all_success_flag[0] else "error"}) + "\n"
+
+            return StatusAwareStreamingResponse(event_generator(), all_success_flag=all_success_flag)
+
+        @router.post("/upload-files", tags=["Ingestion"])
+        def stream_load(
+            files: List[UploadFile] = File(...),
+            metadata_json: str = Form(...),
+        ) -> StreamingResponse:
+            parsed_input = IngestionInput(**json.loads(metadata_json))
+            tags = parsed_input.tags or []
+            # ✅ Preload: Call save_file_to_temp on all files before the generator runs
+            # This is to ensure that the files are saved to temp storage before processing
+            # and to avoid blocking the generator with file I/O operations.
+            preloaded_files = []
+            for file in files:
+                input_temp_file = self.service.save_file_to_temp(file)
+                logger.info(f"File {file.filename} saved to temp storage at {input_temp_file}")
+                preloaded_files.append((file.filename, input_temp_file))
+            all_success_flag = [False]  # Track success across all files
+
+            def event_generator() -> Generator[str, None, None]:
+                for filename, input_temp_file in preloaded_files:
+                    current_step = "metadata extraction"
+
+                    try:
+                        output_temp_dir = input_temp_file.parent.parent
+
+                        # Step 1: Metadata extraction
+                        metadata = self.service.extract_metadata(input_temp_file, tags)
+                        logger.info(f"Metadata extracted for {filename}: {metadata}")
+                        yield ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n"
+
+                        # check if metadata is already known if so delete it to replace it and process the
+                        # document again
+                        if self.metadata_store.get_metadata_by_uid(metadata.document_uid):
+                            logger.info(f"Metadata already exists for {filename}: {metadata}")
+                            self.metadata_store.delete_metadata(metadata)
+                            self.content_store.delete_content(metadata.document_uid)
+
+                        # Step 2: Metadata saving
+                        current_step = "metadata saving"
+                        self.metadata_store.save_metadata(metadata=metadata)
+                        logger.info(f"Metadata saved for {filename}: {metadata}")
+                        yield ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n"
+                        # Step 6: Uploading to backend storage
+                        current_step = "raw content saving"
+                        self.content_store.save_content(metadata.document_uid, output_temp_dir)
+                        yield ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n"
                         # ✅ At least one file succeeded
                         all_success_flag[0] = True
                     except Exception as e:

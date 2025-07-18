@@ -15,8 +15,10 @@
 import json
 import logging
 from typing import List
-from uuid import uuid4
 
+from app.application_context import get_app_context
+from app.application_context import get_sessions_store
+from app.features.dynamic_agent.service import get_dynamic_agent_manager
 from app.chatbot.agent_manager import AgentManager
 from app.services.chatbot_session.session_manager import SessionManager
 from app.services.chatbot_session.structure.chat_schema import ChatMessagePayload, ErrorEvent, FinalEvent, SessionWithFiles, StreamEvent
@@ -43,7 +45,7 @@ from app.common.structure import (
     DAOTypeEnum,
 )
 
-from app.application_context import get_configuration, get_sessions_store
+from app.application_context import get_configuration
 from app.common.utils import log_exception
 
 logger = logging.getLogger(__name__)
@@ -53,10 +55,10 @@ class ChatbotController:
     This controller is responsible for handling the UI HTTP endpoints and
     WebSocket endpoints.
     """
-
     def __init__(self, app: APIRouter):
         self.agent_manager = AgentManager()
         self.session_manager = SessionManager(get_sessions_store(), self.agent_manager)
+        self.dynamic_agent_manager = get_dynamic_agent_manager()
         # For import-export operations
         match get_configuration().dao.type:
             case DAOTypeEnum.file:
@@ -79,8 +81,9 @@ class ChatbotController:
             tags=fastapi_tags,
         )
         def get_agentic_flows(user: KeycloakUser = Depends(get_current_user)) -> list[AgenticFlow]:
-            return self.agent_manager.get_agentic_flows()
-
+            static_flows = self.agent_manager.get_agentic_flows()
+            dynamic_flows = self.dynamic_agent_manager.get_agentic_flows()
+            return static_flows + dynamic_flows
 
         @app.post(
             "/chatbot/query",

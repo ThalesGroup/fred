@@ -12,14 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import argparse
 from datetime import datetime, timezone
 import logging
 import traceback
+from dotenv import load_dotenv
 from pydantic import ValidationError
 from pydantic_settings import BaseSettings
 import tiktoken
 import yaml
 from typing import Dict, Optional, TypeVar
+from rich.logging import RichHandler
 
 from app.common.structures import Configuration
 
@@ -194,3 +197,30 @@ def count_tokens(text: str) -> int:
         logger.warning(f"Fallback to cl100k_base tokenizer due to error: {e}")
         encoding = tiktoken.get_encoding("cl100k_base")
         return len(encoding.encode(text))
+
+
+def configure_logging(log_level: str):
+    logging.basicConfig(
+        level=log_level.upper(),
+        format="%(asctime)s - %(levelname)s - %(filename)s - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+        handlers=[RichHandler(rich_tracebacks=False, show_time=False, show_path=False)],
+    )
+    logging.getLogger(__name__).info(f"Logging configured at {log_level.upper()} level.")
+
+
+def load_environment(dotenv_path: str = "./config/.env"):
+    if load_dotenv(dotenv_path):
+        logging.getLogger().info(f"✅ Loaded environment variables from: {dotenv_path}")
+    else:
+        logging.getLogger().warning(f"⚠️ No .env file found at: {dotenv_path}")
+
+def parse_cli_opts():
+    parser = argparse.ArgumentParser(description="Start the Knowledge Flow Backend App")
+    parser.add_argument(
+        "--config-path",
+        default="./config/configuration.yaml",
+        help="Path to configuration YAML file",
+    )
+    return parser.parse_args()
+
