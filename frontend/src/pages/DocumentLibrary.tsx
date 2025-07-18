@@ -30,7 +30,7 @@ import {
   Container,
   Paper,
   Grid2,
-  Fade,
+  ButtonGroup,
 } from "@mui/material";
 import ClearIcon from "@mui/icons-material/Clear";
 import { useEffect, useState } from "react";
@@ -57,6 +57,9 @@ import { DocumentDrawerTable } from "../components/documents/DocumentDrawerTable
 import DocumentViewer from "../components/documents/DocumentViewer";
 import { TopBar } from "../common/TopBar";
 import { useTranslation } from "react-i18next";
+import { DocumentLibrariesList } from "./DocumentLibrariesList";
+
+type DocumentLibraryView = "libraries" | "documents";
 
 /**
  * DocumentLibrary.tsx
@@ -155,7 +158,6 @@ export const DocumentLibrary = () => {
   const [documentsPerPage, setDocumentsPerPage] = useState(10); // Number of documents shown per page
   const [currentPage, setCurrentPage] = useState(1); // Current page in the pagination component
   const [openSide, setOpenSide] = useState(false); // Whether the upload drawer is open
-  const [showElements, setShowElements] = useState(false); // Controls whether page elements are faded in
 
   // Backend Data States
   const [documentViewerOpen, setDocumentViewerOpen] = useState<boolean>(false);
@@ -204,7 +206,6 @@ export const DocumentLibrary = () => {
   };
 
   useEffect(() => {
-    setShowElements(true);
     setUserInfo({
       name: KeyCloakService.GetUserName(),
       canManageDocuments: hasDocumentManagementPermission(),
@@ -215,6 +216,25 @@ export const DocumentLibrary = () => {
   useEffect(() => {
     fetchFiles();
   }, [getDocumentsWithFilter]);
+
+  // View state: 'libraries' or 'documents', persisted in localStorage
+  const VIEW_KEY = "documentLibrary.selectedView";
+  const [selectedView, setSelectedView] = useState<DocumentLibraryView>(() => {
+    const defaultView = "libraries";
+
+    // Retrive last used view from localStorage
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem(VIEW_KEY);
+      return stored === "libraries" || stored === "documents" ? stored : defaultView;
+    }
+    return defaultView;
+  });
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem(VIEW_KEY, selectedView);
+    }
+  }, [selectedView]);
 
   const handleDownload = async (document_uid: string, file_name: string) => {
     try {
@@ -389,60 +409,82 @@ export const DocumentLibrary = () => {
 
       {/* Search Section */}
       <Container maxWidth="xl" sx={{ mb: 3 }}>
-        <Fade in={showElements} timeout={1500}>
-          <Paper
-            elevation={2}
-            sx={{
-              p: 3,
-              borderRadius: 4,
-              border: `1px solid ${theme.palette.divider}`,
-            }}
-          >
-            <Grid2 container spacing={2} alignItems="center">
-              <Grid2 size={{ xs: 12, md: 12 }}>
-                <TextField
-                  fullWidth
-                  placeholder={t("documentLibrary.searchPlaceholder")}
-                  variant="outlined"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  InputProps={{
-                    startAdornment: (
-                      <InputAdornment position="start">
-                        <SearchIcon color="action" />
-                      </InputAdornment>
-                    ),
-                    endAdornment: searchQuery && (
-                      <InputAdornment position="end">
-                        <IconButton
-                          aria-label={t("documentLibrary.clearSearch")}
-                          onClick={() => setSearchQuery("")}
-                          edge="end"
-                          size="small"
-                        >
-                          <ClearIcon />
-                        </IconButton>
-                      </InputAdornment>
-                    ),
-                  }}
-                  size="small"
-                />
-              </Grid2>
+        <Paper
+          elevation={2}
+          sx={{
+            p: 3,
+            borderRadius: 4,
+            border: `1px solid ${theme.palette.divider}`,
+          }}
+        >
+          {/* View Switch Button Group */}
+          <Box display="flex" justifyContent="flex-end" mb={2}>
+            <ButtonGroup variant="outlined" color="primary" size="small">
+              <Button
+                variant={selectedView === "libraries" ? "contained" : "outlined"}
+                onClick={() => setSelectedView("libraries")}
+              >
+                {t("documentLibrary.librariesView")}
+              </Button>
+              <Button
+                variant={selectedView === "documents" ? "contained" : "outlined"}
+                onClick={() => setSelectedView("documents")}
+              >
+                {t("documentLibrary.documentsView")}
+              </Button>
+            </ButtonGroup>
+          </Box>
+
+          <Grid2 container spacing={2} alignItems="center">
+            <Grid2 size={{ xs: 12, md: 12 }}>
+              <TextField
+                fullWidth
+                placeholder={t("documentLibrary.searchPlaceholder")}
+                variant="outlined"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <SearchIcon color="action" />
+                    </InputAdornment>
+                  ),
+                  endAdornment: searchQuery && (
+                    <InputAdornment position="end">
+                      <IconButton
+                        aria-label={t("documentLibrary.clearSearch")}
+                        onClick={() => setSearchQuery("")}
+                        edge="end"
+                        size="small"
+                      >
+                        <ClearIcon />
+                      </IconButton>
+                    </InputAdornment>
+                  ),
+                }}
+                size="small"
+              />
             </Grid2>
-          </Paper>
-        </Fade>
+          </Grid2>
+        </Paper>
       </Container>
 
-      {/* Documents Container */}
-      <Container maxWidth="xl">
-        <Fade in={showElements} timeout={2000}>
+      {/* Libraries View */}
+      {selectedView === "libraries" && (
+        <Container maxWidth="xl">
+          <DocumentLibrariesList />
+        </Container>
+      )}
+
+      {/* Documents View */}
+      {selectedView === "documents" && (
+        <Container maxWidth="xl">
           <Paper
             elevation={2}
             sx={{
               p: 3,
               borderRadius: 4,
               mb: 3,
-              minHeight: "500px",
               border: `1px solid ${theme.palette.divider}`,
               position: "relative",
             }}
@@ -521,8 +563,8 @@ export const DocumentLibrary = () => {
               </Box>
             )}
           </Paper>
-        </Fade>
-      </Container>
+        </Container>
+      )}
 
       {/* Upload Drawer - Only visible to admins and editors */}
       {userInfo.canManageDocuments && (

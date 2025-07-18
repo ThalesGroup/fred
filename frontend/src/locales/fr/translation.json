@@ -186,7 +186,9 @@
         "addDocuments": "Ajouter des documents",
         "cancel": "Annuler",
         "save": "Enregistrer",
-        "saving": "Enregistrement en cours..."
+        "saving": "Enregistrement en cours...",
+        "librariesView": "Bibliothèques",
+        "documentsView": "Documents"
     },
     "documentTable": {
         "selectedCount": "{{count}} sélectionné(s)",
