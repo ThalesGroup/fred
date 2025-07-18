@@ -1,56 +1,58 @@
 # -----------------------------------------------------------------------------
 # Backend development image (hot-reload enabled)
 # -----------------------------------------------------------------------------
-# FROM mirror.gcr.io/python:3.12.8-slim
+FROM mirror.gcr.io/python:3.12.8-slim
 
-# ARG USER_NAME=python-user
-# ARG USER_ID=1000
-# ARG GROUP_ID=1000
-# ARG UV_VERSION=0.7.12
+ARG USER_NAME=python-user
+ARG USER_ID=1000
+ARG GROUP_ID=1000
+ARG UV_VERSION=0.7.12
 
-# # Install required system dependencies
-# RUN apt-get update && \
-#     apt-get install -y git curl && \
-#     rm -rf /var/lib/apt/lists/*
+# Install required system dependencies
+RUN apt-get update && \
+    apt-get install -y git curl && \
+    rm -rf /var/lib/apt/lists/*
 
-# # Install uv globally
-# RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
-#     mv /root/.local/bin/uv /usr/local/bin/uv && \
-#     chmod +x /usr/local/bin/uv
+# Install uv globally
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
+    mv /root/.local/bin/uv /usr/local/bin/uv && \
+    chmod +x /usr/local/bin/uv
 
 # Setup user and permissions
-# RUN groupadd -g ${GROUP_ID} ${USER_NAME} && \
-#     useradd -u ${USER_ID} -g ${GROUP_ID} -m ${USER_NAME} && \
+RUN groupadd -g ${GROUP_ID} ${USER_NAME} && \
+    useradd -u ${USER_ID} -g ${GROUP_ID} -m ${USER_NAME} && \
     mkdir -p /opt/python && \
     chown -R ${USER_ID}:${GROUP_ID} /opt/python
 
 # Set environment variables for uv and Python
-# ENV UV_PROJECT_ENVIRONMENT=/opt/python/venv
-# ENV PATH="/opt/python/venv/bin:$PATH"
-# ENV OPENAI_API_KEY=<MUST_BE_DEFINED>
+ENV UV_PROJECT_ENVIRONMENT=/opt/python/venv
+ENV PATH="/opt/python/venv/bin:$PATH"
+ENV OPENAI_API_KEY=<MUST_BE_DEFINED>
 
 # Set working directory
-# WORKDIR /app
+WORKDIR /app
 
 # Copy only dependency files first to leverage Docker layer caching
-# COPY pyproject.toml uv.lock* /app/
+COPY knowledge_flow_backend/pyproject.toml knowledge_flow_backend/uv.lock* /app/
+COPY fred-core /fred-core
 
 # Install dependencies with uv
-# RUN uv sync --extra dev
+RUN uv sync --extra dev
 
 # Copy the rest of the project files
-COPY . /app
+COPY knowledge_flow_backend/. /app
 
 # Adjust ownership of copied files
-# RUN chown -R ${USER_ID}:${GROUP_ID} /app
+RUN chown -R ${USER_ID}:${GROUP_ID} /app
+RUN chown -R ${USER_ID}:${GROUP_ID} /fred-core
 
 # Switch to the created user
-# USER ${USER_NAME}
+USER ${USER_NAME}
 
 # Expose Fast API port
-# EXPOSE 8111
+EXPOSE 8111
 
 # Run the application
-# ENV PYTHONPATH=/app
-# ENTRYPOINT ["python", "app/main.py"]
-# CMD ["--reload", "--reload-dir=/app"]
+ENV PYTHONPATH=/app
+ENTRYPOINT ["python", "app/main.py"]
+CMD ["--reload", "--reload-dir=/app"]

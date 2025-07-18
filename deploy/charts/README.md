@@ -14,15 +14,15 @@
 Build the agentic backend, the knowledge-flow backend and the frontend images :
 
 ```
-docker build -f agentic_backend/dockerfiles/Dockerfile -t ghcr.io/thalesgroup/fred-agent/agentic-backend:0.1 .
+docker build -f agentic_backend/dockerfiles/Dockerfile-dev -t ghcr.io/thalesgroup/fred-agent/agentic-backend:0.1 .
 docker save ghcr.io/thalesgroup/fred-agent/agentic-backend:0.1 | gzip > /tmp/backend.tgz
 sudo k3s ctr images import /tmp/backend.tgz
 
-docker build -f knowledge_flow_backend/dockerfiles/Dockerfile -t ghcr.io/thalesgroup/fred-agent/knowledge-flow-backend:0.1 .
+docker build -f knowledge_flow_backend/dockerfiles/Dockerfile-dev -t ghcr.io/thalesgroup/fred-agent/knowledge-flow-backend:0.1 .
 docker save ghcr.io/thalesgroup/fred-agent/knowledge-flow-backend:0.1 | gzip > /tmp/knowledge.tgz
 sudo k3s ctr images import /tmp/knowledge.tgz
 
-docker build -f frontend/dockerfiles/Dockerfile -t ghcr.io/thalesgroup/fred-agent/frontend:0.1 .
+docker build -f frontend/dockerfiles/Dockerfile-dev -t ghcr.io/thalesgroup/fred-agent/frontend:0.1 .
 docker save ghcr.io/thalesgroup/fred-agent/frontend:0.1 | gzip > /tmp/frontend.tgz
 sudo k3s ctr images import /tmp/frontend.tgz
 

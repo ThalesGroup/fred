@@ -21,15 +21,15 @@ jobs:
         include:
           - name: agentic-backend
             context: ./
-            dockerfile: ./agentic_backend/dockerfiles/Dockerfile
+            dockerfile: ./agentic_backend/dockerfiles/Dockerfile-prod
             image: agentic-backend
           - name: knowledge-flow-backend
             context: ./
-            dockerfile: ./knowledge_flow_backend/dockerfiles/Dockerfile
+            dockerfile: ./knowledge_flow_backend/dockerfiles/Dockerfile-prod
             image: knowledge-flow-backend
           - name: frontend
             context: ./
-            dockerfile: ./frontend/dockerfiles/Dockerfile
+            dockerfile: ./frontend/dockerfiles/Dockerfile-prod
             image: frontend
 
     # what each job will play
