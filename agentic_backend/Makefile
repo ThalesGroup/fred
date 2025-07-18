@@ -60,7 +60,7 @@ run: dev ## Run the app from source
 		--port ${PORT} \
 		--env-file ${ENV_FILE} \
 		--log-level ${LOG_LEVEL} \
-		--loop ${UVICORN_LOOP}
+		--loop ${UVICORN_LOOP} \
 		--reload
 
 ##@ Clean
