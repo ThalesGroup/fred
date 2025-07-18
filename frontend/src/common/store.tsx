@@ -18,6 +18,7 @@ import { chatApiSlice } from "../slices/chatApi";
 import { documentApiSlice } from "../slices/documentApi.tsx";
 import { monitoringApiMiddleware, monitoringApiReducer } from "../slices/monitoringApi.tsx";
 import { knowledgeContextApiSlice } from "../slices/knowledgeContextApi.tsx";
+import { knowledgeFlowApi } from "../slices/knowledgeFlow/knowledgeFlowApi.ts";
 
 // Optional: Logging middleware for debugging
 const loggingMiddleware = () => (next) => (action) => {
@@ -43,11 +44,12 @@ const combinedReducer = combineReducers({
       .addCase("incrementIgnoredRefresh", (state) => state + 1)
       .addCase("decrementIgnoredRefresh", (state) => state - 1),
   ),
+  [knowledgeFlowApi.reducerPath]: knowledgeFlowApi.reducer,
   api: apiSlice.reducer,
   documentApi: documentApiSlice.reducer,
   chatApi: chatApiSlice.reducer,
   monitoringApi: monitoringApiReducer,
-  knowledgeContextApi: knowledgeContextApiSlice.reducer
+  knowledgeContextApi: knowledgeContextApiSlice.reducer,
 });
 
 // Configure store
@@ -55,12 +57,13 @@ export const store = configureStore({
   reducer: combinedReducer,
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware().concat(
+      knowledgeFlowApi.middleware,
       apiSlice.middleware,
       documentApiSlice.middleware,
       chatApiSlice.middleware,
       monitoringApiMiddleware,
       loggingMiddleware,
-      knowledgeContextApiSlice.middleware
+      knowledgeContextApiSlice.middleware,
     ),
   devTools: true,
 });

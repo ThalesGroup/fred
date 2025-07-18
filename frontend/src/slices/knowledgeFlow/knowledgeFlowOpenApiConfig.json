@@ -1,0 +1,8 @@
+{
+  "schemaFile": "http://localhost:8111/knowledge-flow/v1/openapi.json",
+  "apiFile": "./knowledgeFlowApi.ts",
+  "apiImport": "knowledgeFlowApi",
+  "outputFile": "knowledgeFlowOpenApi.ts",
+  "exportName": "knowledgeFlowApi",
+  "hooks": { "queries": true, "lazyQueries": true, "mutations": true }
+}
