@@ -21,7 +21,6 @@ from pydantic import BaseModel
 
 from app.application_context import ApplicationContext
 from app.common.structures import Status
-from app.core.stores.content.content_storage_factory import get_content_store
 from app.features.wip.output_processor_service import OutputProcessorService
 from app.features.wip.ingestion_service import IngestionService
 from app.features.wip.input_processor_service import InputProcessorService
@@ -120,7 +119,7 @@ class IngestionController:
         self.logger = logging.getLogger(self.__class__.__name__)
         self.ingestion_service = IngestionService()
         self.metadata_store = ApplicationContext.get_instance().get_metadata_store()
-        self.content_store = get_content_store()
+        self.content_store = ApplicationContext.get_instance().get_content_store()
         self.input_processor_service = InputProcessorService()
         self.output_processor_service = OutputProcessorService()
         logger.info("IngestionController initialized.")

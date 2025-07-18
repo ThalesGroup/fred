@@ -16,9 +16,6 @@ import logging
 import mimetypes
 from typing import BinaryIO, Dict, Tuple
 
-from app.core.stores.content.content_storage_factory import get_content_store
-
-
 logger = logging.getLogger(__name__)
 
 
@@ -33,7 +30,7 @@ class ContentService:
         from app.application_context import ApplicationContext
 
         self.metadata_store = ApplicationContext.get_instance().get_metadata_store()
-        self.content_store = get_content_store()
+        self.content_store = ApplicationContext.get_instance().get_content_store()
         self.config = ApplicationContext.get_instance().get_config()
 
     async def get_document_metadata(self, document_uid: str) -> Dict:

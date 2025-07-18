@@ -20,7 +20,6 @@ from app.application_context import ApplicationContext
 from app.common.structures import (
     AppConfig,
     Configuration,
-    ContentStorageConfig,
     EmbeddingConfig,
     InMemoryVectorStorage,
     KnowledgeContextStorageConfig,
@@ -32,7 +31,6 @@ from app.common.structures import (
     SchedulerConfig,
     TemporalSchedulerConfig,
 )
-from app.core.stores.content.content_storage_factory import get_content_store
 from app.main import create_app
 from app.core.processors.output.vectorization_processor.embedder import Embedder
 from app.tests.test_utils.test_processors import TestMarkdownProcessor, TestTabularProcessor
@@ -64,7 +62,7 @@ def app_context(monkeypatch, fake_embedder):
             base_url="/knowledge-flow/v1",
             address="127.0.0.1",
             port=8888,
-            log_level="debug",
+            log_level="info",
             reload=False,
             reload_dir=".",
         ),
@@ -141,7 +139,8 @@ def content_store(app_context, tmp_path):
     """
     Returns the content store after ApplicationContext is initialized.
     """
-    return get_content_store()
+    return ApplicationContext.get_instance().get_content_store()
+
 
 
 @pytest.fixture

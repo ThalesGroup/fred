@@ -21,7 +21,6 @@ from fastapi import UploadFile
 
 from starlette.datastructures import UploadFile as StarletteUploadFile
 from app.application_context import ApplicationContext
-from app.core.stores.content.content_storage_factory import get_content_store
 from app.features.wip.input_processor_service import InputProcessorService
 
 logger = logging.getLogger(__name__)
@@ -39,7 +38,7 @@ class IngestionService:
     def __init__(self):
         self.context = ApplicationContext.get_instance()
         self.processor = InputProcessorService()
-        self.storage = get_content_store()
+        self.storage = ApplicationContext.get_instance().get_content_store()
 
     def save_file_to_temp(self, file: Union[UploadFile, pathlib.Path]) -> pathlib.Path:
         """

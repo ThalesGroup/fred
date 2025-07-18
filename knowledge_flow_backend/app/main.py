@@ -49,6 +49,7 @@ logger = logging.getLogger(__name__)
 
 def create_app(configuration: Configuration) -> FastAPI:
     logger.info(f"🛠️ create_app() called with base_url={configuration.app.base_url}")
+
     initialize_keycloak(configuration)
     app = FastAPI(
         docs_url=f"{configuration.app.base_url}/docs",
@@ -141,11 +142,5 @@ def main():
         reload_dirs=configuration.app.reload_dir,
     )
 
-
 if __name__ == "__main__":
     main()
-
-# Note: We do not define a global `app = FastAPI()` for ASGI (e.g., `uvicorn app.main:app`)
-# because this application is always launched via the CLI `main()` function.
-# This allows full control over configuration (e.g., --config-path, --base-url) and avoids
-# the need for a static app instance required by ASGI-based servers like Uvicorn in import mode.

@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 import os
 from pathlib import Path
 from typing import Annotated, List, Literal, Union
@@ -25,7 +26,6 @@ This module defines the top level data structures used by controllers, processor
 unit tests. It helps to decouple the different components of the application and allows
 to define clear workflows and data structures.
 """
-
 
 class Status(str, Enum):
     SUCCESS = "success"
@@ -114,30 +114,15 @@ class LocalTagStore(BaseModel):
 
 TagStorageConfig = Annotated[Union[LocalTagStore], Field(discriminator="type")]
 
-
-###########################################################
-#
-# --- Vector Storage Configuration
-#
-
-
 class InMemoryVectorStorage(BaseModel):
     type: Literal["in_memory"]
-
 
 class WeaviateVectorStorage(BaseModel):
     type: Literal["weaviate"]
     host: str = Field(default="https://localhost:8080", description="Weaviate host")
     index_name: str = Field(default="CodeDocuments", description="Weaviate class (collection) name")
 
-
 VectorStorageConfig = Annotated[Union[InMemoryVectorStorage, OpenSearchStorage, WeaviateVectorStorage], Field(discriminator="type")]
-
-
-###########################################################
-#
-# --- Tabular Storage Configuration
-#
 
 class DuckDBTabularStorage(BaseModel):
     type: Literal["duckdb"]
@@ -148,10 +133,8 @@ TabularStorageConfig = Annotated[
     Field(discriminator="type")
 ]
 
-
 class EmbeddingConfig(BaseModel):
     type: str = Field(..., description="The embedding backend to use (e.g., 'openai', 'azureopenai')")
-
 
 class KnowledgeContextStorageConfig(BaseModel):
     type: str = Field(..., description="The storage backend to use (e.g., 'local', 'minio')")
@@ -160,9 +143,6 @@ class KnowledgeContextStorageConfig(BaseModel):
 class AppSecurity(Security):
     client_id: str = "knowledge-flow"
     keycloak_url: str = "http://localhost:9080/realms/knowledge-flow"
-
-
-
 
 class KnowledgeContextDocument(BaseModel):
     id: str
@@ -198,7 +178,7 @@ class SchedulerConfig(BaseModel):
    
 class AppConfig(BaseModel):
     name: Optional[str] = "Knowledge Flow Backend"
-    base_url: str = "/"
+    base_url: str = "/knowledge-flow/v1"
     address: str = "127.0.0.1"
     port: int = 8000
     log_level: str = "info"

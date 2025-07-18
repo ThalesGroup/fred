@@ -5,9 +5,6 @@ PROJECT_REGISTRY=registry.thalesdigital.io/tsn/projects/knowledge_flow_app
 PROJECT_NAME=knowledge-flow
 PY_PACKAGE=app
 
-ROOT_DIR := $(realpath $(CURDIR))
-ENV_FILE := $(ROOT_DIR)/config/.env
-
 TARGET=$(CURDIR)/target
 VENV=$(CURDIR)/.venv
 PIP=$(VENV)/bin/pip
@@ -18,7 +15,11 @@ IMG=$(PROJECT_REGISTRY)/$(PROJECT_NAME):$(VERSION)
 HELM_ARCHIVE=./knowledge_flow_app-0.1.0.tgz
 PROJECT_ID="74648"
 
-LOG_LEVEL?=INFO
+ROOT_DIR := $(realpath $(CURDIR))
+# Needed env variable to start app
+export ENV_FILE := $(ROOT_DIR)/config/.env
+export CONFIG_FILE := $(ROOT_DIR)/config/configuration.yaml
+export LOG_LEVEL?=info
 
 ##@ Setup
 
@@ -89,13 +90,17 @@ helm-push: ## Push Helm chart to GitLab package registry
 ##@ Run
 
 .PHONY: run
-
+run: PORT ?= 8111
+run: UVICORN_FACTORY ?= app.main:create_app
 run: dev ## Run the app from source
-	PYTHONPATH=. \
-	ENV_FILE="$(ENV_FILE)" LOG_LEVEL="$(LOG_LEVEL)" \
-	$(PYTHON) ${PY_PACKAGE}/main.py --config-path ./config/configuration.yaml
+	$(UV) run uvicorn \
+		--factory ${UVICORN_FACTORY} \
+		--port ${PORT} \
+		--env-file ${ENV_FILE} \
+		--log-level ${LOG_LEVEL} \
+		--reload
 
-.PHONY: run-scheduler
+.PHONY: run-worker
 
 run-worker: dev ## Run an ingestion worker this requires a temporal daemon
 	@echo "🚀 Running the app..."
@@ -103,6 +108,15 @@ run-worker: dev ## Run an ingestion worker this requires a temporal daemon
 	LOG_LEVEL=$(LOG_LEVEL) \
 	ENV_FILE=$(ENV_FILE) \
 	$(PYTHON) ${PY_PACKAGE}/main_worker.py --config-path ./config/configuration_worker.yaml
+
+.PHONY: run-api
+
+run-api: dev ## Run an ingestion worker this requires a temporal daemon
+	@echo "🚀 Running the app..."
+	PYTHONPATH=. \
+	LOG_LEVEL=$(LOG_LEVEL) \
+	ENV_FILE=$(ENV_FILE) \
+	$(PYTHON) ${PY_PACKAGE}/main.py --config-path ./config/configuration.yaml
 
 .PHONY: docker-run
 

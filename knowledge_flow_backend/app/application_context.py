@@ -23,6 +23,9 @@ from app.config.embedding_azure_apim_settings import EmbeddingAzureApimSettings
 from app.config.embedding_azure_openai_settings import EmbeddingAzureOpenAISettings
 from app.config.ollama_settings import OllamaSettings
 from app.config.embedding_openai_settings import EmbeddingOpenAISettings
+from app.core.stores.content.base_content_store import BaseContentStore
+from app.core.stores.content.local_content_store import LocalStorageBackend
+from app.core.stores.content.minio_content_store import MinioStorageBackend
 from langchain_openai import OpenAIEmbeddings, AzureOpenAIEmbeddings
 from langchain_ollama import OllamaEmbeddings
 
@@ -257,6 +260,29 @@ class ApplicationContext:
         module = importlib.import_module(module_path)
         cls = getattr(module, class_name)
         return cls
+
+    def get_content_store(self) -> BaseContentStore:
+        """
+        Factory function to get the appropriate storage backend based on configuration.
+        Returns:
+            BaseContentStore: An instance of the storage backend.
+        """
+        # Get the singleton application context and configuration
+        config = ApplicationContext.get_instance().get_config().content_storage
+        backend_type = config.type
+
+        if backend_type == "minio":
+            return MinioStorageBackend(
+                endpoint=config.endpoint,
+                access_key=config.access_key,
+                secret_key=config.secret_key,
+                bucket_name=config.bucket_name,
+                secure=config.secure
+            )
+        elif backend_type == "local":
+            return LocalStorageBackend(Path(config.root_path).expanduser())
+        else:
+            raise ValueError(f"Unsupported storage backend: {backend_type}")
 
     def get_embedder(self) -> BaseEmbeddingModel:
         """

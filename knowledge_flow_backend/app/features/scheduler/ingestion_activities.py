@@ -3,7 +3,6 @@ from temporalio import activity
 from pathlib import Path
 from app.features.wip.input_processor_service import InputProcessorService
 from app.features.wip.output_processor_service import OutputProcessorService
-from app.core.stores.content.content_storage_factory import get_content_store
 from app.application_context import ApplicationContext
 
 logger = logging.getLogger(__name__)
@@ -32,5 +31,5 @@ def vectorize_and_save(file, metadata: dict):
     output_service = OutputProcessorService()
     output_service.process(input_path.parent, input_path, metadata)
     app_context.get_metadata_store().save_metadata(metadata)
-    get_content_store().save_content(metadata["document_uid"], input_path.parent)
+    ApplicationContext.get_instance().get_content_store().save_content(metadata["document_uid"], input_path.parent)
     logger.info(f"[vectorize_and_save] Completed for UID: {metadata.get('document_uid')}")
