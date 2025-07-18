@@ -37,7 +37,7 @@ from fred_core import KeycloakUser, get_current_user
 from app.features.frugal.ai_service import AIService, WorkloadKind
 from app.common.connectors.file_dao import FileDAO
 
-from app.common.structure import (
+from app.common.structures import (
     DAOTypeEnum,
     OfflineStatus,
     PrecisionEnum,

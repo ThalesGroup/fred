@@ -31,7 +31,7 @@ from threading import Lock
 from typing import Dict, List, Type
 from pydantic import BaseModel
 from app.model_factory import get_structured_chain
-from app.common.structure import AgentSettings, Configuration, ServicesSettings
+from app.common.structures import AgentSettings, Configuration, ServicesSettings
 from app.model_factory import get_model
 from langchain_core.language_models.base import BaseLanguageModel
 from langchain_mcp_adapters.client import MultiServerMCPClient

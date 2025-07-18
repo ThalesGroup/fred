@@ -33,7 +33,7 @@ from app.features.k8.kube_service import KubeService
 import uvicorn
 from app.application_context import ApplicationContext
 from app.chatbot.chatbot_controller import ChatbotController
-from app.common.structure import Configuration
+from app.common.structures import Configuration
 from app.common.utils import parse_server_configuration
 from app.monitoring.node_monitoring.node_metric_store import \
     create_node_metric_store

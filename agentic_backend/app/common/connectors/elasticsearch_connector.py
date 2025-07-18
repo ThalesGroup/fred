@@ -32,7 +32,7 @@ from typing import Type, TypeVar
 
 from elasticsearch import Elasticsearch as Els
 
-from common.structure import HttpSchemeEnum
+from app.common.structures import HttpSchemeEnum
 from common.connectors.connector import Connector
 
 # 🔹 Create a module-level logger

@@ -41,7 +41,7 @@ from starlette.websockets import WebSocketState
 from app.chatbot.structures.agentic_flow import AgenticFlow
 from app.chatbot.structures.chatbot_message import ChatAskInput
 from app.common.connectors.file_dao import FileDAO
-from app.common.structure import (
+from app.common.structures import (
     DAOTypeEnum,
 )
 

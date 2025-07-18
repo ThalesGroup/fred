@@ -17,7 +17,7 @@ import logging
 from typing import Optional
 from langchain_core.messages import SystemMessage
 from langgraph.graph import END, START, MessagesState, StateGraph
-from app.common.structure import AgentSettings, Configuration
+from app.common.structures import AgentSettings, Configuration
 from app.flow import AgentFlow
 from app.application_context import get_agent_settings, get_model_for_agent
 from app.monitoring.node_monitoring.monitor_node import monitor_node

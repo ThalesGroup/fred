@@ -14,13 +14,14 @@
 
 # app/tests/conftest.py
 
-from app.common.structures import AppConfig
+
 import pytest
 from fastapi.testclient import TestClient
 from fastapi import FastAPI, APIRouter
 
-from app.common.structure import Configuration, PathOrIndexPrefix
+from app.common.structures import AppConfig, Configuration
 from app.application_context import ApplicationContext
+from app.common.structures import PathOrIndexPrefix
 from app.chatbot.chatbot_controller import ChatbotController
 
 @pytest.fixture(scope="session")
