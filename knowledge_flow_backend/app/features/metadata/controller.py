@@ -26,6 +26,15 @@ logger = logging.getLogger(__name__)
 
 lock = Lock()
 
+def handle_exception(e: Exception) -> HTTPException:
+    if isinstance(e, MetadataNotFound):
+       return HTTPException(status_code=404, detail=str(e))
+    elif isinstance(e, InvalidMetadataRequest):
+        return HTTPException(status_code=400, detail=str(e))
+    elif isinstance(e, MetadataUpdateError):
+        return HTTPException(status_code=500, detail=str(e))
+    return HTTPException(status_code=500, detail="Internal server error")
+
 class MetadataController:
     """
     Controller responsible for exposing CRUD operations on document metadata.
@@ -67,15 +76,6 @@ class MetadataController:
         self.service = MetadataService()
         self.content_store = ApplicationContext.get_instance().get_content_store()
         self.tabular_store = self.context.get_tabular_store()
-
-        def handle_exception(e: Exception) -> HTTPException:
-            if isinstance(e, MetadataNotFound):
-                return HTTPException(status_code=404, detail=str(e))
-            elif isinstance(e, InvalidMetadataRequest):
-                return HTTPException(status_code=400, detail=str(e))
-            elif isinstance(e, MetadataUpdateError):
-                return HTTPException(status_code=500, detail=str(e))
-            return HTTPException(status_code=500, detail="Internal server error")
 
         @router.post(
             "/documents/metadata",
@@ -126,28 +126,12 @@ class MetadataController:
         )
         def delete_document_metadata(document_uid: str):
             try:
-                with lock:
-                    try:
-                        metadata = self.service.get_document_metadata(document_uid)
-                        if metadata:
-                            self.service.delete_document_metadata(document_uid)
-                            self.content_store.delete_content(document_uid)
-                            # TODO
-                            #if document_metadata.get("suffix") in ("CSV", "XLSX", "XLS"):
-                            #    self.tabular_store.delete_table(document_metadata["document_name"])
-                            return DeleteDocumentMetadataResponse(
-                                status=Status.SUCCESS,
-                                message=f"Metadata for document {document_uid} has been deleted."
-                            )
-                        else:
-                           return DeleteDocumentMetadataResponse(
-                            status=Status.ERROR,
-                            message=f"Metadata for document {document_uid} not found."
-                           )
-                    except Exception as e:
-                        logger.exception(f"Failed to delete document metadata: {e}")
-                        raise handle_exception(e)
-                    
+                self.service.delete_document_metadata(document_uid)
+                self.content_store.delete_content(document_uid)
+                return DeleteDocumentMetadataResponse(
+                    status=Status.SUCCESS,
+                    message=f"Metadata for document {document_uid} has been deleted."
+                )
             except Exception as e:
                 logger.exception(f"Failed to delete document metadata: {e}")
                 raise handle_exception(e)

@@ -15,6 +15,8 @@
 storage back‑ends** (no MinIO, no OpenSearch).
 """
 
+from datetime import datetime
+from app.common.structures import DocumentMetadata
 from fastapi.testclient import TestClient
 from fastapi import status
 import pytest
@@ -62,16 +64,15 @@ class TestContentController:
     @pytest.fixture
     def document1(self):
         """Sample metadata matching *markdown_file*."""
-        return {
-            "document_uid": "doc-01",
-            "title": "Example Document",
-            "author": "Jane Doe",
-            "created": "2024-06-01T12:00:00Z",
-            "modified": "2024-06-02T15:30:00Z",
-            "document_name": "document.md",
-            "front_metadata": {"agent_name": "Georges"},
-            "retrievable": True,
-        }
+        return DocumentMetadata(
+            document_uid="doc-01",
+            document_name="document.md",
+            title="Example Document",
+            author="Jane Doe",
+            created=datetime.fromisoformat("2024-06-01T12:00:00+00:00"),
+            modified=datetime.fromisoformat("2024-06-02T15:30:00+00:00"),
+            retrievable=True
+        )
 
     # ─────────────────────────────── tests ────────────────────────────────
     def test_get_markdown_preview(self, client_fixture: TestClient, markdown_file, content_store):
