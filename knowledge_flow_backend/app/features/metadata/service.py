@@ -14,7 +14,7 @@
 
 import logging
 
-from app.common.structures import Status
+from app.common.structures import DocumentMetadata, Status
 from app.features.metadata.structures import GetDocumentMetadataResponse, GetDocumentsMetadataResponse, UpdateDocumentMetadataResponse, UpdateRetrievableRequest
 from app.application_context import ApplicationContext
 
@@ -43,11 +43,9 @@ class MetadataService:
     def __init__(self):
         self.metadata_store = ApplicationContext.get_instance().get_metadata_store()
 
-    def get_documents_metadata(self, filters_dict: dict) -> GetDocumentsMetadataResponse:
+    def get_documents_metadata(self, filters_dict: dict) -> list[DocumentMetadata]:
         try:
-            documents = self.metadata_store.get_all_metadata(filters_dict)
-            logger.info(f"Documents metadata retrieved for {filters_dict} : {documents}")
-            return GetDocumentsMetadataResponse(status=Status.SUCCESS, documents=documents)
+            return self.metadata_store.get_all_metadata(filters_dict)
         except Exception as e:
             logger.error(f"Error retrieving document metadata: {e}")
             raise MetadataUpdateError(f"Failed to retrieve metadata: {e}")
@@ -62,7 +60,7 @@ class MetadataService:
             logger.error(f"Error deleting metadata: {e}")
             raise MetadataUpdateError(f"Failed to delete metadata for {document_uid}: {e}")
 
-    def get_document_metadata(self, document_uid: str) -> GetDocumentMetadataResponse:
+    def get_document_metadata(self, document_uid: str) -> DocumentMetadata:
         if not document_uid:
             raise InvalidMetadataRequest("Document UID cannot be empty")
         try:

@@ -15,34 +15,34 @@
 # app/tests/features/test_input_processor_service.py
 
 from unittest.mock import AsyncMock
+from app.features.ingestion.service import IngestionService
 import pytest
 from types import SimpleNamespace
-from app.features.wip.input_processor_service import InputProcessorService
 
 
 class TestInputProcessorService:
 
     @pytest.fixture
     def service(self):
-        return InputProcessorService()
+        return IngestionService()
 
-    def test_extract_metadata_success(self, tmp_path, service):
+    def test_extract_metadata_success(self, tmp_path, service: IngestionService):
         test_file = tmp_path / "test.md"
         test_file.write_text("dummy content")
 
         metadata = service.extract_metadata(test_file, {})
-        assert "document_uid" in metadata
+        assert metadata.document_uid
         assert metadata["title"] == "test-markdown"
         assert metadata["document_name"] == "test.md"
 
-    def test_extract_metadata_missing_uid(self, tmp_path, service):
+    def test_extract_metadata_missing_uid(self, tmp_path, service: IngestionService):
         # This should no longer raise because `TestMarkdownProcessor` always adds a UID
         test_file = tmp_path / "test.md"
         test_file.write_text("dummy")
         metadata = service.extract_metadata(test_file, {})
-        assert "document_uid" in metadata
+        assert metadata.document_uid
 
-    def test_process_markdown(self, tmp_path, service: InputProcessorService):
+    def test_process_markdown(self, tmp_path, service: IngestionService):
         input_file = tmp_path / "test.md"
         input_file.write_text("dummy")
 

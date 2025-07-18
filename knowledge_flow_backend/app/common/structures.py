@@ -13,6 +13,7 @@
 # limitations under the License.
 
 
+from datetime import datetime
 import os
 from pathlib import Path
 from typing import Annotated, List, Literal, Union
@@ -199,3 +200,53 @@ class Configuration(BaseModel):
     knowledge_context_storage: KnowledgeContextStorageConfig = Field(..., description="Knowledge context storage configuration")
     knowledge_context_max_tokens: int = 50000
     scheduler: SchedulerConfig
+
+
+class DocumentProcessingStatus(str, Enum):
+    UPLOADED = "uploaded"             # File stored, metadata extracted, no processing yet
+    INPUT_PROCESSED = "input_processed"  # Markdown and chunks extracted
+    OUTPUT_PROCESSED = "vectorized"         # Vector embedding done
+    COMPLETED = "completed"           # All pipeline steps done
+    FAILED = "failed"                 # Failed during one of the steps
+
+class DocumentMetadata(BaseModel):
+    document_name: str
+    document_uid: str
+    date_added_to_kb: datetime = Field(default_factory=datetime.utcnow)
+    retrievable: bool = False
+    processing_status: DocumentProcessingStatus = DocumentProcessingStatus.UPLOADED
+    tags: Optional[List[str]] = Field(default=None, description="User-provided tags from the frontend")
+
+    # Optional metadata fields from front or file content
+    title: Optional[str] = None
+    author: Optional[str] = None
+    created: Optional[datetime] = None
+    modified: Optional[datetime] = None
+    last_modified_by: Optional[str] = None
+    category: Optional[str] = None
+    subject: Optional[str] = None
+    keywords: Optional[str] = None
+
+    model_config = {
+        "arbitrary_types_allowed": True,
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "document_name": "CIR_TSN_PUNCH_2020.docx",
+                    "document_uid": "bde801c70277572a5333fe666936f2de7258dbe4e412d2c9cc6be996dc77b310",
+                    "date_added_to_kb": "2025-07-18T03:23:09.953244+00:00",
+                    "retrievable": True,
+                    "processing_status": "uploaded",
+                    "tags": ["finance", "cir", "tsn"],
+                    "title": "Dossier Technique CIR",
+                    "author": "Thales Services SAS",
+                    "created": "2021-11-22T11:54:00+00:00",
+                    "modified": "2021-12-02T08:26:00+00:00",
+                    "last_modified_by": "dimitri tombroff",
+                    "category": "None",
+                    "subject": "None",
+                    "keywords": "None",
+                }
+            ]
+        },
+    }

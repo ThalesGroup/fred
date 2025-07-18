@@ -84,10 +84,14 @@ class MetadataController:
             summary="List document metadata, with optional filters. All documents if no filters are given.",
         )
         def get_documents_metadata(filters: Dict[str, Any] = Body(default={})):
-            try:
-                return self.service.get_documents_metadata(filters)
-            except Exception as e:
-                raise handle_exception(e)
+            docs = self.service.get_documents_metadata(filters)
+            return GetDocumentsMetadataResponse(status=Status.SUCCESS, documents=docs)
+        @router.post(
+            "/documents/metadata",
+            tags=["Metadata"],
+            response_model=GetDocumentsMetadataResponse,
+            summary="List document metadata, with optional filters. All documents if no filters are given.",
+        )
 
         @router.get(
             "/document/{document_uid}",
@@ -97,7 +101,8 @@ class MetadataController:
         )
         def get_document_metadata(document_uid: str):
             try:
-                return self.service.get_document_metadata(document_uid)
+                metadata = self.service.get_document_metadata(document_uid)
+                return GetDocumentMetadataResponse(status=Status.SUCCESS, documents=metadata)
             except Exception as e:
                 raise handle_exception(e)
 
@@ -123,17 +128,26 @@ class MetadataController:
             try:
                 with lock:
                     try:
-                        document_metadata = self.service.get_document_metadata(document_uid).metadata
+                        metadata = self.service.get_document_metadata(document_uid)
+                        if metadata:
+                            self.service.delete_document_metadata(document_uid)
+                            self.content_store.delete_content(document_uid)
+                            # TODO
+                            #if document_metadata.get("suffix") in ("CSV", "XLSX", "XLS"):
+                            #    self.tabular_store.delete_table(document_metadata["document_name"])
+                            return DeleteDocumentMetadataResponse(
+                                status=Status.SUCCESS,
+                                message=f"Metadata for document {document_uid} has been deleted."
+                            )
+                        else:
+                           return DeleteDocumentMetadataResponse(
+                            status=Status.ERROR,
+                            message=f"Metadata for document {document_uid} not found."
+                           )
                     except Exception as e:
-                        document_metadata = {}
-                    self.content_store.delete_content(document_uid)
-                    if document_metadata.get("suffix") in ("CSV", "XLSX", "XLS"):
-                        self.tabular_store.delete_table(document_metadata["document_name"])
-                    self.service.delete_document_metadata(document_uid)
-                    return DeleteDocumentMetadataResponse(
-                        status=Status.SUCCESS,
-                        message=f"Metadata for document {document_uid} has been deleted.",
-                    )
+                        logger.exception(f"Failed to delete document metadata: {e}")
+                        raise handle_exception(e)
+                    
             except Exception as e:
                 logger.exception(f"Failed to delete document metadata: {e}")
                 raise handle_exception(e)

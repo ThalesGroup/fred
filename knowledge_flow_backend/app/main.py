@@ -19,7 +19,6 @@
 Entrypoint for the Knowledge Flow Backend App.
 """
 
-import argparse
 import asyncio
 import atexit
 import logging
@@ -42,8 +41,7 @@ from app.features.metadata.controller import MetadataController
 from app.features.tabular.controller import TabularController
 from app.features.tag.controller import TagController
 from app.features.vector_search.controller import VectorSearchController
-from app.features.wip.ingestion_controller import IngestionController
-from app.features.wip.knowledge_context_controller import KnowledgeContextController
+from app.features.ingestion.controller import IngestionController
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +69,6 @@ def create_app(configuration: Configuration) -> FastAPI:
     VectorSearchController(router)
     MetadataController(router)
     ContentController(router)
-    KnowledgeContextController(router)
     TabularController(router)
     CodeSearchController(router)
     TagController(router)

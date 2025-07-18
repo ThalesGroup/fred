@@ -15,6 +15,7 @@
 import tempfile
 from pathlib import Path
 
+from app.common.structures import DocumentMetadata
 import pytest
 
 from app.core.processors.input.docx_markdown_processor.docx_markdown_processor import DocxMarkdownProcessor
@@ -26,14 +27,23 @@ def processor():
 
 
 @pytest.mark.asyncio
-async def test_process_docx_file(processor):
+async def test_process_docx_file(processor: DocxMarkdownProcessor):
     test_docx_path = Path("app/core/processors/input/docx_markdown_processor/tests/assets/sample.docx")
 
     assert processor.check_file_validity(test_docx_path)
     metadata = processor.process_metadata(test_docx_path)
-    assert "document_uid" in metadata
+    assert isinstance(metadata, DocumentMetadata)
+    assert metadata.document_uid
+    assert metadata.document_name == "sample.docx"
 
     with tempfile.TemporaryDirectory() as tmpdir:
         output_dir = Path(tmpdir)
-        result = processor.convert_file_to_markdown(test_docx_path, output_dir,  metadata["document_uid"] )
-        print(result)
+
+        result = processor.convert_file_to_markdown(
+            test_docx_path,
+            output_dir,
+            metadata.document_uid  # ✅ now access attribute, not dict key
+        )
+
+        assert "md_file" in result
+        assert output_dir.exists()

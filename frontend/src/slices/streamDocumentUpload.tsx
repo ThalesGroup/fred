@@ -24,7 +24,7 @@ export async function streamUploadOrProcessDocument(
   const token = KeyCloakService.GetToken();
   const formData = new FormData();
   formData.append("files", file);
-  const metadata = {}; // Can extend later if needed
+  const metadata = { tags: ["test"] };// Can extend later if needed
   formData.append("metadata_json", JSON.stringify(metadata));
 
   const backend_url_knowledge = getConfig().backend_url_knowledge;

@@ -20,7 +20,7 @@ import pytest
 import pandas as pd
 from typing import Tuple,List
 
-from app.features.wip.input_processor_service import InputProcessorService
+from app.features.ingestion.input_processor_service import InputProcessorService
 from app.features.wip.output_processor_service import OutputProcessorService
 from app.features.wip import output_processor_service
 from app.common.structures import OutputProcessorResponse
