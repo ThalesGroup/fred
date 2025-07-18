@@ -35,7 +35,7 @@ def test_sample_markdown_processor_end_to_end():
         assert processor.check_file_validity(input_file)
 
         # Metadata
-        metadata = processor.process_metadata(input_file)
+        metadata = processor.process_metadata(input_file, [])
         assert metadata["document_name"] == "sample.txt"
         assert "document_uid" in metadata
 

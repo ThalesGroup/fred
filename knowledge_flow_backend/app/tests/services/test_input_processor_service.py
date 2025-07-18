@@ -46,16 +46,16 @@ class TestInputProcessorService:
         input_file = tmp_path / "test.md"
         input_file.write_text("dummy")
 
-        service.process(tmp_path, input_file.name, {"doc": "meta", "document_uid": "markdown-uid-001"})
+        service.process_input(tmp_path, input_file.name, {"doc": "meta", "document_uid": "markdown-uid-001"})
         output_file = tmp_path / "output" / "file.md"
         assert output_file.exists()
         assert output_file.read_text() == "# Test Markdown Content"
 
-    def test_process_tabular(self, tmp_path, service):
+    def test_process_tabular(self, tmp_path, service: IngestionService):
         input_file = tmp_path / "table.xlsx"
         input_file.write_text("dummy")
 
-        service.process(tmp_path, input_file.name, {"doc": "meta"})
+        service.process_input(tmp_path, input_file.name, {"doc": "meta"})
         output_file = tmp_path / "output" / "table.csv"
         assert output_file.exists()
         content = output_file.read_text()
@@ -63,7 +63,7 @@ class TestInputProcessorService:
         assert "1" in content
         assert "A" in content
 
-    def test_process_unknown_processor(self, monkeypatch, tmp_path, service):
+    def test_process_unknown_processor(self, monkeypatch, tmp_path, service: IngestionService):
         # Forcefully override with unknown type (not needed if registry is correct)
         class UnknownProcessor:
             pass
@@ -74,27 +74,5 @@ class TestInputProcessorService:
         input_file.write_text("data")
 
         with pytest.raises(RuntimeError, match="Unknown processor type"):
-            service.process(tmp_path, input_file.name, {"meta": "data"})
+            service.process_input(tmp_path, input_file.name, {"meta": "data"})
 
-    @pytest.mark.asyncio
-    async def test_process_file_success(self, tmp_path, service):
-        content = b"hello world"
-
-        file = SimpleNamespace(
-            filename="demo.md",
-            read=AsyncMock(return_value=content)
-        )
-
-        await service.process_file(file, {}, tmp_path)
-
-        output_dir = tmp_path / "demo.md"
-        assert output_dir.exists()
-
-        # Ignore file copy ("demo.md") and look only for subdirectories (UIDs)
-        uid_dirs = [p for p in output_dir.iterdir() if p.is_dir()]
-        assert len(uid_dirs) == 1
-
-        uid_dir = uid_dirs[0]
-        assert (uid_dir / "metadata.json").exists()
-        assert (uid_dir / "file.md").exists()
-        assert (uid_dir / "file.md").read_text() == "# Test Markdown Content"

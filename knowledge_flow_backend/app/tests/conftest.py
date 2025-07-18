@@ -121,31 +121,31 @@ def app_context(monkeypatch, fake_embedder):
         knowledge_context_max_tokens=50000,
     )
 
-    ApplicationContext(config)
+    return ApplicationContext(config)
 
 
 @pytest.fixture(scope="function")
-def client_fixture(app_context):
+def client_fixture(app_context: ApplicationContext):
     """
     TestClient for FastAPI app. ApplicationContext is preloaded.
     """
-    app = create_app(config_path="dummy", base_url="/knowledge-flow/v1")
+    app = create_app(app_context.get_config())
     with TestClient(app) as test_client:
         yield test_client
 
 
 @pytest.fixture
-def content_store(app_context, tmp_path):
+def content_store(app_context: ApplicationContext, tmp_path):
     """
     Returns the content store after ApplicationContext is initialized.
     """
-    return ApplicationContext.get_instance().get_content_store()
+    return app_context.get_instance().get_content_store()
 
 
 
 @pytest.fixture
-def metadata_store(app_context):
+def metadata_store(app_context: ApplicationContext):
     """
     Returns the metadata store from the initialized ApplicationContext.
     """
-    return ApplicationContext.get_instance().get_metadata_store()
+    return app_context.get_instance().get_metadata_store()

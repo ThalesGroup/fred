@@ -53,7 +53,7 @@ def hello_world():
         assert processor.check_file_validity(input_file)
 
         # Metadata
-        metadata = processor.process_metadata(input_file)
+        metadata = processor.process_metadata(input_file, [])
         assert metadata["document_name"] == "sample.md"
         assert "document_uid" in metadata
         output_dir.mkdir(parents=True, exist_ok=True)  # Ensure output_dir exists

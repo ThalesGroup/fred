@@ -13,7 +13,7 @@
 # limitations under the License.
 
 
-from typing import Any, Dict, List
+from typing import List
 
 from app.common.structures import DocumentMetadata
 from pydantic import BaseModel

@@ -72,7 +72,7 @@ class MetadataService:
         if metadata is None:
             raise MetadataNotFound(f"No document found with UID {document_uid}")
 
-        return GetDocumentMetadataResponse(status=Status.SUCCESS, metadata=metadata)
+        return metadata
 
     def update_document_retrievable(self, document_uid: str, update) -> UpdateDocumentMetadataResponse:
         if not document_uid:

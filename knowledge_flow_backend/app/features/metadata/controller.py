@@ -102,7 +102,7 @@ class MetadataController:
         def get_document_metadata(document_uid: str):
             try:
                 metadata = self.service.get_document_metadata(document_uid)
-                return GetDocumentMetadataResponse(status=Status.SUCCESS, documents=metadata)
+                return GetDocumentMetadataResponse(status=Status.SUCCESS, metadata=metadata)
             except Exception as e:
                 raise handle_exception(e)
 
