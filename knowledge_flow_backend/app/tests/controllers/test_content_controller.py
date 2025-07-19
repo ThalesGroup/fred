@@ -17,6 +17,7 @@ storage back‑ends** (no MinIO, no OpenSearch).
 
 from datetime import datetime
 from app.common.structures import DocumentMetadata
+from app.core.stores.content.base_content_store import BaseContentStore
 from fastapi.testclient import TestClient
 from fastapi import status
 import pytest
@@ -75,7 +76,8 @@ class TestContentController:
         )
 
     # ─────────────────────────────── tests ────────────────────────────────
-    def test_get_markdown_preview(self, client_fixture: TestClient, markdown_file, content_store):
+    def test_get_markdown_preview(self, client_fixture: TestClient, markdown_file, 
+                                  content_store: BaseContentStore):
         """The `/markdown/{uid}` endpoint should return the rendered markdown."""
         content_store.save_content(markdown_file["document_uid"], markdown_file["document_dir"])
 

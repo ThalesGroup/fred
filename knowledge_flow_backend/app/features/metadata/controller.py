@@ -13,27 +13,39 @@
 # limitations under the License.
 
 import logging
-from typing import Any, Dict
-from fastapi import APIRouter, Body, HTTPException
+from typing import Any, Dict, List
+from app.core.stores.metadata.base_catalog_store import PullFileEntry
+from app.core.stores.metadata.duckdb_catalog_store import DuckdbCatalogStore
+from app.features.metadata.utils import file_entry_to_metadata, scan_pull_source
+from fastapi import APIRouter, Body, HTTPException, Query
 
-from app.common.structures import Status
+from app.common.structures import DocumentMetadata, Status
 from app.application_context import ApplicationContext
 from app.features.metadata.service import InvalidMetadataRequest, MetadataNotFound, MetadataService, MetadataUpdateError
-from app.features.metadata.structures import DeleteDocumentMetadataResponse, GetDocumentMetadataResponse, GetDocumentsMetadataResponse, UpdateDocumentMetadataRequest, UpdateDocumentMetadataResponse, UpdateRetrievableRequest
+from app.features.metadata.structures import (
+    DeleteDocumentMetadataResponse,
+    GetDocumentMetadataResponse,
+    GetDocumentsMetadataResponse,
+    UpdateDocumentMetadataRequest,
+    UpdateDocumentMetadataResponse,
+    UpdateRetrievableRequest,
+)
 from threading import Lock
 
 logger = logging.getLogger(__name__)
 
 lock = Lock()
 
+
 def handle_exception(e: Exception) -> HTTPException:
     if isinstance(e, MetadataNotFound):
-       return HTTPException(status_code=404, detail=str(e))
+        return HTTPException(status_code=404, detail=str(e))
     elif isinstance(e, InvalidMetadataRequest):
         return HTTPException(status_code=400, detail=str(e))
     elif isinstance(e, MetadataUpdateError):
         return HTTPException(status_code=500, detail=str(e))
     return HTTPException(status_code=500, detail="Internal server error")
+
 
 class MetadataController:
     """
@@ -75,7 +87,6 @@ class MetadataController:
         self.context = ApplicationContext.get_instance()
         self.service = MetadataService()
         self.content_store = ApplicationContext.get_instance().get_content_store()
-        self.tabular_store = self.context.get_tabular_store()
 
         @router.post(
             "/documents/metadata",
@@ -84,14 +95,8 @@ class MetadataController:
             summary="List document metadata, with optional filters. All documents if no filters are given.",
         )
         def get_documents_metadata(filters: Dict[str, Any] = Body(default={})):
-            docs = self.service.get_documents_metadata(filters)
-            return GetDocumentsMetadataResponse(status=Status.SUCCESS, documents=docs)
-        @router.post(
-            "/documents/metadata",
-            tags=["Metadata"],
-            response_model=GetDocumentsMetadataResponse,
-            summary="List document metadata, with optional filters. All documents if no filters are given.",
-        )
+            push_docs = self.service.get_documents_metadata(filters)
+            return GetDocumentsMetadataResponse(status=Status.SUCCESS, documents=push_docs)
 
         @router.get(
             "/document/{document_uid}",
@@ -128,10 +133,7 @@ class MetadataController:
             try:
                 self.service.delete_document_metadata(document_uid)
                 self.content_store.delete_content(document_uid)
-                return DeleteDocumentMetadataResponse(
-                    status=Status.SUCCESS,
-                    message=f"Metadata for document {document_uid} has been deleted."
-                )
+                return DeleteDocumentMetadataResponse(status=Status.SUCCESS, message=f"Metadata for document {document_uid} has been deleted.")
             except Exception as e:
                 logger.exception(f"Failed to delete document metadata: {e}")
                 raise handle_exception(e)
@@ -151,3 +153,62 @@ class MetadataController:
             except Exception as e:
                 logger.error(f"Failed to update metadata for {document_uid}: {e}")
                 raise handle_exception(e)
+
+        @router.post("/catalog/rescan/{source_tag}", tags=["Metadata"], summary="Rescan a pull source and update catalog")
+        def rescan_pull_source(source_tag: str):
+            config = ApplicationContext.get_instance().get_config()
+            store: DuckdbCatalogStore = ApplicationContext.get_instance().get_catalog_store()
+
+            if source_tag not in config.pull_sources:
+                raise HTTPException(status_code=404, detail=f"Unknown source_tag: {source_tag}")
+
+            try:
+                entries = scan_pull_source(source_tag)
+                store.save_entries(source_tag, entries)
+                return {"status": "success", "source_tag": source_tag, "files_found": len(entries)}
+            except NotImplementedError as e:
+                raise HTTPException(status_code=501, detail=str(e))
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=f"Scan failed: {e}")
+
+        @router.get("/catalog/files", 
+                     tags=["Metadata"],
+                     response_model=List[PullFileEntry], 
+                     summary="List catalogued files from a pull source")
+        def list_catalogued_files(source_tag: str = Query(..., description="Source tag to filter files from catalog")):
+            config = ApplicationContext.get_instance().get_config()
+            store = ApplicationContext.get_instance().get_catalog_store()
+
+            if source_tag not in config.pull_sources:
+                raise HTTPException(status_code=404, detail=f"Unknown source_tag: {source_tag}")
+
+            try:
+                return store.list_entries(source_tag)
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=f"Failed to list catalog entries: {e}")
+
+        @router.get("/metadata/pull_documents", 
+                     tags=["Metadata"],
+                    response_model=List[DocumentMetadata])
+        def list_pull_documents(source_tag: str):
+            config = ApplicationContext.get_instance().get_config()
+            catalog = ApplicationContext.get_instance().get_catalog_store()
+            metadata_store = ApplicationContext.get_instance().get_metadata_store()
+
+            if source_tag not in config.pull_sources:
+                raise HTTPException(status_code=404, detail=f"Unknown source_tag: {source_tag}")
+
+            entries = catalog.list_entries(source_tag)
+            known_docs = metadata_store.list_by_source_tag(source_tag)
+
+            docs_by_hash = {doc.pull_location or doc.document_name: doc for doc in known_docs}
+
+            result = []
+            for entry in entries:
+                existing = docs_by_hash.get(entry.path)
+                if existing:
+                    result.append(existing)
+                else:
+                    result.append(file_entry_to_metadata(entry, source_tag))  # synthetic placeholder
+
+            return result

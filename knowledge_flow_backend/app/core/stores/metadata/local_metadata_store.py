@@ -53,6 +53,12 @@ class LocalMetadataStore(BaseMetadataStore):
             if self._match_nested(md.model_dump(mode="json"), filters)
         ]
 
+    def list_by_source_tag(self, source_tag: str) -> List[DocumentMetadata]:
+        return [
+            md for md in self._load()
+            if md.source_tag == source_tag and md.ingestion_type == "pull"
+        ]
+    
     def get_metadata_by_uid(self, document_uid: str) -> DocumentMetadata:
         for md in self._load():
             if md.document_uid == document_uid:

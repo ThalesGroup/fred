@@ -18,15 +18,12 @@ import shutil
 from pathlib import Path
 from app.features.ingestion.service import IngestionService
 import pytest
-import pandas as pd
-from typing import Tuple, List
 
 from app.common.structures import DocumentMetadata, OutputProcessorResponse
 from app.core.processors.input.common.base_image_describer import BaseImageDescriber
 from app.application_context import ApplicationContext
 from app.core.processors.input.pdf_markdown_processor.pdf_markdown_processor import PdfMarkdownProcessor
 from app.core.stores.vector.base_vector_store import BaseDocumentLoader
-from app.core.stores.tabular.base_tabular_store import BaseTabularStore
 from langchain.schema.document import Document
 
 
@@ -43,31 +40,6 @@ class DummyDescriber(BaseImageDescriber):
 class DummyDocumentLoader(BaseDocumentLoader):
     def load(self, file_path: str, metadata: dict) -> Document:
         return Document(page_content="abcdefg", metadata={})
-
-
-class DummyTabularStore(BaseTabularStore):
-    """
-    Ultra-simple in-memory implementation for testing.
-    """
-
-    def __init__(self):
-        self._store = {}
-
-    def save_table(self, table_name: str, df: pd.DataFrame) -> None:
-        self._store[table_name] = df
-
-    def load_table(self, table_name: str) -> pd.DataFrame:
-        return self._store[table_name]
-
-    def delete_table(self, table_name: str) -> None:
-        del self._store[table_name]
-
-    def list_tables(self) -> List[str]:
-        return list(self._store.keys())
-
-    def get_table_schema(self, table_name: str) -> List[Tuple[str, str]]:
-        df = self._store[table_name]
-        return list(zip(df.columns, df.dtypes.astype(str)))
 
 
 # ✅ Correct — define fixture at module level
@@ -157,18 +129,6 @@ class TestOutputProcessorService:
     def test_output_processor_rejects_non_markdown_csv(self, monkeypatch, service: IngestionService, tmp_path):
         (tmp_path / "output").mkdir(parents=True)
         (tmp_path / "output" / "output.xlsx").write_text("fake content")
-
-        class DummyContext:
-            def get_output_processor_instance(self, ext):
-                return DummyProcessor()
-
-            def get_document_loader(self):
-                return DummyDocumentLoader()
-
-            def get_tabular_store(self):
-                return DummyTabularStore()
-
-        # monkeypatch.setattr(output_processor_service.ApplicationContext, "get_instance", DummyContext)
 
         with pytest.raises(ValueError, match="is not a markdown or csv file"):
             service.process_output(tmp_path, "sample.xlsx", {"document_uid": "bad-ext"})

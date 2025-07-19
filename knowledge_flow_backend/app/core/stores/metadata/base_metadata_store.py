@@ -12,17 +12,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from typing import List
 
 from app.common.structures import DocumentMetadata
+from app.core.stores.metadata.base_catalog_store import BaseCatalogStore
 
 
-class BaseMetadataStore(ABC):
+class BaseMetadataStore(BaseCatalogStore):
     @abstractmethod
     def get_all_metadata(self, filters: dict) -> List[DocumentMetadata]:
         pass
 
+    @abstractmethod
+    def list_by_source_tag(self, source_tag: str) -> List[DocumentMetadata]:
+        """
+        Return all metadata entries ingested from a specific pull source.
+        """
+        pass
+    
     @abstractmethod
     def get_metadata_by_uid(self, document_uid: str) -> DocumentMetadata:
         pass

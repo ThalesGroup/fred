@@ -19,6 +19,7 @@ app:
   reload: false
   reload_dir: "."
 
+
 # Enable or disable the security layer
 security:
   enabled: false
@@ -110,6 +111,12 @@ content_storage:
   # secure: False
   # bucket_name: app-bucket
 
+pull_sources:
+  local-docs:
+    type: local_path
+    base_path: ~/Documents
+    description: "Personal local documents available for pull-mode ingestion"
+
 metadata_storage:
   # Metadata Storage Configuration
   #
@@ -169,7 +176,11 @@ vector_storage:
 
 tabular_storage:
   type: "duckdb"
-  duckdb_path: "~/.fred/tabular/tabular_data.duckdb"
+  duckdb_path: "~/.knowledge-flow/db.duckdb"
+
+catalog_storage:
+  type: "duckdb"
+  duckdb_path: "~/.knowledge-flow/db.duckdb"
 
 embedding:
   # -----------------------------------------------------------------------------

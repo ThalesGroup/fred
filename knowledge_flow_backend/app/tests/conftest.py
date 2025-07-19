@@ -89,7 +89,8 @@ def app_context(monkeypatch, fake_embedder):
         ),
         vector_storage=InMemoryVectorStorage(type="in_memory"),
         content_storage=LocalContentStorage(type="local"),
-        tabular_storage=DuckDBTabularStorage(type="duckdb"),
+        tabular_storage=DuckDBTabularStorage(type="duckdb", duckdb_path="/tmp/tabular"),
+        catalog_storage=DuckDBTabularStorage(type="duckdb", duckdb_path="/tmp/tabular"),
         embedding=EmbeddingConfig(type="openai"),
         tag_storage=LocalTagStore(type="local"),
         knowledge_context_storage=KnowledgeContextStorageConfig(
@@ -135,13 +136,19 @@ def client_fixture(app_context: ApplicationContext):
 
 
 @pytest.fixture
-def content_store(app_context: ApplicationContext, tmp_path):
+def content_store(app_context: ApplicationContext):
     """
     Returns the content store after ApplicationContext is initialized.
     """
     return app_context.get_instance().get_content_store()
 
 
+@pytest.fixture
+def tabular_store(app_context: ApplicationContext):
+    """
+    Returns the content store after ApplicationContext is initialized.
+    """
+    return app_context.get_instance().get_tabular_store()
 
 @pytest.fixture
 def metadata_store(app_context: ApplicationContext):

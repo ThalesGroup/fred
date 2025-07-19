@@ -13,10 +13,10 @@
 # limitations under the License.
 
 
-from datetime import datetime
+from datetime import datetime, timezone
 import os
 from pathlib import Path
-from typing import Annotated, List, Literal, Union
+from typing import Annotated, Dict, List, Literal, Union
 from pydantic import BaseModel, Field
 from typing import Optional
 from enum import Enum
@@ -127,9 +127,15 @@ VectorStorageConfig = Annotated[Union[InMemoryVectorStorage, OpenSearchStorage, 
 
 class DuckDBTabularStorage(BaseModel):
     type: Literal["duckdb"]
-    duckdb_path: str = Field(default="~/.fred/tabular/tabular_data.duckdb", description="Path to the DuckDB database file for tabular storage.")
+    duckdb_path: str = Field(default="~/.knowledge-flow/db.duckdb", 
+                             description="Path to the DuckDB database file.")
 
 TabularStorageConfig = Annotated[
+    Union[DuckDBTabularStorage,],
+    Field(discriminator="type")
+]
+
+CatalogStorageConfig = Annotated[
     Union[DuckDBTabularStorage,],
     Field(discriminator="type")
 ]
@@ -186,6 +192,18 @@ class AppConfig(BaseModel):
     reload: bool = False
     reload_dir: str = "."
 
+class PullSourceType(str, Enum):
+    LOCAL_PATH = "local_path"
+    WEBDAV = "webdav"
+    S3 = "s3"
+    GIT = "git"
+    HTTP = "http"
+    OTHER = "other"
+class PullSourceConfig(BaseModel):
+    type: PullSourceType = Field(..., description="Type of the pull source (e.g., local_path, git, s3)")
+    base_path: str = Field(..., description="Base path or URI where documents can be pulled from")
+    description: Optional[str] = Field(default=None, description="Human-readable description of this source")
+
 class Configuration(BaseModel):
     app: AppConfig
     security: AppSecurity
@@ -196,28 +214,55 @@ class Configuration(BaseModel):
     tag_storage: TagStorageConfig = Field(..., description="Tag storage configuration")
     vector_storage: VectorStorageConfig = Field(..., description="Vector storage configuration")
     tabular_storage: TabularStorageConfig = Field(..., description="Tabular storage configuration")
+    catalog_storage: CatalogStorageConfig = Field(..., description="Catalog storage configuration")
     embedding: EmbeddingConfig = Field(..., description="Embedding configuration")
     knowledge_context_storage: KnowledgeContextStorageConfig = Field(..., description="Knowledge context storage configuration")
     knowledge_context_max_tokens: int = 50000
     scheduler: SchedulerConfig
+    pull_sources: Optional[dict[str, PullSourceConfig]] = Field(
+        default_factory=dict,
+        description="Mapping of source_tag identifiers to pull source configurations"
+    )
 
+class DocumentIngestionType(str, Enum):
+    PUSH = "push"
+    PULL = "pull"
 
-class DocumentProcessingStatus(str, Enum):
-    UPLOADED = "uploaded"             # File stored, metadata extracted, no processing yet
-    INPUT_PROCESSED = "input_processed"  # Markdown and chunks extracted
-    OUTPUT_PROCESSED = "vectorized"         # Vector embedding done
-    COMPLETED = "completed"           # All pipeline steps done
-    FAILED = "failed"                 # Failed during one of the steps
+class PullSourceType(str, Enum):
+    LOCAL_PATH = "local_path"
+    WEBDAV = "webdav"
+    S3 = "s3"
+    GIT = "git"
+    HTTP = "http"
+    OTHER = "other"
+
 
 class DocumentMetadata(BaseModel):
+    # Core identity
     document_name: str
     document_uid: str
-    date_added_to_kb: datetime = Field(default_factory=datetime.utcnow)
-    retrievable: bool = False
-    processing_status: DocumentProcessingStatus = DocumentProcessingStatus.UPLOADED
-    tags: Optional[List[str]] = Field(default=None, description="User-provided tags from the frontend")
+    date_added_to_kb: datetime = Field(
+        default_factory=lambda: datetime.now(tz=timezone.utc),
+        description="When the document was added to the system"
+    )
 
-    # Optional metadata fields from front or file content
+    # Ingestion mode and retrievability
+    ingestion_type: DocumentIngestionType = DocumentIngestionType.PUSH
+    retrievable: bool = False
+
+    # Pull-mode specific fields
+    source_tag: Optional[str] = Field(
+        default=None,
+        description="Tag for identifying the pull source (e.g., 'local-docs')"
+    )
+    pull_location: Optional[str] = Field(
+        default=None,
+        description="Relative or absolute URI/path to the external document"
+    )
+    pull_source_type: Optional[PullSourceType] = None
+
+    # Tags and metadata
+    tags: Optional[List[str]] = Field(default=None, description="User-assigned tags")
     title: Optional[str] = None
     author: Optional[str] = None
     created: Optional[datetime] = None
@@ -227,26 +272,39 @@ class DocumentMetadata(BaseModel):
     subject: Optional[str] = None
     keywords: Optional[str] = None
 
+    # Flexible, extensible processing tracking
+    processing_stages: Dict[str, Literal["not_started", "in_progress", "done", "failed"]] = Field(
+        default_factory=dict,
+        description="Status of each processing stage (e.g. 'markdown', 'vector', 'sql', 'mcp')"
+    )
+
+    def is_fully_processed(self) -> bool:
+        return all(v == "done" for v in self.processing_stages.values())
+
     model_config = {
         "arbitrary_types_allowed": True,
         "json_schema_extra": {
             "examples": [
                 {
-                    "document_name": "CIR_TSN_PUNCH_2020.docx",
-                    "document_uid": "bde801c70277572a5333fe666936f2de7258dbe4e412d2c9cc6be996dc77b310",
-                    "date_added_to_kb": "2025-07-18T03:23:09.953244+00:00",
-                    "retrievable": True,
-                    "processing_status": "uploaded",
-                    "tags": ["finance", "cir", "tsn"],
-                    "title": "Dossier Technique CIR",
-                    "author": "Thales Services SAS",
-                    "created": "2021-11-22T11:54:00+00:00",
-                    "modified": "2021-12-02T08:26:00+00:00",
-                    "last_modified_by": "dimitri tombroff",
-                    "category": "None",
-                    "subject": "None",
-                    "keywords": "None",
+                    "document_name": "report_2025.pdf",
+                    "document_uid": "pull-local-docs-aabbccddeeff",
+                    "date_added_to_kb": "2025-07-19T12:45:00+00:00",
+                    "ingestion_type": "pull",
+                    "retrievable": False,
+                    "source_tag": "local-docs",
+                    "pull_location": "Archive/2025/report_2025.pdf",
+                    "pull_source_type": "local_path",
+                    "processing_stages": {
+                        "markdown": "done",
+                        "vector": "done"
+                    },
+                    "tags": ["finance", "q2"],
+                    "title": "Quarterly Report Q2",
+                    "author": "Finance Team",
+                    "created": "2025-07-01T10:00:00+00:00",
+                    "modified": "2025-07-02T14:30:00+00:00"
                 }
             ]
-        },
+        }
     }
+

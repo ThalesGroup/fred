@@ -17,6 +17,7 @@ import logging
 import os
 from pathlib import Path
 from typing import Dict, Type, Union, Optional
+from app.common.duckdb_store import DuckDBTableStore
 from app.common.structures import Configuration
 from app.common.utils import validate_settings_or_exit
 from app.config.embedding_azure_apim_settings import EmbeddingAzureApimSettings
@@ -26,6 +27,8 @@ from app.config.embedding_openai_settings import EmbeddingOpenAISettings
 from app.core.stores.content.base_content_store import BaseContentStore
 from app.core.stores.content.local_content_store import LocalStorageBackend
 from app.core.stores.content.minio_content_store import MinioStorageBackend
+from app.core.stores.metadata.base_catalog_store import BaseCatalogStore
+from app.core.stores.metadata.duckdb_catalog_store import DuckdbCatalogStore
 from langchain_openai import OpenAIEmbeddings, AzureOpenAIEmbeddings
 from langchain_ollama import OllamaEmbeddings
 
@@ -40,8 +43,6 @@ from app.core.stores.tags.base_tag_store import BaseTagStore
 from app.core.stores.tags.local_tag_store import LocalTagStore
 from app.core.stores.vector.in_memory_langchain_vector_store import InMemoryLangchainVectorStore
 from app.core.stores.vector.base_vector_store import BaseDocumentLoader, BaseEmbeddingModel, BaseTextSplitter, BaseVectoreStore
-from app.core.stores.tabular.base_tabular_store import BaseTabularStore
-from app.core.stores.tabular.duckdb_tabular_store import DuckDBTabularStore
 from app.core.processors.output.vectorization_processor.local_file_loader import LocalFileLoader
 from app.core.stores.vector.opensearch_vector_store import OpenSearchVectorStoreAdapter
 from app.core.processors.output.vectorization_processor.semantic_splitter import SemanticSplitter
@@ -431,7 +432,7 @@ class ApplicationContext:
 
         raise ValueError(f"Unsupported tag storage backend: {config.type}")
 
-    def get_tabular_store(self) -> BaseTabularStore:
+    def get_tabular_store(self) -> DuckDBTableStore:
         """
         Lazy-initialize and return the configured tabular store backend.
         Currently supports only DuckDB.
@@ -443,11 +444,29 @@ class ApplicationContext:
 
         if config.type == "duckdb":
             db_path = Path(config.duckdb_path).expanduser()
-            self._tabular_store_instance = DuckDBTabularStore(db_path)
+            self._tabular_store_instance = DuckDBTableStore(db_path, prefix="tabular_")
         else:
             raise ValueError(f"Unsupported tabular storage backend: {config.type}")
 
         return self._tabular_store_instance
+    
+    def get_catalog_store(self) -> BaseCatalogStore:
+        """
+        Lazy-initialize and return the configured tabular store backend.
+        Currently supports only DuckDB.
+        """
+        if hasattr(self, "_catalog_store_instance") and self._catalog_store_instance is not None:
+            return self._catalog_store_instance
+
+        config = self.config.catalog_storage
+
+        if config.type == "duckdb":
+            db_path = Path(config.duckdb_path).expanduser()
+            self._catalog_store_instance = DuckdbCatalogStore(db_path)
+        else:
+            raise ValueError(f"Unsupported catalog storage backend: {config.type}")
+
+        return self._catalog_store_instance
 
 
     def get_document_loader(self) -> BaseDocumentLoader:
