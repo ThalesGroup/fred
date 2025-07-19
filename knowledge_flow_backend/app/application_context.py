@@ -29,6 +29,7 @@ from app.core.stores.content.local_content_store import LocalStorageBackend
 from app.core.stores.content.minio_content_store import MinioStorageBackend
 from app.core.stores.metadata.base_catalog_store import BaseCatalogStore
 from app.core.stores.metadata.duckdb_catalog_store import DuckdbCatalogStore
+from app.core.stores.metadata.duckdb_metadata_store import DuckdbMetadataStore
 from langchain_openai import OpenAIEmbeddings, AzureOpenAIEmbeddings
 from langchain_ollama import OllamaEmbeddings
 
@@ -395,7 +396,9 @@ class ApplicationContext:
         if config.type == "local":
             path = Path(config.root_path).expanduser()
             self._metadata_store_instance = LocalMetadataStore(path)
-
+        elif config.type == "duckdb":
+            db_path = Path(config.duckdb_path).expanduser()
+            self._metadata_store_instance = DuckdbMetadataStore(db_path)
         elif config.type == "opensearch":
 
             username = config.username
@@ -416,7 +419,6 @@ class ApplicationContext:
 
         else:
             raise ValueError(f"Unsupported metadata storage backend: {config.type}")
-
         return self._metadata_store_instance
 
     def get_tag_store(self) -> BaseTagStore:
@@ -542,9 +544,17 @@ class ApplicationContext:
 
         metadata_type = self.config.metadata_storage.type
         logger.info(f"  🗃️ Metadata storage backend: {metadata_type}")
-
+        if metadata_type == "duckdb":
+            logger.info(f"     ↳ DB Path: {self.config.metadata_storage.duckdb_path}")
+        catalog_type = self.config.catalog_storage.type
+        logger.info(f"  📂 Catalog storage backend: {catalog_type}")
+        if catalog_type == "duckdb":
+            logger.info(f"     ↳ DB Path: {self.config.catalog_storage.duckdb_path}")
         content_type = self.config.content_storage.type
+        
         logger.info(f"  📁 Content storage backend: {content_type}")
+        if content_type == "local":
+            logger.info(f"     ↳ Local Path: {self.config.content_storage.root_path}")
 
         knowledge_context_type = self.config.knowledge_context_storage.type
         logger.info(f"  📁 Knwoledge context storage backend: {knowledge_context_type}")

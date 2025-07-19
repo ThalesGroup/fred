@@ -121,14 +121,15 @@ metadata_storage:
   # Metadata Storage Configuration
   #
   # Available backends:
-  # - local       → stores metadata in a JSON file on disk
+  # - local       → Deprecated, stores metadata in a JSON file on disk
+  # - duckdb      → stores metadata in a local duckdb file
   # - opensearch  → stores metadata in a persistent OpenSearch index (recommended for production)
   #
   # ✅ Default is "local" for easy startup. No external services are needed.
   # If you are using local storage, make sure to set the following environment variable:
   # - LOCAL_METADATA_STORAGE_PATH default to '~/.knowledge-flow/metadata-store.json'
-  type: "local"
-  root_path: ~/.knowledge-flow/metadata-store.json
+  type: "duckdb"
+  root_path: ~/.knowledge-flow/db.duckdb
 
   # --- Example: OpenSearch configuration
   #

@@ -17,7 +17,7 @@ from datetime import datetime, timezone
 import os
 from pathlib import Path
 from typing import Annotated, Dict, List, Literal, Union
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional
 from enum import Enum
 from fred_core import Security
@@ -90,6 +90,11 @@ class LocalMetadataStorage(BaseModel):
     type: Literal["local"]
     root_path: str = Field(default=str(Path("~/.knowledge-flow/metadata-store.json")), description="Local storage json file")
 
+class DuckdbMetadataStorage(BaseModel):
+    type: Literal["duckdb"]
+    duckdb_path: str = Field(default="~/.knowledge-flow/db.duckdb", 
+                             description="Path to the DuckDB database file.")
+
 class OpenSearchStorage(BaseModel):
     type: Literal["opensearch"]
     host: str = Field(..., description="OpenSearch host URL")
@@ -102,7 +107,7 @@ class OpenSearchStorage(BaseModel):
 
 
 # --- Final union config (with discriminator)
-MetadataStorageConfig = Annotated[Union[LocalMetadataStorage, OpenSearchStorage], Field(discriminator="type")]
+MetadataStorageConfig = Annotated[Union[LocalMetadataStorage, DuckdbMetadataStorage, OpenSearchStorage], Field(discriminator="type")]
 
 ###########################################################
 #
@@ -236,7 +241,12 @@ class PullSourceType(str, Enum):
     HTTP = "http"
     OTHER = "other"
 
-
+class ProcessingStage(str, Enum):
+    DISCOVERED = "discovered"
+    MARKDOWN = "markdown"
+    VECTOR = "vector"
+    SQL = "sql"
+    MCP = "mcp"
 class DocumentMetadata(BaseModel):
     # Core identity
     document_name: str
@@ -272,11 +282,18 @@ class DocumentMetadata(BaseModel):
     subject: Optional[str] = None
     keywords: Optional[str] = None
 
-    # Flexible, extensible processing tracking
-    processing_stages: Dict[str, Literal["not_started", "in_progress", "done", "failed"]] = Field(
+    processing_stages: Dict[ProcessingStage, Literal["not_started", "in_progress", "done", "failed"]] = Field(
         default_factory=dict,
-        description="Status of each processing stage (e.g. 'markdown', 'vector', 'sql', 'mcp')"
+        description="Status of each well-defined processing stage"
     )
+
+    @field_validator("processing_stages")
+    @classmethod
+    def validate_stage_keys(cls, stages: dict) -> dict:
+        for key in stages:
+            if key not in ProcessingStage.__members__.values():
+                raise ValueError(f"Unknown processing stage: {key}")
+        return stages
 
     def is_fully_processed(self) -> bool:
         return all(v == "done" for v in self.processing_stages.values())

@@ -24,6 +24,8 @@ import atexit
 import logging
 import threading
 
+from app.features.catalog.controller import CatalogController
+from app.features.pull.controller import PullDocumentController
 from app.features.scheduler.controller import SchedulerController
 from app.features.scheduler.worker import run_worker
 import uvicorn
@@ -72,6 +74,8 @@ def create_app(configuration: Configuration) -> FastAPI:
     TabularController(router)
     CodeSearchController(router)
     TagController(router)
+    PullDocumentController(router)
+    CatalogController(router)
 
     if configuration.scheduler.enabled:
         logger.info("🧩 Activating ingestion scheduler controller.")

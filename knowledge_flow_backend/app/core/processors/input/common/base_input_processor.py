@@ -16,7 +16,7 @@ import hashlib
 import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
-from app.common.structures import DocumentMetadata, DocumentProcessingStatus
+from app.common.structures import DocumentMetadata, ProcessingStage
 import pandas
 
 logger = logging.getLogger(__name__)
@@ -39,8 +39,8 @@ class BaseInputProcessor(ABC):
         return DocumentMetadata(
             document_name=file_path.name,
             document_uid=document_uid,
-            processing_status=DocumentProcessingStatus.UPLOADED,
-            tags=tags
+            tags=tags,
+            processing_stages={ProcessingStage.DISCOVERED: "not_started"}
         )
 
     def process_metadata(self, file_path: Path, tags: list[str]) -> DocumentMetadata:

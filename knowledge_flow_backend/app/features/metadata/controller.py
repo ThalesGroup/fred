@@ -13,13 +13,12 @@
 # limitations under the License.
 
 import logging
-from typing import Any, Dict, List
-from app.core.stores.metadata.base_catalog_store import PullFileEntry
+from typing import Any, Dict
 from app.core.stores.metadata.duckdb_catalog_store import DuckdbCatalogStore
-from app.features.metadata.utils import file_entry_to_metadata, scan_pull_source
-from fastapi import APIRouter, Body, HTTPException, Query
+from app.features.metadata.utils import scan_pull_source
+from fastapi import APIRouter, Body, HTTPException
 
-from app.common.structures import DocumentMetadata, Status
+from app.common.structures import Status
 from app.application_context import ApplicationContext
 from app.features.metadata.service import InvalidMetadataRequest, MetadataNotFound, MetadataService, MetadataUpdateError
 from app.features.metadata.structures import (
@@ -154,61 +153,4 @@ class MetadataController:
                 logger.error(f"Failed to update metadata for {document_uid}: {e}")
                 raise handle_exception(e)
 
-        @router.post("/catalog/rescan/{source_tag}", tags=["Metadata"], summary="Rescan a pull source and update catalog")
-        def rescan_pull_source(source_tag: str):
-            config = ApplicationContext.get_instance().get_config()
-            store: DuckdbCatalogStore = ApplicationContext.get_instance().get_catalog_store()
 
-            if source_tag not in config.pull_sources:
-                raise HTTPException(status_code=404, detail=f"Unknown source_tag: {source_tag}")
-
-            try:
-                entries = scan_pull_source(source_tag)
-                store.save_entries(source_tag, entries)
-                return {"status": "success", "source_tag": source_tag, "files_found": len(entries)}
-            except NotImplementedError as e:
-                raise HTTPException(status_code=501, detail=str(e))
-            except Exception as e:
-                raise HTTPException(status_code=500, detail=f"Scan failed: {e}")
-
-        @router.get("/catalog/files", 
-                     tags=["Metadata"],
-                     response_model=List[PullFileEntry], 
-                     summary="List catalogued files from a pull source")
-        def list_catalogued_files(source_tag: str = Query(..., description="Source tag to filter files from catalog")):
-            config = ApplicationContext.get_instance().get_config()
-            store = ApplicationContext.get_instance().get_catalog_store()
-
-            if source_tag not in config.pull_sources:
-                raise HTTPException(status_code=404, detail=f"Unknown source_tag: {source_tag}")
-
-            try:
-                return store.list_entries(source_tag)
-            except Exception as e:
-                raise HTTPException(status_code=500, detail=f"Failed to list catalog entries: {e}")
-
-        @router.get("/metadata/pull_documents", 
-                     tags=["Metadata"],
-                    response_model=List[DocumentMetadata])
-        def list_pull_documents(source_tag: str):
-            config = ApplicationContext.get_instance().get_config()
-            catalog = ApplicationContext.get_instance().get_catalog_store()
-            metadata_store = ApplicationContext.get_instance().get_metadata_store()
-
-            if source_tag not in config.pull_sources:
-                raise HTTPException(status_code=404, detail=f"Unknown source_tag: {source_tag}")
-
-            entries = catalog.list_entries(source_tag)
-            known_docs = metadata_store.list_by_source_tag(source_tag)
-
-            docs_by_hash = {doc.pull_location or doc.document_name: doc for doc in known_docs}
-
-            result = []
-            for entry in entries:
-                existing = docs_by_hash.get(entry.path)
-                if existing:
-                    result.append(existing)
-                else:
-                    result.append(file_entry_to_metadata(entry, source_tag))  # synthetic placeholder
-
-            return result

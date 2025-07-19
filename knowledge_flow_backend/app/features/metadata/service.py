@@ -32,7 +32,6 @@ class InvalidMetadataRequest(Exception):
     pass
 
 
-# --- MetadataService Implementation ---
 
 class MetadataService:
     """
@@ -40,7 +39,9 @@ class MetadataService:
     """
 
     def __init__(self):
+        self.config = ApplicationContext.get_instance().get_config()
         self.metadata_store = ApplicationContext.get_instance().get_metadata_store()
+        self.catalog_store = ApplicationContext.get_instance().get_catalog_store()
 
     def get_documents_metadata(self, filters_dict: dict) -> list[DocumentMetadata]:
         try:
@@ -105,3 +106,5 @@ class MetadataService:
         except Exception as e:
             logger.error(f"Error updating metadata for {document_uid}: {e}")
             raise MetadataUpdateError(f"Failed to update metadata: {e}")
+
+    
