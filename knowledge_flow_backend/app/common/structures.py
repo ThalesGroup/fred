@@ -197,18 +197,51 @@ class AppConfig(BaseModel):
     reload: bool = False
     reload_dir: str = "."
 
-class PullSourceType(str, Enum):
+class PullProvider(str, Enum):
     LOCAL_PATH = "local_path"
     WEBDAV = "webdav"
     S3 = "s3"
     GIT = "git"
     HTTP = "http"
     OTHER = "other"
-class PullSourceConfig(BaseModel):
-    type: PullSourceType = Field(..., description="Type of the pull source (e.g., local_path, git, s3)")
-    base_path: str = Field(..., description="Base path or URI where documents can be pulled from")
+
+class SourceType(str, Enum):
+    PUSH = "push"
+    PULL = "pull"
+
+class BaseDocumentSourceConfig(BaseModel):
+    type: Literal["push", "pull"]
     description: Optional[str] = Field(default=None, description="Human-readable description of this source")
 
+class PushSourceConfig(BaseDocumentSourceConfig):
+    type: Literal["push"] = "push"
+    # No additional fields
+
+class BasePullSourceConfig(BaseModel):
+    type: Literal["pull"] = "pull"
+    description: Optional[str] = None
+
+class LocalPathPullSource(BasePullSourceConfig):
+    provider: Literal["local_path"]
+    base_path: str
+
+class GitPullSource(BasePullSourceConfig):
+    provider: Literal["github"]
+    repo: str
+
+PullSourceConfig = Annotated[
+    Union[
+        LocalPathPullSource,
+        GitPullSource,
+        # Add WebDAV, HTTP, etc. here
+    ],
+    Field(discriminator="provider")
+]
+
+DocumentSourceConfig = Annotated[
+    Union[PushSourceConfig, PullSourceConfig],
+    Field(discriminator="type")
+]
 class Configuration(BaseModel):
     app: AppConfig
     security: AppSecurity
@@ -224,29 +257,18 @@ class Configuration(BaseModel):
     knowledge_context_storage: KnowledgeContextStorageConfig = Field(..., description="Knowledge context storage configuration")
     knowledge_context_max_tokens: int = 50000
     scheduler: SchedulerConfig
-    pull_sources: Optional[dict[str, PullSourceConfig]] = Field(
+    document_sources: Optional[Dict[str, DocumentSourceConfig]] = Field(
         default_factory=dict,
-        description="Mapping of source_tag identifiers to pull source configurations"
+        description="Mapping of source_tag identifiers to push/pull source configurations"
     )
 
-class DocumentIngestionType(str, Enum):
-    PUSH = "push"
-    PULL = "pull"
-
-class PullSourceType(str, Enum):
-    LOCAL_PATH = "local_path"
-    WEBDAV = "webdav"
-    S3 = "s3"
-    GIT = "git"
-    HTTP = "http"
-    OTHER = "other"
 
 class ProcessingStage(str, Enum):
-    DISCOVERED = "discovered"
-    MARKDOWN = "markdown"
-    VECTOR = "vector"
-    SQL = "sql"
-    MCP = "mcp"
+    RAW_AVAILABLE = "raw"        # raw file can be downloaded
+    PREVIEW_READY = "preview"        # e.g. Markdown or DataFrame generated
+    VECTORIZED = "vector"              # content chunked and embedded
+    SQL_INDEXED = "sql"            # content indexed into SQL backend
+    MCP_SYNCED = "mcp"              # content synced to external system
 class DocumentMetadata(BaseModel):
     # Core identity
     document_name: str
@@ -256,8 +278,6 @@ class DocumentMetadata(BaseModel):
         description="When the document was added to the system"
     )
 
-    # Ingestion mode and retrievability
-    ingestion_type: DocumentIngestionType = DocumentIngestionType.PUSH
     retrievable: bool = False
 
     # Pull-mode specific fields
@@ -269,7 +289,7 @@ class DocumentMetadata(BaseModel):
         default=None,
         description="Relative or absolute URI/path to the external document"
     )
-    pull_source_type: Optional[PullSourceType] = None
+    source_type: Optional[SourceType] = None
 
     # Tags and metadata
     tags: Optional[List[str]] = Field(default=None, description="User-assigned tags")
@@ -291,9 +311,10 @@ class DocumentMetadata(BaseModel):
     @classmethod
     def validate_stage_keys(cls, stages: dict) -> dict:
         for key in stages:
-            if key not in ProcessingStage.__members__.values():
-                raise ValueError(f"Unknown processing stage: {key}")
+            if not isinstance(key, ProcessingStage):
+                raise ValueError(f"Invalid processing stage: {key}")
         return stages
+
 
     def is_fully_processed(self) -> bool:
         return all(v == "done" for v in self.processing_stages.values())
@@ -310,7 +331,7 @@ class DocumentMetadata(BaseModel):
                     "retrievable": False,
                     "source_tag": "local-docs",
                     "pull_location": "Archive/2025/report_2025.pdf",
-                    "pull_source_type": "local_path",
+                    "source_type": "local_path",
                     "processing_stages": {
                         "markdown": "done",
                         "vector": "done"

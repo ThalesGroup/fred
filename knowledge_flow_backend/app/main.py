@@ -26,6 +26,7 @@ import threading
 
 from app.features.catalog.controller import CatalogController
 from app.features.pull.controller import PullDocumentController
+from app.features.pull.service import PullDocumentService
 from app.features.scheduler.controller import SchedulerController
 from app.features.scheduler.worker import run_worker
 import uvicorn
@@ -66,16 +67,17 @@ def create_app(configuration: Configuration) -> FastAPI:
 
     router = APIRouter(prefix=configuration.app.base_url)
 
+    pull_document_service = PullDocumentService()
     # Register controllers
-    IngestionController(router)
-    VectorSearchController(router)
-    MetadataController(router)
-    ContentController(router)
-    TabularController(router)
-    CodeSearchController(router)
-    TagController(router)
-    PullDocumentController(router)
+    MetadataController(router, pull_document_service)
     CatalogController(router)
+    PullDocumentController(router, pull_document_service)
+    ContentController(router)
+    IngestionController(router)
+    TabularController(router)
+    #CodeSearchController(router)
+    TagController(router)
+    VectorSearchController(router)
 
     if configuration.scheduler.enabled:
         logger.info("🧩 Activating ingestion scheduler controller.")

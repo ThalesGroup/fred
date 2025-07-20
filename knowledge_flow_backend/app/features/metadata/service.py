@@ -15,6 +15,7 @@
 import logging
 
 from app.common.structures import DocumentMetadata, Status
+from app.core.stores.metadata.base_metadata_store import MetadataDeserializationError
 from app.features.metadata.structures import UpdateDocumentMetadataResponse
 from app.application_context import ApplicationContext
 
@@ -46,6 +47,10 @@ class MetadataService:
     def get_documents_metadata(self, filters_dict: dict) -> list[DocumentMetadata]:
         try:
             return self.metadata_store.get_all_metadata(filters_dict)
+        except MetadataDeserializationError as e:
+            logger.error(f"[Metadata] Deserialization error: {e}")
+            raise MetadataUpdateError(f"Invalid metadata encountered: {e}")
+    
         except Exception as e:
             logger.error(f"Error retrieving document metadata: {e}")
             raise MetadataUpdateError(f"Failed to retrieve metadata: {e}")

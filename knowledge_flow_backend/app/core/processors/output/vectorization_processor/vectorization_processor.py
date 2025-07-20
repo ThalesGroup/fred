@@ -100,7 +100,7 @@ class VectorizationProcessor(BaseOutputProcessor):
             # 5. Store embeddings
             try:
                 for i, doc in enumerate(chunks):
-                    logger.info(f"[Chunk {i}] Document content preview: {doc.page_content[:100]!r} | Metadata: {doc.metadata}")
+                    logger.debug(f"[Chunk {i}] Document content preview: {doc.page_content[:100]!r} | Metadata: {doc.metadata}")
                 result = self.vector_store.add_documents(chunks)
                 logger.debug(f"Documents added to Vector Store: {result}")
             except Exception as e:

@@ -16,7 +16,7 @@ import hashlib
 import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
-from app.common.structures import DocumentMetadata, ProcessingStage
+from app.common.structures import DocumentMetadata
 import pandas
 
 logger = logging.getLogger(__name__)
@@ -34,21 +34,25 @@ class BaseInputProcessor(ABC):
         """
         return hashlib.sha256(document_name.encode("utf-8")).hexdigest()
 
-    def _add_common_metadata(self, file_path: Path, tags: list[str]) -> DocumentMetadata:
+    def _add_common_metadata(self, file_path: Path, 
+                             tags: list[str],
+                             source_tag: str) -> DocumentMetadata:
         document_uid = self._generate_file_unique_id(file_path.name)
         return DocumentMetadata(
             document_name=file_path.name,
             document_uid=document_uid,
             tags=tags,
-            processing_stages={ProcessingStage.DISCOVERED: "not_started"}
+            source_tag=source_tag
         )
 
-    def process_metadata(self, file_path: Path, tags: list[str]) -> DocumentMetadata:
+    def process_metadata(self, file_path: Path, 
+                         tags: list[str],
+                         source_tag: str = "uploads") -> DocumentMetadata:
         if not self.check_file_validity(file_path):
             return {"document_name": file_path.name, "error": "Invalid file structure"}
 
         # Step 1: Create initial metadata
-        base_metadata = self._add_common_metadata(file_path, tags)
+        base_metadata = self._add_common_metadata(file_path, tags, source_tag)
 
         # Step 2: Extract enrichment fields (e.g., author, created, etc.)
         enrichment = self.extract_file_metadata(file_path)

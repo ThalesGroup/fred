@@ -47,7 +47,7 @@ def test_pdf_processor_end_to_end(processor: PdfMarkdownProcessor, sample_pdf_fi
 
     assert processor.check_file_validity(sample_pdf_file)
 
-    metadata = processor.process_metadata(sample_pdf_file, [])
+    metadata = processor.process_metadata(sample_pdf_file, [], "uploads")
 
     assert metadata.document_name == "sample.pdf"
     #assert metadata.num_pages == 2

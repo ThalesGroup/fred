@@ -15,9 +15,10 @@
 import json
 from pathlib import Path
 from typing import List, Any
+from pydantic import ValidationError
 
 from app.common.duckdb_store import DuckDBTableStore
-from app.core.stores.metadata.base_metadata_store import BaseMetadataStore
+from app.core.stores.metadata.base_metadata_store import BaseMetadataStore, MetadataDeserializationError
 from app.common.structures import DocumentMetadata
 
 
@@ -36,10 +37,9 @@ class DuckdbMetadataStore(BaseMetadataStore):
                     document_name TEXT,
                     date_added_to_kb TIMESTAMP,
                     retrievable BOOLEAN,
-                    ingestion_type TEXT,
                     source_tag TEXT,
                     pull_location TEXT,
-                    pull_source_type TEXT,
+                    source_type TEXT,
                     tags TEXT,
                     title TEXT,
                     author TEXT,
@@ -59,10 +59,9 @@ class DuckdbMetadataStore(BaseMetadataStore):
             metadata.document_name,
             metadata.date_added_to_kb,
             metadata.retrievable,
-            metadata.ingestion_type,
             metadata.source_tag,
             metadata.pull_location,
-            metadata.pull_source_type,
+            metadata.source_type,
             json.dumps(metadata.tags) if metadata.tags else None,
             metadata.title,
             metadata.author,
@@ -76,26 +75,28 @@ class DuckdbMetadataStore(BaseMetadataStore):
         )
 
     def _deserialize(self, row: tuple) -> DocumentMetadata:
-        return DocumentMetadata(
-            document_uid=row[0],
-            document_name=row[1],
-            date_added_to_kb=row[2],
-            retrievable=row[3],
-            ingestion_type=row[4],
-            source_tag=row[5],
-            pull_location=row[6],
-            pull_source_type=row[7],
-            tags=json.loads(row[8]) if row[8] else None,
-            title=row[9],
-            author=row[10],
-            created=row[11],
-            modified=row[12],
-            last_modified_by=row[13],
-            category=row[14],
-            subject=row[15],
-            keywords=row[16],
-            processing_stages=json.loads(row[17]) if row[17] else {}
-        )
+        try:
+            return DocumentMetadata(
+                document_uid=row[0],
+                document_name=row[1],
+                date_added_to_kb=row[2],
+                retrievable=row[3],
+                source_tag=row[4],
+                pull_location=row[5],
+                source_type=row[6],
+                tags=json.loads(row[7]) if row[7] else None,
+                title=row[8],
+                author=row[9],
+                created=row[10],
+                modified=row[11],
+                last_modified_by=row[12],
+                category=row[13],
+                subject=row[14],
+                keywords=row[15],
+                processing_stages=json.loads(row[16]) if row[16] else {}
+            )
+        except ValidationError as e:
+            raise MetadataDeserializationError(f"Invalid metadata structure for document {row[0]}: {e}")
 
     def _table(self):
         return self.store._prefixed(self.table_name)
@@ -122,7 +123,7 @@ class DuckdbMetadataStore(BaseMetadataStore):
             rows = conn.execute(
                 f"""
                 SELECT * FROM {self._table()}
-                WHERE source_tag = ? AND ingestion_type = 'pull'
+                WHERE source_tag = ?
                 """,
                 [source_tag]
             ).fetchall()
@@ -134,7 +135,7 @@ class DuckdbMetadataStore(BaseMetadataStore):
         with self.store._connect() as conn:
             conn.execute(f"""
                 INSERT OR REPLACE INTO {self._table()} VALUES (
-                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
                 )
             """, self._serialize(metadata))
 

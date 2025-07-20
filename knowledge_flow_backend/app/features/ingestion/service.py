@@ -75,7 +75,9 @@ class IngestionService:
         logger.info(f"File saved to temporary location: {target_path}")
         return target_path
 
-    def extract_metadata(self, file_path: pathlib.Path, tags: list[str]) -> DocumentMetadata:
+    def extract_metadata(self, file_path: pathlib.Path, 
+                         tags: list[str], 
+                         source_tag: str = "uploads") -> DocumentMetadata:
         """
         Extracts metadata from the input file.
         This method is responsible for determining the file type and using the appropriate processor
@@ -83,7 +85,10 @@ class IngestionService:
         """
         suffix = file_path.suffix.lower()
         processor = self.context.get_input_processor_instance(suffix)
-        metadata = processor.process_metadata(file_path, tags=tags)
+        source_config = self.context.get_config().document_sources.get(source_tag)
+        metadata = processor.process_metadata(file_path, tags=tags, source_tag=source_tag)
+        if source_config:
+            metadata.source_type = source_config.type
         return metadata
 
     def process_input(self, output_dir: pathlib.Path, input_file: str, metadata: DocumentMetadata) -> None:

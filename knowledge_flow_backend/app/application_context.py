@@ -126,6 +126,7 @@ class ApplicationContext:
         ApplicationContext._instance = self
         self._log_config_summary()
 
+    
     def get_output_processor_instance(self, extension: str) -> BaseOutputProcessor:
         """
         Get an instance of the output processor for a given file extension.

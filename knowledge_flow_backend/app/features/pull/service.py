@@ -21,7 +21,8 @@ class PullDocumentService:
         offset: int = 0,
         limit: int = 50
     ) -> Tuple[List[DocumentMetadata], int]:
-        if source_tag not in self.config.pull_sources:
+        source = self.config.document_sources.get(source_tag)
+        if not source or source.type != "pull":
             raise SourceNotFoundError(source_tag)
 
         # Step 1: List and count all catalog entries

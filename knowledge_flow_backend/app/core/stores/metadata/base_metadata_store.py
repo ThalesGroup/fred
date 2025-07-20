@@ -18,6 +18,9 @@ from typing import List
 from app.common.structures import DocumentMetadata
 from app.core.stores.metadata.base_catalog_store import BaseCatalogStore
 
+class MetadataDeserializationError(Exception):
+    """Raised when document metadata cannot be parsed correctly due to invalid enum or structure."""
+    pass
 
 class BaseMetadataStore(BaseCatalogStore):
     @abstractmethod

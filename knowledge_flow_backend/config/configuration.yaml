@@ -45,7 +45,7 @@ scheduler:
 
 input_processors:
   - prefix: ".pdf"
-    class_path: app.core.processors.input.pdf_markdown_processor.ollama_pdf_mardown_processor.OllamaPdfMarkdownProcessor
+    class_path: app.core.processors.input.pdf_markdown_processor.openai_pdf_markdown_processor.OpenaiPdfMarkdownProcessor
   - prefix: ".docx"
     class_path: app.core.processors.input.docx_markdown_processor.docx_markdown_processor.DocxMarkdownProcessor
   - prefix: ".pptx"
@@ -111,11 +111,20 @@ content_storage:
   # secure: False
   # bucket_name: app-bucket
 
-pull_sources:
+document_sources:
+  uploads:
+    type: push
+    description: "Documents manually uploaded by users"
   local-docs:
-    type: local_path
+    type: pull
+    provider: local_path
     base_path: ~/Documents
     description: "Personal local documents available for pull-mode ingestion"
+  team-github:
+    type: pull
+    provider: github
+    repo: myorg/docs
+    description: "Team documentation from GitHub"
 
 metadata_storage:
   # Metadata Storage Configuration
