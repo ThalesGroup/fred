@@ -84,6 +84,7 @@ def create_app() -> FastAPI:
     load_environment()
     config_file = os.environ["CONFIG_FILE"]
     configuration: Configuration = parse_server_configuration(config_file)
+    configure_logging(configuration.app.log_level)
     base_url = configuration.app.base_url
     logger.info(f"🛠️ create_app() called with base_url={base_url}")
     
