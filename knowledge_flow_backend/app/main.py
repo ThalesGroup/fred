@@ -19,16 +19,13 @@
 Entrypoint for the Knowledge Flow Backend App.
 """
 
-import asyncio
 import atexit
 import logging
-import threading
 
 from app.features.catalog.controller import CatalogController
 from app.features.pull.controller import PullDocumentController
 from app.features.pull.service import PullDocumentService
 from app.features.scheduler.controller import SchedulerController
-from app.features.scheduler.worker import run_worker
 import uvicorn
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -38,7 +35,6 @@ from fred_core import initialize_keycloak
 from app.application_context import ApplicationContext
 from app.common.structures import Configuration
 from app.common.utils import configure_logging, load_environment, parse_cli_opts, parse_server_configuration
-from app.features.code_search.controller import CodeSearchController
 from app.features.content.controller import ContentController
 from app.features.metadata.controller import MetadataController
 from app.features.tabular.controller import TabularController
@@ -129,13 +125,6 @@ def main():
     app = create_app(configuration)
     # ✅ Register graceful shutdown
     atexit.register(ApplicationContext.get_instance().close_connections)
-
-    if configuration.scheduler.enabled and configuration.scheduler.backend == "temporal":
-        logger.info("🛠️ Launching Temporal ingestion scheduler")
-        threading.Thread(
-            target=lambda: asyncio.run(run_worker(configuration.scheduler.temporal)), 
-            daemon=True).start()
-
     uvicorn.run(
         app,
         host=configuration.app.address,

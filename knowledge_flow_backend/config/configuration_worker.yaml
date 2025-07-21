@@ -33,7 +33,7 @@ scheduler:
 
 input_processors:
   - prefix: ".pdf"
-    class_path: app.core.processors.input.pdf_markdown_processor.ollama_pdf_mardown_processor.OllamaPdfMarkdownProcessor
+    class_path: app.core.processors.input.pdf_markdown_processor.openai_pdf_markdown_processor.OpenaiPdfMarkdownProcessor
   - prefix: ".docx"
     class_path: app.core.processors.input.docx_markdown_processor.docx_markdown_processor.DocxMarkdownProcessor
   - prefix: ".pptx"
@@ -97,6 +97,10 @@ content_storage:
   # secret_key: minioadmin # Overrides the MINIO_SECRET_KEY environment variable
   # secure: False
   # bucket_name: app-bucket
+
+catalog_storage:
+  type: "duckdb"
+  duckdb_path: "~/.knowledge-flow/db.duckdb"
 
 metadata_storage:
   # Metadata Storage Configuration

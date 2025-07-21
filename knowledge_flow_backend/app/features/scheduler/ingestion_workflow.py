@@ -20,6 +20,6 @@ class DocumentIngestionWorkflow:
     async def run(self, definition: PipelineDefinition) -> str:
         workflow.logger.info(f"📂 Starting ingestion for pipeline: {definition.name}")
         for file in definition.files:
-            workflow.logger.info(f"📄 Processing file: {file.path}")
+            workflow.logger.info(f"📄 Processing file: {file.source_tag}::{file.document_uid}")
         workflow.logger.info(f"✅ Ingestion workflow complete for pipeline: {definition.name}")
         return "success"

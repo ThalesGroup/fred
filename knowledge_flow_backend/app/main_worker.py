@@ -52,82 +52,39 @@ import atexit
 import logging
 import threading
 
-from app.features.scheduler.controller import SchedulerController
 from app.features.scheduler.worker import run_worker
-import uvicorn
-from fastapi import APIRouter, FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from fred_core import initialize_keycloak
-
 from app.application_context import ApplicationContext
 from app.common.structures import Configuration
 from app.common.utils import configure_logging, load_environment, parse_cli_opts, parse_server_configuration
 
 logger = logging.getLogger(__name__)
 
-def create_app(configuration: Configuration) -> FastAPI:
-    logger.info(f"🛠️ create_app() called with base_url={configuration.app.base_url}")
-    initialize_keycloak(configuration)
-    app = FastAPI(
-        docs_url=f"{configuration.app.base_url}/docs",
-        redoc_url=f"{configuration.app.base_url}/redoc",
-        openapi_url=f"{configuration.app.base_url}/openapi.json",
-    )
-
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=configuration.security.authorized_origins,
-        allow_methods=["GET", "POST", "PUT", "DELETE"],
-        allow_headers=["Content-Type", "Authorization"],
-    )
-
-    router = APIRouter(prefix=configuration.app.base_url)
-    if configuration.scheduler.enabled:
-        logger.info("🧩 Activating ingestion scheduler controller.")
-        SchedulerController(router)
-    app.include_router(router)
-    return app
-
-
 # -----------------------
 # MAIN ENTRYPOINT
 # -----------------------
 
-def main():
+async def main():
     args = parse_cli_opts()
     configuration: Configuration = parse_server_configuration(args.config_path)
     configure_logging(configuration.app.log_level)
     load_environment()
     ApplicationContext(configuration)
-    app = create_app(configuration)
     # ✅ Register graceful shutdown
     atexit.register(ApplicationContext.get_instance().close_connections)
 
     if configuration.scheduler.enabled:
         if configuration.scheduler.backend == "temporal":
             logger.info("🛠️ Launching Temporal ingestion scheduler (backend: temporal)")
-            threading.Thread(
-                target=lambda: asyncio.run(run_worker(configuration.scheduler.temporal)),
-                daemon=True,
-            ).start()
+            await run_worker(configuration.scheduler.temporal)
         else:
             raise ValueError(
                 f"Scheduler is enabled but unsupported backend '{configuration.scheduler.backend}' was provided. "
                 "Expected: 'temporal'. Please check your configuration.yaml."
             )
 
-    uvicorn.run(
-        app,
-        host=configuration.app.address,
-        port=configuration.app.port,
-        log_level=configuration.app.log_level,
-        reload=configuration.app.reload,
-        reload_dirs=configuration.app.reload_dir,
-    )
-
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
 
 # Note: We do not define a global `app = FastAPI()` for ASGI (e.g., `uvicorn app.main:app`)
 # because this application is always launched via the CLI `main()` function.
