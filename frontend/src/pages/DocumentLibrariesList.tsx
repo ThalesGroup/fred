@@ -48,7 +48,7 @@ function DocumentLibraryRow({ library }: { library: Tag }) {
   const lastUpdateTooltip = new Date(library.updated_at).toLocaleString();
 
   return (
-    <InvisibleLink to={`/document-libraries/${library.id}`}>
+    <InvisibleLink to={`/documentLibrary/${library.id}`}>
       <Box
         display="flex"
         alignItems="center"
