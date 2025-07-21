@@ -15,7 +15,7 @@
 from app.application_context import get_app_context, get_configuration
 from app.features.frugal.cluster_consumption.cluster_consumption_abstract_service import AbstractClusterConsumptionService
 from app.features.frugal.cluster_consumption.cluster_consumption_csv_service import ClusterConsumptionCsvService
-from app.common.structure import Configuration, DatabaseTypeEnum
+from app.common.structures import Configuration, DatabaseTypeEnum
 
 
 class ClusterConsumptionService:

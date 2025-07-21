@@ -18,28 +18,29 @@
 """
 Entrypoint for the Knowledge Flow Backend App.
 """
-
 import logging
 import os
-
+from rich.logging import RichHandler
 from dotenv import load_dotenv
+
+from app.features.catalog.controller import CatalogController
+from app.features.pull.controller import PullDocumentController
+from app.features.pull.service import PullDocumentService
+from app.features.scheduler.controller import SchedulerController
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi_mcp import FastApiMCP
 from fred_core import initialize_keycloak
-from rich.logging import RichHandler
 
 from app.application_context import ApplicationContext
 from app.common.structures import Configuration
 from app.common.utils import parse_server_configuration
-from app.features.code_search.controller import CodeSearchController
 from app.features.content.controller import ContentController
 from app.features.metadata.controller import MetadataController
 from app.features.tabular.controller import TabularController
 from app.features.tag.controller import TagController
 from app.features.vector_search.controller import VectorSearchController
-from app.features.wip.ingestion_controller import IngestionController
-from app.features.wip.knowledge_context_controller import KnowledgeContextController
+from app.features.ingestion.controller import IngestionController
 
 # -----------------------
 # LOGGING + ENVIRONMENT
@@ -66,35 +67,29 @@ def load_environment(dotenv_path: str = "./config/.env"):
     else:
         logging.getLogger().warning(f"⚠️ No .env file found at: {dotenv_path}")
 
+
+
+
 # -----------------------
 # APP CREATION
 # -----------------------
 
-
 def create_app() -> FastAPI:
     load_environment()
-    configure_logging(os.getenv("LOG_LEVEL", "info"))
-
-    # Retrieve config path
-    config_file = os.getenv("CONFIG_FILE")
-    if ApplicationContext._instance is None:
-        if config_file is None:
-            raise ValueError("CONFIG_FILE is required if ApplicationContext is not already initialized")
-        configuration: Configuration = parse_server_configuration(config_file)
-        ApplicationContext(configuration)
-    else:
-        # Get config from pre-initialized ApplicationContext (e.g. in tests)
-        configuration = ApplicationContext.get_instance().get_config()
-
-    base_url = configuration.v1_base_url
+    config_file = os.environ["CONFIG_FILE"]
+    configuration: Configuration = parse_server_configuration(config_file)
+    configure_logging(configuration.app.log_level)
+    base_url = configuration.app.base_url
     logger.info(f"🛠️ create_app() called with base_url={base_url}")
 
+    ApplicationContext(configuration)
+    
     initialize_keycloak(configuration)
-
+    
     app = FastAPI(
-        docs_url=f"{base_url}/docs",
-        redoc_url=f"{base_url}/redoc",
-        openapi_url=f"{base_url}/openapi.json",
+        docs_url=f"{configuration.app.base_url}/docs",
+        redoc_url=f"{configuration.app.base_url}/redoc",
+        openapi_url=f"{configuration.app.base_url}/openapi.json",
     )
 
     app.add_middleware(
@@ -104,21 +99,26 @@ def create_app() -> FastAPI:
         allow_headers=["Content-Type", "Authorization"],
     )
 
-    router = APIRouter(prefix=base_url)
+    router = APIRouter(prefix=configuration.app.base_url)
 
+    pull_document_service = PullDocumentService()
     # Register controllers
-    IngestionController(router)
-    VectorSearchController(router)
-    MetadataController(router)
+    MetadataController(router, pull_document_service)
+    CatalogController(router)
+    PullDocumentController(router, pull_document_service)
     ContentController(router)
-    KnowledgeContextController(router)
+    IngestionController(router)
     TabularController(router)
-    CodeSearchController(router)
+    #CodeSearchController(router)
     TagController(router)
+    VectorSearchController(router)
+
+    if configuration.scheduler.enabled:
+        logger.info("🧩 Activating ingestion scheduler controller.")
+        SchedulerController(router)
 
     logger.info("🧩 All controllers registered.")
     app.include_router(router)
-    logger.info("🧩 All controllers registered.")
 
     mcp_tabular = FastApiMCP(
         app,
@@ -150,6 +150,9 @@ def create_app() -> FastAPI:
 
     return app
 
+# -----------------------
+# MAIN ENTRYPOINT
+# -----------------------
 
 if __name__ == "__main__":
     print("To start the app, use uvicorn cli with:")

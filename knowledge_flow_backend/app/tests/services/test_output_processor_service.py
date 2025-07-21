@@ -16,19 +16,14 @@
 
 import shutil
 from pathlib import Path
+from app.features.ingestion.service import IngestionService
 import pytest
-import pandas as pd
-from typing import Tuple,List
 
-from app.features.wip.input_processor_service import InputProcessorService
-from app.features.wip.output_processor_service import OutputProcessorService
-from app.features.wip import output_processor_service
-from app.common.structures import OutputProcessorResponse
+from app.common.structures import DocumentMetadata, OutputProcessorResponse
 from app.core.processors.input.common.base_image_describer import BaseImageDescriber
 from app.application_context import ApplicationContext
 from app.core.processors.input.pdf_markdown_processor.pdf_markdown_processor import PdfMarkdownProcessor
 from app.core.stores.vector.base_vector_store import BaseDocumentLoader
-from app.core.stores.tabular.base_tabular_store import BaseTabularStore
 from langchain.schema.document import Document
 
 
@@ -36,40 +31,15 @@ class DummyProcessor:
     def process(self, path, metadata):
         return OutputProcessorResponse(chunks=1, vectors=[], metadata=metadata)
 
+
 class DummyDescriber(BaseImageDescriber):
     def describe(self, base64_image: str) -> str:
         return "This is a test image description"
-    
+
+
 class DummyDocumentLoader(BaseDocumentLoader):
     def load(self, file_path: str, metadata: dict) -> Document:
         return Document(page_content="abcdefg", metadata={})
-
-class DummyTabularStore(BaseTabularStore):
-    """
-    Ultra-simple in-memory implementation for testing.
-    """
-
-    def __init__(self):
-        self._store = {}
-
-    def save_table(self, table_name: str, df: pd.DataFrame) -> None:
-        self._store[table_name] = df
-
-    def load_table(self, table_name: str) -> pd.DataFrame:
-        return self._store[table_name]
-
-    def delete_table(self, table_name: str) -> None:
-        del self._store[table_name]
-
-    def list_tables(self) -> List[str]:
-        return list(self._store.keys())
-
-    def get_table_schema(self, table_name: str) -> List[Tuple[str, str]]:
-        df = self._store[table_name]
-        return list(zip(df.columns, df.dtypes.astype(str)))
-
-
-
 
 
 # ✅ Correct — define fixture at module level
@@ -92,42 +62,49 @@ def prepared_pdf_dir(tmp_path, monkeypatch):
     target_file = tmp_path / source_file.name
     copy(source_file, target_file)
 
-    InputProcessorService().process(tmp_path, target_file.name, {
-        "origin": "test",
-        "document_uid": "pdf-uid-123"
-    })
+    IngestionService().process_input(tmp_path, target_file.name, DocumentMetadata(document_name=source_file.name, document_uid="pdf-uid-123"))
 
     return tmp_path
+
 
 class TestOutputProcessorService:
     @pytest.fixture
     def service(self):
-        return OutputProcessorService()
+        return IngestionService()
 
     @pytest.fixture
     def prepared_docx_dir(self, tmp_path):
         source = Path("app/tests/assets/sample.docx")
         target = tmp_path / source.name
         shutil.copy(source, target)
-        InputProcessorService().process(tmp_path, target.name, {
-            "origin": "test",
-            "document_uid": "docx-uid-456"
-        })
+        IngestionService().process_input(tmp_path, target.name, 
+                                         DocumentMetadata(
+                                            document_name=source.name,
+                                            document_uid="pdf-uid-123"
+                                            )
+                                         )
         return tmp_path
 
     # ✅ Nominal
-    def test_process_real_pdf_success(self, service, prepared_pdf_dir):
-        result = service.process(prepared_pdf_dir, "sample.pdf", {"meta": "pdf", "document_uid": "uid-123"})
+    def test_process_real_pdf_success(self, service: IngestionService, prepared_pdf_dir):
+        result = service.process_output(prepared_pdf_dir, "sample.pdf", 
+                                        DocumentMetadata(
+                                            document_name="sample.pdf",
+                                            document_uid="pdf-uid-123"
+                                            ))
         assert isinstance(result, OutputProcessorResponse)
 
-    def test_process_real_docx_success(self, service, prepared_docx_dir):
-        result = service.process(prepared_docx_dir, "sample.docx", {"meta": "docx", "document_uid": "uid-456"})
+    def test_process_real_docx_success(self, service: IngestionService, prepared_docx_dir):
+        result = service.process_output(prepared_docx_dir, "sample.docx", DocumentMetadata(
+                                            document_name="sample.docx",
+                                            document_uid="docx-uid-123"
+                                            ))
         assert isinstance(result, OutputProcessorResponse)
 
     # ❌ Failure
-    def test_output_processor_missing_output_dir(self, service, tmp_path):
+    def test_output_processor_missing_output_dir(self, service: IngestionService, tmp_path):
         with pytest.raises(ValueError, match="does not exist"):
-            service.process(tmp_path, "fake.pdf", {})
+            service.process_output(tmp_path, "fake.pdf", {})
 
     @pytest.mark.parametrize(
         "file_name, create_file, content",
@@ -138,7 +115,7 @@ class TestOutputProcessorService:
             ("output/output.md", True, ""),
         ],
     )
-    def test_output_processor_error_cases(self, service, tmp_path, file_name, create_file, content):
+    def test_output_processor_error_cases(self, service: IngestionService, tmp_path, file_name, create_file, content):
         output_path = tmp_path / file_name
         if create_file:
             output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -147,30 +124,21 @@ class TestOutputProcessorService:
             (tmp_path / "output").write_text("this is not a directory")
 
         with pytest.raises(ValueError):
-            service.process(tmp_path, "test.md", {"document_uid": "fail-case"})
+            service.process_output(tmp_path, "test.md", DocumentMetadata(document_uid="unknown"))
 
-    def test_output_processor_rejects_non_markdown_csv(self, monkeypatch, service, tmp_path):
+    def test_output_processor_rejects_non_markdown_csv(self, monkeypatch, service: IngestionService, tmp_path):
         (tmp_path / "output").mkdir(parents=True)
         (tmp_path / "output" / "output.xlsx").write_text("fake content")
 
-        class DummyContext:
-            def get_output_processor_instance(self, ext):
-                return DummyProcessor()
-            def get_document_loader(self):
-                return DummyDocumentLoader()
-            def get_tabular_store(self):
-                return DummyTabularStore()
-
-        monkeypatch.setattr(output_processor_service.ApplicationContext, "get_instance", DummyContext)
-
         with pytest.raises(ValueError, match="is not a markdown or csv file"):
-            service.process(tmp_path, "sample.xlsx", {"document_uid": "bad-ext"})
+            service.process_output(tmp_path, "sample.xlsx", {"document_uid": "bad-ext"})
 
-    def test_output_processor_empty_output_file(self, service, tmp_path):
+    def test_output_processor_empty_output_file(self, service: IngestionService, tmp_path):
         doc_path = tmp_path / "sample.pdf"
         output_dir = doc_path / "output"
         output_dir.mkdir(parents=True)
         (output_dir / "output.md").touch()
 
         with pytest.raises(ValueError, match="does not exist"):
-            service.process(tmp_path, "sample.pdf", {})
+            service.process_output(tmp_path, "sample.pdf", 
+                                   DocumentMetadata(document_name="sample.pdf", document_uid="docx-uid-123"))

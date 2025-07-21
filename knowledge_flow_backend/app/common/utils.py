@@ -12,14 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import argparse
 from datetime import datetime, timezone
 import logging
 import traceback
+from dotenv import load_dotenv
 from pydantic import ValidationError
 from pydantic_settings import BaseSettings
 import tiktoken
 import yaml
 from typing import Dict, Optional, TypeVar
+from rich.logging import RichHandler
 
 from app.common.structures import Configuration
 
@@ -113,7 +116,7 @@ def log_exception(e: Exception, context_message: Optional[str] = None) -> str:
         logger.error("🔍 Context: %s", context_message, stacklevel=2)
     logger.error("🧩 Error message: %s", error_message, stacklevel=2)
     logger.error("📦 Root cause: %s", root_cause, stacklevel=2)
-    logger.error("🧵 Stack trace:\n%s", stack_trace, stacklevel=2)
+    logger.debug("🧵 Stack trace:\n%s", stack_trace, stacklevel=2)
 
     return summary
 
@@ -194,3 +197,4 @@ def count_tokens(text: str) -> int:
         logger.warning(f"Fallback to cl100k_base tokenizer due to error: {e}")
         encoding = tiktoken.get_encoding("cl100k_base")
         return len(encoding.encode(text))
+

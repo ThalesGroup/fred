@@ -20,7 +20,7 @@ import yaml
 from langchain_core.tools import tool
 
 from app.features.k8.kube_service import KubeService
-from app.common.structure import WorkloadKind
+from app.common.structures import WorkloadKind
 
 
 class TargetKind(Enum):

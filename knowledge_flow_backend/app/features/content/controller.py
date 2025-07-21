@@ -95,9 +95,22 @@ class ContentController:
 
         @router.get(
             "/markdown/{document_uid}",
-            tags=["Content"],
-            summary="Get a preview of the complete document in markdown format",
-            description="Fetch complete document including content using its unique UID.",
+            tags=["Library Content"],
+            summary="Get markdown preview of a processed document",
+            description="""
+        Returns the full Markdown preview of a document that has been successfully ingested and processed (either via push or pull mode).
+
+        This preview is only available if the document passed through the chunking or parsing pipeline that generated Markdown content.
+
+        ### When this works:
+        - The document was uploaded (push) or discovered and processed (pull)
+        - A Markdown preview was created during ingestion
+
+        ### When this fails:
+        - The document has not been processed yet
+        - The ingestion failed before preview generation
+
+        """,
             response_model=MarkdownContentResponse,
         )
         async def get_markdown_preview(document_uid: str):
@@ -116,7 +129,19 @@ class ContentController:
                 logger.exception("Unexpected error in get_document_preview")
                 raise HTTPException(status_code=500, detail="Internal server error")
 
-        @router.get('/markdown/{document_uid}/media/{media_id}', tags=["Content"])
+        @router.get(
+            "/markdown/{document_uid}/media/{media_id}",
+            tags=["Library Content"],
+            summary="Download an embedded media asset from a processed document",
+            description="""
+        Fetches an embedded media resource (e.g., image or attachment) that was extracted during the ingestion of a processed document.
+
+        This is only available for documents that had media assets linked or embedded (e.g., PDFs with images).
+
+        ### Usage:
+        Used by the frontend when rendering previews that link to original embedded media.
+        """,
+        )
         async def download_document_media(document_uid: str, media_id: str):
             try:
                 stream, file_name, content_type  = await self.service.get_document_media(document_uid, media_id)
@@ -129,7 +154,22 @@ class ContentController:
                 raise HTTPException(status_code=500, detail="Internal server error")
 
         @router.get(
-            "/raw_content/{document_uid}", tags=["Content"], summary="Download the original document content", description="Serves the raw file associated with the given UID as a downloadable stream."
+            "/raw_content/{document_uid}",
+            tags=["Library Content"],
+            summary="Download the original raw document content",
+            description="""
+        Streams the original uploaded or pulled document content associated with the given UID.
+
+        This endpoint serves the **unaltered file**, exactly as it was uploaded by a user (push mode) or pulled and saved from an external source (pull mode).
+
+        ### When this works:
+        - The document ingestion successfully reached the "raw content saving" step
+        - The document UID is valid and stored in the backend
+
+        ### Notes:
+        - This is a binary download stream
+        - Can be used to reprocess, inspect, or archive the source file
+        """,
         )
         async def download_document(document_uid: str):
             try:

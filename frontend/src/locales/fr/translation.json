@@ -191,11 +191,15 @@
     "documentTable": {
         "selectedCount": "{{count}} sélectionné(s)",
         "deleteSelected": "Supprimer",
+        "processSelected": "Process",
         "downloadSelected": "Télécharger",
         "fileName": "Nom du fichier",
         "dateAdded": "Date d'ajout",
         "dateAddedTooltip": "Date d'ajout à la base de connaissances",
-        "retrievable": "Récupérable",
+        "retrievableYes": "Consultable",
+        "retrievableNo": "Exclu",
+        "status": "Status",
+        "tags": "Tags",
         "actions": "Actions",
         "loadingMetadata": "Chargement des métadonnées...",
         "noMetadata": "Aucune métadonnée disponible.",
@@ -209,6 +213,7 @@
         "menuLabel": "Ouvrir le menu d’actions du document",
         "preview": "Aperçu",
         "download": "Télécharger",
-        "delete": "Supprimer"
+        "delete": "Supprimer",
+        "process": "Process"
     }
 }

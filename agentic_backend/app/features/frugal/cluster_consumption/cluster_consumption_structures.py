@@ -20,7 +20,7 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
-from app.common.structure import Series
+from app.common.structures import Series
 from app.features.k8.structure import Cluster
 
 

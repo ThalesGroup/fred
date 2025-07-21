@@ -22,7 +22,6 @@ import {
   TableRow,
   Paper,
   Checkbox,
-  Switch,
   Tooltip,
   Typography,
   Box,
@@ -30,6 +29,8 @@ import {
   Button,
   Collapse,
   IconButton,
+  Chip,
+  Avatar,
 } from "@mui/material";
 import EventAvailableIcon from "@mui/icons-material/EventAvailable";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
@@ -37,46 +38,55 @@ import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
 import dayjs from "dayjs";
 import { getDocumentIcon } from "./DocumentIcon";
 import { DocumentTableRowActionsMenu } from "./DocumentTableRowActionsMenu";
-import { useGetDocumentMetadataMutation } from "../../slices/documentApi";
+import { DOCUMENT_PROCESSING_STAGES, useGetDocumentMetadataMutation } from "../../slices/documentApi";
 import { useTranslation } from "react-i18next";
-
+// import CheckCircleIcon from "@mui/icons-material/CheckCircle";
+// import HourglassTopIcon from "@mui/icons-material/HourglassTop";
+// import CancelIcon from "@mui/icons-material/Cancel";
+// import RadioButtonUncheckedIcon from "@mui/icons-material/RadioButtonUnchecked";
+// import { shallowEqual } from "react-redux";
 export interface FileRow {
   document_uid: string;
   document_name: string;
   date_added_to_kb?: string;
   retrievable?: boolean;
+  ingestion_type?: string;
+  source_type?: string;
+  processing_stages?: Record<string, string>;
+  tags?: string[];
 }
 
 export interface Metadata {
   metadata: any;
 }
 
-
 interface FileTableProps {
   files: FileRow[];
-  selected: string[];
-  onToggleSelect: (uid: string) => void;
+  selectedFiles: FileRow[];
+  onToggleSelect: (file: FileRow) => void;
   onToggleAll: (checked: boolean) => void;
-  onDelete: (uid: string, file_name: string) => void | Promise<void>;
-  onDownload: (uid: string, file_name: string) => void | Promise<void>;
+  onDelete: (file: FileRow) => void | Promise<void>;
+  onDownload: (file: FileRow) => void | Promise<void>;
   onToggleRetrievable?: (file: FileRow) => void;
-  onOpen: (uid: string, file_name: string) => void | Promise<void>;
+  onOpen: (file: FileRow) => void | Promise<void>;
+  onProcess: (file: FileRow[]) => void | Promise<void>;
   isAdmin?: boolean;
 }
 
 export const DocumentTable: React.FC<FileTableProps> = ({
   files,
-  selected,
+  selectedFiles,
   onToggleSelect,
   onToggleAll,
   onDelete,
   onDownload,
   onToggleRetrievable,
   onOpen,
+  onProcess,
   isAdmin = false,
 }) => {
   const { t } = useTranslation();
-  const allSelected = selected.length === files.length && files.length > 0;
+  const allSelected = selectedFiles.length === files.length && files.length > 0;
   const [sortBy, setSortBy] = useState<keyof FileRow>("date_added_to_kb");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
 
@@ -126,20 +136,19 @@ export const DocumentTable: React.FC<FileTableProps> = ({
   const formatDate = (date?: string) => {
     return date ? dayjs(date).format("DD/MM/YYYY") : "-";
   };
-
   return (
     <>
-      {selected.length > 0 && (
+      {selectedFiles.length > 0 && (
         <Box sx={{ position: "absolute", left: 24, right: 24, zIndex: 10, p: 2, top: 0, display: "flex", justifyContent: "flex-end", alignItems: "center" }}>
           <Typography pr={2} variant="subtitle2">
-            {t("documentTable.selectedCount", { count: selected.length })}
+            {t("documentTable.selectedCount", { count: selectedFiles.length })}
           </Typography>
           <Box display="flex" gap={1}>
             <Button
               size="small"
               variant="outlined"
               color="error"
-              onClick={() => selected.forEach((uid) => onDelete(uid, ""))}
+              onClick={() => selectedFiles.forEach((f) => onDelete(f))}
             >
               {t("documentTable.deleteSelected")}
             </Button>
@@ -147,9 +156,9 @@ export const DocumentTable: React.FC<FileTableProps> = ({
               size="small"
               variant="outlined"
               onClick={() =>
-                selected.forEach((uid) => {
+                selectedFiles.forEach((f) => {
                   const link = document.createElement("a");
-                  link.href = `/knowledge-flow/v1/fullDocument/${uid}`;
+                  link.href = `/knowledge-flow/v1/fullDocument/${f.document_uid}`;
                   link.download = "";
                   document.body.appendChild(link);
                   link.click();
@@ -159,11 +168,20 @@ export const DocumentTable: React.FC<FileTableProps> = ({
             >
               {t("documentTable.downloadSelected")}
             </Button>
+            <Button
+              size="small"
+              variant="outlined"
+              color="primary"
+              onClick={() => onProcess(selectedFiles)}
+            >
+              {t("documentTable.processSelected")}
+            </Button>
           </Box>
         </Box>
       )}
 
       <TableContainer component={Paper}>
+
         <Table size="medium">
           <TableHead>
             <TableRow>
@@ -189,7 +207,9 @@ export const DocumentTable: React.FC<FileTableProps> = ({
                   {t("documentTable.dateAdded")}
                 </TableSortLabel>
               </TableCell>
-              <TableCell>{t("documentTable.retrievable")}</TableCell>
+              <TableCell>{t("documentTable.tags")}</TableCell>
+              <TableCell>{t("documentTable.status")}</TableCell>
+              <TableCell>{t("documentTable.retrievableYes")}</TableCell>
               <TableCell align="right">{t("documentTable.actions")}</TableCell>
             </TableRow>
           </TableHead>
@@ -199,8 +219,8 @@ export const DocumentTable: React.FC<FileTableProps> = ({
                 <TableRow hover>
                   <TableCell padding="checkbox">
                     <Checkbox
-                      checked={selected.includes(file.document_uid)}
-                      onChange={() => onToggleSelect(file.document_uid)}
+                      checked={selectedFiles.some((f) => f.document_uid === file.document_uid)}
+                      onChange={() => onToggleSelect(file)}
                     />
                   </TableCell>
                   <TableCell>
@@ -223,16 +243,110 @@ export const DocumentTable: React.FC<FileTableProps> = ({
                     </Tooltip>
                   </TableCell>
                   <TableCell>
-                    {isAdmin && onToggleRetrievable ? (
-                      <Switch size="small" checked={file.retrievable} onChange={() => onToggleRetrievable(file)} />
-                    ) : file.retrievable ? t("documentTable.yes") : t("documentTable.no")}
+                    <Box display="flex" flexWrap="wrap" gap={0.5}>
+
+                      {file.tags?.map((tag) => (
+                        <Tooltip key={tag} title={`Tag: ${tag}`}>
+                          <Chip
+                            label={tag}
+                            size="small"
+                            variant="filled"
+                            sx={{ fontSize: "0.6rem" }}
+                          />
+                        </Tooltip>
+                      ))}
+
+                    </Box>
+                  </TableCell>
+
+
+                  <TableCell>
+                    <Box display="flex" flexWrap="wrap" gap={0.5}>
+                      {DOCUMENT_PROCESSING_STAGES.map((stage) => {
+                        const status = file.processing_stages?.[stage] ?? "not_started";
+
+                        const statusStyleMap: Record<string, { bgColor: string; color: string }> = {
+                          done: {
+                            bgColor: "#c8e6c9", // green
+                            color: "#2e7d32",
+                          },
+                          in_progress: {
+                            bgColor: "#fff9c4", // yellow
+                            color: "#f9a825",
+                          },
+                          failed: {
+                            bgColor: "#ffcdd2", // red
+                            color: "#c62828",
+                          },
+                          not_started: {
+                            bgColor: "#e0e0e0", // gray
+                            color: "#757575",
+                          },
+                        };
+
+                        const stageLabelMap: Record<string, string> = {
+                          raw: "R",
+                          preview: "P",
+                          vector: "V",
+                          sql: "S",
+                          mcp: "M",
+                        };
+
+                        const label = stageLabelMap[stage] ?? "?";
+                        const { bgColor, color } = statusStyleMap[status];
+
+                        return (
+                          <Tooltip key={stage} title={`${stage.replace(/_/g, " ")}: ${status}`} arrow>
+                            <Avatar
+                              sx={{
+                                bgcolor: bgColor,
+                                color,
+                                width: 24,
+                                height: 24,
+                                fontSize: "0.75rem",
+                                fontWeight: 600,
+                              }}
+                            >
+                              {label}
+                            </Avatar>
+                          </Tooltip>
+                        );
+                      })}
+                    </Box>
+                  </TableCell>
+
+
+
+                  <TableCell>
+                    {(() => {
+                      const isRetrievable = file.retrievable;
+
+                      return (
+                        <Chip
+                          label={isRetrievable ? t("documentTable.retrievableYes") : t("documentTable.retrievableNo")}
+                          size="small"
+                          variant="outlined"
+                          onClick={isAdmin && onToggleRetrievable ? () => onToggleRetrievable(file) : undefined}
+                          sx={{
+                            cursor: isAdmin ? "pointer" : "default",
+                            backgroundColor: isRetrievable ? "#e6f4ea" : "#eceff1",
+                            borderColor: isRetrievable ? "#2e7d32" : "#90a4ae",
+                            color: isRetrievable ? "#2e7d32" : "#607d8b",
+                            fontWeight: 500,
+                            fontSize: "0.75rem",
+                          }}
+                        />
+                      );
+                    })()}
                   </TableCell>
                   <TableCell align="right">
                     {isAdmin && (
                       <DocumentTableRowActionsMenu
-                        onDelete={() => onDelete(file.document_uid, file.document_name)}
-                        onDownload={() => onDownload(file.document_uid, file.document_name)}
-                        onOpen={() => onOpen(file.document_uid, file.document_name)}
+                        file={file}
+                        onDelete={() => onDelete(file)}
+                        onDownload={() => onDownload(file)}
+                        onOpen={() => onOpen(file)}
+                        onProcess={() => onProcess([file])}
                       />
                     )}
                   </TableCell>

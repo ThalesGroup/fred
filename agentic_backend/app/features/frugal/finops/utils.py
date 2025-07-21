@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.from datetime import datetime
 
-from common.structure import Series
+from app.common.structures import Series
 from common.utils import auc_calculation
 from app.services.finops.structure import CloudBilling
 

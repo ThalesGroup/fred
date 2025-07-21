@@ -32,7 +32,7 @@ Select the right connector
 
 from typing import Mapping
 
-from common.structure import DatabaseConfiguration, DatabaseTypeEnum
+from app.common.structures import DatabaseConfiguration, DatabaseTypeEnum
 from common.connectors.elasticsearch_connector import ElasticSearch
 
 

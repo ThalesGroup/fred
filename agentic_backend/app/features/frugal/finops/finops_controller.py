@@ -23,7 +23,7 @@ from fastapi import Depends, HTTPException, Query, APIRouter
 from fred_core import KeycloakUser, get_current_user
 from app.features.frugal.cluster_consumption.cluster_consumption_abstract_service import AbstractClusterConsumptionService
 from app.features.frugal.cluster_consumption.cluster_consumption_service import ClusterConsumptionService
-from app.common.structure import PrecisionEnum, Series, CompareResult, Configuration
+from app.common.structures import PrecisionEnum, Series, CompareResult, Configuration
 from app.common.utils import API_COMPARE_DOC
 
 
