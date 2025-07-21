@@ -19,7 +19,7 @@ from pathlib import Path
 from app.features.ingestion.service import IngestionService
 import pytest
 
-from app.common.structures import DocumentMetadata, OutputProcessorResponse
+from app.common.document_structures import DocumentMetadata, OutputProcessorResponse
 from app.core.processors.input.common.base_image_describer import BaseImageDescriber
 from app.application_context import ApplicationContext
 from app.core.processors.input.pdf_markdown_processor.pdf_markdown_processor import PdfMarkdownProcessor

@@ -14,7 +14,7 @@
 
 from types import SimpleNamespace
 import pytest
-from app.common.structures import DocumentMetadata
+from app.common.document_structures import DocumentMetadata
 from app.features.metadata.service import (
     MetadataNotFound,
     MetadataUpdateError,

@@ -16,7 +16,7 @@ storage back‑ends** (no MinIO, no OpenSearch).
 """
 
 from datetime import datetime
-from app.common.structures import DocumentMetadata
+from app.common.document_structures import DocumentMetadata
 from app.core.stores.content.base_content_store import BaseContentStore
 from fastapi.testclient import TestClient
 from fastapi import status

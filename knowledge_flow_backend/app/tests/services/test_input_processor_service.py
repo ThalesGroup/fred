@@ -16,7 +16,7 @@
 
 import pytest
 from app.features.ingestion.service import IngestionService
-from app.common.structures import DocumentMetadata
+from app.common.document_structures import DocumentMetadata
 from uuid import uuid4
 
 

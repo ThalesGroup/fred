@@ -26,7 +26,7 @@ Uses real filesystem, no mocks. Fast and reliable.
 from app.core.stores.content.local_content_store import LocalStorageBackend
 import pytest
 
-from app.common.structures import DocumentMetadata
+from app.common.document_structures import DocumentMetadata
 from app.features.content.service import ContentService
 from app.core.stores.metadata.local_metadata_store import LocalMetadataStore
 

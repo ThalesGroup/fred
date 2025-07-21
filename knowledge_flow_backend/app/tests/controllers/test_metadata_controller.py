@@ -17,7 +17,7 @@
 # Licensed under the Apache License 2.0
 
 from datetime import datetime
-from app.common.structures import DocumentMetadata
+from app.common.document_structures import DocumentMetadata
 from app.core.stores.metadata.base_metadata_store import BaseMetadataStore
 from fastapi.testclient import TestClient
 from fastapi import status

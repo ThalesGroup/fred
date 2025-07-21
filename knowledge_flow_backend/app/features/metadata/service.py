@@ -14,7 +14,7 @@
 
 import logging
 
-from app.common.structures import DocumentMetadata, Status
+from app.common.document_structures import DocumentMetadata, Status
 from app.core.stores.metadata.base_metadata_store import MetadataDeserializationError
 from app.features.metadata.structures import UpdateDocumentMetadataResponse
 from app.application_context import ApplicationContext

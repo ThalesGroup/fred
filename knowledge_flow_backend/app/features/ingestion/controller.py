@@ -15,12 +15,13 @@
 import json
 import logging
 from typing import Generator, List, Optional
+from app.common.structures import Status
 from fastapi import APIRouter, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from app.application_context import ApplicationContext
-from app.common.structures import ProcessingStage, Status
+from app.common.document_structures import ProcessingStage
 from app.features.ingestion.service import IngestionService
 
 logger = logging.getLogger(__name__)

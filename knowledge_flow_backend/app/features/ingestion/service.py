@@ -18,7 +18,7 @@ import pathlib
 import shutil
 import tempfile
 from typing import Union
-from app.common.structures import DocumentMetadata, OutputProcessorResponse
+from app.common.document_structures import DocumentMetadata, OutputProcessorResponse
 from app.core.processors.input.common.base_input_processor import BaseMarkdownProcessor, BaseTabularProcessor
 from fastapi import UploadFile
 

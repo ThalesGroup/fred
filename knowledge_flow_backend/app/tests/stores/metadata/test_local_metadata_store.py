@@ -17,8 +17,7 @@ Test suite for LocalMetadataStore in local_metadata_store.py.
 """
 
 import pytest
-from datetime import datetime
-from app.common.structures import DocumentMetadata
+from app.common.document_structures import DocumentMetadata
 from app.core.stores.metadata.local_metadata_store import LocalMetadataStore
 
 

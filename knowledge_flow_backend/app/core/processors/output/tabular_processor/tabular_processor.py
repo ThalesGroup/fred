@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import logging
+from app.common.structures import OutputProcessorResponse, Status
 import pandas as pd
 from langchain.schema.document import Document
 import io
@@ -20,7 +21,7 @@ from fastapi import HTTPException
 
 
 from app.application_context import ApplicationContext
-from app.common.structures import DocumentMetadata, Status, OutputProcessorResponse
+from app.common.document_structures import DocumentMetadata
 from app.core.processors.output.base_output_processor import BaseOutputProcessor
 
 logger = logging.getLogger(__name__)

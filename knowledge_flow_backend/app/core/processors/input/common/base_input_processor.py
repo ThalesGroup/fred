@@ -16,7 +16,7 @@ import hashlib
 import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
-from app.common.structures import DocumentMetadata
+from app.common.document_structures import DocumentMetadata
 import pandas
 
 logger = logging.getLogger(__name__)
