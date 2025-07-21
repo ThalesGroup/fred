@@ -22,6 +22,7 @@ import FolderIcon from "@mui/icons-material/Folder";
 import React, { useState } from "react";
 import {
   TagWithDocumentsId,
+  useDeleteTagKnowledgeFlowV1TagsTagIdDeleteMutation,
   useListTagsKnowledgeFlowV1TagsGetQuery,
 } from "../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import InvisibleLink from "../components/InvisibleLink";
@@ -30,7 +31,9 @@ import { useTranslation } from "react-i18next";
 
 export function DocumentLibrariesList() {
   const { t } = useTranslation();
-  const { data: libraries } = useListTagsKnowledgeFlowV1TagsGetQuery();
+  const { data: libraries, refetch: refetchLibraries } = useListTagsKnowledgeFlowV1TagsGetQuery();
+  const [deleteTag] = useDeleteTagKnowledgeFlowV1TagsTagIdDeleteMutation();
+
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
   const [menuLibraryId, setMenuLibraryId] = useState<string | null>(null);
@@ -98,11 +101,10 @@ export function DocumentLibrariesList() {
     setMenuLibraryId(null);
   };
 
-  const handleDelete = (id: string) => {
-    // TODO: Implement delete logic
+  const handleDelete = async (id: string) => {
     handleMenuClose();
-    // For now, just remove from selection
-    setSelectedIds((prev) => prev.filter((i) => i !== id));
+    await deleteTag({ tagId: id });
+    await refetchLibraries();
   };
 
   return (
@@ -218,19 +220,27 @@ function DocumentLibraryRow({
   const lastUpdateTooltip = new Date(library.updated_at).toLocaleString();
 
   return (
-    <TableRow
-      hover
-      sx={{ cursor: "pointer" }}
-      onClick={() => (window.location.href = `/documentLibrary/${library.id}`)}
-    >
+    <TableRow hover>
       <TableCell padding="checkbox" onClick={(e) => e.stopPropagation()}>
         <Checkbox checked={selected} onChange={onToggleSelect} />
       </TableCell>
       <TableCell sx={{ fontWeight: 500 }}>
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-          <FolderIcon fontSize="small" />
-          {library.name}
-        </span>
+        <Tooltip title={library.description || ""}>
+          <span>
+            <InvisibleLink
+              to={`/documentLibrary/${library.id}`}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+                color: "inherit",
+              }}
+            >
+              <FolderIcon fontSize="small" />
+              {library.name}
+            </InvisibleLink>
+          </span>
+        </Tooltip>
       </TableCell>
       <TableCell>
         {documentCount < 2
