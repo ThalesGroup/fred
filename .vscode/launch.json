@@ -29,24 +29,6 @@
       "console": "integratedTerminal"
     },
     {
-      "name": "Debug Knowledge Flow Backend API",
-      "type": "debugpy",
-      "request": "launch",
-      "program": "${workspaceFolder}/knowledge_flow_backend/app/main.py",
-      "cwd": "${workspaceFolder}/knowledge_flow_backend",
-      "args": [
-        "--config-path",
-        "./config/configuration.yaml"
-      ],
-      "env": {
-        "PYTHONPATH": ".",
-        "LOG_LEVEL": "info",
-        "ENV_FILE": "${workspaceFolder}/knowledge_flow_backend/config/.env"
-      },
-      "justMyCode": false,
-      "console": "integratedTerminal"
-    },
-    {
       "name": "Debug Knowledge Flow Backend",
       "type": "debugpy",
       "request": "launch",
@@ -62,8 +44,7 @@
         "--env-file",
         "config/.env",
         "--log-level",
-        "debug",
-        "--reload"
+        "debug"
       ],
       "env": {
         "PYTHONPATH": "${workspaceFolder}/knowledge_flow_backend",

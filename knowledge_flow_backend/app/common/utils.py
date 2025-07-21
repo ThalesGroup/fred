@@ -198,30 +198,3 @@ def count_tokens(text: str) -> int:
         encoding = tiktoken.get_encoding("cl100k_base")
         return len(encoding.encode(text))
 
-
-def configure_logging(log_level: str):
-    logging.basicConfig(
-        level=log_level.upper(),
-        format="%(asctime)s - %(levelname)s - %(filename)s - %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-        handlers=[RichHandler(rich_tracebacks=False, show_time=False, show_path=False)],
-    )
-    logging.getLogger(__name__).info(f"Logging configured at {log_level.upper()} level.")
-
-
-def load_environment(dotenv_path: str = "./config/.env"):
-    if load_dotenv(dotenv_path):
-        logging.getLogger().info(f"✅ Loaded environment variables from: {dotenv_path}")
-    else:
-        logging.getLogger().warning(f"⚠️ No .env file found at: {dotenv_path}")
-
-def parse_cli_opts():
-    parser = argparse.ArgumentParser(description="Start the Knowledge Flow Backend App")
-    parser.add_argument(
-        "--config-path",
-        default="./config/configuration.yaml",
-        help="Path to configuration YAML file",
-    )
-    return parser.parse_args()
-
-

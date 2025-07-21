@@ -18,15 +18,15 @@
 """
 Entrypoint for the Knowledge Flow Backend App.
 """
-
-import atexit
 import logging
+import os
+from rich.logging import RichHandler
+from dotenv import load_dotenv
 
 from app.features.catalog.controller import CatalogController
 from app.features.pull.controller import PullDocumentController
 from app.features.pull.service import PullDocumentService
 from app.features.scheduler.controller import SchedulerController
-import uvicorn
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi_mcp import FastApiMCP
@@ -34,7 +34,7 @@ from fred_core import initialize_keycloak
 
 from app.application_context import ApplicationContext
 from app.common.structures import Configuration
-from app.common.utils import configure_logging, load_environment, parse_cli_opts, parse_server_configuration
+from app.common.utils import parse_server_configuration
 from app.features.content.controller import ContentController
 from app.features.metadata.controller import MetadataController
 from app.features.tabular.controller import TabularController
@@ -42,12 +42,49 @@ from app.features.tag.controller import TagController
 from app.features.vector_search.controller import VectorSearchController
 from app.features.ingestion.controller import IngestionController
 
+# -----------------------
+# LOGGING + ENVIRONMENT
+# -----------------------
+
 logger = logging.getLogger(__name__)
 
-def create_app(configuration: Configuration) -> FastAPI:
-    logger.info(f"🛠️ create_app() called with base_url={configuration.app.base_url}")
 
+def configure_logging(log_level: str):
+    logging.basicConfig(
+        level=log_level.upper(),
+        format="%(asctime)s - %(levelname)s - %(filename)s - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+        handlers=[RichHandler(rich_tracebacks=False, show_time=False, show_path=False)],
+    )
+    logging.getLogger(__name__).info(
+        f"Logging configured at {log_level.upper()} level."
+    )
+
+
+def load_environment(dotenv_path: str = "./config/.env"):
+    if load_dotenv(dotenv_path):
+        logging.getLogger().info(f"✅ Loaded environment variables from: {dotenv_path}")
+    else:
+        logging.getLogger().warning(f"⚠️ No .env file found at: {dotenv_path}")
+
+
+
+
+# -----------------------
+# APP CREATION
+# -----------------------
+
+def create_app() -> FastAPI:
+    load_environment()
+    config_file = os.environ["CONFIG_FILE"]
+    configuration: Configuration = parse_server_configuration(config_file)
+    base_url = configuration.app.base_url
+    logger.info(f"🛠️ create_app() called with base_url={base_url}")
+
+    ApplicationContext(configuration)
+    
     initialize_keycloak(configuration)
+    
     app = FastAPI(
         docs_url=f"{configuration.app.base_url}/docs",
         redoc_url=f"{configuration.app.base_url}/redoc",
@@ -116,23 +153,6 @@ def create_app(configuration: Configuration) -> FastAPI:
 # MAIN ENTRYPOINT
 # -----------------------
 
-def main():
-    args = parse_cli_opts()
-    configuration: Configuration = parse_server_configuration(args.config_path)
-    configure_logging(configuration.app.log_level)
-    load_environment()
-    ApplicationContext(configuration)
-    app = create_app(configuration)
-    # ✅ Register graceful shutdown
-    atexit.register(ApplicationContext.get_instance().close_connections)
-    uvicorn.run(
-        app,
-        host=configuration.app.address,
-        port=configuration.app.port,
-        log_level=configuration.app.log_level,
-        reload=configuration.app.reload,
-        reload_dirs=configuration.app.reload_dir,
-    )
-
 if __name__ == "__main__":
-    main()
+    print("To start the app, use uvicorn cli with:")
+    print("uv run uvicorn --factory app.main:create_app ...")

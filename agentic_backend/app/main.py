@@ -19,8 +19,6 @@
 Entrypoint for the Agentic Backend App.
 """
 
-import argparse
-import atexit
 import logging
 import os
 
@@ -30,7 +28,6 @@ from app.features.frugal.carbon.carbon_controller import CarbonController
 from app.features.frugal.energy.energy_controller import EnergyController
 from app.features.frugal.finops.finops_controller import FinopsController
 from app.features.k8.kube_service import KubeService
-import uvicorn
 from app.application_context import ApplicationContext
 from app.chatbot.chatbot_controller import ChatbotController
 from app.common.structures import Configuration
@@ -82,20 +79,16 @@ def load_environment(dotenv_path: str = "./config/.env"):
 # -----------------------
 # APP CREATION
 # -----------------------
-def parse_cli_opts():
-    parser = argparse.ArgumentParser(description="Start the Knowledge Flow Backend App")
-    parser.add_argument(
-        "--config-path",
-        default="./config/configuration.yaml",
-        help="Path to configuration YAML file",
-    )
-    return parser.parse_args()
 
-def create_app(configuration: Configuration) -> FastAPI:
-
+def create_app() -> FastAPI:
+    load_environment()
+    config_file = os.environ["CONFIG_FILE"]
+    configuration: Configuration = parse_server_configuration(config_file)
     base_url = configuration.app.base_url
     logger.info(f"🛠️ create_app() called with base_url={base_url}")
-
+    
+    ApplicationContext(configuration)
+    
     initialize_keycloak(configuration)
     create_tool_metric_store(configuration.tool_metrics_storage)
     create_node_metric_store(configuration.node_metrics_storage)
@@ -135,22 +128,7 @@ def create_app(configuration: Configuration) -> FastAPI:
     logger.info("🧩 All controllers registered.")
     return app
 
-def main():
-    args = parse_cli_opts()
-    configuration: Configuration = parse_server_configuration(args.config_path)
-    configure_logging(configuration.app.log_level)
-    load_environment()
-    ApplicationContext(configuration)
-    app = create_app(configuration)
-    uvicorn.run(
-        app,
-        host=configuration.app.address,
-        port=configuration.app.port,
-        log_level=configuration.app.log_level,
-        reload=configuration.app.reload,
-        reload_dirs=configuration.app.reload_dir,
-    )
-
 
 if __name__ == "__main__":
-    main()
+    print("To start the app, use uvicorn cli with:")
+    print("uv run uvicorn --factory app.main:create_app ...")
