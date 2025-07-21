@@ -1,43 +1,11 @@
 import { knowledgeFlowApi as api } from "./knowledgeFlowApi";
 const injectedRtkApi = api.injectEndpoints({
   endpoints: (build) => ({
-    streamProcessKnowledgeFlowV1ProcessFilesPost: build.mutation<
-      StreamProcessKnowledgeFlowV1ProcessFilesPostApiResponse,
-      StreamProcessKnowledgeFlowV1ProcessFilesPostApiArg
+    getDocumentsMetadataKnowledgeFlowV1DocumentsMetadataPost: build.mutation<
+      GetDocumentsMetadataKnowledgeFlowV1DocumentsMetadataPostApiResponse,
+      GetDocumentsMetadataKnowledgeFlowV1DocumentsMetadataPostApiArg
     >({
-      query: (queryArg) => ({
-        url: `/knowledge-flow/v1/process-files`,
-        method: "POST",
-        body: queryArg.bodyStreamProcessKnowledgeFlowV1ProcessFilesPost,
-      }),
-    }),
-    streamLoadKnowledgeFlowV1UploadFilesPost: build.mutation<
-      StreamLoadKnowledgeFlowV1UploadFilesPostApiResponse,
-      StreamLoadKnowledgeFlowV1UploadFilesPostApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/knowledge-flow/v1/upload-files`,
-        method: "POST",
-        body: queryArg.bodyStreamLoadKnowledgeFlowV1UploadFilesPost,
-      }),
-    }),
-    searchDocumentsUsingVectorization: build.mutation<
-      SearchDocumentsUsingVectorizationApiResponse,
-      SearchDocumentsUsingVectorizationApiArg
-    >({
-      query: (queryArg) => ({ url: `/knowledge-flow/v1/vector/search`, method: "POST", body: queryArg.searchRequest }),
-    }),
-    getDocumentMetadataKnowledgeFlowV1DocumentsMetadataPost: build.mutation<
-      GetDocumentMetadataKnowledgeFlowV1DocumentsMetadataPostApiResponse,
-      GetDocumentMetadataKnowledgeFlowV1DocumentsMetadataPostApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/knowledge-flow/v1/documents/metadata`,
-        method: "POST",
-        params: {
-          document_uid: queryArg.documentUid,
-        },
-      }),
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/documents/metadata`, method: "POST", body: queryArg.filters }),
     }),
     getDocumentMetadataKnowledgeFlowV1DocumentDocumentUidGet: build.query<
       GetDocumentMetadataKnowledgeFlowV1DocumentDocumentUidGetApiResponse,
@@ -71,6 +39,54 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.updateDocumentMetadataRequest,
       }),
     }),
+    browseDocumentsKnowledgeFlowV1DocumentsBrowsePost: build.mutation<
+      BrowseDocumentsKnowledgeFlowV1DocumentsBrowsePostApiResponse,
+      BrowseDocumentsKnowledgeFlowV1DocumentsBrowsePostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/documents/browse`,
+        method: "POST",
+        body: queryArg.browseDocumentsRequest,
+      }),
+    }),
+    listCatalogFilesKnowledgeFlowV1PullCatalogFilesGet: build.query<
+      ListCatalogFilesKnowledgeFlowV1PullCatalogFilesGetApiResponse,
+      ListCatalogFilesKnowledgeFlowV1PullCatalogFilesGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/pull/catalog/files`,
+        params: {
+          source_tag: queryArg.sourceTag,
+          offset: queryArg.offset,
+          limit: queryArg.limit,
+        },
+      }),
+    }),
+    rescanCatalogSourceKnowledgeFlowV1PullCatalogRescanSourceTagPost: build.mutation<
+      RescanCatalogSourceKnowledgeFlowV1PullCatalogRescanSourceTagPostApiResponse,
+      RescanCatalogSourceKnowledgeFlowV1PullCatalogRescanSourceTagPostApiArg
+    >({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/pull/catalog/rescan/${queryArg.sourceTag}`, method: "POST" }),
+    }),
+    listDocumentSourcesKnowledgeFlowV1DocumentsSourcesGet: build.query<
+      ListDocumentSourcesKnowledgeFlowV1DocumentsSourcesGetApiResponse,
+      ListDocumentSourcesKnowledgeFlowV1DocumentsSourcesGetApiArg
+    >({
+      query: () => ({ url: `/knowledge-flow/v1/documents/sources` }),
+    }),
+    listPullDocumentsKnowledgeFlowV1PullDocumentsGet: build.query<
+      ListPullDocumentsKnowledgeFlowV1PullDocumentsGetApiResponse,
+      ListPullDocumentsKnowledgeFlowV1PullDocumentsGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/pull/documents`,
+        params: {
+          source_tag: queryArg.sourceTag,
+          offset: queryArg.offset,
+          limit: queryArg.limit,
+        },
+      }),
+    }),
     getMarkdownPreviewKnowledgeFlowV1MarkdownDocumentUidGet: build.query<
       GetMarkdownPreviewKnowledgeFlowV1MarkdownDocumentUidGetApiResponse,
       GetMarkdownPreviewKnowledgeFlowV1MarkdownDocumentUidGetApiArg
@@ -89,6 +105,26 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/knowledge-flow/v1/raw_content/${queryArg.documentUid}` }),
     }),
+    streamProcessKnowledgeFlowV1ProcessFilesPost: build.mutation<
+      StreamProcessKnowledgeFlowV1ProcessFilesPostApiResponse,
+      StreamProcessKnowledgeFlowV1ProcessFilesPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/process-files`,
+        method: "POST",
+        body: queryArg.bodyStreamProcessKnowledgeFlowV1ProcessFilesPost,
+      }),
+    }),
+    streamLoadKnowledgeFlowV1UploadFilesPost: build.mutation<
+      StreamLoadKnowledgeFlowV1UploadFilesPostApiResponse,
+      StreamLoadKnowledgeFlowV1UploadFilesPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/upload-files`,
+        method: "POST",
+        body: queryArg.bodyStreamLoadKnowledgeFlowV1UploadFilesPost,
+      }),
+    }),
     getSchema: build.query<GetSchemaApiResponse, GetSchemaApiArg>({
       query: (queryArg) => ({ url: `/knowledge-flow/v1/tabular/${queryArg.documentUid}/schema` }),
     }),
@@ -101,19 +137,6 @@ const injectedRtkApi = api.injectEndpoints({
     }),
     listTables: build.query<ListTablesApiResponse, ListTablesApiArg>({
       query: () => ({ url: `/knowledge-flow/v1/tabular/list` }),
-    }),
-    searchCodebase: build.mutation<SearchCodebaseApiResponse, SearchCodebaseApiArg>({
-      query: (queryArg) => ({
-        url: `/knowledge-flow/v1/code/search`,
-        method: "POST",
-        body: queryArg.codeSearchRequest,
-      }),
-    }),
-    indexCodebaseKnowledgeFlowV1CodeIndexPost: build.mutation<
-      IndexCodebaseKnowledgeFlowV1CodeIndexPostApiResponse,
-      IndexCodebaseKnowledgeFlowV1CodeIndexPostApiArg
-    >({
-      query: (queryArg) => ({ url: `/knowledge-flow/v1/code/index`, method: "POST", body: queryArg.codeIndexRequest }),
     }),
     listTagsKnowledgeFlowV1TagsGet: build.query<
       ListTagsKnowledgeFlowV1TagsGetApiResponse,
@@ -149,6 +172,12 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/knowledge-flow/v1/tags/${queryArg.tagId}`, method: "DELETE" }),
     }),
+    searchDocumentsUsingVectorization: build.mutation<
+      SearchDocumentsUsingVectorizationApiResponse,
+      SearchDocumentsUsingVectorizationApiArg
+    >({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/vector/search`, method: "POST", body: queryArg.searchRequest }),
+    }),
     submitPipelineKnowledgeFlowV1PipelinesSubmitPost: build.mutation<
       SubmitPipelineKnowledgeFlowV1PipelinesSubmitPostApiResponse,
       SubmitPipelineKnowledgeFlowV1PipelinesSubmitPostApiArg
@@ -159,26 +188,26 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.pipelineDefinition,
       }),
     }),
+    processDocumentsKnowledgeFlowV1PipelinesProcessDocumentsPost: build.mutation<
+      ProcessDocumentsKnowledgeFlowV1PipelinesProcessDocumentsPostApiResponse,
+      ProcessDocumentsKnowledgeFlowV1PipelinesProcessDocumentsPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/pipelines/process-documents`,
+        method: "POST",
+        body: queryArg.processDocumentsRequest,
+      }),
+    }),
   }),
   overrideExisting: false,
 });
 export { injectedRtkApi as knowledgeFlowApi };
-export type StreamProcessKnowledgeFlowV1ProcessFilesPostApiResponse = /** status 200 Successful Response */ any;
-export type StreamProcessKnowledgeFlowV1ProcessFilesPostApiArg = {
-  bodyStreamProcessKnowledgeFlowV1ProcessFilesPost: BodyStreamProcessKnowledgeFlowV1ProcessFilesPost;
-};
-export type StreamLoadKnowledgeFlowV1UploadFilesPostApiResponse = /** status 200 Successful Response */ any;
-export type StreamLoadKnowledgeFlowV1UploadFilesPostApiArg = {
-  bodyStreamLoadKnowledgeFlowV1UploadFilesPost: BodyStreamLoadKnowledgeFlowV1UploadFilesPost;
-};
-export type SearchDocumentsUsingVectorizationApiResponse = /** status 200 Successful Response */ DocumentSource[];
-export type SearchDocumentsUsingVectorizationApiArg = {
-  searchRequest: SearchRequest;
-};
-export type GetDocumentMetadataKnowledgeFlowV1DocumentsMetadataPostApiResponse =
+export type GetDocumentsMetadataKnowledgeFlowV1DocumentsMetadataPostApiResponse =
   /** status 200 Successful Response */ GetDocumentsMetadataResponse;
-export type GetDocumentMetadataKnowledgeFlowV1DocumentsMetadataPostApiArg = {
-  documentUid: string;
+export type GetDocumentsMetadataKnowledgeFlowV1DocumentsMetadataPostApiArg = {
+  filters: {
+    [key: string]: any;
+  };
 };
 export type GetDocumentMetadataKnowledgeFlowV1DocumentDocumentUidGetApiResponse =
   /** status 200 Successful Response */ GetDocumentMetadataResponse;
@@ -202,6 +231,39 @@ export type UpdateDocumentMetadataKnowledgeFlowV1DocumentDocumentUidUpdateMetada
   documentUid: string;
   updateDocumentMetadataRequest: UpdateDocumentMetadataRequest;
 };
+export type BrowseDocumentsKnowledgeFlowV1DocumentsBrowsePostApiResponse =
+  /** status 200 Successful Response */ PullDocumentsResponse;
+export type BrowseDocumentsKnowledgeFlowV1DocumentsBrowsePostApiArg = {
+  browseDocumentsRequest: BrowseDocumentsRequest;
+};
+export type ListCatalogFilesKnowledgeFlowV1PullCatalogFilesGetApiResponse =
+  /** status 200 Successful Response */ PullFileEntry[];
+export type ListCatalogFilesKnowledgeFlowV1PullCatalogFilesGetApiArg = {
+  /** The source tag for the cataloged files */
+  sourceTag: string;
+  /** Number of entries to skip */
+  offset?: number;
+  /** Max number of entries to return */
+  limit?: number;
+};
+export type RescanCatalogSourceKnowledgeFlowV1PullCatalogRescanSourceTagPostApiResponse =
+  /** status 200 Successful Response */ any;
+export type RescanCatalogSourceKnowledgeFlowV1PullCatalogRescanSourceTagPostApiArg = {
+  sourceTag: string;
+};
+export type ListDocumentSourcesKnowledgeFlowV1DocumentsSourcesGetApiResponse =
+  /** status 200 Successful Response */ DocumentSourceInfo[];
+export type ListDocumentSourcesKnowledgeFlowV1DocumentsSourcesGetApiArg = void;
+export type ListPullDocumentsKnowledgeFlowV1PullDocumentsGetApiResponse =
+  /** status 200 Successful Response */ PullDocumentsResponse;
+export type ListPullDocumentsKnowledgeFlowV1PullDocumentsGetApiArg = {
+  /** The pull source tag to list documents from */
+  sourceTag: string;
+  /** Start offset for pagination */
+  offset?: number;
+  /** Maximum number of documents to return */
+  limit?: number;
+};
 export type GetMarkdownPreviewKnowledgeFlowV1MarkdownDocumentUidGetApiResponse =
   /** status 200 Successful Response */ MarkdownContentResponse;
 export type GetMarkdownPreviewKnowledgeFlowV1MarkdownDocumentUidGetApiArg = {
@@ -218,6 +280,14 @@ export type DownloadDocumentKnowledgeFlowV1RawContentDocumentUidGetApiResponse =
 export type DownloadDocumentKnowledgeFlowV1RawContentDocumentUidGetApiArg = {
   documentUid: string;
 };
+export type StreamProcessKnowledgeFlowV1ProcessFilesPostApiResponse = /** status 200 Successful Response */ any;
+export type StreamProcessKnowledgeFlowV1ProcessFilesPostApiArg = {
+  bodyStreamProcessKnowledgeFlowV1ProcessFilesPost: BodyStreamProcessKnowledgeFlowV1ProcessFilesPost;
+};
+export type StreamLoadKnowledgeFlowV1UploadFilesPostApiResponse = /** status 200 Successful Response */ any;
+export type StreamLoadKnowledgeFlowV1UploadFilesPostApiArg = {
+  bodyStreamLoadKnowledgeFlowV1UploadFilesPost: BodyStreamLoadKnowledgeFlowV1UploadFilesPost;
+};
 export type GetSchemaApiResponse = /** status 200 Successful Response */ TabularSchemaResponse;
 export type GetSchemaApiArg = {
   documentUid: string;
@@ -229,14 +299,6 @@ export type MakeQueryApiArg = {
 };
 export type ListTablesApiResponse = /** status 200 Successful Response */ TabularDatasetMetadata[];
 export type ListTablesApiArg = void;
-export type SearchCodebaseApiResponse = /** status 200 Successful Response */ CodeDocumentSource[];
-export type SearchCodebaseApiArg = {
-  codeSearchRequest: CodeSearchRequest;
-};
-export type IndexCodebaseKnowledgeFlowV1CodeIndexPostApiResponse = /** status 200 Successful Response */ any;
-export type IndexCodebaseKnowledgeFlowV1CodeIndexPostApiArg = {
-  codeIndexRequest: CodeIndexRequest;
-};
 export type ListTagsKnowledgeFlowV1TagsGetApiResponse = /** status 200 Successful Response */ Tag[];
 export type ListTagsKnowledgeFlowV1TagsGetApiArg = void;
 export type CreateTagKnowledgeFlowV1TagsPostApiResponse = /** status 200 Successful Response */ Tag;
@@ -256,65 +318,33 @@ export type DeleteTagKnowledgeFlowV1TagsTagIdDeleteApiResponse = /** status 200 
 export type DeleteTagKnowledgeFlowV1TagsTagIdDeleteApiArg = {
   tagId: string;
 };
+export type SearchDocumentsUsingVectorizationApiResponse = /** status 200 Successful Response */ DocumentSource[];
+export type SearchDocumentsUsingVectorizationApiArg = {
+  searchRequest: SearchRequest;
+};
 export type SubmitPipelineKnowledgeFlowV1PipelinesSubmitPostApiResponse =
   /** status 200 Temporal workflow ID and run ID */ any;
 export type SubmitPipelineKnowledgeFlowV1PipelinesSubmitPostApiArg = {
   pipelineDefinition: PipelineDefinition;
 };
-export type ValidationError = {
-  loc: (string | number)[];
-  msg: string;
-  type: string;
+export type ProcessDocumentsKnowledgeFlowV1PipelinesProcessDocumentsPostApiResponse =
+  /** status 200 Successful Response */ any;
+export type ProcessDocumentsKnowledgeFlowV1PipelinesProcessDocumentsPostApiArg = {
+  processDocumentsRequest: ProcessDocumentsRequest;
 };
-export type HttpValidationError = {
-  detail?: ValidationError[];
-};
-export type BodyStreamProcessKnowledgeFlowV1ProcessFilesPost = {
-  files: Blob[];
-  metadata_json: string;
-};
-export type BodyStreamLoadKnowledgeFlowV1UploadFilesPost = {
-  files: Blob[];
-  metadata_json: string;
-};
-export type DocumentSource = {
-  content: string;
-  file_path: string;
-  file_name: string;
-  page: number | null;
-  uid: string;
-  modified?: string | null;
-  title: string;
-  author: string;
-  created: string;
-  type: string;
-  /** Similarity score returned by the vector store (e.g., cosine distance). */
-  score: number;
-  /** Rank of the document among the retrieved results. */
-  rank?: number | null;
-  /** Identifier of the embedding model used. */
-  embedding_model?: string | null;
-  /** Name of the vector index used for retrieval. */
-  vector_index?: string | null;
-  /** Approximate token count of the content. */
-  token_count?: number | null;
-  /** Timestamp when the document was retrieved. */
-  retrieved_at?: string | null;
-  /** Session or trace ID for auditability. */
-  retrieval_session_id?: string | null;
-};
-export type SearchRequest = {
-  query: string;
-  top_k?: number;
-};
-export type DocumentProcessingStatus = "uploaded" | "input_processed" | "vectorized" | "completed" | "failed";
+export type SourceType = "push" | "pull";
 export type DocumentMetadata = {
   document_name: string;
   document_uid: string;
+  /** When the document was added to the system */
   date_added_to_kb?: string;
   retrievable?: boolean;
-  processing_status?: DocumentProcessingStatus;
-  /** User-provided tags from the frontend */
+  /** Tag for identifying the pull source (e.g., 'local-docs') */
+  source_tag?: string | null;
+  /** Relative or absolute URI/path to the external document */
+  pull_location?: string | null;
+  source_type?: SourceType | null;
+  /** User-assigned tags */
   tags?: string[] | null;
   title?: string | null;
   author?: string | null;
@@ -324,10 +354,22 @@ export type DocumentMetadata = {
   category?: string | null;
   subject?: string | null;
   keywords?: string | null;
+  /** Status of each well-defined processing stage */
+  processing_stages?: {
+    [key: string]: "not_started" | "in_progress" | "done" | "failed";
+  };
 };
 export type GetDocumentsMetadataResponse = {
   status: string;
   documents: DocumentMetadata[];
+};
+export type ValidationError = {
+  loc: (string | number)[];
+  msg: string;
+  type: string;
+};
+export type HttpValidationError = {
+  detail?: ValidationError[];
 };
 export type GetDocumentMetadataResponse = {
   status: string;
@@ -350,8 +392,43 @@ export type UpdateDocumentMetadataRequest = {
   domain?: string | null;
   tags?: string[] | null;
 };
+export type PullDocumentsResponse = {
+  total: number;
+  documents: DocumentMetadata[];
+};
+export type BrowseDocumentsRequest = {
+  /** Tag of the document source to browse (pull or push) */
+  source_tag: string;
+  /** Optional metadata filters */
+  filters?: {
+    [key: string]: any;
+  } | null;
+  offset?: number;
+  limit?: number;
+};
+export type PullFileEntry = {
+  path: string;
+  size: number;
+  modified_time: number;
+  hash?: string | null;
+};
+export type DocumentSourceInfo = {
+  tag: string;
+  type: "push" | "pull";
+  provider?: string | null;
+  description: string;
+  catalog_supported?: boolean | null;
+};
 export type MarkdownContentResponse = {
   content: string;
+};
+export type BodyStreamProcessKnowledgeFlowV1ProcessFilesPost = {
+  files: Blob[];
+  metadata_json: string;
+};
+export type BodyStreamLoadKnowledgeFlowV1UploadFilesPost = {
+  files: Blob[];
+  metadata_json: string;
 };
 export type TabularColumnSchema = {
   name: string;
@@ -412,25 +489,6 @@ export type TabularDatasetMetadata = {
   domain?: string | null;
   row_count?: number | null;
 };
-export type CodeDocumentSource = {
-  content: string;
-  file_path: string;
-  file_name: string;
-  language: string;
-  symbol?: string | null;
-  uid: string;
-  score: number;
-  rank?: number | null;
-  embedding_model?: string | null;
-  vector_index?: string | null;
-};
-export type CodeSearchRequest = {
-  query: string;
-  top_k?: number;
-};
-export type CodeIndexRequest = {
-  path: string;
-};
 export type TagType = "library";
 export type Tag = {
   id: string;
@@ -454,40 +512,78 @@ export type TagUpdate = {
   type: TagType;
   document_ids?: string[];
 };
-export type PipelineFile = {
-  path: string;
-  original_filename?: string | null;
+export type DocumentSource = {
+  content: string;
+  file_path: string;
+  file_name: string;
+  page: number | null;
+  uid: string;
+  modified?: string | null;
+  title: string;
+  author: string;
+  created: string;
+  type: string;
+  /** Similarity score returned by the vector store (e.g., cosine distance). */
+  score: number;
+  /** Rank of the document among the retrieved results. */
+  rank?: number | null;
+  /** Identifier of the embedding model used. */
+  embedding_model?: string | null;
+  /** Name of the vector index used for retrieval. */
+  vector_index?: string | null;
+  /** Approximate token count of the content. */
+  token_count?: number | null;
+  /** Timestamp when the document was retrieved. */
+  retrieved_at?: string | null;
+  /** Session or trace ID for auditability. */
+  retrieval_session_id?: string | null;
+};
+export type SearchRequest = {
+  query: string;
+  top_k?: number;
+};
+export type FileToProcess = {
+  source_tag: string;
+  document_uid?: string | null;
+  external_path?: string | null;
+  tags?: string[];
 };
 export type PipelineDefinition = {
   name: string;
-  files: PipelineFile[];
-  metadata: {
-    [key: string]: any;
-  };
+  files: FileToProcess[];
+};
+export type ProcessDocumentsRequest = {
+  files: FileToProcess[];
+  pipeline_name?: string | null;
 };
 export const {
-  useStreamProcessKnowledgeFlowV1ProcessFilesPostMutation,
-  useStreamLoadKnowledgeFlowV1UploadFilesPostMutation,
-  useSearchDocumentsUsingVectorizationMutation,
-  useGetDocumentMetadataKnowledgeFlowV1DocumentsMetadataPostMutation,
+  useGetDocumentsMetadataKnowledgeFlowV1DocumentsMetadataPostMutation,
   useGetDocumentMetadataKnowledgeFlowV1DocumentDocumentUidGetQuery,
   useLazyGetDocumentMetadataKnowledgeFlowV1DocumentDocumentUidGetQuery,
   useUpdateDocumentRetrievableKnowledgeFlowV1DocumentDocumentUidPutMutation,
   useDeleteDocumentMetadataKnowledgeFlowV1DocumentDocumentUidDeleteMutation,
   useUpdateDocumentMetadataKnowledgeFlowV1DocumentDocumentUidUpdateMetadataPostMutation,
+  useBrowseDocumentsKnowledgeFlowV1DocumentsBrowsePostMutation,
+  useListCatalogFilesKnowledgeFlowV1PullCatalogFilesGetQuery,
+  useLazyListCatalogFilesKnowledgeFlowV1PullCatalogFilesGetQuery,
+  useRescanCatalogSourceKnowledgeFlowV1PullCatalogRescanSourceTagPostMutation,
+  useListDocumentSourcesKnowledgeFlowV1DocumentsSourcesGetQuery,
+  useLazyListDocumentSourcesKnowledgeFlowV1DocumentsSourcesGetQuery,
+  useListPullDocumentsKnowledgeFlowV1PullDocumentsGetQuery,
+  useLazyListPullDocumentsKnowledgeFlowV1PullDocumentsGetQuery,
   useGetMarkdownPreviewKnowledgeFlowV1MarkdownDocumentUidGetQuery,
   useLazyGetMarkdownPreviewKnowledgeFlowV1MarkdownDocumentUidGetQuery,
   useDownloadDocumentMediaKnowledgeFlowV1MarkdownDocumentUidMediaMediaIdGetQuery,
   useLazyDownloadDocumentMediaKnowledgeFlowV1MarkdownDocumentUidMediaMediaIdGetQuery,
   useDownloadDocumentKnowledgeFlowV1RawContentDocumentUidGetQuery,
   useLazyDownloadDocumentKnowledgeFlowV1RawContentDocumentUidGetQuery,
+  useStreamProcessKnowledgeFlowV1ProcessFilesPostMutation,
+  useStreamLoadKnowledgeFlowV1UploadFilesPostMutation,
   useGetSchemaQuery,
   useLazyGetSchemaQuery,
   useMakeQueryMutation,
   useListTablesQuery,
   useLazyListTablesQuery,
-  useSearchCodebaseMutation,
-  useIndexCodebaseKnowledgeFlowV1CodeIndexPostMutation,
   useListTagsKnowledgeFlowV1TagsGetQuery,
   useLazyListTagsKnowledgeFlowV1TagsGetQuery,
   useCreateTagKnowledgeFlowV1TagsPostMutation,
@@ -495,5 +591,7 @@ export const {
   useLazyGetTagKnowledgeFlowV1TagsTagIdGetQuery,
   useUpdateTagKnowledgeFlowV1TagsTagIdPutMutation,
   useDeleteTagKnowledgeFlowV1TagsTagIdDeleteMutation,
+  useSearchDocumentsUsingVectorizationMutation,
   useSubmitPipelineKnowledgeFlowV1PipelinesSubmitPostMutation,
+  useProcessDocumentsKnowledgeFlowV1PipelinesProcessDocumentsPostMutation,
 } = injectedRtkApi;

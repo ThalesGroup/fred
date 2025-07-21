@@ -3,7 +3,7 @@ import { Container, Typography, Box, CircularProgress, Paper } from "@mui/materi
 import {
   DocumentMetadata,
   useGetTagKnowledgeFlowV1TagsTagIdGetQuery,
-  useGetDocumentMetadataKnowledgeFlowV1DocumentsMetadataPostMutation,
+  useGetDocumentsMetadataKnowledgeFlowV1DocumentsMetadataPostMutation,
 } from "../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { TopBar } from "../common/TopBar";
 import { use } from "i18next";
@@ -12,7 +12,7 @@ import { useEffect, useState } from "react";
 export const DocumentLibraryViewPage = () => {
   const { libraryId } = useParams<{ libraryId: string }>();
   const { data: library, isLoading } = useGetTagKnowledgeFlowV1TagsTagIdGetQuery({ tagId: libraryId });
-  const [getDocumentsMetadata] = useGetDocumentMetadataKnowledgeFlowV1DocumentsMetadataPostMutation();
+  const [getDocumentsMetadata] = useGetDocumentsMetadataKnowledgeFlowV1DocumentsMetadataPostMutation();
 
   const [documents, setDocuments] = useState<DocumentMetadata[]>([]);
 
@@ -20,7 +20,7 @@ export const DocumentLibraryViewPage = () => {
     const promises: Promise<DocumentMetadata | undefined>[] = [];
     for (const id of library.document_ids || []) {
       promises.push(
-        getDocumentsMetadata({ documentUid: id }).then((result) => {
+        getDocumentsMetadata({ filters: { document_uid: id } }).then((result) => {
           // result.data may be undefined or an object containing the metadata
           // Adjust this extraction as needed based on your actual API response shape
           if (result.error) {
