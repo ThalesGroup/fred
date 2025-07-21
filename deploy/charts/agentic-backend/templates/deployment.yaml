@@ -39,43 +39,33 @@ spec:
           {{- end }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          #command: ["/bin/bash", "-c", "tail -f /dev/null"]
+        {{- if .Values.command }} 
+          {{- if .Values.command.enabled }}  
+          command:
+{{ toYaml .Values.command.data | indent 12 }}  
+          {{- end }} 
+        {{- end }}
           ports:
             - containerPort: 8000
-          {{- with .Values.env }}
+          {{- if .Values.env.enabled }}
           env:
-            {{- toYaml . | nindent 12 }}
+            {{- toYaml .Values.env.data | nindent 12 }}
+            {{ if .Values.env.extraEnvVars }}
+            {{- toYaml .Values.env.extraEnvVars | nindent 12 }}
+            {{- end }}
           {{- end }}
           {{- with .Values.resources }}
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
           volumeMounts:
-            {{- with .Values.volumeMounts }}
+            {{- with .Values.volumeMounts.data }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
-            - name: {{ .Chart.Name }}-config-vol
-              mountPath: /app/config/configuration.yaml
-              subPath: configuration.yaml
-            - name: {{ .Chart.Name }}-kubeconfig-vol
-              mountPath: /home/fred-user/.kube/config
-              subPath: kubeconfig
-            - name: {{ .Chart.Name }}-env-vol
-              mountPath: /app/config/.env
-              subPath: .env            
       volumes:
-        {{- with .Values.volumes }}
+        {{- with .Values.volumes.data }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
-        - name: {{ .Chart.Name }}-config-vol
-          secret:
-            secretName: {{ .Chart.Name }}-config
-        - name: {{ .Chart.Name }}-kubeconfig-vol
-          secret:
-            secretName: {{ .Chart.Name }}-kubeconfig
-        - name: {{ .Chart.Name }}-env-vol
-          secret:
-            secretName: {{ .Chart.Name }}-env
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
