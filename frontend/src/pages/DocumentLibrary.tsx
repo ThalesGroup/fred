@@ -30,7 +30,7 @@ import {
   Container,
   Paper,
   Grid2,
-  Fade,
+  ButtonGroup,
   InputLabel,
   Checkbox,
   ListItemText,
@@ -65,6 +65,9 @@ import { DocumentDrawerTable } from "../components/documents/DocumentDrawerTable
 import DocumentViewer from "../components/documents/DocumentViewer";
 import { TopBar } from "../common/TopBar";
 import { useTranslation } from "react-i18next";
+import { DocumentLibrariesList } from "./DocumentLibrariesList";
+
+type DocumentLibraryView = "libraries" | "documents";
 
 /**
  * DocumentLibrary.tsx
@@ -165,7 +168,6 @@ export const DocumentLibrary = () => {
   const [documentsPerPage, setDocumentsPerPage] = useState(10); // Number of documents shown per page
   const [currentPage, setCurrentPage] = useState(1); // Current page in the pagination component
   const [openSide, setOpenSide] = useState(false); // Whether the upload drawer is open
-  const [showElements, setShowElements] = useState(false); // Controls whether page elements are faded in
 
   // Backend Data States
   const [documentViewerOpen, setDocumentViewerOpen] = useState<boolean>(false);
@@ -202,14 +204,10 @@ export const DocumentLibrary = () => {
       ...(selectedTags.length > 0 ? { tags: selectedTags } : {}),
       ...(selectedStages.length > 0
         ? {
-          processing_stages: Object.fromEntries(
-            selectedStages.map((stage) => [stage, "done"])
-          ),
-        }
+            processing_stages: Object.fromEntries(selectedStages.map((stage) => [stage, "done"])),
+          }
         : {}),
-      ...(searchableFilter !== "all"
-        ? { retrievable: searchableFilter === "true" }
-        : {}),
+      ...(searchableFilter !== "all" ? { retrievable: searchableFilter === "true" } : {}),
     };
     try {
       setIsLoading(true);
@@ -238,14 +236,12 @@ export const DocumentLibrary = () => {
     if (allSources && selectedSourceTag === null) {
       const pushSource = allSources.find((s) => s.type === "push");
       if (pushSource) {
-
         setSelectedSourceTag(pushSource.tag);
       }
     }
   }, [allSources, selectedSourceTag]);
 
   useEffect(() => {
-    setShowElements(true);
     setUserInfo({
       name: KeyCloakService.GetUserName(),
       canManageDocuments: hasDocumentManagementPermission(),
@@ -255,15 +251,26 @@ export const DocumentLibrary = () => {
 
   useEffect(() => {
     fetchFiles();
-  }, [
-    selectedSourceTag,
-    searchQuery,
-    selectedTags,
-    selectedStages,
-    searchableFilter,
-    currentPage,
-    documentsPerPage,
-  ]);
+  }, [selectedSourceTag, searchQuery, selectedTags, selectedStages, searchableFilter, currentPage, documentsPerPage]);
+
+  // View state: 'libraries' or 'documents', persisted in localStorage
+  const VIEW_KEY = "documentLibrary.selectedView";
+  const [selectedView, setSelectedView] = useState<DocumentLibraryView>(() => {
+    const defaultView = "libraries";
+
+    // Retrive last used view from localStorage
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem(VIEW_KEY);
+      return stored === "libraries" || stored === "documents" ? stored : defaultView;
+    }
+    return defaultView;
+  });
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem(VIEW_KEY, selectedView);
+    }
+  }, [selectedView]);
 
   const handleDownload = async (file: FileRow) => {
     try {
@@ -295,10 +302,7 @@ export const DocumentLibrary = () => {
         duration: 3000,
       });
       await fetchFiles(); // <-- ensures fresh backend state
-      setSelectedFiles((prev) =>
-        prev.filter((f) => f.document_uid !== file.document_uid)
-      );
-
+      setSelectedFiles((prev) => prev.filter((f) => f.document_uid !== file.document_uid));
     } catch (error) {
       showError({
         summary: "Delete Failed",
@@ -378,17 +382,13 @@ export const DocumentLibrary = () => {
   const indexOfLastDocument = currentPage * documentsPerPage;
   const indexOfFirstDocument = indexOfLastDocument - documentsPerPage;
 
-
   const filteredFiles = allDocuments.filter((file) => {
     const matchesSearch = file.document_name.toLowerCase().includes(searchQuery.toLowerCase());
 
-    const matchesTags =
-      selectedTags.length === 0 ||
-      (file.tags || []).some((tag) => selectedTags.includes(tag));
+    const matchesTags = selectedTags.length === 0 || (file.tags || []).some((tag) => selectedTags.includes(tag));
 
     const matchesStage =
-      selectedStages.length === 0 ||
-      selectedStages.every((stage) => file.processing_stages?.[stage] === "done");
+      selectedStages.length === 0 || selectedStages.every((stage) => file.processing_stages?.[stage] === "done");
 
     const matchesRetrievable =
       searchableFilter === "all" ||
@@ -483,8 +483,6 @@ export const DocumentLibrary = () => {
             </Select>
           </FormControl>
 
-
-
           {/* Upload Button on the right (pull mode only) */}
           {userInfo.canManageDocuments && !isPullMode && (
             <Button
@@ -504,127 +502,147 @@ export const DocumentLibrary = () => {
         </Box>
       </TopBar>
 
-
       {/* Search Section */}
       <Container maxWidth="xl" sx={{ mb: 3 }}>
-        <Fade in={showElements} timeout={1500}>
-          <Paper
-            elevation={2}
-            sx={{
-              p: 3,
-              borderRadius: 4,
-              border: `1px solid ${theme.palette.divider}`,
-            }}
-          >
-            <Grid2 container spacing={2} alignItems="center">
-              <Grid2 size={{ xs: 12, md: 12 }}>
-                <Grid2 container spacing={2} sx={{ mb: 2 }}>
-                  {/* Tags filter */}
-                  <Grid2 size={{ xs: 4 }}>
-                    <FormControl fullWidth size="small">
-                      <InputLabel>Tags</InputLabel>
-                      <Select
-                        multiple
-                        value={selectedTags}
-                        onChange={(e) => setSelectedTags(e.target.value as string[])}
-                        input={<OutlinedInput label="Tags" />}
-                        renderValue={(selected) => selected.join(", ")}
-                      >
-                        {Array.from(new Set(allDocuments.flatMap(doc => doc.tags || []))).map((tag) => (
-                          <MenuItem key={tag} value={tag}>
-                            <Checkbox checked={selectedTags.includes(tag)} />
-                            <ListItemText primary={tag} />
-                          </MenuItem>
-                        ))}
-                      </Select>
-                    </FormControl>
-                  </Grid2>
+        <Paper
+          elevation={2}
+          sx={{
+            p: 3,
+            borderRadius: 4,
+            border: `1px solid ${theme.palette.divider}`,
+          }}
+        >
+          {/* View Switch Button Group */}
+          <Box display="flex" justifyContent="flex-end" mb={2}>
+            <ButtonGroup variant="outlined" color="primary" size="small">
+              <Button
+                variant={selectedView === "libraries" ? "contained" : "outlined"}
+                onClick={() => setSelectedView("libraries")}
+              >
+                {t("documentLibrary.librariesView")}
+              </Button>
+              <Button
+                variant={selectedView === "documents" ? "contained" : "outlined"}
+                onClick={() => setSelectedView("documents")}
+              >
+                {t("documentLibrary.documentsView")}
+              </Button>
+            </ButtonGroup>
+          </Box>
 
-                  {/* Stages filter */}
-                  <Grid2 size={{ xs: 4 }}>
-                    <FormControl fullWidth size="small">
-                      <InputLabel>Stages (done)</InputLabel>
-                      <Select
-                        multiple
-                        value={selectedStages}
-                        onChange={(e) => setSelectedStages(e.target.value as string[])}
-                        input={<OutlinedInput label="Stages (done)" />}
-                        renderValue={(selected) => selected.join(", ")}
-                      >
-                        {DOCUMENT_PROCESSING_STAGES.map((stage) => (
-                          <MenuItem key={stage} value={stage}>
-                            <Checkbox checked={selectedStages.includes(stage)} />
-                            <ListItemText primary={stage} />
-                          </MenuItem>
-                        ))}
-                      </Select>
-                    </FormControl>
-                  </Grid2>
-
-                  {/* Searchable filter */}
-                  <Grid2 size={{ xs: 4 }}>
-                    <FormControl fullWidth size="small">
-                      <InputLabel>Searchable</InputLabel>
-                      <Select
-                        value={searchableFilter}
-                        onChange={(e) => setSearchableFilter(e.target.value as "all" | "true" | "false")}
-                        input={<OutlinedInput label="Searchable" />}
-                      >
-                        <MenuItem value="all">All</MenuItem>
-                        <MenuItem value="true">Only Searchable</MenuItem>
-                        <MenuItem value="false">Only Excluded</MenuItem>
-                      </Select>
-                    </FormControl>
-                  </Grid2>
+          <Grid2 container spacing={2} alignItems="center">
+            <Grid2 size={{ xs: 12, md: 12 }}>
+              <Grid2 container spacing={2} sx={{ mb: 2 }}>
+                {/* Tags filter */}
+                <Grid2 size={{ xs: 4 }}>
+                  <FormControl fullWidth size="small">
+                    <InputLabel>Tags</InputLabel>
+                    <Select
+                      multiple
+                      value={selectedTags}
+                      onChange={(e) => setSelectedTags(e.target.value as string[])}
+                      input={<OutlinedInput label="Tags" />}
+                      renderValue={(selected) => selected.join(", ")}
+                    >
+                      {Array.from(new Set(allDocuments.flatMap((doc) => doc.tags || []))).map((tag) => (
+                        <MenuItem key={tag} value={tag}>
+                          <Checkbox checked={selectedTags.includes(tag)} />
+                          <ListItemText primary={tag} />
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
                 </Grid2>
-                <TextField
-                  fullWidth
-                  placeholder={t("documentLibrary.searchPlaceholder")}
-                  variant="outlined"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  InputProps={{
-                    startAdornment: (
-                      <InputAdornment position="start">
-                        <SearchIcon color="action" />
-                      </InputAdornment>
-                    ),
-                    endAdornment: searchQuery && (
-                      <InputAdornment position="end">
-                        <IconButton
-                          aria-label={t("documentLibrary.clearSearch")}
-                          onClick={() => setSearchQuery("")}
-                          edge="end"
-                          size="small"
-                        >
-                          <ClearIcon />
-                        </IconButton>
-                      </InputAdornment>
-                    ),
-                  }}
-                  size="small"
-                />
+
+                {/* Stages filter */}
+                <Grid2 size={{ xs: 4 }}>
+                  <FormControl fullWidth size="small">
+                    <InputLabel>Stages (done)</InputLabel>
+                    <Select
+                      multiple
+                      value={selectedStages}
+                      onChange={(e) => setSelectedStages(e.target.value as string[])}
+                      input={<OutlinedInput label="Stages (done)" />}
+                      renderValue={(selected) => selected.join(", ")}
+                    >
+                      {DOCUMENT_PROCESSING_STAGES.map((stage) => (
+                        <MenuItem key={stage} value={stage}>
+                          <Checkbox checked={selectedStages.includes(stage)} />
+                          <ListItemText primary={stage} />
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Grid2>
+
+                {/* Searchable filter */}
+                <Grid2 size={{ xs: 4 }}>
+                  <FormControl fullWidth size="small">
+                    <InputLabel>Searchable</InputLabel>
+                    <Select
+                      value={searchableFilter}
+                      onChange={(e) => setSearchableFilter(e.target.value as "all" | "true" | "false")}
+                      input={<OutlinedInput label="Searchable" />}
+                    >
+                      <MenuItem value="all">All</MenuItem>
+                      <MenuItem value="true">Only Searchable</MenuItem>
+                      <MenuItem value="false">Only Excluded</MenuItem>
+                    </Select>
+                  </FormControl>
+                </Grid2>
               </Grid2>
+              <TextField
+                fullWidth
+                placeholder={t("documentLibrary.searchPlaceholder")}
+                variant="outlined"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <SearchIcon color="action" />
+                    </InputAdornment>
+                  ),
+                  endAdornment: searchQuery && (
+                    <InputAdornment position="end">
+                      <IconButton
+                        aria-label={t("documentLibrary.clearSearch")}
+                        onClick={() => setSearchQuery("")}
+                        edge="end"
+                        size="small"
+                      >
+                        <ClearIcon />
+                      </IconButton>
+                    </InputAdornment>
+                  ),
+                }}
+                size="small"
+              />
             </Grid2>
-          </Paper>
-        </Fade>
+          </Grid2>
+        </Paper>
       </Container>
 
-      {/* Documents Container */}
-      <Container maxWidth="xl">
-        <Fade in={showElements} timeout={2000}>
+      {/* Libraries View */}
+      {selectedView === "libraries" && (
+        <Container maxWidth="xl">
+          <DocumentLibrariesList />
+        </Container>
+      )}
+
+      {/* Documents View */}
+      {selectedView === "documents" && (
+        <Container maxWidth="xl">
           <Paper
             elevation={2}
             sx={{
               p: 3,
               borderRadius: 4,
               mb: 3,
-              minHeight: "500px",
               border: `1px solid ${theme.palette.divider}`,
               position: "relative",
             }}
           >
-
             {isLoading ? (
               <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
                 <LoadingSpinner />
@@ -635,7 +653,6 @@ export const DocumentLibrary = () => {
                   {t("documentLibrary.documents", { count: filteredFiles.length })}
                 </Typography>
 
-
                 <DocumentTable
                   files={currentDocuments}
                   selectedFiles={selectedFiles}
@@ -643,7 +660,7 @@ export const DocumentLibrary = () => {
                     setSelectedFiles((prev) =>
                       prev.some((f) => f.document_uid === file.document_uid)
                         ? prev.filter((f) => f.document_uid !== file.document_uid)
-                        : [...prev, file]
+                        : [...prev, file],
                     );
                   }}
                   onToggleAll={(checked) => {
@@ -706,8 +723,8 @@ export const DocumentLibrary = () => {
               </Box>
             )}
           </Paper>
-        </Fade>
-      </Container>
+        </Container>
+      )}
 
       {/* Upload Drawer - Only visible to admins and editors */}
       {userInfo.canManageDocuments && (

@@ -1,219 +1,221 @@
 {
-    "sidebar": {
-        "cluster": "Cluster",
-        "facts": "Faits",
-        "audit": "Audit",
-        "optimize": "Optimiser",
-        "chat": "Discussion",
-        "monitoring": "Supervision",
-        "documentLibrary": "Documents",
-        "agent": "Hub Agent",
-        "workspaces": "Espaces de travail",
-        "account": "Profil",
-        "tooltip": {
-            "cluster": "Expliquer le cluster",
-            "facts": "Consulter les faits métier et d’usage du cluster",
-            "audit": "Afficher un audit complet éco-score du cluster",
-            "optimize": "Consulter les gains d’optimisation",
-            "chat": "Discuter avec l'assistant IA",
-            "monitoring": "Superviser les appels IA backend",
-            "documentLibrary": "Consulter la bibliothèque de documents",
-            "agent": "Voir les agents",
-            "workspaces": "Voir les espaces",
-            "account": "Voir votre profil",
-            "selectCluster": "Veuillez d'abord sélectionner un cluster"
-        },
-        "theme": {
-            "light": "clair",
-            "dark": "sombre"
-        },
-        "footer": {
-            "innovationHub": "Innovation hub",
-            "website": "Site web"
-        }
+  "sidebar": {
+    "cluster": "Cluster",
+    "facts": "Faits",
+    "audit": "Audit",
+    "optimize": "Optimiser",
+    "chat": "Discussion",
+    "monitoring": "Supervision",
+    "documentLibrary": "Documents",
+    "agent": "Hub Agent",
+    "workspaces": "Espaces de travail",
+    "account": "Profil",
+    "tooltip": {
+      "cluster": "Expliquer le cluster",
+      "facts": "Consulter les faits métier et d’usage du cluster",
+      "audit": "Afficher un audit complet éco-score du cluster",
+      "optimize": "Consulter les gains d’optimisation",
+      "chat": "Discuter avec l'assistant IA",
+      "monitoring": "Superviser les appels IA backend",
+      "documentLibrary": "Consulter la bibliothèque de documents",
+      "agent": "Voir les agents",
+      "workspaces": "Voir les espaces",
+      "account": "Voir votre profil",
+      "selectCluster": "Veuillez d'abord sélectionner un cluster"
     },
-    "chatbot": {
-        "startNew": "Démarrer une nouvelle conversation avec {{name}}",
-        "changeAssistant": "Vous pouvez choisir un autre assistant dans le panneau des paramètres.",
-        "tooltip": {
-            "tokenUsage": "Cette conversation a utilisé {{input}} tokens de prompt et {{output}} tokens de réponse",
-            "tokenCount": "Cette conversation a utilisé {{total}} tokens"
-        }
+    "theme": {
+      "light": "clair",
+      "dark": "sombre"
     },
-    "settings": {
-        "profile": {
-            "title": "Profil",
-            "tooltip": {
-                "intro": "Les profils personnalisés permettent d’adapter et d’améliorer vos interactions avec les assistants.",
-                "uses": "Contrairement aux fichiers envoyés ponctuellement, un profil est réutilisable sur plusieurs conversations et peut contenir :",
-                "example1": "Des informations sur un client ou un projet",
-                "example2": "Des documents de référence (PDF, Word, Excel...)",
-                "example3": "Des spécifications techniques"
-            },
-            "add": "Ajouter un nouveau profil",
-            "select": "Sélectionner un profil...",
-            "none": "Aucun"
-        },
-        "assistants": "Assistants",
-        "conversations": "Conversations",
-        "newConversation": "Nouvelle conversation",
-        "noConversation": "Aucune conversation",
-        "delete": "Supprimer"
-    },
-    "monitoring": {
-        "title": "Surveillance des agents et services IA",
-        "description": "Suivez l’utilisation, la performance et les coûts de tous les agents et services IA — y compris les tokens, la latence et les tendances d’activité."
-    },
-    "metrics": {
-        "error": "❌ Échec du chargement des métriques",
-        "from": "De",
-        "to": "À",
-        "tokenUsage": "Utilisation des tokens dans le temps",
-        "range": {
-            "today": "Aujourd'hui",
-            "yesterday": "Hier",
-            "thisWeek": "Cette semaine",
-            "thisMonth": "Ce mois-ci",
-            "thisYear": "Cette année",
-            "last12h": "12 dernières heures",
-            "last24h": "24 dernières heures",
-            "last7d": "7 derniers jours",
-            "last30d": "30 derniers jours"
-        }
-    },
-    "agentHub": {
-        "title": "Centre des Agents",
-        "description": "Explorez et gérez les agents IA disponibles",
-        "allAgents": "Tous les Agents",
-        "favoriteAgents": "Agents Favoris",
-        "agents": "Agents",
-        "search": "Rechercher",
-        "filter": "Filtrer",
-        "noAgents": "Aucun agent trouvé",
-        "noFavorites": "Vous n'avez pas encore ajouté d'agents à vos favoris",
-        "noTag": "Aucun agent avec le tag \"{{tag}}\"",
-        "categories": {
-            "all": "Tous",
-            "favorites": "Favoris"
-        }
-    },
-    "agentCard": {
-        "taggedWith": "Tagué : {{tag}}",
-        "expertIntegrations": "Intégrations expertes :"
-    },
-    "workspaces": {
-        "title": "Espaces de travail",
-        "description": "Gérez vos espaces de travail",
-        "searchPlaceholder": "Rechercher des espaces...",
-        "noResults": "Aucun espace trouvé.",
-        "drawerTitle": "Description de l'espace de travail",
-        "noDescription": "Aucune description disponible.",
-        "createDialogTitle": "Espace de travail",
-        "editDialogTitle": "Espace de travail"
-    },
-    "dialogs": {
-        "create": {
-            "title": "Nouveau {{type}}",
-            "name": "Nom",
-            "description": "Description",
-            "documentDescription": "Description du document (optionnel)",
-            "dropHere": "Déposez les fichiers ici",
-            "dragOrClick": "Cliquez ou glissez-déposez des fichiers ici",
-            "loading": "Création en cours...",
-            "confirm": "Créer",
-            "errorSummary": "Échec de la création",
-            "errorDetail": "Impossible de créer le contexte : {{message}}"
-        },
-        "cancel": "Annuler",
-        "edit": {
-            "title": "Modifier {{context}}",
-            "name": "Nom",
-            "description": "Description",
-            "cancel": "Annuler",
-            "save": "Enregistrer",
-            "dropDefault": "Cliquez ou glissez-déposez des fichiers ici",
-            "dropActive": "Déposez les fichiers ici",
-            "existingDocuments": "Documents existants :",
-            "newDocuments": "Nouveaux documents :",
-            "documentDescription": "Description du document (optionnelle)"
-        }
-    },
-    "profile": {
-        "title": "Profil utilisateur",
-        "description": "Gérez vos préférences utilisateur et vos profils de chat",
-        "menu": {
-            "account": "Compte",
-            "token": "Jeton",
-            "chat": "Profils de chat"
-        },
-        "noUser": "Aucun utilisateur connecté",
-        "login": "Se connecter",
-        "notAvailable": "Non disponible",
-        "email": "E-mail",
-        "userId": "ID utilisateur",
-        "authTime": "Dernière authentification",
-        "expTime": "Expiration de session",
-        "roles": "Rôles utilisateur",
-        "logout": "Se déconnecter",
-        "token": {
-            "title": "Informations du token",
-            "none": "Aucun token disponible"
-        },
-        "language": "Langue de l'interface",
-        "chat": {
-            "searchPlaceholder": "Rechercher des profils...",
-            "noProfiles": "Aucun profil trouvé.",
-            "dialogTitle": "Profil de chat",
-            "drawerTitle": "Description du profil",
-            "noDescription": "Aucune description disponible.",
-            "updateError": "Impossible de mettre à jour le profil",
-            "deleteError": "Impossible de supprimer le profil",
-            "reloadError": "Impossible de recharger le profil"
-        }
-    },
-    "documentLibrary": {
-        "title": "Bibliothèque de documents",
-        "description": "Accédez aux documents de la base de connaissances",
-        "upload": "Ajouter un document",
-        "uploadDrawerTitle": "Ajouter un document",
-        "dropFiles": "Déposez vos fichiers ici",
-        "maxSize": "ou cliquez pour sélectionner (max 200Mo par fichier)",
-        "searchPlaceholder": "Rechercher un document",
-        "clearSearch": "Effacer la recherche",
-        "documents": "{{count}} document(s)",
-        "noDocument": "Aucun document trouvé",
-        "modifySearch": "Essayez de modifier vos critères de recherche",
-        "addDocuments": "Ajouter des documents",
-        "cancel": "Annuler",
-        "save": "Enregistrer",
-        "saving": "Enregistrement en cours..."
-    },
-    "documentTable": {
-        "selectedCount": "{{count}} sélectionné(s)",
-        "deleteSelected": "Supprimer",
-        "processSelected": "Process",
-        "downloadSelected": "Télécharger",
-        "fileName": "Nom du fichier",
-        "dateAdded": "Date d'ajout",
-        "dateAddedTooltip": "Date d'ajout à la base de connaissances",
-        "retrievableYes": "Consultable",
-        "retrievableNo": "Exclu",
-        "status": "Status",
-        "tags": "Tags",
-        "actions": "Actions",
-        "loadingMetadata": "Chargement des métadonnées...",
-        "noMetadata": "Aucune métadonnée disponible.",
-        "yes": "Oui",
-        "no": "Non"
-    },
-    "documentDrawerTable": {
-        "deleteFile": "Supprimer le fichier"
-    },
-    "documentActions": {
-        "menuLabel": "Ouvrir le menu d’actions du document",
-        "preview": "Aperçu",
-        "download": "Télécharger",
-        "delete": "Supprimer",
-        "process": "Process"
+    "footer": {
+      "innovationHub": "Innovation hub",
+      "website": "Site web"
     }
+  },
+  "chatbot": {
+    "startNew": "Démarrer une nouvelle conversation avec {{name}}",
+    "changeAssistant": "Vous pouvez choisir un autre assistant dans le panneau des paramètres.",
+    "tooltip": {
+      "tokenUsage": "Cette conversation a utilisé {{input}} tokens de prompt et {{output}} tokens de réponse",
+      "tokenCount": "Cette conversation a utilisé {{total}} tokens"
+    }
+  },
+  "settings": {
+    "profile": {
+      "title": "Profil",
+      "tooltip": {
+        "intro": "Les profils personnalisés permettent d’adapter et d’améliorer vos interactions avec les assistants.",
+        "uses": "Contrairement aux fichiers envoyés ponctuellement, un profil est réutilisable sur plusieurs conversations et peut contenir :",
+        "example1": "Des informations sur un client ou un projet",
+        "example2": "Des documents de référence (PDF, Word, Excel...)",
+        "example3": "Des spécifications techniques"
+      },
+      "add": "Ajouter un nouveau profil",
+      "select": "Sélectionner un profil...",
+      "none": "Aucun"
+    },
+    "assistants": "Assistants",
+    "conversations": "Conversations",
+    "newConversation": "Nouvelle conversation",
+    "noConversation": "Aucune conversation",
+    "delete": "Supprimer"
+  },
+  "monitoring": {
+    "title": "Surveillance des agents et services IA",
+    "description": "Suivez l’utilisation, la performance et les coûts de tous les agents et services IA — y compris les tokens, la latence et les tendances d’activité."
+  },
+  "metrics": {
+    "error": "❌ Échec du chargement des métriques",
+    "from": "De",
+    "to": "À",
+    "tokenUsage": "Utilisation des tokens dans le temps",
+    "range": {
+      "today": "Aujourd'hui",
+      "yesterday": "Hier",
+      "thisWeek": "Cette semaine",
+      "thisMonth": "Ce mois-ci",
+      "thisYear": "Cette année",
+      "last12h": "12 dernières heures",
+      "last24h": "24 dernières heures",
+      "last7d": "7 derniers jours",
+      "last30d": "30 derniers jours"
+    }
+  },
+  "agentHub": {
+    "title": "Centre des Agents",
+    "description": "Explorez et gérez les agents IA disponibles",
+    "allAgents": "Tous les Agents",
+    "favoriteAgents": "Agents Favoris",
+    "agents": "Agents",
+    "search": "Rechercher",
+    "filter": "Filtrer",
+    "noAgents": "Aucun agent trouvé",
+    "noFavorites": "Vous n'avez pas encore ajouté d'agents à vos favoris",
+    "noTag": "Aucun agent avec le tag \"{{tag}}\"",
+    "categories": {
+      "all": "Tous",
+      "favorites": "Favoris"
+    }
+  },
+  "agentCard": {
+    "taggedWith": "Tagué : {{tag}}",
+    "expertIntegrations": "Intégrations expertes :"
+  },
+  "workspaces": {
+    "title": "Espaces de travail",
+    "description": "Gérez vos espaces de travail",
+    "searchPlaceholder": "Rechercher des espaces...",
+    "noResults": "Aucun espace trouvé.",
+    "drawerTitle": "Description de l'espace de travail",
+    "noDescription": "Aucune description disponible.",
+    "createDialogTitle": "Espace de travail",
+    "editDialogTitle": "Espace de travail"
+  },
+  "dialogs": {
+    "create": {
+      "title": "Nouveau {{type}}",
+      "name": "Nom",
+      "description": "Description",
+      "documentDescription": "Description du document (optionnel)",
+      "dropHere": "Déposez les fichiers ici",
+      "dragOrClick": "Cliquez ou glissez-déposez des fichiers ici",
+      "loading": "Création en cours...",
+      "confirm": "Créer",
+      "errorSummary": "Échec de la création",
+      "errorDetail": "Impossible de créer le contexte : {{message}}"
+    },
+    "cancel": "Annuler",
+    "edit": {
+      "title": "Modifier {{context}}",
+      "name": "Nom",
+      "description": "Description",
+      "cancel": "Annuler",
+      "save": "Enregistrer",
+      "dropDefault": "Cliquez ou glissez-déposez des fichiers ici",
+      "dropActive": "Déposez les fichiers ici",
+      "existingDocuments": "Documents existants :",
+      "newDocuments": "Nouveaux documents :",
+      "documentDescription": "Description du document (optionnelle)"
+    }
+  },
+  "profile": {
+    "title": "Profil utilisateur",
+    "description": "Gérez vos préférences utilisateur et vos profils de chat",
+    "menu": {
+      "account": "Compte",
+      "token": "Jeton",
+      "chat": "Profils de chat"
+    },
+    "noUser": "Aucun utilisateur connecté",
+    "login": "Se connecter",
+    "notAvailable": "Non disponible",
+    "email": "E-mail",
+    "userId": "ID utilisateur",
+    "authTime": "Dernière authentification",
+    "expTime": "Expiration de session",
+    "roles": "Rôles utilisateur",
+    "logout": "Se déconnecter",
+    "token": {
+      "title": "Informations du token",
+      "none": "Aucun token disponible"
+    },
+    "language": "Langue de l'interface",
+    "chat": {
+      "searchPlaceholder": "Rechercher des profils...",
+      "noProfiles": "Aucun profil trouvé.",
+      "dialogTitle": "Profil de chat",
+      "drawerTitle": "Description du profil",
+      "noDescription": "Aucune description disponible.",
+      "updateError": "Impossible de mettre à jour le profil",
+      "deleteError": "Impossible de supprimer le profil",
+      "reloadError": "Impossible de recharger le profil"
+    }
+  },
+  "documentLibrary": {
+    "title": "Bibliothèque de documents",
+    "description": "Accédez aux documents de la base de connaissances",
+    "upload": "Ajouter un document",
+    "uploadDrawerTitle": "Ajouter un document",
+    "dropFiles": "Déposez vos fichiers ici",
+    "maxSize": "ou cliquez pour sélectionner (max 200Mo par fichier)",
+    "searchPlaceholder": "Rechercher un document",
+    "clearSearch": "Effacer la recherche",
+    "documents": "{{count}} document(s)",
+    "noDocument": "Aucun document trouvé",
+    "modifySearch": "Essayez de modifier vos critères de recherche",
+    "addDocuments": "Ajouter des documents",
+    "cancel": "Annuler",
+    "save": "Enregistrer",
+    "saving": "Enregistrement en cours...",
+    "librariesView": "Bibliothèques",
+    "documentsView": "Documents"
+  },
+  "documentTable": {
+    "selectedCount": "{{count}} sélectionné(s)",
+    "deleteSelected": "Supprimer",
+    "processSelected": "Process",
+    "downloadSelected": "Télécharger",
+    "fileName": "Nom du fichier",
+    "dateAdded": "Date d'ajout",
+    "dateAddedTooltip": "Date d'ajout à la base de connaissances",
+    "retrievableYes": "Consultable",
+    "retrievableNo": "Exclu",
+    "status": "Status",
+    "tags": "Tags",
+    "actions": "Actions",
+    "loadingMetadata": "Chargement des métadonnées...",
+    "noMetadata": "Aucune métadonnée disponible.",
+    "yes": "Oui",
+    "no": "Non"
+  },
+  "documentDrawerTable": {
+    "deleteFile": "Supprimer le fichier"
+  },
+  "documentActions": {
+    "menuLabel": "Ouvrir le menu d’actions du document",
+    "preview": "Aperçu",
+    "download": "Télécharger",
+    "delete": "Supprimer",
+    "process": "Process"
+  }
 }
