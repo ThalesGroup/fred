@@ -14,20 +14,27 @@
 
 # app/tests/conftest.py
 
+
 import pytest
 from fastapi.testclient import TestClient
 from fastapi import FastAPI, APIRouter
 
-from app.common.structure import Configuration, PathOrIndexPrefix
+from app.common.structures import AppConfig, Configuration
 from app.application_context import ApplicationContext
+from app.common.structures import PathOrIndexPrefix
 from app.chatbot.chatbot_controller import ChatbotController
-from app.features.frugal.ai_service import AIService
-from app.features.k8.kube_service import KubeService
-
 
 @pytest.fixture(scope="session")
 def minimal_generalist_config() -> Configuration:
     return Configuration(
+        app=AppConfig(
+            base_url="/knowledge-flow/v1",
+            address="127.0.0.1",
+            port=8000,
+            log_level="info",
+            reload=False,
+            reload_dir=".",
+        ),
         frontend_settings={
             "feature_flags": {"enableK8Features": False, "enableElecWarfare": False},
             "properties": {"logoName": "fred"},

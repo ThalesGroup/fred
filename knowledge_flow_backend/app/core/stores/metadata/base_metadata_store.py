@@ -12,37 +12,51 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from abc import ABC, abstractmethod
+from abc import abstractmethod
+from typing import List
 
+from app.common.structures import DocumentMetadata
+from app.core.stores.metadata.base_catalog_store import BaseCatalogStore
 
-class BaseMetadataStore(ABC):
+class MetadataDeserializationError(Exception):
+    """Raised when document metadata cannot be parsed correctly due to invalid enum or structure."""
+    pass
+
+class BaseMetadataStore(BaseCatalogStore):
     @abstractmethod
-    def get_all_metadata(self, filters: dict) -> list:
+    def get_all_metadata(self, filters: dict) -> List[DocumentMetadata]:
         pass
 
     @abstractmethod
-    def get_metadata_by_uid(self, document_uid: str) -> dict:
+    def list_by_source_tag(self, source_tag: str) -> List[DocumentMetadata]:
+        """
+        Return all metadata entries ingested from a specific pull source.
+        """
+        pass
+    
+    @abstractmethod
+    def get_metadata_by_uid(self, document_uid: str) -> DocumentMetadata:
         pass
 
     @abstractmethod
-    def update_metadata_field(self, document_uid: str, field: str, value) -> dict:
+    def update_metadata_field(self, document_uid: str, field: str, value) -> DocumentMetadata:
         pass
 
     @abstractmethod
-    def save_metadata(self, metadata: dict) -> None:
+    def save_metadata(self, metadata: DocumentMetadata) -> None:
         """
         Add or replace a full metadata entry in the store.
 
         - If an entry with the same UID exists, it is overwritten.
         - If not, the metadata is added as a new entry.
 
-        :param metadata: The full metadata dictionary.
+        :param metadata: The full metadata instance.
         :raises ValueError: If 'document_uid' is missing.
         """
         pass
 
     @abstractmethod
-    def delete_metadata(self, metadata: dict) -> None:
+    def delete_metadata(self, metadata: DocumentMetadata) -> None:
         pass
 
     @abstractmethod

@@ -74,3 +74,18 @@ class BaseContentStore(ABC):
         Default implementation does nothing and logs a debug message.
         """
         logger.debug("clear() called on BaseContentStore: no-op by default.")
+
+    @abstractmethod
+    def get_local_copy(self, document_uid: str) -> Path:
+        """
+        Ensures the original uploaded file is accessible on the local filesystem.
+
+        This is useful for workflows or processing logic that requires a real path on disk.
+
+        Returns:
+            Path: Path to the local file (guaranteed to exist).
+
+        Raises:
+            FileNotFoundError: If the content does not exist or cannot be retrieved.
+        """
+        pass

@@ -24,7 +24,7 @@ import inspect
 
 logger = logging.getLogger(__name__)
 
-from app.common.structure import Configuration, PrecisionEnum, SampleDataType, Series, CompareResult, Window, Difference
+from app.common.structures import Configuration, PrecisionEnum, SampleDataType, Series, CompareResult, Window, Difference
 from app.common.error import SESSION_NOT_INITIALIZED
 
 def parse_server_configuration(configuration_path: str) -> Configuration:

@@ -1,9 +1,41 @@
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+app:
+  name: "Knowledge Flow Backend"
+  base_url: "/knowledge-flow/v1"
+  address: "127.0.0.1"
+  port: 8111
+  log_level: "info"
+  reload: false
+  reload_dir: "."
+
+
 # Enable or disable the security layer
 security:
   enabled: false
   keycloak_url: "http://fred-keycloak:8080/realms/fred"
   authorized_origins:
   - "http://localhost:5173"
+
+scheduler:
+  enabled: true
+  backend: "temporal"
+  temporal:
+    host: "localhost:7233"
+    namespace: "default"
+    task_queue: "ingestion"
+    workflow_prefix: "pipeline"
+    connect_timeout_seconds: 5
 
 # -----------------------------------------------------------------------------
 # INPUT PROCESSORS
@@ -13,7 +45,7 @@ security:
 
 input_processors:
   - prefix: ".pdf"
-    class_path: app.core.processors.input.pdf_markdown_processor.ollama_pdf_mardown_processor.OllamaPdfMarkdownProcessor
+    class_path: app.core.processors.input.pdf_markdown_processor.openai_pdf_markdown_processor.OpenaiPdfMarkdownProcessor
   - prefix: ".docx"
     class_path: app.core.processors.input.docx_markdown_processor.docx_markdown_processor.DocxMarkdownProcessor
   - prefix: ".pptx"
@@ -68,6 +100,7 @@ content_storage:
   # If you are using local storage, make sure to set the following environment variable:
   # - LOCAL_CONTENT_STORAGE_PATH default to '~/.knowledge-flow/content-store'
   type: "local"
+  root_path: ~/.knowledge-flow/content-storage
   ################################################
   # Example using MinIO as content storage backend
   ################################################
@@ -78,18 +111,34 @@ content_storage:
   # secure: False
   # bucket_name: app-bucket
 
+document_sources:
+  uploads:
+    type: push
+    description: "Documents manually uploaded by users"
+  local-docs:
+    type: pull
+    provider: local_path
+    base_path: ~/Documents
+    description: "Personal local documents available for pull-mode ingestion"
+  team-github:
+    type: pull
+    provider: github
+    repo: myorg/docs
+    description: "Team documentation from GitHub"
+
 metadata_storage:
   # Metadata Storage Configuration
   #
   # Available backends:
-  # - local       → stores metadata in a JSON file on disk
+  # - local       → Deprecated, stores metadata in a JSON file on disk
+  # - duckdb      → stores metadata in a local duckdb file
   # - opensearch  → stores metadata in a persistent OpenSearch index (recommended for production)
   #
   # ✅ Default is "local" for easy startup. No external services are needed.
   # If you are using local storage, make sure to set the following environment variable:
   # - LOCAL_METADATA_STORAGE_PATH default to '~/.knowledge-flow/metadata-store.json'
-  type: "local"
-  root_path: ~/.knowledge-flow/metadata-store.json
+  type: "duckdb"
+  root_path: ~/.knowledge-flow/db.duckdb
 
   # --- Example: OpenSearch configuration
   #
@@ -137,7 +186,11 @@ vector_storage:
 
 tabular_storage:
   type: "duckdb"
-  duckdb_path: "~/.fred/tabular/tabular_data.duckdb"
+  duckdb_path: "~/.knowledge-flow/db.duckdb"
+
+catalog_storage:
+  type: "duckdb"
+  duckdb_path: "~/.knowledge-flow/db.duckdb"
 
 embedding:
   # -----------------------------------------------------------------------------

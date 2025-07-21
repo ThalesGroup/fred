@@ -11,8 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from common.structure import PrecisionEnum
-from common.structure import SampleDataType
+from app.common.structures import PrecisionEnum
+from app.common.structures import SampleDataType
 from common.utils import sample_data, auc_calculation
 from services.cluster_consumption.cluster_consumption_structures import ClusterConsumptionSeries, \
     ClusterConsumption, DetailSeries, \

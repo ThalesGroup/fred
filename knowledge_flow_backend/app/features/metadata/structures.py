@@ -13,8 +13,9 @@
 # limitations under the License.
 
 
-from typing import Any, Dict, List
+from typing import List
 
+from app.common.structures import DocumentMetadata
 from pydantic import BaseModel
 
 
@@ -27,7 +28,8 @@ class GetDocumentsMetadataResponse(BaseModel):
     """
 
     status: str
-    documents: List[Dict[str, Any]]
+    documents: List[DocumentMetadata]
+
 
 
 class DeleteDocumentMetadataResponse(BaseModel):
@@ -47,7 +49,7 @@ class GetDocumentMetadataResponse(BaseModel):
     """
 
     status: str
-    metadata: Dict[str, Any]
+    metadata: DocumentMetadata
 
 
 class UpdateRetrievableRequest(BaseModel):
@@ -64,7 +66,7 @@ class UpdateDocumentMetadataResponse(BaseModel):
     """
 
     status: str
-    metadata: Dict[str, Any]
+    metadata: DocumentMetadata
 
 class UpdateDocumentMetadataRequest(BaseModel):
     description: str | None = None

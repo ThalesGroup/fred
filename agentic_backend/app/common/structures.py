@@ -12,10 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""
-Pydantic structure definitions to use in the various microservice
-"""
-
 from typing import Any, Dict, List, Optional, Literal, Union, Annotated
 from datetime import datetime
 from enum import Enum
@@ -284,8 +280,17 @@ class AppSecurity(Security):
     client_id: str = "fred"
     keycloak_url: str = "http://localhost:9080/realms/fred"
 
+class AppConfig(BaseModel):
+    name: Optional[str] = "Agentic Backend"
+    base_url: str = "/agentic/v1"
+    address: str = "127.0.0.1"
+    port: int = 8000
+    log_level: str = "info"
+    reload: bool = False
+    reload_dir: str = "."
+
 class Configuration(BaseModel):
-    v1_base_url: str = Field("/agentic/v1", description="Base URL for the v1 API")
+    app: AppConfig
     frontend_settings: FrontendSettings
     database: DatabaseConfiguration
     kubernetes: KubernetesConfiguration

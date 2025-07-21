@@ -29,7 +29,7 @@ from fred_core import KeycloakUser, get_current_user
 from app.features.k8.kube_service import KubeService
 from app.features.k8.structure import Cluster, Workload, WorkloadKind, WorkloadNameList, IngressesList
 from app.features.k8.structure import NamespacesList, Namespace, ConfigMapsList, ServicesList
-from app.common.structure import Configuration
+from app.common.structures import Configuration
 # 🔹 Create a module-level logger
 logger = logging.getLogger(__name__)
 

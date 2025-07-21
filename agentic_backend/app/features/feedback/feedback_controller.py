@@ -17,7 +17,7 @@ from app.features.feedback.store.local_feedback_store import LocalFeedbackStore
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from typing import Optional
-from app.common.structure import FeedbackStorageConfig
+from app.common.structures import FeedbackStorageConfig
 import logging
 
 logger = logging.getLogger(__name__)

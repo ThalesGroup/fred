@@ -5,175 +5,94 @@
 # You may obtain a copy of the License at
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 
 import json
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import List, Any
 
 from app.core.stores.metadata.base_metadata_store import BaseMetadataStore
-
-
-
-@staticmethod
-def _match_nested(item: dict, filter_dict: dict) -> bool:
-    """
-    Recursively match nested filters inside a dictionary.
-    """
-    for key, value in filter_dict.items():
-        if isinstance(value, dict):
-            # Nested dict -> must go deeper
-            sub_item = item.get(key, {})
-            if not isinstance(sub_item, dict) or not _match_nested(sub_item, value):
-                return False
-        else:
-            # Final key: compare
-            if str(item.get(key)) != str(value):
-                return False
-    return True
+from app.common.structures import DocumentMetadata
 
 
 class LocalMetadataStore(BaseMetadataStore):
     """
-    A simple file-based metadata store implementation that persists metadata in a local JSON file.
-
-    This class is primarily designed for local development or lightweight deployments where
-    a full database is not required. It implements the BaseMetadataStore interface and stores
-    a list of metadata records, each represented as a dictionary.
-
-    Metadata is expected to include a unique 'document_uid' field to identify individual entries.
-
-    Example metadata structure:
-    {
-        "document_uid": "abc123",
-        "document_name": "example.md",
-        "date_added": "2024-04-25"
-    }
-
-    Each method loads and saves the entire dataset from/to disk, so this implementation is not
-    optimized for large-scale or concurrent usage.
+    File-based metadata store for development. Stores a list of DocumentMetadata entries in a JSON file.
     """
 
     def __init__(self, json_path: Path):
-        """
-        Initialize the store with the path to a JSON file.
-
-        :param json_path: Path to the metadata file.
-        """
         self.path = json_path
         self.path.parent.mkdir(parents=True, exist_ok=True)
         if not self.path.exists():
-            self.path.write_text("[]")  # Initialize empty list if file doesn't exist
+            self.path.write_text("[]")  # Start with an empty list
 
-    def clear(self) -> None:
-        """Remove **all** documents from the local JSON file.
-
-        This is handy in the test-suite’s autouse fixture so every test
-        starts with a pristine, empty metadata store.
-        """
-        # Easiest: just overwrite the file with an empty list
-        self._save([])
-
-    def _load(self) -> List[Dict[str, Any]]:
-        """
-        Load the full metadata list from the JSON file.
-
-        :return: List of metadata dictionaries.
-        """
+    def _load(self) -> List[DocumentMetadata]:
         if not self.path.exists():
             return []
-        return json.loads(self.path.read_text())
+        raw = json.loads(self.path.read_text())
+        return [DocumentMetadata(**item) for item in raw]
 
-    def _save(self, data: List[Dict[str, Any]]) -> None:
-        """
-        Save the full metadata list to the JSON file.
+    def _save(self, metadata_list: List[DocumentMetadata]) -> None:
+        json_list = [item.model_dump(mode="json") for item in metadata_list]
+        self.path.write_text(json.dumps(json_list, indent=2))
 
-        :param data: List of metadata dictionaries to persist.
-        """
-        self.path.write_text(json.dumps(data, indent=2))
+    def _match_nested(self, item: dict, filter_dict: dict) -> bool:
+        for key, value in filter_dict.items():
+            if isinstance(value, dict):
+                sub_item = item.get(key, {})
+                if not isinstance(sub_item, dict) or not self._match_nested(sub_item, value):
+                    return False
+            else:
+                if str(item.get(key)) != str(value):
+                    return False
+        return True
 
-    def get_all_metadata(self, filters: dict) -> List[dict]:
-        """
-            Return all metadata entries matching the given (possibly nested) filters.
-            The filters are applied recursively to the metadata dictionaries.
-            :param filters: Dictionary of filters to apply.
-        :return: List of metadata dictionaries that match the filters.
-        """
+    def get_all_metadata(self, filters: dict) -> List[DocumentMetadata]:
         all_data = self._load()
-        return [item for item in all_data if _match_nested(item, filters)]
+        return [
+            md for md in all_data
+            if self._match_nested(md.model_dump(mode="json"), filters)
+        ]
 
-    def get_metadata_by_uid(self, document_uid: str) -> dict:
-        """
-        Retrieve a single metadata entry by its unique document UID.
+    def list_by_source_tag(self, source_tag: str) -> List[DocumentMetadata]:
+        return [
+            md for md in self._load()
+            if md.source_tag == source_tag and md.ingestion_type == "pull"
+        ]
+    
+    def get_metadata_by_uid(self, document_uid: str) -> DocumentMetadata:
+        for md in self._load():
+            if md.document_uid == document_uid:
+                return md
+        return None
 
-        :param document_uid: Unique identifier for the document.
-        :return: The matching metadata dictionary, or None if not found.
-        """
-        all_data = self._load()
-        return next((item for item in all_data if item.get("document_uid") == document_uid), None)
-
-    def update_metadata_field(self, document_uid: str, field: str, value: Any) -> dict:
-        """
-        Update a single field in a metadata entry by its document UID.
-
-        :param document_uid: The UID of the document to update.
-        :param field: The field name to update.
-        :param value: The new value to assign.
-        :return: The updated metadata dictionary.
-        :raises ValueError: If no matching document is found.
-        """
+    def update_metadata_field(self, document_uid: str, field: str, value: Any) -> DocumentMetadata:
         data = self._load()
-        for item in data:
-            if item.get("document_uid") == document_uid:
-                item[field] = value
+        for i, md in enumerate(data):
+            if md.document_uid == document_uid:
+                setattr(md, field, value)
                 self._save(data)
-                return item
+                return md
         raise ValueError(f"No document found with UID {document_uid}")
 
-    def save_metadata(self, metadata: dict) -> None:
-        """
-        Add or replace a full metadata entry in the store.
-
-        - If an entry with the same UID exists, it is overwritten.
-        - If not, the metadata is added as a new entry.
-
-        :param metadata: The full metadata dictionary.
-        :raises ValueError: If 'document_uid' is missing.
-        """
-        document_uid = metadata.get("document_uid")
-        if not document_uid:
-            raise ValueError("Metadata must contain a 'document_uid' field.")
-
+    def save_metadata(self, metadata: DocumentMetadata) -> None:
+        if not metadata.document_uid:
+            raise ValueError("Metadata must contain a 'document_uid'")
         data = self._load()
-        for i, item in enumerate(data):
-            if item.get("document_uid") == document_uid:
-                data[i] = metadata  # Overwrite existing
+        for i, md in enumerate(data):
+            if md.document_uid == metadata.document_uid:
+                data[i] = metadata  # Overwrite
                 break
         else:
-            data.append(metadata)  # Add new entry
+            data.append(metadata)
         self._save(data)
 
-    def delete_metadata(self, metadata: dict) -> None:
-        """
-        Delete a metadata entry from the store based on its 'document_uid'.
-
-        :param metadata: The metadata dictionary to delete. Must include 'document_uid'.
-        :raises ValueError: If 'document_uid' is missing or not found in the store.
-        """
-        document_uid = metadata.get("document_uid")
-        if not document_uid:
-            raise ValueError("Cannot delete metadata without 'document_uid'")
-
+    def delete_metadata(self, metadata: DocumentMetadata) -> None:
+        uid = metadata.document_uid
         data = self._load()
-        original_len = len(data)
-        data = [item for item in data if item.get("document_uid") != document_uid]
+        new_data = [md for md in data if md.document_uid != uid]
+        if len(new_data) == len(data):
+            raise ValueError(f"No document found with UID {uid}")
+        self._save(new_data)
 
-        if len(data) == original_len:
-            raise ValueError(f"No document found with UID {document_uid}")
-
-        self._save(data)
+    def clear(self) -> None:
+        self._save([])

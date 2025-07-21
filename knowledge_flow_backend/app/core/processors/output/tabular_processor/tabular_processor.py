@@ -20,7 +20,7 @@ from fastapi import HTTPException
 
 
 from app.application_context import ApplicationContext
-from app.common.structures import Status, OutputProcessorResponse
+from app.common.structures import DocumentMetadata, Status, OutputProcessorResponse
 from app.core.processors.output.base_output_processor import BaseOutputProcessor
 
 logger = logging.getLogger(__name__)
@@ -39,7 +39,7 @@ class TabularProcessor(BaseOutputProcessor):
         self.tabular_store = self.context.get_tabular_store()
         logger.info("Initializing TabularPipeline")
 
-    def process(self, file_path: str, metadata: dict) -> OutputProcessorResponse:
+    def process(self, file_path: str, metadata: DocumentMetadata) -> OutputProcessorResponse:
         try:
             logger.info(f"Processing file: {file_path} with metadata: {metadata}")
 
@@ -51,7 +51,7 @@ class TabularProcessor(BaseOutputProcessor):
             
             # 2. Load the DataFrame from the document
             df = pd.read_csv(io.StringIO(document.page_content))
-            document_name = metadata.get("document_name").split('.')[0]
+            document_name = metadata.document_name.split('.')[0]
 
             logger.info(document)
             

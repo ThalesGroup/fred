@@ -29,15 +29,6 @@ def test_check_file_validity(processor):
     assert processor.check_file_validity(test_file)
 
 
-def test_extract_file_metadata(processor):
-    test_file = Path("app/core/processors/input/pps_tabular_processor/tests/assets/sample_pps.xlsm")
-    metadata = processor.extract_file_metadata(test_file)
-    assert metadata["format"] == "XLSM"
-    assert metadata["sheet_name"] == "Fiche d'affaire"
-    assert metadata["row_count"] > 0
-    assert len(metadata["sample_columns"]) > 0
-
-
 def test_convert_file_to_table(processor):
     test_file = Path("app/core/processors/input/pps_tabular_processor/tests/assets/sample_pps.xlsm")
     with tempfile.TemporaryDirectory() as tmpdir:

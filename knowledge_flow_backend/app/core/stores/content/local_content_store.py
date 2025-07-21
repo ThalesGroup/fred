@@ -122,3 +122,13 @@ class LocalStorageBackend(BaseContentStore):
         """
         return open(self.destination_root / document_uid / "output" / "media" / media_id, "rb")
     
+    def get_local_copy(self, document_uid: str) -> Path:
+        input_dir = self.destination_root / document_uid / "input"
+        if not input_dir.exists():
+            raise FileNotFoundError(f"No input folder for document: {document_uid}")
+
+        files = list(input_dir.glob("*"))
+        if not files:
+            raise FileNotFoundError(f"No file found in input folder for document: {document_uid}")
+
+        return files[0]

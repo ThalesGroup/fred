@@ -14,14 +14,8 @@
 
 # tabular_service.py
 
-import pandas as pd
-import io
 import logging
 from typing import List
-from pandas.api.types import (
-    is_string_dtype, is_numeric_dtype, is_bool_dtype, is_datetime64_any_dtype
-)
-import duckdb
 
 from app.features.tabular.structures import TabularColumnSchema, TabularDatasetMetadata, TabularQueryRequest, TabularQueryResponse, TabularSchemaResponse
 from app.features.tabular.utils import plan_to_sql
@@ -33,8 +27,7 @@ logger = logging.getLogger(__name__)
 
 class TabularService:
     def __init__(self):
-        self.context = ApplicationContext.get_instance()
-        self.tabular_store = self.context.get_tabular_store()
+        self.tabular_store = ApplicationContext.get_instance().get_tabular_store()
 
     def _map_duckdb_type_to_literal(self, duckdb_type: str) -> str:
         """

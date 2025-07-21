@@ -18,7 +18,7 @@ import requests
 from langchain_core.tools import StructuredTool
 from pydantic import BaseModel, Field
 
-from app.common.structure import PrecisionEnum, Series
+from app.common.structures import PrecisionEnum, Series
 
 
 class FinopsConsumptionInput(BaseModel):

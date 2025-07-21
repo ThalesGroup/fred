@@ -214,7 +214,6 @@ core/
 
 ```
 common/
-├── business_exception.py         # Domain-specific exceptions
 ├── structures.py                 # Shared Pydantic models
 └── utils.py                      # Generic helpers
 ```
@@ -243,7 +242,7 @@ config/
 | Add a new vector store        | `core/stores/vector_store/`                   |
 | Change embedding backend      | `core/pipelines/vectorization_pipeline.py`    |
 | Customize ingestion flow      | `services/ingestion_service.py`               |
-| Add business exceptions       | `common/business_exception.py`               |
+| Add business exceptions       | into your feature                             |
 
 ---
 

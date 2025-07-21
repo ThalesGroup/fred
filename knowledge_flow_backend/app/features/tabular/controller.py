@@ -70,7 +70,8 @@ class TabularController:
             response_model=TabularQueryResponse,
             tags=["Tabular"],
             operation_id="make_query",
-            summary="""
+            summary="Execute a SQL-like query on a tabular dataset",
+            description="""
                 Respond with a **JSON object** describing the SQL query plan. This will be transformed into SQL by the server.
 
                 ## Fields:
