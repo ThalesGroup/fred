@@ -299,22 +299,22 @@ export type MakeQueryApiArg = {
 };
 export type ListTablesApiResponse = /** status 200 Successful Response */ TabularDatasetMetadata[];
 export type ListTablesApiArg = void;
-export type ListTagsKnowledgeFlowV1TagsGetApiResponse = /** status 200 Successful Response */ Tag[];
+export type ListTagsKnowledgeFlowV1TagsGetApiResponse = /** status 200 Successful Response */ TagWithDocumentsId[];
 export type ListTagsKnowledgeFlowV1TagsGetApiArg = void;
-export type CreateTagKnowledgeFlowV1TagsPostApiResponse = /** status 200 Successful Response */ Tag;
+export type CreateTagKnowledgeFlowV1TagsPostApiResponse = /** status 200 Successful Response */ TagWithDocumentsId;
 export type CreateTagKnowledgeFlowV1TagsPostApiArg = {
   tagCreate: TagCreate;
 };
-export type GetTagKnowledgeFlowV1TagsTagIdGetApiResponse = /** status 200 Successful Response */ Tag;
+export type GetTagKnowledgeFlowV1TagsTagIdGetApiResponse = /** status 200 Successful Response */ TagWithDocumentsId;
 export type GetTagKnowledgeFlowV1TagsTagIdGetApiArg = {
   tagId: string;
 };
-export type UpdateTagKnowledgeFlowV1TagsTagIdPutApiResponse = /** status 200 Successful Response */ Tag;
+export type UpdateTagKnowledgeFlowV1TagsTagIdPutApiResponse = /** status 200 Successful Response */ TagWithDocumentsId;
 export type UpdateTagKnowledgeFlowV1TagsTagIdPutApiArg = {
   tagId: string;
   tagUpdate: TagUpdate;
 };
-export type DeleteTagKnowledgeFlowV1TagsTagIdDeleteApiResponse = /** status 200 Successful Response */ any;
+export type DeleteTagKnowledgeFlowV1TagsTagIdDeleteApiResponse = unknown;
 export type DeleteTagKnowledgeFlowV1TagsTagIdDeleteApiArg = {
   tagId: string;
 };
@@ -490,7 +490,7 @@ export type TabularDatasetMetadata = {
   row_count?: number | null;
 };
 export type TagType = "library";
-export type Tag = {
+export type TagWithDocumentsId = {
   id: string;
   created_at: string;
   updated_at: string;
@@ -498,7 +498,7 @@ export type Tag = {
   name: string;
   description?: string | null;
   type: TagType;
-  document_ids?: string[];
+  document_ids: string[];
 };
 export type TagCreate = {
   name: string;

@@ -217,5 +217,15 @@
     "download": "Download",
     "delete": "Delete",
     "process": "Process"
+  },
+  "documentLibrariesList": {
+    "libraryName": "Library Name",
+    "documents": "Documents",
+    "lastUpdate": "Last Update",
+    "actions": "Actions",
+    "delete": "Delete",
+    "noLibrariesFound": "No document libraries found.",
+    "documentCountSingular": "{{count}} document",
+    "documentCountPlural": "{{count}} documents"
   }
 }

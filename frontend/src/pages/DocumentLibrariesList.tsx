@@ -1,24 +1,183 @@
-import { Stack, Typography, Box, Divider, Card } from "@mui/material";
-import { Tag, useListTagsKnowledgeFlowV1TagsGetQuery } from "../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import {
+  Table,
+  TableHead,
+  TableBody,
+  TableRow,
+  TableCell,
+  TableContainer,
+  Typography,
+  Card,
+  Tooltip,
+  Checkbox,
+  IconButton,
+  Menu,
+  MenuItem,
+  ListItemText,
+  ListItemIcon,
+  TableSortLabel,
+} from "@mui/material";
+import MoreVertIcon from "@mui/icons-material/MoreVert";
+import DeleteIcon from "@mui/icons-material/Delete";
+import FolderIcon from "@mui/icons-material/Folder";
+import React, { useState } from "react";
+import {
+  TagWithDocumentsId,
+  useListTagsKnowledgeFlowV1TagsGetQuery,
+} from "../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import InvisibleLink from "../components/InvisibleLink";
-import Tooltip from "@mui/material/Tooltip";
 import dayjs from "dayjs";
+import { useTranslation } from "react-i18next";
 
 export function DocumentLibrariesList() {
+  const { t } = useTranslation();
   const { data: libraries } = useListTagsKnowledgeFlowV1TagsGetQuery();
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
+  const [menuLibraryId, setMenuLibraryId] = useState<string | null>(null);
+  const [sortBy, setSortBy] = useState<string>("lastUpdate");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
+
+  const allSelected = libraries && selectedIds.length === libraries.length && libraries.length > 0;
+
+  const handleSortChange = (column: string) => {
+    if (sortBy === column) {
+      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortBy(column);
+      setSortDirection("asc");
+    }
+  };
+
+  const sortedLibraries = React.useMemo(() => {
+    if (!libraries) return [];
+    const libs = [...libraries];
+    return libs.sort((a, b) => {
+      let aVal, bVal;
+      switch (sortBy) {
+        case "name":
+          aVal = a.name.toLowerCase();
+          bVal = b.name.toLowerCase();
+          break;
+        case "documents":
+          aVal = a.document_ids ? a.document_ids.length : 0;
+          bVal = b.document_ids ? b.document_ids.length : 0;
+          break;
+        case "lastUpdate":
+        default:
+          aVal = new Date(a.updated_at).getTime();
+          bVal = new Date(b.updated_at).getTime();
+          break;
+      }
+      if (sortDirection === "asc") {
+        return aVal > bVal ? 1 : aVal < bVal ? -1 : 0;
+      } else {
+        return aVal < bVal ? 1 : aVal > bVal ? -1 : 0;
+      }
+    });
+  }, [libraries, sortBy, sortDirection]);
+
+  const handleToggleSelect = (id: string) => {
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]));
+  };
+
+  const handleToggleAll = (checked: boolean) => {
+    if (checked && libraries) {
+      setSelectedIds(libraries.map((lib) => lib.id));
+    } else {
+      setSelectedIds([]);
+    }
+  };
+
+  const handleMenuOpen = (event: React.MouseEvent<HTMLElement>, id: string) => {
+    setMenuAnchor(event.currentTarget);
+    setMenuLibraryId(id);
+  };
+
+  const handleMenuClose = () => {
+    setMenuAnchor(null);
+    setMenuLibraryId(null);
+  };
+
+  const handleDelete = (id: string) => {
+    // TODO: Implement delete logic
+    handleMenuClose();
+    // For now, just remove from selection
+    setSelectedIds((prev) => prev.filter((i) => i !== id));
+  };
 
   return (
     <Card sx={{ borderRadius: 4, p: 2 }}>
-      {libraries && libraries.length > 0 ? (
-        <Stack spacing={0} divider={<Divider />}>
-          {/* No gap, use divider for separation */}
-          {libraries.map((library) => (
-            <DocumentLibraryRow key={library.id} library={library} />
-          ))}
-        </Stack>
+      {sortedLibraries && sortedLibraries.length > 0 ? (
+        <TableContainer>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableCell padding="checkbox">
+                  <Checkbox checked={allSelected} onChange={(e) => handleToggleAll(e.target.checked)} />
+                </TableCell>
+                <TableCell sx={{ fontWeight: 600 }}>
+                  <TableSortLabel
+                    active={sortBy === "name"}
+                    direction={sortBy === "name" ? sortDirection : "asc"}
+                    onClick={() => handleSortChange("name")}
+                  >
+                    {t("documentLibrariesList.libraryName")}
+                  </TableSortLabel>
+                </TableCell>
+                <TableCell sx={{ fontWeight: 600 }}>
+                  <TableSortLabel
+                    active={sortBy === "documents"}
+                    direction={sortBy === "documents" ? sortDirection : "asc"}
+                    onClick={() => handleSortChange("documents")}
+                  >
+                    {t("documentLibrariesList.documents")}
+                  </TableSortLabel>
+                </TableCell>
+                <TableCell sx={{ fontWeight: 600 }}>
+                  <TableSortLabel
+                    active={sortBy === "lastUpdate"}
+                    direction={sortBy === "lastUpdate" ? sortDirection : "desc"}
+                    onClick={() => handleSortChange("lastUpdate")}
+                  >
+                    {t("documentLibrariesList.lastUpdate")}
+                  </TableSortLabel>
+                </TableCell>
+                <TableCell sx={{ fontWeight: 600 }} align="right">
+                  {t("documentLibrariesList.actions")}
+                </TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {sortedLibraries.map((library) => (
+                <DocumentLibraryRow
+                  key={library.id}
+                  library={library}
+                  selected={selectedIds.includes(library.id)}
+                  onToggleSelect={() => handleToggleSelect(library.id)}
+                  onMenuOpen={handleMenuOpen}
+                  t={t}
+                />
+              ))}
+            </TableBody>
+          </Table>
+          <Menu
+            anchorEl={menuAnchor}
+            open={Boolean(menuAnchor)}
+            onClose={handleMenuClose}
+            anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+            transformOrigin={{ vertical: "top", horizontal: "right" }}
+          >
+            <MenuItem onClick={() => menuLibraryId && handleDelete(menuLibraryId)}>
+              <ListItemIcon>
+                <DeleteIcon fontSize="small" />
+              </ListItemIcon>
+              <ListItemText>{t("documentLibrariesList.delete")}</ListItemText>
+            </MenuItem>
+          </Menu>
+        </TableContainer>
       ) : (
         <Typography color="text.secondary" px={2} py={2}>
-          No document libraries found.
+          {t("documentLibrariesList.noLibrariesFound")}
         </Typography>
       )}
     </Card>
@@ -42,40 +201,52 @@ function formatLastUpdate(dateString: string): string {
   }
 }
 
-function DocumentLibraryRow({ library }: { library: Tag }) {
+function DocumentLibraryRow({
+  library,
+  selected,
+  onToggleSelect,
+  onMenuOpen,
+}: {
+  library: TagWithDocumentsId;
+  selected: boolean;
+  onToggleSelect: () => void;
+  onMenuOpen: (event: React.MouseEvent<HTMLElement>, id: string) => void;
+}) {
+  const { t } = useTranslation();
   const documentCount = library.document_ids ? library.document_ids.length : 0;
   const lastUpdateLabel = formatLastUpdate(library.updated_at);
   const lastUpdateTooltip = new Date(library.updated_at).toLocaleString();
 
   return (
-    <InvisibleLink to={`/documentLibrary/${library.id}`}>
-      <Box
-        display="flex"
-        alignItems="center"
-        px={2}
-        py={1.5}
-        borderRadius={3}
-        sx={{
-          transition: "background 0.2s",
-          "&:hover": {
-            background: (theme) => theme.palette.action.hover,
-          },
-          minWidth: 0,
-          width: "100%",
-        }}
-      >
-        <Typography variant="body1" fontWeight={500} sx={{ flex: 2, minWidth: 0 }} noWrap>
+    <TableRow
+      hover
+      sx={{ cursor: "pointer" }}
+      onClick={() => (window.location.href = `/documentLibrary/${library.id}`)}
+    >
+      <TableCell padding="checkbox" onClick={(e) => e.stopPropagation()}>
+        <Checkbox checked={selected} onChange={onToggleSelect} />
+      </TableCell>
+      <TableCell sx={{ fontWeight: 500 }}>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+          <FolderIcon fontSize="small" />
           {library.name}
-        </Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ flex: 1, minWidth: 120 }}>
-          {documentCount} document{documentCount !== 1 ? "s" : ""}
-        </Typography>
+        </span>
+      </TableCell>
+      <TableCell>
+        {documentCount < 2
+          ? t("documentLibrariesList.documentCountSingular", { count: documentCount })
+          : t("documentLibrariesList.documentCountPlural", { count: documentCount })}
+      </TableCell>
+      <TableCell>
         <Tooltip title={lastUpdateTooltip} arrow>
-          <Typography variant="caption" color="text.secondary" sx={{ flex: 1, minWidth: 160 }}>
-            {lastUpdateLabel}
-          </Typography>
+          <span>{lastUpdateLabel}</span>
         </Tooltip>
-      </Box>
-    </InvisibleLink>
+      </TableCell>
+      <TableCell align="right" onClick={(e) => e.stopPropagation()}>
+        <IconButton size="small" onClick={(e) => onMenuOpen(e, library.id)}>
+          <MoreVertIcon />
+        </IconButton>
+      </TableCell>
+    </TableRow>
   );
 }

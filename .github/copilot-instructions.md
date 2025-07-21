@@ -2,6 +2,7 @@
 
 - Use MUI components
 - Use MUI theme (in `theme.tsx`)
+- When writing text, always use react-i18next (`t` from `useTranslation` hook) and add/update the key(s) to the translation file located in `src/locales/{lang}/translation.json`.
 
 ## Formatting
 

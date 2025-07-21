@@ -217,5 +217,15 @@
     "download": "Télécharger",
     "delete": "Supprimer",
     "process": "Process"
+  },
+  "documentLibrariesList": {
+    "libraryName": "Nom de la bibliothèque",
+    "documents": "Documents",
+    "lastUpdate": "Dernière mise à jour",
+    "actions": "Actions",
+    "delete": "Supprimer",
+    "noLibrariesFound": "Aucune bibliothèque de documents trouvée.",
+    "documentCountSingular": "{{count}} document",
+    "documentCountPlural": "{{count}} documents"
   }
 }
