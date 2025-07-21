@@ -40,12 +40,6 @@ spec:
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           #command: ["/bin/bash", "-c", "tail -f /dev/null"]
-          command: ["python", "/app/app/main.py"]
-          args:
-            - --config-path
-            - /usr/local/etc/configuration.yaml
-            - --base-url
-            - {{ .Values.baseUrlPath }}
           ports:
             - containerPort: 8000
           {{- with .Values.env }}
@@ -61,7 +55,7 @@ spec:
             {{- toYaml . | nindent 12 }}
             {{- end }}
             - name: {{ .Chart.Name }}-config-vol
-              mountPath: /usr/local/etc/configuration.yaml
+              mountPath: /app/config/configuration.yaml
               subPath: configuration.yaml
             - name: {{ .Chart.Name }}-kubeconfig-vol
               mountPath: /home/fred-user/.kube/config

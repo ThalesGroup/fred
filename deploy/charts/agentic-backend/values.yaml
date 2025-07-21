@@ -14,6 +14,13 @@ image:
 imagePullSecrets:
   - name: "gitlab-registry-creds"
 
+command:
+  enabled: false
+  data: []
+    # - /bin/sh
+    # - -c
+    # - tail -f /dev/null
+
 # This is for setting Kubernetes Annotations to a Pod.
 # For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/
 podAnnotations: {}
@@ -131,8 +138,6 @@ nodeSelector: {}
 tolerations: []
 
 affinity: {}
-
-baseUrlPath: /fred
 
 config:
   frontend_settings:

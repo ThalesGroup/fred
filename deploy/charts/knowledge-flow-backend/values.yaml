@@ -49,15 +49,11 @@ rollingUpdate:
   maxSurge: 1
 
 command:
-  enabled: true
-  data:
+  enabled: false
+  data: []
     # - /bin/sh
     # - -c
     # - tail -f /dev/null
-    - python
-    - /app/app/main.py
-    - --config-path
-    - /app/config/configuration.yaml
 
 env:
   data:
