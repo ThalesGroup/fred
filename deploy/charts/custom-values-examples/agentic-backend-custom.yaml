@@ -6,11 +6,7 @@ ingress:
   className: "traefik"
 
 dotenv:
-  openai_api_key: "sk-proj-*****"
-
-env:
-  - name: OPENAI_API_KEY
-    value: "sk-proj-*****"
+  OPENAI_API_KEY: "sk-pr*****"
 
 kubeconfig:
   data:
@@ -18,32 +14,19 @@ kubeconfig:
       apiVersion: v1
       clusters:
       - cluster:
-          certificate-authority-data: *****
-          extensions:
-          - extension:
-              last-update: Tue, 10 Jun 2025 11:21:54 CEST
-              provider: minikube.sigs.k8s.io
-              version: v1.35.0
-            name: cluster_info
-          server: https://yyy.yyy.yyy.yyy:8443
-        name: minikube
+          certificate-authority-data: LS0********
+          server: https://127.0.0.1:6443
+        name: default
       contexts:
       - context:
-          cluster: minikube
-          extensions:
-          - extension:
-              last-update: Tue, 10 Jun 2025 11:21:54 CEST
-              provider: minikube.sigs.k8s.io
-              version: v1.35.0
-            name: context_info
-          namespace: default
-          user: minikube
-        name: minikube
-      current-context: minikube
+          cluster: default
+          user: default
+        name: default
+      current-context: default
       kind: Config
       preferences: {}
       users:
-      - name: minikube
+      - name: default
         user:
-          client-certificate-data: kkkkkk
-          client-key-data: mmmmmmm
+          client-certificate-data: LS0*******
+          client-key-data: LS0*******

@@ -38,6 +38,14 @@ echo $IP_K3S fred.dev.fred.thalesgroup.com | sudo tee -a /etc/hosts
 echo $IP_K3S knowledge-flow-backend.dev.fred.thalesgroup.com | sudo tee -a /etc/hosts
 ```
 
+## Prepare a kubeconfig file
+
+```
+# Do this modification only if the kubeconfig points on the kubernetes cluster hosting the fred backend
+cp $HOME/.kube/config /tmp/config
+sed -i 's|^\([[:space:]]*server:\)[[:space:]]*.*$|\1 https://kubernetes.default.svc|' /tmp/config
+```
+
 ## Install Knowledge-Flow
 
 Overload the file `knowlegde-flow-backend/values.yaml`, specially the three following variables, we recommend a separated *knowledge-flow-custom.yaml* file
@@ -60,14 +68,6 @@ OR
 helm upgrade -i knowledge-flow-backend ./knowledge-flow-backend/ -n dev --values ./knowledge-flow-custom.yaml
 ```
 
-## Prepare a kubeconfig file
-
-```
-# Do this modification only if the kubeconfig points on the kubernetes cluster hosting the fred backend
-cp $HOME/.kube/config /tmp/config
-sed -i 's|^\([[:space:]]*server:\)[[:space:]]*.*$|\1 https://kubernetes.default.svc|' /tmp/config
-```
-
 ## Install the agentic backend
 
 Overload the following variables in `charts/agentic-backend/values.yaml`, we recommend a separated *agentic-backend-custom.yaml* values file :
@@ -86,7 +86,7 @@ Then deploy the backend :
 
 ```
 cd deploy/charts/
-helm upgrade -i agentic-backend ./agentic-backend/ --values ./custom-values-examples/agentic-backend-custom.yaml -n dev
+helm upgrade -i agentic-backend ./agentic-backend/ -n dev --values ./custom-values-examples/agentic-backend-custom.yaml
 ```
 
 ## Install the Fred frontend
@@ -102,7 +102,7 @@ Deploy the frontend
 
 ```
 cd deploy/charts/
-helm upgrade -i fred-frontend ./frontend/ --values ./fred-frontend-custom.yaml -n dev
+helm upgrade -i fred-frontend ./frontend/ -n dev --values ./fred-frontend-custom.yaml
 ```
 
 ## Access
