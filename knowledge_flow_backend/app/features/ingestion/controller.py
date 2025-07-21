@@ -190,20 +190,20 @@ class IngestionController:
                         current_step = "document knowledge extraction"
                         self.service.process_input(output_temp_dir, input_temp_file, metadata)
                         logger.info(f"Document processed for {filename}: {metadata}")
-                        metadata.processing_stages[ProcessingStage.PREVIEW_READY] = "done"
                         yield ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n"
 
                         # Step: Post-processing (optional)
                         current_step = "knowledge post processing"
-                        metadata.processing_stages[ProcessingStage.VECTORIZED] = "done"
+                        metadata.mark_stage_done(ProcessingStage.VECTORIZED)
                         vectorization_response = self.service.process_output(output_temp_dir, input_temp_file, metadata)
                         logger.info(f"Post-processing completed for {filename}: {metadata}")
                         yield ProcessingProgress(step=current_step, status=vectorization_response.status, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n"
 
                         # Step: Uploading to backend storage
                         current_step = "raw content saving"
-                        metadata.processing_stages[ProcessingStage.RAW_AVAILABLE] = "done"
                         self.content_store.save_content(metadata.document_uid, output_temp_dir)
+                        metadata.mark_stage_done(ProcessingStage.RAW_AVAILABLE)
+                        metadata.mark_stage_done(ProcessingStage.PREVIEW_READY)
                         yield ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n"
                         # Step: Metadata saving
                         current_step = "metadata saving"
@@ -290,8 +290,8 @@ class IngestionController:
                         yield ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n"
                         # Step: Uploading to backend storage
                         current_step = "raw content saving"
-                        metadata.processing_stages[ProcessingStage.RAW_AVAILABLE] = "done"
                         self.content_store.save_content(metadata.document_uid, output_temp_dir)
+                        metadata.mark_stage_done(ProcessingStage.RAW_AVAILABLE)
                         yield ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n"
                         # ✅ At least one file succeeded
                         # Step 2: Metadata saving

@@ -53,12 +53,14 @@ import {
   useUpdateDocumentRetrievableMutation,
   useGetDocumentSourcesQuery,
   useBrowseDocumentsMutation,
+  useProcessDocumentsMutation,
+  ProcessDocumentsRequest,
 } from "../slices/documentApi";
 
 import { streamUploadOrProcessDocument } from "../slices/streamDocumentUpload";
 import { useToast } from "../components/ToastProvider";
 import { ProgressStep, ProgressStepper } from "../components/ProgressStepper";
-import { DocumentTable } from "../components/documents/DocumentTable";
+import { DocumentTable, FileRow } from "../components/documents/DocumentTable";
 import { DocumentDrawerTable } from "../components/documents/DocumentDrawerTable";
 import DocumentViewer from "../components/documents/DocumentViewer";
 import { TopBar } from "../common/TopBar";
@@ -121,7 +123,7 @@ export const DocumentLibrary = () => {
   // API Hooks
   const [deleteDocument] = useDeleteDocumentMutation();
   const [browseDocuments] = useBrowseDocumentsMutation();
-
+  const [processDocuments] = useProcessDocumentsMutation();
   const [getDocumentMarkdownContent] = useGetDocumentMarkdownPreviewMutation();
   const [selectedDocument, setSelectedDocument] = useState<any>(null);
   const [triggerDownload] = useLazyGetDocumentRawContentQuery();
@@ -152,7 +154,7 @@ export const DocumentLibrary = () => {
   // This ensures a clear separation between "pending uploads" and "uploaded documents."
   const [tempFiles, setTempFiles] = useState([]);
 
-  const [selectedFiles, setSelectedFiles] = useState<string[]>([]);
+  const [selectedFiles, setSelectedFiles] = useState<FileRow[]>([]);
 
   // UI States
   const [uploadProgressSteps, setUploadProgressSteps] = useState<ProgressStep[]>([]);
@@ -263,14 +265,14 @@ export const DocumentLibrary = () => {
     documentsPerPage,
   ]);
 
-  const handleDownload = async (document_uid: string, file_name: string) => {
+  const handleDownload = async (file: FileRow) => {
     try {
-      const { data: blob } = await triggerDownload({ document_uid });
+      const { data: blob } = await triggerDownload({ document_uid: file.document_uid });
       if (blob) {
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
         link.href = url;
-        link.download = file_name || "document";
+        link.download = file.document_name || "document";
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -284,16 +286,19 @@ export const DocumentLibrary = () => {
     }
   };
 
-  const handleDelete = async (document_uid: string) => {
+  const handleDelete = async (file: FileRow) => {
     try {
-      await deleteDocument(document_uid).unwrap();
+      await deleteDocument(file.document_uid).unwrap();
       showInfo({
         summary: "Delete Success",
-        detail: `Document ${document_uid} deleted`,
+        detail: `Document ${file.document_name} deleted`,
         duration: 3000,
       });
       await fetchFiles(); // <-- ensures fresh backend state
-      setSelectedFiles((prev) => prev.filter((id) => id !== document_uid));
+      setSelectedFiles((prev) =>
+        prev.filter((f) => f.document_uid !== file.document_uid)
+      );
+
     } catch (error) {
       showError({
         summary: "Delete Failed",
@@ -397,6 +402,30 @@ export const DocumentLibrary = () => {
 
   const handleCloseDocumentViewer = () => {
     setDocumentViewerOpen(false);
+  };
+  const handleProcess = async (files: FileRow[]) => {
+    try {
+      const payload: ProcessDocumentsRequest = {
+        files: files.map((f) => ({
+          source_tag: f.source_type || "uploads", // adjust if needed
+          document_uid: f.document_uid,
+          external_path: undefined, // populate if you support pull mode
+          tags: f.tags || [],
+        })),
+        pipeline_name: "manual_ui_trigger",
+      };
+
+      const result = await processDocuments(payload).unwrap();
+      showInfo({
+        summary: "Processing started",
+        detail: `Workflow ${result.workflow_id} submitted`,
+      });
+    } catch (error) {
+      showError({
+        summary: "Processing Failed",
+        detail: error?.data?.detail || error.message,
+      });
+    }
   };
 
   const handleToggleRetrievable = async (file) => {
@@ -609,18 +638,23 @@ export const DocumentLibrary = () => {
 
                 <DocumentTable
                   files={currentDocuments}
-                  selected={selectedFiles}
-                  onToggleSelect={(uid) => {
-                    setSelectedFiles((prev) => (prev.includes(uid) ? prev.filter((id) => id !== uid) : [...prev, uid]));
+                  selectedFiles={selectedFiles}
+                  onToggleSelect={(file) => {
+                    setSelectedFiles((prev) =>
+                      prev.some((f) => f.document_uid === file.document_uid)
+                        ? prev.filter((f) => f.document_uid !== file.document_uid)
+                        : [...prev, file]
+                    );
                   }}
                   onToggleAll={(checked) => {
-                    setSelectedFiles(checked ? currentDocuments.map((f) => f.document_uid) : []);
+                    setSelectedFiles(checked ? currentDocuments : []);
                   }}
                   onDelete={handleDelete}
                   onDownload={handleDownload}
                   isAdmin={userInfo.canManageDocuments}
-                  onOpen={(document_uid, file_name) => handleDocumentMarkdownPreview(document_uid, file_name)}
+                  onOpen={(file) => handleDocumentMarkdownPreview(file.document_uid, file.document_name)}
                   onToggleRetrievable={handleToggleRetrievable}
+                  onProcess={handleProcess}
                 />
                 <Box display="flex" alignItems="center" mt={3} justifyContent="space-between">
                   <Pagination

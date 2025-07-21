@@ -63,7 +63,22 @@ export type DocumentProcessingStage = typeof DOCUMENT_PROCESSING_STAGES[number];
 export interface MarkdownDocumentPreview {
   content: string;
 }
+export interface FileToProcess {
+  source_tag: string;
+  document_uid?: string;
+  external_path?: string;
+  tags?: string[];
+}
 
+export interface ProcessDocumentsRequest {
+  files: FileToProcess[];
+  pipeline_name?: string;
+}
+
+interface ProcessDocumentsResponse {
+  workflow_id: string;
+  run_id: string;
+}
 export const documentApiSlice = createApi({
   reducerPath: "documentApi",
   baseQuery: createDynamicBaseQuery({ backend: "knowledge" }),
@@ -96,6 +111,13 @@ const extendedDocumentApi = documentApiSlice.injectEndpoints({
         url: `/knowledge-flow/v1/raw_content/${document_uid}`,
         method: "GET",
         responseHandler: async (response) => await response.blob(),
+      }),
+    }),
+    processDocuments: builder.mutation<ProcessDocumentsResponse, ProcessDocumentsRequest>({
+      query: (body) => ({
+        url: "/knowledge-flow/v1/pipelines/process-documents",
+        method: "POST",
+        body,
       }),
     }),
     getDocumentMetadata: builder.mutation<Metadata, { document_uid: string }>({
@@ -153,5 +175,6 @@ export const {
   useLazyGetDocumentRawContentQuery,
   useGetDocumentSourcesQuery,
   useGetCatalogFilesQuery,
-  useBrowseDocumentsMutation
+  useBrowseDocumentsMutation,
+  useProcessDocumentsMutation
 } = extendedDocumentApi;

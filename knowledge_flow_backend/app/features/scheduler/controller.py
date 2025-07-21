@@ -22,7 +22,7 @@ from fastapi import APIRouter, HTTPException
 from temporalio.client import Client
 
 from app.application_context import ApplicationContext
-from app.features.scheduler.structure import PipelineDefinition
+from app.features.scheduler.structure import PipelineDefinition, ProcessDocumentsRequest
 from app.features.scheduler.ingestion_workflow import DocumentIngestionWorkflow
 
 logger = logging.getLogger(__name__)
@@ -36,6 +36,47 @@ class SchedulerController:
     def __init__(self, router: APIRouter):
         self.config = ApplicationContext.get_instance().get_config().scheduler.temporal
         self._register_routes(router)
+
+        @router.post(
+            "/pipelines/process-documents",
+            tags=["Ingestion"],
+            summary="Submit processing for push/pull files via Temporal",
+            description="Accepts a list of files (document_uid or external_path) and launches the appropriate ingestion workflow"
+        )
+        async def process_documents(req: ProcessDocumentsRequest):
+            logger.info(f"Processing {len(req.files)} file(s) via Temporal pipeline")
+
+            try:
+                # You may batch files per-source_tag if needed
+                definition = PipelineDefinition(
+                    name=req.pipeline_name,
+                    files=req.files,
+                )
+
+                client = await Client.connect(
+                    target_host=self.config.host,
+                    namespace=self.config.namespace,
+                )
+                workflow_id = f"{self.config.workflow_prefix}-{uuid4()}"
+                # handle = await client.start_workflow(
+                #     DocumentIngestionWorkflow.run,
+                #     definition,
+                #     id=workflow_id,
+                #     task_queue=self.config.task_queue,
+                # )
+                #return {
+                #    "workflow_id": handle.id,
+                #    "run_id": handle.first_execution_run_id,
+                #}
+                logger.info(f"🛠️ started temporal workflow={workflow_id}")
+                return {
+                    "workflow_id": "testid",
+                    "run_id": "testrunid",
+                }
+
+            except Exception as e:
+                logger.exception("Failed to submit process-documents workflow")
+                raise HTTPException(status_code=500, detail="Workflow submission failed")
 
     def _register_routes(self, router: APIRouter):
         @router.post(

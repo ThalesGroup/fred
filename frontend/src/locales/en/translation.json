@@ -191,6 +191,7 @@
     "documentTable": {
         "selectedCount": "{{count}} selected",
         "deleteSelected": "Delete",
+        "processSelected": "Process",
         "downloadSelected": "Download",
         "fileName": "File Name",
         "dateAdded": "Date Added",
@@ -212,6 +213,7 @@
         "menuLabel": "Open document actions menu",
         "preview": "Preview",
         "download": "Download",
-        "delete": "Delete"
+        "delete": "Delete",
+        "process": "Process"
     }
 }

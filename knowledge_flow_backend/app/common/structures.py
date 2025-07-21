@@ -306,7 +306,18 @@ class DocumentMetadata(BaseModel):
         default_factory=dict,
         description="Status of each well-defined processing stage"
     )
+    def mark_stage_done(self, stage: ProcessingStage) -> None:
+        self.processing_stages[stage] = "done"
 
+    def mark_stage_error(self, stage: ProcessingStage, error_msg: str) -> None:
+        self.processing_stages[stage] = f"error: {error_msg}"
+
+    def clear_processing_stages(self) -> None:
+        self.processing_stages.clear()
+
+    def set_stage_status(self, stage: ProcessingStage, status: str) -> None:
+        self.processing_stages[stage] = status
+        
     @field_validator("processing_stages")
     @classmethod
     def validate_stage_keys(cls, stages: dict) -> dict:

@@ -191,6 +191,7 @@
     "documentTable": {
         "selectedCount": "{{count}} sélectionné(s)",
         "deleteSelected": "Supprimer",
+        "processSelected": "Process",
         "downloadSelected": "Télécharger",
         "fileName": "Nom du fichier",
         "dateAdded": "Date d'ajout",
@@ -212,6 +213,7 @@
         "menuLabel": "Ouvrir le menu d’actions du document",
         "preview": "Aperçu",
         "download": "Télécharger",
-        "delete": "Supprimer"
+        "delete": "Supprimer",
+        "process": "Process"
     }
 }

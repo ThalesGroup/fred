@@ -17,12 +17,23 @@ from pydantic import BaseModel
 from typing import List, Optional
 
 
-class PipelineFile(BaseModel):
-    path: str  # absolute or relative path
-    original_filename: Optional[str] = None
+class FileToProcess(BaseModel):
+    source_tag: str
+    document_uid: Optional[str] = None
+    external_path: Optional[str] = None
+    tags: List[str] = []
+
+    def is_push(self) -> bool:
+        return self.document_uid is not None
+
+    def is_pull(self) -> bool:
+        return self.external_path is not None
 
 
 class PipelineDefinition(BaseModel):
     name: str
-    files: List[PipelineFile]
-    metadata: dict
+    files: List[FileToProcess]
+
+class ProcessDocumentsRequest(BaseModel):
+    files: List[FileToProcess]
+    pipeline_name: Optional[str] = "manual_ui_trigger"
