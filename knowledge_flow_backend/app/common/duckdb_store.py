@@ -20,6 +20,8 @@ class DuckDBTableStore:
         logger.info(f"🗄️ DuckDBTableStore ({self.prefix}) initialized at {self.db_path}")
 
     def _prefixed(self, table_name: str) -> str:
+        if table_name.startswith(self.prefix):
+            return table_name
         return f"{self.prefix}{table_name}"
 
     def _connect(self):
