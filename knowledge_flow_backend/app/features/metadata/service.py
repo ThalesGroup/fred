@@ -50,10 +50,20 @@ class MetadataService:
         except MetadataDeserializationError as e:
             logger.error(f"[Metadata] Deserialization error: {e}")
             raise MetadataUpdateError(f"Invalid metadata encountered: {e}")
-    
+
         except Exception as e:
             logger.error(f"Error retrieving document metadata: {e}")
             raise MetadataUpdateError(f"Failed to retrieve metadata: {e}")
+
+    def get_document_metadata_in_tag(self, tag_id: str) -> list[DocumentMetadata]:
+        """
+        Return all metadata entries associated with a specific tag.
+        """
+        try:
+            return self.metadata_store.get_metadata_in_tag(tag_id)
+        except Exception as e:
+            logger.error(f"Error retrieving metadata for tag {tag_id}: {e}")
+            raise MetadataUpdateError(f"Failed to retrieve metadata for tag {tag_id}: {e}")
 
     def delete_document_metadata(self, document_uid: str) -> None:
         metadata = self.metadata_store.get_metadata_by_uid(document_uid)
@@ -112,4 +122,3 @@ class MetadataService:
             logger.error(f"Error updating metadata for {document_uid}: {e}")
             raise MetadataUpdateError(f"Failed to update metadata: {e}")
 
-    
