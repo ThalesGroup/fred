@@ -50,23 +50,46 @@ This separation supports independent scaling and better resource management in K
 import asyncio
 import atexit
 import logging
-
+import os 
 from app.features.scheduler.worker import run_worker
 from app.application_context import ApplicationContext
 from app.common.structures import Configuration
-from app.common.utils import configure_logging, load_environment, parse_cli_opts, parse_server_configuration
+from app.common.utils import parse_server_configuration
+from dotenv import load_dotenv
+
+# -----------------------
+# LOGGING + ENVIRONMENT
+# -----------------------
 
 logger = logging.getLogger(__name__)
+
+def configure_logging(log_level: str):
+    logging.basicConfig(
+        level=log_level.upper(),
+        format="%(asctime)s - %(levelname)s - %(filename)s - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+        # handlers=[RichHandler(rich_tracebacks=False, show_time=False, show_path=False)],
+    )
+    logging.getLogger(__name__).info(
+        f"Logging configured at {log_level.upper()} level."
+    )
+
+def load_environment(dotenv_path: str = "./config/.env"):
+    if load_dotenv(dotenv_path):
+        logging.getLogger().info(f"✅ Loaded environment variables from: {dotenv_path}")
+    else:
+        logging.getLogger().warning(f"⚠️ No .env file found at: {dotenv_path}")
+
 
 # -----------------------
 # MAIN ENTRYPOINT
 # -----------------------
 
 async def main():
-    args = parse_cli_opts()
-    configuration: Configuration = parse_server_configuration(args.config_path)
-    configure_logging(configuration.app.log_level)
     load_environment()
+    config_file = os.environ["CONFIG_FILE"]
+    configuration: Configuration = parse_server_configuration(config_file)
+    configure_logging(configuration.app.log_level)
     ApplicationContext(configuration)
     # ✅ Register graceful shutdown
     atexit.register(ApplicationContext.get_instance().close_connections)

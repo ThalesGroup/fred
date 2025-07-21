@@ -109,15 +109,6 @@ run-worker: dev ## Run an ingestion worker this requires a temporal daemon
 	ENV_FILE=$(ENV_FILE) \
 	$(PYTHON) ${PY_PACKAGE}/main_worker.py --config-path ./config/configuration_worker.yaml
 
-.PHONY: run-api
-
-run-api: dev ## Run an ingestion worker this requires a temporal daemon
-	@echo "🚀 Running the app..."
-	PYTHONPATH=. \
-	LOG_LEVEL=$(LOG_LEVEL) \
-	ENV_FILE=$(ENV_FILE) \
-	$(PYTHON) ${PY_PACKAGE}/main.py --config-path ./config/configuration.yaml
-
 .PHONY: docker-run
 
 docker-run: ## Run the app in Docker

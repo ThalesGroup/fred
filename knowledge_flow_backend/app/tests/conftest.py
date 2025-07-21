@@ -130,7 +130,7 @@ def client_fixture(app_context: ApplicationContext):
     """
     TestClient for FastAPI app. ApplicationContext is preloaded.
     """
-    app = create_app(app_context.get_config())
+    app = create_app()
     with TestClient(app) as test_client:
         yield test_client
 
