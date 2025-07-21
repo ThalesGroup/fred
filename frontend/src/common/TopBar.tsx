@@ -31,11 +31,13 @@ export const TopBar = ({ title, description, children, fadeIn = true, leftLg = 8
   return (
     <Box
       sx={{
-        position: "relative",
+        position: "sticky",
+        top: 0,
+        zIndex: theme.zIndex.appBar,
+        backgroundColor: theme.palette.background.paper,
         backgroundSize: "cover",
         backgroundPosition: "center",
         mb: 3,
-        borderRadius: 2,
         boxShadow: theme.shadows[4],
       }}
     >
@@ -55,9 +57,9 @@ export const TopBar = ({ title, description, children, fadeIn = true, leftLg = 8
                     }}
                     title={description}
                     placement="bottom-end"
-                    arrow>
-                    <Chip
-                      label={title} color="primary" />
+                    arrow
+                  >
+                    <Chip label={title} color="primary" />
                   </Tooltip>
                 </Box>
               </Grid2>
