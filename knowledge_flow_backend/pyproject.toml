@@ -43,6 +43,7 @@ dependencies = [
   "weaviate-client<4.0.0",
   "fred-core",
   "temporalio>=1.14.1",
+  "dateparser>=1.2.2",
 ]
 
 [project.optional-dependencies]
