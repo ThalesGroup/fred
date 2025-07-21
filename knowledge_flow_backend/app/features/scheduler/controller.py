@@ -23,7 +23,7 @@ from temporalio.client import Client
 
 from app.application_context import ApplicationContext
 from app.features.scheduler.structure import PipelineDefinition, ProcessDocumentsRequest
-from app.features.scheduler.ingestion_workflow import DocumentIngestionWorkflow
+from app.features.scheduler.workflow import DocumentIngestionWorkflow
 
 logger = logging.getLogger(__name__)
 

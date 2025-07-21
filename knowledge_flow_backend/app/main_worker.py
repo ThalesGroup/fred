@@ -50,7 +50,6 @@ This separation supports independent scaling and better resource management in K
 import asyncio
 import atexit
 import logging
-import threading
 
 from app.features.scheduler.worker import run_worker
 from app.application_context import ApplicationContext

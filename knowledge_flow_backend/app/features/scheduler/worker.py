@@ -21,12 +21,12 @@ from temporalio.client import Client
 from temporalio.worker import Worker
 
 from app.common.structures import TemporalSchedulerConfig
-from app.features.scheduler.ingestion_activities import (
+from app.features.scheduler.activities import (
     extract_metadata,
     process_document,
     vectorize_and_save,
 )
-from app.features.scheduler.ingestion_workflow import DocumentIngestionWorkflow
+from app.features.scheduler.workflow import DocumentIngestionWorkflow
 
 # Use basic logging instead of rich within the Temporal worker
 logging.basicConfig(

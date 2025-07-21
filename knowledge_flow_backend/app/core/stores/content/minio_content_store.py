@@ -16,6 +16,7 @@ from io import BytesIO
 import io
 import logging
 from pathlib import Path
+import tempfile
 from typing import BinaryIO
 from minio import Minio
 from minio.error import S3Error
@@ -157,3 +158,35 @@ class MinioStorageBackend(BaseContentStore):
             except S3Error as e:
                 logger.error(f"❌ Failed to delete objects from bucket{self.bucket_name}: {e}")
                 raise ValueError(f"Failed to delete document content from MinIO: {e}")
+
+
+    def get_local_copy(self, document_uid: str) -> Path:
+        """
+        Downloads the first input file of the given document_uid to a temporary file,
+        and returns the local filesystem Path to it.
+        """
+        prefix = f"{document_uid}/input/"
+        try:
+            objects = list(self.client.list_objects(self.bucket_name, prefix=prefix, recursive=True))
+            if not objects:
+                raise FileNotFoundError(f"No input content found for document: {document_uid}")
+
+            obj = objects[0]
+            file_suffix = Path(obj.object_name).suffix or ".bin"
+
+            # Create a temp file with a suffix
+            tmp_file = tempfile.NamedTemporaryFile(delete=False, suffix=file_suffix)
+            tmp_path = Path(tmp_file.name)
+
+            self.client.fget_object(
+                self.bucket_name,
+                obj.object_name,
+                str(tmp_path)
+            )
+
+            logger.info(f"📥 Downloaded {obj.object_name} to temporary file {tmp_path}")
+            return tmp_path
+
+        except S3Error as e:
+            logger.error(f"Error fetching content for {document_uid}: {e}")
+            raise FileNotFoundError(f"Failed to retrieve original content: {e}")
