@@ -50,7 +50,8 @@ This separation supports independent scaling and better resource management in K
 import asyncio
 import atexit
 import logging
-import os 
+import os
+from rich.logging import RichHandler
 from app.features.scheduler.worker import run_worker
 from app.application_context import ApplicationContext
 from app.common.structures import Configuration
@@ -68,7 +69,7 @@ def configure_logging(log_level: str):
         level=log_level.upper(),
         format="%(asctime)s - %(levelname)s - %(filename)s - %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
-        # handlers=[RichHandler(rich_tracebacks=False, show_time=False, show_path=False)],
+        handlers=[RichHandler(rich_tracebacks=False, show_time=False, show_path=False)],
     )
     logging.getLogger(__name__).info(
         f"Logging configured at {log_level.upper()} level."
