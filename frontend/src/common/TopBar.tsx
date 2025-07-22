@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Box, Container, Fade, Grid2, Chip, useTheme, Tooltip } from "@mui/material";
+import { Box, Container, Fade, Grid2, useTheme, Tooltip, Typography } from "@mui/material";
 import { ReactNode } from "react";
 
 interface TopBarProps {
@@ -59,7 +59,9 @@ export const TopBar = ({ title, description, children, fadeIn = true, leftLg = 8
                     placement="bottom-end"
                     arrow
                   >
-                    <Chip label={title} color="primary" />
+                    <Typography variant="h6" component="h1">
+                      {title}
+                    </Typography>
                   </Tooltip>
                 </Box>
               </Grid2>

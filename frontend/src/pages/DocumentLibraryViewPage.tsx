@@ -8,6 +8,7 @@ import {
 import { TopBar } from "../common/TopBar";
 import { use } from "i18next";
 import { useEffect, useState } from "react";
+import { DocumentTable } from "../components/documents/DocumentTable";
 
 export const DocumentLibraryViewPage = () => {
   const { libraryId } = useParams<{ libraryId: string }>();
@@ -66,16 +67,26 @@ export const DocumentLibraryViewPage = () => {
       <TopBar title={library.name} description={library.description || ""} />
       <Container maxWidth="xl">
         <Paper sx={{ p: 3, borderRadius: 4, mt: 2 }}>
-          <Typography variant="h6" gutterBottom>
-            Documents in this library
+          <Typography variant="h4" gutterBottom>
+            {library.name}
           </Typography>
-          <Box mt={2}>
-            {documents.map((doc: DocumentMetadata) => (
-              <Paper key={doc.document_uid} sx={{ p: 2, mb: 2 }}>
-                <Typography>{doc.document_name}</Typography>
-              </Paper>
-            ))}
-          </Box>
+          <Typography variant="body2" color="text.secondary">
+            {library.description || "No description available."}
+          </Typography>
+        </Paper>
+        <Paper sx={{ p: 2, borderRadius: 4, mt: 2 }}>
+          <DocumentTable
+            files={documents}
+            selectedFiles={[]}
+            onToggleSelect={() => {}}
+            onToggleAll={() => {}}
+            onDelete={() => {}}
+            onDownload={() => {}}
+            onToggleRetrievable={() => {}}
+            onOpen={() => {}}
+            onProcess={() => {}}
+            isAdmin={true}
+          />
         </Paper>
       </Container>
     </>
