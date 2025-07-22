@@ -65,11 +65,21 @@ export interface Metadata {
   metadata: any;
 }
 
+interface DocumentTableColumns {
+  fileName?: boolean;
+  dateAdded?: boolean;
+  tags?: boolean;
+  status?: boolean;
+  retrievable?: boolean;
+  actions?: boolean;
+}
+
 interface FileTableProps {
   files: FileRow[];
   isAdmin?: boolean;
   onRefreshData?: () => void;
   showSelectionActions?: boolean;
+  columns?: DocumentTableColumns;
 }
 
 export const DocumentTable: React.FC<FileTableProps> = ({
@@ -77,6 +87,14 @@ export const DocumentTable: React.FC<FileTableProps> = ({
   isAdmin = false,
   onRefreshData,
   showSelectionActions = true,
+  columns = {
+    fileName: true,
+    dateAdded: true,
+    tags: true,
+    status: true,
+    retrievable: true,
+    actions: true,
+  },
 }) => {
   const { t } = useTranslation();
   const { showInfo, showError } = useToast();
@@ -283,28 +301,32 @@ export const DocumentTable: React.FC<FileTableProps> = ({
               <TableCell padding="checkbox">
                 <Checkbox checked={allSelected} onChange={(e) => handleToggleAll(e.target.checked)} />
               </TableCell>
-              <TableCell>
-                <TableSortLabel
-                  active={sortBy === "document_name"}
-                  direction={sortBy === "document_name" ? sortDirection : "asc"}
-                  onClick={() => handleSortChange("document_name")}
-                >
-                  {t("documentTable.fileName")}
-                </TableSortLabel>
-              </TableCell>
-              <TableCell>
-                <TableSortLabel
-                  active={sortBy === "date_added_to_kb"}
-                  direction={sortBy === "date_added_to_kb" ? sortDirection : "asc"}
-                  onClick={() => handleSortChange("date_added_to_kb")}
-                >
-                  {t("documentTable.dateAdded")}
-                </TableSortLabel>
-              </TableCell>
-              <TableCell>{t("documentTable.tags")}</TableCell>
-              <TableCell>{t("documentTable.status")}</TableCell>
-              <TableCell>{t("documentTable.retrievableYes")}</TableCell>
-              <TableCell align="right">{t("documentTable.actions")}</TableCell>
+              {columns.fileName && (
+                <TableCell>
+                  <TableSortLabel
+                    active={sortBy === "document_name"}
+                    direction={sortBy === "document_name" ? sortDirection : "asc"}
+                    onClick={() => handleSortChange("document_name")}
+                  >
+                    {t("documentTable.fileName")}
+                  </TableSortLabel>
+                </TableCell>
+              )}
+              {columns.dateAdded && (
+                <TableCell>
+                  <TableSortLabel
+                    active={sortBy === "date_added_to_kb"}
+                    direction={sortBy === "date_added_to_kb" ? sortDirection : "asc"}
+                    onClick={() => handleSortChange("date_added_to_kb")}
+                  >
+                    {t("documentTable.dateAdded")}
+                  </TableSortLabel>
+                </TableCell>
+              )}
+              {columns.tags && <TableCell>{t("documentTable.tags")}</TableCell>}
+              {columns.status && <TableCell>{t("documentTable.status")}</TableCell>}
+              {columns.retrievable && <TableCell>{t("documentTable.retrievableYes")}</TableCell>}
+              {columns.actions && <TableCell align="right">{t("documentTable.actions")}</TableCell>}
             </TableRow>
           </TableHead>
           <TableBody>
@@ -317,120 +339,130 @@ export const DocumentTable: React.FC<FileTableProps> = ({
                       onChange={() => handleToggleSelect(file)}
                     />
                   </TableCell>
-                  <TableCell>
-                    <Box display="flex" alignItems="center" gap={1}>
-                      {getDocumentIcon(file.document_name)}
-                      <Typography variant="body2" noWrap>
-                        {file.document_name}
-                      </Typography>
-                    </Box>
-                  </TableCell>
-                  <TableCell>
-                    <Tooltip title={file.date_added_to_kb}>
-                      <Typography variant="body2">
-                        <EventAvailableIcon fontSize="small" sx={{ mr: 0.5 }} />
-                        {formatDate(file.date_added_to_kb)}
-                      </Typography>
-                    </Tooltip>
-                  </TableCell>
-                  <TableCell>
-                    <Box display="flex" flexWrap="wrap" gap={0.5}>
-                      {file.tags?.map((tag) => (
-                        <Tooltip key={tag} title={`Tag: ${tag}`}>
-                          <Chip label={tag} size="small" variant="filled" sx={{ fontSize: "0.6rem" }} />
-                        </Tooltip>
-                      ))}
-                    </Box>
-                  </TableCell>
+                  {columns.fileName && (
+                    <TableCell>
+                      <Box display="flex" alignItems="center" gap={1}>
+                        {getDocumentIcon(file.document_name)}
+                        <Typography variant="body2" noWrap>
+                          {file.document_name}
+                        </Typography>
+                      </Box>
+                    </TableCell>
+                  )}
+                  {columns.dateAdded && (
+                    <TableCell>
+                      <Tooltip title={file.date_added_to_kb}>
+                        <Typography variant="body2">
+                          <EventAvailableIcon fontSize="small" sx={{ mr: 0.5 }} />
+                          {formatDate(file.date_added_to_kb)}
+                        </Typography>
+                      </Tooltip>
+                    </TableCell>
+                  )}
+                  {columns.tags && (
+                    <TableCell>
+                      <Box display="flex" flexWrap="wrap" gap={0.5}>
+                        {file.tags?.map((tag) => (
+                          <Tooltip key={tag} title={`Tag: ${tag}`}>
+                            <Chip label={tag} size="small" variant="filled" sx={{ fontSize: "0.6rem" }} />
+                          </Tooltip>
+                        ))}
+                      </Box>
+                    </TableCell>
+                  )}
+                  {columns.status && (
+                    <TableCell>
+                      <Box display="flex" flexWrap="wrap" gap={0.5}>
+                        {DOCUMENT_PROCESSING_STAGES.map((stage) => {
+                          const status = file.processing_stages?.[stage] ?? "not_started";
 
-                  <TableCell>
-                    <Box display="flex" flexWrap="wrap" gap={0.5}>
-                      {DOCUMENT_PROCESSING_STAGES.map((stage) => {
-                        const status = file.processing_stages?.[stage] ?? "not_started";
+                          const statusStyleMap: Record<string, { bgColor: string; color: string }> = {
+                            done: {
+                              bgColor: "#c8e6c9", // green
+                              color: "#2e7d32",
+                            },
+                            in_progress: {
+                              bgColor: "#fff9c4", // yellow
+                              color: "#f9a825",
+                            },
+                            failed: {
+                              bgColor: "#ffcdd2", // red
+                              color: "#c62828",
+                            },
+                            not_started: {
+                              bgColor: "#e0e0e0", // gray
+                              color: "#757575",
+                            },
+                          };
 
-                        const statusStyleMap: Record<string, { bgColor: string; color: string }> = {
-                          done: {
-                            bgColor: "#c8e6c9", // green
-                            color: "#2e7d32",
-                          },
-                          in_progress: {
-                            bgColor: "#fff9c4", // yellow
-                            color: "#f9a825",
-                          },
-                          failed: {
-                            bgColor: "#ffcdd2", // red
-                            color: "#c62828",
-                          },
-                          not_started: {
-                            bgColor: "#e0e0e0", // gray
-                            color: "#757575",
-                          },
-                        };
+                          const stageLabelMap: Record<string, string> = {
+                            raw: "R",
+                            preview: "P",
+                            vector: "V",
+                            sql: "S",
+                            mcp: "M",
+                          };
 
-                        const stageLabelMap: Record<string, string> = {
-                          raw: "R",
-                          preview: "P",
-                          vector: "V",
-                          sql: "S",
-                          mcp: "M",
-                        };
+                          const label = stageLabelMap[stage] ?? "?";
+                          const { bgColor, color } = statusStyleMap[status];
 
-                        const label = stageLabelMap[stage] ?? "?";
-                        const { bgColor, color } = statusStyleMap[status];
+                          return (
+                            <Tooltip key={stage} title={`${stage.replace(/_/g, " ")}: ${status}`} arrow>
+                              <Avatar
+                                sx={{
+                                  bgcolor: bgColor,
+                                  color,
+                                  width: 24,
+                                  height: 24,
+                                  fontSize: "0.75rem",
+                                  fontWeight: 600,
+                                }}
+                              >
+                                {label}
+                              </Avatar>
+                            </Tooltip>
+                          );
+                        })}
+                      </Box>
+                    </TableCell>
+                  )}
+                  {columns.retrievable && (
+                    <TableCell>
+                      {(() => {
+                        const isRetrievable = file.retrievable;
 
                         return (
-                          <Tooltip key={stage} title={`${stage.replace(/_/g, " ")}: ${status}`} arrow>
-                            <Avatar
-                              sx={{
-                                bgcolor: bgColor,
-                                color,
-                                width: 24,
-                                height: 24,
-                                fontSize: "0.75rem",
-                                fontWeight: 600,
-                              }}
-                            >
-                              {label}
-                            </Avatar>
-                          </Tooltip>
+                          <Chip
+                            label={isRetrievable ? t("documentTable.retrievableYes") : t("documentTable.retrievableNo")}
+                            size="small"
+                            variant="outlined"
+                            onClick={isAdmin ? () => handleToggleRetrievable(file) : undefined}
+                            sx={{
+                              cursor: isAdmin ? "pointer" : "default",
+                              backgroundColor: isRetrievable ? "#e6f4ea" : "#eceff1",
+                              borderColor: isRetrievable ? "#2e7d32" : "#90a4ae",
+                              color: isRetrievable ? "#2e7d32" : "#607d8b",
+                              fontWeight: 500,
+                              fontSize: "0.75rem",
+                            }}
+                          />
                         );
-                      })}
-                    </Box>
-                  </TableCell>
-
-                  <TableCell>
-                    {(() => {
-                      const isRetrievable = file.retrievable;
-
-                      return (
-                        <Chip
-                          label={isRetrievable ? t("documentTable.retrievableYes") : t("documentTable.retrievableNo")}
-                          size="small"
-                          variant="outlined"
-                          onClick={isAdmin ? () => handleToggleRetrievable(file) : undefined}
-                          sx={{
-                            cursor: isAdmin ? "pointer" : "default",
-                            backgroundColor: isRetrievable ? "#e6f4ea" : "#eceff1",
-                            borderColor: isRetrievable ? "#2e7d32" : "#90a4ae",
-                            color: isRetrievable ? "#2e7d32" : "#607d8b",
-                            fontWeight: 500,
-                            fontSize: "0.75rem",
-                          }}
+                      })()}
+                    </TableCell>
+                  )}
+                  {columns.actions && (
+                    <TableCell align="right">
+                      {isAdmin && (
+                        <DocumentTableRowActionsMenu
+                          file={file}
+                          onDelete={() => handleDelete(file)}
+                          onDownload={() => handleDownload(file)}
+                          onOpen={() => handleDocumentPreview(file)}
+                          onProcess={() => handleProcess([file])}
                         />
-                      );
-                    })()}
-                  </TableCell>
-                  <TableCell align="right">
-                    {isAdmin && (
-                      <DocumentTableRowActionsMenu
-                        file={file}
-                        onDelete={() => handleDelete(file)}
-                        onDownload={() => handleDownload(file)}
-                        onOpen={() => handleDocumentPreview(file)}
-                        onProcess={() => handleProcess([file])}
-                      />
-                    )}
-                  </TableCell>
+                      )}
+                    </TableCell>
+                  )}
                 </TableRow>
               </React.Fragment>
             ))}

@@ -90,6 +90,14 @@ export const DocumentLibraryViewPage = () => {
             isAdmin={hasDocumentManagementPermission()}
             onRefreshData={handleRefreshData}
             showSelectionActions={true}
+            columns={{
+              fileName: true,
+              dateAdded: true,
+              tags: false, // Hide tags column in library view
+              status: true,
+              retrievable: true,
+              actions: true,
+            }}
           />
         </Paper>
       </Container>
