@@ -6,10 +6,8 @@
       "type": "debugpy",
       "request": "launch",
       "cwd": "${workspaceFolder}/agentic_backend",
-      "module": "uv",
+      "module": "uvicorn",
       "args": [
-        "run",
-        "uvicorn",
         "app.main:create_app",
         "--factory",
         "--port",
@@ -33,10 +31,8 @@
       "type": "debugpy",
       "request": "launch",
       "cwd": "${workspaceFolder}/knowledge_flow_backend",
-      "module": "uv",
+      "module": "uvicorn",
       "args": [
-        "run",
-        "uvicorn",
         "app.main:create_app",
         "--factory",
         "--port",
