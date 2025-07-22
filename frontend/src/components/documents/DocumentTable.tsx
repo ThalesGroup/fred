@@ -168,7 +168,7 @@ export const DocumentTable: React.FC<FileTableProps> = ({
     if (successCount > 0) {
       showInfo({
         summary: "Delete Success",
-        detail: `${successCount} document${successCount > 1 ? 's' : ''} deleted`,
+        detail: `${successCount} document${successCount > 1 ? "s" : ""} deleted`,
         duration: 3000,
       });
     }
@@ -176,7 +176,7 @@ export const DocumentTable: React.FC<FileTableProps> = ({
     if (failedFiles.length > 0) {
       showError({
         summary: "Delete Failed",
-        detail: `Failed to delete: ${failedFiles.join(', ')}`,
+        detail: `Failed to delete: ${failedFiles.join(", ")}`,
       });
     }
 
@@ -341,7 +341,13 @@ export const DocumentTable: React.FC<FileTableProps> = ({
                   </TableCell>
                   {columns.fileName && (
                     <TableCell>
-                      <Box display="flex" alignItems="center" gap={1}>
+                      <Box
+                        display="flex"
+                        alignItems="center"
+                        gap={1}
+                        onClick={() => handleDocumentPreview(file)}
+                        sx={{ cursor: "pointer" }}
+                      >
                         {getDocumentIcon(file.document_name)}
                         <Typography variant="body2" noWrap>
                           {file.document_name}
