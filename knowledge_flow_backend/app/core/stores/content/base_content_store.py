@@ -21,6 +21,17 @@ logger = logging.getLogger(__name__)
 
 
 class BaseContentStore(ABC):
+
+    @abstractmethod
+    def save_input(self, document_uid: str, input_dir: Path) -> None:
+        """Saves the input/ folder (raw user-uploaded file)."""
+        pass
+
+    @abstractmethod
+    def save_output(self, document_uid: str, output_dir: Path) -> None:
+        """Saves the output/ folder (processed markdown or CSV)."""
+        pass
+
     @abstractmethod
     def save_content(self, document_uid: str, document_dir: Path) -> None:
         """

@@ -14,13 +14,15 @@
 
 import json
 import logging
+import pathlib
+import shutil
+import tempfile
 from typing import Generator, List, Optional
 from app.common.structures import Status
 from fastapi import APIRouter, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from app.application_context import ApplicationContext
 from app.common.document_structures import ProcessingStage
 from app.features.ingestion.service import IngestionService
 
@@ -67,7 +69,24 @@ class StatusAwareStreamingResponse(StreamingResponse):
         if not self.all_success_flag[0]:
             self.status_code = 422  # or 207 if you prefer partial success
 
+def uploadfile_to_path(file: UploadFile) -> pathlib.Path:
+    tmp_dir = tempfile.mkdtemp()
+    tmp_path = pathlib.Path(tmp_dir) / file.filename
+    with open(tmp_path, "wb") as f_out:
+        shutil.copyfileobj(file.file, f_out)
+    return tmp_path
 
+def save_file_to_temp(source_file_path: pathlib.Path) -> pathlib.Path:
+        """
+        Copies the given local file into a new temp folder and returns the new path.
+        """
+        temp_dir = pathlib.Path(tempfile.mkdtemp()) / "input"
+        temp_dir.mkdir(parents=True, exist_ok=True)
+
+        target_path = temp_dir / source_file_path.name
+        shutil.copyfile(source_file_path, target_path)
+        logger.info(f"File copied to temporary location: {target_path}")
+        return target_path
 class IngestionController:
     """
     Controller responsible for handling the initial ingestion pipeline.
@@ -118,11 +137,8 @@ class IngestionController:
     """
 
     def __init__(self, router: APIRouter):
-        self.context = ApplicationContext.get_instance()
         self.logger = logging.getLogger(self.__class__.__name__)
         self.service = IngestionService()
-        self.metadata_store = ApplicationContext.get_instance().get_metadata_store()
-        self.content_store = ApplicationContext.get_instance().get_content_store()
         logger.info("IngestionController initialized.")
 
         @router.post(
@@ -163,7 +179,8 @@ class IngestionController:
             # and to avoid blocking the generator with file I/O operations.
             preloaded_files = []
             for file in files:
-                input_temp_file = self.service.save_file_to_temp(file)
+                raw_path = uploadfile_to_path(file)
+                input_temp_file = save_file_to_temp(raw_path)
                 logger.info(f"File {file.filename} saved to temp storage at {input_temp_file}")
                 preloaded_files.append((file.filename, input_temp_file))
             all_success_flag = [False]  # Track success across all files
@@ -180,37 +197,47 @@ class IngestionController:
                         logger.info(f"Metadata extracted for {filename}: {metadata}")
                         yield ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n"
 
-                        # check if metadata is already known if so delete it to replace it and process the
-                        # document again
-                        if self.metadata_store.get_metadata_by_uid(metadata.document_uid):
-                            logger.info(f"Metadata already exists for {filename}: {metadata}")
-                            self.metadata_store.delete_metadata(metadata)
-                            self.content_store.delete_content(metadata.document_uid)
+                        if self.service.get_metadata(metadata.document_uid):
+                            logger.error(f"Metadata already exists for {filename}: {metadata}")
 
                         # Step: Processing
                         current_step = "document knowledge extraction"
-                        self.service.process_input(output_temp_dir, input_temp_file, metadata)
+                        self.service.process_input(
+                            input_path=input_temp_file,
+                            output_dir=output_temp_dir / "output",
+                            metadata=metadata
+                        )
                         logger.info(f"Document processed for {filename}: {metadata}")
                         yield ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n"
 
                         # Step: Post-processing (optional)
                         current_step = "knowledge post processing"
                         metadata.mark_stage_done(ProcessingStage.VECTORIZED)
-                        vectorization_response = self.service.process_output(output_temp_dir, input_temp_file, metadata)
+                        vectorization_response = self.service.process_output(
+                            working_dir=output_temp_dir,
+                            input_file_name=input_temp_file.name,
+                            input_file_metadata=metadata
+                        )
                         logger.info(f"Post-processing completed for {filename}: {metadata}")
-                        yield ProcessingProgress(step=current_step, status=vectorization_response.status, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n"
+                        yield ProcessingProgress(step=current_step, 
+                                                 status=vectorization_response.status, 
+                                                 document_uid=metadata.document_uid, 
+                                                 filename=filename).model_dump_json() + "\n"
 
                         # Step: Uploading to backend storage
                         current_step = "raw content saving"
-                        self.content_store.save_content(metadata.document_uid, output_temp_dir)
-                        metadata.mark_stage_done(ProcessingStage.RAW_AVAILABLE)
-                        metadata.mark_stage_done(ProcessingStage.PREVIEW_READY)
-                        yield ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n"
+                        self.service.save_input(metadata, output_temp_dir / "input")
+                        self.service.save_output(metadata, output_temp_dir / "output")
+                        yield ProcessingProgress(step=current_step, status=Status.SUCCESS, 
+                                                 document_uid=metadata.document_uid, 
+                                                 filename=filename).model_dump_json() + "\n"
                         # Step: Metadata saving
                         current_step = "metadata saving"
-                        self.metadata_store.save_metadata(metadata=metadata)
+                        self.service.persist_metadata(metadata)
                         logger.info(f"Metadata saved for {filename}: {metadata}")
-                        yield ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n"
+                        yield ProcessingProgress(step=current_step, status=Status.SUCCESS, 
+                                                 document_uid=metadata.document_uid, 
+                                                 filename=filename).model_dump_json() + "\n"
                         
                         # ✅ At least one file succeeded
                         all_success_flag[0] = True
@@ -218,7 +245,9 @@ class IngestionController:
                         logger.exception(f"Failed to process {file.filename}")
                         # Send detailed error message (safe for frontend)
                         error_message = f"{type(e).__name__}: {str(e).strip() or 'No error message'}"
-                        yield ProcessingProgress(step=current_step, status=Status.ERROR, error=error_message, filename=file.filename).model_dump_json() + "\n"
+                        yield ProcessingProgress(step=current_step, 
+                                                 status=Status.ERROR, error=error_message, 
+                                                 filename=file.filename).model_dump_json() + "\n"
                 yield json.dumps({"step": "done", "status": Status.SUCCESS if all_success_flag[0] else "error"}) + "\n"
 
             return StatusAwareStreamingResponse(event_generator(), all_success_flag=all_success_flag)
@@ -264,7 +293,8 @@ class IngestionController:
             # and to avoid blocking the generator with file I/O operations.
             preloaded_files = []
             for file in files:
-                input_temp_file = self.service.save_file_to_temp(file)
+                raw_path = uploadfile_to_path(file)
+                input_temp_file = save_file_to_temp(raw_path)
                 logger.info(f"File {file.filename} saved to temp storage at {input_temp_file}")
                 preloaded_files.append((file.filename, input_temp_file))
             all_success_flag = [False]  # Track success across all files
@@ -277,27 +307,28 @@ class IngestionController:
                         output_temp_dir = input_temp_file.parent.parent
 
                         # Step: Metadata extraction
-                        metadata = self.service.extract_metadata(input_temp_file, tags=tags, source_tag=source_tag)
+                        metadata = self.service.extract_metadata(
+                            file_path=input_temp_file, tags=tags, source_tag=source_tag)
                         logger.info(f"Metadata extracted for {filename}: {metadata}")
                         yield ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n"
 
                         # check if metadata is already known if so delete it to replace it and process the
                         # document again
-                        if self.metadata_store.get_metadata_by_uid(metadata.document_uid):
-                            logger.info(f"Metadata already exists for {filename}: {metadata}")
-                            self.metadata_store.delete_metadata(metadata)
-                            self.content_store.delete_content(metadata.document_uid)
+                        if self.service.get_metadata(metadata.document_uid):
+                            logger.error(f"Metadata already exists for {filename}: {metadata}")
 
                         yield ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n"
                         # Step: Uploading to backend storage
                         current_step = "raw content saving"
-                        self.content_store.save_content(metadata.document_uid, output_temp_dir)
-                        metadata.mark_stage_done(ProcessingStage.RAW_AVAILABLE)
-                        yield ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n"
+                        self.service.save_input(metadata=metadata, input_dir=output_temp_dir / "input")
+                        yield ProcessingProgress(step=current_step, 
+                                                 status=Status.SUCCESS, 
+                                                 document_uid=metadata.document_uid, 
+                                                 filename=filename).model_dump_json() + "\n"
                         # ✅ At least one file succeeded
                         # Step 2: Metadata saving
                         current_step = "metadata saving"
-                        self.metadata_store.save_metadata(metadata=metadata)
+                        self.service.persist_metadata(metadata=metadata)
                         logger.info(f"Metadata saved for {filename}: {metadata}")
                         all_success_flag[0] = True
                     except Exception as e:

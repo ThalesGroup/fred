@@ -25,7 +25,7 @@ class PreProcess:
     @workflow.run
     async def run(self, file, metadata):
         workflow.logger.info(f"📂 PreProcess: {file}")
-        await workflow.execute_activity(
+        return await workflow.execute_activity(
             process_document_activity,
             args=[file, metadata],
             schedule_to_close_timeout=timedelta(seconds=60)
@@ -58,7 +58,7 @@ class Process:
                 retry_policy=RetryPolicy(maximum_attempts=2)
             )
 
-            await workflow.execute_child_workflow(
+            metadata = await workflow.execute_child_workflow(
                 PreProcess.run,
                 args=[file, metadata],
                 id=f"process-{file.document_uid}",

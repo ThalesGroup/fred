@@ -62,6 +62,18 @@ class LocalStorageBackend(BaseContentStore):
 
         logger.info(f"✅ Successfully saved document {document_uid} to {destination}")
 
+    def save_input(self, document_uid: str, input_dir: Path) -> None:
+        destination = self.destination_root / document_uid / "input"
+        if destination.exists():
+            shutil.rmtree(destination)
+        shutil.copytree(input_dir, destination)
+
+    def save_output(self, document_uid: str, output_dir: Path) -> None:
+        destination = self.destination_root / document_uid / "output"
+        if destination.exists():
+            shutil.rmtree(destination)
+        shutil.copytree(output_dir, destination)
+        
     def delete_content(self, document_uid: str) -> None:
         """
         Deletes the content directory for the given document UID.

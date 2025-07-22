@@ -59,6 +59,46 @@ class MinioStorageBackend(BaseContentStore):
                     logger.error(f"Failed to upload '{file_path}': {e}")
                     raise ValueError(f"Failed to upload '{file_path}': {e}")
 
+    def _upload_folder(self, document_uid: str, local_path: Path, subfolder: str):
+        """
+        Uploads all files inside `local_path` to MinIO under the given subfolder
+        (e.g. input/ or output/) using the structure:
+            {document_uid}/{subfolder}/<relative_path>
+
+        Example:
+            If local_path contains:
+                /tmp/output/output.md
+                /tmp/output/media/image1.png
+
+            It uploads to:
+                {document_uid}/output/output.md
+                {document_uid}/output/media/image1.png
+        """
+        if not local_path.exists() or not local_path.is_dir():
+            raise ValueError(f"Path {local_path} does not exist or is not a directory")
+
+        for file_path in local_path.rglob("*"):
+            if file_path.is_file():
+                relative_path = file_path.relative_to(local_path)
+                object_name = f"{document_uid}/{subfolder}/{relative_path}"
+
+                try:
+                    self.client.fput_object(
+                        self.bucket_name,
+                        object_name,
+                        str(file_path)
+                    )
+                    logger.info(f"📤 Uploaded '{object_name}' to bucket '{self.bucket_name}'")
+                except S3Error as e:
+                    logger.error(f"❌ Failed to upload '{file_path}' as '{object_name}': {e}")
+                    raise ValueError(f"Upload failed for '{object_name}': {e}")
+
+    def save_input(self, document_uid: str, input_dir: Path) -> None:
+        self._upload_folder(document_uid, input_dir, subfolder="input")
+
+    def save_output(self, document_uid: str, output_dir: Path) -> None:
+        self._upload_folder(document_uid, output_dir, subfolder="output")
+
     def delete_content(self, document_uid: str) -> None:
         """
         Deletes all objects in the bucket under the given document UID prefix.
