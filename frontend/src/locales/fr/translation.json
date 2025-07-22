@@ -197,7 +197,6 @@
     "downloadSelected": "Télécharger",
     "fileName": "Nom du fichier",
     "dateAdded": "Date d'ajout",
-    "dateAddedTooltip": "Date d'ajout à la base de connaissances",
     "retrievableYes": "Consultable",
     "retrievableNo": "Exclu",
     "status": "Status",

@@ -197,7 +197,6 @@
     "downloadSelected": "Download",
     "fileName": "File Name",
     "dateAdded": "Date Added",
-    "dateAddedTooltip": "Date added to knowledge base",
     "retrievableYes": "Searchable",
     "retrievableNo": "Exluded",
     "status": "Status",

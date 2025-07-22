@@ -20,7 +20,6 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  Paper,
   Checkbox,
   Tooltip,
   Typography,
@@ -109,28 +108,62 @@ export const DocumentTable: React.FC<FileTableProps> = ({
     setSelectedFiles(checked ? [...files] : []);
   };
 
-  const handleDelete = async (file: FileRow) => {
+  const handleDelete = async (file: FileRow, showToast: boolean = true) => {
     try {
       await deleteDocument(file.document_uid).unwrap();
-      showInfo({
-        summary: "Delete Success",
-        detail: `Document ${file.document_name} deleted`,
-        duration: 3000,
-      });
+      if (showToast) {
+        showInfo({
+          summary: "Delete Success",
+          detail: `${file.document_name} deleted`,
+          duration: 3000,
+        });
+      }
       setSelectedFiles((prev) => prev.filter((f) => f.document_uid !== file.document_uid));
-      onRefreshData?.();
+      if (showToast) {
+        onRefreshData?.();
+      }
     } catch (error) {
-      showError({
-        summary: "Delete Failed",
-        detail: `Could not delete document: ${error?.data?.detail || error.message}`,
-      });
+      if (showToast) {
+        showError({
+          summary: "Delete Failed",
+          detail: `Could not delete document: ${error?.data?.detail || error.message}`,
+        });
+      }
+      throw error; // Re-throw for bulk handling
     }
   };
 
   const handleBulkDelete = async (filesToDelete: FileRow[]) => {
+    let successCount = 0;
+    let failedFiles: string[] = [];
+
     for (const file of filesToDelete) {
-      await handleDelete(file);
+      try {
+        await handleDelete(file, false); // Don't show individual toasts
+        successCount++;
+      } catch (error) {
+        failedFiles.push(file.document_name);
+      }
     }
+
+    // Show summary toasts
+    if (successCount > 0) {
+      showInfo({
+        summary: "Delete Success",
+        detail: `${successCount} document${successCount > 1 ? 's' : ''} deleted`,
+        duration: 3000,
+      });
+    }
+
+    if (failedFiles.length > 0) {
+      showError({
+        summary: "Delete Failed",
+        detail: `Failed to delete: ${failedFiles.join(', ')}`,
+      });
+    }
+
+    // Refresh data once at the end
+    onRefreshData?.();
   };
 
   const handleDownload = async (file: FileRow) => {
@@ -293,7 +326,7 @@ export const DocumentTable: React.FC<FileTableProps> = ({
                     </Box>
                   </TableCell>
                   <TableCell>
-                    <Tooltip title={t("documentTable.dateAddedTooltip")}>
+                    <Tooltip title={file.date_added_to_kb}>
                       <Typography variant="body2">
                         <EventAvailableIcon fontSize="small" sx={{ mr: 0.5 }} />
                         {formatDate(file.date_added_to_kb)}
