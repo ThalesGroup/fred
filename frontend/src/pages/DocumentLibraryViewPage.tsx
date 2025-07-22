@@ -12,11 +12,15 @@ import { KeyCloakService } from "../security/KeycloakService";
 
 export const DocumentLibraryViewPage = () => {
   const { libraryId } = useParams<{ libraryId: string }>();
-  const { data: library, isLoading, refetch: refetchLibrary } = useGetTagKnowledgeFlowV1TagsTagIdGetQuery({ tagId: libraryId });
+  const {
+    data: library,
+    isLoading,
+    refetch: refetchLibrary,
+  } = useGetTagKnowledgeFlowV1TagsTagIdGetQuery({ tagId: libraryId });
   const [getDocumentsMetadata] = useGetDocumentsMetadataKnowledgeFlowV1DocumentsMetadataPostMutation();
 
   const [documents, setDocuments] = useState<DocumentMetadata[]>([]);
-  
+
   const hasDocumentManagementPermission = () => {
     const userRoles = KeyCloakService.GetUserRoles();
     return userRoles.includes("admin") || userRoles.includes("editor");
@@ -24,7 +28,7 @@ export const DocumentLibraryViewPage = () => {
 
   const fetchDocumentsMetadata = async () => {
     if (!library?.document_ids) return;
-    
+
     const promises: Promise<DocumentMetadata | undefined>[] = [];
     for (const id of library.document_ids) {
       promises.push(
@@ -84,7 +88,15 @@ export const DocumentLibraryViewPage = () => {
             {library.description || "No description available."}
           </Typography>
         </Paper>
-        <Paper sx={{ p: 2, borderRadius: 4, mt: 2, position: "relative" }}>
+        <Paper
+          sx={{
+            p: 2,
+            pt: 7, // To make space for DocumentTableSelectionToolbar (used for bulk actions)
+            borderRadius: 4,
+            mt: 2,
+            position: "relative",
+          }}
+        >
           <DocumentTable
             files={documents}
             isAdmin={hasDocumentManagementPermission()}
