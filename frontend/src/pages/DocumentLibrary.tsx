@@ -34,6 +34,7 @@ import {
   InputLabel,
   Checkbox,
   ListItemText,
+  SelectChangeEvent,
 } from "@mui/material";
 
 import ClearIcon from "@mui/icons-material/Clear";
@@ -463,25 +464,30 @@ export const DocumentLibrary = () => {
           sx={{ mt: { xs: 10, md: 0 } }}
         >
           {/* Source Selector on the left */}
-          <FormControl size="small" sx={{ minWidth: 220 }}>
-            <InputLabel>Source</InputLabel>
+          <FormControl size="small" sx={{ minWidth: 320 }}>
+            <InputLabel id="sources-label">Document Sources</InputLabel>
             <Select
+              labelId="sources-label"
               value={selectedSourceTag || ""}
-              onChange={(e) => {
+              onChange={(e: SelectChangeEvent) => {
                 const value = e.target.value;
                 setSelectedSourceTag(value === "" ? null : value);
               }}
-              input={<OutlinedInput label="Source" />}
+              input={<OutlinedInput label="Document Sources" />}  
             >
               {allSources?.map((source) => (
                 <MenuItem key={source.tag} value={source.tag}>
-                  <Box title={source.description || source.tag} sx={{ overflow: "hidden", textOverflow: "ellipsis" }}>
+                  <Box
+                    title={source.description || source.tag}
+                    sx={{ overflow: "hidden", textOverflow: "ellipsis" }}
+                  >
                     {source.tag}
                   </Box>
                 </MenuItem>
               ))}
             </Select>
           </FormControl>
+
 
 
 
