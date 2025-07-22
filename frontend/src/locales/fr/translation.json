@@ -175,6 +175,7 @@
     "title": "Bibliothèque de documents",
     "description": "Accédez aux documents de la base de connaissances",
     "upload": "Ajouter un document",
+    "uploadInLibrary": "Ajouter à la bibliothèque",
     "uploadDrawerTitle": "Ajouter un document",
     "dropFiles": "Déposez vos fichiers ici",
     "maxSize": "ou cliquez pour sélectionner (max 200Mo par fichier)",

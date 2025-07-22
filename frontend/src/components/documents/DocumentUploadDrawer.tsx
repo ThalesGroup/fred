@@ -27,9 +27,15 @@ interface DocumentUploadDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   onUploadComplete?: () => void;
+  metadata?: Record<string, any>;
 }
 
-export const DocumentUploadDrawer: React.FC<DocumentUploadDrawerProps> = ({ isOpen, onClose, onUploadComplete }) => {
+export const DocumentUploadDrawer: React.FC<DocumentUploadDrawerProps> = ({
+  isOpen,
+  onClose,
+  onUploadComplete,
+  metadata,
+}) => {
   const { t } = useTranslation();
   const { showError } = useToast();
   const theme = useTheme();
@@ -69,16 +75,21 @@ export const DocumentUploadDrawer: React.FC<DocumentUploadDrawerProps> = ({ isOp
       let uploadCount = 0;
       for (const file of tempFiles) {
         try {
-          await streamUploadOrProcessDocument(file, uploadMode, (progress) => {
-            setUploadProgressSteps((prev) => [
-              ...prev,
-              {
-                step: progress.step,
-                status: progress.status,
-                filename: file.name,
-              },
-            ]);
-          });
+          await streamUploadOrProcessDocument(
+            file,
+            uploadMode,
+            (progress) => {
+              setUploadProgressSteps((prev) => [
+                ...prev,
+                {
+                  step: progress.step,
+                  status: progress.status,
+                  filename: file.name,
+                },
+              ]);
+            },
+            metadata,
+          );
           uploadCount++;
         } catch (e) {
           console.error("Error uploading file:", e);

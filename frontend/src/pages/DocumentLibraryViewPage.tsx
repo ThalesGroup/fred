@@ -96,7 +96,7 @@ export const DocumentLibraryViewPage = () => {
             size="medium"
             sx={{ borderRadius: "8px" }}
           >
-            {t("documentLibrary.upload")}
+            {t("documentLibrary.uploadInLibrary")}
           </Button>
         )}
       </TopBar>
@@ -134,13 +134,14 @@ export const DocumentLibraryViewPage = () => {
           />
         </Paper>
       </Container>
-      
+
       {/* Upload Drawer */}
       {hasDocumentManagementPermission() && (
         <DocumentUploadDrawer
           isOpen={openUploadDrawer}
           onClose={() => setOpenUploadDrawer(false)}
           onUploadComplete={handleUploadComplete}
+          metadata={{ tags: [library.id] }}
         />
       )}
     </>

@@ -175,6 +175,7 @@
     "title": "Document Library",
     "description": "Access the knowledge base documents",
     "upload": "Upload a document",
+    "uploadInLibrary": "Add to library",
     "uploadDrawerTitle": "Upload a document",
     "dropFiles": "Drop your files here",
     "maxSize": "or click to select (max 200Mb per file)",
