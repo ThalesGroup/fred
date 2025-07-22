@@ -464,7 +464,7 @@ export const DocumentLibrary = () => {
           sx={{ mt: { xs: 10, md: 0 } }}
         >
           {/* Source Selector on the left */}
-          <FormControl size="small" sx={{ minWidth: 320 }}>
+          <FormControl size="small" sx={{ minWidth: 200 }}>
             <InputLabel id="sources-label">Document Sources</InputLabel>
             <Select
               labelId="sources-label"
