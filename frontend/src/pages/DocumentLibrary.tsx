@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useDropzone } from "react-dropzone";
 import {
   Box,
   Typography,
@@ -26,7 +25,6 @@ import {
   IconButton,
   InputAdornment,
   Pagination,
-  Drawer,
   Container,
   Paper,
   Grid2,
@@ -40,7 +38,6 @@ import ClearIcon from "@mui/icons-material/Clear";
 import { useEffect, useState } from "react";
 import { LoadingSpinner } from "../utils/loadingSpinner";
 import UploadIcon from "@mui/icons-material/Upload";
-import SaveIcon from "@mui/icons-material/Save";
 import SearchIcon from "@mui/icons-material/Search";
 import LibraryBooksRoundedIcon from "@mui/icons-material/LibraryBooksRounded";
 import { KeyCloakService } from "../security/KeycloakService";
@@ -51,11 +48,9 @@ import {
   useBrowseDocumentsMutation,
 } from "../slices/documentApi";
 
-import { streamUploadOrProcessDocument } from "../slices/streamDocumentUpload";
 import { useToast } from "../components/ToastProvider";
-import { ProgressStep, ProgressStepper } from "../components/ProgressStepper";
 import { DocumentTable } from "../components/documents/DocumentTable";
-import { DocumentDrawerTable } from "../components/documents/DocumentDrawerTable";
+import { DocumentUploadDrawer } from "../components/documents/DocumentUploadDrawer";
 import { TopBar } from "../common/TopBar";
 import { useTranslation } from "react-i18next";
 import { DocumentLibrariesList } from "./DocumentLibrariesList";
@@ -113,8 +108,7 @@ type DocumentLibraryView = "libraries" | "documents";
  * - Responsive layout using MUI's Grid2 and Breakpoints
  */
 export const DocumentLibrary = () => {
-  const { showInfo, showError } = useToast();
-  const [uploadMode, setUploadMode] = useState<"upload" | "process">("process");
+  const { showError } = useToast();
 
   // API Hooks
   const [browseDocuments] = useBrowseDocumentsMutation();
@@ -135,22 +129,10 @@ export const DocumentLibrary = () => {
     return userRoles.includes("admin") || userRoles.includes("editor");
   };
 
-  // tempFiles:
-  // This state holds the list of files that the user has selected or dropped into the upload drawer.
-  // These files are pending upload to the server and are not yet part of the main document library.
-  // - Files are added to tempFiles when dropped or selected via the Dropzone.
-  // - They are displayed inside the Upload Drawer for review or removal.
-  // - Upon clicking "Save", files from tempFiles are uploaded to the server.
-  // - After upload completes (success or failure), tempFiles is cleared.
-  // This ensures a clear separation between "pending uploads" and "uploaded documents."
-  const [tempFiles, setTempFiles] = useState([]);
-
   // UI States
-  const [uploadProgressSteps, setUploadProgressSteps] = useState<ProgressStep[]>([]);
 
   const [searchQuery, setSearchQuery] = useState(""); // Text entered in the search bar
   const [isLoading, setIsLoading] = useState(false); // Controls loading spinner for fetches/uploads
-  const [isHighlighted, setIsHighlighted] = useState(false); // Highlight state for the upload Dropzone
   const [documentsPerPage, setDocumentsPerPage] = useState(10); // Number of documents shown per page
   const [currentPage, setCurrentPage] = useState(1); // Current page in the pagination component
   const [openSide, setOpenSide] = useState(false); // Whether the upload drawer is open
@@ -170,13 +152,6 @@ export const DocumentLibrary = () => {
     roles: KeyCloakService.GetUserRoles(),
   });
 
-  const { getInputProps, open } = useDropzone({
-    noClick: true,
-    noKeyboard: true,
-    onDrop: (acceptedFiles) => {
-      setTempFiles((prevFiles) => [...prevFiles, ...acceptedFiles]);
-    },
-  });
 
   const [allDocuments, setAllDocuments] = useState<KnowledgeDocument[]>([]);
 
@@ -255,49 +230,8 @@ export const DocumentLibrary = () => {
     }
   }, [selectedView]);
 
-  const handleDeleteTemp = (index) => {
-    const newFiles = tempFiles.filter((_, i) => i !== index);
-    setTempFiles(newFiles);
-  };
-
-  const handleAddFiles = async () => {
-    setIsLoading(true);
-    setUploadProgressSteps([]);
-    try {
-      let uploadCount = 0;
-      for (const file of tempFiles) {
-        try {
-          await streamUploadOrProcessDocument(file, uploadMode, (progress) => {
-            setUploadProgressSteps((prev) => [
-              ...prev,
-              {
-                step: progress.step,
-                status: progress.status,
-                filename: file.name,
-              },
-            ]);
-          });
-          uploadCount++;
-        } catch (e) {
-          console.error("Error uploading file:", e);
-          showError({
-            summary: "Upload Failed",
-            detail: `Error uploading ${file.name}: ${e.message}`,
-          });
-        }
-      }
-    } catch (error) {
-      showError({
-        summary: "Upload Failed",
-        detail: `Error uploading ${error}`,
-      });
-      console.error("Unexpected error:", error);
-    } finally {
-      await fetchFiles();
-      setTempFiles([]);
-      setOpenSide(false);
-      setIsLoading(false);
-    }
+  const handleUploadComplete = async () => {
+    await fetchFiles();
   };
 
   // Pagination
@@ -360,11 +294,7 @@ export const DocumentLibrary = () => {
             <Button
               variant="contained"
               startIcon={<UploadIcon />}
-              onClick={() => {
-                setUploadProgressSteps([]);
-                setTempFiles([]);
-                setOpenSide(true);
-              }}
+              onClick={() => setOpenSide(true)}
               size="medium"
               sx={{ borderRadius: "8px" }}
             >
@@ -586,104 +516,11 @@ export const DocumentLibrary = () => {
 
       {/* Upload Drawer - Only visible to admins and editors */}
       {userInfo.canManageDocuments && (
-        <Drawer
-          anchor="right"
-          open={openSide}
+        <DocumentUploadDrawer
+          isOpen={openSide}
           onClose={() => setOpenSide(false)}
-          PaperProps={{
-            sx: {
-              width: { xs: "100%", sm: 450 },
-              p: 3,
-              borderTopLeftRadius: 16,
-              borderBottomLeftRadius: 16,
-            },
-          }}
-        >
-          <Typography variant="h5" fontWeight="bold" gutterBottom>
-            {t("documentLibrary.uploadDrawerTitle")}
-          </Typography>
-          <FormControl fullWidth sx={{ mt: 2 }}>
-            <Typography variant="subtitle2" gutterBottom>
-              Ingestion Mode
-            </Typography>
-            <Select
-              value={uploadMode}
-              onChange={(e) => setUploadMode(e.target.value as "upload" | "process")}
-              size="small"
-              sx={{ borderRadius: "8px" }}
-            >
-              <MenuItem value="upload">Upload</MenuItem>
-              <MenuItem value="process">Upload and Process</MenuItem>
-            </Select>
-          </FormControl>
-
-          <Paper
-            sx={{
-              mt: 3,
-              p: 3,
-              border: "1px dashed",
-              borderColor: "divider",
-              borderRadius: "12px",
-              cursor: "pointer",
-              minHeight: "180px",
-              maxHeight: "400px",
-              overflowY: "auto",
-              backgroundColor: isHighlighted ? theme.palette.action.hover : theme.palette.background.paper,
-              transition: "background-color 0.3s",
-              display: "block",
-              textAlign: "left",
-              flexDirection: "column",
-              alignItems: "center",
-            }}
-            onClick={open}
-            onDragOver={(event) => {
-              event.preventDefault();
-              setIsHighlighted(true);
-            }}
-            onDragLeave={() => setIsHighlighted(false)}
-            onDrop={(event) => {
-              event.preventDefault();
-              setIsHighlighted(false);
-            }}
-          >
-            <input {...getInputProps()} />
-            {!tempFiles.length ? (
-              <Box display="flex" flexDirection="column" justifyContent="center" alignItems="center" height="100%">
-                <UploadIcon sx={{ fontSize: 40, color: "text.secondary", mb: 2 }} />
-                <Typography variant="body1" color="textSecondary">
-                  {t("documentLibrary.dropFiles")}
-                </Typography>
-                <Typography variant="body2" color="textSecondary">
-                  {t("documentLibrary.maxSize")}
-                </Typography>
-              </Box>
-            ) : (
-              <DocumentDrawerTable files={tempFiles} onDelete={handleDeleteTemp} />
-            )}
-          </Paper>
-          {uploadProgressSteps.length > 0 && (
-            <Box sx={{ mt: 3, width: "100%" }}>
-              <ProgressStepper steps={uploadProgressSteps} />
-            </Box>
-          )}
-
-          <Box sx={{ mt: 3, display: "flex", justifyContent: "space-between" }}>
-            <Button variant="outlined" onClick={() => setOpenSide(false)} sx={{ borderRadius: "8px" }}>
-              {t("documentLibrary.cancel")}
-            </Button>
-
-            <Button
-              variant="contained"
-              color="success"
-              startIcon={<SaveIcon />}
-              onClick={handleAddFiles}
-              disabled={!tempFiles.length || isLoading}
-              sx={{ borderRadius: "8px" }}
-            >
-              {isLoading ? t("documentLibrary.saving") : t("documentLibrary.save")}
-            </Button>
-          </Box>
-        </Drawer>
+          onUploadComplete={handleUploadComplete}
+        />
       )}
     </>
   );

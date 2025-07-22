@@ -1,5 +1,5 @@
 import { useParams } from "react-router-dom";
-import { Container, Typography, Box, CircularProgress, Paper } from "@mui/material";
+import { Container, Typography, Box, CircularProgress, Paper, Button } from "@mui/material";
 import {
   DocumentMetadata,
   useGetTagKnowledgeFlowV1TagsTagIdGetQuery,
@@ -8,9 +8,13 @@ import {
 import { TopBar } from "../common/TopBar";
 import { useEffect, useState } from "react";
 import { DocumentTable } from "../components/documents/DocumentTable";
+import { DocumentUploadDrawer } from "../components/documents/DocumentUploadDrawer";
 import { KeyCloakService } from "../security/KeycloakService";
+import UploadIcon from "@mui/icons-material/Upload";
+import { useTranslation } from "react-i18next";
 
 export const DocumentLibraryViewPage = () => {
+  const { t } = useTranslation();
   const { libraryId } = useParams<{ libraryId: string }>();
   const {
     data: library,
@@ -20,6 +24,7 @@ export const DocumentLibraryViewPage = () => {
   const [getDocumentsMetadata] = useGetDocumentsMetadataKnowledgeFlowV1DocumentsMetadataPostMutation();
 
   const [documents, setDocuments] = useState<DocumentMetadata[]>([]);
+  const [openUploadDrawer, setOpenUploadDrawer] = useState(false);
 
   const hasDocumentManagementPermission = () => {
     const userRoles = KeyCloakService.GetUserRoles();
@@ -50,6 +55,10 @@ export const DocumentLibraryViewPage = () => {
     fetchDocumentsMetadata();
   };
 
+  const handleUploadComplete = () => {
+    handleRefreshData();
+  };
+
   useEffect(() => {
     if (library) {
       console.log("Fetching documents for library:", library.name, library.document_ids);
@@ -78,7 +87,19 @@ export const DocumentLibraryViewPage = () => {
 
   return (
     <>
-      <TopBar title={library.name} description={library.description || ""} backTo="/documentLibrary" />
+      <TopBar title={library.name} description={library.description || ""} backTo="/documentLibrary">
+        {hasDocumentManagementPermission() && (
+          <Button
+            variant="contained"
+            startIcon={<UploadIcon />}
+            onClick={() => setOpenUploadDrawer(true)}
+            size="medium"
+            sx={{ borderRadius: "8px" }}
+          >
+            {t("documentLibrary.upload")}
+          </Button>
+        )}
+      </TopBar>
       <Container maxWidth="xl">
         <Paper sx={{ p: 3, borderRadius: 4, mt: 2 }}>
           <Typography variant="h4" gutterBottom>
@@ -113,6 +134,15 @@ export const DocumentLibraryViewPage = () => {
           />
         </Paper>
       </Container>
+      
+      {/* Upload Drawer */}
+      {hasDocumentManagementPermission() && (
+        <DocumentUploadDrawer
+          isOpen={openUploadDrawer}
+          onClose={() => setOpenUploadDrawer(false)}
+          onUploadComplete={handleUploadComplete}
+        />
+      )}
     </>
   );
 };
