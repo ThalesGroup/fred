@@ -26,20 +26,26 @@ import {
   Typography,
   Box,
   TableSortLabel,
-  Button,
-  Collapse,
-  IconButton,
   Chip,
   Avatar,
 } from "@mui/material";
 import EventAvailableIcon from "@mui/icons-material/EventAvailable";
-import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
-import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
 import dayjs from "dayjs";
 import { getDocumentIcon } from "./DocumentIcon";
 import { DocumentTableRowActionsMenu } from "./DocumentTableRowActionsMenu";
-import { DOCUMENT_PROCESSING_STAGES, useGetDocumentMetadataMutation } from "../../slices/documentApi";
+import { DocumentTableSelectionToolbar } from "./DocumentTableSelectionToolbar";
+import {
+  DOCUMENT_PROCESSING_STAGES,
+  useDeleteDocumentMutation,
+  useLazyGetDocumentRawContentQuery,
+  useUpdateDocumentRetrievableMutation,
+  useProcessDocumentsMutation,
+  ProcessDocumentsRequest,
+} from "../../slices/documentApi";
 import { useTranslation } from "react-i18next";
+import { useToast } from "../ToastProvider";
+import { useDocumentViewer } from "./useDocumentViewer";
+import { downloadFile } from "../../utils/downloadUtils";
 // import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 // import HourglassTopIcon from "@mui/icons-material/HourglassTop";
 // import CancelIcon from "@mui/icons-material/Cancel";
@@ -62,54 +68,142 @@ export interface Metadata {
 
 interface FileTableProps {
   files: FileRow[];
-  selectedFiles: FileRow[];
-  onToggleSelect: (file: FileRow) => void;
-  onToggleAll: (checked: boolean) => void;
-  onDelete: (file: FileRow) => void | Promise<void>;
-  onDownload: (file: FileRow) => void | Promise<void>;
-  onToggleRetrievable?: (file: FileRow) => void;
-  onOpen: (file: FileRow) => void | Promise<void>;
-  onProcess: (file: FileRow[]) => void | Promise<void>;
   isAdmin?: boolean;
+  onRefreshData?: () => void;
+  showSelectionActions?: boolean;
 }
 
 export const DocumentTable: React.FC<FileTableProps> = ({
   files,
-  selectedFiles,
-  onToggleSelect,
-  onToggleAll,
-  onDelete,
-  onDownload,
-  onToggleRetrievable,
-  onOpen,
-  onProcess,
   isAdmin = false,
+  onRefreshData,
+  showSelectionActions = true,
 }) => {
   const { t } = useTranslation();
-  const allSelected = selectedFiles.length === files.length && files.length > 0;
+  const { showInfo, showError } = useToast();
+  const { openDocument, DocumentViewerComponent } = useDocumentViewer();
+
+  // Internal state management
+  const [selectedFiles, setSelectedFiles] = useState<FileRow[]>([]);
   const [sortBy, setSortBy] = useState<keyof FileRow>("date_added_to_kb");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
 
-  const [openRows, setOpenRows] = useState<Record<string, boolean>>({});
-  const [metadataByUid, setMetadataByUid] = useState<Record<string, Record<string, any>>>({});
-  const [loadingMetadata, setLoadingMetadata] = useState<Record<string, boolean>>({});
-  const [retrieveMetadata] = useGetDocumentMetadataMutation();
+  // API hooks
+  const [deleteDocument] = useDeleteDocumentMutation();
+  const [triggerDownload] = useLazyGetDocumentRawContentQuery();
+  const [updateDocumentRetrievable] = useUpdateDocumentRetrievableMutation();
+  const [processDocuments] = useProcessDocumentsMutation();
 
-  const toggleRow = async (uid: string) => {
-    const isOpen = openRows[uid];
-    setOpenRows((prev) => ({ ...prev, [uid]: !isOpen }));
+  const allSelected = selectedFiles.length === files.length && files.length > 0;
 
-    if (!isOpen && !metadataByUid[uid]) {
-      setLoadingMetadata((prev) => ({ ...prev, [uid]: true }));
-      try {
-        const response = await retrieveMetadata({ document_uid: uid }).unwrap();
-        setMetadataByUid((prev) => ({ ...prev, [uid]: response.metadata }));
-      } catch (error) {
-        console.error("Failed to fetch metadata:", error);
-        setMetadataByUid((prev) => ({ ...prev, [uid]: {} }));
-      } finally {
-        setLoadingMetadata((prev) => ({ ...prev, [uid]: false }));
+  // Internal handlers
+  const handleToggleSelect = (file: FileRow) => {
+    setSelectedFiles((prev) =>
+      prev.some((f) => f.document_uid === file.document_uid)
+        ? prev.filter((f) => f.document_uid !== file.document_uid)
+        : [...prev, file],
+    );
+  };
+
+  const handleToggleAll = (checked: boolean) => {
+    setSelectedFiles(checked ? [...files] : []);
+  };
+
+  const handleDelete = async (file: FileRow) => {
+    try {
+      await deleteDocument(file.document_uid).unwrap();
+      showInfo({
+        summary: "Delete Success",
+        detail: `Document ${file.document_name} deleted`,
+        duration: 3000,
+      });
+      setSelectedFiles((prev) => prev.filter((f) => f.document_uid !== file.document_uid));
+      onRefreshData?.();
+    } catch (error) {
+      showError({
+        summary: "Delete Failed",
+        detail: `Could not delete document: ${error?.data?.detail || error.message}`,
+      });
+    }
+  };
+
+  const handleBulkDelete = async (filesToDelete: FileRow[]) => {
+    for (const file of filesToDelete) {
+      await handleDelete(file);
+    }
+  };
+
+  const handleDownload = async (file: FileRow) => {
+    try {
+      const { data: blob } = await triggerDownload({ document_uid: file.document_uid });
+      if (blob) {
+        downloadFile(blob, file.document_name || "document");
       }
+    } catch (err) {
+      showError({
+        summary: "Download failed",
+        detail: `Could not download document: ${err?.data?.detail || err.message}`,
+      });
+    }
+  };
+
+  const handleBulkDownload = async (filesToDownload: FileRow[]) => {
+    for (const file of filesToDownload) {
+      await handleDownload(file);
+    }
+  };
+
+  const handleDocumentPreview = async (file: FileRow) => {
+    openDocument({
+      document_uid: file.document_uid,
+      file_name: file.document_name,
+    });
+  };
+
+  const handleToggleRetrievable = async (file: FileRow) => {
+    try {
+      await updateDocumentRetrievable({
+        document_uid: file.document_uid,
+        retrievable: !file.retrievable,
+      }).unwrap();
+
+      showInfo({
+        summary: "Updated",
+        detail: `"${file.document_name}" is now ${!file.retrievable ? "searchable" : "excluded from search"}.`,
+      });
+
+      onRefreshData?.();
+    } catch (error) {
+      console.error("Update failed:", error);
+      showError({
+        summary: "Error updating document",
+        detail: error?.data?.detail || error.message,
+      });
+    }
+  };
+
+  const handleProcess = async (filesToProcess: FileRow[]) => {
+    try {
+      const payload: ProcessDocumentsRequest = {
+        files: filesToProcess.map((f) => ({
+          source_tag: f.source_type || "uploads",
+          document_uid: f.document_uid,
+          external_path: undefined,
+          tags: f.tags || [],
+        })),
+        pipeline_name: "manual_ui_trigger",
+      };
+
+      const result = await processDocuments(payload).unwrap();
+      showInfo({
+        summary: "Processing started",
+        detail: `Workflow ${result.workflow_id} submitted`,
+      });
+    } catch (error) {
+      showError({
+        summary: "Processing Failed",
+        detail: error?.data?.detail || error.message,
+      });
     }
   };
 
@@ -136,59 +230,26 @@ export const DocumentTable: React.FC<FileTableProps> = ({
   const formatDate = (date?: string) => {
     return date ? dayjs(date).format("DD/MM/YYYY") : "-";
   };
+
   return (
     <>
-      {selectedFiles.length > 0 && (
-        <Box sx={{ position: "absolute", left: 24, right: 24, zIndex: 10, p: 2, top: 0, display: "flex", justifyContent: "flex-end", alignItems: "center" }}>
-          <Typography pr={2} variant="subtitle2">
-            {t("documentTable.selectedCount", { count: selectedFiles.length })}
-          </Typography>
-          <Box display="flex" gap={1}>
-            <Button
-              size="small"
-              variant="outlined"
-              color="error"
-              onClick={() => selectedFiles.forEach((f) => onDelete(f))}
-            >
-              {t("documentTable.deleteSelected")}
-            </Button>
-            <Button
-              size="small"
-              variant="outlined"
-              onClick={() =>
-                selectedFiles.forEach((f) => {
-                  const link = document.createElement("a");
-                  link.href = `/knowledge-flow/v1/fullDocument/${f.document_uid}`;
-                  link.download = "";
-                  document.body.appendChild(link);
-                  link.click();
-                  document.body.removeChild(link);
-                })
-              }
-            >
-              {t("documentTable.downloadSelected")}
-            </Button>
-            <Button
-              size="small"
-              variant="outlined"
-              color="primary"
-              onClick={() => onProcess(selectedFiles)}
-            >
-              {t("documentTable.processSelected")}
-            </Button>
-          </Box>
-        </Box>
+      {showSelectionActions && (
+        <DocumentTableSelectionToolbar
+          selectedFiles={selectedFiles}
+          onDeleteSelected={handleBulkDelete}
+          onDownloadSelected={handleBulkDownload}
+          onProcessSelected={handleProcess}
+          isVisible={selectedFiles.length > 0}
+        />
       )}
 
-      <TableContainer component={Paper}>
-
+      <TableContainer>
         <Table size="medium">
           <TableHead>
             <TableRow>
               <TableCell padding="checkbox">
-                <Checkbox checked={allSelected} onChange={(e) => onToggleAll(e.target.checked)} />
+                <Checkbox checked={allSelected} onChange={(e) => handleToggleAll(e.target.checked)} />
               </TableCell>
-              <TableCell />
               <TableCell>
                 <TableSortLabel
                   active={sortBy === "document_name"}
@@ -220,18 +281,15 @@ export const DocumentTable: React.FC<FileTableProps> = ({
                   <TableCell padding="checkbox">
                     <Checkbox
                       checked={selectedFiles.some((f) => f.document_uid === file.document_uid)}
-                      onChange={() => onToggleSelect(file)}
+                      onChange={() => handleToggleSelect(file)}
                     />
-                  </TableCell>
-                  <TableCell>
-                    <IconButton size="small" onClick={() => toggleRow(file.document_uid)}>
-                      {openRows[file.document_uid] ? <KeyboardArrowUpIcon /> : <KeyboardArrowDownIcon />}
-                    </IconButton>
                   </TableCell>
                   <TableCell>
                     <Box display="flex" alignItems="center" gap={1}>
                       {getDocumentIcon(file.document_name)}
-                      <Typography variant="body2" noWrap>{file.document_name}</Typography>
+                      <Typography variant="body2" noWrap>
+                        {file.document_name}
+                      </Typography>
                     </Box>
                   </TableCell>
                   <TableCell>
@@ -244,21 +302,13 @@ export const DocumentTable: React.FC<FileTableProps> = ({
                   </TableCell>
                   <TableCell>
                     <Box display="flex" flexWrap="wrap" gap={0.5}>
-
                       {file.tags?.map((tag) => (
                         <Tooltip key={tag} title={`Tag: ${tag}`}>
-                          <Chip
-                            label={tag}
-                            size="small"
-                            variant="filled"
-                            sx={{ fontSize: "0.6rem" }}
-                          />
+                          <Chip label={tag} size="small" variant="filled" sx={{ fontSize: "0.6rem" }} />
                         </Tooltip>
                       ))}
-
                     </Box>
                   </TableCell>
-
 
                   <TableCell>
                     <Box display="flex" flexWrap="wrap" gap={0.5}>
@@ -315,8 +365,6 @@ export const DocumentTable: React.FC<FileTableProps> = ({
                     </Box>
                   </TableCell>
 
-
-
                   <TableCell>
                     {(() => {
                       const isRetrievable = file.retrievable;
@@ -326,7 +374,7 @@ export const DocumentTable: React.FC<FileTableProps> = ({
                           label={isRetrievable ? t("documentTable.retrievableYes") : t("documentTable.retrievableNo")}
                           size="small"
                           variant="outlined"
-                          onClick={isAdmin && onToggleRetrievable ? () => onToggleRetrievable(file) : undefined}
+                          onClick={isAdmin ? () => handleToggleRetrievable(file) : undefined}
                           sx={{
                             cursor: isAdmin ? "pointer" : "default",
                             backgroundColor: isRetrievable ? "#e6f4ea" : "#eceff1",
@@ -343,39 +391,12 @@ export const DocumentTable: React.FC<FileTableProps> = ({
                     {isAdmin && (
                       <DocumentTableRowActionsMenu
                         file={file}
-                        onDelete={() => onDelete(file)}
-                        onDownload={() => onDownload(file)}
-                        onOpen={() => onOpen(file)}
-                        onProcess={() => onProcess([file])}
+                        onDelete={() => handleDelete(file)}
+                        onDownload={() => handleDownload(file)}
+                        onOpen={() => handleDocumentPreview(file)}
+                        onProcess={() => handleProcess([file])}
                       />
                     )}
-                  </TableCell>
-                </TableRow>
-
-                <TableRow>
-                  <TableCell colSpan={6} sx={{ p: 0, borderBottom: "none" }}>
-                    <Collapse in={openRows[file.document_uid]} timeout="auto" unmountOnExit>
-                      <Box sx={{ p: 2, bgcolor: "background.default" }}>
-                        {loadingMetadata[file.document_uid] ? (
-                          <Typography variant="body2" fontStyle="italic" color="text.secondary">
-                            {t("documentTable.loadingMetadata")}
-                          </Typography>
-                        ) : metadataByUid[file.document_uid] && Object.keys(metadataByUid[file.document_uid]).length > 0 ? (
-                          Object.entries(metadataByUid[file.document_uid]).map(([key, value]) => (
-                            <Box key={key} sx={{ display: "flex", flexDirection: "row", mb: 0.5 }}>
-                              <Typography variant="body2" fontWeight={500}>{key}:</Typography>
-                              <Typography variant="body2" sx={{ ml: 1 }}>
-                                {typeof value === "object" ? JSON.stringify(value, null, 2) : String(value)}
-                              </Typography>
-                            </Box>
-                          ))
-                        ) : (
-                          <Typography variant="body2" fontStyle="italic" color="text.secondary">
-                            {t("documentTable.noMetadata")}
-                          </Typography>
-                        )}
-                      </Box>
-                    </Collapse>
                   </TableCell>
                 </TableRow>
               </React.Fragment>
@@ -383,6 +404,7 @@ export const DocumentTable: React.FC<FileTableProps> = ({
           </TableBody>
         </Table>
       </TableContainer>
+      <DocumentViewerComponent />
     </>
   );
-}
+};

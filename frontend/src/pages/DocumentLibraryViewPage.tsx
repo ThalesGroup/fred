@@ -6,27 +6,32 @@ import {
   useGetDocumentsMetadataKnowledgeFlowV1DocumentsMetadataPostMutation,
 } from "../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { TopBar } from "../common/TopBar";
-import { use } from "i18next";
 import { useEffect, useState } from "react";
 import { DocumentTable } from "../components/documents/DocumentTable";
+import { KeyCloakService } from "../security/KeycloakService";
 
 export const DocumentLibraryViewPage = () => {
   const { libraryId } = useParams<{ libraryId: string }>();
-  const { data: library, isLoading } = useGetTagKnowledgeFlowV1TagsTagIdGetQuery({ tagId: libraryId });
+  const { data: library, isLoading, refetch: refetchLibrary } = useGetTagKnowledgeFlowV1TagsTagIdGetQuery({ tagId: libraryId });
   const [getDocumentsMetadata] = useGetDocumentsMetadataKnowledgeFlowV1DocumentsMetadataPostMutation();
 
   const [documents, setDocuments] = useState<DocumentMetadata[]>([]);
+  
+  const hasDocumentManagementPermission = () => {
+    const userRoles = KeyCloakService.GetUserRoles();
+    return userRoles.includes("admin") || userRoles.includes("editor");
+  };
 
-  async function fetchDocumentsMetadata() {
+  const fetchDocumentsMetadata = async () => {
+    if (!library?.document_ids) return;
+    
     const promises: Promise<DocumentMetadata | undefined>[] = [];
-    for (const id of library.document_ids || []) {
+    for (const id of library.document_ids) {
       promises.push(
         getDocumentsMetadata({ filters: { document_uid: id } }).then((result) => {
-          // result.data may be undefined or an object containing the metadata
-          // Adjust this extraction as needed based on your actual API response shape
           if (result.error) {
             console.error(`Error fetching metadata for document ${id}:`, result.error);
-            return undefined; // Skip this document on error
+            return undefined;
           }
           return result.data.documents && result.data.documents[0];
         }),
@@ -34,7 +39,12 @@ export const DocumentLibraryViewPage = () => {
     }
     const docs = (await Promise.all(promises)).filter((doc): doc is DocumentMetadata => !!doc);
     setDocuments(docs);
-  }
+  };
+
+  const handleRefreshData = () => {
+    refetchLibrary();
+    fetchDocumentsMetadata();
+  };
 
   useEffect(() => {
     if (library) {
@@ -74,18 +84,12 @@ export const DocumentLibraryViewPage = () => {
             {library.description || "No description available."}
           </Typography>
         </Paper>
-        <Paper sx={{ p: 2, borderRadius: 4, mt: 2 }}>
+        <Paper sx={{ p: 2, borderRadius: 4, mt: 2, position: "relative" }}>
           <DocumentTable
             files={documents}
-            selectedFiles={[]}
-            onToggleSelect={() => {}}
-            onToggleAll={() => {}}
-            onDelete={() => {}}
-            onDownload={() => {}}
-            onToggleRetrievable={() => {}}
-            onOpen={() => {}}
-            onProcess={() => {}}
-            isAdmin={true}
+            isAdmin={hasDocumentManagementPermission()}
+            onRefreshData={handleRefreshData}
+            showSelectionActions={true}
           />
         </Paper>
       </Container>

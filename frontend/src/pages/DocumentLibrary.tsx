@@ -47,22 +47,15 @@ import { KeyCloakService } from "../security/KeycloakService";
 import {
   DOCUMENT_PROCESSING_STAGES,
   KnowledgeDocument,
-  useDeleteDocumentMutation,
-  useGetDocumentMarkdownPreviewMutation,
-  useLazyGetDocumentRawContentQuery,
-  useUpdateDocumentRetrievableMutation,
   useGetDocumentSourcesQuery,
   useBrowseDocumentsMutation,
-  useProcessDocumentsMutation,
-  ProcessDocumentsRequest,
 } from "../slices/documentApi";
 
 import { streamUploadOrProcessDocument } from "../slices/streamDocumentUpload";
 import { useToast } from "../components/ToastProvider";
 import { ProgressStep, ProgressStepper } from "../components/ProgressStepper";
-import { DocumentTable, FileRow } from "../components/documents/DocumentTable";
+import { DocumentTable } from "../components/documents/DocumentTable";
 import { DocumentDrawerTable } from "../components/documents/DocumentDrawerTable";
-import DocumentViewer from "../components/documents/DocumentViewer";
 import { TopBar } from "../common/TopBar";
 import { useTranslation } from "react-i18next";
 import { DocumentLibrariesList } from "./DocumentLibrariesList";
@@ -124,12 +117,7 @@ export const DocumentLibrary = () => {
   const [uploadMode, setUploadMode] = useState<"upload" | "process">("process");
 
   // API Hooks
-  const [deleteDocument] = useDeleteDocumentMutation();
   const [browseDocuments] = useBrowseDocumentsMutation();
-  const [processDocuments] = useProcessDocumentsMutation();
-  const [getDocumentMarkdownContent] = useGetDocumentMarkdownPreviewMutation();
-  const [selectedDocument, setSelectedDocument] = useState<any>(null);
-  const [triggerDownload] = useLazyGetDocumentRawContentQuery();
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [selectedStages, setSelectedStages] = useState<string[]>([]);
   const [searchableFilter, setSearchableFilter] = useState<"all" | "true" | "false">("all");
@@ -157,8 +145,6 @@ export const DocumentLibrary = () => {
   // This ensures a clear separation between "pending uploads" and "uploaded documents."
   const [tempFiles, setTempFiles] = useState([]);
 
-  const [selectedFiles, setSelectedFiles] = useState<FileRow[]>([]);
-
   // UI States
   const [uploadProgressSteps, setUploadProgressSteps] = useState<ProgressStep[]>([]);
 
@@ -170,9 +156,6 @@ export const DocumentLibrary = () => {
   const [openSide, setOpenSide] = useState(false); // Whether the upload drawer is open
 
   // Backend Data States
-  const [documentViewerOpen, setDocumentViewerOpen] = useState<boolean>(false);
-
-  const [updateDocumentRetrievable] = useUpdateDocumentRetrievableMutation();
 
   // userInfo:
   // Stores information about the currently authenticated user.
@@ -272,70 +255,9 @@ export const DocumentLibrary = () => {
     }
   }, [selectedView]);
 
-  const handleDownload = async (file: FileRow) => {
-    try {
-      const { data: blob } = await triggerDownload({ document_uid: file.document_uid });
-      if (blob) {
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = file.document_name || "document";
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
-      }
-    } catch (err) {
-      showError({
-        summary: "Download failed",
-        detail: `Could not download document: ${err?.data?.detail || err.message}`,
-      });
-    }
-  };
-
-  const handleDelete = async (file: FileRow) => {
-    try {
-      await deleteDocument(file.document_uid).unwrap();
-      showInfo({
-        summary: "Delete Success",
-        detail: `Document ${file.document_name} deleted`,
-        duration: 3000,
-      });
-      await fetchFiles(); // <-- ensures fresh backend state
-      setSelectedFiles((prev) => prev.filter((f) => f.document_uid !== file.document_uid));
-    } catch (error) {
-      showError({
-        summary: "Delete Failed",
-        detail: `Could not delete document: ${error?.data?.detail || error.message}`,
-      });
-    }
-  };
-
   const handleDeleteTemp = (index) => {
     const newFiles = tempFiles.filter((_, i) => i !== index);
     setTempFiles(newFiles);
-  };
-
-  const handleDocumentMarkdownPreview = async (document_uid: string, file_name: string) => {
-    try {
-      const response = await getDocumentMarkdownContent({
-        document_uid,
-      }).unwrap();
-      const { content } = response;
-
-      setSelectedDocument({
-        document_uid,
-        file_name,
-        content,
-      });
-
-      setDocumentViewerOpen(true);
-    } catch (error) {
-      showError({
-        summary: "Preview Error",
-        detail: `Could not load document content: ${error?.data?.detail || error.message}`,
-      });
-    }
   };
 
   const handleAddFiles = async () => {
@@ -399,56 +321,6 @@ export const DocumentLibrary = () => {
   });
 
   const currentDocuments = filteredFiles.slice(indexOfFirstDocument, indexOfLastDocument);
-
-  const handleCloseDocumentViewer = () => {
-    setDocumentViewerOpen(false);
-  };
-  const handleProcess = async (files: FileRow[]) => {
-    try {
-      const payload: ProcessDocumentsRequest = {
-        files: files.map((f) => ({
-          source_tag: f.source_type || "uploads", // adjust if needed
-          document_uid: f.document_uid,
-          external_path: undefined, // populate if you support pull mode
-          tags: f.tags || [],
-        })),
-        pipeline_name: "manual_ui_trigger",
-      };
-
-      const result = await processDocuments(payload).unwrap();
-      showInfo({
-        summary: "Processing started",
-        detail: `Workflow ${result.workflow_id} submitted`,
-      });
-    } catch (error) {
-      showError({
-        summary: "Processing Failed",
-        detail: error?.data?.detail || error.message,
-      });
-    }
-  };
-
-  const handleToggleRetrievable = async (file) => {
-    try {
-      await updateDocumentRetrievable({
-        document_uid: file.document_uid,
-        retrievable: !file.retrievable,
-      }).unwrap();
-
-      showInfo({
-        summary: "Updated",
-        detail: `Document "${file.document_name}" is now ${!file.retrievable ? "searchable" : "excluded from search"}.`,
-      });
-
-      await fetchFiles(); // recharge les documents
-    } catch (error) {
-      console.error("Update failed:", error);
-      showError({
-        summary: "Error updating document",
-        detail: error?.data?.detail || error.message,
-      });
-    }
-  };
 
   return (
     <>
@@ -655,23 +527,9 @@ export const DocumentLibrary = () => {
 
                 <DocumentTable
                   files={currentDocuments}
-                  selectedFiles={selectedFiles}
-                  onToggleSelect={(file) => {
-                    setSelectedFiles((prev) =>
-                      prev.some((f) => f.document_uid === file.document_uid)
-                        ? prev.filter((f) => f.document_uid !== file.document_uid)
-                        : [...prev, file],
-                    );
-                  }}
-                  onToggleAll={(checked) => {
-                    setSelectedFiles(checked ? currentDocuments : []);
-                  }}
-                  onDelete={handleDelete}
-                  onDownload={handleDownload}
                   isAdmin={userInfo.canManageDocuments}
-                  onOpen={(file) => handleDocumentMarkdownPreview(file.document_uid, file.document_name)}
-                  onToggleRetrievable={handleToggleRetrievable}
-                  onProcess={handleProcess}
+                  onRefreshData={fetchFiles}
+                  showSelectionActions={true}
                 />
                 <Box display="flex" alignItems="center" mt={3} justifyContent="space-between">
                   <Pagination
@@ -827,7 +685,6 @@ export const DocumentLibrary = () => {
           </Box>
         </Drawer>
       )}
-      <DocumentViewer document={selectedDocument} open={documentViewerOpen} onClose={handleCloseDocumentViewer} />
     </>
   );
 };
