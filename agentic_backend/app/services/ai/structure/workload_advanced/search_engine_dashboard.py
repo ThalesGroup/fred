@@ -13,7 +13,7 @@
 # limitations under the License.
 
 """
-Module to represent advanced information about OpenSearch Dashboard workload.
+Module to represent advanced information about SearchEngine Dashboard workload.
 """
 
 from typing import Optional, Literal
@@ -25,30 +25,30 @@ from app.application_context import get_structured_chain_for_service
 
 from app.services.ai.structure.workload_context import WorkloadContext
 
-class OpenSearchDashboardAdvanced(BaseModel):
+class SearchEngineDashboardAdvanced(BaseModel):
     """
-    Represents advanced informations about an OpenSearch Dashboard workload.
+    Represents advanced informations about an SearchEngine Dashboard workload.
     """
     type: Literal["opensearch-dashboard"] = Field(
         default="opensearch-dashboard",
         description="The type of workload, used for discriminated union")
-    opensearch_hosts: list = Field(
-        default_factory=list, description="List of OpenSearch backend hosts"
+    search_engine_hosts: list = Field(
+        default_factory=list, description="List of SearchEngine backend hosts"
     )
-    opensearch_ssl_verification_mode: str = Field(
-        default="full", description="SSL verification mode for OpenSearch connection"
+    search_engine_ssl_verification_mode: str = Field(
+        default="full", description="SSL verification mode for SearchEngine connection"
     )
-    opensearch_username: Optional[str] = Field(
-        default=None, description="Username for OpenSearch authentication"
+    search_engine_username: Optional[str] = Field(
+        default=None, description="Username for SearchEngine authentication"
     )
-    opensearch_password: Optional[str] = Field(
-        default=None, description="Password for OpenSearch authentication"
+    search_engine_password: Optional[str] = Field(
+        default=None, description="Password for SearchEngine authentication"
     )
-    opensearch_request_timeout: int = Field(
-        default=30000, description="Timeout for OpenSearch requests (in milliseconds)"
+    search_engine_request_timeout: int = Field(
+        default=30000, description="Timeout for SearchEngine requests (in milliseconds)"
     )
-    opensearch_shard_timeout: int = Field(
-        default=0, description="Timeout for OpenSearch shards (in milliseconds)"
+    search_engine_shard_timeout: int = Field(
+        default=0, description="Timeout for SearchEngine shards (in milliseconds)"
     )
     server_host: str = Field(
         default="0.0.0.0", description="Host to which the server binds"
@@ -74,15 +74,15 @@ class OpenSearchDashboardAdvanced(BaseModel):
 
     def __str__(self) -> str:
         """
-        Provide a string representation of the advanced OpenSearch Dashboard workload attributes.
+        Provide a string representation of the advanced SearchEngine Dashboard workload attributes.
         """
         return (
-            f"OpenSearch Host: {self.opensearch_hosts}\n"
-            f"OpenSearch SSL Verification Mode: {self.opensearch_ssl_verification_mode}\n"
-            f"OpenSearch Username: {self.opensearch_username}\n"
-            f"OpenSearch Password: {self.opensearch_password}\n"
-            f"OpenSearch Request Timeout: {self.opensearch_request_timeout}\n"
-            f"OpenSearch Shard Timeout: {self.opensearch_shard_timeout}\n"
+            f"SearchEngine Host: {self.search_engine_hosts}\n"
+            f"SearchEngine SSL Verification Mode: {self.search_engine_ssl_verification_mode}\n"
+            f"SearchEngine Username: {self.search_engine_username}\n"
+            f"SearchEngine Password: {self.search_engine_password}\n"
+            f"SearchEngine Request Timeout: {self.search_engine_request_timeout}\n"
+            f"SearchEngine Shard Timeout: {self.search_engine_shard_timeout}\n"
             f"Server Host: {self.server_host}\n"
             f"Server Port: {self.server_port}\n"
             f"Server Base Path: {self.server_base_path}\n"
@@ -99,9 +99,9 @@ class OpenSearchDashboardAdvanced(BaseModel):
         cls,
         workload_context: WorkloadContext,
         langfuse_handler: Optional[CallbackHandler] = None,
-    ) -> "OpenSearchDashboardAdvanced":
+    ) -> "SearchEngineDashboardAdvanced":
         """
-        Extract advanced information about a OpenSearch Dashboard workload based on its context
+        Extract advanced information about a SearchEngine Dashboard workload based on its context
         (YAML definitions).
 
         Args:
@@ -111,16 +111,16 @@ class OpenSearchDashboardAdvanced(BaseModel):
         prompt = PromptTemplate(
             template=(
                 "You are an expert in Kubernetes.\n\n"
-                "Based on the following OpenSearch Dashboard definitions:\n\n"
+                "Based on the following SearchEngine Dashboard definitions:\n\n"
                 "{workload_context}\n\n"
-                "Please provide advanced information about the following OpenSearch Dashboard "
+                "Please provide advanced information about the following SearchEngine Dashboard "
                 "attributes:\n"
-                "- Opensearch Hosts\n"
-                "- Opensearch SSL Verification Mode\n"
-                "- Opensearch Username\n"
-                "- Opensearch Password\n"
-                "- Opensearch Request Timeout\n"
-                "- Opensearch Shard Timeout\n"
+                "- SearchEngine Hosts\n"
+                "- SearchEngine SSL Verification Mode\n"
+                "- SearchEngine Username\n"
+                "- SearchEngine Password\n"
+                "- SearchEngine Request Timeout\n"
+                "- SearchEngine Shard Timeout\n"
                 "- Server Host\n"
                 "- Server Port\n"
                 "- Server Base Path\n"
@@ -131,8 +131,8 @@ class OpenSearchDashboardAdvanced(BaseModel):
                 "- Logging Destination\n"
                 "- Logging Level\n\n"
                 "Provide the information in a structured JSON format with the keys:\n"
-                "'open_search_hosts', 'opensearch_ssl_verification_mode', 'opensearch_username', "
-                "'opensearch_password', 'opensearch_request_timeout', 'opensearch_shard_timeout', "
+                "'open_search_hosts', 'search_engine_ssl_verification_mode', 'search_engine_username', "
+                "'search_engine_password', 'search_engine_request_timeout', 'search_engine_shard_timeout', "
                 "'server_host', 'server_port', 'server_base_path', 'server_rewrite_base_path', "
                 "'server_ssl_enabled', 'server_ssl_certificate', 'server_ssl_key', "
                 "'logging_dest', 'logging_level'"
@@ -140,7 +140,7 @@ class OpenSearchDashboardAdvanced(BaseModel):
             input_variables=["workload_context"],
         )
 
-        structured_model = get_structured_chain_for_service("kubernetes", OpenSearchDashboardAdvanced)
+        structured_model = get_structured_chain_for_service("kubernetes", SearchEngineDashboardAdvanced)
         chain = prompt | structured_model
         invocation_args = {"workload_context": workload_context}
 

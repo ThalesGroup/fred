@@ -77,20 +77,20 @@ class LocalMetadataStorage(BaseModel):
     type: Literal["local"]
     root_path: str = Field(default=str(Path("~/.fred/knowledge/metadata-store.json")), description="Local storage directory")
 
-class OpenSearchStorage(BaseModel):
+class SearchEngineStorage(BaseModel):
     type: Literal["opensearch"]
-    host: str = Field(..., description="OpenSearch host URL")
-    secure: bool = Field(default=False, description="Use TLS (https)")
-    verify_certs: bool = Field(default=False, description="Verify TLS certs")
-    metadata_index: str = Field(..., description="OpenSearch index name for metadata")
-    vector_index: str = Field(..., description="OpenSearch index name for vectors")
-    username: Optional[str] = Field(default_factory=lambda: os.getenv("OPENSEARCH_USER"), description="Username from env")
-    password: Optional[str] = Field(default_factory=lambda: os.getenv("OPENSEARCH_PASSWORD"), description="Password from env")
+    host: str = Field(default_factory=lambda: os.getenv("OPENSEARCH_HOST"))
+    metadata_index: str = Field(default_factory=lambda: os.getenv("OPENSEARCH_METADATA_INDEX"))
+    vector_index: str = Field(default_factory=lambda: os.getenv("OPENSEARCH_VECTOR_INDEX"))
+    secure: bool = Field(default_factory=lambda: os.getenv("OPENSEARCH_SECURE", "false").lower() == "true")
+    verify_certs: bool = Field(default_factory=lambda: os.getenv("OPENSEARCH_VERIFY_CERTS", "false").lower() == "true")
+    username: Optional[str] = Field(default_factory=lambda: os.getenv("OPENSEARCH_USER"))
+    password: Optional[str] = Field(default_factory=lambda: os.getenv("OPENSEARCH_PASSWORD"))
 
 
 # --- Final union config (with discriminator)
 MetadataStorageConfig = Annotated[
-    Union[LocalMetadataStorage, OpenSearchStorage],
+    Union[LocalMetadataStorage, SearchEngineStorage],
     Field(discriminator="type")
 ]
 
@@ -108,7 +108,7 @@ class WeaviateVectorStorage(BaseModel):
     index_name: str = Field(default="CodeDocuments", description="Weaviate class (collection) name")
 
 VectorStorageConfig = Annotated[
-    Union[InMemoryVectorStorage, OpenSearchStorage, WeaviateVectorStorage],
+    Union[InMemoryVectorStorage, SearchEngineStorage, WeaviateVectorStorage],
     Field(discriminator="type")
 ]
 

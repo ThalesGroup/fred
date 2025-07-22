@@ -243,7 +243,7 @@ class MetricsStorageConfig(BaseModel):
 class InMemoryStorageConfig(BaseModel):
     type: Literal["in_memory"]
 
-class OpenSearchStorageConfig(BaseModel):
+class SearchEngineStorageConfig(BaseModel):
     type: Literal["opensearch"]
     host: str = Field(default="https://localhost:9200", description="URL of the Opensearch host")
     username: Optional[str] = Field(default_factory=lambda: os.getenv("OPENSEARCH_USER"), description="Opensearch username")
@@ -254,7 +254,7 @@ class OpenSearchStorageConfig(BaseModel):
     history_index: str = Field(default="chat-interactions-index", description="Index where messages histories are stored")
 
 SessionStorageConfig = Annotated[
-    Union[InMemoryStorageConfig, OpenSearchStorageConfig],
+    Union[InMemoryStorageConfig, SearchEngineStorageConfig],
     Field(discriminator="type")
 ]
 

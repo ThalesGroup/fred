@@ -41,11 +41,11 @@ High-Level Schema:
              │
              ▼
 ┌─────────────────────────────────────┐
-│        BaseMetadataStore            │  (ex: OpenSearchMetadataStore)
+│        BaseMetadataStore            │  (ex: SearchEngineMetadataStore)
 └─────────────────────────────────────┘
 
 Each step is handled by a modular, replaceable component.
-This design allows easy switching of backends (e.g., OpenSearch ➔ ChromaDB, Azure ➔ HuggingFace).
+This design allows easy switching of backends (e.g., SearchEngine ➔ ChromaDB, Azure ➔ HuggingFace).
 
 """
 
@@ -126,7 +126,7 @@ class BaseVectoreStore(ABC):
     Interface for vector stores.
 
     This interface is designed to be implemented by various concrete classes that handle
-    different vector storage strategies (e.g., OpenSearch, in memory, etc.).
+    different vector storage strategies (e.g., SearchEngine, in memory, etc.).
     """
 
     @abstractmethod

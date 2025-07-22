@@ -32,13 +32,13 @@ from app.core.processors.output.vectorization_processor.azure_apim_embedder impo
 from app.core.processors.output.vectorization_processor.embedder import Embedder
 from app.core.stores.metadata.base_metadata_store import BaseMetadataStore
 from app.core.stores.metadata.local_metadata_store import LocalMetadataStore
-from app.core.stores.metadata.opensearch_metadata_store import OpenSearchMetadataStore
+from app.core.stores.metadata.search_engine_metadata_store import SearchEngineMetadataStore
 from app.core.stores.vector.in_memory_langchain_vector_store import InMemoryLangchainVectorStore
 from app.core.stores.vector.base_vector_store import BaseDocumentLoader, BaseEmbeddingModel, BaseTextSplitter, BaseVectoreStore
 from app.core.stores.tabular.base_tabular_store import BaseTabularStore
 from app.core.stores.tabular.duckdb_tabular_store import DuckDBTabularStore
 from app.core.processors.output.vectorization_processor.local_file_loader import LocalFileLoader
-from app.core.stores.vector.opensearch_vector_store import OpenSearchVectorStoreAdapter
+from app.core.stores.vector.search_engine_vector_store import SearchEngineVectorStoreAdapter
 from app.core.processors.output.vectorization_processor.recursive_splitter import RecursiveSplitter
 from app.core.stores.vector.weaviate_vector_store import WeaviateVectorStore
 
@@ -336,7 +336,7 @@ class ApplicationContext:
                 raise ValueError("Missing required environment variables: OPENSEARCH_USER and OPENSEARCH_PASSWORD")
             
             if self._vector_store_instance is None:
-                self._vector_store_instance = OpenSearchVectorStoreAdapter(
+                self._vector_store_instance = SearchEngineVectorStoreAdapter(
                     embedding_model=embedding_model,
                     host=s.host,
                     vector_index=s.vector_index,
@@ -372,9 +372,9 @@ class ApplicationContext:
             password = config.password
 
             if not username or not password:
-                raise ValueError("Missing OpenSearch credentials: OPENSEARCH_USER and/or OPENSEARCH_PASSWORD")
+                raise ValueError("Missing SearchEngine credentials: OPENSEARCH_USER and/or OPENSEARCH_PASSWORD")
 
-            self._metadata_store_instance = OpenSearchMetadataStore(
+            self._metadata_store_instance = SearchEngineMetadataStore(
                 host=config.host,
                 username=username,
                 password=password,

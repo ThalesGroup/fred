@@ -17,7 +17,7 @@ import logging
 import os
 from typing import List, Tuple
 from langchain.schema.document import Document
-from langchain_community.vectorstores import OpenSearchVectorSearch
+from langchain_community.vectorstores import OpenSearchVectorSearch as SearchEngineVectorSearch
 
 from app.common.utils import get_embedding_model_name
 from app.core.stores.vector.base_vector_store import BaseEmbeddingModel, BaseVectoreStore
@@ -25,16 +25,16 @@ from app.core.stores.vector.base_vector_store import BaseEmbeddingModel, BaseVec
 logger = logging.getLogger(__name__)
 
 
-class OpenSearchVectorStoreAdapter(BaseVectoreStore):
+class SearchEngineVectorStoreAdapter(BaseVectoreStore):
     """
-    Opensearch Vector Store.
+    SearchEngine Vector Store.
 
     -------------------
-    1. This class is an adapter for OpenSearch vector store.
+    1. This class is an adapter for SearchEngine vector store.
     2. It implements the VectorStoreInterface.
-    3. It uses the langchain_community OpenSearchVectorSearch class.
+    3. It uses the langchain_community SearchEngineVectorSearch class.
 
-    It accepts documents + embeddings and stores them into the configured OpenSearch vector index.
+    It accepts documents + embeddings and stores them into the configured SearchEngine vector index.
     """
     def __init__(
         self,
@@ -47,7 +47,7 @@ class OpenSearchVectorStoreAdapter(BaseVectoreStore):
         verify_certs: bool = False,
     ):
         self.vector_index = vector_index
-        self.opensearch_vector_search = OpenSearchVectorSearch(
+        self.opensearch_vector_search = SearchEngineVectorSearch(
             opensearch_url=host,
             index_name=vector_index,
             embedding_function=embedding_model,
@@ -58,7 +58,7 @@ class OpenSearchVectorStoreAdapter(BaseVectoreStore):
 
     def add_documents(self, documents: List[Document]) -> None:
         """
-        Add raw documents to OpenSearch.
+        Add raw documents to SearchEngine.
         Embeddings will be computed internally by LangChain using the configured embedding model.
 
         Args:
@@ -68,8 +68,8 @@ class OpenSearchVectorStoreAdapter(BaseVectoreStore):
             self.opensearch_vector_search.add_documents(documents)
             logger.info("✅ Documents added successfully.")
         except Exception as e:
-            logger.exception("❌ Failed to add documents to OpenSearch.")
-            raise RuntimeError(f"Failed to add documents to OpenSearch: {e}") from e
+            logger.exception("❌ Failed to add documents to SearchEngine.")
+            raise RuntimeError(f"Failed to add documents to SearchEngine: {e}") from e
 
     def similarity_search_with_score(self, query: str, k: int = 5) -> List[Tuple[Document, float]]:
         results = self.opensearch_vector_search.similarity_search_with_score(query, k=k)

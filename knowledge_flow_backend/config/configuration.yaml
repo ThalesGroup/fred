@@ -70,28 +70,28 @@ content_storage:
   # - GCS_CREDENTIALS_PATH
   # If you are using local storage, make sure to set the following environment variable:
   # - LOCAL_STORAGE_PATH default to '~/.knowledge-flow/content-store'
-  type: "local"
+  type: "minio"
 
 metadata_storage:
   # Metadata Storage Configuration
   #
   # Available backends:
   # - local       → stores metadata in a JSON file on disk
-  # - opensearch  → stores metadata in a persistent OpenSearch index (recommended for production)
+  # - opensearch  → stores metadata in a persistent SearchEngine index (recommended for production)
   #
   # ✅ Default is "local" for easy startup. No external services are needed.
-  # ❗ If using OpenSearch, make sure required environment variables are defined (see below).
-  type: "local"
+  # ❗ If using SearchEngine, make sure required environment variables are defined (see below).
+  type: "opensearch"
   root_path: ~/.fred/knowledge/metadata-store.json
 
-  # --- Example: OpenSearch configuration
+  # --- Example: SearchEngine configuration
   #
   # type: opensearch
-  # host: https://localhost:9200              # OpenSearch host
+  # host: https://localhost:9200              # SearchEngine host
   # secure: true                              # Use HTTPS (set to false for HTTP)
   # verify_certs: false                       # Whether to verify TLS certificates
   # metadata_index: fred-dev-metadata         # Index for storing metadata
-  # vector_index: fred-dev-vectors            # Vector index (required if reusing OpenSearch backend)
+  # vector_index: fred-dev-vectors            # Vector index (required if reusing SearchEngine backend)
   # ➤ Required environment variables (not stored in this file):
   #   OPENSEARCH_USERNAME=admin
   #   OPENSEARCH_PASSWORD=xxx
@@ -105,8 +105,8 @@ vector_storage:
   #
   # ⚠️ in_memory is used by default to ensure startup always succeeds, but it does NOT persist vectors between restarts.
   # Use it only for testing or development.
-  type: in_memory
-  # --- Example: OpenSearch configuration
+  type: opensearch
+  # --- Example: SearchEngine configuration
   #
   # type: opensearch
   # host: https://localhost:9200              # Opensearch HTTP URL

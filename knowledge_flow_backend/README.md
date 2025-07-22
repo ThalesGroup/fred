@@ -48,7 +48,7 @@ Then visit:
 - Swagger UI: http://localhost:8111/knowledge-flow/v1/docs  
 - ReDoc: http://localhost:8111/knowledge-flow/v1/redoc
 
-Prefer a zero-install workflow? Open the project in VS Code’s Dev Container and get a full stack (Knowledge-Flow + OpenSearch + MinIO) in one click. See **[docs/DEV_CONTAINER.md](docs/DEV_CONTAINER.md)** for step-by-step instructions.
+Prefer a zero-install workflow? Open the project in VS Code’s Dev Container and get a full stack (Knowledge-Flow + SearchEngine + ObjectStorage) in one click. See **[docs/DEV_CONTAINER.md](docs/DEV_CONTAINER.md)** for step-by-step instructions.
 
 ---
 
@@ -93,8 +93,8 @@ See the `ai:` section in `config/configuration.yaml` for complete setup examples
 Use the [fred-deployment-factory](https://github.com/ThalesGroup/fred-deployment-factory) to run a full stack including:
 
 - Keycloak (authentication)
-- OpenSearch (vector + metadata index)
-- MinIO (content storage)
+- SearchEngine (vector + metadata index)
+- ObjectStorage (content storage)
 - Fred + Knowledge Flow containers
 
 This is the recommended way to test a production-grade Fred deployment.

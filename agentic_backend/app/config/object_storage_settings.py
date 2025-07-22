@@ -20,17 +20,17 @@ from typing import ClassVar
 
 logger = logging.getLogger(__name__)
 
-class MinioSettings(BaseSettings):
+class ObjectStorageSettings(BaseSettings):
     """
-    Settings for MinIO integration, sourced from environment variables.
+    Settings for ObjectStorage integration, sourced from environment variables.
     """
     # Variables d'environnement avec validation
-    minio_endpoint: str = Field("localhost:9000", validation_alias="MINIO_ENDPOINT")
-    minio_access_key: str = Field("minioadmin", validation_alias="MINIO_ACCESS_KEY")
-    minio_secret_key: str = Field("minioadmin", validation_alias="MINIO_SECRET_KEY")
-    minio_bucket_name: str = Field("fred-storage", validation_alias="MINIO_BUCKET_NAME")
-    minio_secure: bool = Field(False, validation_alias="MINIO_SECURE")
-    minio_bucket_context_name: str = Field("agent-contexts", validation_alias="MINIO_BUCKET_CONTEXT_NAME")
+    object_storage_endpoint: str = Field("localhost:9000", validation_alias="MINIO_ENDPOINT")
+    object_storage_access_key: str = Field("minioadmin", validation_alias="MINIO_ACCESS_KEY")
+    object_storage_secret_key: str = Field("minioadmin", validation_alias="MINIO_SECRET_KEY")
+    object_storage_bucket_name: str = Field("fred-storage", validation_alias="MINIO_BUCKET_NAME")
+    object_storage_secure: bool = Field(False, validation_alias="MINIO_SECURE")
+    object_storage_bucket_context_name: str = Field("agent-contexts", validation_alias="MINIO_BUCKET_CONTEXT_NAME")
     
     # Configuration du modèle
     model_config = {
@@ -39,4 +39,4 @@ class MinioSettings(BaseSettings):
 
 
 # Default singleton instance
-minio_settings = MinioSettings()
+object_storage_settings = ObjectStorageSettings()

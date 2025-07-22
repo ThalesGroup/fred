@@ -211,7 +211,7 @@ feedback_storage:
 session_storage:
   ## Session Storage in memory:
   type: in_memory
-  ## Session Storage using OpenSearch:
+  ## Session Storage using SearchEngine:
   # type: opensearch # username and password are passed via the OPENSEARCH_USER and OPENSEARCH_PASSWORD env variables defined in thes .env file
   # host: https://localhost:9200
   # username: Admin # Overrides the OPENSEARCH_USER environment variable

@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Integration‑tests for the Content/Metadata controllers **using only the local
-storage back‑ends** (no MinIO, no OpenSearch).
+storage back‑ends** (no ObjectStorage, no SearchEngine).
 """
 
 from fastapi.testclient import TestClient

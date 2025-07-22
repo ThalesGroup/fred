@@ -22,7 +22,7 @@ class Embedder(Embeddings):
     -------------------
     1. Generic wrapper around a LangChain-compatible embedding model.
     2. Conforms to LangChain's Embeddings interface.
-    3. Can be passed directly to OpenSearchVectorSearch or any LangChain component.
+    3. Can be passed directly to SearchEngineVectorSearch or any LangChain component.
     """
 
     def __init__(self, model: Embeddings):

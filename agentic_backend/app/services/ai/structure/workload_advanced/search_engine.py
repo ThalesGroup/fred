@@ -13,7 +13,7 @@
 # limitations under the License.
 
 """
-Module to represent advanced information about OpenSearch workload.
+Module to represent advanced information about SearchEngine workload.
 """
 
 from typing import Optional, Literal
@@ -26,9 +26,9 @@ from pydantic import Field, BaseModel
 from app.services.ai.structure.workload_context import WorkloadContext
 
 
-class OpenSearchAdvanced(BaseModel):
+class SearchEngineAdvanced(BaseModel):
     """
-    Represents advanced informations about a OpenSearch workload.
+    Represents advanced informations about a SearchEngine workload.
     """
     type: Literal["opensearch"] = Field(
         default="opensearch", description="The type of workload, used for discriminated union")
@@ -46,7 +46,7 @@ class OpenSearchAdvanced(BaseModel):
     )
     def __str__(self) -> str:
         """
-        Provide a string representation of the advanced OpenSearch workload attributes.
+        Provide a string representation of the advanced SearchEngine workload attributes.
         """
         return (
             f"Shard Size (GB): {self.shard_size_gb}\n"
@@ -59,9 +59,9 @@ class OpenSearchAdvanced(BaseModel):
         cls,
         workload_context: WorkloadContext,
         langfuse_handler: Optional[CallbackHandler] = None,
-    ) -> "OpenSearchAdvanced":
+    ) -> "SearchEngineAdvanced":
         """
-        Extract advanced information about a OpenSearch workload based on its context (YAML
+        Extract advanced information about a SearchEngine workload based on its context (YAML
         definitions).
 
         Args:
@@ -71,9 +71,9 @@ class OpenSearchAdvanced(BaseModel):
         prompt = PromptTemplate(
             template=(
                 "You are an expert in Kubernetes.\n\n"
-                "Based on the following OpenSearch definitions:\n\n"
+                "Based on the following SearchEngine definitions:\n\n"
                 "{workload_context}\n\n"
-                "Please provide advanced information about the following OpenSearch attributes:\n"
+                "Please provide advanced information about the following SearchEngine attributes:\n"
                 "- Shard Size (GB)\n"
                 "- Shard Count\n"
                 "- Shards per Data Node\n"
@@ -83,7 +83,7 @@ class OpenSearchAdvanced(BaseModel):
             input_variables=["workload_context"],
         )
 
-        structured_model = get_structured_chain_for_service("kubernetes", OpenSearchAdvanced)
+        structured_model = get_structured_chain_for_service("kubernetes", SearchEngineAdvanced)
         chain = prompt | structured_model
         invocation_args = {"workload_context": workload_context}
 

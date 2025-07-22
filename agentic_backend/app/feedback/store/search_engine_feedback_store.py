@@ -12,17 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from opensearchpy import OpenSearch, exceptions
+from opensearchpy import OpenSearch as SearchEngine, exceptions
 from app.feedback.store.base_feedback_store import BaseFeedbackStore
 import logging
 import json
 
 logger = logging.getLogger(__name__)
 
-class OpenSearchFeedbackStore(BaseFeedbackStore):
+class SearchEngineFeedbackStore(BaseFeedbackStore):
     def __init__(self, host: str, port: int, index: str, user: str, password: str, use_ssl: bool = False):
         self.index = index
-        self.client = OpenSearch(
+        self.client = SearchEngine(
             hosts=[{"host": host, "port": port}],
             http_auth=(user, password),
             use_ssl=use_ssl,
@@ -31,7 +31,7 @@ class OpenSearchFeedbackStore(BaseFeedbackStore):
 
         if not self.client.indices.exists(index=self.index):
             self.client.indices.create(index=self.index)
-            logger.info(f"📦 Created OpenSearch index: {self.index}")
+            logger.info(f"📦 Created SearchEngine index: {self.index}")
 
     def get_feedback(self, key: str) -> str | None:
         try:

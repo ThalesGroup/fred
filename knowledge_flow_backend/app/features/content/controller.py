@@ -76,7 +76,7 @@ class ContentController:
 
     Dependencies:
     -------------
-    - `ContentService`: abstracts retrieval from storage backend (e.g., filesystem, MinIO)
+    - `ContentService`: abstracts retrieval from storage backend (e.g., filesystem, ObjectStorage)
     """
 
     def __init__(self, router: APIRouter):

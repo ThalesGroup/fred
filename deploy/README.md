@@ -5,7 +5,7 @@ This directory contains Docker Compose files and supporting configuration used f
 ## Certificate Notice
 
 The certificates located under this folder and sub folders
-are **self-signed and non-sensitive**. They are used **only to enable TLS communication** between containers (e.g., OpenSearch and dashboards) in local environments.
+are **self-signed and non-sensitive**. They are used **only to enable TLS communication** between containers (e.g., SearchEngine and dashboards) in local environments.
 
 - These certificates are:
   - Auto-generated or manually created for test purposes.
@@ -16,7 +16,7 @@ are **self-signed and non-sensitive**. They are used **only to enable TLS commun
 
 These files are included to support development workflows such as:
 
-- Running OpenSearch with HTTPS in Docker Compose
+- Running SearchEngine with HTTPS in Docker Compose
 - Avoiding mixed-content issues when using local dashboards
 - Enabling local testing of TLS scenarios
 

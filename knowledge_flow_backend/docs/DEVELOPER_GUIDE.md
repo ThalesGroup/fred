@@ -118,7 +118,7 @@ Output processors transform parsed content into embeddings or structured records
    BaseMetadataStore
 ```
 
-Each interface is pluggable. You can switch OpenSearch → Pinecone, or Azure → HuggingFace by updating config and implementing the interface.
+Each interface is pluggable. You can switch SearchEngine → Pinecone, or Azure → HuggingFace by updating config and implementing the interface.
 
 ---
 
@@ -223,7 +223,7 @@ common/
 
 ### `config/` – Pluggable Settings
 
-Contains config classes (e.g., OpenAI, Ollama, GCS, MinIO):
+Contains config classes (e.g., OpenAI, Ollama, GCS, ObjectStorage):
 
 ```
 config/

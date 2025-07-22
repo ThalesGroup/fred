@@ -40,13 +40,13 @@ See the project site: <https://fredk8.dev>
 ## Core Architecture and Licensing Clarity
 
 The three components just described form the *entirety of the Fred platform*. They are self-contained and do not 
-require any external dependencies such as MinIO, OpenSearch, or Weaviate.
+require any external dependencies such as ObjectStorage, SearchEngine, or Weaviate.
 
 Instead, Fred is designed with a modular architecture that allows optional integration with these technologies. By default, a minimal Fred deployment can use just the local filesystem for all storage needs.
 
 ### Licensing Note
 
-Fred is released under the **Apache License 2.0**. It does *not embed or depend on any LGPLv3 or copyleft-licensed components. Optional integrations (like OpenSearch or Weaviate) are configured externally and do not contaminate Fred's licensing. 
+Fred is released under the **Apache License 2.0**. It does *not embed or depend on any LGPLv3 or copyleft-licensed components. Optional integrations (like SearchEngine or Weaviate) are configured externally and do not contaminate Fred's licensing. 
 This ensures maximum freedom and clarity for commercial and internal use.
 
 In short: Fred is 100% Apache 2.0, and you stay in full control of any additional components.
@@ -149,7 +149,7 @@ If you prefer a fully containerised IDE with all dependencies running:
 2. Create `~/.fred/openai-api-key.env` containing `OPENAI_API_KEY=sk-…`.  
 3. In VS Code, press <kbd>F1</kbd> → **Dev Containers: Reopen in Container**.
 
-The Dev Container starts the `devcontainer` service plus Postgres, OpenSearch, and MinIO. Ports 8000 (backend) and 5173 (frontend) are forwarded automatically.
+The Dev Container starts the `devcontainer` service plus Postgres, SearchEngine, and ObjectStorage. Ports 8000 (backend) and 5173 (frontend) are forwarded automatically.
 
 Inside the container, start the servers:
 
@@ -208,7 +208,7 @@ See `agentic_backend/config/configuration.yaml` (section `ai:`) for concrete exa
 ### Advanced Integrations
 
 * Enable Keycloak or another OIDC provider for authentication  
-* Persist metrics and files in OpenSearch and MinIO  
+* Persist metrics and files in SearchEngine and ObjectStorage  
 
 ---
 

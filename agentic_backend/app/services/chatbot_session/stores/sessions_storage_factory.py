@@ -16,12 +16,12 @@ from app.application_context import get_configuration
 
 from app.services.chatbot_session.abstract_session_backend import AbstractSessionStorage
 from app.services.chatbot_session.stores.in_memory_session_store import InMemorySessionStorage
-from app.services.chatbot_session.stores.opensearch_session_store import OpensearchSessionStorage
+from app.services.chatbot_session.stores.search_engine_session_store import SearchEngineSessionStorage
 
 def get_sessions_store() -> AbstractSessionStorage:
     """
     Factory function to create a sessions store instance based on the configuration.
-    As of now, it supports in_memory and OpenSearch sessions storage.
+    As of now, it supports in_memory and SearchEngine sessions storage.
     Returns:
         AbstractSessionStorage: An instance of the sessions store.
     """
@@ -31,7 +31,7 @@ def get_sessions_store() -> AbstractSessionStorage:
     if config.type == "in_memory":
         return InMemorySessionStorage()
     elif config.type == "opensearch":
-        return OpensearchSessionStorage(
+        return SearchEngineSessionStorage(
             host=config.host,
             username=config.username,
             password=config.password,

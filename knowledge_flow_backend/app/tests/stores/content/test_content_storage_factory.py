@@ -16,7 +16,7 @@
 Test suite for get_content_store() in content_storage_factory.py
 
 Covers:
-- Selection of LocalStorageBackend and MinioContentStore
+- Selection of LocalStorageBackend and ObjectStorageContentStore
 - Failure case for unsupported backend type
 Uses monkeypatching to mock configuration and application context.
 """
@@ -28,7 +28,7 @@ import pytest
 
 from app.core.stores.content.content_storage_factory import get_content_store
 from app.core.stores.content.local_content_store import LocalStorageBackend
-from app.core.stores.content.minio_content_store import MinioContentStore
+from app.core.stores.content.minio_content_store import ObjectStorageContentStore
 
 
 class DummyConfig:  # pylint: disable=too-few-public-methods

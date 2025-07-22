@@ -15,12 +15,12 @@
 from app.application_context import ApplicationContext
 from app.common.utils import validate_settings_or_exit
 from app.config.content_store_local_settings import ContentStoreLocalSettings
-from app.config.content_store_minio_settings import ContentStoreMinioSettings
+from app.config.content_store_object_storage_settings import ContentStoreObjectStorageSettings
 from pathlib import Path
 
 from app.core.stores.content.base_content_store import BaseContentStore
 from app.core.stores.content.local_content_store import LocalStorageBackend
-from app.core.stores.content.minio_content_store import MinioContentStore
+from app.core.stores.content.object_storage_content_store import ObjectStorageContentStore
 
 
 def get_content_store() -> BaseContentStore:
@@ -34,9 +34,9 @@ def get_content_store() -> BaseContentStore:
     backend_type = config.content_storage.type
 
     if backend_type == "minio":
-        settings = validate_settings_or_exit(ContentStoreMinioSettings, "MinIO Settings")
-        return MinioContentStore(
-            endpoint=settings.minio_endpoint, access_key=settings.minio_access_key, secret_key=settings.minio_secret_key, bucket_name=settings.minio_bucket_name, secure=settings.minio_secure
+        settings = validate_settings_or_exit(ContentStoreObjectStorageSettings, "ObjectStorage Settings")
+        return ObjectStorageContentStore(
+            endpoint=settings.object_storage_endpoint, access_key=settings.object_storage_access_key, secret_key=settings.object_storage_secret_key, bucket_name=settings.object_storage_bucket_name, secure=settings.object_storage_secure
         )
     elif backend_type == "local":
         settings = ContentStoreLocalSettings()

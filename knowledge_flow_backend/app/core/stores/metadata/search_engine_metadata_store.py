@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import logging
-from opensearchpy import OpenSearch, RequestsHttpConnection, OpenSearchException
+from opensearchpy import OpenSearch as SearchEngine, RequestsHttpConnection, OpenSearchException as SearchEngineException
 
 from app.core.stores.metadata.base_metadata_store import BaseMetadataStore
 
@@ -21,7 +21,7 @@ from app.core.stores.metadata.base_metadata_store import BaseMetadataStore
 logger = logging.getLogger(__name__)
 
 
-class OpenSearchMetadataStore(BaseMetadataStore):
+class SearchEngineMetadataStore(BaseMetadataStore):
     def __init__(self, host: str, 
                  metadata_index_name: str, 
                  vector_index_name: str, 
@@ -29,7 +29,7 @@ class OpenSearchMetadataStore(BaseMetadataStore):
                  password: str = None, 
                  secure: bool = False, 
                  verify_certs: bool = False):
-        self.client = OpenSearch(
+        self.client = SearchEngine(
             host,
             http_auth=(username, password),
             use_ssl=secure,
@@ -41,9 +41,9 @@ class OpenSearchMetadataStore(BaseMetadataStore):
 
         if not self.client.indices.exists(index=metadata_index_name):
             self.client.indices.create(index=metadata_index_name)
-            logger.info(f"Opensearch index '{metadata_index_name}' created.")
+            logger.info(f"SearchEngine index '{metadata_index_name}' created.")
         else:
-            logger.warning(f"Opensearch index '{metadata_index_name}' already exists.")
+            logger.warning(f"SearchEngine index '{metadata_index_name}' already exists.")
 
     def get_metadata_by_uid(self, document_uid: str) -> dict:
         """Fetch metadata of a specific document by UID."""
@@ -65,18 +65,18 @@ class OpenSearchMetadataStore(BaseMetadataStore):
         try:
             return self.client.exists(index=self.metadata_index_name, id=document_uid)
         except Exception as e:
-            logger.error(f"Error while checking existence of UID '{document_uid}' in OpenSearch: {e}")
+            logger.error(f"Error while checking existence of UID '{document_uid}' in SearchEngine: {e}")
             return False
 
     def write_metadata(self, document_uid: str, metadata: dict):
-        """Write metadata to OpenSearch using the UID as document ID."""
+        """Write metadata to SearchEngine using the UID as document ID."""
         try:
             response = self.client.index(index=self.metadata_index_name, id=document_uid, body=metadata)
             logger.info(f"Metadata written to index '{self.metadata_index_name}' for UID '{document_uid}'.")
             return response
-        except OpenSearchException as e:
+        except SearchEngineException as e:
             logger.error(f"❌ Failed to write metadata with UID {document_uid}: {e}")
-            raise ValueError(f"Failed to write metadata to Opensearch: {e}")
+            raise ValueError(f"Failed to write metadata to SearchEngine: {e}")
 
     def update_metadata_field(self, document_uid: str, field: str, value: any):
         try:
@@ -148,7 +148,7 @@ class OpenSearchMetadataStore(BaseMetadataStore):
             return []
 
     def delete_metadata(self, metadata: dict):
-        """Delete metadata from OpenSearch using the UID."""
+        """Delete metadata from SearchEngine using the UID."""
         try:
             document_uid = metadata.get("document_uid")
             if not document_uid:
@@ -168,7 +168,7 @@ class OpenSearchMetadataStore(BaseMetadataStore):
             raise e
 
     def save_metadata(self, metadata: dict):
-        """Save metadata in Opensearch
+        """Save metadata in SearchEngine
 
         Args:
             metadata (dict): A dictionary containing metadatas

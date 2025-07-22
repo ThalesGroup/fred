@@ -1,6 +1,6 @@
 # VS Code Dev-Container Guide
 
-This project ships a **Dev Container** that launches Knowledge-Flow plus its dependencies (OpenSearch, MinIO, etc.) in one command. You get a ready-to-code IDE without installing Python, uv, or extra services on your machine.
+This project ships a **Dev Container** that launches Knowledge-Flow plus its dependencies (SearchEngine, ObjectStorage, etc.) in one command. You get a ready-to-code IDE without installing Python, uv, or extra services on your machine.
 
 ---
 
@@ -41,9 +41,9 @@ This file is mounted into the `devcontainer` service via `env_file` in the main 
 | Service        | Port | Notes |
 |----------------|------|-------|
 | **Knowledge-Flow API** | 8111 | FastAPI backend |
-| OpenSearch      | internal | Available inside the stack |
-| MinIO           | internal | Bucket storage |
-| OpenSearch Dashboards | internal | Depends on health check |
+| SearchEngine      | internal | Available inside the stack |
+| ObjectStorage           | internal | Bucket storage |
+| SearchEngine Dashboards | internal | Depends on health check |
 
 The container forwards port **8111** to your host so Swagger is reachable at `http://localhost:8111/knowledge/v1/docs`.
 

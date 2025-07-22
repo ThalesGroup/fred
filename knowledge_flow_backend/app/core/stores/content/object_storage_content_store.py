@@ -25,15 +25,15 @@ from app.core.stores.content.base_content_store import BaseContentStore
 logger = logging.getLogger(__name__)
 
 
-class MinioContentStore(BaseContentStore):
+class ObjectStorageContentStore(BaseContentStore):
     """
-    MinIO content store for uploading files to a MinIO bucket.
+    ObjectStorage content store for uploading files to a ObjectStorage bucket.
     This class implements the BaseContentStore interface.
     """
 
     def __init__(self, endpoint: str, access_key: str, secret_key: str, bucket_name: str, secure: bool):
         """
-        Initializes the MinIO client and ensures the bucket exists.
+        Initializes the ObjectStorage client and ensures the bucket exists.
         """
         self.bucket_name = bucket_name
         self.client = Minio(endpoint, access_key=access_key, secret_key=secret_key, secure=secure)
@@ -45,7 +45,7 @@ class MinioContentStore(BaseContentStore):
 
     def save_content(self, document_uid: str, document_dir: Path):
         """
-        Uploads all files in the given directory to MinIO,
+        Uploads all files in the given directory to ObjectStorage,
         preserving the document UID as the root prefix.
         """
         for file_path in document_dir.rglob("*"):
@@ -76,7 +76,7 @@ class MinioContentStore(BaseContentStore):
 
         except S3Error as e:
             logger.error(f"❌ Failed to delete objects for document {document_uid}: {e}")
-            raise ValueError(f"Failed to delete document content from MinIO: {e}")
+            raise ValueError(f"Failed to delete document content from ObjectStorage: {e}")
 
     def get_content(self, document_uid: str) -> BinaryIO:
         """
@@ -121,3 +121,9 @@ class MinioContentStore(BaseContentStore):
             logger.error(f"Error reading or converting CSV for {document_uid}: {e}")
 
         raise FileNotFoundError(f"Neither markdown nor CSV preview found for document: {document_uid}")
+
+    def clear(self) -> None:
+        """
+        No-op clear for ObjectStorageContentStore.
+        """
+        pass

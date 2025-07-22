@@ -26,11 +26,11 @@ from app.services.ai.structure.workload_id import WorkloadId
 from app.services.ai.structure.workload_context import WorkloadContext
 
 from app.services.ai.structure.workload_advanced.punchline import PunchlineAdvanced
-from app.services.ai.structure.workload_advanced.opensearch import OpenSearchAdvanced
+from app.services.ai.structure.workload_advanced.search_engine import SearchEngineAdvanced
 
 from app.services.ai.structure.workload_advanced.kafka import KafkaAdvanced
-from app.services.ai.structure.workload_advanced.opensearch_dashboard import (
-    OpenSearchDashboardAdvanced,
+from app.services.ai.structure.workload_advanced.search_engine_dashboard import (
+    SearchEngineDashboardAdvanced,
 )
 
 class WorkloadAdvanced(BaseModel):
@@ -39,14 +39,14 @@ class WorkloadAdvanced(BaseModel):
     nature.
     """
     data: Union[
-            KafkaAdvanced, OpenSearchDashboardAdvanced,
-            OpenSearchAdvanced, PunchlineAdvanced,
+            KafkaAdvanced, SearchEngineDashboardAdvanced,
+            SearchEngineAdvanced, PunchlineAdvanced,
             None
         ] = Field(discriminator="type")
 
     def __init__(self, data: Union[
-            KafkaAdvanced, OpenSearchDashboardAdvanced,
-            OpenSearchAdvanced, PunchlineAdvanced
+            KafkaAdvanced, SearchEngineDashboardAdvanced,
+            SearchEngineAdvanced, PunchlineAdvanced
         ]):
         super().__init__(data=data)
 
@@ -81,7 +81,7 @@ class WorkloadAdvanced(BaseModel):
 
         if 'opensearch' in workload_name and 'dashboard' in workload_name:
             return cls(
-                data=OpenSearchDashboardAdvanced.from_workload_context(
+                data=SearchEngineDashboardAdvanced.from_workload_context(
                     workload_context,
                     langfuse_handler,
                 )
@@ -89,7 +89,7 @@ class WorkloadAdvanced(BaseModel):
 
         if 'opensearch' in workload_name:
             return cls(
-                data=OpenSearchAdvanced.from_workload_context(
+                data=SearchEngineAdvanced.from_workload_context(
                     workload_context,
                     langfuse_handler,
                 )
