@@ -157,7 +157,6 @@ export function DocumentLibrariesList() {
                   selected={selectedIds.includes(library.id)}
                   onToggleSelect={() => handleToggleSelect(library.id)}
                   onMenuOpen={handleMenuOpen}
-                  t={t}
                 />
               ))}
             </TableBody>

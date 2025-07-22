@@ -12,8 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Box, Container, Fade, Grid2, useTheme, Tooltip, Typography } from "@mui/material";
+import { Box, Container, Fade, Grid2, useTheme, Tooltip, Typography, IconButton } from "@mui/material";
+import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import { ReactNode } from "react";
+import InvisibleLink from "../components/InvisibleLink";
 
 interface TopBarProps {
   title: string;
@@ -21,9 +23,10 @@ interface TopBarProps {
   children?: ReactNode; // e.g. right-hand content like date picker
   fadeIn?: boolean;
   leftLg?: number;
+  backTo?: string; // Path to navigate back to
 }
 
-export const TopBar = ({ title, description, children, fadeIn = true, leftLg = 8 }: TopBarProps) => {
+export const TopBar = ({ title, description, children, fadeIn = true, leftLg = 8, backTo }: TopBarProps) => {
   const theme = useTheme();
   const leftGrid = leftLg ?? 8;
   const rightGrid = 12 - leftGrid;
@@ -46,7 +49,14 @@ export const TopBar = ({ title, description, children, fadeIn = true, leftLg = 8
           <Box sx={{ py: 3 }}>
             <Grid2 container spacing={3} alignItems="center">
               <Grid2 size={{ xs: 12, md: 8, lg: leftGrid }}>
-                <Box>
+                <Box display="flex" alignItems="center" gap={1}>
+                  {backTo && (
+                    <InvisibleLink to={backTo}>
+                      <IconButton size="small" sx={{ mr: 1 }}>
+                        <ArrowBackIcon />
+                      </IconButton>
+                    </InvisibleLink>
+                  )}
                   <Tooltip
                     slotProps={{
                       tooltip: {

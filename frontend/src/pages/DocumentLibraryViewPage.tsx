@@ -64,7 +64,7 @@ export const DocumentLibraryViewPage = () => {
 
   return (
     <>
-      <TopBar title={library.name} description={library.description || ""} />
+      <TopBar title={library.name} description={library.description || ""} backTo="/documentLibrary" />
       <Container maxWidth="xl">
         <Paper sx={{ p: 3, borderRadius: 4, mt: 2 }}>
           <Typography variant="h4" gutterBottom>
