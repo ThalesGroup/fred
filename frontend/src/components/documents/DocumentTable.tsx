@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import {
   Table,
   TableBody,
@@ -41,6 +41,10 @@ import {
   useProcessDocumentsMutation,
   ProcessDocumentsRequest,
 } from "../../slices/documentApi";
+import {
+  useLazyGetTagKnowledgeFlowV1TagsTagIdGetQuery,
+  TagWithDocumentsId,
+} from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { useTranslation } from "react-i18next";
 import { useToast } from "../ToastProvider";
 import { useDocumentViewer } from "./useDocumentViewer";
@@ -104,14 +108,63 @@ export const DocumentTable: React.FC<FileTableProps> = ({
   const [selectedFiles, setSelectedFiles] = useState<FileRow[]>([]);
   const [sortBy, setSortBy] = useState<keyof FileRow>("date_added_to_kb");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
+  const [tagsById, setTagsById] = useState<Record<string, TagWithDocumentsId>>({});
 
   // API hooks
   const [deleteDocument] = useDeleteDocumentMutation();
   const [triggerDownload] = useLazyGetDocumentRawContentQuery();
   const [updateDocumentRetrievable] = useUpdateDocumentRetrievableMutation();
   const [processDocuments] = useProcessDocumentsMutation();
+  const [getTag] = useLazyGetTagKnowledgeFlowV1TagsTagIdGetQuery();
 
   const allSelected = selectedFiles.length === files.length && files.length > 0;
+
+  // Fetch tag information when files change and tags column is enabled
+  useEffect(() => {
+    if (!columns.tags) return;
+
+    const allTagIds = new Set<string>();
+    files.forEach((file) => {
+      file.tags?.forEach((tagId) => allTagIds.add(tagId));
+    });
+
+    const fetchTags = async () => {
+      const promises: Promise<void>[] = [];
+      const updatedTags: Record<string, TagWithDocumentsId> = {};
+
+      allTagIds.forEach((tagId) => {
+        if (!tagsById[tagId]) {
+          promises.push(
+            getTag({ tagId })
+              .unwrap()
+              .then((tagData) => {
+                updatedTags[tagId] = tagData;
+              })
+              .catch(() => {
+                // If tag fetch fails, create a fallback tag object
+                updatedTags[tagId] = {
+                  id: tagId,
+                  name: tagId,
+                  description: null,
+                  created_at: "",
+                  updated_at: "",
+                  owner_id: "",
+                  type: "library",
+                  document_ids: [],
+                };
+              }),
+          );
+        }
+      });
+
+      if (promises.length > 0) {
+        await Promise.all(promises);
+        setTagsById((prev) => ({ ...prev, ...updatedTags }));
+      }
+    };
+
+    fetchTags();
+  }, [files, columns.tags, getTag]);
 
   // Internal handlers
   const handleToggleSelect = (file: FileRow) => {
@@ -368,11 +421,16 @@ export const DocumentTable: React.FC<FileTableProps> = ({
                   {columns.tags && (
                     <TableCell>
                       <Box display="flex" flexWrap="wrap" gap={0.5}>
-                        {file.tags?.map((tag) => (
-                          <Tooltip key={tag} title={`Tag: ${tag}`}>
-                            <Chip label={tag} size="small" variant="filled" sx={{ fontSize: "0.6rem" }} />
-                          </Tooltip>
-                        ))}
+                        {file.tags?.map((tagId) => {
+                          const tag = tagsById[tagId];
+                          const tagName = tag?.name || tagId;
+
+                          return (
+                            <Tooltip key={tagId} title={tag?.description || ""}>
+                              <Chip label={tagName} size="small" variant="filled" sx={{ fontSize: "0.6rem" }} />
+                            </Tooltip>
+                          );
+                        })}
                       </Box>
                     </TableCell>
                   )}
