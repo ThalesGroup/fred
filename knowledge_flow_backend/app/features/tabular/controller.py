@@ -23,6 +23,7 @@ from app.features.tabular.structures import (
     TabularQueryRequest,
     TabularQueryResponse,
     TabularSchemaResponse,
+    HowToMakeAQueryResponse
 )
 
 logger = logging.getLogger(__name__)
@@ -64,6 +65,21 @@ class TabularController:
             except Exception as e:
                 logger.exception(f"Error fetching schema for UID {document_uid}: {e}")
                 raise HTTPException(status_code=500, detail="Internal server error")
+            
+        @router.post(
+            "/tabular/howtomakeaquery",
+            response_model=HowToMakeAQueryResponse,
+            tags=["Tabular"],
+            operation_id="how_to_make_query",
+            summary="Give a documentation on how to make a query",
+        )
+        async def how_to_make_a_query():
+            logger.info(f"Received query to have the query documentation")
+            try:
+                return self.service.how_to_make_a_query()
+            except Exception as e:
+                logger.warning(f"Error: {e}")
+
 
         @router.post(
             "/tabular/{document_uid}/query",
@@ -71,43 +87,6 @@ class TabularController:
             tags=["Tabular"],
             operation_id="make_query",
             summary="Execute a SQL-like query on a tabular dataset",
-            description="""
-                Respond with a **JSON object** describing the SQL query plan. This will be transformed into SQL by the server.
-
-                ## Fields:
-                - `table` *(REQUIRED)*: main table to query.
-                - `columns` *(OPTIONAL)*: columns to SELECT. Use `*` or leave empty to select all.
-                - `filters` *(OPTIONAL)*: list of conditions for the WHERE clause.
-                - `group_by`, `order_by`, `limit` *(OPTIONAL)*: standard SQL clauses.
-                - `joins` *(OPTIONAL)*: list of joins with other tables.
-
-                ### Filters:
-                - `column`: the column to filter on.
-                - `op`: SQL operator (e.g. '=', '<>', '>', '<', 'LIKE', 'IN').
-                - `value` (can be scalar or list for IN).
-                exemple: "filters": [{"column": "status", "op": "=", "value": "active"}]"
-
-                ### OrderBySpec:
-                - `column`: column.
-                - `direction`: ASC or DESC, defaults to ASC.
-                exemple: "order_by": [{"column": "user_id", "direction": "DESC"}]
-
-                ### JoinSpec:
-                - `table`: name of the table to join.
-                - `on`: join condition.
-                - `type`: join type (INNER, LEFT, etc.).
-
-                ### AggregationSpec:
-                - `function`: aggregation function (e.g. SUM, COUNT, AVG, etc.).
-                - `column`: column to aggregate.
-                - `alias`: result alias for the aggregated value.
-                - `distinct` *(OPTIONAL)*: boolean. If true, applies DISTINCT to the aggregation (e.g. `COUNT(DISTINCT column)`).
-                - `filter` *(OPTIONAL)*: dictionary of conditions applied *within* the aggregation using SQL FILTER (WHERE ...) syntax. Example: `{"status": "active"}` will generate `FILTER (WHERE status = 'active')`.
-
-                - `aggregations` *(OPTIONAL)*: list of aggregation specifications to compute in SELECT.
-
-                Always specify `table`. Use `joins`, `filters`, `aggregations`, `group_by`, `order_by`, `limit` as needed.
-                """
         )
         async def query_tabular(document_uid: str, query: TabularQueryRequest):
             logger.info(f"Received query for table UID: {document_uid} with parameters: {query}")

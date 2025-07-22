@@ -17,7 +17,7 @@
 import logging
 from typing import List
 
-from app.features.tabular.structures import TabularColumnSchema, TabularDatasetMetadata, TabularQueryRequest, TabularQueryResponse, TabularSchemaResponse
+from app.features.tabular.structures import TabularColumnSchema, TabularDatasetMetadata, TabularQueryRequest, TabularQueryResponse, TabularSchemaResponse, HowToMakeAQueryResponse
 from app.features.tabular.utils import plan_to_sql
 from app.features.tabular.structures import SQLQueryPlan
 from app.application_context import ApplicationContext
@@ -107,3 +107,44 @@ class TabularService:
             ))
 
         return datasets
+    
+    def how_to_make_a_query(self) -> HowToMakeAQueryResponse:
+        response = """
+                Respond with a **JSON object** describing the SQL query plan. This will be transformed into SQL by the server.
+
+                ## Fields:
+                - `table` *(REQUIRED)*: main table to query.
+                - `columns` *(OPTIONAL)*: columns to SELECT. Use `*` or leave empty to select all.
+                - `filters` *(OPTIONAL)*: list of conditions for the WHERE clause.
+                - `group_by`, `order_by`, `limit` *(OPTIONAL)*: standard SQL clauses.
+                - `joins` *(OPTIONAL)*: list of joins with other tables.
+
+                ### Filters:
+                - `column`: the column to filter on.
+                - `op`: SQL operator (e.g. '=', '<>', '>', '<', 'LIKE', 'IN').
+                - `value` (can be scalar or list for IN).
+                exemple: "filters": [{"column": "status", "op": "=", "value": "active"}]"
+
+                ### OrderBySpec:
+                - `column`: column.
+                - `direction`: ASC or DESC, defaults to ASC.
+                exemple: "order_by": [{"column": "user_id", "direction": "DESC"}]
+
+                ### JoinSpec:
+                - `table`: name of the table to join.
+                - `on`: join condition.
+                - `type`: join type (INNER, LEFT, etc.).
+
+                ### AggregationSpec:
+                - `function`: aggregation function (e.g. SUM, COUNT, AVG, etc.).
+                - `column`: column to aggregate.
+                - `alias`: result alias for the aggregated value.
+                - `distinct` *(OPTIONAL)*: boolean. If true, applies DISTINCT to the aggregation (e.g. `COUNT(DISTINCT column)`).
+                - `filter` *(OPTIONAL)*: dictionary of conditions applied *within* the aggregation using SQL FILTER (WHERE ...) syntax. Example: `{"status": "active"}` will generate `FILTER (WHERE status = 'active')`.
+
+                - `aggregations` *(OPTIONAL)*: list of aggregation specifications to compute in SELECT.
+
+                Always specify `table`. Use `joins`, `filters`, `aggregations`, `group_by`, `order_by`, `limit` as needed.
+                """
+        return HowToMakeAQueryResponse(how=response)
+

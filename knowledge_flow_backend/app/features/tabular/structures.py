@@ -62,6 +62,9 @@ class TabularQueryResponse(BaseModel):
     document_name: str
     rows: List[dict]
 
+class HowToMakeAQueryResponse(BaseModel):
+    how: str
+
 class TabularDatasetMetadata(BaseModel):
     document_name: str
     title: str
