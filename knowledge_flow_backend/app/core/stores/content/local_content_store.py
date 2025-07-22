@@ -73,7 +73,7 @@ class LocalStorageBackend(BaseContentStore):
         if destination.exists():
             shutil.rmtree(destination)
         shutil.copytree(output_dir, destination)
-        
+
     def delete_content(self, document_uid: str) -> None:
         """
         Deletes the content directory for the given document UID.
@@ -134,13 +134,9 @@ class LocalStorageBackend(BaseContentStore):
         """
         return open(self.destination_root / document_uid / "output" / "media" / media_id, "rb")
     
-    def get_local_copy(self, document_uid: str) -> Path:
-        input_dir = self.destination_root / document_uid / "input"
-        if not input_dir.exists():
-            raise FileNotFoundError(f"No input folder for document: {document_uid}")
+    def get_local_copy(self, document_uid: str, destination_dir: Path) -> Path:
+        source_dir = self.destination_root / document_uid
+        if not source_dir.exists():
+            raise FileNotFoundError(f"No stored document for: {document_uid}")
+        shutil.copytree(source_dir, destination_dir, dirs_exist_ok=True)
 
-        files = list(input_dir.glob("*"))
-        if not files:
-            raise FileNotFoundError(f"No file found in input folder for document: {document_uid}")
-
-        return files[0]

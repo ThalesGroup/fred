@@ -18,7 +18,7 @@ from fastapi import HTTPException
 from langchain.schema.document import Document
 
 from app.application_context import ApplicationContext
-from app.common.document_structures import DocumentMetadata
+from app.common.document_structures import DocumentMetadata, ProcessingStage
 from app.core.processors.output.base_output_processor import BaseOutputProcessor
 
 logger = logging.getLogger(__name__)
@@ -93,10 +93,6 @@ class VectorizationProcessor(BaseOutputProcessor):
             if document_uid is None:
                 raise ValueError("Metadata must contain a 'document_uid'.")
 
-            if self.metadata_store.get_metadata_by_uid(document_uid):
-                logger.info(f"Document with UID {document_uid} already exists. Skipping.")
-                return OutputProcessorResponse(status=Status.IGNORED)
-
             # 5. Store embeddings
             try:
                 for i, doc in enumerate(chunks):
@@ -106,7 +102,7 @@ class VectorizationProcessor(BaseOutputProcessor):
             except Exception as e:
                 logger.exception("Failed to add documents to Vectore Store: %s", e)
                 raise HTTPException(status_code=500, detail="Failed to add documents to Vectore Store") from e
-
+            metadata.mark_stage_done(ProcessingStage.VECTORIZED)
             return OutputProcessorResponse(status=Status.SUCCESS, chunks=len(chunks))
 
         except Exception as e:

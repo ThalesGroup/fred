@@ -214,7 +214,7 @@ class IngestionController:
                         current_step = "knowledge post processing"
                         metadata.mark_stage_done(ProcessingStage.VECTORIZED)
                         vectorization_response = self.service.process_output(
-                            working_dir=output_temp_dir,
+                            output_dir=output_temp_dir / "output",
                             input_file_name=input_temp_file.name,
                             input_file_metadata=metadata
                         )
@@ -233,7 +233,7 @@ class IngestionController:
                                                  filename=filename).model_dump_json() + "\n"
                         # Step: Metadata saving
                         current_step = "metadata saving"
-                        self.service.persist_metadata(metadata)
+                        self.service.save_metadata(metadata)
                         logger.info(f"Metadata saved for {filename}: {metadata}")
                         yield ProcessingProgress(step=current_step, status=Status.SUCCESS, 
                                                  document_uid=metadata.document_uid, 
@@ -328,7 +328,7 @@ class IngestionController:
                         # ✅ At least one file succeeded
                         # Step 2: Metadata saving
                         current_step = "metadata saving"
-                        self.service.persist_metadata(metadata=metadata)
+                        self.service.save_metadata(metadata=metadata)
                         logger.info(f"Metadata saved for {filename}: {metadata}")
                         all_success_flag[0] = True
                     except Exception as e:

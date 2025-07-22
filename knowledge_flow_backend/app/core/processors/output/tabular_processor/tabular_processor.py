@@ -21,7 +21,7 @@ from fastapi import HTTPException
 
 
 from app.application_context import ApplicationContext
-from app.common.document_structures import DocumentMetadata
+from app.common.document_structures import DocumentMetadata, ProcessingStage
 from app.core.processors.output.base_output_processor import BaseOutputProcessor
 
 logger = logging.getLogger(__name__)
@@ -63,7 +63,7 @@ class TabularProcessor(BaseOutputProcessor):
             except Exception as e:
                 logger.exception("Failed to add documents to Tabular Storage: %s", e)
                 raise HTTPException(status_code=500, detail="Failed to add documents to Tabular Storage") from e
-
+            metadata.mark_stage_done(ProcessingStage.SQL_INDEXED)
             return OutputProcessorResponse(status=Status.SUCCESS)
         
         except Exception as e:

@@ -200,33 +200,24 @@ class MinioStorageBackend(BaseContentStore):
                 raise ValueError(f"Failed to delete document content from MinIO: {e}")
 
 
-    def get_local_copy(self, document_uid: str) -> Path:
+    def get_local_copy(self, document_uid: str, destination_dir: Path) -> Path:
         """
         Downloads the first input file of the given document_uid to a temporary file,
         and returns the local filesystem Path to it.
         """
-        prefix = f"{document_uid}/input/"
         try:
-            objects = list(self.client.list_objects(self.bucket_name, prefix=prefix, recursive=True))
+            objects = list(self.client.list_objects(self.bucket_name, prefix=f"{document_uid}/", recursive=True))
             if not objects:
-                raise FileNotFoundError(f"No input content found for document: {document_uid}")
+                raise FileNotFoundError(f"No content found for document: {document_uid}")
 
-            obj = objects[0]
-            file_suffix = Path(obj.object_name).suffix or ".bin"
+            for obj in objects:
+                relative_path = Path(obj.object_name).relative_to(document_uid)
+                target_path = destination_dir / relative_path
+                target_path.parent.mkdir(parents=True, exist_ok=True)
+                self.client.fget_object(self.bucket_name, obj.object_name, str(target_path))
 
-            # Create a temp file with a suffix
-            tmp_file = tempfile.NamedTemporaryFile(delete=False, suffix=file_suffix)
-            tmp_path = Path(tmp_file.name)
-
-            self.client.fget_object(
-                self.bucket_name,
-                obj.object_name,
-                str(tmp_path)
-            )
-
-            logger.info(f"📥 Downloaded {obj.object_name} to temporary file {tmp_path}")
-            return tmp_path
+            logger.info(f"✅ Restored document {document_uid} to {destination_dir}")
 
         except S3Error as e:
-            logger.error(f"Error fetching content for {document_uid}: {e}")
-            raise FileNotFoundError(f"Failed to retrieve original content: {e}")
+            logger.error(f"Failed to restore document {document_uid}: {e}")
+            raise

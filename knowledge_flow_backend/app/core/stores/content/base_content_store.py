@@ -87,7 +87,7 @@ class BaseContentStore(ABC):
         logger.debug("clear() called on BaseContentStore: no-op by default.")
 
     @abstractmethod
-    def get_local_copy(self, document_uid: str) -> Path:
+    def get_local_copy(self, document_uid: str, destination_dir: Path) -> Path:
         """
         Ensures the original uploaded file is accessible on the local filesystem.
 

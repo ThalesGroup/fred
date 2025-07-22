@@ -14,7 +14,6 @@
 
 import logging
 import pathlib
-import shutil
 from app.common.document_structures import DocumentMetadata, ProcessingStage
 from app.common.structures import OutputProcessorResponse
 from app.core.processors.input.common.base_input_processor import BaseMarkdownProcessor, BaseTabularProcessor
@@ -46,21 +45,33 @@ class IngestionService:
         self.content_store.save_output(metadata.document_uid, output_dir)
         metadata.mark_stage_done(ProcessingStage.PREVIEW_READY)
 
-    def persist_metadata(self, metadata: DocumentMetadata) -> None:
+    def save_metadata(self, metadata: DocumentMetadata) -> None:
+        logger.debug(f"Saving metadata {metadata}")
         self.metadata_store.save_metadata(metadata)
 
     def get_metadata(self, document_uid: str) -> DocumentMetadata:
-        self.metadata_store.get_metadata_by_uid(document_uid)
+        return self.metadata_store.get_metadata_by_uid(document_uid)
         
-    def load_file_from_store(self, metadata: DocumentMetadata, target_dir: pathlib.Path) -> pathlib.Path:
+    def get_local_copy(self, metadata: DocumentMetadata, target_dir: pathlib.Path) -> pathlib.Path:
         """
         Downloads the file content from the store into target_dir and returns the path to the file.
         """
-        content_path = self.content_store.get_local_copy(metadata.document_uid)
-        target_path = target_dir / content_path.name
-        shutil.copyfile(content_path, target_path)
-        return target_path
+        return self.content_store.get_local_copy(metadata.document_uid, target_dir)
+    
+    def restore_document_folder(self, metadata: DocumentMetadata, target_dir: pathlib.Path) -> None:
+        """
+        Restores all available document content (input and/or output folders)
+        into the target working directory, from the content store.
+        """
+        if not target_dir.exists():
+            target_dir.mkdir(parents=True)
 
+        # Download the full tree under {document_uid}/ from the store
+        # LocalStorageBackend does this via a copy; Minio should download recursively
+        # You can implement a method like: get_full_document_tree(document_uid, destination_path)
+        self.content_store.restore_full_document(metadata.document_uid, target_dir)
+
+        logger.info(f"📦 Restored document '{metadata.document_uid}' into {target_dir}")
     
     def extract_metadata(self, file_path: pathlib.Path, 
                          tags: list[str], 
@@ -108,8 +119,8 @@ class IngestionService:
             raise RuntimeError(f"Unknown processor type for: {input_path}")
 
     def process_output(self, 
-                       working_dir: pathlib.Path, 
-                       input_file_name: str, 
+                       input_file_name: str,
+                       output_dir: pathlib.Path, 
                        input_file_metadata: DocumentMetadata) -> OutputProcessorResponse:
         """
         Processes data resulting from the input processing.
@@ -118,7 +129,6 @@ class IngestionService:
         processor = self.context.get_output_processor_instance(suffix)
         # check the content of the working dir 'output' directory and if there are some 'output.md' or 'output.csv' files
         # get their path and pass them to the processor
-        output_dir = working_dir / "output"
         if not output_dir.exists():
             raise ValueError(f"Output directory {output_dir} does not exist")
         if not output_dir.is_dir():
@@ -136,3 +146,29 @@ class IngestionService:
             raise ValueError(f"Output file {output_file} is empty")
         # check if the file is a markdown or csv file
         return processor.process(output_file, input_file_metadata)
+    
+    def get_markdown(self, metadata: DocumentMetadata, target_dir: pathlib.Path) -> pathlib.Path:
+        """
+        Downloads the preview file (markdown or CSV) for the document and saves it into `target_dir`.
+        Returns the filename of the downloaded preview.
+        """
+        try:
+            # Try markdown first
+            md_content = self.content_store.get_markdown(metadata.document_uid)
+            target_file = target_dir / "output.md"
+            target_file.write_text(md_content, encoding="utf-8")
+            logger.info(f"✅ Markdown preview saved to {target_file}")
+            return target_file
+        except FileNotFoundError:
+            raise RuntimeError(f"⚠️ No preview available for document {metadata.document_uid} in content store")
+
+    def get_preview_file(self, metadata: DocumentMetadata, output_dir: pathlib.Path) -> pathlib.Path:
+        """
+        Returns the preview file (output.md or table.csv) for a document.
+        Raises if not found.
+        """
+        for name in ["output.md", "table.csv"]:
+            candidate = output_dir / name
+            if candidate.exists() and candidate.is_file():
+                return candidate
+        raise FileNotFoundError(f"No preview file found for document: {metadata.document_uid}")
