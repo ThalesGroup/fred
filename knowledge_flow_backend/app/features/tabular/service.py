@@ -52,33 +52,29 @@ class TabularService:
         if "int" in duckdb_type:
             return "integer"
         return "unknown"
-
-    def get_schema(self, document_name: str) -> TabularSchemaResponse:
-        table_name = self._sanitize_table_name(document_name)
-        schema_info = self.tabular_store.get_table_schema(table_name)
-        columns = [
-            TabularColumnSchema(name=col_name, dtype=self._map_duckdb_type_to_literal(col_type))
-            for col_name, col_type in schema_info
-        ]
-        count_df = self.tabular_store.execute_sql_query(f"SELECT COUNT(*) AS count FROM {table_name}")
-        return TabularSchemaResponse(document_name=document_name, columns=columns, row_count=count_df['count'][0])
+    
+    def list_datasets_with_schema(self) -> List[TabularSchemaResponse]:
+        results = []
+        for table in self.tabular_store.list_tables():
+            schema_info = self.tabular_store.get_table_schema(table)
+            columns = [
+                TabularColumnSchema(name=col_name, dtype=self._map_duckdb_type_to_literal(col_type))
+                for col_name, col_type in schema_info
+            ]
+            row_count_df = self.tabular_store.execute_sql_query(f"SELECT COUNT(*) AS count FROM {table}")
+            row_count = row_count_df['count'][0]
+            results.append(TabularSchemaResponse(
+                document_name=table,
+                columns=columns,
+                row_count=row_count
+            ))
+        return results
 
     def query(self, document_name: str, request: TabularQueryRequest) -> TabularQueryResponse:
         sql = request.query if isinstance(request.query, str) else plan_to_sql(request.query)
         logger.info(f"Executing SQL: {sql}")
         df = self.tabular_store.execute_sql_query(sql)
         return TabularQueryResponse(document_name=document_name, rows=df.to_dict(orient="records"))
-
-    def list_tabular_datasets(self) -> List[TabularDatasetMetadata]:
-        result = []
-        for table in self.tabular_store.list_tables():
-            row_count = self.tabular_store.execute_sql_query(f"SELECT COUNT(*) AS count FROM {table}")['count'][0]
-            result.append(TabularDatasetMetadata(
-                document_name=table,
-                title=table,
-                row_count=row_count
-            ))
-        return result
 
     def how_to_make_a_query(self) -> HowToMakeAQueryResponse:
         return HowToMakeAQueryResponse(how="""... (identique à la version précédente) ...""")

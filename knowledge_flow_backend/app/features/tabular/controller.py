@@ -24,21 +24,20 @@ class TabularController:
 
     def _register_routes(self, router: APIRouter):
         @router.get(
-            "/tabular/{document_uid}/schema",
-            response_model=TabularSchemaResponse,
+            "/tabular/full_metadata",
+            response_model=List[TabularSchemaResponse],
             tags=["Tabular"],
-            operation_id="get_schema",
-            summary="Get schema (columns/types) of a SQL-like table"
+            operation_id="list_all_with_schema",
+            summary="List all tabular datasets with schema and row count"
         )
-        async def get_schema(document_uid: str):
-            logger.info(f"Schema request for table UID: {document_uid}")
+        async def list_all_with_schema():
+            logger.info("Received request for full schema + metadata")
             try:
-                return self.service.get_schema(document_uid)
-            except FileNotFoundError:
-                raise HTTPException(status_code=404, detail="Table not found")
+                return self.service.list_datasets_with_schema()
             except Exception as e:
-                logger.exception(f"Error fetching schema for {document_uid}: {e}")
+                logger.exception(f"Error getting full tabular metadata: {e}")
                 raise HTTPException(status_code=500, detail="Internal server error")
+
 
         @router.post(
             "/tabular/howtomakeaquery",
@@ -68,20 +67,6 @@ class TabularController:
                 raise HTTPException(status_code=404, detail="Table not found")
             except Exception as e:
                 logger.exception(f"Error querying table {document_uid}: {e}")
-                raise HTTPException(status_code=500, detail="Internal server error")
-
-        @router.get(
-            "/tabular/list",
-            response_model=List[TabularDatasetMetadata],
-            tags=["Tabular"],
-            operation_id="list_tables",
-            summary="List available SQL-like tabular datasets"
-        )
-        async def list_tabular_datasets():
-            try:
-                return self.service.list_tabular_datasets()
-            except Exception as e:
-                logger.exception("Error listing tabular datasets")
                 raise HTTPException(status_code=500, detail="Internal server error")
 
         @router.get(
