@@ -47,7 +47,7 @@ def service(tmp_path) -> ContentService:
 
     # Valid doc setup
     uid = "valid"
-    metadata = DocumentMetadata(document_uid=uid, document_name="test.txt")
+    metadata = DocumentMetadata(source_type="push", document_uid=uid, document_name="test.txt")
     service.metadata_store.save_metadata(metadata)
 
     input_dir = content_dir / uid / "input"

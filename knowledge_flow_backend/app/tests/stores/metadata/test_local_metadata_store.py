@@ -36,14 +36,14 @@ def metadata_store(tmp_path):
 # ----------------------------
 
 def test_save_and_get_metadata(metadata_store):
-    metadata = DocumentMetadata(document_uid="doc1", document_name="Test Doc")
+    metadata = DocumentMetadata(source_type="push", document_uid="doc1", document_name="Test Doc")
     metadata_store.save_metadata(metadata)
     result = metadata_store.get_metadata_by_uid("doc1")
     assert result == metadata
 
 
 def test_update_metadata_field(metadata_store):
-    metadata = DocumentMetadata(document_uid="doc2", document_name="Doc2", author="Old Author")
+    metadata = DocumentMetadata(source_type="push", document_uid="doc2", document_name="Doc2", author="Old Author")
     metadata_store.save_metadata(metadata)
 
     updated = metadata_store.update_metadata_field("doc2", "author", "New Author")
@@ -55,6 +55,7 @@ def test_update_metadata_field(metadata_store):
 
 def test_get_all_metadata_with_filter(metadata_store):
     metadata = DocumentMetadata(
+        source_type="push",
         document_uid="doc3",
         document_name="Nested",
         title="X",
@@ -74,7 +75,7 @@ def test_get_all_metadata_with_filter(metadata_store):
 
 def test_save_metadata_missing_uid(metadata_store):
     with pytest.raises(ValueError):
-        metadata_store.save_metadata(DocumentMetadata(document_uid=None, document_name="Missing"))
+        metadata_store.save_metadata(DocumentMetadata(source_type="push", document_uid=None, document_name="Missing"))
 
 
 def test_update_metadata_uid_not_found(metadata_store):
@@ -83,13 +84,13 @@ def test_update_metadata_uid_not_found(metadata_store):
 
 
 def test_delete_metadata_uid_not_found(metadata_store):
-    ghost = DocumentMetadata(document_uid="ghost", document_name="Ghost")
+    ghost = DocumentMetadata(source_type="push", document_uid="ghost", document_name="Ghost")
     with pytest.raises(ValueError):
         metadata_store.delete_metadata(ghost)
 
 
 def test_delete_metadata_missing_uid(metadata_store):
-    broken = DocumentMetadata(document_uid="", document_name="Broken")
+    broken = DocumentMetadata(source_type="push", document_uid="", document_name="Broken")
     with pytest.raises(ValueError):
         metadata_store.delete_metadata(broken)
 
@@ -99,8 +100,8 @@ def test_delete_metadata_missing_uid(metadata_store):
 # ----------------------------
 
 def test_overwrite_existing_metadata(metadata_store):
-    original = DocumentMetadata(document_uid="doc5", document_name="Original")
-    updated = DocumentMetadata(document_uid="doc5", document_name="Updated")
+    original = DocumentMetadata(source_type="push", document_uid="doc5", document_name="Original")
+    updated = DocumentMetadata(source_type="push", document_uid="doc5", document_name="Updated")
 
     metadata_store.save_metadata(original)
     metadata_store.save_metadata(updated)
@@ -110,7 +111,7 @@ def test_overwrite_existing_metadata(metadata_store):
 
 
 def test_delete_existing_metadata(metadata_store):
-    doc = DocumentMetadata(document_uid="doc6", document_name="ToDelete")
+    doc = DocumentMetadata(source_type="push", document_uid="doc6", document_name="ToDelete")
     metadata_store.save_metadata(doc)
     metadata_store.delete_metadata(doc)
 
@@ -118,7 +119,7 @@ def test_delete_existing_metadata(metadata_store):
 
 
 def test_match_nested_with_value_mismatch(metadata_store):
-    metadata = DocumentMetadata(document_uid="doc8", document_name="Mismatch", author="bob")
+    metadata = DocumentMetadata(source_type="push", document_uid="doc8", document_name="Mismatch", author="bob")
     metadata_store.save_metadata(metadata)
 
     result = metadata_store.get_all_metadata({"author": "alice"})

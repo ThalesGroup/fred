@@ -34,8 +34,8 @@ class TestMetadataService:
 
     def test_get_documents_metadata(self, monkeypatch):
         dummy_docs = [
-            DocumentMetadata(document_uid="1", document_name="doc1.md"),
-            DocumentMetadata(document_uid="2", document_name="doc2.md"),
+            DocumentMetadata(source_type="push", document_uid="1", document_name="doc1.md"),
+            DocumentMetadata(source_type="push", document_uid="2", document_name="doc2.md"),
         ]
         monkeypatch.setattr(self.service.metadata_store, "get_all_metadata", lambda filters: dummy_docs)
 
@@ -44,7 +44,7 @@ class TestMetadataService:
         assert result == dummy_docs
 
     def test_delete_document_metadata(self, monkeypatch):
-        mock_doc = DocumentMetadata(document_uid="doc1", document_name="doc.md")
+        mock_doc = DocumentMetadata(source_type="push", document_uid="doc1", document_name="doc.md")
         monkeypatch.setattr(self.service.metadata_store, "get_metadata_by_uid", lambda uid: mock_doc)
         monkeypatch.setattr(self.service.metadata_store, "delete_metadata", lambda m: True)
 
@@ -52,7 +52,7 @@ class TestMetadataService:
         assert result is None
 
     def test_get_document_metadata(self, monkeypatch):
-        doc = DocumentMetadata(document_uid="doc1", document_name="doc.md", title="doc")
+        doc = DocumentMetadata(source_type="push", document_uid="doc1", document_name="doc.md", title="doc")
         monkeypatch.setattr(self.service.metadata_store, "get_metadata_by_uid", lambda uid: doc)
 
         result = self.service.get_document_metadata("doc1")
@@ -60,7 +60,7 @@ class TestMetadataService:
         assert result.title == "doc"
 
     def test_update_document_retrievable(self, monkeypatch, dummy_update):
-        mock_updated = DocumentMetadata(document_uid="doc1", document_name="doc.md", retrievable=True)
+        mock_updated = DocumentMetadata(source_type="push", document_uid="doc1", document_name="doc.md", retrievable=True)
         monkeypatch.setattr(
             self.service.metadata_store,
             "update_metadata_field",

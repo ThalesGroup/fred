@@ -58,21 +58,6 @@ class IngestionService:
         """
         return self.content_store.get_local_copy(metadata.document_uid, target_dir)
     
-    def restore_document_folder(self, metadata: DocumentMetadata, target_dir: pathlib.Path) -> None:
-        """
-        Restores all available document content (input and/or output folders)
-        into the target working directory, from the content store.
-        """
-        if not target_dir.exists():
-            target_dir.mkdir(parents=True)
-
-        # Download the full tree under {document_uid}/ from the store
-        # LocalStorageBackend does this via a copy; Minio should download recursively
-        # You can implement a method like: get_full_document_tree(document_uid, destination_path)
-        self.content_store.restore_full_document(metadata.document_uid, target_dir)
-
-        logger.info(f"📦 Restored document '{metadata.document_uid}' into {target_dir}")
-    
     def extract_metadata(self, file_path: pathlib.Path, 
                          tags: list[str], 
                          source_tag: str = "uploads") -> DocumentMetadata:

@@ -66,6 +66,7 @@ class TestContentController:
     def document1(self):
         """Sample metadata matching *markdown_file*."""
         return DocumentMetadata(
+            source_type="push",
             document_uid="doc-01",
             document_name="document.md",
             title="Example Document",
