@@ -12,15 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List, Optional, Protocol
+from typing import List, Protocol
 
 from pydantic import BaseModel
 
 class PullFileEntry(BaseModel):
-    path: str  # relative to base path
-    size: int
-    modified_time: float
-    hash: Optional[str] = None
+    path: str            # Relative path from base pull location (e.g. "reports/2024/q2.pdf")
+    size: int            # Size in bytes
+    modified_time: float # Unix timestamp (last modified time)
+    hash: str            # SHA256 hash of path, precomputed or generated during scan
 
 
 # ------------------------------------------------------------------------------

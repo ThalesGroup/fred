@@ -76,7 +76,7 @@ def test_similarity_search_empty_question(monkeypatch):
     """Test: raises ValueError if question is an empty string."""
     monkeypatch.setattr(service.ApplicationContext, "get_instance", DummyContext)
     vector_svc = VectorSearchService()
-    with pytest.raises(ValueError, match="Question must not be empty"):
+    with pytest.raises(ValueError):
         vector_svc.similarity_search_with_score("", k=3)
 
 

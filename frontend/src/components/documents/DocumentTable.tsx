@@ -54,6 +54,11 @@ export interface FileRow {
   source_type?: string;
   processing_stages?: Record<string, string>;
   tags?: string[];
+  source_tag?: string;         
+  pull_location?: string;    
+  size?: number;              
+  modified_time?: number;      
+  hash?: string;              
 }
 
 export interface Metadata {

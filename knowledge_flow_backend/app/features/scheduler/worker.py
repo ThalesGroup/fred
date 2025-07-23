@@ -23,10 +23,10 @@ from temporalio.worker import Worker
 from app.common.structures import TemporalSchedulerConfig
 from app.features.scheduler.activities import (
     extract_metadata,
-    process_document,
-    vectorize_and_save,
+    input_process,
+    output_process,
 )
-from app.features.scheduler.workflow import DocumentIngestionWorkflow
+from app.features.scheduler.workflow import Process, ExtractMetadata, InputProcess, OutputProcess
 
 # Use basic logging instead of rich within the Temporal worker
 logging.basicConfig(
@@ -52,12 +52,20 @@ async def run_worker(config: TemporalSchedulerConfig):
 
     # Use thread pool executor for sync activities
     executor = concurrent.futures.ThreadPoolExecutor()
-
     worker = Worker(
         client=client,
         task_queue=config.task_queue,
-        workflows=[DocumentIngestionWorkflow],
-        activities=[extract_metadata, process_document, vectorize_and_save],
+        workflows=[
+            Process,
+            ExtractMetadata,
+            InputProcess,
+            OutputProcess,
+        ],
+        activities=[
+            extract_metadata,
+            input_process,
+            output_process,
+        ],
         activity_executor=executor,
     )
 

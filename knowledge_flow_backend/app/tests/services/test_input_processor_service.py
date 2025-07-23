@@ -16,7 +16,7 @@
 
 import pytest
 from app.features.ingestion.service import IngestionService
-from app.common.structures import DocumentMetadata
+from app.common.document_structures import DocumentMetadata
 from uuid import uuid4
 
 
@@ -47,13 +47,14 @@ class TestInputProcessorService:
         input_file.write_text("dummy")
 
         metadata = DocumentMetadata(
+            source_type="push",
             document_name=input_file.name,
             document_uid="markdown-uid-001"
         )
 
-        service.process_input(tmp_path, input_file.name, metadata)
+        service.process_input(input_path=input_file, output_dir=tmp_path, metadata=metadata)
 
-        output_file = tmp_path / "output" / "file.md"
+        output_file = tmp_path / "output.md"
         assert output_file.exists()
         assert output_file.read_text() == "# Test Markdown Content"
 
@@ -62,13 +63,14 @@ class TestInputProcessorService:
         input_file.write_text("dummy")
 
         metadata = DocumentMetadata(
+            source_type="push",
             document_name=input_file.name,
             document_uid="tabular-uid-001"
         )
 
-        service.process_input(tmp_path, input_file.name, metadata)
-
-        output_file = tmp_path / "output" / "table.csv"
+        service.process_input(input_path=input_file, output_dir=tmp_path, metadata=metadata)
+        
+        output_file = tmp_path / "table.csv"
         assert output_file.exists()
         content = output_file.read_text()
         assert "col1" in content
@@ -85,9 +87,10 @@ class TestInputProcessorService:
         input_file.write_text("data")
 
         metadata = DocumentMetadata(
+            source_type="push",
             document_name=input_file.name,
             document_uid=str(uuid4())
         )
 
         with pytest.raises(RuntimeError, match="Unknown processor type"):
-            service.process_input(tmp_path, input_file.name, metadata)
+            service.process_input(input_path=input_file, output_dir=tmp_path, metadata=metadata)
