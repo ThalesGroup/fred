@@ -100,7 +100,7 @@ export const DocumentLibraryViewPage = () => {
           </Button>
         )}
       </TopBar>
-      <Container maxWidth="xl">
+      <Container maxWidth="xl" sx={{ mb: 3 }}>
         <Paper sx={{ p: 3, borderRadius: 4, mt: 2 }}>
           <Typography variant="h4" gutterBottom>
             {library.name}
