@@ -1,37 +1,37 @@
-import {
-  Table,
-  TableHead,
-  TableBody,
-  TableRow,
-  TableCell,
-  TableContainer,
-  Typography,
-  Card,
-  Tooltip,
-  Checkbox,
-  IconButton,
-  Menu,
-  MenuItem,
-  ListItemText,
-  ListItemIcon,
-  TableSortLabel,
-  Box,
-  Button,
-} from "@mui/material";
-import MoreVertIcon from "@mui/icons-material/MoreVert";
+import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
 import FolderIcon from "@mui/icons-material/Folder";
-import AddIcon from "@mui/icons-material/Add";
+import MoreVertIcon from "@mui/icons-material/MoreVert";
+import {
+  Box,
+  Button,
+  Card,
+  Checkbox,
+  IconButton,
+  ListItemIcon,
+  ListItemText,
+  Menu,
+  MenuItem,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  TableSortLabel,
+  Tooltip,
+  Typography,
+} from "@mui/material";
+import dayjs from "dayjs";
 import React, { useState } from "react";
+import { useTranslation } from "react-i18next";
+import InvisibleLink from "../components/InvisibleLink";
+import { LibraryCreateDrawer } from "../components/documents/LibraryCreateDrawer";
 import {
   TagWithDocumentsId,
   useDeleteTagKnowledgeFlowV1TagsTagIdDeleteMutation,
   useListTagsKnowledgeFlowV1TagsGetQuery,
 } from "../slices/knowledgeFlow/knowledgeFlowOpenApi";
-import InvisibleLink from "../components/InvisibleLink";
-import { LibraryCreateDrawer } from "../components/documents/LibraryCreateDrawer";
-import dayjs from "dayjs";
-import { useTranslation } from "react-i18next";
 
 export function DocumentLibrariesList() {
   const { t } = useTranslation();
@@ -124,80 +124,80 @@ export function DocumentLibrariesList() {
           {t("documentLibrariesList.createLibrary")}
         </Button>
       </Box>
-      
+
       <Card sx={{ borderRadius: 4, p: 2 }}>
         {sortedLibraries && sortedLibraries.length > 0 ? (
-        <TableContainer>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell padding="checkbox">
-                  <Checkbox checked={allSelected} onChange={(e) => handleToggleAll(e.target.checked)} />
-                </TableCell>
-                <TableCell sx={{ fontWeight: 600 }}>
-                  <TableSortLabel
-                    active={sortBy === "name"}
-                    direction={sortBy === "name" ? sortDirection : "asc"}
-                    onClick={() => handleSortChange("name")}
-                  >
-                    {t("documentLibrariesList.libraryName")}
-                  </TableSortLabel>
-                </TableCell>
-                <TableCell sx={{ fontWeight: 600 }}>
-                  <TableSortLabel
-                    active={sortBy === "documents"}
-                    direction={sortBy === "documents" ? sortDirection : "asc"}
-                    onClick={() => handleSortChange("documents")}
-                  >
-                    {t("documentLibrariesList.documents")}
-                  </TableSortLabel>
-                </TableCell>
-                <TableCell sx={{ fontWeight: 600 }}>
-                  <TableSortLabel
-                    active={sortBy === "lastUpdate"}
-                    direction={sortBy === "lastUpdate" ? sortDirection : "desc"}
-                    onClick={() => handleSortChange("lastUpdate")}
-                  >
-                    {t("documentLibrariesList.lastUpdate")}
-                  </TableSortLabel>
-                </TableCell>
-                <TableCell sx={{ fontWeight: 600 }} align="right">
-                  {t("documentLibrariesList.actions")}
-                </TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {sortedLibraries.map((library) => (
-                <DocumentLibraryRow
-                  key={library.id}
-                  library={library}
-                  selected={selectedIds.includes(library.id)}
-                  onToggleSelect={() => handleToggleSelect(library.id)}
-                  onMenuOpen={handleMenuOpen}
-                />
-              ))}
-            </TableBody>
-          </Table>
-          <Menu
-            anchorEl={menuAnchor}
-            open={Boolean(menuAnchor)}
-            onClose={handleMenuClose}
-            anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-            transformOrigin={{ vertical: "top", horizontal: "right" }}
-          >
-            <MenuItem onClick={() => menuLibraryId && handleDelete(menuLibraryId)}>
-              <ListItemIcon>
-                <DeleteIcon fontSize="small" />
-              </ListItemIcon>
-              <ListItemText>{t("documentLibrariesList.delete")}</ListItemText>
-            </MenuItem>
-          </Menu>
-        </TableContainer>
-      ) : (
-        <Typography color="text.secondary" px={2} py={2}>
-          {t("documentLibrariesList.noLibrariesFound")}
-        </Typography>
-      )}
+          <TableContainer>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell padding="checkbox">
+                    <Checkbox checked={allSelected} onChange={(e) => handleToggleAll(e.target.checked)} />
+                  </TableCell>
+                  <TableCell sx={{ fontWeight: 600 }}>
+                    <TableSortLabel
+                      active={sortBy === "name"}
+                      direction={sortBy === "name" ? sortDirection : "asc"}
+                      onClick={() => handleSortChange("name")}
+                    >
+                      {t("documentLibrariesList.libraryName")}
+                    </TableSortLabel>
+                  </TableCell>
+                  <TableCell sx={{ fontWeight: 600 }}>
+                    <TableSortLabel
+                      active={sortBy === "documents"}
+                      direction={sortBy === "documents" ? sortDirection : "asc"}
+                      onClick={() => handleSortChange("documents")}
+                    >
+                      {t("documentLibrariesList.documents")}
+                    </TableSortLabel>
+                  </TableCell>
+                  <TableCell sx={{ fontWeight: 600 }}>
+                    <TableSortLabel
+                      active={sortBy === "lastUpdate"}
+                      direction={sortBy === "lastUpdate" ? sortDirection : "desc"}
+                      onClick={() => handleSortChange("lastUpdate")}
+                    >
+                      {t("documentLibrariesList.lastUpdate")}
+                    </TableSortLabel>
+                  </TableCell>
+                  <TableCell sx={{ fontWeight: 600 }} align="right">
+                    {t("documentLibrariesList.actions")}
+                  </TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {sortedLibraries.map((library) => (
+                  <DocumentLibraryRow
+                    key={library.id}
+                    library={library}
+                    selected={selectedIds.includes(library.id)}
+                    onToggleSelect={() => handleToggleSelect(library.id)}
+                    onMenuOpen={handleMenuOpen}
+                  />
+                ))}
+              </TableBody>
+            </Table>
+            <Menu
+              anchorEl={menuAnchor}
+              open={Boolean(menuAnchor)}
+              onClose={handleMenuClose}
+              anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+              transformOrigin={{ vertical: "top", horizontal: "right" }}
+            >
+              <MenuItem onClick={() => menuLibraryId && handleDelete(menuLibraryId)}>
+                <ListItemIcon>
+                  <DeleteIcon fontSize="small" />
+                </ListItemIcon>
+                <ListItemText>{t("documentLibrariesList.delete")}</ListItemText>
+              </MenuItem>
+            </Menu>
+          </TableContainer>
+        ) : (
+          <Typography color="text.secondary" px={2} py={2}>
+            {t("documentLibrariesList.noLibrariesFound")}
+          </Typography>
+        )}
       </Card>
 
       <LibraryCreateDrawer

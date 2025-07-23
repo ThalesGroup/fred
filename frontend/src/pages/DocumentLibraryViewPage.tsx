@@ -1,17 +1,17 @@
-import { useParams } from "react-router-dom";
-import { Container, Typography, Box, CircularProgress, Paper, Button } from "@mui/material";
-import {
-  DocumentMetadata,
-  useGetTagKnowledgeFlowV1TagsTagIdGetQuery,
-  useGetDocumentsMetadataKnowledgeFlowV1DocumentsMetadataPostMutation,
-} from "../slices/knowledgeFlow/knowledgeFlowOpenApi";
-import { TopBar } from "../common/TopBar";
+import UploadIcon from "@mui/icons-material/Upload";
+import { Box, Button, CircularProgress, Container, Paper, Typography } from "@mui/material";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { useParams } from "react-router-dom";
+import { TopBar } from "../common/TopBar";
 import { DocumentTable } from "../components/documents/DocumentTable";
 import { DocumentUploadDrawer } from "../components/documents/DocumentUploadDrawer";
 import { KeyCloakService } from "../security/KeycloakService";
-import UploadIcon from "@mui/icons-material/Upload";
-import { useTranslation } from "react-i18next";
+import {
+  DocumentMetadata,
+  useGetDocumentsMetadataKnowledgeFlowV1DocumentsMetadataPostMutation,
+  useGetTagKnowledgeFlowV1TagsTagIdGetQuery,
+} from "../slices/knowledgeFlow/knowledgeFlowOpenApi";
 
 export const DocumentLibraryViewPage = () => {
   const { t } = useTranslation();
@@ -126,7 +126,7 @@ export const DocumentLibraryViewPage = () => {
             columns={{
               fileName: true,
               dateAdded: true,
-              tags: false, // Hide tags column in library view
+              librairies: false, // Hide column in library view
               status: true,
               retrievable: true,
               actions: true,

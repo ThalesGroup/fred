@@ -12,43 +12,43 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import React, { useMemo, useState, useEffect } from "react";
+import EventAvailableIcon from "@mui/icons-material/EventAvailable";
 import {
+  Avatar,
+  Box,
+  Checkbox,
+  Chip,
   Table,
   TableBody,
   TableCell,
   TableContainer,
   TableHead,
   TableRow,
-  Checkbox,
+  TableSortLabel,
   Tooltip,
   Typography,
-  Box,
-  TableSortLabel,
-  Chip,
-  Avatar,
 } from "@mui/material";
-import EventAvailableIcon from "@mui/icons-material/EventAvailable";
 import dayjs from "dayjs";
+import React, { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
+import {
+  DOCUMENT_PROCESSING_STAGES,
+  ProcessDocumentsRequest,
+  useDeleteDocumentMutation,
+  useLazyGetDocumentRawContentQuery,
+  useProcessDocumentsMutation,
+  useUpdateDocumentRetrievableMutation,
+} from "../../slices/documentApi";
+import {
+  TagWithDocumentsId,
+  useLazyGetTagKnowledgeFlowV1TagsTagIdGetQuery,
+} from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { downloadFile } from "../../utils/downloadUtils";
+import { useToast } from "../ToastProvider";
 import { getDocumentIcon } from "./DocumentIcon";
 import { DocumentTableRowActionsMenu } from "./DocumentTableRowActionsMenu";
 import { DocumentTableSelectionToolbar } from "./DocumentTableSelectionToolbar";
-import {
-  DOCUMENT_PROCESSING_STAGES,
-  useDeleteDocumentMutation,
-  useLazyGetDocumentRawContentQuery,
-  useUpdateDocumentRetrievableMutation,
-  useProcessDocumentsMutation,
-  ProcessDocumentsRequest,
-} from "../../slices/documentApi";
-import {
-  useLazyGetTagKnowledgeFlowV1TagsTagIdGetQuery,
-  TagWithDocumentsId,
-} from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
-import { useTranslation } from "react-i18next";
-import { useToast } from "../ToastProvider";
 import { useDocumentViewer } from "./useDocumentViewer";
-import { downloadFile } from "../../utils/downloadUtils";
 // import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 // import HourglassTopIcon from "@mui/icons-material/HourglassTop";
 // import CancelIcon from "@mui/icons-material/Cancel";
@@ -72,7 +72,7 @@ export interface Metadata {
 interface DocumentTableColumns {
   fileName?: boolean;
   dateAdded?: boolean;
-  tags?: boolean;
+  librairies?: boolean;
   status?: boolean;
   retrievable?: boolean;
   actions?: boolean;
@@ -94,7 +94,7 @@ export const DocumentTable: React.FC<FileTableProps> = ({
   columns = {
     fileName: true,
     dateAdded: true,
-    tags: true,
+    librairies: true,
     status: true,
     retrievable: true,
     actions: true,
@@ -121,7 +121,7 @@ export const DocumentTable: React.FC<FileTableProps> = ({
 
   // Fetch tag information when files change and tags column is enabled
   useEffect(() => {
-    if (!columns.tags) return;
+    if (!columns.librairies) return;
 
     const allTagIds = new Set<string>();
     files.forEach((file) => {
@@ -164,7 +164,7 @@ export const DocumentTable: React.FC<FileTableProps> = ({
     };
 
     fetchTags();
-  }, [files, columns.tags, getTag]);
+  }, [files, columns.librairies, getTag]);
 
   // Internal handlers
   const handleToggleSelect = (file: FileRow) => {
@@ -376,7 +376,7 @@ export const DocumentTable: React.FC<FileTableProps> = ({
                   </TableSortLabel>
                 </TableCell>
               )}
-              {columns.tags && <TableCell>{t("documentTable.tags")}</TableCell>}
+              {columns.librairies && <TableCell>{t("documentTable.librairies")}</TableCell>}
               {columns.status && <TableCell>{t("documentTable.status")}</TableCell>}
               {columns.retrievable && <TableCell>{t("documentTable.retrievableYes")}</TableCell>}
               {columns.actions && <TableCell align="right">{t("documentTable.actions")}</TableCell>}
@@ -418,7 +418,7 @@ export const DocumentTable: React.FC<FileTableProps> = ({
                       </Tooltip>
                     </TableCell>
                   )}
-                  {columns.tags && (
+                  {columns.librairies && (
                     <TableCell>
                       <Box display="flex" flexWrap="wrap" gap={0.5}>
                         {file.tags?.map((tagId) => {

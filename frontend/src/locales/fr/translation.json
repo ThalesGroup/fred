@@ -201,12 +201,12 @@
     "retrievableYes": "Consultable",
     "retrievableNo": "Exclu",
     "status": "Status",
-    "tags": "Tags",
     "actions": "Actions",
     "loadingMetadata": "Chargement des métadonnées...",
     "noMetadata": "Aucune métadonnée disponible.",
     "yes": "Oui",
-    "no": "Non"
+    "no": "Non",
+    "librairies": "Bibliothèques"
   },
   "documentDrawerTable": {
     "deleteFile": "Supprimer le fichier"

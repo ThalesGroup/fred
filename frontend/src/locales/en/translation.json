@@ -201,12 +201,12 @@
     "retrievableYes": "Searchable",
     "retrievableNo": "Exluded",
     "status": "Status",
-    "tags": "Tags",
     "actions": "Actions",
     "loadingMetadata": "Loading metadata...",
     "noMetadata": "No metadata available.",
     "yes": "Yes",
-    "no": "No"
+    "no": "No",
+    "librairies": "Librairies"
   },
   "documentDrawerTable": {
     "deleteFile": "Delete file"
