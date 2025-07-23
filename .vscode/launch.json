@@ -17,7 +17,8 @@
         "--log-level",
         "info",
         "--loop",
-        "asyncio"
+        "asyncio",
+        "--reload"
       ],
       "env": {
         "PYTHONPATH": "${workspaceFolder}/agentic_backend",
@@ -40,7 +41,8 @@
         "--env-file",
         "config/.env",
         "--log-level",
-        "debug"
+        "debug",
+        "--reload"
       ],
       "env": {
         "PYTHONPATH": "${workspaceFolder}/knowledge_flow_backend",
