@@ -189,7 +189,11 @@
     "save": "Enregistrer",
     "saving": "Enregistrement en cours...",
     "librariesView": "Bibliothèques",
-    "documentsView": "Documents"
+    "documentsView": "Documents",
+    "removeSuccess": "Documents supprimés",
+    "removedDocuments": "{{count}} document(s) supprimé(s) de la bibliothèque",
+    "removeError": "Échec de la suppression",
+    "removeErrorGeneric": "Impossible de supprimer les documents de la bibliothèque"
   },
   "documentTable": {
     "selectedCount": "{{count}} sélectionné(s)",

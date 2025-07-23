@@ -4,6 +4,7 @@ import { Box, Button, CircularProgress, Container, Paper, Typography } from "@mu
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
+import { useToast } from "../components/ToastProvider";
 import { TopBar } from "../common/TopBar";
 import { DocumentTable } from "../components/documents/DocumentTable";
 import { CustomRowAction } from "../components/documents/DocumentTableRowActionsMenu";
@@ -16,10 +17,12 @@ import {
   DocumentMetadata,
   useGetDocumentsMetadataKnowledgeFlowV1DocumentsMetadataPostMutation,
   useGetTagKnowledgeFlowV1TagsTagIdGetQuery,
+  useUpdateTagKnowledgeFlowV1TagsTagIdPutMutation,
 } from "../slices/knowledgeFlow/knowledgeFlowOpenApi";
 
 export const DocumentLibraryViewPage = () => {
   const { t } = useTranslation();
+  const { showError, showSuccess } = useToast();
   const { libraryId } = useParams<{ libraryId: string }>();
   const {
     data: library,
@@ -27,6 +30,7 @@ export const DocumentLibraryViewPage = () => {
     refetch: refetchLibrary,
   } = useGetTagKnowledgeFlowV1TagsTagIdGetQuery({ tagId: libraryId || "" }, { skip: !libraryId });
   const [getDocumentsMetadata] = useGetDocumentsMetadataKnowledgeFlowV1DocumentsMetadataPostMutation();
+  const [updateTag] = useUpdateTagKnowledgeFlowV1TagsTagIdPutMutation();
 
   const [documents, setDocuments] = useState<DocumentMetadata[]>([]);
   const [openUploadDrawer, setOpenUploadDrawer] = useState(false);
@@ -65,10 +69,35 @@ export const DocumentLibraryViewPage = () => {
   };
 
   const handleRemoveFromLibrary = async (documents: DocumentMetadata[]) => {
-    console.log(
-      "Remove from library:",
-      documents.map((doc) => doc.document_name),
-    );
+    if (!library) return;
+
+    try {
+      const documentIdsToRemove = documents.map((doc) => doc.document_uid);
+      const updatedDocumentIds = library.document_ids?.filter(
+        (id) => !documentIdsToRemove.includes(id)
+      ) || [];
+
+      await updateTag({
+        tagId: library.id,
+        tagUpdate: {
+          name: library.name,
+          description: library.description,
+          type: library.type,
+          document_ids: updatedDocumentIds,
+        },
+      }).unwrap();
+
+      showSuccess({
+        summary: t("documentLibrary.removeSuccess"),
+        detail: t("documentLibrary.removedDocuments", { count: documents.length }),
+      });
+
+    } catch (error: any) {
+      showError({
+        summary: t("documentLibrary.removeError"),
+        detail: error?.data?.detail || t("documentLibrary.removeErrorGeneric"),
+      });
+    }
   };
 
   // Get default document actions

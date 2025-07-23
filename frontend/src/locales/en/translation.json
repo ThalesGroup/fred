@@ -189,7 +189,11 @@
     "save": "Save",
     "saving": "Saving...",
     "librariesView": "Libraries",
-    "documentsView": "Documents"
+    "documentsView": "Documents",
+    "removeSuccess": "Documents Removed",
+    "removedDocuments": "{{count}} document(s) removed from library",
+    "removeError": "Remove Failed",
+    "removeErrorGeneric": "Failed to remove documents from library"
   },
   "documentTable": {
     "selectedCount": "{{count}} selected",
