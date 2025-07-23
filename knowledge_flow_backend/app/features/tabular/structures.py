@@ -15,37 +15,49 @@
 from typing import List, Literal, Optional, Union, Any, Dict
 from enum import Enum
 from datetime import datetime
-from pydantic import BaseModel, Field,root_validator
+from pydantic import BaseModel, Field, model_validator
+
+# -- Constants for consistent types --
+DTypes = Literal["string", "integer", "float", "boolean", "datetime", "unknown"]
+
+# -- Schema models --
 
 class TabularColumnSchema(BaseModel):
     name: str
-    dtype: Literal["string", "integer", "float", "boolean", "datetime", "unknown"]
+    dtype: DTypes
+
 
 class TabularSchemaResponse(BaseModel):
     document_name: str
     columns: List[TabularColumnSchema]
     row_count: Optional[int] = None
 
-class AggregationSpec(BaseModel):
-    function: str
-    column: str
-    alias: Optional[str] = None
-    distinct: bool = False
-    filter: Optional[dict] = None  # ex: {"status": "PAID"}
+# -- Query & Planning --
 
 class FilterCondition(BaseModel):
     column: str
     op: str = "="
     value: Any
 
+
 class JoinSpec(BaseModel):
     table: str
     on: str
     type: Optional[str] = "INNER"
 
+
 class OrderBySpec(BaseModel):
     column: str
-    direction: Optional[str] = "ASC"  # Default ascending
+    direction: Optional[Literal["ASC", "DESC"]] = "ASC"
+
+
+class AggregationSpec(BaseModel):
+    function: str
+    column: str
+    alias: Optional[str] = None
+    distinct: bool = False
+    filter: Optional[Dict[str, Any]] = None  # Optional SQL filter within aggregation
+
 
 class SQLQueryPlan(BaseModel):
     table: str
@@ -57,15 +69,19 @@ class SQLQueryPlan(BaseModel):
     joins: Optional[List[JoinSpec]] = None
     aggregations: Optional[List[AggregationSpec]] = None
 
+
 class TabularQueryRequest(BaseModel):
     query: Optional[Union[str, SQLQueryPlan]] = None
+
 
 class TabularQueryResponse(BaseModel):
     document_name: str
     rows: List[dict]
 
+
 class HowToMakeAQueryResponse(BaseModel):
     how: str
+
 
 class TabularDatasetMetadata(BaseModel):
     document_name: str
@@ -75,31 +91,40 @@ class TabularDatasetMetadata(BaseModel):
     domain: Optional[str] = ""
     row_count: Optional[int] = None
 
+# -- Aggregation Models --
+
 class Precision(str, Enum):
     sec = "sec"
     min = "min"
     hour = "hour"
     day = "day"
+    all = "all"  # for global (non-bucketed) aggregations
+
 
 class Aggregation(str, Enum):
-    avg = "avg"
-    max = "max"
-    min = "min"
-    sum = "sum"
-    
+    min = "MIN"
+    max = "MAX"
+    count = "COUNT"
+    count_distinct = "COUNT_DISTINCT"
+    avg = "AVG"
+    sum = "SUM"
+
+
 class AggregatedBucket(BaseModel):
     time_bucket: str
     values: Dict[str, Any]
-    groupby_fields: Dict[str, Any] = Field(default_factory=dict)
+    groupby_fields: Optional[Dict[str, Any]] = None
 
-    @root_validator(pre=True)
+    @model_validator(mode="before")
+    @classmethod
     def extract_groupby_fields(cls, values):
-        reserved = {"time_bucket", "values"}
-        groupby = {k: v for k, v in values.items() if k not in reserved}
-        values["groupby_fields"] = groupby
+        if "groupby_fields" not in values:
+            reserved = {"time_bucket", "values"}
+            groupby = {k: v for k, v in values.items() if k not in reserved}
+            if groupby:
+                values["groupby_fields"] = groupby
         return values
 
 
 class TabularAggregationResponse(BaseModel):
     buckets: List[AggregatedBucket]
-    global_: Optional[Dict[str, Any]] = Field(default=None, alias="global")
