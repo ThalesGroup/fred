@@ -33,6 +33,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { DOCUMENT_PROCESSING_STAGES, useUpdateDocumentRetrievableMutation } from "../../slices/documentApi";
 import {
+  DocumentMetadata,
   TagWithDocumentsId,
   useLazyGetTagKnowledgeFlowV1TagsTagIdGetQuery,
 } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
@@ -42,16 +43,8 @@ import { CustomRowAction, DocumentTableRowActionsMenu } from "./DocumentTableRow
 import { CustomBulkAction, DocumentTableSelectionToolbar } from "./DocumentTableSelectionToolbar";
 import { useDocumentActions } from "./useDocumentActions";
 
-export interface FileRow {
-  document_uid: string;
-  document_name: string;
-  date_added_to_kb?: string;
-  retrievable?: boolean;
-  ingestion_type?: string;
-  source_type?: string;
-  processing_stages?: Record<string, string>;
-  tags?: string[];
-}
+// Todo: use `DocumentMetadata` directly (as `DocumentMetadata` is auto-generated from OpenAPI spec)
+export type FileRow = DocumentMetadata;
 
 export interface Metadata {
   metadata: any;
