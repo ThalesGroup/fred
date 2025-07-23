@@ -94,7 +94,7 @@ Use the [fred-deployment-factory](https://github.com/ThalesGroup/fred-deployment
 
 - Keycloak (authentication)
 - SearchEngine (vector + metadata index)
-- ObjectStorage (content storage)
+- ObjectStorage (content storage, must be compatible with S3 like MinIO or Garage)
 - Fred + Knowledge Flow containers
 
 This is the recommended way to test a production-grade Fred deployment.
