@@ -14,14 +14,12 @@
 
 import logging
 from pathlib import Path
+from app.features.feedback.store.search_engine_feedback_store import SearchEngineFeedbackStore
 from app.features.feedback.feedback_service import FeedbackService
 from app.features.feedback.store.local_feedback_store import LocalFeedbackStore
 from app.main_utils import validate_settings_or_exit
 from app.config.feedback_store_local_settings import FeedbackStoreLocalSettings
 from app.config.feedback_store_search_engine_settings import FeedbackStoreSearchEngineSettings
-from app.feedback.feedback_service import FeedbackService
-from app.feedback.store.local_feedback_store import LocalFeedbackStore
-from app.feedback.store.search_engine_feedback_store import SearchEngineFeedbackStore
 
 
 logger = logging.getLogger(__name__)

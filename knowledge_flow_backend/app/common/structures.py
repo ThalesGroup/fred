@@ -63,7 +63,7 @@ class ProcessorConfig(BaseModel):
 #  --- Content Storage Configuration
 #
 
-class MinioStorage(BaseModel):
+class ObjectStorage(BaseModel):
     type: Literal["minio"]
     endpoint: str = Field(default="localhost:9000", description="MinIO API URL")
     access_key: Optional[str] = Field(default_factory=lambda: os.getenv("MINIO_ACCESS_KEY"), description="MinIO access key from env")
@@ -76,7 +76,7 @@ class LocalContentStorage(BaseModel):
     root_path: str = Field(default=str(Path("~/.knowledge-flow/content-store")), description="Local storage directory")
 
 ContentStorageConfig = Annotated[
-    Union[LocalContentStorage, MinioStorage],
+    Union[LocalContentStorage, ObjectStorage],
     Field(discriminator="type")
 ]
 

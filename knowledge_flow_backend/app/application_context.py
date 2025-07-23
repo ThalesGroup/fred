@@ -26,10 +26,10 @@ from app.config.ollama_settings import OllamaSettings
 from app.config.embedding_openai_settings import EmbeddingOpenAISettings
 from app.core.stores.content.base_content_store import BaseContentStore
 from app.core.stores.content.local_content_store import LocalStorageBackend
-from app.core.stores.content.minio_content_store import MinioStorageBackend
 from app.core.stores.metadata.base_catalog_store import BaseCatalogStore
 from app.core.stores.metadata.duckdb_catalog_store import DuckdbCatalogStore
 from app.core.stores.metadata.duckdb_metadata_store import DuckdbMetadataStore
+from app.core.stores.content.object_storage_content_store import ObjectStorageBackend
 from langchain_openai import OpenAIEmbeddings, AzureOpenAIEmbeddings
 from langchain_ollama import OllamaEmbeddings
 
@@ -275,7 +275,7 @@ class ApplicationContext:
         backend_type = config.type
 
         if backend_type == "minio":
-            return MinioStorageBackend(
+            return ObjectStorageBackend(
                 endpoint=config.endpoint,
                 access_key=config.access_key,
                 secret_key=config.secret_key,

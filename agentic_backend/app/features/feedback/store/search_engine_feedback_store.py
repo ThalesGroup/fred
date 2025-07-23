@@ -12,13 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-<<<<<<<< HEAD:agentic_backend/app/features/feedback/store/search_engine_feedback_store.py
 from opensearchpy import OpenSearch as SearchEngine, exceptions
-from app.feedback.store.base_feedback_store import BaseFeedbackStore
-========
 from app.features.feedback.store.base_feedback_store import BaseFeedbackStore
-from opensearchpy import OpenSearch, exceptions
->>>>>>>> main:agentic_backend/app/features/feedback/store/opensearch_feedback_store.py
 import logging
 import json
 

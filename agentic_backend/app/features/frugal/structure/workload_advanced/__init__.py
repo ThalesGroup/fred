@@ -19,27 +19,19 @@ software nature.
 
 from typing import Optional, Union
 
+from app.features.frugal.structure.workload_advanced.opensearch import SearchEngineAdvanced
 from langfuse.callback import CallbackHandler
 from pydantic import BaseModel, Field
 
 from app.features.frugal.structure.workload_id import WorkloadId
 from app.features.frugal.structure.workload_context import WorkloadContext
 
-<<<<<<< HEAD:agentic_backend/app/services/ai/structure/workload_advanced/__init__.py
-from app.services.ai.structure.workload_advanced.punchline import PunchlineAdvanced
-from app.services.ai.structure.workload_advanced.search_engine import SearchEngineAdvanced
-
-from app.services.ai.structure.workload_advanced.kafka import KafkaAdvanced
-from app.services.ai.structure.workload_advanced.search_engine_dashboard import (
-    SearchEngineDashboardAdvanced,
-=======
 from app.features.frugal.structure.workload_advanced.punchline import PunchlineAdvanced
-from app.features.frugal.structure.workload_advanced.opensearch import OpenSearchAdvanced
+from app.features.frugal.structure.workload_advanced.search_engine_dashboard import SearchEngineDashboardAdvanced
 
 from app.features.frugal.structure.workload_advanced.kafka import KafkaAdvanced
-from app.features.frugal.structure.workload_advanced.opensearch_dashboard import (
-    OpenSearchDashboardAdvanced,
->>>>>>> main:agentic_backend/app/features/frugal/structure/workload_advanced/__init__.py
+from app.features.frugal.structure.workload_advanced.search_engine_dashboard import (
+    SearchEngineDashboardAdvanced,
 )
 
 class WorkloadAdvanced(BaseModel):

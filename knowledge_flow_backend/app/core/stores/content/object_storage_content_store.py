@@ -18,7 +18,7 @@ import logging
 from pathlib import Path
 import tempfile
 from typing import BinaryIO
-from minio import Minio
+from minio import Minio as ObjectStorage
 from minio.error import S3Error
 import pandas as pd
 from app.core.stores.content.base_content_store import BaseContentStore
@@ -37,7 +37,7 @@ class ObjectStorageBackend(BaseContentStore):
         Initializes the ObjectStorage client and ensures the bucket exists.
         """
         self.bucket_name = bucket_name
-        self.client = Minio(endpoint, access_key=access_key, secret_key=secret_key, secure=secure)
+        self.client = ObjectStorage(endpoint, access_key=access_key, secret_key=secret_key, secure=secure)
 
         # Ensure bucket exists or create it
         if not self.client.bucket_exists(bucket_name):
@@ -157,7 +157,7 @@ class ObjectStorageBackend(BaseContentStore):
 
             except S3Error as e:
                 logger.error(f"❌ Failed to delete objects from bucket{self.bucket_name}: {e}")
-                raise ValueError(f"Failed to delete document content from MinIO: {e}")
+                raise ValueError(f"Failed to delete document content from ObjectStorage: {e}")
 
 
     def get_local_copy(self, document_uid: str) -> Path:
@@ -209,7 +209,7 @@ class ObjectStorageBackend(BaseContentStore):
 
     def clear(self) -> None:
             """
-            Deletes all objects in the MinIO bucket.
+            Deletes all objects in the ObjectStorage bucket.
             """
             try:
                 objects_to_delete = self.client.list_objects(self.bucket_name, recursive=True)
@@ -225,7 +225,7 @@ class ObjectStorageBackend(BaseContentStore):
 
             except S3Error as e:
                 logger.error(f"❌ Failed to delete objects from bucket{self.bucket_name}: {e}")
-                raise ValueError(f"Failed to delete document content from MinIO: {e}")
+                raise ValueError(f"Failed to delete document content from ObjectStorage: {e}")
 
 
     def get_local_copy(self, document_uid: str) -> Path:
