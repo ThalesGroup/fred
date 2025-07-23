@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import List, Any
 from pydantic import ValidationError
 
-from app.common.duckdb_store import DuckDBTableStore
+from fred_core.store.duckdb_store import DuckDBTableStore
 from app.core.stores.metadata.base_metadata_store import BaseMetadataStore, MetadataDeserializationError
 from app.common.structures import DocumentMetadata
 

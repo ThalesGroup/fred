@@ -40,6 +40,9 @@ from app.flow import AgentFlow, Flow  # Base class for all agent flows
 from app.common.utils import log_exception
 from app.common.error import UnsupportedTransportError, MCPToolFetchError
 from app.services.chatbot_session.abstract_session_backend import AbstractSessionStorage
+from app.features.dynamic_agent.stores.base_agent_store import BaseDynamicAgentStore
+from pathlib import Path
+
 import logging
 
 logger = logging.getLogger(__name__)
@@ -86,6 +89,16 @@ def get_sessions_store() -> AbstractSessionStorage:
         AbstractSessionStorage: An instance of the sessions store.
     """
     return get_app_context().get_sessions_store()
+
+def get_dynamic_agent_store() -> BaseDynamicAgentStore:
+    """
+    Factory function to create a dynamic agents store instance.
+    As of now, it only supports duckdb.
+    
+    Returns:
+        BaseDynamicAgentStore: An instance of the dynamic agents store.
+    """
+    return get_app_context().get_dynamic_agent_store()
 
 def get_enabled_agent_names() -> List[str]:
     """
@@ -528,3 +541,18 @@ class ApplicationContext:
         else:
             raise ValueError(f"Unsupported sessions storage backend: {config.type}")
         
+    def get_dynamic_agent_store(self) -> BaseDynamicAgentStore:
+        """
+        Factory function to create a dynamic agent store instance based on the configuration.
+        As of now, it only supports duckdb storage.
+        
+        Returns:
+            BaseDynamicAgentStore: An instance of the dynamic agents store.
+        """
+        from app.features.dynamic_agent.stores.mcp_agent.duckdb_mcp_agent_store import DuckdbMCPAgentStorage
+        config = get_configuration().dynamic_agent_storage
+        if config.type == "duckdb":
+            db_path = Path(config.duckdb_path).expanduser()
+            return DuckdbMCPAgentStorage(db_path)
+        else:
+            raise ValueError(f"Unsupported sessions storage backend: {config.type}")

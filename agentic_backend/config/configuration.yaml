@@ -226,3 +226,9 @@ session_storage:
   # password: xxx # Overrides the OPENSEARCH_PASSWORD environment variable
   secure: false
   verify_certs: false
+
+# Configuration to store dynamically created agents.
+# For now only DuckDB is supported.
+dynamic_agent_storage:
+  type: "duckdb"
+  duckdb_path: "~/.fred/dynamic_agents.duckdb"

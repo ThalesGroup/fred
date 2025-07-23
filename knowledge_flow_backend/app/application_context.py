@@ -17,7 +17,7 @@ import logging
 import os
 from pathlib import Path
 from typing import Dict, Type, Union, Optional
-from app.common.duckdb_store import DuckDBTableStore
+from fred_core.store.duckdb_store import DuckDBTableStore
 from app.common.structures import Configuration
 from app.common.utils import validate_settings_or_exit
 from app.config.embedding_azure_apim_settings import EmbeddingAzureApimSettings

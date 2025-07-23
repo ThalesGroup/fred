@@ -16,7 +16,7 @@ from typing import Any, Dict, List, Optional, Literal, Union, Annotated
 from datetime import datetime
 from enum import Enum
 import os
-
+from pathlib import Path
 from pydantic import BaseModel, model_validator, Field
 from fred_core import Security
 
@@ -255,6 +255,22 @@ SessionStorageConfig = Annotated[
     Field(discriminator="type")
 ]
 
+###########################################################
+#
+#  --- Dynamic Agents Storage Configuration
+#
+
+class LocalDynamicAgentStorage(BaseModel):
+    type: Literal["local"]
+    local_path: str = Field(default=str(Path("~/.fred/dynamic_agents.json")), description="Local storage json file")
+
+class DuckdbDynamicAgentStorage(BaseModel):
+    type: Literal["duckdb"]
+    duckdb_path: str = Field(default="~/.fred/dynamic_agents.duckdb", 
+                             description="Path to the DuckDB database file.")
+
+DynamicAgentStorageConfig = Annotated[Union[LocalDynamicAgentStorage, DuckdbDynamicAgentStorage], Field(discriminator="type")]
+
 # ----------------------------------------------------------------------
 # Other configurations
 # ----------------------------------------------------------------------
@@ -301,6 +317,7 @@ class Configuration(BaseModel):
     node_metrics_storage:  MetricsStorageConfig = Field(..., description="Node Monitoring Storage configuration")
     tool_metrics_storage:  MetricsStorageConfig = Field(..., description="Tool Monitoring Storage configuration")
     session_storage: SessionStorageConfig = Field(..., description="Session Storage configuration")
+    dynamic_agent_storage: DynamicAgentStorageConfig = Field(..., description="Dynamic Agents Storage configuration")
 
 class OfflineStatus(BaseModel):
     is_offline: bool
