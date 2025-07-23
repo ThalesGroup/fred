@@ -288,8 +288,9 @@ class ApplicationContext:
                 cls._instance.status = RuntimeStatus()
                 cls._instance._service_instances = {}  # Cache for service instances
                 
-                from app.features.dynamic_agent.service import get_dynamic_agent_manager
-                cls._instance.dynamic_agent_manager = get_dynamic_agent_manager()
+                from app.features.dynamic_agent.service import DynamicAgentManagerService
+                service = DynamicAgentManagerService()
+                cls._instance.dynamic_agent_manager = service.get_dynamic_agent_manager()
                 
                 cls._instance.apply_default_models()
                 cls._instance._build_indexes()

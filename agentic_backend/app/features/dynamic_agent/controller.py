@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException
 
 from app.features.dynamic_agent.structures import CreateAgentRequest, MCPAgentRequest
-from app.features.dynamic_agent.service import build_and_register_mcp_agent
+from app.features.dynamic_agent.service import DynamicAgentManagerService
 
 class DynamicAgentController:
     """
@@ -9,7 +9,8 @@ class DynamicAgentController:
     """
     def __init__(self, app: APIRouter):
         fastapi_tags = ["Dynamic MCP agent creation"]
-
+        self.service = DynamicAgentManagerService()
+        
         @app.post(
             "/agents/create",
             tags=fastapi_tags,
@@ -20,7 +21,7 @@ class DynamicAgentController:
                 if not isinstance(req, MCPAgentRequest):
                     raise HTTPException(status_code=400, detail=f"Unsupported agent_type: {req.agent_type}")
                 
-                return build_and_register_mcp_agent(req)
+                return self.service.build_and_register_mcp_agent(req)
 
             except Exception as e:
                 raise HTTPException(status_code=500, detail=str(e))

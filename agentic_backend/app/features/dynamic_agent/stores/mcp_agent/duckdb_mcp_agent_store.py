@@ -18,7 +18,6 @@ from pathlib import Path
 import logging
 
 from fred_core.store.duckdb_store import DuckDBTableStore
-from app.features.dynamic_agent.structures import MCPAgentRequest
 from app.features.dynamic_agent.stores.base_agent_store import BaseDynamicAgentStore
 from app.flow import AgentFlow
 from app.features.dynamic_agent.mcp_agent import MCPAgent
@@ -28,7 +27,7 @@ logger = logging.getLogger(__name__)
 class DuckdbMCPAgentStorage(BaseDynamicAgentStore):
     def __init__(self, db_path: Path):
         self.table_name = "mcp_agents"
-        self.prefix="_mcp_agents"
+        self.prefix = "_mcp_agents"
         self.store = DuckDBTableStore(prefix=self.prefix, db_path=db_path)
         self._ensure_schema()
 
@@ -47,16 +46,16 @@ class DuckdbMCPAgentStorage(BaseDynamicAgentStore):
                 )
             """)
 
-    def _serialize(self, req: MCPAgentRequest) -> tuple:
+    def _serialize(self, agent: AgentFlow) -> tuple:
         return (
-            req.name,
-            req.base_prompt,
-            req.role,
-            req.nickname,
-            req.description,
-            req.icon,
-            json.dumps(req.categories) if req.categories else None,
-            req.tag,
+            agent.name,
+            agent.base_prompt,
+            agent.role,
+            agent.nickname,
+            agent.description,
+            agent.icon,
+            json.dumps(agent.categories) if agent.categories else None,
+            agent.tag,
         )
 
     def _deserialize(self, row: tuple) -> AgentFlow:
@@ -72,7 +71,6 @@ class DuckdbMCPAgentStorage(BaseDynamicAgentStore):
             cluster_fullname="", # Placeholder waiting to get rid of it as a non optional param in Agen8tFlow
         )
 
-
     def save(self, agent: AgentFlow) -> None:
         with self.store._connect() as conn:
             conn.execute(
@@ -80,21 +78,11 @@ class DuckdbMCPAgentStorage(BaseDynamicAgentStore):
                 INSERT OR REPLACE INTO {self.store._prefixed(self.table_name)} 
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (
-                    agent.name,
-                    agent.base_prompt,
-                    agent.role,
-                    agent.nickname,
-                    agent.description,
-                    agent.icon,
-                    json.dumps(agent.categories) if agent.categories else None,
-                    agent.tag,
-                ),
+                self._serialize(agent),
             )
             logger.info(f"Agent {agent.name} saved in {self.table_name}")
-            
 
-    def get(self, name: str) -> Optional[MCPAgentRequest]:
+    def get(self, name: str) -> Optional[AgentFlow]:
         with self.store._connect() as conn:
             row = conn.execute(
                 f"SELECT * FROM {self.store._prefixed(self.table_name)} WHERE name = ?",
@@ -102,12 +90,14 @@ class DuckdbMCPAgentStorage(BaseDynamicAgentStore):
             ).fetchone()
         return self._deserialize(row) if row else None
 
-    def load_all(self) -> List[MCPAgentRequest]:
+    def load_all(self) -> List[AgentFlow]:
         with self.store._connect() as conn:
             rows = conn.execute(
                 f"SELECT * FROM {self.store._prefixed(self.table_name)}"
             ).fetchall()
-        return [self._deserialize(row) for row in rows]
+        loaded_agents = [self._deserialize(row) for row in rows]
+        logger.info(f"Fetched all dynamic agents: {loaded_agents}")
+        return loaded_agents
 
     def delete(self, name: str) -> None:
         with self.store._connect() as conn:
