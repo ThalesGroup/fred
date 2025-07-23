@@ -14,9 +14,9 @@
 
 import logging
 import mimetypes
-from typing import BinaryIO, Dict, Tuple
+from typing import BinaryIO, Tuple
 
-from app.common.structures import DocumentMetadata
+from app.common.document_structures import DocumentMetadata
 
 logger = logging.getLogger(__name__)
 

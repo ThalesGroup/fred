@@ -20,20 +20,23 @@ from app.application_context import ApplicationContext
 from app.common.structures import (
     AppConfig,
     Configuration,
+    DuckdbMetadataStorage,
     EmbeddingConfig,
     InMemoryVectorStorage,
     KnowledgeContextStorageConfig,
     LocalContentStorage,
     LocalMetadataStorage,
     LocalTagStore,
+    MetadataStorageConfig,
     ProcessorConfig,
     DuckDBTabularStorage,
+    PushSourceConfig,
     SchedulerConfig,
     TemporalSchedulerConfig,
 )
 from app.main import create_app
 from app.core.processors.output.vectorization_processor.embedder import Embedder
-from app.tests.test_utils.test_processors import TestMarkdownProcessor, TestTabularProcessor
+from app.tests.test_utils.test_processors import TestOutputProcessor, TestMarkdownProcessor, TestTabularProcessor
 
 
 @pytest.fixture(scope="function", autouse=True)
@@ -83,14 +86,14 @@ def app_context(monkeypatch, fake_embedder):
                 connect_timeout_seconds=3,
             ),
         ),
-        metadata_storage=LocalMetadataStorage(
-            type="local",
-            root_path="/tmp/test-metadata-store.json",
-        ),
+        document_sources={
+            "uploads": PushSourceConfig(type="push", description="User uploaded files"),
+        },
+        metadata_storage=DuckdbMetadataStorage(type="duckdb", duckdb_path="/tmp/testdb.duckdb"),
         vector_storage=InMemoryVectorStorage(type="in_memory"),
-        content_storage=LocalContentStorage(type="local"),
-        tabular_storage=DuckDBTabularStorage(type="duckdb", duckdb_path="/tmp/tabular"),
-        catalog_storage=DuckDBTabularStorage(type="duckdb", duckdb_path="/tmp/tabular"),
+        content_storage=LocalContentStorage(type="local", root_path="/tmp/content"),
+        tabular_storage=DuckDBTabularStorage(type="duckdb", duckdb_path="/tmp/testdb.duckdb"),
+        catalog_storage=DuckDBTabularStorage(type="duckdb", duckdb_path="/tmp/testdb.duckdb"),
         embedding=EmbeddingConfig(type="openai"),
         tag_storage=LocalTagStore(type="local"),
         knowledge_context_storage=KnowledgeContextStorageConfig(
@@ -117,6 +120,16 @@ def app_context(monkeypatch, fake_embedder):
             ProcessorConfig(
                 prefix=".csv",
                 class_path=f"{TestMarkdownProcessor.__module__}.{TestTabularProcessor.__qualname__}",
+            ),
+        ],
+        output_processors=[
+            ProcessorConfig(
+                prefix=".pdf",
+                class_path=f"{TestOutputProcessor.__module__}.{TestOutputProcessor.__qualname__}",
+            ),
+            ProcessorConfig(
+                prefix=".docx",
+                class_path=f"{TestOutputProcessor.__module__}.{TestOutputProcessor.__qualname__}",
             ),
         ],
         knowledge_context_max_tokens=50000,
@@ -149,6 +162,7 @@ def tabular_store(app_context: ApplicationContext):
     Returns the content store after ApplicationContext is initialized.
     """
     return app_context.get_instance().get_tabular_store()
+
 
 @pytest.fixture
 def metadata_store(app_context: ApplicationContext):

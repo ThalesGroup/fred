@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import logging
+from app.common.structures import OutputProcessorResponse, Status
 import pandas as pd
 from langchain.schema.document import Document
 import io
@@ -20,7 +21,7 @@ from fastapi import HTTPException
 
 
 from app.application_context import ApplicationContext
-from app.common.structures import DocumentMetadata, Status, OutputProcessorResponse
+from app.common.document_structures import DocumentMetadata, ProcessingStage
 from app.core.processors.output.base_output_processor import BaseOutputProcessor
 
 logger = logging.getLogger(__name__)
@@ -53,7 +54,7 @@ class TabularProcessor(BaseOutputProcessor):
             df = pd.read_csv(io.StringIO(document.page_content))
             document_name = metadata.document_name.split('.')[0]
 
-            logger.info(document)
+            logger.debug(f"document {document}")
             
             # 3. save the document into the selected tabular storage            
             try:
@@ -62,7 +63,7 @@ class TabularProcessor(BaseOutputProcessor):
             except Exception as e:
                 logger.exception("Failed to add documents to Tabular Storage: %s", e)
                 raise HTTPException(status_code=500, detail="Failed to add documents to Tabular Storage") from e
-
+            metadata.mark_stage_done(ProcessingStage.SQL_INDEXED)
             return OutputProcessorResponse(status=Status.SUCCESS)
         
         except Exception as e:

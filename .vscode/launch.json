@@ -153,6 +153,25 @@
       "request": "launch",
       "command": "npm run dev",
       "cwd": "${workspaceFolder}/frontend"
+    },
+    {
+      "name": "Debug Knowledge Flow Worker",
+      "type": "debugpy",
+      "request": "launch",
+      "cwd": "${workspaceFolder}/knowledge_flow_backend",
+      "program": "${workspaceFolder}/knowledge_flow_backend/app/main_worker.py",
+      "args": [
+        "--config-path",
+        "./config/configuration_worker.yaml"
+      ],
+      "env": {
+        "PYTHONPATH": ".",
+        "ENV_FILE": "${workspaceFolder}/knowledge_flow_backend/config/.env",
+        "CONFIG_FILE": "${workspaceFolder}/knowledge_flow_backend/config/configuration_worker.yaml",
+        "LOG_LEVEL": "info"
+      },
+      "console": "integratedTerminal",
+      "justMyCode": false
     }
   ]
 }
