@@ -12,8 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List, Literal, Optional,Union, Any
-from pydantic import BaseModel
+from typing import List, Literal, Optional, Union, Any, Dict
+from enum import Enum
+from datetime import datetime
+from pydantic import BaseModel, Field,root_validator
 
 class TabularColumnSchema(BaseModel):
     name: str
@@ -72,3 +74,32 @@ class TabularDatasetMetadata(BaseModel):
     tags: List[str] = []
     domain: Optional[str] = ""
     row_count: Optional[int] = None
+
+class Precision(str, Enum):
+    sec = "sec"
+    min = "min"
+    hour = "hour"
+    day = "day"
+
+class Aggregation(str, Enum):
+    avg = "avg"
+    max = "max"
+    min = "min"
+    sum = "sum"
+    
+class AggregatedBucket(BaseModel):
+    time_bucket: str
+    values: Dict[str, Any]
+    groupby_fields: Dict[str, Any] = Field(default_factory=dict)
+
+    @root_validator(pre=True)
+    def extract_groupby_fields(cls, values):
+        reserved = {"time_bucket", "values"}
+        groupby = {k: v for k, v in values.items() if k not in reserved}
+        values["groupby_fields"] = groupby
+        return values
+
+
+class TabularAggregationResponse(BaseModel):
+    buckets: List[AggregatedBucket]
+    global_: Optional[Dict[str, Any]] = Field(default=None, alias="global")

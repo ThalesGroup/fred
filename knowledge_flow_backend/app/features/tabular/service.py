@@ -15,9 +15,10 @@
 # tabular_service.py
 
 import logging
-from typing import List
+from datetime import datetime
+from typing import List, Dict, Optional, Any
 
-from app.features.tabular.structures import TabularColumnSchema, TabularDatasetMetadata, TabularQueryRequest, TabularQueryResponse, TabularSchemaResponse, HowToMakeAQueryResponse
+from app.features.tabular.structures import TabularColumnSchema, TabularDatasetMetadata, TabularQueryRequest, TabularQueryResponse, TabularSchemaResponse, HowToMakeAQueryResponse, TabularAggregationResponse
 from app.features.tabular.utils import plan_to_sql
 from app.features.tabular.structures import SQLQueryPlan
 from app.application_context import ApplicationContext
@@ -147,4 +148,94 @@ class TabularService:
                 Always specify `table`. Use `joins`, `filters`, `aggregations`, `group_by`, `order_by`, `limit` as needed.
                 """
         return HowToMakeAQueryResponse(how=response)
+
+    def _get_bucket_expression(self, precision: str, timestamp_column: str) -> str:
+        if precision == "sec":
+            return f"strftime('%Y-%m-%d %H:%M:%S', {timestamp_column})"
+        elif precision == "min":
+            return f"strftime('%Y-%m-%d %H:%M', {timestamp_column})"
+        elif precision == "hour":
+            return f"strftime('%Y-%m-%d %H:00', {timestamp_column})"
+        elif precision == "day":
+            return f"strftime('%Y-%m-%d', {timestamp_column})"
+        else:
+            raise ValueError(f"Unsupported precision: {precision}")
+
+
+    def get_aggregated_metrics_with_summary(
+        self,
+        table: str,
+        start: datetime,
+        end: datetime,
+        precision: str,
+        agg_mapping: Dict[str, str],
+        groupby_fields: Optional[List[str]] = None,
+        timestamp_column: str = "date",
+        include_global: bool = False
+    ) -> TabularAggregationResponse:
+        table_name = table.replace("-", "_")
+        if groupby_fields is None:
+            groupby_fields = []
+
+        bucket_expr = self._get_bucket_expression(precision, timestamp_column)
+        select_fields = [f"{bucket_expr} AS time_bucket"]
+        group_by_fields = ["time_bucket"]
+
+        for field in groupby_fields:
+            select_fields.append(field)
+            group_by_fields.append(field)
+
+        for col, op in agg_mapping.items():
+            alias = f"{col}--{op}"
+            select_fields.append(f"{op.upper()}({col}) AS '{alias}'")
+
+        select_clause = ", ".join(select_fields)
+        group_clause = ", ".join(group_by_fields)
+
+        start_str = start.isoformat()
+        end_str = end.isoformat()
+
+        sql = f"""
+        SELECT {select_clause}
+        FROM {table_name}
+        WHERE {timestamp_column} BETWEEN '{start_str}' AND '{end_str}'
+        GROUP BY {group_clause}
+        ORDER BY time_bucket
+        """
+
+        df = self.tabular_store.execute_sql_query(sql)
+
+        buckets = []
+        for _, row in df.iterrows():
+            record = {"time_bucket": row["time_bucket"]}
+            for field in groupby_fields:
+                record[field] = row[field]
+
+            values = {}
+            for col in df.columns:
+                if col not in record and col != "time_bucket":
+                    values[col] = row[col]
+            record["values"] = values
+
+            buckets.append(record)
+
+        global_result = None
+        if include_global:
+            # Simple global aggregation
+            select_parts = [
+                f"{op.upper()}({col}) AS '{col}--{op}'"
+                for col, op in agg_mapping.items()
+            ]
+            global_sql = f"""
+            SELECT {", ".join(select_parts)}
+            FROM {table}
+            WHERE {timestamp_column} BETWEEN '{start.isoformat()}' AND '{end.isoformat()}'
+            """
+            df_global = self.tabular_store.execute_sql_query(global_sql)
+            global_result = df_global.iloc[0].to_dict()
+
+        return TabularAggregationResponse(
+            buckets=buckets,
+            global_=global_result
+        )   
 

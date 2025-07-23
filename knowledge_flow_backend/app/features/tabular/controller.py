@@ -13,9 +13,10 @@
 # limitations under the License.
 
 import logging
-from typing import List
+from typing import List, Annotated
+from datetime import datetime
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 
 from app.features.tabular.service import TabularService
 from app.features.tabular.structures import (
@@ -23,7 +24,9 @@ from app.features.tabular.structures import (
     TabularQueryRequest,
     TabularQueryResponse,
     TabularSchemaResponse,
-    HowToMakeAQueryResponse
+    HowToMakeAQueryResponse,
+    Precision,
+    Aggregation
 )
 
 logger = logging.getLogger(__name__)
@@ -113,3 +116,60 @@ class TabularController:
             except Exception as e:
                 logger.exception(f"Error listing tabular datasets: {e}")
                 raise HTTPException(status_code=500, detail="Internal server error")
+            
+        def str_to_bool(value: str) -> bool:
+            return value.lower() in ("true", "1", "yes")
+            
+        @router.get(
+            "/tabular/{table_name}/aggregate",
+            tags=["Tabular"],
+            operation_id="aggregate_metrics_summary",
+            summary="Aggregate numerical metrics over time and return global summary"
+        )
+        async def aggregate_tabular_metrics(
+            table_name: str,
+            start: Annotated[str, Query(description="Start time (ISO 8601)")],
+            end: Annotated[str, Query(description="End time (ISO 8601)")],
+            precision: Precision = Query(default=Precision.hour),
+            agg: List[str] = Query(default=[]),
+            groupby: List[str] = Query(default=[]),
+            timestamp_column: str = Query(default="date", description="Timestamp column name"),
+            include_global: Annotated[bool, Query()] = False
+        ):
+            logger.info(f"Aggregation request on {table_name} from {start} to {end}")
+
+            def parse_dates(start: str, end: str) -> (datetime, datetime):
+                return datetime.fromisoformat(start), datetime.fromisoformat(end)
+
+            VALID_OPS = {"avg", "AVG", "sum", "SUM", "min", "MIN", "max", "MAX", "count", "COUNT"}
+
+            try:
+                start_dt, end_dt = parse_dates(start, end)
+            except Exception as e:
+                raise HTTPException(status_code=400, detail=f"Invalid datetime format: {e}")
+
+            agg_mapping = {}
+            for item in agg:
+                try:
+                    field, op = item.split(":")
+                    if op not in VALID_OPS:
+                        raise HTTPException(status_code=400, detail=f"Invalid aggregation operation: '{op}' (allowed: {VALID_OPS})")
+                    agg_mapping[field] = op
+                except ValueError:
+                    raise HTTPException(status_code=400, detail=f"Invalid agg format: '{item}' (expected field:op)")
+
+            try:
+                return self.service.get_aggregated_metrics_with_summary(
+                    table=table_name,
+                    start=start_dt,
+                    end=end_dt,
+                    precision=precision,
+                    agg_mapping=agg_mapping,
+                    groupby_fields=groupby,
+                    timestamp_column=timestamp_column,
+                    include_global=include_global
+                )
+            except Exception as e:
+                logger.exception(f"Error aggregating table {table_name}: {e}")
+                raise HTTPException(status_code=500, detail="Internal server error")
+
