@@ -29,16 +29,13 @@ class DynamicAgentController:
             
                     get_app_context()._agent_index[req.name] = AgentSettings(
                         name=req.name,
-                        prompt=req.prompt,
-                        # mcp_urls=req.mcp_urls,
-                        # class_path=f"app.features.dynamic_agent.mcp_agent.MCPAgent",
+                        class_path=f"app.features.dynamic_agent.mcp_agent.MCPAgent",
                         enabled=True,
                         categories=req.categories,
-                        tag=req.tag,
+                        settings={},
                         model=get_configuration().ai.default_model,
-                        settings={
-                            "mcp_urls": req.mcp_urls
-                        },
+                        tag=req.tag,
+                        mcp_servers=req.mcp_servers,
                         max_steps=10,
                     )
 

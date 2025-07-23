@@ -1,16 +1,15 @@
 from pydantic import BaseModel, Field
 from typing import Literal, List, Optional, Union
+from app.common.structures import MCPServerConfiguration
 
-# Base class with discriminator
 class BaseAgentRequest(BaseModel):
     agent_type: str = Field(..., description="The type of agent to create (e.g., 'mcp', 'rag').")
 
-# MCP agent subtype
 class MCPAgentRequest(BaseAgentRequest):
     agent_type: Literal["mcp"]
     name: str
-    prompt: str
-    mcp_urls: List[str]
+    base_prompt: str
+    mcp_servers: List[MCPServerConfiguration]
     role: Optional[str] = None
     nickname: Optional[str] = None
     description: Optional[str] = None
@@ -23,5 +22,4 @@ class MCPAgentRequest(BaseAgentRequest):
 #     agent_type: Literal["rag"]
 #     ...
 
-# Union for routing
-CreateAgentRequest = Union[MCPAgentRequest]  # Add more types as you go
+CreateAgentRequest = Union[MCPAgentRequest]

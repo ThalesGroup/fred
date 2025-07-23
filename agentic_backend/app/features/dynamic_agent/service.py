@@ -18,8 +18,7 @@ def create_mcp_agent(req: MCPAgentRequest):
         return MCPAgent(
             cluster_fullname="",
             name=req.name,
-            prompt=req.prompt,
-            mcp_urls=req.mcp_urls,
+            base_prompt=req.base_prompt,
             role=req.role,
             nickname=req.nickname,
             description=req.description,

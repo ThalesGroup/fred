@@ -22,8 +22,7 @@ class MCPAgent(AgentFlow):
         self,
         cluster_fullname: str,
         name: str,
-        prompt: str,
-        mcp_urls: List[str],
+        base_prompt: str,
         role: Optional[str] = None,
         nickname: Optional[str] = None,
         description: Optional[str] = None,
@@ -31,7 +30,6 @@ class MCPAgent(AgentFlow):
         categories: Optional[List[str]] = None,
         tag: Optional[str] = None,
     ):
-        # self.agent_settings = get_app_context()._agent_index[name]
         self.current_date = datetime.now().strftime("%Y-%m-%d")
         self.name = name
         self.cluster_fullname = cluster_fullname
@@ -45,7 +43,7 @@ class MCPAgent(AgentFlow):
         self.icon = icon or "agent_generic"
         self.categories = categories or []
         self.tag = tag or "mcp"
-        self.prompt = prompt
+        self.base_prompt = base_prompt
 
         super().__init__(
             name=self.name,
@@ -61,7 +59,7 @@ class MCPAgent(AgentFlow):
         )
         
     def build_base_prompt(self) -> str:
-        return f"{self.prompt}\n\nThe current date is {self.current_date}."
+        return f"{self.base_prompt}\n\nThe current date is {self.current_date}."
 
     async def reasoner(self, state: MessagesState):
         try:
