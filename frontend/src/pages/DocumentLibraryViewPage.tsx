@@ -1,3 +1,4 @@
+import RemoveCircleOutlineIcon from "@mui/icons-material/RemoveCircleOutline";
 import UploadIcon from "@mui/icons-material/Upload";
 import { Box, Button, CircularProgress, Container, Paper, Typography } from "@mui/material";
 import { useEffect, useState } from "react";
@@ -5,8 +6,11 @@ import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
 import { TopBar } from "../common/TopBar";
 import { DocumentTable } from "../components/documents/DocumentTable";
+import { CustomRowAction } from "../components/documents/DocumentTableRowActionsMenu";
+import { CustomBulkAction } from "../components/documents/DocumentTableSelectionToolbar";
 import { DocumentUploadDrawer } from "../components/documents/DocumentUploadDrawer";
 import { LibraryInfoCard } from "../components/documents/LibraryInfoCard";
+import { useDocumentActions } from "../components/documents/useDocumentActions";
 import { KeyCloakService } from "../security/KeycloakService";
 import {
   DocumentMetadata,
@@ -21,7 +25,7 @@ export const DocumentLibraryViewPage = () => {
     data: library,
     isLoading,
     refetch: refetchLibrary,
-  } = useGetTagKnowledgeFlowV1TagsTagIdGetQuery({ tagId: libraryId });
+  } = useGetTagKnowledgeFlowV1TagsTagIdGetQuery({ tagId: libraryId || "" }, { skip: !libraryId });
   const [getDocumentsMetadata] = useGetDocumentsMetadataKnowledgeFlowV1DocumentsMetadataPostMutation();
 
   const [documents, setDocuments] = useState<DocumentMetadata[]>([]);
@@ -51,14 +55,43 @@ export const DocumentLibraryViewPage = () => {
     setDocuments(docs);
   };
 
-  const handleRefreshData = () => {
-    refetchLibrary();
-    fetchDocumentsMetadata();
+  const handleRefreshData = async () => {
+    await refetchLibrary();
+    await fetchDocumentsMetadata();
   };
 
   const handleUploadComplete = () => {
     handleRefreshData();
   };
+
+  const handleRemoveFromLibrary = async (documents: DocumentMetadata[]) => {
+    console.log(
+      "Remove from library:",
+      documents.map((doc) => doc.document_name),
+    );
+  };
+
+  // Get default document actions
+  const { defaultRowActions, defaultBulkActions, handleDocumentPreview } = useDocumentActions(handleRefreshData);
+
+  // Combine custom actions with default ones
+  const rowActions: CustomRowAction[] = [
+    {
+      icon: <RemoveCircleOutlineIcon />,
+      name: "Remove from Library",
+      handler: (file) => handleRemoveFromLibrary([file]),
+    },
+    ...defaultRowActions,
+  ];
+
+  const bulkActions: CustomBulkAction[] = [
+    {
+      icon: <RemoveCircleOutlineIcon />,
+      name: "Remove from Library",
+      handler: (files) => handleRemoveFromLibrary(files),
+    },
+    ...defaultBulkActions,
+  ];
 
   useEffect(() => {
     if (library) {
@@ -124,6 +157,9 @@ export const DocumentLibraryViewPage = () => {
             isAdmin={hasDocumentManagementPermission()}
             onRefreshData={handleRefreshData}
             showSelectionActions={true}
+            rowActions={hasDocumentManagementPermission() ? rowActions : []} // todo: add a permission check for each action, enforced by DocumentTable
+            bulkActions={hasDocumentManagementPermission() ? bulkActions : []}
+            nameClickAction={handleDocumentPreview}
             columns={{
               fileName: true,
               dateAdded: true,

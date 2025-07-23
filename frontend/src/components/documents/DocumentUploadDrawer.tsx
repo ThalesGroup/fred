@@ -12,16 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import SaveIcon from "@mui/icons-material/Save";
+import UploadIcon from "@mui/icons-material/Upload";
+import { Box, Button, Drawer, FormControl, MenuItem, Paper, Select, Typography, useTheme } from "@mui/material";
 import React, { useState } from "react";
 import { useDropzone } from "react-dropzone";
-import { Box, Typography, useTheme, FormControl, MenuItem, Select, Button, Drawer, Paper } from "@mui/material";
-import UploadIcon from "@mui/icons-material/Upload";
-import SaveIcon from "@mui/icons-material/Save";
 import { useTranslation } from "react-i18next";
-import { useToast } from "../ToastProvider";
-import { ProgressStep, ProgressStepper } from "../ProgressStepper";
-import { DocumentDrawerTable } from "./DocumentDrawerTable";
 import { streamUploadOrProcessDocument } from "../../slices/streamDocumentUpload";
+import { ProgressStep, ProgressStepper } from "../ProgressStepper";
+import { useToast } from "../ToastProvider";
+import { DocumentDrawerTable } from "./DocumentDrawerTable";
 
 interface DocumentUploadDrawerProps {
   isOpen: boolean;

@@ -31,29 +31,17 @@ import {
 import dayjs from "dayjs";
 import React, { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  DOCUMENT_PROCESSING_STAGES,
-  ProcessDocumentsRequest,
-  useDeleteDocumentMutation,
-  useLazyGetDocumentRawContentQuery,
-  useProcessDocumentsMutation,
-  useUpdateDocumentRetrievableMutation,
-} from "../../slices/documentApi";
+import { DOCUMENT_PROCESSING_STAGES, useUpdateDocumentRetrievableMutation } from "../../slices/documentApi";
 import {
   TagWithDocumentsId,
   useLazyGetTagKnowledgeFlowV1TagsTagIdGetQuery,
 } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
-import { downloadFile } from "../../utils/downloadUtils";
 import { useToast } from "../ToastProvider";
 import { getDocumentIcon } from "./DocumentIcon";
-import { DocumentTableRowActionsMenu } from "./DocumentTableRowActionsMenu";
-import { DocumentTableSelectionToolbar } from "./DocumentTableSelectionToolbar";
-import { useDocumentViewer } from "./useDocumentViewer";
-// import CheckCircleIcon from "@mui/icons-material/CheckCircle";
-// import HourglassTopIcon from "@mui/icons-material/HourglassTop";
-// import CancelIcon from "@mui/icons-material/Cancel";
-// import RadioButtonUncheckedIcon from "@mui/icons-material/RadioButtonUnchecked";
-// import { shallowEqual } from "react-redux";
+import { CustomRowAction, DocumentTableRowActionsMenu } from "./DocumentTableRowActionsMenu";
+import { CustomBulkAction, DocumentTableSelectionToolbar } from "./DocumentTableSelectionToolbar";
+import { useDocumentActions } from "./useDocumentActions";
+
 export interface FileRow {
   document_uid: string;
   document_name: string;
@@ -80,15 +68,17 @@ interface DocumentTableColumns {
 
 interface FileTableProps {
   files: FileRow[];
-  isAdmin?: boolean;
   onRefreshData?: () => void;
   showSelectionActions?: boolean;
   columns?: DocumentTableColumns;
+  rowActions?: CustomRowAction[]; // Action in the 3 dots menu of each row. If empty list is passed, not actions.
+  bulkActions?: CustomBulkAction[]; // Actions on selected documents, in the selection toolbar. If empty list is passed, no actions.
+  nameClickAction?: null | ((file: FileRow) => void); // Action when clicking on file name. If undefined, open document preview. If null, no action.
+  isAdmin?: boolean; // For retrievable toggle functionality
 }
 
 export const DocumentTable: React.FC<FileTableProps> = ({
   files,
-  isAdmin = false,
   onRefreshData,
   showSelectionActions = true,
   columns = {
@@ -99,10 +89,13 @@ export const DocumentTable: React.FC<FileTableProps> = ({
     retrievable: true,
     actions: true,
   },
+  rowActions,
+  bulkActions,
+  nameClickAction,
+  isAdmin = false,
 }) => {
   const { t } = useTranslation();
   const { showInfo, showError } = useToast();
-  const { openDocument, DocumentViewerComponent } = useDocumentViewer();
 
   // Internal state management
   const [selectedFiles, setSelectedFiles] = useState<FileRow[]>([]);
@@ -111,10 +104,7 @@ export const DocumentTable: React.FC<FileTableProps> = ({
   const [tagsById, setTagsById] = useState<Record<string, TagWithDocumentsId>>({});
 
   // API hooks
-  const [deleteDocument] = useDeleteDocumentMutation();
-  const [triggerDownload] = useLazyGetDocumentRawContentQuery();
   const [updateDocumentRetrievable] = useUpdateDocumentRetrievableMutation();
-  const [processDocuments] = useProcessDocumentsMutation();
   const [getTag] = useLazyGetTagKnowledgeFlowV1TagsTagIdGetQuery();
 
   const allSelected = selectedFiles.length === files.length && files.length > 0;
@@ -179,91 +169,6 @@ export const DocumentTable: React.FC<FileTableProps> = ({
     setSelectedFiles(checked ? [...files] : []);
   };
 
-  const handleDelete = async (file: FileRow, showToast: boolean = true) => {
-    try {
-      await deleteDocument(file.document_uid).unwrap();
-      if (showToast) {
-        showInfo({
-          summary: "Delete Success",
-          detail: `${file.document_name} deleted`,
-          duration: 3000,
-        });
-      }
-      setSelectedFiles((prev) => prev.filter((f) => f.document_uid !== file.document_uid));
-      if (showToast) {
-        onRefreshData?.();
-      }
-    } catch (error) {
-      if (showToast) {
-        showError({
-          summary: "Delete Failed",
-          detail: `Could not delete document: ${error?.data?.detail || error.message}`,
-        });
-      }
-      throw error; // Re-throw for bulk handling
-    }
-  };
-
-  const handleBulkDelete = async (filesToDelete: FileRow[]) => {
-    let successCount = 0;
-    let failedFiles: string[] = [];
-
-    for (const file of filesToDelete) {
-      try {
-        await handleDelete(file, false); // Don't show individual toasts
-        successCount++;
-      } catch (error) {
-        failedFiles.push(file.document_name);
-      }
-    }
-
-    // Show summary toasts
-    if (successCount > 0) {
-      showInfo({
-        summary: "Delete Success",
-        detail: `${successCount} document${successCount > 1 ? "s" : ""} deleted`,
-        duration: 3000,
-      });
-    }
-
-    if (failedFiles.length > 0) {
-      showError({
-        summary: "Delete Failed",
-        detail: `Failed to delete: ${failedFiles.join(", ")}`,
-      });
-    }
-
-    // Refresh data once at the end
-    onRefreshData?.();
-  };
-
-  const handleDownload = async (file: FileRow) => {
-    try {
-      const { data: blob } = await triggerDownload({ document_uid: file.document_uid });
-      if (blob) {
-        downloadFile(blob, file.document_name || "document");
-      }
-    } catch (err) {
-      showError({
-        summary: "Download failed",
-        detail: `Could not download document: ${err?.data?.detail || err.message}`,
-      });
-    }
-  };
-
-  const handleBulkDownload = async (filesToDownload: FileRow[]) => {
-    for (const file of filesToDownload) {
-      await handleDownload(file);
-    }
-  };
-
-  const handleDocumentPreview = async (file: FileRow) => {
-    openDocument({
-      document_uid: file.document_uid,
-      file_name: file.document_name,
-    });
-  };
-
   const handleToggleRetrievable = async (file: FileRow) => {
     try {
       await updateDocumentRetrievable({
@@ -286,30 +191,38 @@ export const DocumentTable: React.FC<FileTableProps> = ({
     }
   };
 
-  const handleProcess = async (filesToProcess: FileRow[]) => {
-    try {
-      const payload: ProcessDocumentsRequest = {
-        files: filesToProcess.map((f) => ({
-          source_tag: f.source_type || "uploads",
-          document_uid: f.document_uid,
-          external_path: undefined,
-          tags: f.tags || [],
-        })),
-        pipeline_name: "manual_ui_trigger",
-      };
+  // If actions are undefined, use default actions from useDocumentActions
+  const { defaultBulkActions, defaultRowActions, handleDocumentPreview } = useDocumentActions();
+  const rowActionsWithDefault = rowActions === undefined ? defaultRowActions : rowActions;
+  const bulkActionsWithDefault = bulkActions === undefined ? defaultBulkActions : bulkActions;
+  const nameClickActionWithDefault = nameClickAction === undefined ? handleDocumentPreview : nameClickAction;
 
-      const result = await processDocuments(payload).unwrap();
-      showInfo({
-        summary: "Processing started",
-        detail: `Workflow ${result.workflow_id} submitted`,
-      });
-    } catch (error) {
-      showError({
-        summary: "Processing Failed",
-        detail: error?.data?.detail || error.message,
-      });
-    }
-  };
+  // Enhanced action handler that refreshes data after execution
+  const enhancedRowActions = useMemo(
+    () =>
+      rowActionsWithDefault.map((action) => ({
+        ...action,
+        handler: async (file: FileRow) => {
+          await action.handler(file);
+          onRefreshData?.(); // Refresh data after action
+        },
+      })),
+    [rowActionsWithDefault, onRefreshData],
+  );
+
+  // Enhanced bulk action handler that clears selection and refresh data after execution
+  const enhancedBulkActions = useMemo(
+    () =>
+      bulkActionsWithDefault.map((action) => ({
+        ...action,
+        handler: async (files: FileRow[]) => {
+          await action.handler(files);
+          setSelectedFiles([]); // Clear selection after action
+          onRefreshData?.(); // Refresh data after action
+        },
+      })),
+    [bulkActionsWithDefault, setSelectedFiles, onRefreshData],
+  );
 
   const handleSortChange = (column: keyof FileRow) => {
     if (sortBy === column) {
@@ -340,9 +253,7 @@ export const DocumentTable: React.FC<FileTableProps> = ({
       {showSelectionActions && (
         <DocumentTableSelectionToolbar
           selectedFiles={selectedFiles}
-          onDeleteSelected={handleBulkDelete}
-          onDownloadSelected={handleBulkDownload}
-          onProcessSelected={handleProcess}
+          actions={enhancedBulkActions}
           isVisible={selectedFiles.length > 0}
         />
       )}
@@ -398,8 +309,8 @@ export const DocumentTable: React.FC<FileTableProps> = ({
                         display="flex"
                         alignItems="center"
                         gap={1}
-                        onClick={() => handleDocumentPreview(file)}
-                        sx={{ cursor: "pointer" }}
+                        onClick={() => nameClickActionWithDefault?.(file)}
+                        sx={{ cursor: nameClickActionWithDefault ? "pointer" : "default" }}
                       >
                         {getDocumentIcon(file.document_name)}
                         <Typography variant="body2" noWrap>
@@ -516,14 +427,8 @@ export const DocumentTable: React.FC<FileTableProps> = ({
                   )}
                   {columns.actions && (
                     <TableCell align="right">
-                      {isAdmin && (
-                        <DocumentTableRowActionsMenu
-                          file={file}
-                          onDelete={() => handleDelete(file)}
-                          onDownload={() => handleDownload(file)}
-                          onOpen={() => handleDocumentPreview(file)}
-                          onProcess={() => handleProcess([file])}
-                        />
+                      {enhancedRowActions.length > 0 && (
+                        <DocumentTableRowActionsMenu file={file} actions={enhancedRowActions} />
                       )}
                     </TableCell>
                   )}
@@ -533,7 +438,6 @@ export const DocumentTable: React.FC<FileTableProps> = ({
           </TableBody>
         </Table>
       </TableContainer>
-      <DocumentViewerComponent />
     </>
   );
 };

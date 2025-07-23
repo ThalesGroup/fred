@@ -12,32 +12,33 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { Box, Button, Typography } from "@mui/material";
 import React from "react";
-import { Box, Typography, Button } from "@mui/material";
 import { useTranslation } from "react-i18next";
 import { FileRow } from "./DocumentTable";
 
-interface DocumentTableSelectionToolbarProps {
+export interface CustomBulkAction {
+  icon: React.ReactElement;
+  name: string;
+  handler: (files: FileRow[]) => void;
+}
+
+export interface DocumentTableSelectionToolbarProps {
   selectedFiles: FileRow[];
-  onDeleteSelected: (files: FileRow[]) => void;
-  onDownloadSelected: (files: FileRow[]) => void;
-  onProcessSelected: (files: FileRow[]) => void;
+  actions: CustomBulkAction[];
   isVisible: boolean;
 }
 
 export const DocumentTableSelectionToolbar: React.FC<DocumentTableSelectionToolbarProps> = ({
   selectedFiles,
-  onDeleteSelected,
-  onDownloadSelected,
-  onProcessSelected,
+  actions,
   isVisible,
 }) => {
   const { t } = useTranslation();
 
-  if (!isVisible || selectedFiles.length === 0) {
+  if (!isVisible || selectedFiles.length === 0 || actions.length === 0) {
     return null;
   }
-
 
   return (
     <Box
@@ -57,25 +58,17 @@ export const DocumentTableSelectionToolbar: React.FC<DocumentTableSelectionToolb
         {t("documentTable.selectedCount", { count: selectedFiles.length })}
       </Typography>
       <Box display="flex" gap={1}>
-        <Button
-          size="small"
-          variant="outlined"
-          color="error"
-          onClick={() => onDeleteSelected(selectedFiles)}
-        >
-          {t("documentTable.deleteSelected")}
-        </Button>
-        <Button size="small" variant="outlined" onClick={() => onDownloadSelected(selectedFiles)}>
-          {t("documentTable.downloadSelected")}
-        </Button>
-        <Button 
-          size="small" 
-          variant="outlined" 
-          color="primary" 
-          onClick={() => onProcessSelected(selectedFiles)}
-        >
-          {t("documentTable.processSelected")}
-        </Button>
+        {actions.map((action, index) => (
+          <Button
+            key={index}
+            size="small"
+            variant="outlined"
+            startIcon={action.icon}
+            onClick={() => action.handler(selectedFiles)}
+          >
+            {action.name}
+          </Button>
+        ))}
       </Box>
     </Box>
   );

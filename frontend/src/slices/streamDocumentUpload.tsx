@@ -26,9 +26,7 @@ export async function streamUploadOrProcessDocument(
   const formData = new FormData();
   formData.append("files", file);
 
-  if (metadata) {
-    formData.append("metadata_json", JSON.stringify(metadata));
-  }
+  formData.append("metadata_json", JSON.stringify(metadata) || "{}");
 
   const backend_url_knowledge = getConfig().backend_url_knowledge;
   if (!backend_url_knowledge) {

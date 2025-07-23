@@ -12,36 +12,44 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useState } from "react";
+import { useDrawer } from "../DrawerProvider";
 import DocumentViewer from "./DocumentViewer";
 
 export interface DocumentViewerDocument {
   document_uid: string;
   file_name?: string;
+  file_url?: string;
   content?: string;
 }
 
-export const useDocumentViewer = () => {
-  const [isOpen, setIsOpen] = useState(false);
-  const [document, setDocument] = useState<DocumentViewerDocument | null>(null);
+export interface DocumentViewerOptions {
+  highlightedParts?: any[];
+  chunksToHighlight?: string[];
+}
 
-  const openDocument = (doc: DocumentViewerDocument) => {
-    setDocument(doc);
-    setIsOpen(true);
+export const useDocumentViewer = () => {
+  const { openDrawer, closeDrawer } = useDrawer();
+
+  const openDocument = (doc: DocumentViewerDocument, options?: DocumentViewerOptions) => {
+    openDrawer({
+      content: (
+        <DocumentViewer
+          document={doc}
+          onClose={closeDrawer}
+          highlightedParts={options?.highlightedParts}
+          chunksToHighlight={options?.chunksToHighlight}
+        />
+      ),
+      anchor: "right",
+    });
   };
 
   const closeDocument = () => {
-    setIsOpen(false);
-    setDocument(null);
+    closeDrawer();
   };
-
-  const DocumentViewerComponent = () => <DocumentViewer document={document} open={isOpen} onClose={closeDocument} />;
 
   return {
     openDocument,
     closeDocument,
-    DocumentViewerComponent,
-    isOpen,
-    document,
   };
 };
