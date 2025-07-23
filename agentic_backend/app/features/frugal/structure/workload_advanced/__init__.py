@@ -19,7 +19,7 @@ software nature.
 
 from typing import Optional, Union
 
-from app.features.frugal.structure.workload_advanced.opensearch import SearchEngineAdvanced
+from app.features.frugal.structure.workload_advanced.search_engine import SearchEngineAdvanced
 from langfuse.callback import CallbackHandler
 from pydantic import BaseModel, Field
 
