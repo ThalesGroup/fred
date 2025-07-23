@@ -242,5 +242,12 @@
     "libraryCreatedDetail": "Library \"{{name}}\" has been created successfully",
     "creationFailed": "Creation Failed",
     "creationFailedDetail": "Error creating library: {{error}}"
+  },
+  "libraryEdit": {
+    "edit": "Edit",
+    "cancel": "Cancel",
+    "save": "Save",
+    "updateFailed": "Update Failed",
+    "updateFailedDetail": "An error occurred while updating the library. Please try again."
   }
 }

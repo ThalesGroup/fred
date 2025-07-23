@@ -6,6 +6,7 @@ import { useParams } from "react-router-dom";
 import { TopBar } from "../common/TopBar";
 import { DocumentTable } from "../components/documents/DocumentTable";
 import { DocumentUploadDrawer } from "../components/documents/DocumentUploadDrawer";
+import { LibraryInfoCard } from "../components/documents/LibraryInfoCard";
 import { KeyCloakService } from "../security/KeycloakService";
 import {
   DocumentMetadata,
@@ -101,14 +102,14 @@ export const DocumentLibraryViewPage = () => {
         )}
       </TopBar>
       <Container maxWidth="xl" sx={{ mb: 3 }}>
-        <Paper sx={{ p: 3, borderRadius: 4, mt: 2 }}>
-          <Typography variant="h4" gutterBottom>
-            {library.name}
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            {library.description || "No description available."}
-          </Typography>
-        </Paper>
+        {/* Library name and description */}
+        <LibraryInfoCard
+          library={library}
+          hasEditPermission={hasDocumentManagementPermission()}
+          onLibraryUpdated={handleRefreshData}
+        />
+
+        {/* List of documents */}
         <Paper
           sx={{
             p: 2,
