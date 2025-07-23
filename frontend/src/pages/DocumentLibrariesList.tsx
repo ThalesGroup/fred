@@ -15,10 +15,13 @@ import {
   ListItemText,
   ListItemIcon,
   TableSortLabel,
+  Box,
+  Button,
 } from "@mui/material";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import DeleteIcon from "@mui/icons-material/Delete";
 import FolderIcon from "@mui/icons-material/Folder";
+import AddIcon from "@mui/icons-material/Add";
 import React, { useState } from "react";
 import {
   TagWithDocumentsId,
@@ -26,6 +29,7 @@ import {
   useListTagsKnowledgeFlowV1TagsGetQuery,
 } from "../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import InvisibleLink from "../components/InvisibleLink";
+import { LibraryCreateDrawer } from "../components/documents/LibraryCreateDrawer";
 import dayjs from "dayjs";
 import { useTranslation } from "react-i18next";
 
@@ -39,6 +43,7 @@ export function DocumentLibrariesList() {
   const [menuLibraryId, setMenuLibraryId] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<string>("lastUpdate");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
+  const [isCreateDrawerOpen, setIsCreateDrawerOpen] = useState(false);
 
   const allSelected = libraries && selectedIds.length === libraries.length && libraries.length > 0;
 
@@ -108,8 +113,20 @@ export function DocumentLibrariesList() {
   };
 
   return (
-    <Card sx={{ borderRadius: 4, p: 2 }}>
-      {sortedLibraries && sortedLibraries.length > 0 ? (
+    <>
+      <Box sx={{ mb: 2, display: "flex", justifyContent: "flex-end" }}>
+        <Button
+          variant="contained"
+          startIcon={<AddIcon />}
+          onClick={() => setIsCreateDrawerOpen(true)}
+          sx={{ borderRadius: "8px" }}
+        >
+          {t("documentLibrariesList.createLibrary")}
+        </Button>
+      </Box>
+      
+      <Card sx={{ borderRadius: 4, p: 2 }}>
+        {sortedLibraries && sortedLibraries.length > 0 ? (
         <TableContainer>
           <Table>
             <TableHead>
@@ -181,7 +198,14 @@ export function DocumentLibrariesList() {
           {t("documentLibrariesList.noLibrariesFound")}
         </Typography>
       )}
-    </Card>
+      </Card>
+
+      <LibraryCreateDrawer
+        isOpen={isCreateDrawerOpen}
+        onClose={() => setIsCreateDrawerOpen(false)}
+        onLibraryCreated={refetchLibraries}
+      />
+    </>
   );
 }
 

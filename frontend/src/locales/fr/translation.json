@@ -226,6 +226,21 @@
     "delete": "Supprimer",
     "noLibrariesFound": "Aucune bibliothèque de documents trouvée.",
     "documentCountSingular": "{{count}} document",
-    "documentCountPlural": "{{count}} documents"
+    "documentCountPlural": "{{count}} documents",
+    "createLibrary": "Créer une bibliothèque"
+  },
+  "libraryCreateDrawer": {
+    "title": "Créer une nouvelle bibliothèque",
+    "libraryName": "Nom",
+    "libraryDescription": "Description",
+    "cancel": "Annuler",
+    "save": "Créer",
+    "saving": "Création en cours...",
+    "validationError": "Erreur de validation",
+    "nameRequired": "Le nom de la bibliothèque est obligatoire",
+    "libraryCreated": "Bibliothèque créée",
+    "libraryCreatedDetail": "La bibliothèque \"{{name}}\" a été créée avec succès",
+    "creationFailed": "Échec de la création",
+    "creationFailedDetail": "Erreur lors de la création de la bibliothèque : {{error}}"
   }
 }

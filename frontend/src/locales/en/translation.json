@@ -188,7 +188,7 @@
     "cancel": "Cancel",
     "save": "Save",
     "saving": "Saving...",
-    "librariesView": "Bibliothèques",
+    "librariesView": "Libraries",
     "documentsView": "Documents"
   },
   "documentTable": {
@@ -226,6 +226,21 @@
     "delete": "Delete",
     "noLibrariesFound": "No document libraries found.",
     "documentCountSingular": "{{count}} document",
-    "documentCountPlural": "{{count}} documents"
+    "documentCountPlural": "{{count}} documents",
+    "createLibrary": "Create Library"
+  },
+  "libraryCreateDrawer": {
+    "title": "Create New Library",
+    "libraryName": "Name",
+    "libraryDescription": "Description",
+    "cancel": "Cancel",
+    "save": "Create",
+    "saving": "Creating...",
+    "validationError": "Validation Error",
+    "nameRequired": "Library name is required",
+    "libraryCreated": "Library Created",
+    "libraryCreatedDetail": "Library \"{{name}}\" has been created successfully",
+    "creationFailed": "Creation Failed",
+    "creationFailedDetail": "Error creating library: {{error}}"
   }
 }
