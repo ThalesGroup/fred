@@ -56,8 +56,8 @@ class ChatbotController:
     WebSocket endpoints.
     """
     def __init__(self, app: APIRouter):
-        self.agent_manager = AgentManager()
         self.dynamic_agent_manager = get_dynamic_agent_manager()
+        self.agent_manager = AgentManager(dynamic_agent_manager=self.dynamic_agent_manager)
         self.session_manager = SessionManager(get_sessions_store(), self.agent_manager, self.dynamic_agent_manager)
         # For import-export operations
         match get_configuration().dao.type:

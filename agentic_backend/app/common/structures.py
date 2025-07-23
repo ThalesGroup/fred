@@ -173,7 +173,7 @@ class AgentSettings(BaseModel):
     settings: Dict[str, Any] = Field(default_factory=dict, description="Agent-specific settings (e.g., document directory, chunk size).")
     model: ModelConfiguration = Field(default_factory=ModelConfiguration, description="AI model configuration for this agent.")
     tag: Optional[str] = Field(None, description="Tag of the agent")
-    mcp_servers: List[MCPServerConfiguration] = Field(default_factory=list, description="List of MCP servers associated to an agent.")
+    mcp_servers: Optional[List[MCPServerConfiguration]] = Field(default_factory=list, description="List of MCP servers associated to an agent.")
     max_steps: int = Field(None,description="Max step")
 
 

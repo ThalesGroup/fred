@@ -1,32 +1,51 @@
-# app/controllers/agent_controller.py
-
 from fastapi import APIRouter, HTTPException
-
 from app.features.dynamic_agent.mcp_agent import MCPAgent
 from app.features.dynamic_agent.structures import CreateAgentRequest, MCPAgentRequest
+from app.application_context import get_app_context
+from app.common.structures import AgentSettings
+from app.features.dynamic_agent.service import create_mcp_agent
+from app.application_context import get_configuration
 
-router = APIRouter()
+class DynamicAgentController:
+    """
+    Plip plop
+    """
+    def __init__(self, app: APIRouter):
+        """
+        Plap ploup
+        """
+        
+        fastapi_tags = ["Dynamic MCP agent creation"]
+        
+        @app.post(
+            "/agents/create",
+            tags=fastapi_tags,
+            summary="Create a Dynamic Agent that can access MCP tools",
+        )
+        async def create_agent(req: CreateAgentRequest):
+            try:
+                if isinstance(req, MCPAgentRequest):
+                    create_mcp_agent(req)
+            
+                    get_app_context()._agent_index[req.name] = AgentSettings(
+                        name=req.name,
+                        prompt=req.prompt,
+                        # mcp_urls=req.mcp_urls,
+                        # class_path=f"app.features.dynamic_agent.mcp_agent.MCPAgent",
+                        enabled=True,
+                        categories=req.categories,
+                        tag=req.tag,
+                        model=get_configuration().ai.default_model,
+                        settings={
+                            "mcp_urls": req.mcp_urls
+                        },
+                        max_steps=10,
+                    )
 
-@router.post("/agents/create")
-async def create_agent(req: CreateAgentRequest):
-    try:
-        if isinstance(req, MCPAgentRequest):
-            agent = MCPAgent(
-                name=req.name,
-                prompt=req.prompt,
-                mcp_urls=req.mcp_urls,
-                role=req.role,
-                nickname=req.nickname,
-                description=req.description,
-                icon=req.icon,
-                categories=req.categories,
-                tag=req.tag,
-            )
-        else:
-            raise HTTPException(status_code=400, detail=f"Unsupported agent_type: {req.agent_type}")
+                else:
+                    raise HTTPException(status_code=400, detail=f"Unsupported agent_type: {req.agent_type}")
 
-        #AgentTeam().register(agent)
-        return {"status": "success", "agent_name": agent.name}
+                return {"status": "success", "agent_name": req.name}
 
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=str(e))

@@ -1,5 +1,3 @@
-# app/schemas/agent_creation.py
-
 from pydantic import BaseModel, Field
 from typing import Literal, List, Optional, Union
 

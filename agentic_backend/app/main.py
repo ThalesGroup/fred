@@ -27,6 +27,7 @@ from app.features.frugal.ai_service import AIService
 from app.features.frugal.carbon.carbon_controller import CarbonController
 from app.features.frugal.energy.energy_controller import EnergyController
 from app.features.frugal.finops.finops_controller import FinopsController
+from app.features.dynamic_agent.controller import DynamicAgentController
 from app.features.k8.kube_service import KubeService
 from app.application_context import ApplicationContext
 from app.chatbot.chatbot_controller import ChatbotController
@@ -124,6 +125,7 @@ def create_app() -> FastAPI:
     FeedbackController(router, configuration.feedback_storage)
     ToolMetricStoreController(router)
     NodeMetricStoreController(router)
+    DynamicAgentController(router)    
 
     app.include_router(router)
     logger.info("🧩 All controllers registered.")

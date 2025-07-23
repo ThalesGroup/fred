@@ -274,6 +274,10 @@ class ApplicationContext:
                 cls._instance.configuration = configuration
                 cls._instance.status = RuntimeStatus()
                 cls._instance._service_instances = {}  # Cache for service instances
+                
+                from app.features.dynamic_agent.service import get_dynamic_agent_manager
+                cls._instance.dynamic_agent_manager = get_dynamic_agent_manager()
+                
                 cls._instance.apply_default_models()
                 cls._instance._build_indexes()
 
@@ -304,6 +308,7 @@ class ApplicationContext:
         """
         agent_classes = {}
 
+        # Load class_path from agents in configuration
         for agent in self.configuration.ai.agents:
             if not agent.enabled:
                 continue
@@ -323,6 +328,19 @@ class ApplicationContext:
                 raise ValueError(f"Agent class '{agent.class_path}' must inherit from AgentFlow.")
 
             agent_classes[agent.name] = cls
+
+        # Load class_path from dynamic agent (if any)
+        if self.dynamic_agent_manager:
+            dynamic_agents = self.dynamic_agent_manager.get_agent_classes()
+            for name, cls in dynamic_agents.items():
+                if not issubclass(cls, AgentFlow):
+                    logger.warning(f"Dynamic agent '{name}' does not inherit from AgentFlow and will be skipped.")
+                    continue
+
+                if name in agent_classes:
+                    logger.warning(f"Dynamic agent '{name}' overrides statically defined agent.")
+
+                agent_classes[name] = cls
 
         return agent_classes
     

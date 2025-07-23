@@ -7,7 +7,6 @@ from app.features.dynamic_agent.structures import MCPAgentRequest
 # Singleton dynamic manager (can be moved to __init__.py or containerized later)
 dynamic_agent_manager = DynamicAgentManager()
 
-
 def create_mcp_agent(req: MCPAgentRequest):
     """
     Create and register a dynamic MCP agent if it doesn't already exist.
@@ -17,6 +16,7 @@ def create_mcp_agent(req: MCPAgentRequest):
 
     def constructor() -> MCPAgent:
         return MCPAgent(
+            cluster_fullname="",
             name=req.name,
             prompt=req.prompt,
             mcp_urls=req.mcp_urls,
@@ -27,8 +27,7 @@ def create_mcp_agent(req: MCPAgentRequest):
             categories=req.categories,
             tag=req.tag,
         )
-
-    dynamic_agent_manager.register_agent(req.name, constructor)
+    dynamic_agent_manager.register_agent(req.name, constructor, MCPAgent)
     return {"status": "success", "agent_name": req.name}
 
 

@@ -10,6 +10,8 @@ from langgraph.prebuilt import ToolNode, tools_condition
 from app.monitoring.node_monitoring.monitor_node import monitor_node
 from langchain_core.messages import HumanMessage
 from langchain_mcp_adapters.client import MultiServerMCPClient
+from app.common.structures import MCPServerConfiguration
+from app.application_context import get_agent_settings, get_model_for_agent, get_mcp_client_for_agent
 
 import logging
 
@@ -18,6 +20,7 @@ logger = logging.getLogger(__name__)
 class MCPAgent(AgentFlow):
     def __init__(
         self,
+        cluster_fullname: str,
         name: str,
         prompt: str,
         mcp_urls: List[str],
@@ -28,18 +31,21 @@ class MCPAgent(AgentFlow):
         categories: Optional[List[str]] = None,
         tag: Optional[str] = None,
     ):
+        # self.agent_settings = get_app_context()._agent_index[name]
+        self.current_date = datetime.now().strftime("%Y-%m-%d")
         self.name = name
+        self.cluster_fullname = cluster_fullname
+        self.agent_settings = get_agent_settings(self.name)
+        self.model = get_model_for_agent(self.name)
+        self.mcp_client = get_mcp_client_for_agent(self.name)
+        self.toolkit = McpAgentToolkit(self.mcp_client)
         self.role = role or "Agent using external MCP tools"
         self.nickname = nickname or name
         self.description = description or "Agent dynamically created to use MCP-based tools."
         self.icon = icon or "agent_generic"
         self.categories = categories or []
         self.tag = tag or "mcp"
-        self.current_date = datetime.now().strftime("%Y-%m-%d")
-
         self.prompt = prompt
-        self.mcp_client = MultiServerMCPClient(mcp_urls)  # handle multiple URLs
-        self.toolkit = McpAgentToolkit(self.mcp_client)
 
         super().__init__(
             name=self.name,
@@ -53,7 +59,7 @@ class MCPAgent(AgentFlow):
             tag=self.tag,
             toolkit=self.toolkit,
         )
-
+        
     def build_base_prompt(self) -> str:
         return f"{self.prompt}\n\nThe current date is {self.current_date}."
 
