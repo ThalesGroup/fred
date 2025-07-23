@@ -31,7 +31,11 @@ import {
   Paper,
   Grid2,
   Fade,
+  InputLabel,
+  Checkbox,
+  ListItemText,
 } from "@mui/material";
+
 import ClearIcon from "@mui/icons-material/Clear";
 import { useEffect, useState } from "react";
 import { LoadingSpinner } from "../utils/loadingSpinner";
@@ -41,18 +45,22 @@ import SearchIcon from "@mui/icons-material/Search";
 import LibraryBooksRoundedIcon from "@mui/icons-material/LibraryBooksRounded";
 import { KeyCloakService } from "../security/KeycloakService";
 import {
+  DOCUMENT_PROCESSING_STAGES,
   KnowledgeDocument,
   useDeleteDocumentMutation,
   useGetDocumentMarkdownPreviewMutation,
-  useGetDocumentsWithFilterMutation,
   useLazyGetDocumentRawContentQuery,
   useUpdateDocumentRetrievableMutation,
+  useGetDocumentSourcesQuery,
+  useBrowseDocumentsMutation,
+  useProcessDocumentsMutation,
+  ProcessDocumentsRequest,
 } from "../slices/documentApi";
 
-import { streamProcessDocument } from "../slices/streamDocumentUpload";
+import { streamUploadOrProcessDocument } from "../slices/streamDocumentUpload";
 import { useToast } from "../components/ToastProvider";
 import { ProgressStep, ProgressStepper } from "../components/ProgressStepper";
-import { DocumentTable } from "../components/documents/DocumentTable";
+import { DocumentTable, FileRow } from "../components/documents/DocumentTable";
 import { DocumentDrawerTable } from "../components/documents/DocumentDrawerTable";
 import DocumentViewer from "../components/documents/DocumentViewer";
 import { TopBar } from "../common/TopBar";
@@ -90,13 +98,6 @@ import { useTranslation } from "react-i18next";
  *    - When a user clicks "preview", the backend is queried using the document UID.
  *    - If Markdown content is available, it’s shown in a Drawer viewer with proper rendering.
  *
- * ## Backend Communication:
- *
- * - Uses **RTK Query** to talk to the `knowledge` backend:
- *    - `useGetDocumentsWithFilterMutation()` – to list/search documents
- *    - `useDeleteDocumentMutation()` – to delete a document
- *    - `useGetDocumentMarkdownPreviewMutation()` – to fetch markdown preview
- * - Integrates with `streamProcessDocument()` utility for upload streaming
  *
  * ## User Roles:
  *
@@ -117,13 +118,23 @@ import { useTranslation } from "react-i18next";
  */
 export const DocumentLibrary = () => {
   const { showInfo, showError } = useToast();
+  const [uploadMode, setUploadMode] = useState<"upload" | "process">("process");
 
   // API Hooks
   const [deleteDocument] = useDeleteDocumentMutation();
-  const [getDocumentsWithFilter] = useGetDocumentsWithFilterMutation();
+  const [browseDocuments] = useBrowseDocumentsMutation();
+  const [processDocuments] = useProcessDocumentsMutation();
   const [getDocumentMarkdownContent] = useGetDocumentMarkdownPreviewMutation();
   const [selectedDocument, setSelectedDocument] = useState<any>(null);
   const [triggerDownload] = useLazyGetDocumentRawContentQuery();
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [selectedStages, setSelectedStages] = useState<string[]>([]);
+  const [searchableFilter, setSearchableFilter] = useState<"all" | "true" | "false">("all");
+
+  const { data: allSources } = useGetDocumentSourcesQuery();
+  const [selectedSourceTag, setSelectedSourceTag] = useState<string | null>(null);
+  const selectedSource = allSources?.find((s) => s.tag === selectedSourceTag);
+  const isPullMode = selectedSource?.type === "pull";
 
   const theme = useTheme();
   const { t } = useTranslation();
@@ -143,7 +154,7 @@ export const DocumentLibrary = () => {
   // This ensures a clear separation between "pending uploads" and "uploaded documents."
   const [tempFiles, setTempFiles] = useState([]);
 
-  const [selectedFiles, setSelectedFiles] = useState<string[]>([]);
+  const [selectedFiles, setSelectedFiles] = useState<FileRow[]>([]);
 
   // UI States
   const [uploadProgressSteps, setUploadProgressSteps] = useState<ProgressStep[]>([]);
@@ -185,10 +196,31 @@ export const DocumentLibrary = () => {
   const [allDocuments, setAllDocuments] = useState<KnowledgeDocument[]>([]);
 
   const fetchFiles = async () => {
+    if (!selectedSourceTag) return;
+    const filters = {
+      ...(searchQuery ? { document_name: searchQuery } : {}),
+      ...(selectedTags.length > 0 ? { tags: selectedTags } : {}),
+      ...(selectedStages.length > 0
+        ? {
+          processing_stages: Object.fromEntries(
+            selectedStages.map((stage) => [stage, "done"])
+          ),
+        }
+        : {}),
+      ...(searchableFilter !== "all"
+        ? { retrievable: searchableFilter === "true" }
+        : {}),
+    };
     try {
       setIsLoading(true);
 
-      const response = await getDocumentsWithFilter(null).unwrap();
+      const response = await browseDocuments({
+        source_tag: selectedSourceTag,
+        filters,
+        offset: (currentPage - 1) * documentsPerPage,
+        limit: documentsPerPage,
+      }).unwrap();
+
       const docs = response.documents as KnowledgeDocument[];
       setAllDocuments(docs);
     } catch (error) {
@@ -203,6 +235,16 @@ export const DocumentLibrary = () => {
   };
 
   useEffect(() => {
+    if (allSources && selectedSourceTag === null) {
+      const pushSource = allSources.find((s) => s.type === "push");
+      if (pushSource) {
+
+        setSelectedSourceTag(pushSource.tag);
+      }
+    }
+  }, [allSources, selectedSourceTag]);
+
+  useEffect(() => {
     setShowElements(true);
     setUserInfo({
       name: KeyCloakService.GetUserName(),
@@ -213,16 +255,24 @@ export const DocumentLibrary = () => {
 
   useEffect(() => {
     fetchFiles();
-  }, [getDocumentsWithFilter]);
+  }, [
+    selectedSourceTag,
+    searchQuery,
+    selectedTags,
+    selectedStages,
+    searchableFilter,
+    currentPage,
+    documentsPerPage,
+  ]);
 
-  const handleDownload = async (document_uid: string, file_name: string) => {
+  const handleDownload = async (file: FileRow) => {
     try {
-      const { data: blob } = await triggerDownload({ document_uid });
+      const { data: blob } = await triggerDownload({ document_uid: file.document_uid });
       if (blob) {
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
         link.href = url;
-        link.download = file_name || "document";
+        link.download = file.document_name || "document";
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -236,16 +286,19 @@ export const DocumentLibrary = () => {
     }
   };
 
-  const handleDelete = async (document_uid: string) => {
+  const handleDelete = async (file: FileRow) => {
     try {
-      await deleteDocument(document_uid).unwrap();
+      await deleteDocument(file.document_uid).unwrap();
       showInfo({
         summary: "Delete Success",
-        detail: `Document ${document_uid} deleted`,
+        detail: `Document ${file.document_name} deleted`,
         duration: 3000,
       });
       await fetchFiles(); // <-- ensures fresh backend state
-      setSelectedFiles((prev) => prev.filter((id) => id !== document_uid));
+      setSelectedFiles((prev) =>
+        prev.filter((f) => f.document_uid !== file.document_uid)
+      );
+
     } catch (error) {
       showError({
         summary: "Delete Failed",
@@ -288,7 +341,7 @@ export const DocumentLibrary = () => {
       let uploadCount = 0;
       for (const file of tempFiles) {
         try {
-          await streamProcessDocument(file, (progress) => {
+          await streamUploadOrProcessDocument(file, uploadMode, (progress) => {
             setUploadProgressSteps((prev) => [
               ...prev,
               {
@@ -324,13 +377,55 @@ export const DocumentLibrary = () => {
   // Pagination
   const indexOfLastDocument = currentPage * documentsPerPage;
   const indexOfFirstDocument = indexOfLastDocument - documentsPerPage;
-  const filteredFiles = allDocuments.filter((file) =>
-    file.document_name.toLowerCase().includes(searchQuery.toLowerCase()),
-  );
+
+
+  const filteredFiles = allDocuments.filter((file) => {
+    const matchesSearch = file.document_name.toLowerCase().includes(searchQuery.toLowerCase());
+
+    const matchesTags =
+      selectedTags.length === 0 ||
+      (file.tags || []).some((tag) => selectedTags.includes(tag));
+
+    const matchesStage =
+      selectedStages.length === 0 ||
+      selectedStages.every((stage) => file.processing_stages?.[stage] === "done");
+
+    const matchesRetrievable =
+      searchableFilter === "all" ||
+      (searchableFilter === "true" && file.retrievable) ||
+      (searchableFilter === "false" && !file.retrievable);
+
+    return matchesSearch && matchesTags && matchesStage && matchesRetrievable;
+  });
+
   const currentDocuments = filteredFiles.slice(indexOfFirstDocument, indexOfLastDocument);
 
   const handleCloseDocumentViewer = () => {
     setDocumentViewerOpen(false);
+  };
+  const handleProcess = async (files: FileRow[]) => {
+    try {
+      const payload: ProcessDocumentsRequest = {
+        files: files.map((f) => ({
+          source_tag: f.source_type || "uploads", // adjust if needed
+          document_uid: f.document_uid,
+          external_path: undefined, // populate if you support pull mode
+          tags: f.tags || [],
+        })),
+        pipeline_name: "manual_ui_trigger",
+      };
+
+      const result = await processDocuments(payload).unwrap();
+      showInfo({
+        summary: "Processing started",
+        detail: `Workflow ${result.workflow_id} submitted`,
+      });
+    } catch (error) {
+      showError({
+        summary: "Processing Failed",
+        detail: error?.data?.detail || error.message,
+      });
+    }
   };
 
   const handleToggleRetrievable = async (file) => {
@@ -358,15 +453,40 @@ export const DocumentLibrary = () => {
   return (
     <>
       <TopBar title={t("documentLibrary.title")} description={t("documentLibrary.description")}>
-        {userInfo.canManageDocuments && (
-          <Grid2
-            size={{ xs: 12, md: 12 }}
-            sx={{
-              display: "flex",
-              justifyContent: "flex-end",
-              mt: { xs: 1, md: 0 },
-            }}
-          >
+        <Box
+          display="flex"
+          flexDirection="row"
+          alignItems="center"
+          justifyContent="space-between"
+          flexWrap="wrap" // Optional: set to 'nowrap' to prevent stacking on narrow screens
+          gap={2}
+          sx={{ mt: { xs: 10, md: 0 } }}
+        >
+          {/* Source Selector on the left */}
+          <FormControl size="small" sx={{ minWidth: 220 }}>
+            <InputLabel>Source</InputLabel>
+            <Select
+              value={selectedSourceTag || ""}
+              onChange={(e) => {
+                const value = e.target.value;
+                setSelectedSourceTag(value === "" ? null : value);
+              }}
+              input={<OutlinedInput label="Source" />}
+            >
+              {allSources?.map((source) => (
+                <MenuItem key={source.tag} value={source.tag}>
+                  <Box title={source.description || source.tag} sx={{ overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {source.tag}
+                  </Box>
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+
+
+
+          {/* Upload Button on the right (pull mode only) */}
+          {userInfo.canManageDocuments && !isPullMode && (
             <Button
               variant="contained"
               startIcon={<UploadIcon />}
@@ -376,15 +496,14 @@ export const DocumentLibrary = () => {
                 setOpenSide(true);
               }}
               size="medium"
-              sx={{
-                borderRadius: "8px",
-              }}
+              sx={{ borderRadius: "8px" }}
             >
               {t("documentLibrary.upload")}
             </Button>
-          </Grid2>
-        )}
+          )}
+        </Box>
       </TopBar>
+
 
       {/* Search Section */}
       <Container maxWidth="xl" sx={{ mb: 3 }}>
@@ -399,6 +518,65 @@ export const DocumentLibrary = () => {
           >
             <Grid2 container spacing={2} alignItems="center">
               <Grid2 size={{ xs: 12, md: 12 }}>
+                <Grid2 container spacing={2} sx={{ mb: 2 }}>
+                  {/* Tags filter */}
+                  <Grid2 size={{ xs: 4 }}>
+                    <FormControl fullWidth size="small">
+                      <InputLabel>Tags</InputLabel>
+                      <Select
+                        multiple
+                        value={selectedTags}
+                        onChange={(e) => setSelectedTags(e.target.value as string[])}
+                        input={<OutlinedInput label="Tags" />}
+                        renderValue={(selected) => selected.join(", ")}
+                      >
+                        {Array.from(new Set(allDocuments.flatMap(doc => doc.tags || []))).map((tag) => (
+                          <MenuItem key={tag} value={tag}>
+                            <Checkbox checked={selectedTags.includes(tag)} />
+                            <ListItemText primary={tag} />
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </Grid2>
+
+                  {/* Stages filter */}
+                  <Grid2 size={{ xs: 4 }}>
+                    <FormControl fullWidth size="small">
+                      <InputLabel>Stages (done)</InputLabel>
+                      <Select
+                        multiple
+                        value={selectedStages}
+                        onChange={(e) => setSelectedStages(e.target.value as string[])}
+                        input={<OutlinedInput label="Stages (done)" />}
+                        renderValue={(selected) => selected.join(", ")}
+                      >
+                        {DOCUMENT_PROCESSING_STAGES.map((stage) => (
+                          <MenuItem key={stage} value={stage}>
+                            <Checkbox checked={selectedStages.includes(stage)} />
+                            <ListItemText primary={stage} />
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </Grid2>
+
+                  {/* Searchable filter */}
+                  <Grid2 size={{ xs: 4 }}>
+                    <FormControl fullWidth size="small">
+                      <InputLabel>Searchable</InputLabel>
+                      <Select
+                        value={searchableFilter}
+                        onChange={(e) => setSearchableFilter(e.target.value as "all" | "true" | "false")}
+                        input={<OutlinedInput label="Searchable" />}
+                      >
+                        <MenuItem value="all">All</MenuItem>
+                        <MenuItem value="true">Only Searchable</MenuItem>
+                        <MenuItem value="false">Only Excluded</MenuItem>
+                      </Select>
+                    </FormControl>
+                  </Grid2>
+                </Grid2>
                 <TextField
                   fullWidth
                   placeholder={t("documentLibrary.searchPlaceholder")}
@@ -446,6 +624,7 @@ export const DocumentLibrary = () => {
               position: "relative",
             }}
           >
+
             {isLoading ? (
               <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
                 <LoadingSpinner />
@@ -455,20 +634,27 @@ export const DocumentLibrary = () => {
                 <Typography variant="h6" fontWeight="bold" gutterBottom sx={{ mb: 2 }}>
                   {t("documentLibrary.documents", { count: filteredFiles.length })}
                 </Typography>
+
+
                 <DocumentTable
                   files={currentDocuments}
-                  selected={selectedFiles}
-                  onToggleSelect={(uid) => {
-                    setSelectedFiles((prev) => (prev.includes(uid) ? prev.filter((id) => id !== uid) : [...prev, uid]));
+                  selectedFiles={selectedFiles}
+                  onToggleSelect={(file) => {
+                    setSelectedFiles((prev) =>
+                      prev.some((f) => f.document_uid === file.document_uid)
+                        ? prev.filter((f) => f.document_uid !== file.document_uid)
+                        : [...prev, file]
+                    );
                   }}
                   onToggleAll={(checked) => {
-                    setSelectedFiles(checked ? currentDocuments.map((f) => f.document_uid) : []);
+                    setSelectedFiles(checked ? currentDocuments : []);
                   }}
                   onDelete={handleDelete}
                   onDownload={handleDownload}
                   isAdmin={userInfo.canManageDocuments}
-                  onOpen={(document_uid, file_name) => handleDocumentMarkdownPreview(document_uid, file_name)}
+                  onOpen={(file) => handleDocumentMarkdownPreview(file.document_uid, file.document_name)}
                   onToggleRetrievable={handleToggleRetrievable}
+                  onProcess={handleProcess}
                 />
                 <Box display="flex" alignItems="center" mt={3} justifyContent="space-between">
                   <Pagination
@@ -541,6 +727,20 @@ export const DocumentLibrary = () => {
           <Typography variant="h5" fontWeight="bold" gutterBottom>
             {t("documentLibrary.uploadDrawerTitle")}
           </Typography>
+          <FormControl fullWidth sx={{ mt: 2 }}>
+            <Typography variant="subtitle2" gutterBottom>
+              Ingestion Mode
+            </Typography>
+            <Select
+              value={uploadMode}
+              onChange={(e) => setUploadMode(e.target.value as "upload" | "process")}
+              size="small"
+              sx={{ borderRadius: "8px" }}
+            >
+              <MenuItem value="upload">Upload</MenuItem>
+              <MenuItem value="process">Upload and Process</MenuItem>
+            </Select>
+          </FormControl>
 
           <Paper
             sx={{

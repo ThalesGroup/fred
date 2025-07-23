@@ -34,9 +34,9 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
-from app.services.ai.structure.facts import Fact
-from app.services.ai.structure.workload_scores import WorkloadScores
-from app.services.kube.structure import Cluster, WorkloadKind
+from app.features.frugal.structure.facts import Fact
+from app.features.frugal.structure.workload_scores import WorkloadScores
+from app.features.k8.structure import Cluster, WorkloadKind
 
 class WorkloadDescription(BaseModel):
     """

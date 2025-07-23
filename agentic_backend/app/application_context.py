@@ -31,7 +31,7 @@ from threading import Lock
 from typing import Dict, List, Type
 from pydantic import BaseModel
 from app.model_factory import get_structured_chain
-from app.common.structure import AgentSettings, Configuration, ServicesSettings
+from app.common.structures import AgentSettings, Configuration, ServicesSettings
 from app.model_factory import get_model
 from langchain_core.language_models.base import BaseLanguageModel
 from langchain_mcp_adapters.client import MultiServerMCPClient
@@ -39,7 +39,7 @@ from langchain_core.tools import BaseTool
 from app.flow import AgentFlow, Flow  # Base class for all agent flows
 from app.common.utils import log_exception
 from app.common.error import UnsupportedTransportError, MCPToolFetchError
-
+from app.services.chatbot_session.abstract_session_backend import AbstractSessionStorage
 import logging
 
 logger = logging.getLogger(__name__)
@@ -76,6 +76,16 @@ def get_configuration() -> Configuration:
         Configuration: The singleton application configuration.
     """
     return get_app_context().configuration
+
+def get_sessions_store() -> AbstractSessionStorage:
+    """
+    Factory function to create a sessions store instance based on the configuration.
+    As of now, it supports in_memory and OpenSearch sessions storage.
+    
+    Returns:
+        AbstractSessionStorage: An instance of the sessions store.
+    """
+    return get_app_context().get_sessions_store()
 
 def get_enabled_agent_names() -> List[str]:
     """
@@ -472,14 +482,31 @@ class ApplicationContext:
             raise ValueError(f"Leader class '{leader_cfg.class_path}' must inherit from AgentFlow.")
 
         return cls
-
-
-    def list_agent_names(self) -> list[str]:
+    
+    def get_sessions_store(self) -> AbstractSessionStorage:
         """
-        Lists all available agent names from the configuration.
-
+        Factory function to create a sessions store instance based on the configuration.
+        As of now, it supports in_memory and OpenSearch sessions storage.
+        
         Returns:
-            list[str]: List of available agent names.
+            AbstractSessionStorage: An instance of the sessions store.
         """
-        return list(self.agent_classes.keys())
+        # Import here to avoid avoid circular dependencies:
+        from app.services.chatbot_session.stores.in_memory_session_store import InMemorySessionStorage
+        from app.services.chatbot_session.stores.opensearch_session_store import OpensearchSessionStorage
+        config = get_configuration().session_storage
+        if config.type == "in_memory":
+            return InMemorySessionStorage()
+        elif config.type == "opensearch":
+            return OpensearchSessionStorage(
+                host=config.host,
+                username=config.username,
+                password=config.password,
+                secure=config.secure,
+                verify_certs=config.verify_certs,
+                sessions_index=config.sessions_index,
+                history_index=config.history_index
+            )
+        else:
+            raise ValueError(f"Unsupported sessions storage backend: {config.type}")
         

@@ -16,8 +16,7 @@ import logging
 import mimetypes
 from typing import BinaryIO, Dict, Tuple
 
-from app.core.stores.content.content_storage_factory import get_content_store
-
+from app.common.structures import DocumentMetadata
 
 logger = logging.getLogger(__name__)
 
@@ -33,10 +32,10 @@ class ContentService:
         from app.application_context import ApplicationContext
 
         self.metadata_store = ApplicationContext.get_instance().get_metadata_store()
-        self.content_store = get_content_store()
+        self.content_store = ApplicationContext.get_instance().get_content_store()
         self.config = ApplicationContext.get_instance().get_config()
 
-    async def get_document_metadata(self, document_uid: str) -> Dict:
+    async def get_document_metadata(self, document_uid: str) -> DocumentMetadata:
         """
         Return the metadata dict for a document UID.
 
@@ -56,9 +55,6 @@ class ContentService:
             raise FileNotFoundError(
                 f"No metadata found for document {document_uid}"
             )
-
-        # Optional: ensure the dict has a name; keep if you need it
-        metadata.setdefault("document_name", f"{document_uid}.xxx")
         return metadata
 
     async def get_original_content(self, document_uid: str) -> Tuple[BinaryIO, str, str]:
@@ -66,7 +62,7 @@ class ContentService:
         Returns binary stream of original input file, filename and content type.
         """
         metadata = await self.get_document_metadata(document_uid)
-        document_name = metadata["document_name"]
+        document_name = metadata.document_name
         content_type = mimetypes.guess_type(document_name)[0] or "application/octet-stream"
 
         try:
@@ -74,6 +70,19 @@ class ContentService:
         except FileNotFoundError:
             raise FileNotFoundError(f"Original input file not found for document {document_uid}")
         return stream, document_name, content_type
+
+    async def get_document_media(self, document_uid: str, media_id: str) -> Tuple[BinaryIO, str, str]:
+        """
+        Returns media file associated with a document if it exists.
+        """
+        content_type = mimetypes.guess_type(media_id)[0] or "application/octet-stream"
+        
+        try:
+            stream = self.content_store.get_media(document_uid, media_id)
+        except FileNotFoundError:
+            raise FileNotFoundError(f"No media found for document {document_uid} with media ID {media_id}")
+        
+        return stream, media_id, content_type
 
     async def get_markdown_preview(self, document_uid: str) -> str:
         """

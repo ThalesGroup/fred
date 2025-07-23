@@ -16,6 +16,7 @@
 
 import logging
 
+from app.common.structures import DocumentMetadata
 from app.core.processors.output.base_output_processor import BaseOutputProcessor
 
 logger = logging.getLogger(__name__)
@@ -31,6 +32,6 @@ class EmptyOutputProcessor(BaseOutputProcessor):
     def __init__(self):
         super().__init__()
 
-    def process(self, document_uid: str, document_content: str, metadata: dict) -> None:
+    def process(self, document_uid: str, document_content: str, metadata: DocumentMetadata) -> None:
         logger.info(f"Skipping output processing for document UID: {document_uid}")
         return  # Do nothing

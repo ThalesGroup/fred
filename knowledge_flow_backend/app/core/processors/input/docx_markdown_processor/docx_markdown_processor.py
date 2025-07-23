@@ -21,6 +21,7 @@ from docx import Document
 import pypandoc
 
 from app.core.processors.input.common.base_input_processor import BaseMarkdownProcessor
+import subprocess
 
 logger = logging.getLogger(__name__)
 
@@ -57,24 +58,47 @@ class DocxMarkdownProcessor(BaseMarkdownProcessor):
             logger.error(f"Erreur lors de l'extraction des métadonnées pour {file_path}: {e}")
             return {"document_name": file_path.name, "error": str(e)}
 
-    def convert_file_to_markdown(self, file_path: Path, output_dir: Path) -> dict:
+    def convert_file_to_markdown(self, file_path: Path, output_dir: Path, document_uid: str | None) -> dict:
         output_dir.mkdir(parents=True, exist_ok=True)
         md_path = output_dir / "output.md"
 
-        filters_dir = Path(__file__).parent / "filters"
-        lua_filters = [
-            filters_dir / "remove_toc.lua",
-            filters_dir / "remove_images.lua",
-            filters_dir / "remove_tables.lua",
-        ]
+        images_dir = output_dir
+        extra_args = [f"--extract-media={images_dir}", "--preserve-tabs", "--wrap=none", "--reference-links"]
 
-        extra_args = ["--extract-media=."]
-        for lua_filter in lua_filters:
-            copied = output_dir / lua_filter.name
-            shutil.copy(lua_filter, copied)
-            extra_args.append(f"--lua-filter={copied}")
+        subprocess.run([
+            "pandoc",
+            "--to",
+            "markdown",
+            "--to",
+            "markdown_strict",
+            str(file_path),
+            "-o", str(md_path),
+            *extra_args,
+            ],
+            
+        )
 
-        pypandoc.convert_file(str(file_path), to="markdown", outputfile=str(md_path), extra_args=extra_args)
+        # pypandoc.convert_file(str(file_path), to="markdown_strict+pipe_tables", outputfile=str(md_path), extra_args=extra_args)
+
+        # Convert EMF to SVG
+        for img_path in (images_dir / "media").glob("*.emf"):
+            svg_path = img_path.with_suffix(".svg")
+            subprocess.run(["inkscape", str(img_path), "--export-filename=" + str(svg_path)])
+
+            # Remove the original EMF file
+            img_path.unlink()
+
+        # Update references in the markdown file
+        with open(md_path, "r", encoding="utf-8") as f:
+            md_content = f.read()
+
+        md_content = md_content.replace(".emf", ".svg")
+
+        # Change media path to use api endpoint
+        md_content = md_content.replace(str(output_dir), f"knowledge-flow/v1/markdown/{document_uid}")
+
+        with open(md_path, "w", encoding="utf-8") as f:
+            f.write(md_content)
 
         for f in output_dir.glob("*.lua"):
             f.unlink()

@@ -27,7 +27,7 @@ from pathlib import Path
 from io import BytesIO
 import pytest
 from fastapi import UploadFile
-from app.features.wip.ingestion_service import IngestionService
+from app.features.ingestion.service import IngestionService
 
 
 # ----------------------------
@@ -45,8 +45,9 @@ def test_ingestion_service():
     assert temp_file.exists()
     assert temp_file.is_file()
     assert temp_file.name == "sample.docx"
-    metadata = ingestion_service.extract_metadata(temp_file, {"source": "test"})
-    assert "document_uid" in metadata
+    metadata = ingestion_service.extract_metadata(temp_file, [])
+    assert isinstance(metadata.document_uid, str)
+
 
 
 def test_save_file_to_temp_uploadfile():
@@ -78,27 +79,6 @@ def test_extract_metadata_no_extension(monkeypatch):
 # ----------------------------
 # ❌ Failure Cases
 # ----------------------------
-
-
-def test_extract_metadata_missing_uid(monkeypatch):
-    """
-    Test: raises ValueError if extract_metadata doesn't produce a document_uid.
-    Uses monkeypatch to mock metadata processing output.
-    """
-    ingestion_service = IngestionService()
-    dummy_path = Path("dummy.docx")
-
-    class DummyProcessor:
-        """Mock metadata processor that omits 'document_uid' key."""
-
-        def process_metadata(self, path, metadata):
-            return {"status": "uploaded"}
-
-    monkeypatch.setattr(ingestion_service.context, "get_input_processor_instance", lambda suffix: DummyProcessor())
-
-    with pytest.raises(ValueError, match="missing 'document_uid'"):
-        ingestion_service.extract_metadata(dummy_path, {"source": "test"})
-
 
 def test_save_file_to_temp_invalid_path():
     """

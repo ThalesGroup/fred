@@ -1,13 +1,21 @@
+# Copyright Thales 2025
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 # tabular_service.py
 
-import pandas as pd
-import io
 import logging
 from typing import List
-from pandas.api.types import (
-    is_string_dtype, is_numeric_dtype, is_bool_dtype, is_datetime64_any_dtype
-)
-import duckdb
 
 from app.features.tabular.structures import TabularColumnSchema, TabularDatasetMetadata, TabularQueryRequest, TabularQueryResponse, TabularSchemaResponse
 from app.features.tabular.utils import plan_to_sql
@@ -19,8 +27,7 @@ logger = logging.getLogger(__name__)
 
 class TabularService:
     def __init__(self):
-        self.context = ApplicationContext.get_instance()
-        self.tabular_store = self.context.get_tabular_store()
+        self.tabular_store = ApplicationContext.get_instance().get_tabular_store()
 
     def _map_duckdb_type_to_literal(self, duckdb_type: str) -> str:
         """

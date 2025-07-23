@@ -45,7 +45,7 @@ This file is mounted into the `devcontainer` service via `env_file` in the main 
 | ObjectStorage           | internal | Bucket storage |
 | SearchEngine Dashboards | internal | Depends on health check |
 
-The container forwards port **8111** to your host so Swagger is reachable at `http://localhost:8111/knowledge/v1/docs`.
+The container forwards port **8111** to your host so Swagger is reachable at `http://localhost:8111/knowledge-flow/v1/docs`.
 
 ---
 

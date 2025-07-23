@@ -11,9 +11,11 @@ PYTHON=$(VENV)/bin/python
 PIP=$(VENV)/bin/pip
 UV=$(VENV)/bin/uv
 
-ENV_DIR?=$(CURDIR)
-ENV_FILE?=$(ENV_DIR)/config/.env
-LOG_LEVEL?=INFO
+ROOT_DIR := $(realpath $(CURDIR))
+# Needed env variable to start app
+export ENV_FILE ?= $(ROOT_DIR)/config/.env
+export CONFIG_FILE ?= $(ROOT_DIR)/config/configuration.yaml
+export LOG_LEVEL ?= info
 
 ##@ Setup
 
@@ -49,13 +51,17 @@ update: $(TARGET)/.uv-installed ## Re-resolve and update all dependencies
 ##@ Run
 
 .PHONY: run
-
-run: dev
-	@echo "🚀 Running the app..."
-	PYTHONPATH=. \
-	LOG_LEVEL=$(LOG_LEVEL) \
-	ENV_FILE=$(ENV_FILE) \
-	$(PYTHON) ${PY_PACKAGE}/main.py --config-path ./config/configuration.yaml
+run: PORT ?= 8000
+run: UVICORN_FACTORY ?= app.main:create_app
+run: UVICORN_LOOP ?= asyncio
+run: dev ## Run the app from source
+	$(UV) run uvicorn \
+		--factory ${UVICORN_FACTORY} \
+		--port ${PORT} \
+		--env-file ${ENV_FILE} \
+		--log-level ${LOG_LEVEL} \
+		--loop ${UVICORN_LOOP}
+		--reload
 
 ##@ Clean
 

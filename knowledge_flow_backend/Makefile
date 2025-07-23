@@ -5,9 +5,6 @@ PROJECT_REGISTRY=registry.thalesdigital.io/tsn/projects/knowledge_flow_app
 PROJECT_NAME=knowledge-flow
 PY_PACKAGE=app
 
-ROOT_DIR := $(realpath $(CURDIR))
-ENV_FILE := $(ROOT_DIR)/config/.env
-
 TARGET=$(CURDIR)/target
 VENV=$(CURDIR)/.venv
 PIP=$(VENV)/bin/pip
@@ -18,7 +15,11 @@ IMG=$(PROJECT_REGISTRY)/$(PROJECT_NAME):$(VERSION)
 HELM_ARCHIVE=./knowledge_flow_app-0.1.0.tgz
 PROJECT_ID="74648"
 
-LOG_LEVEL?=INFO
+ROOT_DIR := $(realpath $(CURDIR))
+# Needed env variable to start app
+export ENV_FILE := $(ROOT_DIR)/config/.env
+export CONFIG_FILE := $(ROOT_DIR)/config/configuration.yaml
+export LOG_LEVEL?=info
 
 ##@ Setup
 
@@ -89,11 +90,24 @@ helm-push: ## Push Helm chart to GitLab package registry
 ##@ Run
 
 .PHONY: run
-
+run: PORT ?= 8111
+run: UVICORN_FACTORY ?= app.main:create_app
 run: dev ## Run the app from source
+	$(UV) run uvicorn \
+		--factory ${UVICORN_FACTORY} \
+		--port ${PORT} \
+		--env-file ${ENV_FILE} \
+		--log-level ${LOG_LEVEL} \
+		--reload
+
+.PHONY: run-worker
+
+run-worker: dev ## Run an ingestion worker this requires a temporal daemon
+	@echo "🚀 Running the app..."
 	PYTHONPATH=. \
-	ENV_FILE="$(ENV_FILE)" LOG_LEVEL="$(LOG_LEVEL)" \
-	$(PYTHON) ${PY_PACKAGE}/main.py --config-path ./config/configuration.yaml
+	LOG_LEVEL=$(LOG_LEVEL) \
+	ENV_FILE=$(ENV_FILE) \
+	$(PYTHON) ${PY_PACKAGE}/main_worker.py --config-path ./config/configuration_worker.yaml
 
 .PHONY: docker-run
 
@@ -101,9 +115,7 @@ docker-run: ## Run the app in Docker
 	docker run -it \
 		-p 8111:8111 \
 		-v ~/.kube/:/home/fred-user/.kube/ \
-		-v ~/.aws/:/home/fred-user/.aws/ \
 		-v $(realpath app/config/configuration.yaml):/app/configuration.yaml \
-		-e LOG_LEVEL="$(LOG_LEVEL)" \
 		$(IMG) --config-path /app/configuration.yaml
 
 ##@ Tests
@@ -177,23 +189,6 @@ sast: ## Run bandit
 code-quality: ## Run all pre-commit checks
 	@echo "************ Executing pre-commit ************"
 	$(UV) run pre-commit run --all-files
-
-##@ Review 
-
-.PHONY: review-pull-request
-review-pull-request: dev ## Run AI-based PR review locally
-	@echo "🤖 Reviewing Python changes using AI..."
-	$(PYTHON) developer_tools/ai_review_pull_request.py --mode committed
-
-.PHONY: review-uncommitted
-review-uncommitted: dev ## Run AI-based PR review locally
-	@echo "🤖 Reviewing Python changes using AI..."
-	$(PYTHON) developer_tools/ai_review_pull_request.py --mode uncommitted
-
-.PHONY: review-all
-review-all: dev ## Run AI-based PR review locally
-	@echo "🤖 Reviewing Python changes using AI..."
-	$(PYTHON) developer_tools/ai_review_pull_request.py --mode all
 
 ##@ Help
 

@@ -19,15 +19,19 @@
 Entrypoint for the Agentic Backend App.
 """
 
-import argparse
 import logging
+import os
 
-import uvicorn
+from app.features.feedback.feedback_controller import FeedbackController
+from app.features.frugal.ai_service import AIService
+from app.features.frugal.carbon.carbon_controller import CarbonController
+from app.features.frugal.energy.energy_controller import EnergyController
+from app.features.frugal.finops.finops_controller import FinopsController
+from app.features.k8.kube_service import KubeService
 from app.application_context import ApplicationContext
 from app.chatbot.chatbot_controller import ChatbotController
-from app.common.structure import Configuration
+from app.common.structures import Configuration
 from app.common.utils import parse_server_configuration
-from app.feedback.feedback_controller import FeedbackController
 from app.monitoring.node_monitoring.node_metric_store import \
     create_node_metric_store
 from app.monitoring.node_monitoring.node_metric_store_controller import \
@@ -36,26 +40,14 @@ from app.monitoring.tool_monitoring.tool_metric_store import \
     create_tool_metric_store
 from app.monitoring.tool_monitoring.tool_metric_store_controller import \
     ToolMetricStoreController
-from app.security.keycloak import initialize_keycloak
-from app.services.ai.ai_controller import AIController
-from app.services.carbon.carbon_controller import CarbonController
-from app.services.energy.energy_controller import EnergyController
-from app.services.finops.finops_controller import FinopsController
+from app.features.frugal.ai_controller import AIController
 from app.services.frontend.frontend_controller import UiController
-from app.services.kube.kube_controller import KubeController
-from app.services.mission.mission_controller import MissionController
-from app.services.sensor.sensor_controller import (
-    SensorConfigurationController, SensorController)
-from app.services.theater_analysis.theater_analysis_controller import \
-    TheaterAnalysisController
-from app.services.theorical_radio.theorical_radio_controller import \
-    TheoricalRadioController
+from app.features.k8.kube_controller import KubeController
 from dotenv import load_dotenv
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fred_core import initialize_keycloak
 from rich.logging import RichHandler
-from services.ai.ai_service import AIService
-from services.kube.kube_service import KubeService
 
 
 # -----------------------
@@ -85,48 +77,19 @@ def load_environment(dotenv_path: str = "./config/.env"):
 
 
 # -----------------------
-# CLI ARGUMENTS
-# -----------------------
-
-
-def parse_cli_opts():
-    parser = argparse.ArgumentParser(description="Start the Agentic Backend App")
-    parser.add_argument(
-        "--config-path",
-        default="./config/configuration.yaml",
-        help="Path to configuration YAML file",
-    )
-    parser.add_argument(
-        "--base-url",
-        default="/agentic/v1",
-        help="Base path for all API endpoints",
-    )
-    parser.add_argument(
-        "--server-address", default="127.0.0.1", help="Server binding address"
-    )
-    parser.add_argument("--server-port", type=int, default=8000, help="Server port")
-    parser.add_argument("--log-level", default="info", help="Logging level")
-    parser.add_argument(
-        "--reload", action="store_true", help="Enable auto-reload (for dev only)"
-    )
-    parser.add_argument(
-        "--reload-dir", default=".", help="Watch for changes in these directories"
-    )
-
-    return parser.parse_args()
-
-
-# -----------------------
 # APP CREATION
 # -----------------------
 
-
-def create_app(config_path: str, base_url: str) -> FastAPI:
+def create_app() -> FastAPI:
+    load_environment()
+    config_file = os.environ["CONFIG_FILE"]
+    configuration: Configuration = parse_server_configuration(config_file)
+    configure_logging(configuration.app.log_level)
+    base_url = configuration.app.base_url
     logger.info(f"🛠️ create_app() called with base_url={base_url}")
-
-    configuration: Configuration = parse_server_configuration(config_path)
-    ApplicationContext(configuration)  # 🟢 harmonisation ici
-
+    
+    ApplicationContext(configuration)
+    
     initialize_keycloak(configuration)
     create_tool_metric_store(configuration.tool_metrics_storage)
     create_node_metric_store(configuration.node_metrics_storage)
@@ -145,24 +108,19 @@ def create_app(config_path: str, base_url: str) -> FastAPI:
     )
 
     router = APIRouter(prefix=base_url)
-
-    # Initialize services
-    kube_service = KubeService()
-    ai_service = AIService(kube_service)
+    enable_k8_features = configuration.frontend_settings.feature_flags.enableK8Features
+    if enable_k8_features:
+        kube_service = KubeService()
+        ai_service = AIService(kube_service)
+        KubeController(router)
+        AIController(router, ai_service)
+        UiController(router, kube_service, ai_service)
+        CarbonController(router)
+        EnergyController(router)
+        FinopsController(router)
 
     # Register controllers
-    SensorController(router)
-    SensorConfigurationController(router)
-    TheaterAnalysisController(router)
-    MissionController(router)
-    TheoricalRadioController(router)
-    CarbonController(router)
-    EnergyController(router)
-    FinopsController(router)
-    KubeController(router)
-    AIController(router, ai_service)
-    UiController(router, kube_service, ai_service)
-    ChatbotController(router, ai_service)
+    ChatbotController(router)
     FeedbackController(router, configuration.feedback_storage)
     ToolMetricStoreController(router)
     NodeMetricStoreController(router)
@@ -172,33 +130,6 @@ def create_app(config_path: str, base_url: str) -> FastAPI:
     return app
 
 
-# -----------------------
-# MAIN ENTRYPOINT
-# -----------------------
-
-
-def main():
-    args = parse_cli_opts()
-    configure_logging(args.log_level)
-    load_environment()
-
-    app = create_app(config_path=args.config_path, base_url=args.base_url)
-
-    uvicorn.run(
-        app,
-        host=args.server_address,
-        port=args.server_port,
-        log_level=args.log_level,
-        loop="asyncio",
-        reload=args.reload,
-        reload_dirs=args.reload_dir,
-    )
-
-
 if __name__ == "__main__":
-    main()
-
-# Note: We do not define a global `app = FastAPI()` for ASGI (e.g., `uvicorn app.main:app`)
-# because this application is always launched via the CLI `main()` function.
-# This allows full control over configuration (e.g., --config-path, --base-url) and avoids
-# the need for a static app instance required by ASGI-based servers like Uvicorn in import mode.
+    print("To start the app, use uvicorn cli with:")
+    print("uv run uvicorn --factory app.main:create_app ...")

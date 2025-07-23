@@ -17,7 +17,7 @@ from fastapi import HTTPException
 from langchain.schema.document import Document
 
 from app.application_context import ApplicationContext
-from app.common.structures import Status, OutputProcessorResponse
+from app.common.structures import DocumentMetadata, Status, OutputProcessorResponse
 from app.core.processors.output.base_output_processor import BaseOutputProcessor
 
 logger = logging.getLogger(__name__)
@@ -46,7 +46,7 @@ class VectorizationProcessor(BaseOutputProcessor):
         self.metadata_store = ApplicationContext.get_instance().get_metadata_store()
         logger.info(f"📝 Metadata store initialized: {self.metadata_store.__class__.__name__}")
 
-    def process(self, file_path: str, metadata: dict) -> OutputProcessorResponse:
+    def process(self, file_path: str, metadata: DocumentMetadata) -> OutputProcessorResponse:
         """
         Process a document for vectorization.
         This method orchestrates the entire vectorization process:
@@ -61,7 +61,7 @@ class VectorizationProcessor(BaseOutputProcessor):
     def _vectorize_document(
         self,
         file_path: str,
-        metadata: dict,
+        metadata: DocumentMetadata,
     ) -> OutputProcessorResponse:
         """
         Orchestrates the document vectorization process:
@@ -89,7 +89,7 @@ class VectorizationProcessor(BaseOutputProcessor):
             # logger.info(f"{len(embedded_chunks)} chunks embedded.")
 
             # 4. Check if document already exists
-            document_uid = metadata.get("document_uid")
+            document_uid = metadata.document_uid
             if document_uid is None:
                 raise ValueError("Metadata must contain a 'document_uid'.")
 
@@ -100,7 +100,7 @@ class VectorizationProcessor(BaseOutputProcessor):
             # 5. Store embeddings
             try:
                 for i, doc in enumerate(chunks):
-                    logger.info(f"[Chunk {i}] Document content preview: {doc.page_content[:100]!r} | Metadata: {doc.metadata}")
+                    logger.debug(f"[Chunk {i}] Document content preview: {doc.page_content[:100]!r} | Metadata: {doc.metadata}")
                 result = self.vector_store.add_documents(chunks)
                 logger.debug(f"Documents added to Vector Store: {result}")
             except Exception as e:

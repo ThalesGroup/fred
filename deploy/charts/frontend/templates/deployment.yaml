@@ -19,6 +19,18 @@ spec:
       labels:
         app: {{ .Chart.Name }}
     spec:
+      {{- if .Values.imagePullSecrets }}
+      imagePullSecrets:
+      {{ toYaml .Values.imagePullSecrets | indent 2 }}
+      {{- end }}
+      {{- if .Values.serviceAccount.enabled }}
+      serviceAccount: {{ .Values.serviceAccount.name }}
+      serviceAccountName: {{ .Values.serviceAccount.name }}
+      {{- end }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: {{ .Chart.Name }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
@@ -44,10 +56,6 @@ spec:
           {{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
-      {{- if .Values.imagePullSecrets }}
-      imagePullSecrets:
-      {{ toYaml .Values.imagePullSecrets | indent 2 }}
-      {{- end }}
       {{- if .Values.oidc.enabled }}
       volumes:
         - name: {{ .Chart.Name }}-config-vol

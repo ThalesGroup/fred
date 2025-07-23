@@ -4,18 +4,25 @@ import MoreVertIcon from "@mui/icons-material/MoreVert";
 import DeleteIcon from "@mui/icons-material/Delete";
 import DownloadIcon from "@mui/icons-material/Download";
 import VisibilityIcon from "@mui/icons-material/Visibility";
+import RocketLaunchIcon from "@mui/icons-material/RocketLaunch";
+
 import { useTranslation } from "react-i18next";
+import { FileRow } from "./DocumentTable";
 
 interface DocumentTableRowActionsMenuProps {
-  onDelete: () => void;
-  onDownload: () => void;
-  onOpen: () => void;
+  file: FileRow;
+  onDelete: (file: FileRow) => void;
+  onDownload: (file: FileRow) => void;
+  onOpen: (file: FileRow) => void;
+  onProcess: (file: FileRow) => void;
 }
 
 export const DocumentTableRowActionsMenu: React.FC<DocumentTableRowActionsMenuProps> = ({
+  file,
   onDelete,
   onDownload,
   onOpen,
+  onProcess
 }) => {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const open = Boolean(anchorEl);
@@ -39,7 +46,7 @@ export const DocumentTableRowActionsMenu: React.FC<DocumentTableRowActionsMenuPr
       >
         <MenuItem
           onClick={() => {
-            onOpen();
+            onOpen(file);
             setAnchorEl(null);
           }}
         >
@@ -50,7 +57,7 @@ export const DocumentTableRowActionsMenu: React.FC<DocumentTableRowActionsMenuPr
         </MenuItem>
         <MenuItem
           onClick={() => {
-            onDownload();
+            onDownload(file);
             setAnchorEl(null);
           }}
         >
@@ -61,7 +68,7 @@ export const DocumentTableRowActionsMenu: React.FC<DocumentTableRowActionsMenuPr
         </MenuItem>
         <MenuItem
           onClick={() => {
-            onDelete();
+            onDelete(file);
             setAnchorEl(null);
           }}
         >
@@ -69,6 +76,17 @@ export const DocumentTableRowActionsMenu: React.FC<DocumentTableRowActionsMenuPr
             <DeleteIcon fontSize="small" />
           </ListItemIcon>
           <ListItemText primary={t("documentActions.delete")} />
+        </MenuItem>
+        <MenuItem
+          onClick={() => {
+            onProcess(file);
+            setAnchorEl(null);
+          }}
+        >
+          <ListItemIcon>
+            <RocketLaunchIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText primary={t("documentActions.process")} />
         </MenuItem>
       </Menu>
     </>

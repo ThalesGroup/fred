@@ -41,6 +41,8 @@ dependencies = [
   "fastapi-mcp==0.3.4",
   "duckdb>=1.3.2",
   "weaviate-client<4.0.0",
+  "fred-core",
+  "temporalio>=1.14.1",
 ]
 
 [project.optional-dependencies]
@@ -80,3 +82,11 @@ markers = [
   "metadata_storage_type(type): mark test to select a metadata store backend",
   "vector_storage_type(type): mark test to select a vector store backend"
 ]
+
+[tool.uv.sources]
+fred-core = { path = "../fred-core", editable = true }
+
+[tool.uv]
+# Using `editable_mode = "compat"` when installing fred-core to make editable install work with Pylance (vscode):
+# https://github.com/microsoft/pylance-release/blob/main/TROUBLESHOOTING.md#editable-install-modules-not-found
+config-settings = { editable_mode = "compat" }

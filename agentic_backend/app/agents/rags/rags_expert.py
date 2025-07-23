@@ -22,7 +22,7 @@ from langgraph.graph import END, START, MessagesState, StateGraph
 from app.flow import AgentFlow
 from app.application_context import get_agent_settings, get_model_for_agent
 from app.common.models.document_source import DocumentSource
-from services.chatbot_session.structure.chat_schema import ChatSource
+from app.services.chatbot_session.structure.chat_schema import ChatSource
 
 class RagsExpert(AgentFlow):
     """
@@ -38,7 +38,7 @@ class RagsExpert(AgentFlow):
     categories: List[str] = []
     tag: str = "Innovation"
 
-    def __init__(self, cluster_fullname: Optional[str] = None):     
+    def __init__(self, cluster_fullname: Optional[str] = None):
         """
         Initialize the RagsExpert agent with settings and configuration.
         Loads settings from agent configuration and sets up connections to the
@@ -73,7 +73,7 @@ class RagsExpert(AgentFlow):
     def _generate_prompt(self) -> str:
         """
         Generate the base prompt for the rags expert agent.
-        
+
         Returns:
             str: The base prompt for the agent.
         """
@@ -86,16 +86,16 @@ class RagsExpert(AgentFlow):
     async def agent(self, state: MessagesState):
         """
         Main agent function that processes user questions and retrieves relevant documents.
-        
+
         Args:
             state (MessagesState): The current state containing user messages.
-            
+
         Returns:
             dict: A dictionary containing the agent's response message.
         """
         model = get_model_for_agent(self.name)
         question: str = state["messages"][-1].content
-        
+
         try:
             # Step 1: Send request to vector search service
             print(f"Sending request to {self.knowledge_flow_url}/vector/search with query: {question}")
@@ -105,11 +105,11 @@ class RagsExpert(AgentFlow):
                 timeout=10
             )
             response.raise_for_status()
-            
+
             # Step 2: Process the response
             documents_data = response.json()
             print(f"Received response with {len(documents_data)} documents")
-            
+
             # Step 3: Handle empty results
             if not documents_data:
                 ai_message = await model.ainvoke([HumanMessage(content=
@@ -117,21 +117,21 @@ class RagsExpert(AgentFlow):
                     "Could you rephrase or ask another question?"
                 )])
                 return {"messages": [ai_message]}
-            
+
             # Step 4: Process documents with error handling
             documents = []
             sources: List[ChatSource] = []
-            
+
             for doc in documents_data:
                 try:
                     # Handle field name differences (uid vs document_uid)
                     if "uid" in doc and "document_uid" not in doc:
                         doc["document_uid"] = doc["uid"]
-                    
+
                     # Create DocumentSource instance
                     doc_source = DocumentSource(**doc)
                     documents.append(doc_source)
-                    
+
                     # Create ChatSource for metadata
                     source = ChatSource(
                         document_uid=getattr(doc_source, "document_uid", getattr(doc_source, "uid", "unknown")),
@@ -147,14 +147,14 @@ class RagsExpert(AgentFlow):
                     sources.append(source)
                 except Exception as e:
                     print(f"Error processing document: {str(e)}. Document: {doc}")
-            
+
             # Step 5: Check if we have any valid documents after processing
             if not documents:
                 ai_message = await model.ainvoke([HumanMessage(content=
                     "I found some documents but couldn't process them correctly. Please try again later."
                 )])
                 return {"messages": [ai_message]}
-            
+
             # Step 6: Build prompt with document content
             documents_str = ""
             for doc in documents:
@@ -163,19 +163,19 @@ class RagsExpert(AgentFlow):
                     f"Page: {doc.page}\n"
                     f"Content: {doc.content}\n\n"
                 )
-            
+
             prompt = (
                 "You are an assistant that answers questions based on retrieved documents.\n"
                 "Use the following related documents to generate your answer and cite sources.\n\n"
                 f"{documents_str}\n"
                 f"Question:\n{question}\n\n"
             )
-            
+
             # Step 7: Generate response using the LLM
             response = await model.ainvoke([HumanMessage(content=prompt)])
             response.response_metadata.update({"sources": [s.model_dump() for s in sources]})
             return {"messages": [response]}
-            
+
         except requests.RequestException as e:
             # Handle API request errors
             print(f"Error connecting to vector search service: {str(e)}")
@@ -194,7 +194,7 @@ class RagsExpert(AgentFlow):
     def get_graph(self) -> StateGraph:
         """
         Create the LangGraph workflow for this agent.
-        
+
         Returns:
             StateGraph: The graph defining the agent's workflow.
         """
@@ -204,4 +204,3 @@ class RagsExpert(AgentFlow):
         builder.add_edge("agent", END)
         return builder
 
-        

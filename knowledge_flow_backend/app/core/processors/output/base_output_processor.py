@@ -15,7 +15,7 @@
 from abc import ABC, abstractmethod
 import logging
 
-from app.common.structures import OutputProcessorResponse
+from app.common.structures import DocumentMetadata, OutputProcessorResponse
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +35,7 @@ class BaseOutputProcessor(ABC):
     """
 
     @abstractmethod
-    def process(self, file_path: str, metadata: dict) -> OutputProcessorResponse:
+    def process(self, file_path: str, metadata: DocumentMetadata) -> OutputProcessorResponse:
         """
         Process the file after it has been extracted.
         Args:

@@ -1,11 +1,25 @@
+# Copyright Thales 2025
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import logging
 
-from app.common.structures import Status
-from app.features.metadata.structures import GetDocumentMetadataResponse, GetDocumentsMetadataResponse, UpdateDocumentMetadataResponse, UpdateRetrievableRequest
+from app.common.structures import DocumentMetadata, Status
+from app.core.stores.metadata.base_metadata_store import MetadataDeserializationError
+from app.features.metadata.structures import UpdateDocumentMetadataResponse
 from app.application_context import ApplicationContext
 
 logger = logging.getLogger(__name__)
-
 
 # --- Domain Exceptions ---
 
@@ -19,7 +33,6 @@ class InvalidMetadataRequest(Exception):
     pass
 
 
-# --- MetadataService Implementation ---
 
 class MetadataService:
     """
@@ -27,13 +40,17 @@ class MetadataService:
     """
 
     def __init__(self):
+        self.config = ApplicationContext.get_instance().get_config()
         self.metadata_store = ApplicationContext.get_instance().get_metadata_store()
+        self.catalog_store = ApplicationContext.get_instance().get_catalog_store()
 
-    def get_documents_metadata(self, filters_dict: dict) -> GetDocumentsMetadataResponse:
+    def get_documents_metadata(self, filters_dict: dict) -> list[DocumentMetadata]:
         try:
-            documents = self.metadata_store.get_all_metadata(filters_dict)
-            logger.info(f"Documents metadata retrieved for {filters_dict} : {documents}")
-            return GetDocumentsMetadataResponse(status=Status.SUCCESS, documents=documents)
+            return self.metadata_store.get_all_metadata(filters_dict)
+        except MetadataDeserializationError as e:
+            logger.error(f"[Metadata] Deserialization error: {e}")
+            raise MetadataUpdateError(f"Invalid metadata encountered: {e}")
+    
         except Exception as e:
             logger.error(f"Error retrieving document metadata: {e}")
             raise MetadataUpdateError(f"Failed to retrieve metadata: {e}")
@@ -48,17 +65,19 @@ class MetadataService:
             logger.error(f"Error deleting metadata: {e}")
             raise MetadataUpdateError(f"Failed to delete metadata for {document_uid}: {e}")
 
-    def get_document_metadata(self, document_uid: str) -> GetDocumentMetadataResponse:
+    def get_document_metadata(self, document_uid: str) -> DocumentMetadata:
         if not document_uid:
             raise InvalidMetadataRequest("Document UID cannot be empty")
         try:
             metadata = self.metadata_store.get_metadata_by_uid(document_uid)
-            if metadata is None:
-                raise MetadataNotFound(f"No document found with UID {document_uid}")
-            return GetDocumentMetadataResponse(status=Status.SUCCESS, metadata=metadata)
         except Exception as e:
             logger.error(f"Error retrieving metadata for {document_uid}: {e}")
             raise MetadataUpdateError(f"Failed to get metadata: {e}")
+
+        if metadata is None:
+            raise MetadataNotFound(f"No document found with UID {document_uid}")
+
+        return metadata
 
     def update_document_retrievable(self, document_uid: str, update) -> UpdateDocumentMetadataResponse:
         if not document_uid:
@@ -92,3 +111,5 @@ class MetadataService:
         except Exception as e:
             logger.error(f"Error updating metadata for {document_uid}: {e}")
             raise MetadataUpdateError(f"Failed to update metadata: {e}")
+
+    

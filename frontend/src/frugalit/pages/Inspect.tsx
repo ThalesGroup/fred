@@ -37,7 +37,6 @@
  * ```
  */
 import { useContext, useEffect } from "react";
-import { ApplicationContext } from "../../app/ApplicationContextProvider";
 import { useSearchParams } from "react-router-dom";
 import LoadingWithProgress from "../../components/LoadingWithProgress";
 import { ClusterConsumption } from "../slices/api";
@@ -48,13 +47,14 @@ import { ChartCard } from "../../common/ChartCard";
 import { transformClusterConsumptionToSerie } from "../../utils/serie";
 import { NamespaceFilter } from "../../common/NamespaceFilter";
 import { InspectCard } from "../../common/InspectCard";
+import { K8ApplicationContext } from "../../app/K8ApplicationContextProvider";
 
 const Inspect = () => {
   const [searchParams] = useSearchParams();
   const clusterFullName = searchParams.get("cluster");
-  const { currentClusterOverview, selectedNamespaces } = useContext(ApplicationContext);
+  const { currentClusterOverview, selectedNamespaces } = useContext(K8ApplicationContext);
   const inspect_context = useContext(FootprintContext);
-  const application_context = useContext(ApplicationContext);
+  const application_context = useContext(K8ApplicationContext);
   const theme = useTheme<Theme>();
 
   // Check if the current cluster overview is available and the alias matches the clusterName

@@ -18,29 +18,29 @@
 """
 Entrypoint for the Knowledge Flow Backend App.
 """
-
-import argparse
-import atexit
 import logging
+import os
+from rich.logging import RichHandler
+from dotenv import load_dotenv
 
-import uvicorn
+from app.features.catalog.controller import CatalogController
+from app.features.pull.controller import PullDocumentController
+from app.features.pull.service import PullDocumentService
+from app.features.scheduler.controller import SchedulerController
+from fastapi import APIRouter, FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi_mcp import FastApiMCP
+from fred_core import initialize_keycloak
+
 from app.application_context import ApplicationContext
 from app.common.structures import Configuration
 from app.common.utils import parse_server_configuration
 from app.features.content.controller import ContentController
 from app.features.metadata.controller import MetadataController
 from app.features.tabular.controller import TabularController
+from app.features.tag.controller import TagController
 from app.features.vector_search.controller import VectorSearchController
-from app.features.wip.ingestion_controller import IngestionController
-from app.features.wip.knowledge_context_controller import KnowledgeContextController
-from dotenv import load_dotenv
-from fastapi import APIRouter, FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi_mcp import FastApiMCP
-from rich.logging import RichHandler
-
-from app.features.code_search.controller import CodeSearchController
-
+from app.features.ingestion.controller import IngestionController
 
 # -----------------------
 # LOGGING + ENVIRONMENT
@@ -68,60 +68,28 @@ def load_environment(dotenv_path: str = "./config/.env"):
         logging.getLogger().warning(f"⚠️ No .env file found at: {dotenv_path}")
 
 
-# -----------------------
-# CLI ARGUMENTS
-# -----------------------
-
-
-def parse_cli_opts():
-    parser = argparse.ArgumentParser(description="Start the Knowledge Flow Backend App")
-    parser.add_argument(
-        "--config-path",
-        default="./config/configuration.yaml",
-        help="Path to configuration YAML file",
-    )
-    parser.add_argument(
-        "--base-url",
-        default="/knowledge-flow/v1",
-        help="Base path for all API endpoints",
-    )
-    parser.add_argument(
-        "--server-address", default="127.0.0.1", help="Server binding address"
-    )
-    parser.add_argument("--server-port", type=int, default=8111, help="Server port")
-    parser.add_argument("--log-level", default="info", help="Logging level")
-    parser.add_argument(
-        "--reload", action="store_true", help="Enable auto-reload (for dev only)"
-    )
-    parser.add_argument(
-        "--reload-dir", default=".", help="Watch for changes in these directories"
-    )
-
-    return parser.parse_args()
 
 
 # -----------------------
 # APP CREATION
 # -----------------------
 
-
-def create_app(config_path: str, base_url: str) -> FastAPI:
-
+def create_app() -> FastAPI:
+    load_environment()
+    config_file = os.environ["CONFIG_FILE"]
+    configuration: Configuration = parse_server_configuration(config_file)
+    configure_logging(configuration.app.log_level)
+    base_url = configuration.app.base_url
     logger.info(f"🛠️ create_app() called with base_url={base_url}")
 
-    if ApplicationContext._instance is None:
-        if config_path is None:
-            raise ValueError("config_path is required if ApplicationContext is not already initialized")
-        configuration: Configuration = parse_server_configuration(config_path)
-        ApplicationContext(configuration)
-    else:
-        # Get config from pre-initialized ApplicationContext (e.g. in tests)
-        configuration = ApplicationContext.get_instance().get_config()
-
+    ApplicationContext(configuration)
+    
+    initialize_keycloak(configuration)
+    
     app = FastAPI(
-        docs_url=f"{base_url}/docs",
-        redoc_url=f"{base_url}/redoc",
-        openapi_url=f"{base_url}/openapi.json",
+        docs_url=f"{configuration.app.base_url}/docs",
+        redoc_url=f"{configuration.app.base_url}/redoc",
+        openapi_url=f"{configuration.app.base_url}/openapi.json",
     )
 
     app.add_middleware(
@@ -131,20 +99,26 @@ def create_app(config_path: str, base_url: str) -> FastAPI:
         allow_headers=["Content-Type", "Authorization"],
     )
 
-    router = APIRouter(prefix=base_url)
+    router = APIRouter(prefix=configuration.app.base_url)
 
+    pull_document_service = PullDocumentService()
     # Register controllers
-    IngestionController(router)
-    VectorSearchController(router)
-    MetadataController(router)
+    MetadataController(router, pull_document_service)
+    CatalogController(router)
+    PullDocumentController(router, pull_document_service)
     ContentController(router)
-    KnowledgeContextController(router)
+    IngestionController(router)
     TabularController(router)
-    CodeSearchController(router)
+    #CodeSearchController(router)
+    TagController(router)
+    VectorSearchController(router)
+
+    if configuration.scheduler.enabled:
+        logger.info("🧩 Activating ingestion scheduler controller.")
+        SchedulerController(router)
 
     logger.info("🧩 All controllers registered.")
     app.include_router(router)
-    logger.info("🧩 All controllers registered.")
 
     mcp_tabular = FastApiMCP(
         app,
@@ -153,7 +127,6 @@ def create_app(config_path: str, base_url: str) -> FastAPI:
         include_tags=["Tabular"],
         describe_all_responses=True,
         describe_full_response_schema=True,
-        
     )
     mcp_tabular.mount(mount_path="/mcp_tabular")
     mcp_text = FastApiMCP(
@@ -177,35 +150,10 @@ def create_app(config_path: str, base_url: str) -> FastAPI:
 
     return app
 
-
 # -----------------------
 # MAIN ENTRYPOINT
 # -----------------------
 
-
-def main():
-    args = parse_cli_opts()
-    configure_logging(args.log_level)
-    load_environment()
-
-    app = create_app(config_path=args.config_path, base_url=args.base_url)
-    # ✅ Register graceful shutdown
-    atexit.register(ApplicationContext.get_instance().close_connections)
-
-    uvicorn.run(
-        app,
-        host=args.server_address,
-        port=args.server_port,
-        log_level=args.log_level,
-        reload=args.reload,
-        reload_dirs=args.reload_dir,
-    )
-
-
 if __name__ == "__main__":
-    main()
-
-# Note: We do not define a global `app = FastAPI()` for ASGI (e.g., `uvicorn app.main:app`)
-# because this application is always launched via the CLI `main()` function.
-# This allows full control over configuration (e.g., --config-path, --base-url) and avoids
-# the need for a static app instance required by ASGI-based servers like Uvicorn in import mode.
+    print("To start the app, use uvicorn cli with:")
+    print("uv run uvicorn --factory app.main:create_app ...")

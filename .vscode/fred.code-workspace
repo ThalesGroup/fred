@@ -1,7 +1,10 @@
 {
 	"folders": [
 		{
-			"path": ".."		
+			"path": ".."
+		},
+		{
+			"path": "../fred-core"
 		},
 		{
 			"path": "../agentic_backend"
@@ -17,7 +20,8 @@
 		"files.exclude": {
 			"agentic_backend/": true,
 			"knowledge_flow_backend/": true,
-			"frontend/": true
+			"frontend/": true,
+			"fred-core/": true,
 		}
 	}
 }

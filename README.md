@@ -68,11 +68,19 @@ Production services and databases can be added later or via the **deployment fac
 
 #### 1 · Prerequisites
 
+##### Required 
+
 | Tool   | Version | Install hint           |
 | ------ | ------- | ---------------------- |
 | Python | 3.12.8  | `pyenv install 3.12.8` |
 | Node   | 22.13.0 | `nvm install 22.13.0`  |
 | Make   | any     | install from your OS   |
+
+##### Optional
+
+| Tool   | Version | Install hint                                                           | Comment                     |
+| ------ | ------- | ---------------------------------------------------------------------- | --------------------------- |
+| Pandoc | 2.9.2.1 | [Pandoc installation instructions](https://pandoc.org/installing.html) | For docx document ingestion |
 
 #### 2 · Clone
 
@@ -129,6 +137,7 @@ To get full VS Code Python support (linting, IntelliSense, debugging, etc.) acr
   - fred – for any repo‑wide scripts
   - agentic_backend – first Python backend
   - knowledge_flow_backend – second Python backend
+  - fred-core - a common python library for both python backends
   - frontend – UI
 
 2. Per‑folder Python interpreters
@@ -197,10 +206,10 @@ See `agentic_backend/config/configuration.yaml` (section `ai:`) for concrete exa
 
 ### System Architecture
 
-| Component         | Location                   | Role                                                                  |
-| ----------------- | -------------------------- | --------------------------------------------------------------------- |
-| Frontend UI       | `./frontend`               | React-based chatbot                                                   |
-| Agentic backend   | `./agentic_backend`        | Multi-agent API server                                                |
+| Component              | Location                   | Role                                                                  |
+| ---------------------- | -------------------------- | --------------------------------------------------------------------- |
+| Frontend UI            | `./frontend`               | React-based chatbot                                                   |
+| Agentic backend        | `./agentic_backend`        | Multi-agent API server                                                |
 | Knowledge Flow backend | `./knowledge_flow_backend` | **Optional** knowledge management component (document ingestion & Co) |
 
 ---
@@ -217,7 +226,8 @@ See `agentic_backend/config/configuration.yaml` (section `ai:`) for concrete exa
 * Main docs: <https://fredk8.dev/docs>  
 * [Agentic backend README](./agentic_backend/README.md)  
 * [Frontend README](./frontend/README.md)  
-* [Knowledge Flow backend README](./knowledge_flow_backend/README.md)  
+* [Knowledge Flow backend README](./knowledge_flow_backend/README.md)
+* [Developer Tools](./developer_tools/README.md)    
 * [Code of Conduct](./docs/CODE_OF_CONDUCT.md) 
 * [License](./docs/LICENSE.md)  
 * [Security](./docs/SECURITY.md)  

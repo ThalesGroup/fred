@@ -16,7 +16,6 @@ import { Box, FormControl, Grid2, InputLabel, MenuItem, Select, useTheme } from 
 import "dayjs/locale/en-gb";
 import { useContext, useEffect, useState } from "react";
 import { Serie, transformClusterConsumptionToSerie } from "../../utils/serie.tsx";
-import { ApplicationContext } from "../../app/ApplicationContextProvider.tsx";
 import { ChartCard } from "../../common/ChartCard.tsx";
 import dayjs, { Dayjs } from "dayjs";
 import {
@@ -35,6 +34,7 @@ import { useSearchParams } from "react-router-dom";
 import LoadingWithProgress from "../../components/LoadingWithProgress.tsx";
 import { TopBar } from "../../common/TopBar.tsx";
 import { DatePicker } from "@mui/x-date-pickers/DatePicker";
+import { K8ApplicationContext } from "../../app/K8ApplicationContextProvider.tsx";
 
 enum Delta {
   DAY = "day",
@@ -54,7 +54,7 @@ export const Optimize = () => {
   const [searchParams] = useSearchParams();
   const clusterFullName = searchParams.get("cluster");
   const theme = useTheme();
-  const application_context = useContext(ApplicationContext);
+  const application_context = useContext(K8ApplicationContext);
   const currentClusterOverview = application_context.currentClusterOverview;
   const [chartRange, setChartRange] = useState<"current" | "previous">("current"); // New state for selecting chart range
 

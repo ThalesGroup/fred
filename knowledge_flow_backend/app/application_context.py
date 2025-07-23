@@ -17,12 +17,19 @@ import logging
 import os
 from pathlib import Path
 from typing import Dict, Type, Union, Optional
+from app.common.duckdb_store import DuckDBTableStore
 from app.common.structures import Configuration
 from app.common.utils import validate_settings_or_exit
 from app.config.embedding_azure_apim_settings import EmbeddingAzureApimSettings
 from app.config.embedding_azure_openai_settings import EmbeddingAzureOpenAISettings
 from app.config.ollama_settings import OllamaSettings
 from app.config.embedding_openai_settings import EmbeddingOpenAISettings
+from app.core.stores.content.base_content_store import BaseContentStore
+from app.core.stores.content.local_content_store import LocalStorageBackend
+from app.core.stores.content.minio_content_store import MinioStorageBackend
+from app.core.stores.metadata.base_catalog_store import BaseCatalogStore
+from app.core.stores.metadata.duckdb_catalog_store import DuckdbCatalogStore
+from app.core.stores.metadata.duckdb_metadata_store import DuckdbMetadataStore
 from langchain_openai import OpenAIEmbeddings, AzureOpenAIEmbeddings
 from langchain_ollama import OllamaEmbeddings
 
@@ -33,13 +40,13 @@ from app.core.processors.output.vectorization_processor.embedder import Embedder
 from app.core.stores.metadata.base_metadata_store import BaseMetadataStore
 from app.core.stores.metadata.local_metadata_store import LocalMetadataStore
 from app.core.stores.metadata.search_engine_metadata_store import SearchEngineMetadataStore
+from app.core.stores.tags.base_tag_store import BaseTagStore
+from app.core.stores.tags.local_tag_store import LocalTagStore
 from app.core.stores.vector.in_memory_langchain_vector_store import InMemoryLangchainVectorStore
 from app.core.stores.vector.base_vector_store import BaseDocumentLoader, BaseEmbeddingModel, BaseTextSplitter, BaseVectoreStore
-from app.core.stores.tabular.base_tabular_store import BaseTabularStore
-from app.core.stores.tabular.duckdb_tabular_store import DuckDBTabularStore
 from app.core.processors.output.vectorization_processor.local_file_loader import LocalFileLoader
 from app.core.stores.vector.search_engine_vector_store import SearchEngineVectorStoreAdapter
-from app.core.processors.output.vectorization_processor.recursive_splitter import RecursiveSplitter
+from app.core.processors.output.vectorization_processor.semantic_splitter import SemanticSplitter
 from app.core.stores.vector.weaviate_vector_store import WeaviateVectorStore
 
 # Union of supported processor base classes
@@ -102,6 +109,7 @@ class ApplicationContext:
     _output_processor_instances: Dict[str, BaseOutputProcessor] = {}
     _vector_store_instance: Optional[BaseVectoreStore] = None
     _metadata_store_instance: Optional[BaseMetadataStore] = None
+    _tag_store_instance: Optional[BaseTagStore] = None
     _tabular_store_instance: Optional[BaseTabularProcessor] = None
 
     def __init__(self, config: Configuration):
@@ -118,6 +126,7 @@ class ApplicationContext:
         ApplicationContext._instance = self
         self._log_config_summary()
 
+    
     def get_output_processor_instance(self, extension: str) -> BaseOutputProcessor:
         """
         Get an instance of the output processor for a given file extension.
@@ -255,6 +264,29 @@ class ApplicationContext:
         cls = getattr(module, class_name)
         return cls
 
+    def get_content_store(self) -> BaseContentStore:
+        """
+        Factory function to get the appropriate storage backend based on configuration.
+        Returns:
+            BaseContentStore: An instance of the storage backend.
+        """
+        # Get the singleton application context and configuration
+        config = ApplicationContext.get_instance().get_config().content_storage
+        backend_type = config.type
+
+        if backend_type == "minio":
+            return MinioStorageBackend(
+                endpoint=config.endpoint,
+                access_key=config.access_key,
+                secret_key=config.secret_key,
+                bucket_name=config.bucket_name,
+                secure=config.secure
+            )
+        elif backend_type == "local":
+            return LocalStorageBackend(Path(config.root_path).expanduser())
+        else:
+            raise ValueError(f"Unsupported storage backend: {backend_type}")
+
     def get_embedder(self) -> BaseEmbeddingModel:
         """
         Factory method to create an embedding model instance based on the configuration.
@@ -334,7 +366,7 @@ class ApplicationContext:
             s = self.config.vector_storage
             if not s.username or not s.password:
                 raise ValueError("Missing required environment variables: OPENSEARCH_USER and OPENSEARCH_PASSWORD")
-            
+
             if self._vector_store_instance is None:
                 self._vector_store_instance = SearchEngineVectorStoreAdapter(
                     embedding_model=embedding_model,
@@ -365,7 +397,9 @@ class ApplicationContext:
         if config.type == "local":
             path = Path(config.root_path).expanduser()
             self._metadata_store_instance = LocalMetadataStore(path)
-
+        elif config.type == "duckdb":
+            db_path = Path(config.duckdb_path).expanduser()
+            self._metadata_store_instance = DuckdbMetadataStore(db_path)
         elif config.type == "opensearch":
 
             username = config.username
@@ -386,11 +420,22 @@ class ApplicationContext:
 
         else:
             raise ValueError(f"Unsupported metadata storage backend: {config.type}")
-
         return self._metadata_store_instance
-    
-    
-    def get_tabular_store(self) -> BaseTabularStore:
+
+    def get_tag_store(self) -> BaseTagStore:
+        if self._tag_store_instance is not None:
+            return self._tag_store_instance
+
+        config = self.config.tag_storage
+
+        if config.type == "local":
+            path = Path(config.root_path).expanduser()
+            self._tag_store_instance = LocalTagStore(path)
+            return self._tag_store_instance
+
+        raise ValueError(f"Unsupported tag storage backend: {config.type}")
+
+    def get_tabular_store(self) -> DuckDBTableStore:
         """
         Lazy-initialize and return the configured tabular store backend.
         Currently supports only DuckDB.
@@ -402,13 +447,31 @@ class ApplicationContext:
 
         if config.type == "duckdb":
             db_path = Path(config.duckdb_path).expanduser()
-            self._tabular_store_instance = DuckDBTabularStore(db_path)
+            self._tabular_store_instance = DuckDBTableStore(db_path, prefix="tabular_")
         else:
             raise ValueError(f"Unsupported tabular storage backend: {config.type}")
 
         return self._tabular_store_instance
+    
+    def get_catalog_store(self) -> BaseCatalogStore:
+        """
+        Lazy-initialize and return the configured tabular store backend.
+        Currently supports only DuckDB.
+        """
+        if hasattr(self, "_catalog_store_instance") and self._catalog_store_instance is not None:
+            return self._catalog_store_instance
 
-        
+        config = self.config.catalog_storage
+
+        if config.type == "duckdb":
+            db_path = Path(config.duckdb_path).expanduser()
+            self._catalog_store_instance = DuckdbCatalogStore(db_path)
+        else:
+            raise ValueError(f"Unsupported catalog storage backend: {config.type}")
+
+        return self._catalog_store_instance
+
+
     def get_document_loader(self) -> BaseDocumentLoader:
         """
         Factory method to create a document loader instance based on configuration.
@@ -422,7 +485,7 @@ class ApplicationContext:
         Factory method to create a text splitter instance based on configuration.
         Currently returns RecursiveSplitter.
         """
-        return RecursiveSplitter()
+        return SemanticSplitter()
 
     def _log_sensitive(self, name: str, value: Optional[str]):
         logger.info(f"     ↳ {name} set: {'✅' if value else '❌'}")
@@ -482,9 +545,17 @@ class ApplicationContext:
 
         metadata_type = self.config.metadata_storage.type
         logger.info(f"  🗃️ Metadata storage backend: {metadata_type}")
-
+        if metadata_type == "duckdb":
+            logger.info(f"     ↳ DB Path: {self.config.metadata_storage.duckdb_path}")
+        catalog_type = self.config.catalog_storage.type
+        logger.info(f"  📂 Catalog storage backend: {catalog_type}")
+        if catalog_type == "duckdb":
+            logger.info(f"     ↳ DB Path: {self.config.catalog_storage.duckdb_path}")
         content_type = self.config.content_storage.type
+        
         logger.info(f"  📁 Content storage backend: {content_type}")
+        if content_type == "local":
+            logger.info(f"     ↳ Local Path: {self.config.content_storage.root_path}")
 
         knowledge_context_type = self.config.knowledge_context_storage.type
         logger.info(f"  📁 Knwoledge context storage backend: {knowledge_context_type}")

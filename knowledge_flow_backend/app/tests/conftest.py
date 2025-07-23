@@ -18,17 +18,19 @@ from langchain_community.embeddings import FakeEmbeddings
 
 from app.application_context import ApplicationContext
 from app.common.structures import (
+    AppConfig,
     Configuration,
-    ContentStorageConfig,
     EmbeddingConfig,
     InMemoryVectorStorage,
     KnowledgeContextStorageConfig,
+    LocalContentStorage,
     LocalMetadataStorage,
+    LocalTagStore,
     ProcessorConfig,
-    DuckDBTabularStorage
+    DuckDBTabularStorage,
+    SchedulerConfig,
+    TemporalSchedulerConfig,
 )
-from app.core.stores.vector.in_memory_langchain_vector_store import InMemoryLangchainVectorStore
-from app.core.stores.content.content_storage_factory import get_content_store
 from app.main import create_app
 from app.core.processors.output.vectorization_processor.embedder import Embedder
 from app.tests.test_utils.test_processors import TestMarkdownProcessor, TestTabularProcessor
@@ -39,6 +41,7 @@ def fake_embedder(monkeypatch):
     """
     Monkeypatch the Embedder to avoid real API calls during tests.
     """
+
     def fake_embedder_init(self, config=None):
         self.model = FakeEmbeddings(size=1352)
 
@@ -55,20 +58,41 @@ def app_context(monkeypatch, fake_embedder):
     monkeypatch.setenv("OPENAI_API_KEY", "test")  # Avoid system exit due to missing API key
 
     config = Configuration(
+        app=AppConfig(
+            base_url="/knowledge-flow/v1",
+            address="127.0.0.1",
+            port=8888,
+            log_level="info",
+            reload=False,
+            reload_dir=".",
+        ),
         security={
             "enabled": False,
             "keycloak_url": "http://fake",
             "client_id": "test-client",
             "authorized_origins": [],
         },
+        scheduler=SchedulerConfig(
+            backend="temporal",
+            enabled=False,
+            temporal=TemporalSchedulerConfig(
+                host="localhost:7233",
+                namespace="default",
+                task_queue="ingestion",
+                workflow_prefix="test-pipeline",
+                connect_timeout_seconds=3,
+            ),
+        ),
         metadata_storage=LocalMetadataStorage(
             type="local",
             root_path="/tmp/test-metadata-store.json",
         ),
         vector_storage=InMemoryVectorStorage(type="in_memory"),
-        content_storage=ContentStorageConfig(type="local"),
-        tabular_storage=DuckDBTabularStorage(type="duckdb"),
+        content_storage=LocalContentStorage(type="local"),
+        tabular_storage=DuckDBTabularStorage(type="duckdb", duckdb_path="/tmp/tabular"),
+        catalog_storage=DuckDBTabularStorage(type="duckdb", duckdb_path="/tmp/tabular"),
         embedding=EmbeddingConfig(type="openai"),
+        tag_storage=LocalTagStore(type="local"),
         knowledge_context_storage=KnowledgeContextStorageConfig(
             type="local",
             local_path="/tmp",
@@ -98,31 +122,37 @@ def app_context(monkeypatch, fake_embedder):
         knowledge_context_max_tokens=50000,
     )
 
-    ApplicationContext(config)
+    return ApplicationContext(config)
 
 
 @pytest.fixture(scope="function")
-def client_fixture(app_context):
+def client_fixture(app_context: ApplicationContext):
     """
     TestClient for FastAPI app. ApplicationContext is preloaded.
     """
-    app = create_app(config_path="dummy", base_url="/knowledge-flow/v1")
+    app = create_app()
     with TestClient(app) as test_client:
         yield test_client
 
 
 @pytest.fixture
-def content_store(app_context, tmp_path):
+def content_store(app_context: ApplicationContext):
     """
     Returns the content store after ApplicationContext is initialized.
     """
-    return get_content_store()
+    return app_context.get_instance().get_content_store()
 
 
 @pytest.fixture
-def metadata_store(app_context):
+def tabular_store(app_context: ApplicationContext):
+    """
+    Returns the content store after ApplicationContext is initialized.
+    """
+    return app_context.get_instance().get_tabular_store()
+
+@pytest.fixture
+def metadata_store(app_context: ApplicationContext):
     """
     Returns the metadata store from the initialized ApplicationContext.
     """
-    return ApplicationContext.get_instance().get_metadata_store()
-
+    return app_context.get_instance().get_metadata_store()

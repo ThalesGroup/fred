@@ -1,6 +1,7 @@
 #!/bin/bash
 
-# Define the Apache header
+ROOT_PATH="${1:-.}"
+
 HEADER='# Copyright Thales 2025
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,19 +17,21 @@ HEADER='# Copyright Thales 2025
 # limitations under the License.
 '
 
-# Find .py files, excluding .venv, .git, __pycache__, htmlcov
-FILES=$(find . \
-  -type d \( -path './.venv' -o -path './.git' -o -path './__pycache__' -o -path './htmlcov' \) -prune -false \
-  -o -name "*.py" -type f)
+# Use find with multiple -prune rules to exclude dirs named .venv, .git, etc., anywhere
+FILES=$(find "$ROOT_PATH" \
+  \( -type d \( -name ".venv" -o -name ".git" -o -name "__pycache__" -o -name "htmlcov" \) -prune \) -o \
+  -type f -name "*.py" -print)
 
-# Loop through files and check for missing header
 for file in $FILES; do
-  if ! grep -q "Copyright Thales 2025" "$file"; then
-    echo "📄 Updating: $file"
-    tmp_file=$(mktemp)
-    echo "$HEADER" > "$tmp_file"
-    cat "$file" >> "$tmp_file"
-    mv "$tmp_file" "$file"
+  # Check it's a real Python script (avoid .pyc or bad encoding files)
+  if file "$file" | grep -q "Python script"; then
+    if ! grep -q "Copyright Thales 2025" "$file"; then
+      echo "📄 Updating: $file"
+      tmp_file=$(mktemp)
+      echo "$HEADER" > "$tmp_file"
+      cat "$file" >> "$tmp_file"
+      mv "$tmp_file" "$file"
+    fi
   fi
 done
 

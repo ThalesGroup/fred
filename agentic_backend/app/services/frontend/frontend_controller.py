@@ -18,6 +18,9 @@ import shutil
 import traceback
 from datetime import datetime
 
+from app.features.frugal.cluster_consumption.cluster_consumption_service import ClusterConsumptionService
+from app.features.k8.kube_service import ClusterList, KubeService
+from app.services.frontend.frontend_structures import ClusterDescription, ClusterFootprint, ClusterScore, NamespaceDescription, Observation, WorkloadDescription, WorkloadScore
 from fastapi import (
     APIRouter,
     BackgroundTasks,
@@ -30,27 +33,14 @@ from fastapi import (
 from fastapi.responses import StreamingResponse
 from app.application_context import get_app_context, get_configuration
 
-from security.keycloak import KeycloakUser, get_current_user
-from services.ai.ai_service import AIService
-from services.cluster_consumption.cluster_consumption_service import (
-    ClusterConsumptionService,
-)
-from services.kube.kube_service import KubeService
-from services.kube.structure import ClusterList, WorkloadKind
-from common.connectors.file_dao import FileDAO
-from common.structure import (
+from fred_core import KeycloakUser, get_current_user
+from app.features.frugal.ai_service import AIService, WorkloadKind
+from app.common.connectors.file_dao import FileDAO
+
+from app.common.structures import (
     DAOTypeEnum,
     OfflineStatus,
     PrecisionEnum,
-)
-from services.frontend.frontend_structures import (
-    ClusterDescription,
-    ClusterFootprint,
-    ClusterScore,
-    NamespaceDescription,
-    Observation,
-    WorkloadDescription,
-    WorkloadScore
 )
 logger = logging.getLogger(__name__)
 
@@ -84,10 +74,6 @@ class UiController:
                 os.remove(file_path)
             except Exception as e:
                 logger.error(f"Failed to delete file {file_path}: {e}")
-
-        @app.get("/config/frontend_settings",tags=fastapi_tags, summary="Get the frontend dynamic configuration")
-        def get_frontend_config():
-            return get_configuration().frontend_settings
 
         @app.get("/export", tags=fastapi_tags, summary="Export a dump of the data")
         async def export_data(background_tasks: BackgroundTasks, user: KeycloakUser = Depends(get_current_user)):
@@ -173,7 +159,7 @@ class UiController:
             else:
                 app_context.status.disable_offline()
             return toggle_status
-        
+
         @app.get(
             "/clusters/footprints",
             tags=fastapi_tags,
@@ -185,7 +171,7 @@ class UiController:
             user: KeycloakUser = Depends(get_current_user)
         ) -> list[ClusterFootprint]:
             logger.info(f"User {user.username} with roles {user.roles} is fetching cluster footprints")
-    
+
             if start >= end:
                 raise HTTPException(
                     status_code=400, detail="Start date must be before end date"
@@ -377,7 +363,7 @@ class UiController:
                                         kind=workload_kind,
                                         facts=factList.facts,
                                     )
-                                ) 
+                                )
                         except FileNotFoundError:
                             # Log and continue if no workloads of this kind are found
                             logger.info(

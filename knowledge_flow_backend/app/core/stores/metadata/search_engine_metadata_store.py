@@ -150,7 +150,7 @@ class SearchEngineMetadataStore(BaseMetadataStore):
     def delete_metadata(self, metadata: dict):
         """Delete metadata from SearchEngine using the UID."""
         try:
-            document_uid = metadata.get("document_uid")
+            document_uid = metadata.document_uid
             if not document_uid:
                 raise ValueError("Missing 'document_uid' in metadata.")
 
@@ -174,7 +174,7 @@ class SearchEngineMetadataStore(BaseMetadataStore):
             metadata (dict): A dictionary containing metadatas
         """
         try:
-            self.write_metadata(document_uid=metadata.get("document_uid"), metadata=metadata)
+            self.write_metadata(document_uid=metadata.document_uid, metadata=metadata)
         except Exception as e:
             logger.error(f"❌ Failed to write metadata with UID {metadata.get('document_uid')}: {e}")
             raise ValueError(e)

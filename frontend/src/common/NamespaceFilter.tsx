@@ -19,13 +19,13 @@ import timezone from "dayjs/plugin/timezone";
 import "dayjs/locale/en-gb";
 import { useContext, useEffect, useState } from "react";
 import { v4 as uuidv4 } from "uuid";
-import { ApplicationContext } from "../app/ApplicationContextProvider.tsx";
+import { K8ApplicationContext } from "../app/K8ApplicationContextProvider.tsx";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
 
 export const NamespaceFilter = () => {
-  const ctx = useContext(ApplicationContext);
+  const ctx = useContext(K8ApplicationContext);
   const [selectAll, setSelectAll] = useState(false);
   const theme = useTheme(); // Access the theme object
 

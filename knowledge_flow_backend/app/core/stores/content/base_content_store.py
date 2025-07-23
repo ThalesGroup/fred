@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 class BaseContentStore(ABC):
     @abstractmethod
-    def save_content(self, document_id: str, directory: Path) -> None:
+    def save_content(self, document_uid: str, document_dir: Path) -> None:
         """
         Uploads the content of a directory (recursively) to storage.
         The directory should contain all files related to the document.
@@ -60,6 +60,13 @@ class BaseContentStore(ABC):
         pass
 
     @abstractmethod
+    def get_media(self, document_uid: str, media_id: str) -> BinaryIO:
+        """
+        Returns the media file associated with a document.
+        """
+        pass
+
+    @abstractmethod
     def clear(self) -> None:
         """
         Optional: Clear the store. Only supported by test-friendly stores.
@@ -67,3 +74,18 @@ class BaseContentStore(ABC):
         Default implementation does nothing and logs a debug message.
         """
         logger.debug("clear() called on BaseContentStore: no-op by default.")
+
+    @abstractmethod
+    def get_local_copy(self, document_uid: str) -> Path:
+        """
+        Ensures the original uploaded file is accessible on the local filesystem.
+
+        This is useful for workflows or processing logic that requires a real path on disk.
+
+        Returns:
+            Path: Path to the local file (guaranteed to exist).
+
+        Raises:
+            FileNotFoundError: If the content does not exist or cannot be retrieved.
+        """
+        pass

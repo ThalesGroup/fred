@@ -10,10 +10,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+app:
+  name: "Agentic Backend"
+  base_url: "/agentic/v1"
+  address: "127.0.0.1"
+  port: 8000
+  log_level: "info"
+  reload: false
+  reload_dir: "."
 
 frontend_settings:
   feature_flags:
-    # If true acuivate the backend and frontend modules in charge of K8 
+    # If true acuivate the backend and frontend modules in charge of K8
     # and frugality monitoring
     enableK8Features: false
     # If true activate support for an electronic warfare demonstration
@@ -68,7 +76,7 @@ ai:
     # - AZURE_CLIENT_ID
     # - AZURE_CLIENT_SECRET
     # provider: "azure"
-    # name: "fred-gpt-4o"  
+    # name: "fred-gpt-4o"
     # settings:
     #  api_version: "2024-05-01-preview"
     #  temperature: 0.0
@@ -130,7 +138,7 @@ ai:
         #     - "/home/xxx/Documents/github_repos/prometheus-mcp-server"
         #     -  "run"
         #     -  "src/prometheus_mcp_server/main.py"
-        #   env: 
+        #   env:
         #     PROMETHEUS_URL: "http://localhost:9091"
       model: {}
     - name: "GeneralistExpert"
@@ -157,14 +165,14 @@ ai:
       model: {}
       # The Rags expert essentially is the Document expert before using tools and the knownledge-flow backend as a MCP server
     - name: "RagsExpert"
-      class_path: "agents.rags.rags_expert.RagsExpert"
+      class_path: "app.agents.rags.rags_expert.RagsExpert"
       enabled: true
       categories:
         - "rag"
       settings:
         chunk_size: 512
         chunk_overlap: 64
-        knowledge_flow_url: "http://localhost:8111/knowledge-flow/v1" 
+        knowledge_flow_url: "http://localhost:8111/knowledge-flow/v1"
       model: {}
     # The Monitoring expert requires you activate the 'enableK8Features' flags above
     - name: "MonitoringExpert"
@@ -191,22 +199,22 @@ security:
   - "http://localhost:5173"
 
 # Agentic metrics are stored in a prometheus or opensearch backend. To make development
-# easy by default they are stored on a local file. 
+# easy by default they are stored on a local file.
 node_metrics_storage:
-  type: "local" 
+  type: "local"
   local_path: "~/.fred/node-metrics-store"
 
 tool_metrics_storage:
-  type: "local" 
+  type: "local"
   local_path: "~/.fred/tool-metrics-store"
 
-# Feedbacks are store in a simple local file. It is plan to add 
+# Feedbacks are store in a simple local file. It is plan to add
 # additional backend like opensearch or minio.
 feedback_storage:
   type: local
   local_path: "~/.fred/feedback-store"
 
-# Sessions and messages are stored by default in_memory 
+# Sessions and messages are stored by default in_memory
 # but it can be modified to use a backend like opensearch
 session_storage:
   ## Session Storage in memory:

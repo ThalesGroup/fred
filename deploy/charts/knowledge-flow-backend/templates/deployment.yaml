@@ -57,12 +57,10 @@ spec:
 {{ toYaml .Values.extraLabels.data | indent 8 }}
         {{- end }}
     spec:
-        {{- if .Values.serviceaccount }}
-          {{- if .Values.serviceaccount.enabled }}
-      serviceAccount: "{{ .Values.applicationName }}-account"
-      serviceAccountName: "{{ .Values.applicationName }}-account"
-          {{- end}}
-        {{- end }} 
+      {{- if .Values.serviceAccount.enabled }}
+      serviceAccount: {{ .Values.serviceAccount.name }}
+      serviceAccountName: {{ .Values.serviceAccount.name }}
+      {{- end }}
       terminationGracePeriodSeconds: {{ .Values.spec.terminationGracePeriodSeconds }}
       securityContext:      
         runAsUser: {{ .Values.spec.runAsUser }}

@@ -16,6 +16,7 @@ from io import BytesIO
 import io
 import logging
 from pathlib import Path
+import tempfile
 from typing import BinaryIO
 from minio import Minio
 from minio.error import S3Error
@@ -25,7 +26,7 @@ from app.core.stores.content.base_content_store import BaseContentStore
 logger = logging.getLogger(__name__)
 
 
-class ObjectStorageContentStore(BaseContentStore):
+class ObjectStorageBackend(BaseContentStore):
     """
     ObjectStorage content store for uploading files to a ObjectStorage bucket.
     This class implements the BaseContentStore interface.
@@ -122,8 +123,138 @@ class ObjectStorageContentStore(BaseContentStore):
 
         raise FileNotFoundError(f"Neither markdown nor CSV preview found for document: {document_uid}")
 
+    def get_media(self, document_uid: str, media_id: str) -> BinaryIO:
+        """
+        Returns a binary stream for the specified media file.
+        """
+        media_object = f"{document_uid}/output/media/{media_id}"
+        try:
+            response = self.client.get_object(self.bucket_name, media_object)
+            media_bytes = response.read()
+            return io.BytesIO(media_bytes)
+        except S3Error as e:
+            logger.error(f"Error fetching media {media_id} for document {document_uid}: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error fetching media {media_id} for document {document_uid}: {e}")
+            raise
+
     def clear(self) -> None:
+            """
+            Deletes all objects in the ObjectStorage bucket.
+            """
+            try:
+                objects_to_delete = self.client.list_objects(self.bucket_name, recursive=True)
+                deleted_any = False
+
+                for obj in objects_to_delete:
+                    self.client.remove_object(self.bucket_name, obj.object_name)
+                    logger.info(f"🗑️ Deleted '{obj.object_name}' from bucket '{self.bucket_name}'.")
+                    deleted_any = True
+
+                if not deleted_any:
+                    logger.warning("⚠️ No objects found to delete.")
+
+            except S3Error as e:
+                logger.error(f"❌ Failed to delete objects from bucket{self.bucket_name}: {e}")
+                raise ValueError(f"Failed to delete document content from MinIO: {e}")
+
+
+    def get_local_copy(self, document_uid: str) -> Path:
         """
-        No-op clear for ObjectStorageContentStore.
+        Downloads the first input file of the given document_uid to a temporary file,
+        and returns the local filesystem Path to it.
         """
-        pass
+        prefix = f"{document_uid}/input/"
+        try:
+            objects = list(self.client.list_objects(self.bucket_name, prefix=prefix, recursive=True))
+            if not objects:
+                raise FileNotFoundError(f"No input content found for document: {document_uid}")
+
+            obj = objects[0]
+            file_suffix = Path(obj.object_name).suffix or ".bin"
+
+            # Create a temp file with a suffix
+            tmp_file = tempfile.NamedTemporaryFile(delete=False, suffix=file_suffix)
+            tmp_path = Path(tmp_file.name)
+
+            self.client.fget_object(
+                self.bucket_name,
+                obj.object_name,
+                str(tmp_path)
+            )
+
+            logger.info(f"📥 Downloaded {obj.object_name} to temporary file {tmp_path}")
+            return tmp_path
+
+        except S3Error as e:
+            logger.error(f"Error fetching content for {document_uid}: {e}")
+            raise FileNotFoundError(f"Failed to retrieve original content: {e}")
+
+    def get_media(self, document_uid: str, media_id: str) -> BinaryIO:
+        """
+        Returns a binary stream for the specified media file.
+        """
+        media_object = f"{document_uid}/output/media/{media_id}"
+        try:
+            response = self.client.get_object(self.bucket_name, media_object)
+            media_bytes = response.read()
+            return io.BytesIO(media_bytes)
+        except S3Error as e:
+            logger.error(f"Error fetching media {media_id} for document {document_uid}: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error fetching media {media_id} for document {document_uid}: {e}")
+            raise
+
+    def clear(self) -> None:
+            """
+            Deletes all objects in the MinIO bucket.
+            """
+            try:
+                objects_to_delete = self.client.list_objects(self.bucket_name, recursive=True)
+                deleted_any = False
+
+                for obj in objects_to_delete:
+                    self.client.remove_object(self.bucket_name, obj.object_name)
+                    logger.info(f"🗑️ Deleted '{obj.object_name}' from bucket '{self.bucket_name}'.")
+                    deleted_any = True
+
+                if not deleted_any:
+                    logger.warning("⚠️ No objects found to delete.")
+
+            except S3Error as e:
+                logger.error(f"❌ Failed to delete objects from bucket{self.bucket_name}: {e}")
+                raise ValueError(f"Failed to delete document content from MinIO: {e}")
+
+
+    def get_local_copy(self, document_uid: str) -> Path:
+        """
+        Downloads the first input file of the given document_uid to a temporary file,
+        and returns the local filesystem Path to it.
+        """
+        prefix = f"{document_uid}/input/"
+        try:
+            objects = list(self.client.list_objects(self.bucket_name, prefix=prefix, recursive=True))
+            if not objects:
+                raise FileNotFoundError(f"No input content found for document: {document_uid}")
+
+            obj = objects[0]
+            file_suffix = Path(obj.object_name).suffix or ".bin"
+
+            # Create a temp file with a suffix
+            tmp_file = tempfile.NamedTemporaryFile(delete=False, suffix=file_suffix)
+            tmp_path = Path(tmp_file.name)
+
+            self.client.fget_object(
+                self.bucket_name,
+                obj.object_name,
+                str(tmp_path)
+            )
+
+            logger.info(f"📥 Downloaded {obj.object_name} to temporary file {tmp_path}")
+            return tmp_path
+
+        except S3Error as e:
+            logger.error(f"Error fetching content for {document_uid}: {e}")
+            raise FileNotFoundError(f"Failed to retrieve original content: {e}")

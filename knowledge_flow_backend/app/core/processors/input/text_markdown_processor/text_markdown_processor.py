@@ -31,7 +31,7 @@ class TextMarkdownProcessor(BaseMarkdownProcessor):
             "suffix": file_path.suffix,
         }
 
-    def convert_file_to_markdown(self, file_path: Path, output_dir: Path) -> dict:
+    def convert_file_to_markdown(self, file_path: Path, output_dir: Path, document_uid: str | None) -> dict:
         with open(file_path, "r", encoding="utf-8") as f_in, open(output_dir / file_path.name, "w", encoding="utf-8") as f_out:
             f_out.write(f_in.read())
         return {"doc_dir": str(output_dir), "md_file": str(file_path)}

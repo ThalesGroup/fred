@@ -12,7 +12,7 @@ The `knowledge_flow_app` exposes two API namespaces for different purposes:
 
 ### 1. REST API
 
-- **Base URL**: `/knowledge/v1`
+- **Base URL**: `/knowledge-flow/v1`
 - **Used by**: React frontend, CLI tools, admin scripts
 - **Includes**:
   - Ingestion endpoints
@@ -24,14 +24,14 @@ The `knowledge_flow_app` exposes two API namespaces for different purposes:
 You can access the Swagger UI at:
 
 ```
-http://localhost:8111/knowledge/v1/docs
+http://localhost:8111/knowledge-flow/v1/docs
 ```
 
 ---
 
 ### 2. MCP API
 
-- **Base URL**: `/mcp` (not nested under `/knowledge/v1`)
+- **Base URL**: `/mcp` (not nested under `/knowledge-flow/v1`)
 - **Used by**: Agents (e.g., Dominic) that follow the [LangGraph MCP spec](https://github.com/langchain-ai/langgraph/tree/main/libs/langgraph/experimental/mcp)
 - **Exposes only tagged endpoints**:
   - `Vector Search`
@@ -214,7 +214,6 @@ core/
 
 ```
 common/
-├── business_exception.py         # Domain-specific exceptions
 ├── structures.py                 # Shared Pydantic models
 └── utils.py                      # Generic helpers
 ```
@@ -228,7 +227,6 @@ Contains config classes (e.g., OpenAI, Ollama, GCS, ObjectStorage):
 ```
 config/
 ├── embedding_openai_settings.py
-├── content_store_minio_settings.py
 ├── opensearch_settings.py
 └── ...
 ```
@@ -244,7 +242,7 @@ config/
 | Add a new vector store        | `core/stores/vector_store/`                   |
 | Change embedding backend      | `core/pipelines/vectorization_pipeline.py`    |
 | Customize ingestion flow      | `services/ingestion_service.py`               |
-| Add business exceptions       | `common/business_exception.py`               |
+| Add business exceptions       | into your feature                             |
 
 ---
 
@@ -276,7 +274,7 @@ pytest tests/test_vector_search_service.py
 
 ## 📚 Docs and Swagger
 
-Docs available at: [http://localhost:8111/knowledge/v1/docs](http://localhost:8111/knowledge/v1/docs)
+Docs available at: [http://localhost:8111/knowledge-flow/v1/docs](http://localhost:8111/knowledge-flow/v1/docs)
 
 ---
 

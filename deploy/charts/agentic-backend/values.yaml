@@ -1,7 +1,3 @@
-# Default values for backend.
-# This is a YAML-formatted file.
-# Declare variables to be passed into your templates.
-
 applicationName: agentic-backend
 
 # This will set the replicaset count more information can be found here: https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/
@@ -9,7 +5,7 @@ replicaCount: 1
 
 # This sets the container image more information can be found here: https://kubernetes.io/docs/concepts/containers/images/
 image:
-  repository: registry.thalesdigital.io/tsn/innovation/projects/fred/agentic_backend
+  repository: ghcr.io/thalesgroup/fred-agent/agentic-backend
   # This sets the pull policy for images.
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
@@ -89,6 +85,33 @@ autoscaling:
   maxReplicas: 100
   targetCPUUtilizationPercentage: 80
   # targetMemoryUtilizationPercentage: 80
+
+serviceAccount:
+  enabled: true
+  name: fred-agentic-back
+  annotations: {}
+  labels: {}
+  automount: true
+  rbac:
+    enabled: true
+    permissions:
+    # Permissions at namespace level
+      namespaced:
+      - apiGroups: [""]
+        resources: ["pods", "configmaps", "secrets"]
+        verbs: ["get", "list", "watch"]
+      - apiGroups: ["apps"]
+        resources: ["deployments", "replicasets"]
+        verbs: ["get", "list", "watch", "create", "update", "patch"]
+      - apiGroups: [""]
+        resources: ["events"]
+        verbs: ["create"]
+    
+      # Permissions at cluster level
+      cluster:
+      - apiGroups: [""]
+        resources: ["nodes"]
+        verbs: ["get", "list", "watch"]
 
 # Additional volumes on the output Deployment definition.
 volumes: []
@@ -268,19 +291,28 @@ config:
     options:
       path: "/home/fred-user/.fred/context-store"
 
-  metrics_storage:
-    type: "local"
-    settings:
-      local_path: "/home/fred-user/.fred/metrics-store"
-
   feedback:
     db_host: postgres
 
   feedback_storage:
     type: local
-    settings:
-      local_path: "/home/fred-user/.fred/feedback-store"
+    local_path: "/home/fred-user/.fred/feedback-store"
 
+  node_metrics_storage:
+    type: "local" 
+    local_path:  "/home/fred-user/.fred/metrics-store"
+
+  tool_metrics_storage:
+    type: "local" 
+    local_path: "/home/fred-user/.fred/metrics-store"
+
+  session_storage:
+    type: opensearch
+    host: https://opensearch.dev.svc.cluster.local:9200
+    # username: admin # Overrides the OPENSEARCH_USER env variable
+    # password: xxx  # Overrides the OPENSEARCH_PASSWORD env variable
+    secure: true
+    verify_certs: false
 
 dotenv:
   azure_tenant_id: ""
@@ -305,7 +337,8 @@ dotenv:
   keycloak_client_id: "app"
   local_context_storage_path: "/home/fred-user/.fred/context-store"
   local_metadata_storage_path: "/home/fred-user/.knowledge-flow/metadata-store.json"
-
+  opensearch_user: "admin"
+  opensearch_password: "Azerty123_"
 
 kubeconfig:
   data:

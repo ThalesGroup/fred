@@ -13,7 +13,6 @@
 // limitations under the License.
 
 import "dayjs/locale/en-gb";
-import { ApplicationContext } from "../app/ApplicationContextProvider.tsx";
 import { useContext, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import LoadingWithProgress from "../components/LoadingWithProgress.tsx";
@@ -24,12 +23,13 @@ import { extractHttpErrorMessage } from "../utils/extractHttpErrorMessage.tsx";
 import { ClusterScore } from "../frugalit/slices/scoresStructures.tsx";
 import ClusterScoresTable from "../frugalit/component/ScoreTable.tsx";
 import { TopBar } from "../common/TopBar.tsx";
+import { K8ApplicationContext } from "../app/K8ApplicationContextProvider.tsx";
 
 export const Audit = () => {
   const [searchParams] = useSearchParams();
   const clusterFullName = searchParams.get("cluster");
-  const application_context = useContext(ApplicationContext);
-  const { currentClusterOverview } = useContext(ApplicationContext);
+  const application_context = useContext(K8ApplicationContext);
+  const { currentClusterOverview } = useContext(K8ApplicationContext);
   const [currentClusterScores, setCurrentClusterScores] = useState<ClusterScore>(undefined);
   const [getClusterScores] = useGetClusterScoresMutation();
   const { showError } = useToast();

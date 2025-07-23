@@ -37,13 +37,13 @@
  * ```
  */
 import { useContext, useEffect } from "react";
-import { ApplicationContext } from "../app/ApplicationContextProvider";
 import { useNavigate, useParams } from "react-router-dom";
 import LoadingWithProgress from "../components/LoadingWithProgress";
+import { K8ApplicationContext } from "../app/K8ApplicationContextProvider";
 
 const Debug = () => {
   const navigate = useNavigate();
-  const { currentClusterOverview } = useContext(ApplicationContext);
+  const { currentClusterOverview } = useContext(K8ApplicationContext);
   const { clusterName } = useParams();
 
   // Check if the current cluster overview is available and the alias matches the clusterName

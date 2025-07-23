@@ -48,6 +48,7 @@ import { ApplicationContext } from "./ApplicationContextProvider.tsx";
 import { SideBarClusterSelector } from "../frugalit/component/SideBarClusterSelector.tsx";
 import { FeatureFlagKey, getProperty, isFeatureEnabled } from "../common/config.tsx";
 import { useTranslation } from "react-i18next";
+import { K8ApplicationContext } from "./K8ApplicationContextProvider.tsx";
 
 export default function SideBar({ darkMode, onThemeChange }) {
   const { t } = useTranslation();
@@ -55,6 +56,7 @@ export default function SideBar({ darkMode, onThemeChange }) {
   const navigate = useNavigate();
   const location = useLocation();
   const applicationContext = useContext(ApplicationContext);
+  const k8ApplicationContext = useContext(K8ApplicationContext)
   const smallScreen = useMediaQuery(theme.breakpoints.down("md"));
 
   // Couleurs sobres à la manière du second fichier
@@ -66,7 +68,7 @@ export default function SideBar({ darkMode, onThemeChange }) {
 
   const hoverColor = theme.palette.sidebar.hoverColor;
 
-  const currentClusterFullname = applicationContext.currentClusterOverview?.fullname;
+  const currentClusterFullname = k8ApplicationContext?.currentClusterOverview?.fullname;
 
   // Éléments de menu du premier fichier
   const menuItems = [
@@ -280,9 +282,9 @@ export default function SideBar({ darkMode, onThemeChange }) {
       {!isSidebarSmall && isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES) && (
         <Box sx={{ pt: 3, px: 2 }}>
           <SideBarClusterSelector
-            currentClusterOverview={applicationContext.currentClusterOverview}
-            allClusters={applicationContext.allClusters}
-            setCurrentClusterOverview={applicationContext.fetchClusterAndNamespaceData}
+            currentClusterOverview={k8ApplicationContext.currentClusterOverview}
+            allClusters={k8ApplicationContext.allClusters}
+            setCurrentClusterOverview={k8ApplicationContext.fetchClusterAndNamespaceData}
           />
         </Box>
       )}

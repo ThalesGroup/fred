@@ -8,7 +8,7 @@ RUN apt-get update && \
     apt-get install -y make
 
 # Copy project files
-COPY .. /app
+COPY frontend/* /app
 
 # Move to project directory
 WORKDIR /app

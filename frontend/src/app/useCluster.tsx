@@ -13,14 +13,14 @@
 // limitations under the License.
 
 import { useContext, useEffect, useState } from "react";
-import { ApplicationContext } from "../app/ApplicationContextProvider.tsx";
+import { K8ApplicationContext } from "./K8ApplicationContextProvider.tsx";
 
 /**
  * Custom hook to fetch cluster and namespace data
  * @param clusterName The name of the cluster to fetch data for
  */
 export const useCluster = (clusterName: string | undefined) => {
-  const global_context = useContext(ApplicationContext);
+  const global_context = useContext(K8ApplicationContext);
   const [isFetching, setIsFetching] = useState(false); // Add a fetching flag to prevent redundant fetches
 
   useEffect(() => {

@@ -1,0 +1,126 @@
+name: Check pending request
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main]
+
+jobs:
+  # Job to detect changes
+  detect-changes:
+    runs-on: ubuntu-latest
+    # Those outputs are variables that will be shared to the check
+    outputs:
+      frontend: ${{ steps.changes.outputs.frontend }}
+      agentic: ${{ steps.changes.outputs.agentic }}
+      knowledge-flow: ${{ steps.changes.outputs.knowledge-flow }}
+      deploy-chart: ${{ steps.changes.outputs.deploy-chart }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Enough needed to detect changes
+      
+      - name: Detect changes
+        uses: dorny/paths-filter@v2
+        id: changes
+        with:
+          filters: |
+            frontend:
+              - 'frontend/**'
+            agentic:
+              - 'agentic_backend/**'
+            deploy-chart:
+              - 'deploy/charts/**'
+            knowledge-flow:
+              - 'knowledge_flow_backend/**'
+
+  # Job to check the frontend
+  frontend-checks:
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.frontend == 'true'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.13.0'
+
+      - name: Frontend build
+        run: |
+          cd frontend/
+          make build
+  
+      - name: Frontend run
+        run: |
+          cd frontend/
+          timeout 5s make run || true
+
+  # Job to check helm charts
+  deploy-charts-checks:
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.deploy-chart == 'true'
+
+    steps:
+      - name: Checkout charts
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      
+      - name: Check chart - agentic-backend
+        run: |
+          helm template agentic-backend deploy/charts/agentic-backend
+
+      - name: Check chart - frontend
+        run: |
+          helm template frontend deploy/charts/frontend
+
+      - name: Check chart - knowledge-flow-backend
+        run: |
+          helm template knowledge-flow-backend deploy/charts/knowledge-flow-backend
+
+  # Job to check agentic backend
+  agentic-backend-checks:
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.agentic == 'true'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      
+      - name: Setup backend dependencies
+        run: |
+          cd agentic_backend/
+          make dev
+      
+      - name: Test backend startup
+        run: |
+          cd agentic_backend/
+          timeout 5 make run || true
+  
+  # Job for knownledge-flow
+  knowledge-flow-backend-checks:
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.knowledge-flow == 'true'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      
+      - name: knowledge-flow-backend checks
+        run: |
+          cd knowledge_flow_backend/
+          make build

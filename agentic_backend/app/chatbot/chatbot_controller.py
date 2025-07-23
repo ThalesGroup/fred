@@ -15,8 +15,10 @@
 import json
 import logging
 from typing import List
-from uuid import uuid4
 
+from app.application_context import get_app_context
+from app.application_context import get_sessions_store
+from app.features.dynamic_agent.service import get_dynamic_agent_manager
 from app.chatbot.agent_manager import AgentManager
 from app.services.chatbot_session.session_manager import SessionManager
 from app.services.chatbot_session.structure.chat_schema import ChatMessagePayload, ErrorEvent, FinalEvent, SessionWithFiles, StreamEvent
@@ -33,37 +35,30 @@ from fastapi import (
 )
 
 from fastapi.responses import JSONResponse, StreamingResponse
+from fred_core import KeycloakUser, get_current_user
 from starlette.websockets import WebSocketState
 
 from app.chatbot.structures.agentic_flow import AgenticFlow
 from app.chatbot.structures.chatbot_message import ChatAskInput
 from app.common.connectors.file_dao import FileDAO
-from app.common.structure import (
+from app.common.structures import (
     DAOTypeEnum,
 )
 
 from app.application_context import get_configuration
-from app.services.chatbot_session.stores.sessions_storage_factory import get_sessions_store
 from app.common.utils import log_exception
-from app.security.keycloak import KeycloakUser, get_current_user
-from app.services.ai.ai_service import AIService
-from app.services.cluster_consumption.cluster_consumption_service import (
-    ClusterConsumptionService,
-)
 
 logger = logging.getLogger(__name__)
 
 class ChatbotController:
     """
     This controller is responsible for handling the UI HTTP endpoints and
-    WebSocket endpoints. 
+    WebSocket endpoints.
     """
-
-    def __init__(self, app: APIRouter, ai_service: AIService):
-        self.ai_service = ai_service
-        self.cluster_consumption_service = ClusterConsumptionService()
+    def __init__(self, app: APIRouter):
         self.agent_manager = AgentManager()
         self.session_manager = SessionManager(get_sessions_store(), self.agent_manager)
+        self.dynamic_agent_manager = get_dynamic_agent_manager()
         # For import-export operations
         match get_configuration().dao.type:
             case DAOTypeEnum.file:
@@ -71,16 +66,24 @@ class ChatbotController:
             case dao_type:
                 raise NotImplementedError(f"DAO type {dao_type}")
 
-        fastapi_tags = ["Chatbot service"]
-
+        fastapi_tags = ["Fred UI"]
+        
+        @app.get("/config/frontend_settings",
+                 summary="Get the frontend dynamic configuration",
+                 tags=fastapi_tags)
+        def get_frontend_config():
+            return get_configuration().frontend_settings
+        
         @app.get(
             "/chatbot/agenticflows",
             description="Get the list of available agentic flows",
             summary="Get the list of available agentic flows",
+            tags=fastapi_tags,
         )
         def get_agentic_flows(user: KeycloakUser = Depends(get_current_user)) -> list[AgenticFlow]:
-            return self.agent_manager.get_agentic_flows()
-
+            static_flows = self.agent_manager.get_agentic_flows()
+            dynamic_flows = self.dynamic_agent_manager.get_agentic_flows()
+            return static_flows + dynamic_flows
 
         @app.post(
             "/chatbot/query",
@@ -89,7 +92,9 @@ class ChatbotController:
             tags=fastapi_tags,
             response_model=FinalEvent
         )
-        @app.post("/chatbot/query", response_model=FinalEvent)
+        @app.post("/chatbot/query", 
+                  tags=fastapi_tags,
+                  response_model=FinalEvent)
         async def chatbot_query(
             event: ChatAskInput = Body(...),
             user: KeycloakUser = Depends(get_current_user)
@@ -125,12 +130,12 @@ class ChatbotController:
                     ).model_dump()
                 )
 
-        @app.post("/chatbot/query/stream", response_class=StreamingResponse)
+        @app.post("/chatbot/query/stream", tags=fastapi_tags, response_class=StreamingResponse)
         async def chatbot_query_stream(
             event: ChatAskInput = Body(...),
             user: KeycloakUser = Depends(get_current_user)
         ):
-            
+
             async def event_stream():
                 try:
                     streamed_messages: List[ChatMessagePayload] = []
@@ -139,7 +144,7 @@ class ChatbotController:
                         payload = ChatMessagePayload(**msg)
                         streamed_messages.append(payload)
                         yield json.dumps(StreamEvent(type="stream", message=payload).model_dump()) + "\n"
-                    
+
                     session, final_messages = await self.session_manager.chat_ask_websocket(
                         callback=callback,
                         user_id=user.uid,
@@ -231,12 +236,13 @@ class ChatbotController:
 
         @app.get(
             "/chatbot/sessions",
+            tags=fastapi_tags,
             description="Get the list of active chatbot sessions.",
             summary="Get the list of active chatbot sessions.",
         )
         def get_sessions(user: KeycloakUser = Depends(get_current_user)) -> list[SessionWithFiles]:
             return self.session_manager.get_sessions(user.uid)
-        
+
         @app.get(
             "/chatbot/session/{session_id}/history",
             description="Get the history of a chatbot session.",
@@ -282,4 +288,3 @@ class ChatbotController:
                 dict: Response message.
             """
             return await self.session_manager.upload_file(user_id, session_id, agent_name, file)
-            

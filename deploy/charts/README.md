@@ -6,7 +6,7 @@
 - [Install helm](https://helm.sh/docs/intro/install/)
 - An SQL database engine
 - A S3 bucket
-- An IDP provider ( such as keycloak or alternative )
+- An IDP provider (such as keycloak or alternative)
 - A full-text search engine (such as opensearch or alternative)
 
 ## Build images
@@ -14,19 +14,16 @@
 Build the agentic backend, the knowledge-flow backend and the frontend images :
 
 ```
-cd agentic_backend
-docker build -f dockerfiles/Dockerfile-dev -t registry.thalesdigital.io/tsn/innovation/projects/fred/agentic_backend:0.1 .
-docker save registry.thalesdigital.io/tsn/innovation/projects/fred/agentic_backend:0.1 | gzip > /tmp/backend.tgz
+docker build -f agentic_backend/dockerfiles/Dockerfile-dev -t ghcr.io/thalesgroup/fred-agent/agentic-backend:0.1 .
+docker save ghcr.io/thalesgroup/fred-agent/agentic-backend:0.1 | gzip > /tmp/backend.tgz
 sudo k3s ctr images import /tmp/backend.tgz
 
-cd ../knowledge_flow_backend
-docker build -f dockerfiles/Dockerfile-dev -t registry.thalesdigital.io/tsn/projects/knowledge_flow_app/knowledge-flow-backend:0.1 .
-docker save registry.thalesdigital.io/tsn/projects/knowledge_flow_app/knowledge-flow-backend:0.1 | gzip > /tmp/knowledge.tgz
+docker build -f knowledge_flow_backend/dockerfiles/Dockerfile-dev -t ghcr.io/thalesgroup/fred-agent/knowledge-flow-backend:0.1 .
+docker save ghcr.io/thalesgroup/fred-agent/knowledge-flow-backend:0.1 | gzip > /tmp/knowledge.tgz
 sudo k3s ctr images import /tmp/knowledge.tgz
 
-cd ../frontend
-docker build -f dockerfiles/Dockerfile-dev -t registry.thalesdigital.io/tsn/innovation/projects/fred/frontend:0.1 .
-docker save registry.thalesdigital.io/tsn/innovation/projects/fred/frontend:0.1 | gzip > /tmp/frontend.tgz
+docker build -f frontend/dockerfiles/Dockerfile-dev -t ghcr.io/thalesgroup/fred-agent/frontend:0.1 .
+docker save ghcr.io/thalesgroup/fred-agent/frontend:0.1 | gzip > /tmp/frontend.tgz
 sudo k3s ctr images import /tmp/frontend.tgz
 
 ```
@@ -56,6 +53,8 @@ kubeconfig:*
 Then deploy knowledge-flow-backend
 
 ```
+cd deploy/charts
+
 helm upgrade -i knowledge-flow-backend ./knowledge-flow-backend/ -n dev
 OR
 helm upgrade -i knowledge-flow-backend ./knowledge-flow-backend/ -n dev --values ./knowledge-flow-custom.yaml
@@ -87,7 +86,7 @@ Then deploy the backend :
 
 ```
 cd deploy/charts/
-helm upgrade -i agentic-backend ./agentic-backend/ --values ./custom-agentic-backend.yaml -n dev
+helm upgrade -i agentic-backend ./agentic-backend/ --values ./custom-values-examples/agentic-backend-custom.yaml -n dev
 ```
 
 ## Install the Fred frontend

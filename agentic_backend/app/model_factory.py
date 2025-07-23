@@ -21,7 +21,7 @@ from langchain_core.runnables import RunnableLambda
 from pydantic import BaseModel
 from typing import Type, Any
 
-from app.common.structure import ModelConfiguration
+from app.common.structures import ModelConfiguration
 
 logger = logging.getLogger(__name__)
 
