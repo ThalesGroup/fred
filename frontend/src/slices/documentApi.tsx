@@ -68,6 +68,7 @@ export interface FileToProcess {
   document_uid?: string;
   external_path?: string;
   tags?: string[];
+  display_name: string
 }
 
 export interface ProcessDocumentsRequest {

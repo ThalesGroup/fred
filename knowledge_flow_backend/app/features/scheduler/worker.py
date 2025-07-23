@@ -22,11 +22,11 @@ from temporalio.worker import Worker
 
 from app.common.structures import TemporalSchedulerConfig
 from app.features.scheduler.activities import (
-    extract_metadata_activity,
-    process_document_activity,
-    vectorize_activity,
+    extract_metadata,
+    input_process,
+    output_process,
 )
-from app.features.scheduler.workflow import Process, ExtractMetadata, PreProcess, Vectorize
+from app.features.scheduler.workflow import Process, ExtractMetadata, InputProcess, OutputProcess
 
 # Use basic logging instead of rich within the Temporal worker
 logging.basicConfig(
@@ -58,13 +58,13 @@ async def run_worker(config: TemporalSchedulerConfig):
         workflows=[
             Process,
             ExtractMetadata,
-            PreProcess,
-            Vectorize,
+            InputProcess,
+            OutputProcess,
         ],
         activities=[
-            extract_metadata_activity,
-            process_document_activity,
-            vectorize_activity,
+            extract_metadata,
+            input_process,
+            output_process,
         ],
         activity_executor=executor,
     )

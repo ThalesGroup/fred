@@ -23,20 +23,25 @@ class DocumentMetadata(BaseModel):
         description="When the document was added to the system"
     )
 
-    retrievable: bool = False
+    # If true, the raw file can be retrieved again (e.g., from push uploads or a stable pull source)
+    retrievable: bool = Field(
+        default=False,
+        description="True if the system can download or access the original file again"
+    )
 
-    # Pull-mode specific fields
+    # Pull-mode specific fields (optional for push documents)
     source_tag: Optional[str] = Field(
         default=None,
-        description="Tag for identifying the pull source (e.g., 'local-docs')"
+        description="Tag identifying the pull source (e.g., 'local-docs', 'contracts-git')"
     )
     pull_location: Optional[str] = Field(
         default=None,
-        description="Relative or absolute URI/path to the external document"
+        description="Path or URI to the original pull file"
     )
-    source_type: Optional[SourceType] = None
 
-    # Tags and metadata
+    source_type: SourceType
+
+    # User-assigned tags and metadata (often editable via UI)
     tags: Optional[List[str]] = Field(default=None, description="User-assigned tags")
     title: Optional[str] = None
     author: Optional[str] = None
@@ -47,10 +52,12 @@ class DocumentMetadata(BaseModel):
     subject: Optional[str] = None
     keywords: Optional[str] = None
 
+    # Ingestion processing stages and their status
     processing_stages: Dict[ProcessingStage, Literal["not_started", "in_progress", "done", "failed"]] = Field(
         default_factory=dict,
         description="Status of each well-defined processing stage"
     )
+
     def mark_stage_done(self, stage: ProcessingStage) -> None:
         self.processing_stages[stage] = "done"
 
@@ -62,7 +69,13 @@ class DocumentMetadata(BaseModel):
 
     def set_stage_status(self, stage: ProcessingStage, status: str) -> None:
         self.processing_stages[stage] = status
-        
+
+    def is_fully_processed(self) -> bool:
+        return all(v == "done" for v in self.processing_stages.values())
+
+    def get_display_name(self) -> str:
+        return self.title or self.document_name
+
     @field_validator("processing_stages")
     @classmethod
     def validate_stage_keys(cls, stages: dict) -> dict:
@@ -70,10 +83,6 @@ class DocumentMetadata(BaseModel):
             if not isinstance(key, ProcessingStage):
                 raise ValueError(f"Invalid processing stage: {key}")
         return stages
-
-
-    def is_fully_processed(self) -> bool:
-        return all(v == "done" for v in self.processing_stages.values())
 
     model_config = {
         "arbitrary_types_allowed": True,
@@ -83,13 +92,12 @@ class DocumentMetadata(BaseModel):
                     "document_name": "report_2025.pdf",
                     "document_uid": "pull-local-docs-aabbccddeeff",
                     "date_added_to_kb": "2025-07-19T12:45:00+00:00",
-                    "ingestion_type": "pull",
                     "retrievable": False,
                     "source_tag": "local-docs",
                     "pull_location": "Archive/2025/report_2025.pdf",
-                    "source_type": "local_path",
+                    "source_type": "pull",
                     "processing_stages": {
-                        "markdown": "done",
+                        "preview": "done",
                         "vector": "done"
                     },
                     "tags": ["finance", "q2"],
@@ -101,4 +109,3 @@ class DocumentMetadata(BaseModel):
             ]
         }
     }
-

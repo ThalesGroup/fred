@@ -17,6 +17,7 @@ import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
 from app.common.document_structures import DocumentMetadata
+from app.common.source_utils import resolve_source_type
 import pandas
 
 logger = logging.getLogger(__name__)
@@ -38,11 +39,13 @@ class BaseInputProcessor(ABC):
                              tags: list[str],
                              source_tag: str) -> DocumentMetadata:
         document_uid = self._generate_file_unique_id(file_path.name)
+        source_type = resolve_source_type(source_tag)
         return DocumentMetadata(
             document_name=file_path.name,
             document_uid=document_uid,
             tags=tags,
-            source_tag=source_tag
+            source_tag=source_tag,
+            source_type=source_type
         )
 
     def process_metadata(self, file_path: Path, 

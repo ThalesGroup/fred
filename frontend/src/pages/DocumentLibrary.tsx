@@ -407,12 +407,20 @@ export const DocumentLibrary = () => {
   const handleProcess = async (files: FileRow[]) => {
     try {
       const payload: ProcessDocumentsRequest = {
-        files: files.map((f) => ({
-          source_tag: f.source_type || "uploads", // adjust if needed
-          document_uid: f.document_uid,
-          external_path: undefined, // populate if you support pull mode
+        files: files.map((f) => {
+        const isPull = f.source_type === "pull";
+
+        return {
+          source_tag: f.source_tag || "uploads",
+          document_uid: isPull ? undefined : f.document_uid,
+          external_path: isPull ? f.pull_location : undefined,
+          hash: isPull ? f.hash : undefined,
+          size: isPull ? f.size : undefined,
+          modified_time: isPull ? f.modified_time : undefined,
           tags: f.tags || [],
-        })),
+          display_name: f.document_name,
+        };
+      }),
         pipeline_name: "manual_ui_trigger",
       };
 

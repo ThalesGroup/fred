@@ -84,9 +84,24 @@ class IngestionService:
         suffix = file_path.suffix.lower()
         processor = self.context.get_input_processor_instance(suffix)
         source_config = self.context.get_config().document_sources.get(source_tag)
+        
+        # Step 1: run processor
         metadata = processor.process_metadata(file_path, tags=tags, source_tag=source_tag)
+
+        # Step 2: enrich/clean metadata
         if source_config:
             metadata.source_type = source_config.type
+
+        # If this is a pull file, preserve the path
+        if source_config and source_config.type == "pull":
+            metadata.pull_location = str(file_path.name)
+
+        # Clean string fields like "None" to actual None
+        for field in ["title", "category", "subject", "keywords"]:
+            value = getattr(metadata, field, None)
+            if isinstance(value, str) and value.strip().lower() == "none":
+                setattr(metadata, field, None)
+        
         return metadata
 
     def process_input(

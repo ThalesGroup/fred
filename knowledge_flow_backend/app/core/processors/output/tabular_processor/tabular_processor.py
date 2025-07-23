@@ -54,7 +54,7 @@ class TabularProcessor(BaseOutputProcessor):
             df = pd.read_csv(io.StringIO(document.page_content))
             document_name = metadata.document_name.split('.')[0]
 
-            logger.info(document)
+            logger.debug(f"document {document}")
             
             # 3. save the document into the selected tabular storage            
             try:
