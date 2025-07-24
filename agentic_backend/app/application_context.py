@@ -288,9 +288,8 @@ class ApplicationContext:
                 cls._instance.status = RuntimeStatus()
                 cls._instance._service_instances = {}  # Cache for service instances
                 
-                from app.features.dynamic_agent.service import DynamicAgentManagerService
-                service = DynamicAgentManagerService()
-                cls._instance.dynamic_agent_manager = service.get_dynamic_agent_manager()
+                cls._instance.dynamic_agent_manager_service = get_app_context().get_dynamic_agent_manager_service()
+                cls._instance.dynamic_agent_manager = cls._instance.dynamic_agent_manager_service.get_dynamic_agent_manager()
                 
                 cls._instance.apply_default_models()
                 cls._instance._build_indexes()
@@ -557,3 +556,19 @@ class ApplicationContext:
             return DuckdbMCPAgentStorage(db_path)
         else:
             raise ValueError(f"Unsupported sessions storage backend: {config.type}")
+
+    def get_dynamic_agent_manager_service(self):
+        """
+        Lazily initializes and returns the singleton instance of DynamicAgentManagerService.
+
+        This method ensures that only one instance of the DynamicAgentManagerService is created
+        and reused throughout the application. The service provides access to functionality for
+        building, registering, and managing dynamic agents at runtime.
+
+        Returns:
+            DynamicAgentManagerService: The singleton instance of the dynamic agent manager service.
+        """
+        from app.features.dynamic_agent.service import DynamicAgentManagerService
+        if not hasattr(self, "dynamic_agent_manager_service"):
+            self.dynamic_agent_manager_service = DynamicAgentManagerService()
+        return self.dynamic_agent_manager_service

@@ -3,7 +3,6 @@ from fastapi import HTTPException
 from app.chatbot.dynamic_agent_manager import DynamicAgentManager
 from app.features.dynamic_agent.mcp_agent import MCPAgent
 from app.features.dynamic_agent.structures import MCPAgentRequest
-from app.features.dynamic_agent.stores.mcp_agent.duckdb_mcp_agent_store import DuckdbMCPAgentStorage
 from app.application_context import get_app_context, get_configuration
 from app.common.structures import AgentSettings
 

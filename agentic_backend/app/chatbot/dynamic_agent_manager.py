@@ -22,7 +22,7 @@ class DynamicAgentManager:
 
         # Automatically load and register all persisted agents from DuckDB
         ##############################################################################################################
-        ##### @TODO load the dynamic agents somewhere else where ApplicartionContext is initialized because it is not here
+        ##### @TODO load the dynamic agents somewhere else where ApplicationContext is initialized because it is not here
         ##############################################################################################################
         try:
             agent_store = get_app_context().get_dynamic_agent_store()

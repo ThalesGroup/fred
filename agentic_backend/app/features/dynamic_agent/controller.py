@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException
 
 from app.features.dynamic_agent.structures import CreateAgentRequest, MCPAgentRequest
-from app.features.dynamic_agent.service import DynamicAgentManagerService
+from app.application_context import get_app_context
 
 class DynamicAgentController:
     """
@@ -9,7 +9,7 @@ class DynamicAgentController:
     """
     def __init__(self, app: APIRouter):
         fastapi_tags = ["Dynamic MCP agent creation"]
-        self.service = DynamicAgentManagerService()
+        self.service = get_app_context().get_dynamic_agent_manager_service()
         
         @app.post(
             "/agents/create",
