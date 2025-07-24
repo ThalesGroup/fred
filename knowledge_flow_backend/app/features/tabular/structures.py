@@ -32,46 +32,8 @@ class TabularSchemaResponse(BaseModel):
     columns: List[TabularColumnSchema]
     row_count: Optional[int] = None
 
-# -- Query & Planning --
-
-class FilterCondition(BaseModel):
-    column: str
-    op: str = "="
-    value: Any
-
-
-class JoinSpec(BaseModel):
-    table: str
-    on: str
-    type: Optional[str] = "INNER"
-
-
-class OrderBySpec(BaseModel):
-    column: str
-    direction: Optional[Literal["ASC", "DESC"]] = "ASC"
-
-
-class AggregationSpec(BaseModel):
-    function: str
-    column: str
-    alias: Optional[str] = None
-    distinct: bool = False
-    filter: Optional[Dict[str, Any]] = None  # Optional SQL filter within aggregation
-
-
-class SQLQueryPlan(BaseModel):
-    table: str
-    columns: Optional[List[str]] = None
-    filters: Optional[List[FilterCondition]] = None
-    group_by: Optional[List[str]] = None
-    order_by: Optional[List[OrderBySpec]] = None
-    limit: Optional[int] = None
-    joins: Optional[List[JoinSpec]] = None
-    aggregations: Optional[List[AggregationSpec]] = None
-
-
-class TabularQueryRequest(BaseModel):
-    query: Optional[Union[str, SQLQueryPlan]] = None
+class RawSQLRequest(BaseModel):
+    query: str
 
 
 class TabularQueryResponse(BaseModel):
