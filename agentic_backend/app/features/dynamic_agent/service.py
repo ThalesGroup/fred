@@ -26,7 +26,7 @@ class DynamicAgentManagerService:
             name=req.name,
             class_path="app.features.dynamic_agent.mcp_agent.MCPAgent",
             enabled=True,
-            categories=req.categories,
+            categories=req.categories or [],
             settings={},
             model=get_configuration().ai.default_model,
             tag=req.tag,
