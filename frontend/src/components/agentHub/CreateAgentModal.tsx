@@ -337,7 +337,7 @@ export const CreateAgentModal = ({ open, onClose, onCreated }: CreateAgentModalP
             </DialogContent>
             <DialogActions>
                 <Button size="small" onClick={onClose}>{t("common.cancel", "Cancel")}</Button>
-                <Button size="small" onClick={handleSubmit} disabled={isSubmitting} variant="contained">
+                <Button size="small"  type="submit" disabled={isSubmitting} variant="contained">
                     {t("common.create", "Create")}
                 </Button>
             </DialogActions>
