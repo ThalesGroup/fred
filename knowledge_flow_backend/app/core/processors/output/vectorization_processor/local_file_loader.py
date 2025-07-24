@@ -13,7 +13,7 @@
 # limitations under the License.
 
 from pathlib import Path
-from app.common.structures import DocumentMetadata
+from app.common.document_structures import DocumentMetadata
 from langchain.schema.document import Document
 
 from app.core.stores.vector.base_vector_store import BaseDocumentLoader

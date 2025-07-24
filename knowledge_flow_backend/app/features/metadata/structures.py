@@ -15,7 +15,7 @@
 
 from typing import List
 
-from app.common.structures import DocumentMetadata
+from app.common.document_structures import DocumentMetadata
 from pydantic import BaseModel
 
 

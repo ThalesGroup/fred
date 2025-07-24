@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Query
 from typing import List
 from pydantic import BaseModel
-from app.common.structures import DocumentMetadata
+from app.common.document_structures import DocumentMetadata
 from app.features.pull.service import PullDocumentService, SourceNotFoundError
 
 

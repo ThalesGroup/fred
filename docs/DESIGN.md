@@ -1,114 +1,158 @@
-# Document Ingestion & Tagging Design (July 2025)
+# 📐 DESIGN.md – Ingestion Pipeline Structures
 
-## Overview
-
-This note summarizes the design choices around document ingestion (`push` / `pull`), logical grouping via tags, and future extensibility for permissions and visibility in the document library.
+This document describes the design of core data structures in the Fred ingestion pipeline, with a focus on **when** and **why** they are used.
 
 ---
 
-## 1. Ingestion Modes
+## 🧭 Push vs Pull Documents
 
-Documents in the system originate from two ingestion modes:
+Fred supports two ingestion modes:
 
-| Mode   | Description                                          | Upload via UI | Typical Use Cases                 |
-|--------|------------------------------------------------------|----------------|-----------------------------------|
-| push   | File is uploaded directly by the user                | ✅ Yes         | Session attachments, project files |
-| pull   | File is discovered from a configured external source | ❌ No          | GitHub, WebDAV, internal folders   |
+### ➕ Push Documents
 
-Pull sources are configured in `configuration.yaml`:
+- The user **uploads a document** (e.g., PDF) through the API or UI.
+- A `document_uid` is assigned immediately.
+- A `DocumentMetadata` is created and saved **immediately**.
+- The document is stored and retrievable from the backend.
 
-```yaml
-pull_sources:
-  local-docs:
-    type: local_path
-    base_path: ~/Documents
-    description: "Personal local documents available for pull-mode ingestion"
+> Push files always have `document_uid` and a stored metadata record.
+
+### 📥 Pull Documents
+
+- Represent **external files** (e.g., on disk, Git, or WebDAV).
+- Initially discovered as `PullFileEntry` objects via catalog scan.
+- Only when the user explicitly triggers processing is a `FileToProcess` created.
+- **No metadata is stored until processing begins**.
+- During processing, a virtual `DocumentMetadata` is generated and then persisted.
+
+> Pull files have no metadata until the user triggers ingestion.
+
+---
+
+## ⚙️ Ingestion Mechanisms
+
+Fred supports two ingestion entry points:
+
+### 1. 🧩 Temporal-based Pipeline (recommended)
+
+- Activities:
+  - `extract_metadata_activity`
+  - `process_document_activity`
+  - `vectorize_activity`
+- Supports staged, recoverable, asynchronous workflows
+- Can be triggered manually or programmatically (via pipeline definitions)
+
+> Unified handling of push and pull through `FileToProcess`.
+
+### 2. 🚀 Direct Controller-based Ingestion
+
+- REST endpoint accepts uploads and optionally processes immediately
+- Used for fast/manual ingestion
+- Still relies on the same structures (`DocumentMetadata`, etc.)
+
+> Ideal for small uploads or test tools; same design structures apply.
+
+---
+
+## 🧱 Core Structures
+
+### 1. `PullFileEntry`
+
+**What**: Discovered file in a pull source (e.g., `/mnt/docs/report.pdf`)
+
+**When**: Returned during catalog scan
+
+**Why**: Transient structure used to let the user select a file to ingest
+
+```python
+class PullFileEntry(BaseModel):
+    path: str            # Relative path in pull source
+    size: int            # File size in bytes
+    modified_time: float # Unix timestamp (mtime)
+    hash: str            # Path-based stable hash (used for UID)
 ```
 
-The frontend allows browsing documents per pull source (e.g., dropdown or tabs), while `push` documents are viewed in a general-purpose library.
-
 ---
 
-## 2. Tags: Logical Grouping
+### 2. `FileToProcess`
 
-Each document can be associated with one or more **tags**, used to:
+**What**: Describes a document to be ingested
 
-- Group documents by project, topic, or workflow (e.g., `"project-acme"`, `"security"`)
-- Filter documents in the UI
-- (In future) control permissions or visibility
+**When**: Created when user triggers ingestion (UI or API)
 
-✅ Tags apply to both push and pull documents  
-✅ Tags are **independent** of ingestion type  
-✅ Tags will be reused for workspace-level grouping
+**Why**: Primary input to both the ingestion controller and Temporal pipeline
 
----
+```python
+class FileToProcess(BaseModel):
+    source_tag: str
+    tags: List[str] = []
 
-## 3. Data Model
+    # Push
+    document_uid: Optional[str] = None
 
-Each document is represented as:
+    # Pull
+    external_path: Optional[str] = None
+    size: Optional[int] = None
+    modified_time: Optional[float] = None
+    hash: Optional[str] = None
 
-**Frontend TypeScript (simplified):**
-
-```ts
-interface KnowledgeDocument {
-  document_uid: string;
-  ingestion_type: "push" | "pull";
-  source_tag: string | null;
-  tags: string[];
-  processing_stages: Record<string, "not_started" | "in_progress" | "done" | "failed">;
-}
+    def is_push(self) -> bool
+    def is_pull(self) -> bool
+    @classmethod
+    def from_pull_entry(...)
+    def to_virtual_metadata(...) → DocumentMetadata
 ```
 
-**Backend Python (Pydantic):**
+> Ingestion logic only needs this class as input.
+
+---
+
+### 3. `DocumentMetadata`
+
+**What**: The master record of a document’s metadata and ingestion state
+
+**When**: 
+- Created immediately for push files
+- Created virtually during pull ingestion, and saved after processing begins
+
+**Why**: Tracks document identity, source, status, and metadata for retrieval and UI display
 
 ```python
 class DocumentMetadata(BaseModel):
+    document_name: str
     document_uid: str
-    ingestion_type: Literal["push", "pull"]
+    date_added_to_kb: datetime
+    retrievable: bool
+
+    # Pull-specific fields
     source_tag: Optional[str]
-    tags: List[str]
-    processing_stages: Dict[ProcessingStage, StageStatus]
+    pull_location: Optional[str]
+    source_type: SourceType  # Enum: PUSH or PULL
+
+    tags: Optional[List[str]]
+    title, author, created, modified, etc.
+
+    processing_stages: Dict[ProcessingStage, Literal["not_started", "in_progress", "done", "failed"]]
+
+    def mark_stage_done(...)
+    def set_stage_status(...)
+    def is_fully_processed(...) → bool
+    def get_display_name(...) → str
 ```
 
----
-
-## 4. UI Behavior
-
-- 🔁 **Source Selector**  
-  - Displays either the general push document library or a selected pull source
-  - Disables upload button when in pull mode
-
-- 🏷️ **Tag Filter**  
-  - Always available and applies across ingestion modes
-
-- 📥 **Upload Button**  
-  - Only visible/active in push mode (and for users with upload permissions)
-
-- 📊 **Document Table**  
-  - Includes chips for ingestion type, processing stages, retrievability
-  - Rows are filterable by tags, stages, and retrievability
+> This object lives in the metadata store and is the main UI reference.
 
 ---
 
-## 5. Extensibility Ideas
+## 🧼 Summary
 
-- Add per-tag permissions (e.g., "ops team can view `project-infra`")
-- Enable document sync status for pull-mode (e.g., `last_checked`, `hash_mismatch`)
-- Introduce virtual "workspace" tags (like OpenUI) for team-based navigation
-- Add tool-assisted mass tagging or ingestion suggestions
+| Step            | Push File                            | Pull File                             |
+|------------------|--------------------------------------|----------------------------------------|
+| Discovery        | Uploaded by user                     | Scanned from external source           |
+| Initial metadata | Created and saved immediately        | Not created yet                        |
+| Ingestion input  | `FileToProcess(document_uid=...)`    | `FileToProcess(external_path=...)`     |
+| Metadata usage   | Retrieved from store                 | Created via `to_virtual_metadata()`    |
+| Storage          | File and metadata saved              | Virtual metadata created, then saved   |
 
----
+This unified design supports both push and pull documents without duplication, and is compatible with both Temporal workflows and simpler ingestion flows.
 
-## ✅ Summary Table
-
-| Concept          | Scope        | Purpose                         |
-|------------------|--------------|---------------------------------|
-| `ingestion_type` | Technical    | How the document entered the system |
-| `tags`           | Logical      | How the document is used/grouped    |
-| `source_tag`     | Pull-only    | Where the file was discovered      |
-| Upload           | `push` only  | Not available in pull mode         |
-| Filters          | Universal    | Work across all ingestion types    |
-
----
-
-*Prepared for design discussion – July 2025*

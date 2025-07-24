@@ -14,7 +14,6 @@
 
 from datetime import datetime, timezone
 import logging
-import os
 from typing import List, Tuple
 from langchain.schema.document import Document
 from langchain_community.vectorstores import OpenSearchVectorSearch as SearchEngineVectorSearch

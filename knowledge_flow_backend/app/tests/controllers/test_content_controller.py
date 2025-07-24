@@ -16,7 +16,7 @@ storage back‑ends** (no ObjectStorage, no SearchEngine).
 """
 
 from datetime import datetime
-from app.common.structures import DocumentMetadata
+from app.common.document_structures import DocumentMetadata
 from app.core.stores.content.base_content_store import BaseContentStore
 from fastapi.testclient import TestClient
 from fastapi import status
@@ -66,6 +66,7 @@ class TestContentController:
     def document1(self):
         """Sample metadata matching *markdown_file*."""
         return DocumentMetadata(
+            source_type="push",
             document_uid="doc-01",
             document_name="document.md",
             title="Example Document",

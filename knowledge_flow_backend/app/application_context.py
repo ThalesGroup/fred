@@ -126,6 +126,17 @@ class ApplicationContext:
         ApplicationContext._instance = self
         self._log_config_summary()
 
+    def is_tabular_file(self, file_name: str) -> bool:
+        """
+        Returns True if the file is handled by a tabular input processor.
+        This allows detecting if a file is meant to be stored in a SQL/structured store like DuckDB.
+        """
+        ext = Path(file_name).suffix.lower()
+        try:
+            processor = self.get_input_processor_instance(ext)
+            return isinstance(processor, BaseTabularProcessor)
+        except ValueError:
+            return False
     
     def get_output_processor_instance(self, extension: str) -> BaseOutputProcessor:
         """

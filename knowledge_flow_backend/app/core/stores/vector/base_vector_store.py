@@ -51,7 +51,7 @@ This design allows easy switching of backends (e.g., SearchEngine ➔ ChromaDB, 
 
 from abc import ABC, abstractmethod
 from typing import List, Tuple
-from app.common.structures import DocumentMetadata
+from app.common.document_structures import DocumentMetadata
 from langchain.schema.document import Document
 
 

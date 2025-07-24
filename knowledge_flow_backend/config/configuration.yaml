@@ -115,16 +115,11 @@ document_sources:
   uploads:
     type: push
     description: "Documents manually uploaded by users"
-  local-docs:
+  local:
     type: pull
     provider: local_path
     base_path: ~/Documents
     description: "Personal local documents available for pull-mode ingestion"
-  team-github:
-    type: pull
-    provider: github
-    repo: myorg/docs
-    description: "Team documentation from GitHub"
 
 metadata_storage:
   # Metadata Storage Configuration

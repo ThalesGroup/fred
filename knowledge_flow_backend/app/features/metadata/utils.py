@@ -4,11 +4,9 @@ from pathlib import Path
 from typing import List
 
 from app.application_context import ApplicationContext
+from app.common.document_structures import DocumentMetadata, SourceType
 from app.common.structures import (
-    DocumentMetadata,
     DocumentSourceConfig,
-    PullSourceConfig,
-    SourceType,
 )
 from app.core.stores.metadata.base_catalog_store import PullFileEntry
 

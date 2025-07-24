@@ -13,7 +13,7 @@
 # limitations under the License.
 
 # app/features/code_search/structures.py
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from typing import Optional
 
 from app.common.structures import Status

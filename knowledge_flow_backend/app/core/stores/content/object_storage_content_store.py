@@ -59,6 +59,46 @@ class ObjectStorageBackend(BaseContentStore):
                     logger.error(f"Failed to upload '{file_path}': {e}")
                     raise ValueError(f"Failed to upload '{file_path}': {e}")
 
+    def _upload_folder(self, document_uid: str, local_path: Path, subfolder: str):
+        """
+        Uploads all files inside `local_path` to MinIO under the given subfolder
+        (e.g. input/ or output/) using the structure:
+            {document_uid}/{subfolder}/<relative_path>
+
+        Example:
+            If local_path contains:
+                /tmp/output/output.md
+                /tmp/output/media/image1.png
+
+            It uploads to:
+                {document_uid}/output/output.md
+                {document_uid}/output/media/image1.png
+        """
+        if not local_path.exists() or not local_path.is_dir():
+            raise ValueError(f"Path {local_path} does not exist or is not a directory")
+
+        for file_path in local_path.rglob("*"):
+            if file_path.is_file():
+                relative_path = file_path.relative_to(local_path)
+                object_name = f"{document_uid}/{subfolder}/{relative_path}"
+
+                try:
+                    self.client.fput_object(
+                        self.bucket_name,
+                        object_name,
+                        str(file_path)
+                    )
+                    logger.info(f"📤 Uploaded '{object_name}' to bucket '{self.bucket_name}'")
+                except S3Error as e:
+                    logger.error(f"❌ Failed to upload '{file_path}' as '{object_name}': {e}")
+                    raise ValueError(f"Upload failed for '{object_name}': {e}")
+
+    def save_input(self, document_uid: str, input_dir: Path) -> None:
+        self._upload_folder(document_uid, input_dir, subfolder="input")
+
+    def save_output(self, document_uid: str, output_dir: Path) -> None:
+        self._upload_folder(document_uid, output_dir, subfolder="output")
+
     def delete_content(self, document_uid: str) -> None:
         """
         Deletes all objects in the bucket under the given document UID prefix.
@@ -160,101 +200,24 @@ class ObjectStorageBackend(BaseContentStore):
                 raise ValueError(f"Failed to delete document content from ObjectStorage: {e}")
 
 
-    def get_local_copy(self, document_uid: str) -> Path:
+    def get_local_copy(self, document_uid: str, destination_dir: Path) -> Path:
         """
         Downloads the first input file of the given document_uid to a temporary file,
         and returns the local filesystem Path to it.
         """
-        prefix = f"{document_uid}/input/"
         try:
-            objects = list(self.client.list_objects(self.bucket_name, prefix=prefix, recursive=True))
+            objects = list(self.client.list_objects(self.bucket_name, prefix=f"{document_uid}/", recursive=True))
             if not objects:
-                raise FileNotFoundError(f"No input content found for document: {document_uid}")
+                raise FileNotFoundError(f"No content found for document: {document_uid}")
 
-            obj = objects[0]
-            file_suffix = Path(obj.object_name).suffix or ".bin"
+            for obj in objects:
+                relative_path = Path(obj.object_name).relative_to(document_uid)
+                target_path = destination_dir / relative_path
+                target_path.parent.mkdir(parents=True, exist_ok=True)
+                self.client.fget_object(self.bucket_name, obj.object_name, str(target_path))
 
-            # Create a temp file with a suffix
-            tmp_file = tempfile.NamedTemporaryFile(delete=False, suffix=file_suffix)
-            tmp_path = Path(tmp_file.name)
-
-            self.client.fget_object(
-                self.bucket_name,
-                obj.object_name,
-                str(tmp_path)
-            )
-
-            logger.info(f"📥 Downloaded {obj.object_name} to temporary file {tmp_path}")
-            return tmp_path
+            logger.info(f"✅ Restored document {document_uid} to {destination_dir}")
 
         except S3Error as e:
-            logger.error(f"Error fetching content for {document_uid}: {e}")
-            raise FileNotFoundError(f"Failed to retrieve original content: {e}")
-
-    def get_media(self, document_uid: str, media_id: str) -> BinaryIO:
-        """
-        Returns a binary stream for the specified media file.
-        """
-        media_object = f"{document_uid}/output/media/{media_id}"
-        try:
-            response = self.client.get_object(self.bucket_name, media_object)
-            media_bytes = response.read()
-            return io.BytesIO(media_bytes)
-        except S3Error as e:
-            logger.error(f"Error fetching media {media_id} for document {document_uid}: {e}")
+            logger.error(f"Failed to restore document {document_uid}: {e}")
             raise
-        except Exception as e:
-            logger.error(f"Unexpected error fetching media {media_id} for document {document_uid}: {e}")
-            raise
-
-    def clear(self) -> None:
-            """
-            Deletes all objects in the ObjectStorage bucket.
-            """
-            try:
-                objects_to_delete = self.client.list_objects(self.bucket_name, recursive=True)
-                deleted_any = False
-
-                for obj in objects_to_delete:
-                    self.client.remove_object(self.bucket_name, obj.object_name)
-                    logger.info(f"🗑️ Deleted '{obj.object_name}' from bucket '{self.bucket_name}'.")
-                    deleted_any = True
-
-                if not deleted_any:
-                    logger.warning("⚠️ No objects found to delete.")
-
-            except S3Error as e:
-                logger.error(f"❌ Failed to delete objects from bucket{self.bucket_name}: {e}")
-                raise ValueError(f"Failed to delete document content from ObjectStorage: {e}")
-
-
-    def get_local_copy(self, document_uid: str) -> Path:
-        """
-        Downloads the first input file of the given document_uid to a temporary file,
-        and returns the local filesystem Path to it.
-        """
-        prefix = f"{document_uid}/input/"
-        try:
-            objects = list(self.client.list_objects(self.bucket_name, prefix=prefix, recursive=True))
-            if not objects:
-                raise FileNotFoundError(f"No input content found for document: {document_uid}")
-
-            obj = objects[0]
-            file_suffix = Path(obj.object_name).suffix or ".bin"
-
-            # Create a temp file with a suffix
-            tmp_file = tempfile.NamedTemporaryFile(delete=False, suffix=file_suffix)
-            tmp_path = Path(tmp_file.name)
-
-            self.client.fget_object(
-                self.bucket_name,
-                obj.object_name,
-                str(tmp_path)
-            )
-
-            logger.info(f"📥 Downloaded {obj.object_name} to temporary file {tmp_path}")
-            return tmp_path
-
-        except S3Error as e:
-            logger.error(f"Error fetching content for {document_uid}: {e}")
-            raise FileNotFoundError(f"Failed to retrieve original content: {e}")
