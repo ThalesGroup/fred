@@ -27,8 +27,7 @@ logger = logging.getLogger(__name__)
 class DuckdbMCPAgentStorage(BaseDynamicAgentStore):
     def __init__(self, db_path: Path):
         self.table_name = "mcp_agents"
-        self.prefix = "_mcp_agents"
-        self.store = DuckDBTableStore(prefix=self.prefix, db_path=db_path)
+        self.store = DuckDBTableStore(prefix="", db_path=db_path)
         self._ensure_schema()
 
     def _ensure_schema(self):
