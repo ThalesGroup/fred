@@ -260,16 +260,12 @@ SessionStorageConfig = Annotated[
 #  --- Dynamic Agents Storage Configuration
 #
 
-class LocalDynamicAgentStorage(BaseModel):
-    type: Literal["local"]
-    local_path: str = Field(default=str(Path("~/.fred/dynamic_agents.json")), description="Local storage json file")
-
 class DuckdbDynamicAgentStorage(BaseModel):
     type: Literal["duckdb"]
     duckdb_path: str = Field(default="~/.fred/dynamic_agents.duckdb", 
                              description="Path to the DuckDB database file.")
 
-DynamicAgentStorageConfig = Annotated[Union[LocalDynamicAgentStorage, DuckdbDynamicAgentStorage], Field(discriminator="type")]
+DynamicAgentStorageConfig = Annotated[Union[DuckdbDynamicAgentStorage], Field(discriminator="type")]
 
 # ----------------------------------------------------------------------
 # Other configurations

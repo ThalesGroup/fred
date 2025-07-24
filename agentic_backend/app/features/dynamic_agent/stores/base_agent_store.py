@@ -14,7 +14,8 @@
 
 from abc import ABC, abstractmethod
 from typing import List, Optional
-from app.features.dynamic_agent.structures import MCPAgentRequest
+from app.flow import AgentFlow
+
 
 class BaseDynamicAgentStore(ABC):
     """
@@ -22,21 +23,21 @@ class BaseDynamicAgentStore(ABC):
     """
 
     @abstractmethod
-    def save(self, req: MCPAgentRequest) -> None:
+    def save(self, req: AgentFlow) -> None:
         """
         Persist an agent request.
         """
         pass
 
     @abstractmethod
-    def load_all(self) -> List[MCPAgentRequest]:
+    def load_all(self) -> List[AgentFlow]:
         """
         Retrieve all persisted agent requests.
         """
         pass
 
     @abstractmethod
-    def get(self, name: str) -> Optional[MCPAgentRequest]:
+    def get(self, name: str) -> Optional[AgentFlow]:
         """
         Retrieve a single agent request by name.
         """

@@ -78,3 +78,16 @@ class MCPAgent(AgentFlow):
         builder.add_conditional_edges("reasoner", tools_condition)
         builder.add_edge("tools", "reasoner")
         return builder
+
+    def to_dict(self) -> dict:
+        return {
+            "name": self.name,
+            "cluster_fullname": self.cluster_fullname,
+            "base_prompt": self.base_prompt,
+            "role": self.role,
+            "nickname": self.nickname,
+            "description": self.description,
+            "icon": self.icon,
+            "categories": self.categories,
+            "tag": self.tag,
+        }

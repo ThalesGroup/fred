@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Literal, List, Optional, Union
+from typing import Literal, List, Optional, Union, Annotated
 from app.common.structures import MCPServerConfiguration
 
 class BaseAgentRequest(BaseModel):
@@ -22,4 +22,7 @@ class MCPAgentRequest(BaseAgentRequest):
 #     agent_type: Literal["rag"]
 #     ...
 
-CreateAgentRequest = Union[MCPAgentRequest]
+CreateAgentRequest = Annotated[
+    Union[MCPAgentRequest],
+    Field(discriminator="agent_type")
+]

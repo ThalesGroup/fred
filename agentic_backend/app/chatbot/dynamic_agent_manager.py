@@ -114,11 +114,6 @@ class DynamicAgentManager:
     def get_registered_names(self) -> list[str]:
         return list(self.agent_constructors.keys())
 
-    def clear_cache_for_session(self, session_id: str):
-        to_remove = [k for k in self.agent_cache if k.startswith(f"{session_id}:")]
-        for k in to_remove:
-            del self.agent_cache[k]
-
     def has_agent(self, name: str) -> bool:
         return name in self.agent_constructors
 

@@ -40,7 +40,7 @@ class DuckdbMCPAgentStorage(BaseDynamicAgentStore):
                     nickname TEXT,
                     description TEXT,
                     icon TEXT,
-                    categories TEXT,
+                    categories TEXT[],
                     tag TEXT
                 )
             """)
@@ -53,7 +53,7 @@ class DuckdbMCPAgentStorage(BaseDynamicAgentStore):
             agent.nickname,
             agent.description,
             agent.icon,
-            json.dumps(agent.categories) if agent.categories else None,
+            agent.categories if agent.categories else [],
             agent.tag,
         )
 
@@ -65,7 +65,7 @@ class DuckdbMCPAgentStorage(BaseDynamicAgentStore):
             nickname=row[3],
             description=row[4],
             icon=row[5],
-            categories=json.loads(row[6]) if row[6] else [],
+            categories=row[6] if row[6] else [],
             tag=row[7],
             cluster_fullname="", # Placeholder waiting to get rid of it as a non optional param in Agen8tFlow
         )

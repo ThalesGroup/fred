@@ -1,7 +1,14 @@
 from fastapi import APIRouter, HTTPException
 
-from app.features.dynamic_agent.structures import CreateAgentRequest, MCPAgentRequest
+from app.features.dynamic_agent.structures import CreateAgentRequest
+from app.features.dynamic_agent.service import AgentAlreadyExistsException
 from app.application_context import get_app_context
+from app.common.utils import log_exception
+
+def handle_exception(e: Exception) -> HTTPException:
+    if isinstance(e, AgentAlreadyExistsException):
+        return HTTPException(status_code=409, detail=str(e))
+    return HTTPException(status_code=500, detail="Internal server error")
 
 class DynamicAgentController:
     """
@@ -16,12 +23,10 @@ class DynamicAgentController:
             tags=fastapi_tags,
             summary="Create a Dynamic Agent that can access MCP tools",
         )
+        # @TODO: check for authorization
         async def create_agent(req: CreateAgentRequest):
             try:
-                if not isinstance(req, MCPAgentRequest):
-                    raise HTTPException(status_code=400, detail=f"Unsupported agent_type: {req.agent_type}")
-                
                 return self.service.build_and_register_mcp_agent(req)
-
             except Exception as e:
-                raise HTTPException(status_code=500, detail=str(e))
+                log_exception(e)
+                raise handle_exception(e)
