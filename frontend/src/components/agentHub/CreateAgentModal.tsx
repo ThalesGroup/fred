@@ -35,7 +35,7 @@ interface CreateAgentModalProps {
     onCreated: () => void;
 }
 
-const agentTypes: AgentType[] = ["mcp", "langgraph", "planning"];
+const agentTypes: AgentType[] = ["mcp"];
 const transportOptions: McpTransport[] = ["sse", "http"];
 const iconOptions = [
     { label: "Robot", icon: <RobotIcon fontSize="small" /> },
