@@ -89,6 +89,7 @@
         "agents": "Agents",
         "search": "Rechercher",
         "filter": "Filtrer",
+        "create": "Créer",
         "noAgents": "Aucun agent trouvé",
         "noFavorites": "Vous n'avez pas encore ajouté d'agents à vos favoris",
         "noTag": "Aucun agent avec le tag \"{{tag}}\"",

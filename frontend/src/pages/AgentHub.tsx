@@ -16,6 +16,7 @@ import { Box, Typography, useTheme, Container, Paper, Button, Chip, Fade, Tabs, 
 import { useState, useEffect, SyntheticEvent, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import SearchIcon from "@mui/icons-material/Search";
+import AddIcon from "@mui/icons-material/Add";
 import FilterListIcon from "@mui/icons-material/FilterList";
 import StarIcon from "@mui/icons-material/Star";
 import Grid2 from "@mui/material/Grid2";
@@ -24,6 +25,7 @@ import { LoadingSpinner } from "../utils/loadingSpinner";
 import { useGetChatBotAgenticFlowsMutation } from "../slices/chatApi";
 import { TopBar } from "../common/TopBar";
 import { AgentCard } from "../components/AgentCard";
+import { CreateAgentModal } from "../components/agentHub/CreateAgentModal";
 
 interface Agent {
   name: string;
@@ -44,25 +46,35 @@ const extractUniqueTags = (agents: Agent[]): string[] => {
     .filter((tag, index, self) => self.indexOf(tag) === index);
 };
 
-const ActionButton = ({ icon, children }: { icon: React.ReactNode; children: React.ReactNode }) => {
+const ActionButton = ({
+  icon,
+  children,
+  ...props
+}: {
+  icon: React.ReactNode;
+  children: React.ReactNode;
+} & React.ComponentProps<typeof Button>) => {
   const theme = useTheme();
   const isDarkTheme = theme.palette.mode === "dark";
   return (
     <Button
       startIcon={icon}
       size="small"
+      {...props}
       sx={{
         borderRadius: "8px",
         bgcolor: isDarkTheme ? theme.palette.action.hover : theme.palette.action.selected,
         "&:hover": {
           bgcolor: isDarkTheme ? theme.palette.action.selected : theme.palette.action.hover,
         },
+        ...props.sx,
       }}
     >
       {children}
     </Button>
   );
 };
+
 
 export const AgentHub = () => {
   const theme = useTheme();
@@ -73,37 +85,42 @@ export const AgentHub = () => {
   const [showElements, setShowElements] = useState(false);
   const [favoriteAgents, setFavoriteAgents] = useState<string[]>([]);
   const [categories, setCategories] = useState<AgentCategory[]>([{ name: "all" }, { name: "favorites" }]);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const handleOpenCreateAgent = () => setIsCreateModalOpen(true);
+  const handleCloseCreateAgent = () => setIsCreateModalOpen(false);
 
   const [getAgenticFlows] = useGetChatBotAgenticFlowsMutation();
 
+
+  const fetchAgents = async () => {
+    try {
+      setIsLoading(true);
+      const response = await getAgenticFlows().unwrap();
+      setAgenticFlows(response);
+      const tags = extractUniqueTags(response);
+      const updatedCategories = [
+        { name: "all" },
+        { name: "favorites" },
+        ...tags.map((tag) => ({ name: tag, isTag: true })),
+      ];
+      setCategories(updatedCategories);
+
+      const savedFavorites = localStorage.getItem("favoriteAgents");
+      if (savedFavorites) {
+        setFavoriteAgents(JSON.parse(savedFavorites));
+      }
+    } catch (error) {
+      console.error("Error fetching agents:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   useEffect(() => {
     setShowElements(true);
-    const fetchAgents = async () => {
-      try {
-        setIsLoading(true);
-        const response = await getAgenticFlows().unwrap();
-        setAgenticFlows(response);
-        const tags = extractUniqueTags(response);
-        const updatedCategories = [
-          { name: "all" },
-          { name: "favorites" },
-          ...tags.map((tag) => ({ name: tag, isTag: true })),
-        ];
-        setCategories(updatedCategories);
-
-        const savedFavorites = localStorage.getItem("favoriteAgents");
-        if (savedFavorites) {
-          setFavoriteAgents(JSON.parse(savedFavorites));
-        }
-      } catch (error) {
-        console.error("Error fetching agents:", error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
     fetchAgents();
-  }, [getAgenticFlows]);
+  }, []);
+
 
   const handleTabChange = (_event: SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
@@ -225,6 +242,10 @@ export const AgentHub = () => {
                   <Box sx={{ display: "flex", gap: 1 }}>
                     <ActionButton icon={<SearchIcon />}>{t("agentHub.search")}</ActionButton>
                     <ActionButton icon={<FilterListIcon />}>{t("agentHub.filter")}</ActionButton>
+                    <ActionButton icon={<AddIcon />} onClick={() => handleOpenCreateAgent()}>
+                      {t("agentHub.create")}
+                    </ActionButton>
+
                   </Box>
                 </Box>
 
@@ -268,6 +289,17 @@ export const AgentHub = () => {
                     )}
                   </Box>
                 )}
+                {isCreateModalOpen && (
+                  <CreateAgentModal
+                    open={isCreateModalOpen}
+                    onClose={handleCloseCreateAgent}
+                    onCreated={() => {
+                      handleCloseCreateAgent();
+                      fetchAgents(); // optionally refresh agents
+                    }}
+                  />
+                )}
+
               </>
             )}
           </Paper>

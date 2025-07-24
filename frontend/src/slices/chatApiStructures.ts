@@ -88,3 +88,31 @@ export interface ErrorEvent {
 }
 
 export type ChatEvent = StreamEvent | FinalEvent | ErrorEvent;
+
+export type AgentType = "mcp" | "langgraph" | "planning"; // update as needed
+
+export type McpTransport = "sse" | "http";
+
+export interface McpServer {
+  name: string;
+  url: string;
+  transport?: McpTransport; // default "sse"
+  sse_read_timeout?: number;
+}
+
+export interface CreateAgentRequest {
+  agent_type: AgentType;
+  name: string;
+  nickname?: string;
+  description?: string;
+  role?: string;
+  base_prompt?: string;
+  tag?: string;
+  icon?: string;
+  mcp_servers?: McpServer[];
+  categories?: string[];
+}
+
+export interface CreateAgentResponse {
+  success: boolean;
+}

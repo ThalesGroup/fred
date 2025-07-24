@@ -89,6 +89,7 @@
         "agents": "Agents",
         "search": "Search",
         "filter": "Filter",
+        "create": "Create",
         "noAgents": "No agents found",
         "noFavorites": "You haven't added any agents to your favorites yet",
         "noTag": "No agents with tag \"{{tag}}\"",
