@@ -88,8 +88,7 @@ export const CreateAgentModal = ({ open, onClose, onCreated }: CreateAgentModalP
     const [form, setForm] = useState<Omit<CreateAgentRequest, "mcp_servers">>(initialForm);
     const [tags, setTags] = useState<string[]>([]);
     const [mcpServers, setMcpServers] = useState<McpServer[]>([]);
-    const [isSubmitting, setIsSubmitting] = useState(false);
-    const [createAgent] = useCreateAgentMutation();
+    const [createAgent, {isLoading: isSubmitting}] = useCreateAgentMutation();
     const [customTag, setCustomTag] = useState("");
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
