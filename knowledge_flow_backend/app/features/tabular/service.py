@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import logging
+import re
 from datetime import datetime
 from typing import List, Dict, Optional, Any
 
@@ -124,7 +125,18 @@ class TabularService:
         if not isinstance(request.query, str):
             raise ValueError("Expected raw SQL string in request.query")
 
-        sql = request.query
+        sql = request.query.strip()
+
+        # Vérifie s'il y a déjà un LIMIT dans la requête
+        has_limit = re.search(r"\bLIMIT\b\s+\d+", sql, re.IGNORECASE) is not None
+
+        # Si aucun LIMIT, ajoute "LIMIT 20"
+        if not has_limit:
+            # Assure que la requête se termine proprement
+            sql = sql.rstrip(";") + " LIMIT 20"
+
+        logger.info(f"🧠 Final SQL executed: {sql}")
+
         df = self.tabular_store.execute_sql_query(sql)
         rows = df.to_dict(orient="records")
 
