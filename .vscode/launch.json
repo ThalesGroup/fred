@@ -5,6 +5,7 @@
       "name": "Debug Agentic Backend",
       "type": "debugpy",
       "request": "launch",
+      "python": "${workspaceFolder}/agentic_backend/.venv/bin/python",
       "cwd": "${workspaceFolder}/agentic_backend",
       "module": "uvicorn",
       "args": [
@@ -31,6 +32,7 @@
       "name": "Debug Knowledge Flow Backend",
       "type": "debugpy",
       "request": "launch",
+      "python": "${workspaceFolder}/knowledge_flow_backend/.venv/bin/python",
       "cwd": "${workspaceFolder}/knowledge_flow_backend",
       "module": "uvicorn",
       "args": [
@@ -52,7 +54,7 @@
       "console": "integratedTerminal"
     },
     {
-      "name": "Debug all Kknowledge flow tests",
+      "name": "Debug all Knowledge Flow Backend tests",
       "type": "debugpy",
       "request": "launch",
       "module": "pytest",
@@ -70,7 +72,7 @@
       "justMyCode": false
     },
     {
-      "name": "Debug all agentic tests",
+      "name": "Debug all Agentic Backend tests",
       "type": "debugpy",
       "request": "launch",
       "module": "pytest",
@@ -88,7 +90,7 @@
       "justMyCode": false
     },
     {
-      "name": "Debug one knowledge flow test",
+      "name": "Debug one Knowledge Flow Backend test",
       "type": "debugpy",
       "request": "launch",
       "module": "pytest",
@@ -108,7 +110,7 @@
       "console": "integratedTerminal"
     },
     {
-      "name": "Debug current knowledge flow test file",
+      "name": "Debug current Knowledge Flow Backend test file",
       "type": "debugpy",
       "request": "launch",
       "module": "pytest",
@@ -127,7 +129,7 @@
       "justMyCode": false
     },
     {
-      "name": "Debug current agentic test file",
+      "name": "Debug current Agentic Backend test file",
       "type": "debugpy",
       "request": "launch",
       "module": "pytest",
@@ -151,6 +153,25 @@
       "request": "launch",
       "command": "npm run dev",
       "cwd": "${workspaceFolder}/frontend"
+    },
+    {
+      "name": "Debug Knowledge Flow Worker",
+      "type": "debugpy",
+      "request": "launch",
+      "cwd": "${workspaceFolder}/knowledge_flow_backend",
+      "program": "${workspaceFolder}/knowledge_flow_backend/app/main_worker.py",
+      "args": [
+        "--config-path",
+        "./config/configuration_worker.yaml"
+      ],
+      "env": {
+        "PYTHONPATH": ".",
+        "ENV_FILE": "${workspaceFolder}/knowledge_flow_backend/config/.env",
+        "CONFIG_FILE": "${workspaceFolder}/knowledge_flow_backend/config/configuration_worker.yaml",
+        "LOG_LEVEL": "info"
+      },
+      "console": "integratedTerminal",
+      "justMyCode": false
     }
   ]
 }

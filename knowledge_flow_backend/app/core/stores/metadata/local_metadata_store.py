@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import List, Any
 
 from app.core.stores.metadata.base_metadata_store import BaseMetadataStore
-from app.common.structures import DocumentMetadata
+from app.common.document_structures import DocumentMetadata
 
 
 class LocalMetadataStore(BaseMetadataStore):

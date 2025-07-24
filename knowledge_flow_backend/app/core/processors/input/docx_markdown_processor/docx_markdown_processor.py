@@ -12,13 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import shutil
 import zipfile
 import logging
 from datetime import datetime
 from pathlib import Path
 from docx import Document
-import pypandoc
 
 from app.core.processors.input.common.base_input_processor import BaseMarkdownProcessor
 import subprocess

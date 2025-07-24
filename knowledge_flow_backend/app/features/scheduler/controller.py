@@ -6,24 +6,15 @@
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
 
-"""
-Controller responsible for triggering asynchronous ingestion pipelines via Temporal.
-
-This exposes a single endpoint to submit a structured pipeline definition, which is
-dispatched as a Temporal workflow to a background worker. The actual processing is handled
-by the DocumentIngestionWorkflow class.
-
-The controller is modular and consistent with the Knowledge Flow architecture.
-"""
-
 import logging
 from uuid import uuid4
+from app.common.utils import log_exception
 from fastapi import APIRouter, HTTPException
 from temporalio.client import Client
 
 from app.application_context import ApplicationContext
 from app.features.scheduler.structure import PipelineDefinition, ProcessDocumentsRequest
-from app.features.scheduler.workflow import DocumentIngestionWorkflow
+from app.features.scheduler.workflow import Process
 
 logger = logging.getLogger(__name__)
 
@@ -58,24 +49,20 @@ class SchedulerController:
                     namespace=self.config.namespace,
                 )
                 workflow_id = f"{self.config.workflow_prefix}-{uuid4()}"
-                # handle = await client.start_workflow(
-                #     DocumentIngestionWorkflow.run,
-                #     definition,
-                #     id=workflow_id,
-                #     task_queue=self.config.task_queue,
-                # )
-                #return {
-                #    "workflow_id": handle.id,
-                #    "run_id": handle.first_execution_run_id,
-                #}
+                handle = await client.start_workflow(
+                     Process.run,
+                     definition,
+                     id=workflow_id,
+                     task_queue=self.config.task_queue,
+                 )
                 logger.info(f"🛠️ started temporal workflow={workflow_id}")
                 return {
-                    "workflow_id": "testid",
-                    "run_id": "testrunid",
+                    "workflow_id": handle.id,
+                    "run_id": handle.first_execution_run_id,
                 }
 
             except Exception as e:
-                logger.exception("Failed to submit process-documents workflow")
+                log_exception(e, "Failed to submit process-documents workflow")
                 raise HTTPException(status_code=500, detail="Workflow submission failed")
 
     def _register_routes(self, router: APIRouter):
@@ -94,7 +81,7 @@ class SchedulerController:
                 )
                 workflow_id = f"{self.config.workflow_prefix}-{uuid4()}"
                 handle = await client.start_workflow(
-                    DocumentIngestionWorkflow.run,
+                    Process.run,
                     definition,
                     id=workflow_id,
                     task_queue=self.config.task_queue,

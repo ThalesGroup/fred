@@ -2,7 +2,7 @@ from typing import List, Tuple
 from app.application_context import ApplicationContext
 from app.features.metadata.utils import file_entry_to_metadata
 from app.core.stores.metadata.base_catalog_store import PullFileEntry
-from app.common.structures import DocumentMetadata
+from app.common.document_structures import DocumentMetadata
 
 class SourceNotFoundError(ValueError):
     def __init__(self, source_tag: str):

@@ -12,17 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import json
 import logging
 import pathlib
-import shutil
-import tempfile
-from typing import Union
-from app.common.structures import DocumentMetadata, OutputProcessorResponse
+from app.common.document_structures import DocumentMetadata, ProcessingStage
+from app.common.structures import OutputProcessorResponse
 from app.core.processors.input.common.base_input_processor import BaseMarkdownProcessor, BaseTabularProcessor
-from fastapi import UploadFile
 
-from starlette.datastructures import UploadFile as StarletteUploadFile
 from app.application_context import ApplicationContext
 
 logger = logging.getLogger(__name__)
@@ -39,42 +34,30 @@ class IngestionService:
 
     def __init__(self):
         self.context = ApplicationContext.get_instance()
-        self.storage = ApplicationContext.get_instance().get_content_store()
+        self.content_store = ApplicationContext.get_instance().get_content_store()
+        self.metadata_store = ApplicationContext.get_instance().get_metadata_store()
 
-    def save_file_to_temp(self, file: Union[UploadFile, pathlib.Path]) -> pathlib.Path:
+    def save_input(self, metadata: DocumentMetadata, input_dir: pathlib.Path) -> None:
+        self.content_store.save_input(metadata.document_uid, input_dir)
+        metadata.mark_stage_done(ProcessingStage.RAW_AVAILABLE)
+
+    def save_output(self, metadata: DocumentMetadata, output_dir: pathlib.Path) -> None:
+        self.content_store.save_output(metadata.document_uid, output_dir)
+        metadata.mark_stage_done(ProcessingStage.PREVIEW_READY)
+
+    def save_metadata(self, metadata: DocumentMetadata) -> None:
+        logger.debug(f"Saving metadata {metadata}")
+        self.metadata_store.save_metadata(metadata)
+
+    def get_metadata(self, document_uid: str) -> DocumentMetadata:
+        return self.metadata_store.get_metadata_by_uid(document_uid)
+        
+    def get_local_copy(self, metadata: DocumentMetadata, target_dir: pathlib.Path) -> pathlib.Path:
         """
-        Creates a temporary directory, saves the uploaded file into
-        it inside a subdirectory named "ingestion", and returns the full path to the saved file.
-        The directory structure will look like this:
-
-            /tmp/abcd1234/
-                ├── input
-                    └── sample.docx
+        Downloads the file content from the store into target_dir and returns the path to the file.
         """
-        # 1. Create the temp directory
-        temp_dir = pathlib.Path(tempfile.mkdtemp(), "input")
-        temp_dir.mkdir(parents=True, exist_ok=True)
-
-        if isinstance(file, (UploadFile, StarletteUploadFile)):
-            file_stream = file.file
-            filename = file.filename
-        elif isinstance(file, pathlib.Path):
-            file_stream = file.open("rb")
-            filename = file.name
-
-        # 2. Build the full file path using the original filename
-        target_path = temp_dir / filename
-
-        # 3. Copy the file content to the target path
-        with open(target_path, "wb") as out_file:
-            shutil.copyfileobj(file_stream, out_file)
-
-        if isinstance(file, pathlib.Path):
-            file_stream.close()
-        # 4. Return the full file path
-        logger.info(f"File saved to temporary location: {target_path}")
-        return target_path
-
+        return self.content_store.get_local_copy(metadata.document_uid, target_dir)
+    
     def extract_metadata(self, file_path: pathlib.Path, 
                          tags: list[str], 
                          source_tag: str = "uploads") -> DocumentMetadata:
@@ -86,62 +69,66 @@ class IngestionService:
         suffix = file_path.suffix.lower()
         processor = self.context.get_input_processor_instance(suffix)
         source_config = self.context.get_config().document_sources.get(source_tag)
+        
+        # Step 1: run processor
         metadata = processor.process_metadata(file_path, tags=tags, source_tag=source_tag)
+
+        # Step 2: enrich/clean metadata
         if source_config:
             metadata.source_type = source_config.type
+
+        # If this is a pull file, preserve the path
+        if source_config and source_config.type == "pull":
+            metadata.pull_location = str(file_path.name)
+
+        # Clean string fields like "None" to actual None
+        for field in ["title", "category", "subject", "keywords"]:
+            value = getattr(metadata, field, None)
+            if isinstance(value, str) and value.strip().lower() == "none":
+                setattr(metadata, field, None)
+        
         return metadata
 
-    def process_input(self, output_dir: pathlib.Path, input_file: str, metadata: DocumentMetadata) -> None:
+    def process_input(
+        self,
+        input_path: pathlib.Path,
+        output_dir: pathlib.Path,
+        metadata: DocumentMetadata
+    ) -> None:
         """
-        Processes input document
-        ------------------------------------------------------
-        1. Extracts metadata from the input file.
-        2. Converts the file to markdown or tabular format.
-        3. Saves the converted file and metadata in a structured directory.
-
-        Given the temp_dir, filename and metadata (with document_uid), run the appropriate processor.
-        Returns the document directory path with results.
-        The directory structure will look like this:
-
-            /tmp/abcd1234/
-                ├── input
-                │   └── sample.docx
-                ├── output
-                │   └── file.md or table.csv or other
-                └── metadata.json
+        Processes an input document from input_path and writes outputs to output_dir.
+        Saves metadata.json alongside.
         """
-        suffix = pathlib.Path(input_file).suffix.lower()
+        suffix = input_path.suffix.lower()
         processor = self.context.get_input_processor_instance(suffix)
-        file_path = output_dir / input_file
 
-        # 📝 Save metadata.json. This is a duplicate of the metadata stored in the
-        # global metadata store
-        metadata_path = output_dir / "metadata.json"
-        with open(metadata_path, "w", encoding="utf-8") as meta_file:
-            json.dump(metadata.model_dump(mode="json"), meta_file, indent=4, ensure_ascii=False)
+        # 📝 Save metadata.json
+        #metadata_path = output_dir / "metadata.json"
+        #with open(metadata_path, "w", encoding="utf-8") as meta_file:
+        #    json.dump(metadata.model_dump(mode="json"), meta_file, indent=4, ensure_ascii=False)
 
-
-        # 🗂️ Create a dedicated subfolder for the processor's output
-        processing_dir = output_dir / "output"
-        processing_dir.mkdir(parents=True, exist_ok=True)
+        # 🗂️ Ensure output directory exists
+        output_dir.mkdir(parents=True, exist_ok=True)
 
         if isinstance(processor, BaseMarkdownProcessor):
-            processor.convert_file_to_markdown(file_path, processing_dir, metadata.document_uid)
+            processor.convert_file_to_markdown(input_path, output_dir, metadata.document_uid)
         elif isinstance(processor, BaseTabularProcessor):
-            df = processor.convert_file_to_table(file_path)
-            df.to_csv(processing_dir / "table.csv", index=False)
+            df = processor.convert_file_to_table(input_path)
+            df.to_csv(output_dir / "table.csv", index=False)
         else:
-            raise RuntimeError(f"Unknown processor type for: {input_file}")
+            raise RuntimeError(f"Unknown processor type for: {input_path}")
 
-    def process_output(self, working_dir: pathlib.Path, input_file: str, input_file_metadata: DocumentMetadata) -> OutputProcessorResponse:
+    def process_output(self, 
+                       input_file_name: str,
+                       output_dir: pathlib.Path, 
+                       input_file_metadata: DocumentMetadata) -> OutputProcessorResponse:
         """
         Processes data resulting from the input processing.
         """
-        suffix = pathlib.Path(input_file).suffix.lower()
+        suffix = pathlib.Path(input_file_name).suffix.lower()
         processor = self.context.get_output_processor_instance(suffix)
         # check the content of the working dir 'output' directory and if there are some 'output.md' or 'output.csv' files
         # get their path and pass them to the processor
-        output_dir = working_dir / "output"
         if not output_dir.exists():
             raise ValueError(f"Output directory {output_dir} does not exist")
         if not output_dir.is_dir():
@@ -159,3 +146,29 @@ class IngestionService:
             raise ValueError(f"Output file {output_file} is empty")
         # check if the file is a markdown or csv file
         return processor.process(output_file, input_file_metadata)
+    
+    def get_markdown(self, metadata: DocumentMetadata, target_dir: pathlib.Path) -> pathlib.Path:
+        """
+        Downloads the preview file (markdown or CSV) for the document and saves it into `target_dir`.
+        Returns the filename of the downloaded preview.
+        """
+        try:
+            # Try markdown first
+            md_content = self.content_store.get_markdown(metadata.document_uid)
+            target_file = target_dir / "output.md"
+            target_file.write_text(md_content, encoding="utf-8")
+            logger.info(f"✅ Markdown preview saved to {target_file}")
+            return target_file
+        except FileNotFoundError:
+            raise RuntimeError(f"⚠️ No preview available for document {metadata.document_uid} in content store")
+
+    def get_preview_file(self, metadata: DocumentMetadata, output_dir: pathlib.Path) -> pathlib.Path:
+        """
+        Returns the preview file (output.md or table.csv) for a document.
+        Raises if not found.
+        """
+        for name in ["output.md", "table.csv"]:
+            candidate = output_dir / name
+            if candidate.exists() and candidate.is_file():
+                return candidate
+        raise FileNotFoundError(f"No preview file found for document: {metadata.document_uid}")

@@ -19,7 +19,7 @@ from pydantic import ValidationError
 
 from fred_core.store.duckdb_store import DuckDBTableStore
 from app.core.stores.metadata.base_metadata_store import BaseMetadataStore, MetadataDeserializationError
-from app.common.structures import DocumentMetadata
+from app.common.document_structures import DocumentMetadata
 
 
 class DuckdbMetadataStore(BaseMetadataStore):
