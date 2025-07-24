@@ -7,7 +7,7 @@ It provides:
 - ⚙️ A powerful runtime to orchestrate **domain-specific experts** and **leaders**
 - 🧠 Built-in support for OpenAI, Azure, Ollama, and other LLM providers
 - 🧪 Local development defaults for quick experimentation
-- 🔌 Optional integration with external backends (MCP servers, OpenSearch, MinIO, etc.)
+- 🔌 Optional integration with external backends (MCP servers, SearchEngine, ObjectStorage, etc.)
 
 ---
 
@@ -47,8 +47,8 @@ See [LLM Configuration](#configuring-freds-ai-model-provider) below for details.
 Fred is modular — it can integrate with:
 
 - 🟤 **MCP servers** (for code execution, monitoring, document search, etc.)
-- 🔍 **OpenSearch** (for persistent vector storage)
-- 🪣 **MinIO** (for storing feedbacks, files)
+- 🔍 **SearchEngine** (for persistent vector storage)
+- 🪣 **ObjectStorage** (for storing feedbacks, files)
 - ☁️ **Cloud storage** (via the `context_storage` and `dao` configs)
 
 These are optional. By default, Fred uses local file-based cache.

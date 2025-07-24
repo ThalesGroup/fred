@@ -19,17 +19,17 @@ import os
 
 logger = logging.getLogger(__name__)
 
-class FeedbackStoreOpenSearchSettings(BaseSettings):
+class FeedbackStoreSearchEngineSettings(BaseSettings):
     """
-    Configuration for storing feedback in OpenSearch.
+    Configuration for storing feedback in SearchEngine.
     """
 
-    opensearch_host: str = Field(..., validation_alias="OPENSEARCH_HOST")
-    opensearch_user: str = Field(..., validation_alias="OPENSEARCH_USER")
-    opensearch_password: str = Field(..., validation_alias="OPENSEARCH_PASSWORD")
-    opensearch_secure: bool = Field(False, validation_alias="OPENSEARCH_SECURE")
-    opensearch_verify_certs: bool = Field(False, validation_alias="OPENSEARCH_VERIFY_CERTS")
-    opensearch_feedback_index: str = Field(..., validation_alias="OPENSEARCH_FEEDBACK_INDEX")
+    search_engine_host: str = Field(..., validation_alias="OPENSEARCH_HOST")
+    search_engine_user: str = Field(..., validation_alias="OPENSEARCH_USER")
+    search_engine_password: str = Field(..., validation_alias="OPENSEARCH_PASSWORD")
+    search_engine_secure: bool = Field(False, validation_alias="OPENSEARCH_SECURE")
+    search_engine_verify_certs: bool = Field(False, validation_alias="OPENSEARCH_VERIFY_CERTS")
+    search_engine_feedback_index: str = Field(..., validation_alias="OPENSEARCH_FEEDBACK_INDEX")
 
     model_config = {
         "extra": "ignore"

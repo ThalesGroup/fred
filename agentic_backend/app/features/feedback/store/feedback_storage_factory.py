@@ -14,12 +14,13 @@
 
 import logging
 from pathlib import Path
+from app.features.feedback.store.search_engine_feedback_store import SearchEngineFeedbackStore
 from app.features.feedback.feedback_service import FeedbackService
 from app.features.feedback.store.local_feedback_store import LocalFeedbackStore
-from app.features.feedback.store.opensearch_feedback_store import OpenSearchFeedbackStore
 from app.main_utils import validate_settings_or_exit
 from app.config.feedback_store_local_settings import FeedbackStoreLocalSettings
-from app.config.feedback_store_opensearch_settings import FeedbackStoreOpenSearchSettings
+from app.config.feedback_store_search_engine_settings import FeedbackStoreSearchEngineSettings
+
 
 logger = logging.getLogger(__name__)
 
@@ -35,14 +36,14 @@ def _create_feedback_service():
         settings = validate_settings_or_exit(FeedbackStoreLocalSettings)
         store = LocalFeedbackStore(Path(settings.root_path).expanduser())
     elif config.type == "opensearch":
-        settings = validate_settings_or_exit(FeedbackStoreOpenSearchSettings)
-        store = OpenSearchFeedbackStore(
-            host=settings.opensearch_host,
-            username=settings.opensearch_user,
-            password=settings.opensearch_password,
-            secure=settings.opensearch_secure,
-            verify_certs=settings.opensearch_verify_certs,
-            index_name=settings.opensearch_feedback_index
+        settings = validate_settings_or_exit(FeedbackStoreSearchEngineSettings)
+        store = SearchEngineFeedbackStore(
+            host=settings.search_engine_host,
+            username=settings.search_engine_user,
+            password=settings.search_engine_password,
+            secure=settings.search_engine_secure,
+            verify_certs=settings.search_engine_verify_certs,
+            index_name=settings.search_engine_feedback_index
         )
     else:
         raise ValueError(f"Unsupported feedback storage backend: {config.type}")

@@ -26,10 +26,10 @@ from app.config.ollama_settings import OllamaSettings
 from app.config.embedding_openai_settings import EmbeddingOpenAISettings
 from app.core.stores.content.base_content_store import BaseContentStore
 from app.core.stores.content.local_content_store import LocalStorageBackend
-from app.core.stores.content.minio_content_store import MinioStorageBackend
 from app.core.stores.metadata.base_catalog_store import BaseCatalogStore
 from app.core.stores.metadata.duckdb_catalog_store import DuckdbCatalogStore
 from app.core.stores.metadata.duckdb_metadata_store import DuckdbMetadataStore
+from app.core.stores.content.object_storage_content_store import ObjectStorageBackend
 from langchain_openai import OpenAIEmbeddings, AzureOpenAIEmbeddings
 from langchain_ollama import OllamaEmbeddings
 
@@ -39,13 +39,13 @@ from app.core.processors.output.vectorization_processor.azure_apim_embedder impo
 from app.core.processors.output.vectorization_processor.embedder import Embedder
 from app.core.stores.metadata.base_metadata_store import BaseMetadataStore
 from app.core.stores.metadata.local_metadata_store import LocalMetadataStore
-from app.core.stores.metadata.opensearch_metadata_store import OpenSearchMetadataStore
+from app.core.stores.metadata.search_engine_metadata_store import SearchEngineMetadataStore
 from app.core.stores.tags.base_tag_store import BaseTagStore
 from app.core.stores.tags.local_tag_store import LocalTagStore
 from app.core.stores.vector.in_memory_langchain_vector_store import InMemoryLangchainVectorStore
 from app.core.stores.vector.base_vector_store import BaseDocumentLoader, BaseEmbeddingModel, BaseTextSplitter, BaseVectoreStore
 from app.core.processors.output.vectorization_processor.local_file_loader import LocalFileLoader
-from app.core.stores.vector.opensearch_vector_store import OpenSearchVectorStoreAdapter
+from app.core.stores.vector.search_engine_vector_store import SearchEngineVectorStoreAdapter
 from app.core.processors.output.vectorization_processor.semantic_splitter import SemanticSplitter
 from app.core.stores.vector.weaviate_vector_store import WeaviateVectorStore
 
@@ -286,7 +286,7 @@ class ApplicationContext:
         backend_type = config.type
 
         if backend_type == "minio":
-            return MinioStorageBackend(
+            return ObjectStorageBackend(
                 endpoint=config.endpoint,
                 access_key=config.access_key,
                 secret_key=config.secret_key,
@@ -379,7 +379,7 @@ class ApplicationContext:
                 raise ValueError("Missing required environment variables: OPENSEARCH_USER and OPENSEARCH_PASSWORD")
 
             if self._vector_store_instance is None:
-                self._vector_store_instance = OpenSearchVectorStoreAdapter(
+                self._vector_store_instance = SearchEngineVectorStoreAdapter(
                     embedding_model=embedding_model,
                     host=s.host,
                     vector_index=s.vector_index,
@@ -417,9 +417,9 @@ class ApplicationContext:
             password = config.password
 
             if not username or not password:
-                raise ValueError("Missing OpenSearch credentials: OPENSEARCH_USER and/or OPENSEARCH_PASSWORD")
+                raise ValueError("Missing SearchEngine credentials: OPENSEARCH_USER and/or OPENSEARCH_PASSWORD")
 
-            self._metadata_store_instance = OpenSearchMetadataStore(
+            self._metadata_store_instance = SearchEngineMetadataStore(
                 host=config.host,
                 username=username,
                 password=password,

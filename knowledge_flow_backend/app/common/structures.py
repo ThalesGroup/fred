@@ -62,7 +62,7 @@ class ProcessorConfig(BaseModel):
 #  --- Content Storage Configuration
 #
 
-class MinioStorage(BaseModel):
+class ObjectStorage(BaseModel):
     type: Literal["minio"]
     endpoint: str = Field(default="localhost:9000", description="MinIO API URL")
     access_key: Optional[str] = Field(default_factory=lambda: os.getenv("MINIO_ACCESS_KEY"), description="MinIO access key from env")
@@ -75,7 +75,7 @@ class LocalContentStorage(BaseModel):
     root_path: str = Field(default=str(Path("~/.knowledge-flow/content-store")), description="Local storage directory")
 
 ContentStorageConfig = Annotated[
-    Union[LocalContentStorage, MinioStorage],
+    Union[LocalContentStorage, ObjectStorage],
     Field(discriminator="type")
 ]
 
@@ -94,7 +94,7 @@ class DuckdbMetadataStorage(BaseModel):
     duckdb_path: str = Field(default="~/.knowledge-flow/db.duckdb", 
                              description="Path to the DuckDB database file.")
 
-class OpenSearchStorage(BaseModel):
+class SearchEngineStorage(BaseModel):
     type: Literal["opensearch"]
     host: str = Field(..., description="OpenSearch host URL")
     username: Optional[str] = Field(default_factory=lambda: os.getenv("OPENSEARCH_USER"), description="Username from env")
@@ -106,7 +106,7 @@ class OpenSearchStorage(BaseModel):
 
 
 # --- Final union config (with discriminator)
-MetadataStorageConfig = Annotated[Union[LocalMetadataStorage, DuckdbMetadataStorage, OpenSearchStorage], Field(discriminator="type")]
+MetadataStorageConfig = Annotated[Union[LocalMetadataStorage, DuckdbMetadataStorage, SearchEngineStorage], Field(discriminator="type")]
 
 ###########################################################
 #
@@ -127,7 +127,7 @@ class WeaviateVectorStorage(BaseModel):
     host: str = Field(default="https://localhost:8080", description="Weaviate host")
     index_name: str = Field(default="CodeDocuments", description="Weaviate class (collection) name")
 
-VectorStorageConfig = Annotated[Union[InMemoryVectorStorage, OpenSearchStorage, WeaviateVectorStorage], Field(discriminator="type")]
+VectorStorageConfig = Annotated[Union[InMemoryVectorStorage, SearchEngineStorage, WeaviateVectorStorage], Field(discriminator="type")]
 
 class DuckDBTabularStorage(BaseModel):
     type: Literal["duckdb"]

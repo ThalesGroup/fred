@@ -14,7 +14,7 @@
 
 import logging
 from typing import List, Optional
-from opensearchpy import OpenSearch, RequestsHttpConnection
+from opensearchpy import OpenSearch as SearchEngine, RequestsHttpConnection
 from app.services.chatbot_session.abstract_session_backend import AbstractSessionStorage
 from app.services.chatbot_session.abstract_user_authentication_backend import AbstractSecuredResourceAccess
 from app.services.chatbot_session.session_manager import SessionSchema
@@ -24,7 +24,7 @@ from app.common.error import AuthorizationSentinel, SESSION_NOT_INITIALIZED
 
 logger = logging.getLogger(__name__)
 
-class OpensearchSessionStorage(AbstractSessionStorage, AbstractSecuredResourceAccess):
+class SearchEngineSessionStorage(AbstractSessionStorage, AbstractSecuredResourceAccess):
     def __init__(self, 
                  host: str,
                  sessions_index: str,
@@ -34,7 +34,7 @@ class OpensearchSessionStorage(AbstractSessionStorage, AbstractSecuredResourceAc
                  secure: bool = False,
                  verify_certs: bool = False):
         
-        self.client = OpenSearch(
+        self.client = SearchEngine(
             host,
             http_auth=(username, password),
             use_ssl=secure,
@@ -48,9 +48,9 @@ class OpensearchSessionStorage(AbstractSessionStorage, AbstractSecuredResourceAc
         for index in [sessions_index, history_index]:
             if not self.client.indices.exists(index=index):
                 self.client.indices.create(index=index)
-                logger.info(f"Opensearch index '{index}' created.")
+                logger.info(f"SearchEngine index '{index}' created.")
             else:
-                logger.debug(f"Opensearch index '{index}' already exists.")
+                logger.debug(f"SearchEngine index '{index}' already exists.")
 
     def get_authorized_user_id(self, session_id: str) -> str | None | AuthorizationSentinel:
         try:
@@ -137,7 +137,7 @@ class OpensearchSessionStorage(AbstractSessionStorage, AbstractSecuredResourceAc
             bodies = [msg.model_dump() for msg in messages]
             bulk_body = [entry for pair in zip(actions, bodies) for entry in pair]
 
-            # OpenSearch Bulk API
+            # SearchEngine Bulk API
             self.client.bulk(body=bulk_body)
             self.client.indices.refresh(index=self.history_index) # Necessary due to indexing delay for whoever wants to access the newly stored data (from save_messages).
             logger.info(f"Saved {len(messages)} messages for session {session_id}")
