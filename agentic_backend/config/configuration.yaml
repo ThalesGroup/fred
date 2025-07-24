@@ -231,4 +231,4 @@ session_storage:
 # For now only DuckDB is supported.
 dynamic_agent_storage:
   type: "duckdb"
-  duckdb_path: "~/.fred/dynamic_agents.duckdb"
+  duckdb_path: "~/.fred/db.duckdb"
