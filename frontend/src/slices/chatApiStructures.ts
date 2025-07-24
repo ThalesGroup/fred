@@ -89,9 +89,9 @@ export interface ErrorEvent {
 
 export type ChatEvent = StreamEvent | FinalEvent | ErrorEvent;
 
-export type AgentType = "mcp" | "langgraph" | "planning"; // update as needed
+export type AgentType = "mcp";
 
-export type McpTransport = "sse" | "http";
+export type McpTransport = "sse"; // add  | "stdio" | "streamable_http" | "websocket" later
 
 export interface McpServer {
   name: string;
