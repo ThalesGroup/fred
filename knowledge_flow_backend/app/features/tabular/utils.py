@@ -32,7 +32,7 @@ def extract_safe_sql_query(text: str) -> Optional[str]:
     forbidden_keywords = ["INSERT", "UPDATE", "DELETE", "DROP", "CREATE", "ALTER", "TRUNCATE"]
     for keyword in forbidden_keywords:
         if re.search(rf"(?i)\b{keyword}\b", text):
-            raise PermissionError("❌ Non, tu n'as pas les droits de modifier la base.")
+            raise PermissionError("No, you dont have the rights to modify the database")
 
     # 2. Try to extract a query inside a ```sql code block
     sql_block = re.search(r"```sql\s*(.*?)```", text, re.DOTALL | re.IGNORECASE)
@@ -40,7 +40,7 @@ def extract_safe_sql_query(text: str) -> Optional[str]:
         query = sql_block.group(1).strip()
         if query.upper().startswith(("SELECT", "WITH")):
             return query
-        raise PermissionError("❌ Non, tu n'as pas les droits de modifier la base.")
+        raise PermissionError("No, you dont have the rights to modify the database")
 
     # 3. Fallback: scan for SELECT/WITH queries inline
     read_keywords = ["SELECT", "WITH"]
