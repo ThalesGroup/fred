@@ -85,7 +85,7 @@ class DuckDBTableStore:
                     con.execute(f'DROP TABLE "{full_table}"')
                     logger.info(f"Deleted DuckDB table '{full_table}' from {self.db_path}")
                 else:
-                    logger.info(f"ℹDuckDB table '{full_table}' does not exist in {self.db_path}, nothing to delete.")
+                    logger.info(f"DuckDB table '{full_table}' does not exist in {self.db_path}, nothing to delete.")
         except Exception as e:
             logger.error(f"Failed to delete DuckDB table '{full_table}': {e}", exc_info=True)
             raise
