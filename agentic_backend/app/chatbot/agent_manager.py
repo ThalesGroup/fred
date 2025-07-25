@@ -16,8 +16,8 @@ import logging
 from typing import cast
 from app.application_context import get_agent_class, get_enabled_agent_names
 from app.chatbot.structures.agentic_flow import AgenticFlow
-from app.features.dynamic_agent.service import DynamicAgentManager
 from app.leader.leader import Leader
+from app.application_context import get_app_context
 
 logger = logging.getLogger(__name__)
 
@@ -29,12 +29,12 @@ class AgentManager:
     in scenarios where the same agent is requested multiple times.
     """
 
-    def __init__(self, dynamic_agent_manager: DynamicAgentManager | None = None):
+    def __init__(self):
         """
         Initializes the AgentManager with an empty cache.
         """
         self.agent_cache = {}
-        self.dynamic_agent_manager = dynamic_agent_manager
+        self.dynamic_agent_manager = get_app_context().get_dynamic_agent_manager_service().get_dynamic_agent_manager()
 
     def get_create_agent_instance(self, name: str, 
                                   session_id: str,

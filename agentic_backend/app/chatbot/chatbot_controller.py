@@ -56,7 +56,7 @@ class ChatbotController:
     def __init__(self, app: APIRouter):
         self.dynamic_agent_manager_service = get_app_context().get_dynamic_agent_manager_service()
         self.dynamic_agent_manager = self.dynamic_agent_manager_service.get_dynamic_agent_manager()
-        self.agent_manager = AgentManager(dynamic_agent_manager=self.dynamic_agent_manager)
+        self.agent_manager = AgentManager()
         self.session_manager = SessionManager(get_sessions_store(), self.agent_manager, self.dynamic_agent_manager)
         # For import-export operations
         match get_configuration().dao.type:
