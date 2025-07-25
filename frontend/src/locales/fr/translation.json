@@ -193,7 +193,10 @@
     "removeSuccess": "Documents supprimés",
     "removedDocuments": "{{count}} document(s) supprimé(s) de la bibliothèque",
     "removeError": "Échec de la suppression",
-    "removeErrorGeneric": "Impossible de supprimer les documents de la bibliothèque"
+    "removeErrorGeneric": "Impossible de supprimer les documents de la bibliothèque",
+    "emptyLibraryTitle": "Aucun document dans cette bibliothèque",
+    "emptyLibraryDescription": "Cette bibliothèque est vide. Commencez par ajouter votre premier document pour le rendre consultable par vos assistants IA.",
+    "uploadFirstDocument": "Ajouter votre premier document"
   },
   "documentTable": {
     "selectedCount": "{{count}} sélectionné(s)",

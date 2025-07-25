@@ -193,7 +193,10 @@
     "removeSuccess": "Documents Removed",
     "removedDocuments": "{{count}} document(s) removed from library",
     "removeError": "Remove Failed",
-    "removeErrorGeneric": "Failed to remove documents from library"
+    "removeErrorGeneric": "Failed to remove documents from library",
+    "emptyLibraryTitle": "No documents in this library",
+    "emptyLibraryDescription": "This library is empty. Add your first documents to make them available to your AI assistants.",
+    "uploadFirstDocument": "Add your first document"
   },
   "documentTable": {
     "selectedCount": "{{count}} selected",
