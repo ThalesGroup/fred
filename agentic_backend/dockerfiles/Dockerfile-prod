@@ -91,7 +91,7 @@ COPY fred-core /fred-core
 ENV PYTHONPATH=/app
 
 # Remove dev/test/config if needed
-RUN rm -f /app/config/configuration.yaml
+RUN rm -f /app/config/configuration.yamlù
 
 # Fix permissions
 RUN chown -R ${USER_ID}:${GROUP_ID} /app /fred-core
