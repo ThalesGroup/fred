@@ -1,4 +1,11 @@
 {
+    "validation": {
+        "required": "Champ requis",
+        "invalid_url": "URL invalide",
+        "invalid_transport": "Transport invalide",
+        "timeout_min": "Doit être ≥ 0",
+        "invalid_type": "Type invalide"
+    },
     "sidebar": {
         "cluster": "Cluster",
         "facts": "Faits",

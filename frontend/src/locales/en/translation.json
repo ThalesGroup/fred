@@ -1,4 +1,12 @@
 {
+        
+    "validation": {
+        "required": "Required",
+        "invalid_url": "Invalid URL",
+        "invalid_transport": "Invalid Transport",
+        "timeout_min": "Must be ≥ 0",
+        "invalid_type": "Invalid Type"
+    },
     "sidebar": {
         "cluster": "Cluster",
         "facts": "Facts",

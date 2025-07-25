@@ -89,9 +89,11 @@ export interface ErrorEvent {
 
 export type ChatEvent = StreamEvent | FinalEvent | ErrorEvent;
 
-export type AgentType = "mcp" | "langgraph" | "planning"; // update as needed
+export const agentTypes = ["mcp"] as const;
+export type AgentType = typeof agentTypes[number];
 
-export type McpTransport = "sse" | "http";
+export const mcpTransports = ["sse"] as const;
+export type McpTransport = typeof mcpTransports[number];
 
 export interface McpServer {
   name: string;
@@ -107,7 +109,6 @@ export interface CreateAgentRequest {
   description?: string;
   role?: string;
   base_prompt?: string;
-  tag?: string;
   icon?: string;
   mcp_servers?: McpServer[];
   categories?: string[];
