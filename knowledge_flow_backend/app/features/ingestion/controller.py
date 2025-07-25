@@ -22,6 +22,7 @@ from pydantic import BaseModel, Field
 from app.application_context import ApplicationContext
 from app.common.structures import ProcessingStage, Status
 from app.features.ingestion.service import IngestionService
+from app.features.metadata.service import MetadataService
 
 logger = logging.getLogger(__name__)
 
@@ -120,7 +121,7 @@ class IngestionController:
         self.context = ApplicationContext.get_instance()
         self.logger = logging.getLogger(self.__class__.__name__)
         self.service = IngestionService()
-        self.metadata_store = ApplicationContext.get_instance().get_metadata_store()
+        self.metadata_service = MetadataService()
         self.content_store = ApplicationContext.get_instance().get_content_store()
         logger.info("IngestionController initialized.")
 
@@ -181,10 +182,14 @@ class IngestionController:
 
                         # check if metadata is already known if so delete it to replace it and process the
                         # document again
-                        if self.metadata_store.get_metadata_by_uid(metadata.document_uid):
+                        try:
+                            self.metadata_service.get_document_metadata(metadata.document_uid)
                             logger.info(f"Metadata already exists for {filename}: {metadata}")
-                            self.metadata_store.delete_metadata(metadata)
+                            self.metadata_service.delete_document_metadata(metadata.document_uid)
                             self.content_store.delete_content(metadata.document_uid)
+                        except Exception:
+                            # Metadata doesn't exist, which is fine
+                            pass
 
                         # Step: Processing
                         current_step = "document knowledge extraction"
@@ -207,7 +212,7 @@ class IngestionController:
                         yield ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n"
                         # Step: Metadata saving
                         current_step = "metadata saving"
-                        self.metadata_store.save_metadata(metadata=metadata)
+                        self.metadata_service.save_document_metadata(metadata)
                         logger.info(f"Metadata saved for {filename}: {metadata}")
                         yield ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n"
                         
@@ -282,10 +287,14 @@ class IngestionController:
 
                         # check if metadata is already known if so delete it to replace it and process the
                         # document again
-                        if self.metadata_store.get_metadata_by_uid(metadata.document_uid):
+                        try:
+                            self.metadata_service.get_document_metadata(metadata.document_uid)
                             logger.info(f"Metadata already exists for {filename}: {metadata}")
-                            self.metadata_store.delete_metadata(metadata)
+                            self.metadata_service.delete_document_metadata(metadata.document_uid)
                             self.content_store.delete_content(metadata.document_uid)
+                        except Exception:
+                            # Metadata doesn't exist, which is fine
+                            pass
 
                         yield ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n"
                         # Step: Uploading to backend storage
@@ -296,7 +305,7 @@ class IngestionController:
                         # ✅ At least one file succeeded
                         # Step 2: Metadata saving
                         current_step = "metadata saving"
-                        self.metadata_store.save_metadata(metadata=metadata)
+                        self.metadata_service.save_document_metadata(metadata)
                         logger.info(f"Metadata saved for {filename}: {metadata}")
                         all_success_flag[0] = True
                     except Exception as e:

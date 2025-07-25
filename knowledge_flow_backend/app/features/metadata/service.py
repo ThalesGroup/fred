@@ -110,6 +110,11 @@ class MetadataService:
             raise InvalidMetadataRequest("No metadata fields provided for update")
         try:
             logger.info(f"Updating metadata for {document_uid} with {update_fields}")
+
+            # if tags are changed, update `updated_at` timestamp for each tag
+            if "tags" in update_fields:
+                self._handle_tag_timestamp_updates(document_uid, update_fields["tags"])
+
             result = None
             for field, value in update_fields.items():
                 result = self.metadata_store.update_metadata_field(
@@ -121,4 +126,60 @@ class MetadataService:
         except Exception as e:
             logger.error(f"Error updating metadata for {document_uid}: {e}")
             raise MetadataUpdateError(f"Failed to update metadata: {e}")
+
+    def save_document_metadata(self, metadata: DocumentMetadata) -> None:
+        """
+        Save document metadata and update tag timestamps for any assigned tags.
+        """
+        try:
+            # Save the metadata first
+            self.metadata_store.save_metadata(metadata)
+            
+            # Update tag timestamps for any tags assigned to this document
+            if metadata.tags:
+                self._update_tag_timestamps(metadata.tags)
+                
+        except Exception as e:
+            logger.error(f"Error saving metadata for {metadata.document_uid}: {e}")
+            raise MetadataUpdateError(f"Failed to save metadata: {e}")
+
+    def _handle_tag_timestamp_updates(self, document_uid: str, new_tags: list[str]) -> None:
+        """
+        Update tag timestamps when document tags are modified.
+        """
+        try:
+            # Get old tags from current document metadata
+            old_document = self.get_document_metadata(document_uid)
+            old_tags = old_document.tags or []
+
+            # Find tags that were added or removed
+            old_tags_set = set(old_tags)
+            new_tags_set = set(new_tags or [])
+
+            affected_tags = old_tags_set.symmetric_difference(new_tags_set)
+
+            # Update timestamps for affected tags
+            if affected_tags:
+                self._update_tag_timestamps(list(affected_tags))
+
+        except Exception as e:
+            logger.warning(f"Failed to handle tag timestamp updates for {document_uid}: {e}")
+
+    def _update_tag_timestamps(self, tag_ids: list[str]) -> None:
+        """
+        Update timestamps for a list of tag IDs.
+        """
+        try:
+            # Import here to avoid circular imports
+            from app.features.tag.service import TagService
+            tag_service = TagService()
+
+            for tag_id in tag_ids:
+                try:
+                    tag_service.update_tag_timestamp(tag_id)
+                except Exception as tag_error:
+                    logger.warning(f"Failed to update timestamp for tag {tag_id}: {tag_error}")
+
+        except Exception as e:
+            logger.warning(f"Failed to update tag timestamps: {e}")
 
