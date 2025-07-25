@@ -1,3 +1,4 @@
+from app.common.error import MCPClientConnectionException
 from fastapi import APIRouter, HTTPException
 
 from app.features.dynamic_agent.structures import CreateAgentRequest
@@ -8,6 +9,8 @@ from app.common.utils import log_exception
 def handle_exception(e: Exception) -> HTTPException:
     if isinstance(e, AgentAlreadyExistsException):
         return HTTPException(status_code=409, detail=str(e))
+    if isinstance(e, MCPClientConnectionException):
+        return HTTPException(status_code=502, detail=f"MCP connection failed: {e.reason}")
     return HTTPException(status_code=500, detail="Internal server error")
 
 class DynamicAgentController:

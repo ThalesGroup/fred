@@ -26,6 +26,13 @@ class InvalidCacheError(FileNotFoundError):
 # ------------------------------
 # MCP & Agent setup Exceptions
 # ------------------------------
+# app/features/dynamic_agent/exceptions.py
+
+class MCPClientConnectionException(Exception):
+    def __init__(self, agent_name: str, reason: str):
+        super().__init__(f"Failed to connect MCP client for '{agent_name}': {reason}")
+        self.agent_name = agent_name
+        self.reason = reason
 
 class UnsupportedTransportError(ValueError):
     ...
@@ -44,6 +51,8 @@ class SessionNotFoundError(Exception):
     def __init__(self, session_id: str):
         self.session_id = session_id
         super().__init__(f"Session '{session_id}' not found")
+
+
 
 class AuthorizationSentinel:
     ...
