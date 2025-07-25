@@ -55,5 +55,5 @@ USER ${USER_NAME}
 EXPOSE 8000
 
 # Run the application
-ENV PYTHONPATH=/app
+ENV PYTHONPATH=/app/app
 ENTRYPOINT ["make", "run-local"]
