@@ -15,11 +15,19 @@ imagePullSecrets:
   - name: "gitlab-registry-creds"
 
 command:
-  enabled: false
-  data: []
-    # - /bin/sh
+  enabled: true
+  data: ["uvicorn", "app.main:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000", "--env-file", "/app/config/.env", "--log-level", "info", "--loop", "asyncio"]
+
+    # - /bin/s
     # - -c
     # - tail -f /dev/null
+
+env:
+  enabled: true
+  data:
+  - name: CONFIG_FILE
+    value: "/app/config/configuration.yaml"
+  
 
 # This is for setting Kubernetes Annotations to a Pod.
 # For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/
@@ -120,18 +128,31 @@ serviceAccount:
         resources: ["nodes"]
         verbs: ["get", "list", "watch"]
 
-# Additional volumes on the output Deployment definition.
-volumes: []
-# - name: foo
-#   secret:
-#     secretName: mysecret
-#     optional: false
+volumes:
+  enabled: true
+  data:
+  # configuration.yaml && .env since we'll mount them as a directory && kube/config
+  - name: "agentic-backend-vol"
+    configMap:
+      name: "agentic-backend-configmap"
+  # kube/config
+  - name: "agentic-backend-kube-vol"
+    configMap:
+      name: "agentic-backend-kube-configmap"
+      items:
+      - key: kubeconfig
+        path: kubeconfig
 
-# Additional volumeMounts on the output Deployment definition.
-volumeMounts: []
-# - name: foo
-#   mountPath: "/etc/foo"
-#   readOnly: true
+volumeMounts:
+  enabled: true
+  data:
+  # configuration.yaml && .env
+  - name: agentic-backend-vol
+    mountPath: /app/config
+  # kube/config
+  - name: agentic-backend-kube-vol
+    mountPath: /home/fred-user/.kube/config
+    subPath: kubeconfig
 
 nodeSelector: {}
 
@@ -139,7 +160,7 @@ tolerations: []
 
 affinity: {}
 
-config:
+configuration:
   frontend_settings:
     feature_flags:
       # If true acuivate the backend and frontend modules in charge of K8 
@@ -320,30 +341,31 @@ config:
     verify_certs: false
 
 dotenv:
-  azure_tenant_id: ""
-  azure_client_id: ""
-  azure_client_secret: ""
-  azure_client_scope: ""
-  azure_api_version: "2024-06-01"
-  azure_apim_base_url: "https://trustnest.azure-api.net"
-  azure_resource_path_embeddings: "/genai-aoai-inference/v1"
-  azure_resource_path_llm: "/genai-aoai-inference/v2"
-  azure_apim_key: "your-subscription-key"
-  azure_openai_endpoint: "https://your-azure-openai-resource.openai.azure.com"
-  azure_openai_key: "your-real-azure-openai-api-key"
-  azure_deployment_llm: "gpt-4o"
-  azure_deployment_embedding: "text-embedding-ada-002"
-  openai_api_key: "sk-..."
-  openai_api_base: "https://api.openai.com/v1"
-  openai_api_version: ""
-  openai_model_name: "text-embedding-ada-002"
-  keycloak_server_url: "http://keycloak.test"
-  keycloak_realm_name: "app"
-  keycloak_client_id: "app"
-  local_context_storage_path: "/home/fred-user/.fred/context-store"
-  local_metadata_storage_path: "/home/fred-user/.knowledge-flow/metadata-store.json"
-  opensearch_user: "admin"
-  opensearch_password: "Azerty123_"
+  AZURE_TENANT_ID: ""
+  AZURE_CLIENT_ID: ""
+  AZURE_CLIENT_SECRET: ""
+  AZURE_CLIENT_SCOPE: ""
+  AZURE_API_VERSION: "2024-06-01"
+  AZURE_APIM_BASE_URL: "https://trustnest.azure-api.net"
+  AZURE_RESOURCE_PATH_EMBEDDINGS: "/genai-aoai-inference/v1"
+  AZURE_RESOURCE_PATH_LLM: "/genai-aoai-inference/v2"
+  AZURE_APIM_KEY: "your-subscription-key"
+  AZURE_OPENAI_ENDPOINT: "https://your-azure-openai-resource.openai.azure.com"
+  AZURE_OPENAI_KEY: "your-real-azure-openai-api-key"
+  AZURE_DEPLOYMENT_LLM: "gpt-4o"
+  AZURE_DEPLOYMENT_EMBEDDING: "text-embedding-ada-002"
+  OPENAI_API_KEY: "sk-..."
+  OPENAI_API_BASE: "https://api.openai.com/v1"
+  OPENAI_API_VERSION: ""
+  OPENAI_MODEL_NAME: "text-embedding-ada-002"
+  KEYCLOAK_SERVER_URL: "http://keycloak.test"
+  KEYCLOAK_REALM_NAME: "app"
+  KEYCLOAK_CLIENT_ID: "app"
+  LOCAL_CONTEXT_STORAGE_PATH: "/home/fred-user/.fred/context-store"
+  LOCAL_METADATA_STORAGE_PATH: "/home/fred-user/.knowledge-flow/metadata-store.json"
+  OPENSEARCH_USER: "admin"
+  OPENSEARCH_PASSWORD: "Azerty123_"
+
 
 kubeconfig:
   data:

@@ -61,7 +61,7 @@ config:
 
 env:
   - name: VITE_ALLOWED_HOSTS
-    value: "fred.test"
+    value: "fred.dev"
   - name: VITE_BACKEND_URL_KNOWLEDGE
     value: "http://knowledge-flow-backend.dev.fred.thalesgroup.com"
   - name: VITE_USE_AUTH
@@ -70,8 +70,8 @@ env:
 oidc:
   enabled: true
   config:
-    realm: "app"
-    authServerUrl: "https://keycloak.dev.fred.thalesgroup.com/"
+    realm: "fred"
+    authServerUrl: "https://idp.dev.fred.thalesgroup.com/"
     clientId: "app"
 
 feedback_storage:

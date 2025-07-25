@@ -50,15 +50,22 @@ rollingUpdate:
 
 command:
   enabled: false
-  data: []
-    # - /bin/sh
-    # - -c
-    # - tail -f /dev/null
+  data:
+    - /bin/sh
+    - -c
+    - tail -f /dev/null
 
 env:
+  enabled: true
   data:
   - name: LOG_LEVEL
     value: "INFO"
+  - name: CONFIG_FILE
+    value: "/app/config/configuration.yaml"
+
+# env.extraEnvVars to add variable
+
+
 
 lifecycle:
   enabled: false
@@ -205,6 +212,12 @@ configuration:
     bucket_name: app-bucket
   metadata_storage:
     type: "opensearch"
+    host: https://opensearch.dev.svc.cluster.local:9200
+    secure: true 
+    verify_certs: false
+    metadata_index: metadata-index
+    vector_index: vector-index
+
   # type: "opensearch"
   # host: https://opensearch.dev.svc.cluster.local:9200              # OpenSearch host
   # secure: true                                                     # Use HTTPS (set to false for HTTP)
@@ -219,6 +232,13 @@ configuration:
   
   vector_storage:
     type: opensearch 
+    host: "https://opensearch.dev.svc.cluster.local:9200"
+    username: 
+    password: 
+    secure: true
+    verify_certs: false
+    metadata_index: "metadata-index"
+    vector_index: "vector-index"
   # Available backends:
   # - in_memory  → ephemeral, dev-only (no persistence)
   # - opensearch → persistent, secure, production-ready
@@ -290,6 +310,29 @@ configuration:
   # All environment variables are expected to be present in the .env file
   # pointed to by the ENV_FILE variable in your Makefile.
   #
+  
+  tag_storage:
+    type: "local"
+    local_path: "~/.knowledge-flow/tag-storage"
+
+  tabular_storage:
+    type: "duckdb"
+    database_path: "~/.knowledge-flow/tabular.db"
+
+  catalog_storage:
+    type: "duckdb"
+    database_path: "~/.knowledge-flow/catalog.db"
+
+  scheduler:
+    type: "temporal"
+    enabled: true
+    max_workers: 4
+    temporal:
+      host: "temporal-frontend:7233"
+      namespace: "dev"
+      task_queue: "knowledge-flow-tasks"
+
+
   embedding:
     type: "openai"   # can be "openai" or "azureopenai" or "azureapim" or "ollama"
 

@@ -1,11 +1,11 @@
 apiVersion: v1
-kind: Secret
+kind: ConfigMap
 metadata:
-  name: "{{ .Chart.Name }}-kubeconfig"
+  name: "{{ .Values.applicationName }}-kube-configmap"
   namespace: {{ .Release.Namespace }}
   {{- if .Values.kubeconfig.annotations }}
   annotations:
-{{ toYaml .Values.kubeconfig.annotations | indent 4 }}
+    {{- toYaml .Values.kubeconfig.annotations | nindent 4 }}
   {{- end }}
   labels:
     name: {{ .Release.Name }}
@@ -14,10 +14,9 @@ metadata:
     release: "{{ .Values.applicationName }}"
     heritage: "{{ .Release.Service }}"
     {{- if .Values.extraLabels }}
-{{ toYaml .Values.extraLabels.data | indent 4 }}
+    {{- toYaml .Values.extraLabels.data | nindent 4 }}
     {{- end }}
-type: Opaque
 data:
 {{- range $key, $value := .Values.kubeconfig.data }}
-  {{ $key }}: {{ $value | b64enc }}
+  {{ $key }}: {{ $value | quote }}
 {{- end }}
