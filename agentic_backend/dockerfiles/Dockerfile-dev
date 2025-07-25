@@ -39,7 +39,7 @@ COPY fred-core /fred-core
 RUN make dev
 
 # Copy the rest of the project files
-COPY agentic_backend/app/. /app
+COPY agentic_backend/. /app
 
 # Remove test configuration.yaml files
 RUN rm /app/config/configuration.yaml

@@ -84,7 +84,7 @@ ENV PATH="/opt/python/venv/bin:$PATH"
 WORKDIR /app
 
 # Copy app source
-COPY agentic_backend/app/. /app
+COPY agentic_backend/. /app
 COPY fred-core /fred-core
 
 # Set environment (prod should inject via secrets/CI, not hardcoded)
