@@ -22,7 +22,7 @@ class DynamicAgentManagerService:
         """
         Builds, registers, and stores the MCP agent, including updating app context and saving to DuckDB.
         """
-        if req.name in self.dynamic_agent_manager.get_registered_names():
+        if req.name in get_app_context().get_enabled_agent_names() + self.dynamic_agent_manager.get_registered_names():
             raise AgentAlreadyExistsException(f"Agent '{req.name}' already exists")
 
         get_app_context()._agent_index[req.name] = AgentSettings(
