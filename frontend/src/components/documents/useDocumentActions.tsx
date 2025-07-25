@@ -132,10 +132,16 @@ export const useDocumentActions = (onRefreshData?: () => void) => {
             external_path: isPull ? f.pull_location : undefined,
             tags: f.tags || [],
             display_name: f.document_name,
-            // Todo: hash, size, modified_time should not exist in FileRow, this should be
-            // removed of type should be fixed in the Open API spec
+
+            // Using `ts-ignore` because `hash`, `size` and `modified_time` should not
+            // exist in DocumentMetadata, but this code was added so I don't want to remove
+            // it. This should be removed or the Open API spec should be fixed to add this
+            // fields in DocumentMetadata (if they are really set by the backend).
+            // @ts-ignore
             hash: isPull ? f.hash : undefined,
+            // @ts-ignore
             size: isPull ? f.size : undefined,
+            // @ts-ignore
             modified_time: isPull ? f.modified_time : undefined,
           };
         }),
