@@ -65,7 +65,7 @@ export const CreateAgentModal = ({ open, onClose, onCreated }: CreateAgentModalP
             icon: "Robot",
             agent_type: "mcp",
             categories: [],
-            mcp_servers: [{ name: "", url: "", transport: "sse", sse_read_timeout: 30 }],
+            mcp_servers: [{ name: "", url: "", transport: "sse", sse_read_timeout: 600 }],
         },
     });
 
