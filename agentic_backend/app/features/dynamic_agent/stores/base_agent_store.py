@@ -42,3 +42,10 @@ class BaseDynamicAgentStore(ABC):
         Retrieve a single agent request by name.
         """
         pass
+
+    @abstractmethod
+    def delete(self, name: str) -> None:
+        """
+        Delete a single agent by name.
+        """
+        pass
