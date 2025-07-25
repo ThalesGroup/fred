@@ -1,10 +1,9 @@
 import RemoveCircleOutlineIcon from "@mui/icons-material/RemoveCircleOutline";
 import UploadIcon from "@mui/icons-material/Upload";
-import { Box, Button, CircularProgress, Container, Paper, Typography } from "@mui/material";
+import { Box, Button, CircularProgress, Container, Paper, Stack, Typography } from "@mui/material";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
-import { useToast } from "../components/ToastProvider";
 import { TopBar } from "../common/TopBar";
 import { DocumentTable } from "../components/documents/DocumentTable";
 import { CustomRowAction } from "../components/documents/DocumentTableRowActionsMenu";
@@ -12,6 +11,7 @@ import { CustomBulkAction } from "../components/documents/DocumentTableSelection
 import { DocumentUploadDrawer } from "../components/documents/DocumentUploadDrawer";
 import { LibraryInfoCard } from "../components/documents/LibraryInfoCard";
 import { useDocumentActions } from "../components/documents/useDocumentActions";
+import { useToast } from "../components/ToastProvider";
 import { KeyCloakService } from "../security/KeycloakService";
 import {
   DocumentMetadata,
@@ -147,20 +147,9 @@ export const DocumentLibraryViewPage = () => {
 
   return (
     <>
-      <TopBar title={library.name} description={library.description || ""} backTo="/documentLibrary">
-        {hasDocumentManagementPermission() && (
-          <Button
-            variant="contained"
-            startIcon={<UploadIcon />}
-            onClick={() => setOpenUploadDrawer(true)}
-            size="medium"
-            sx={{ borderRadius: "8px" }}
-          >
-            {t("documentLibrary.uploadInLibrary")}
-          </Button>
-        )}
-      </TopBar>
-      <Container maxWidth="xl" sx={{ mb: 3 }}>
+      <TopBar title={library.name} description={library.description || ""} backTo="/documentLibrary"></TopBar>
+
+      <Container maxWidth="xl" sx={{ mb: 3, display: "flex", flexDirection: "column", gap: 4 }}>
         {/* Library name and description */}
         <LibraryInfoCard
           library={library}
@@ -168,34 +157,50 @@ export const DocumentLibraryViewPage = () => {
           onLibraryUpdated={handleRefreshData}
         />
 
-        {/* List of documents */}
-        <Paper
-          sx={{
-            p: 2,
-            pt: 7, // To make space for DocumentTableSelectionToolbar (used for bulk actions)
-            borderRadius: 4,
-            mt: 2,
-            position: "relative",
-          }}
-        >
-          <DocumentTable
-            files={documents}
-            isAdmin={hasDocumentManagementPermission()}
-            onRefreshData={handleRefreshData}
-            showSelectionActions={true}
-            rowActions={hasDocumentManagementPermission() ? rowActions : []} // todo: add a permission check for each action, enforced by DocumentTable
-            bulkActions={hasDocumentManagementPermission() ? bulkActions : []}
-            nameClickAction={handleDocumentPreview}
-            columns={{
-              fileName: true,
-              dateAdded: true,
-              librairies: false, // Hide column in library view
-              status: true,
-              retrievable: true,
-              actions: true,
+        <Stack gap={2}>
+          {/* Upload button */}
+          {hasDocumentManagementPermission() && (
+            <Stack direction="row" spacing={2} justifyContent="flex-end">
+              <Button
+                variant="contained"
+                startIcon={<UploadIcon />}
+                onClick={() => setOpenUploadDrawer(true)}
+                size="medium"
+                sx={{ borderRadius: "8px" }}
+              >
+                {t("documentLibrary.uploadInLibrary")}
+              </Button>
+            </Stack>
+          )}
+
+          {/* List of documents */}
+          <Paper
+            sx={{
+              p: 2,
+              pt: 7, // To make space for DocumentTableSelectionToolbar (used for bulk actions)
+              borderRadius: 4,
+              position: "relative",
             }}
-          />
-        </Paper>
+          >
+            <DocumentTable
+              files={documents}
+              isAdmin={hasDocumentManagementPermission()}
+              onRefreshData={handleRefreshData}
+              showSelectionActions={true}
+              rowActions={hasDocumentManagementPermission() ? rowActions : []} // todo: add a permission check for each action, enforced by DocumentTable
+              bulkActions={hasDocumentManagementPermission() ? bulkActions : []}
+              nameClickAction={handleDocumentPreview}
+              columns={{
+                fileName: true,
+                dateAdded: true,
+                librairies: false, // Hide column in library view
+                status: true,
+                retrievable: true,
+                actions: true,
+              }}
+            />
+          </Paper>
+        </Stack>
       </Container>
 
       {/* Upload Drawer */}
