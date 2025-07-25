@@ -112,6 +112,12 @@ class TagService:
 
     def delete_tag_for_user(self, tag_id: str, user: KeycloakUser) -> None:
         # Todo: check if user is authorized
+        
+        # Remove the tag ID from all documents that have this tag
+        documents = self._retrieve_documents_for_tag(tag_id)
+        for doc in documents:
+            self._remove_tag_id_from_document(doc, tag_id)
+        
         return self._tag_store.delete_tag_by_id(tag_id)
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
