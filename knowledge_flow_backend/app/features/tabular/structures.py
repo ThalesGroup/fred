@@ -38,7 +38,8 @@ class RawSQLRequest(BaseModel):
 
 class TabularQueryResponse(BaseModel):
     document_name: str
-    rows: List[dict]
+    rows:  Optional[List[dict]] = []
+    error: Optional[str] = None
 
 
 class HowToMakeAQueryResponse(BaseModel):

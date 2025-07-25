@@ -132,12 +132,14 @@ class TabularService:
 
         # Si aucun LIMIT, ajoute "LIMIT 20"
         if not has_limit:
-            # Assure que la requête se termine proprement
             sql = sql.rstrip(";") + " LIMIT 20"
 
         logger.info(f"🧠 Final SQL executed: {sql}")
 
-        df = self.tabular_store.execute_sql_query(sql)
-        rows = df.to_dict(orient="records")
-
-        return TabularQueryResponse(document_name=document_name, rows=rows)
+        try:
+            df = self.tabular_store.execute_sql_query(sql)
+            rows = df.to_dict(orient="records")
+            return TabularQueryResponse(document_name=document_name, rows=rows, error=None)
+        except Exception as e:
+            logger.error(f"Error during query execution: {e}", exc_info=True)
+            return TabularQueryResponse(document_name=document_name, rows=[], error=str(e))
