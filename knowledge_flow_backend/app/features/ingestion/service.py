@@ -14,9 +14,11 @@
 
 import logging
 import pathlib
+import shutil
 from app.common.document_structures import DocumentMetadata, ProcessingStage
 from app.common.structures import OutputProcessorResponse
 from app.core.processors.input.common.base_input_processor import BaseMarkdownProcessor, BaseTabularProcessor
+from app.core.processors.input.duckdb_processor.duckdb_processor import DuckDBProcessor
 
 from app.application_context import ApplicationContext
 
@@ -112,6 +114,9 @@ class IngestionService:
 
         if isinstance(processor, BaseMarkdownProcessor):
             processor.convert_file_to_markdown(input_path, output_dir, metadata.document_uid)
+        elif isinstance(processor, DuckDBProcessor):
+            output_path = output_dir / input_path.name
+            shutil.copy(input_path, output_path)
         elif isinstance(processor, BaseTabularProcessor):
             df = processor.convert_file_to_table(input_path)
             df.to_csv(output_dir / "table.csv", index=False)
@@ -138,8 +143,8 @@ class IngestionService:
             raise ValueError(f"Output directory {output_dir} does not contain output files")
         # get the first file in the output_dir
         output_file = next(output_dir.glob("*.*"))
-        # check if the file is a markdown or csv file
-        if output_file.suffix.lower() not in [".md", ".csv"]:
+        # check if the file is a markdown, csv or duckdb file
+        if output_file.suffix.lower() not in [".md", ".csv",".duckdb"]:
             raise ValueError(f"Output file {output_file} is not a markdown or csv file")
         # check if the file is empty
         if output_file.stat().st_size == 0:
@@ -157,10 +162,10 @@ class IngestionService:
             md_content = self.content_store.get_markdown(metadata.document_uid)
             target_file = target_dir / "output.md"
             target_file.write_text(md_content, encoding="utf-8")
-            logger.info(f"✅ Markdown preview saved to {target_file}")
+            logger.info(f"Markdown preview saved to {target_file}")
             return target_file
         except FileNotFoundError:
-            raise RuntimeError(f"⚠️ No preview available for document {metadata.document_uid} in content store")
+            raise RuntimeError(f"No preview available for document {metadata.document_uid} in content store")
 
     def get_preview_file(self, metadata: DocumentMetadata, output_dir: pathlib.Path) -> pathlib.Path:
         """
