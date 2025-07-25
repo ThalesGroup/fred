@@ -3,16 +3,16 @@ import { IconButton, ListItemIcon, ListItemText, Menu, MenuItem } from "@mui/mat
 import React, { useState } from "react";
 
 import { useTranslation } from "react-i18next";
-import { FileRow } from "./DocumentTable";
+import { DocumentMetadata } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 
 export interface CustomRowAction {
   icon: React.ReactElement;
   name: string;
-  handler: (file: FileRow) => Promise<void>;
+  handler: (file: DocumentMetadata) => Promise<void>;
 }
 
 interface DocumentTableRowActionsMenuProps {
-  file: FileRow;
+  file: DocumentMetadata;
   actions: CustomRowAction[];
 }
 

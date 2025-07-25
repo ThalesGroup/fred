@@ -17,30 +17,42 @@ import DownloadIcon from "@mui/icons-material/Download";
 import RocketLaunchIcon from "@mui/icons-material/RocketLaunch";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import { TFunction } from "i18next";
-import { FileRow } from "./DocumentTable";
+import { DocumentMetadata } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { CustomRowAction } from "./DocumentTableRowActionsMenu";
 import { CustomBulkAction } from "./DocumentTableSelectionToolbar";
 
 // Individual action creators that parent components can use
-export const createPreviewAction = (onOpen: (file: FileRow) => Promise<void>, t: TFunction): CustomRowAction => ({
+export const createPreviewAction = (
+  onOpen: (file: DocumentMetadata) => Promise<void>,
+  t: TFunction,
+): CustomRowAction => ({
   icon: <VisibilityIcon />,
   name: t("documentActions.preview"),
   handler: onOpen,
 });
 
-export const createDownloadAction = (onDownload: (file: FileRow) => Promise<void>, t: TFunction): CustomRowAction => ({
+export const createDownloadAction = (
+  onDownload: (file: DocumentMetadata) => Promise<void>,
+  t: TFunction,
+): CustomRowAction => ({
   icon: <DownloadIcon />,
   name: t("documentActions.download"),
   handler: onDownload,
 });
 
-export const createDeleteAction = (onDelete: (file: FileRow) => Promise<void>, t: TFunction): CustomRowAction => ({
+export const createDeleteAction = (
+  onDelete: (file: DocumentMetadata) => Promise<void>,
+  t: TFunction,
+): CustomRowAction => ({
   icon: <DeleteIcon />,
   name: t("documentActions.delete"),
   handler: onDelete,
 });
 
-export const createProcessAction = (onProcess: (file: FileRow) => Promise<void>, t: TFunction): CustomRowAction => ({
+export const createProcessAction = (
+  onProcess: (file: DocumentMetadata) => Promise<void>,
+  t: TFunction,
+): CustomRowAction => ({
   icon: <RocketLaunchIcon />,
   name: t("documentActions.process"),
   handler: onProcess,
@@ -48,7 +60,7 @@ export const createProcessAction = (onProcess: (file: FileRow) => Promise<void>,
 
 // Bulk action creators
 export const createBulkDeleteAction = (
-  onBulkDelete: (files: FileRow[]) => Promise<void>,
+  onBulkDelete: (files: DocumentMetadata[]) => Promise<void>,
   t: TFunction,
 ): CustomBulkAction => ({
   icon: <DeleteIcon />,
@@ -57,7 +69,7 @@ export const createBulkDeleteAction = (
 });
 
 export const createBulkDownloadAction = (
-  onBulkDownload: (files: FileRow[]) => Promise<void>,
+  onBulkDownload: (files: DocumentMetadata[]) => Promise<void>,
   t: TFunction,
 ): CustomBulkAction => ({
   icon: <DownloadIcon />,
@@ -66,7 +78,7 @@ export const createBulkDownloadAction = (
 });
 
 export const createBulkProcessAction = (
-  onBulkProcess: (files: FileRow[]) => Promise<void>,
+  onBulkProcess: (files: DocumentMetadata[]) => Promise<void>,
   t: TFunction,
 ): CustomBulkAction => ({
   icon: <RocketLaunchIcon />,

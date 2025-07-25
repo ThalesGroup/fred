@@ -44,7 +44,6 @@ import { CustomBulkAction, DocumentTableSelectionToolbar } from "./DocumentTable
 import { useDocumentActions } from "./useDocumentActions";
 
 // Todo: use `DocumentMetadata` directly (as `DocumentMetadata` is auto-generated from OpenAPI spec)
-export type FileRow = DocumentMetadata;
 
 export interface Metadata {
   metadata: any;
@@ -60,13 +59,13 @@ interface DocumentTableColumns {
 }
 
 interface FileTableProps {
-  files: FileRow[];
+  files: DocumentMetadata[];
   onRefreshData?: () => void;
   showSelectionActions?: boolean;
   columns?: DocumentTableColumns;
   rowActions?: CustomRowAction[]; // Action in the 3 dots menu of each row. If empty list is passed, not actions.
   bulkActions?: CustomBulkAction[]; // Actions on selected documents, in the selection toolbar. If empty list is passed, no actions.
-  nameClickAction?: null | ((file: FileRow) => void); // Action when clicking on file name. If undefined, open document preview. If null, no action.
+  nameClickAction?: null | ((file: DocumentMetadata) => void); // Action when clicking on file name. If undefined, open document preview. If null, no action.
   isAdmin?: boolean; // For retrievable toggle functionality
 }
 
@@ -91,8 +90,8 @@ export const DocumentTable: React.FC<FileTableProps> = ({
   const { showInfo, showError } = useToast();
 
   // Internal state management
-  const [selectedFiles, setSelectedFiles] = useState<FileRow[]>([]);
-  const [sortBy, setSortBy] = useState<keyof FileRow>("date_added_to_kb");
+  const [selectedFiles, setSelectedFiles] = useState<DocumentMetadata[]>([]);
+  const [sortBy, setSortBy] = useState<keyof DocumentMetadata>("date_added_to_kb");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
   const [tagsById, setTagsById] = useState<Record<string, TagWithDocumentsId>>({});
 
@@ -150,7 +149,7 @@ export const DocumentTable: React.FC<FileTableProps> = ({
   }, [files, columns.librairies, getTag]);
 
   // Internal handlers
-  const handleToggleSelect = (file: FileRow) => {
+  const handleToggleSelect = (file: DocumentMetadata) => {
     setSelectedFiles((prev) =>
       prev.some((f) => f.document_uid === file.document_uid)
         ? prev.filter((f) => f.document_uid !== file.document_uid)
@@ -162,7 +161,7 @@ export const DocumentTable: React.FC<FileTableProps> = ({
     setSelectedFiles(checked ? [...files] : []);
   };
 
-  const handleToggleRetrievable = async (file: FileRow) => {
+  const handleToggleRetrievable = async (file: DocumentMetadata) => {
     try {
       await updateDocumentRetrievable({
         document_uid: file.document_uid,
@@ -195,7 +194,7 @@ export const DocumentTable: React.FC<FileTableProps> = ({
     () =>
       rowActionsWithDefault.map((action) => ({
         ...action,
-        handler: async (file: FileRow) => {
+        handler: async (file: DocumentMetadata) => {
           await action.handler(file);
           onRefreshData?.(); // Refresh data after action
         },
@@ -208,7 +207,7 @@ export const DocumentTable: React.FC<FileTableProps> = ({
     () =>
       bulkActionsWithDefault.map((action) => ({
         ...action,
-        handler: async (files: FileRow[]) => {
+        handler: async (files: DocumentMetadata[]) => {
           await action.handler(files);
           setSelectedFiles([]); // Clear selection after action
           onRefreshData?.(); // Refresh data after action
@@ -217,7 +216,7 @@ export const DocumentTable: React.FC<FileTableProps> = ({
     [bulkActionsWithDefault, setSelectedFiles, onRefreshData],
   );
 
-  const handleSortChange = (column: keyof FileRow) => {
+  const handleSortChange = (column: keyof DocumentMetadata) => {
     if (sortBy === column) {
       setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
     } else {

@@ -19,6 +19,7 @@ import {
   useLazyGetDocumentRawContentQuery,
   useProcessDocumentsMutation,
 } from "../../slices/documentApi";
+import { DocumentMetadata } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { downloadFile } from "../../utils/downloadUtils";
 import { useToast } from "../ToastProvider";
 import {
@@ -30,7 +31,6 @@ import {
   createPreviewAction,
   createProcessAction,
 } from "./DocumentActions";
-import { FileRow } from "./DocumentTable";
 import { useDocumentViewer } from "./useDocumentViewer";
 
 export const useDocumentActions = (onRefreshData?: () => void) => {
@@ -44,7 +44,7 @@ export const useDocumentActions = (onRefreshData?: () => void) => {
   const [processDocuments] = useProcessDocumentsMutation();
 
   // Action handlers
-  const handleDelete = async (file: FileRow) => {
+  const handleDelete = async (file: DocumentMetadata) => {
     try {
       await deleteDocument(file.document_uid).unwrap();
       showInfo({
@@ -62,7 +62,7 @@ export const useDocumentActions = (onRefreshData?: () => void) => {
     }
   };
 
-  const handleBulkDelete = async (files: FileRow[]) => {
+  const handleBulkDelete = async (files: DocumentMetadata[]) => {
     let successCount = 0;
     let failedFiles: string[] = [];
 
@@ -93,7 +93,7 @@ export const useDocumentActions = (onRefreshData?: () => void) => {
     onRefreshData?.();
   };
 
-  const handleDownload = async (file: FileRow) => {
+  const handleDownload = async (file: DocumentMetadata) => {
     try {
       const { data: blob } = await triggerDownload({ document_uid: file.document_uid });
       if (blob) {
@@ -107,20 +107,20 @@ export const useDocumentActions = (onRefreshData?: () => void) => {
     }
   };
 
-  const handleBulkDownload = async (files: FileRow[]) => {
+  const handleBulkDownload = async (files: DocumentMetadata[]) => {
     for (const file of files) {
       await handleDownload(file);
     }
   };
 
-  const handleDocumentPreview = async (file: FileRow) => {
+  const handleDocumentPreview = async (file: DocumentMetadata) => {
     openDocument({
       document_uid: file.document_uid,
       file_name: file.document_name,
     });
   };
 
-  const handleProcess = async (files: FileRow[]) => {
+  const handleProcess = async (files: DocumentMetadata[]) => {
     try {
       const payload: ProcessDocumentsRequest = {
         files: files.map((f) => {

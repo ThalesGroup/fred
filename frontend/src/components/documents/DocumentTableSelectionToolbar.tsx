@@ -15,16 +15,16 @@
 import { Box, Button, Typography } from "@mui/material";
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { FileRow } from "./DocumentTable";
+import { DocumentMetadata } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 
 export interface CustomBulkAction {
   icon: React.ReactElement;
   name: string;
-  handler: (files: FileRow[]) => void;
+  handler: (files: DocumentMetadata[]) => void;
 }
 
 export interface DocumentTableSelectionToolbarProps {
-  selectedFiles: FileRow[];
+  selectedFiles: DocumentMetadata[];
   actions: CustomBulkAction[];
   isVisible: boolean;
 }
