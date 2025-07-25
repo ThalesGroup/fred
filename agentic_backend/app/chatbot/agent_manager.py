@@ -17,6 +17,7 @@ from typing import cast
 from app.application_context import get_agent_class, get_enabled_agent_names
 from app.chatbot.structures.agentic_flow import AgenticFlow
 from app.leader.leader import Leader
+from app.application_context import get_app_context
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +34,7 @@ class AgentManager:
         Initializes the AgentManager with an empty cache.
         """
         self.agent_cache = {}
+        self.dynamic_agent_manager = get_app_context().get_dynamic_agent_manager_service().get_dynamic_agent_manager()
 
     def get_create_agent_instance(self, name: str, 
                                   session_id: str,
@@ -69,8 +71,13 @@ class AgentManager:
                 agent_instance.add_expert(expert_name, expert_instance, compiled_graph)
             self.agent_cache[cache_key] = agent_instance
             return agent_instance
-
-        agent_instance = agent_class(cluster_fullname=argument)
+        else:
+            if self.dynamic_agent_manager.has_agent(name):
+                agent_instance = self.dynamic_agent_manager.get_agent_instance(name)
+            else:
+                agent_class = get_agent_class(name)
+                agent_instance = agent_class(cluster_fullname=argument)
+        
         self.agent_cache[cache_key] = agent_instance
         logger.debug(f"Cached agent with key: {cache_key}")
         logger.info(f"Created new agent instance for '{name}'")

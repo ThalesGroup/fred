@@ -15,11 +15,9 @@
 import { createApi } from "@reduxjs/toolkit/query/react";
 import { AgenticFlow } from "../pages/Chat";
 import { createDynamicBaseQuery } from "../common/dynamicBaseQuery.tsx";
-import { ChatMessagePayload, SessionSchema } from "./chatApiStructures.ts";
+import { ChatMessagePayload, CreateAgentRequest, CreateAgentResponse, SessionSchema } from "./chatApiStructures.ts";
 
-/**
- * 1. API Slice pour le Chat/LLM
- */
+
 export const chatApiSlice = createApi({
   reducerPath: "chatApi",
   baseQuery: createDynamicBaseQuery({ backend: "api" }),
@@ -36,6 +34,14 @@ const extendedChatApi = chatApiSlice.injectEndpoints({
         method: "GET",
       }),
     }),
+    createAgent: builder.mutation<CreateAgentResponse, CreateAgentRequest>({
+      query: (body) => ({
+        url: `/agentic/v1/agents/create`,
+        method: "POST",
+        body,
+      }),
+    }),
+
     getChatBotAgenticFlows: builder.mutation<AgenticFlow[], void>({
       query: () => ({
         url: `/agentic/v1/chatbot/agenticflows`,
@@ -104,4 +110,5 @@ export const {
   useGetAgentContextsMutation,
   useSaveAgentContextMutation,
   useDeleteAgentContextMutation,
+  useCreateAgentMutation,
 } = extendedChatApi;

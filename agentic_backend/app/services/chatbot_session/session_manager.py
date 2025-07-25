@@ -50,7 +50,8 @@ class SessionManager:
     This class is responsible for creating, retrieving, and deleting sessions,
     as well as handling chat interactions.
     """ 
-    def __init__(self, storage: AbstractSessionStorage, 
+    def __init__(self,
+                 storage: AbstractSessionStorage, 
                  agent_manager: AgentManager = None,
                  dynamic_agent_manager: DynamicAgentManager = None):
         """
@@ -297,10 +298,10 @@ class SessionManager:
         # Append the new question
         history.append(HumanMessage(message))
         agent = self.agent_manager.get_create_agent_instance(agent_name, session.id, argument=argument)
-        # if agent_name in self.dynamic_agent_manager.get_registered_names():
-        #     agent = self.dynamic_agent_manager.get_create_agent_instance(agent_name, session_id, argument)
-        # else:
-        #     agent = self.agent_manager.get_create_agent_instance(agent_name, session.id, argument=argument)
+        if agent_name in self.dynamic_agent_manager.get_registered_names():
+            agent = self.dynamic_agent_manager.get_create_agent_instance(agent_name, session_id, argument)
+        else:
+            agent = self.agent_manager.get_create_agent_instance(agent_name, session.id, argument=argument)
 
         return session, history, agent, is_new_session
 

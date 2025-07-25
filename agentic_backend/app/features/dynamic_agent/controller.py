@@ -1,32 +1,35 @@
-# app/controllers/agent_controller.py
-
+from app.common.error import MCPClientConnectionException
 from fastapi import APIRouter, HTTPException
 
-from app.features.dynamic_agent.mcp_agent import MCPAgent
-from app.features.dynamic_agent.structures import CreateAgentRequest, MCPAgentRequest
+from app.features.dynamic_agent.structures import CreateAgentRequest
+from app.features.dynamic_agent.service import AgentAlreadyExistsException
+from app.application_context import get_app_context
+from app.common.utils import log_exception
 
-router = APIRouter()
+def handle_exception(e: Exception) -> HTTPException:
+    if isinstance(e, AgentAlreadyExistsException):
+        return HTTPException(status_code=409, detail=str(e))
+    if isinstance(e, MCPClientConnectionException):
+        return HTTPException(status_code=502, detail=f"MCP connection failed: {e.reason}")
+    return HTTPException(status_code=500, detail="Internal server error")
 
-@router.post("/agents/create")
-async def create_agent(req: CreateAgentRequest):
-    try:
-        if isinstance(req, MCPAgentRequest):
-            agent = MCPAgent(
-                name=req.name,
-                prompt=req.prompt,
-                mcp_urls=req.mcp_urls,
-                role=req.role,
-                nickname=req.nickname,
-                description=req.description,
-                icon=req.icon,
-                categories=req.categories,
-                tag=req.tag,
-            )
-        else:
-            raise HTTPException(status_code=400, detail=f"Unsupported agent_type: {req.agent_type}")
-
-        #AgentTeam().register(agent)
-        return {"status": "success", "agent_name": agent.name}
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+class DynamicAgentController:
+    """
+    Controller for managing dynamic MCP agents.
+    """
+    def __init__(self, app: APIRouter):
+        fastapi_tags = ["Dynamic MCP agent creation"]
+        self.service = get_app_context().get_dynamic_agent_manager_service()
+        
+        @app.post(
+            "/agents/create",
+            tags=fastapi_tags,
+            summary="Create a Dynamic Agent that can access MCP tools",
+        )
+        # @TODO: check for authorization
+        async def create_agent(req: CreateAgentRequest):
+            try:
+                return self.service.build_and_register_mcp_agent(req)
+            except Exception as e:
+                log_exception(e)
+                raise handle_exception(e)

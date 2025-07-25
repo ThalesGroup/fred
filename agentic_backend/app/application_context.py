@@ -38,8 +38,11 @@ from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain_core.tools import BaseTool
 from app.flow import AgentFlow, Flow  # Base class for all agent flows
 from app.common.utils import log_exception
-from app.common.error import UnsupportedTransportError, MCPToolFetchError
+from app.common.error import MCPClientConnectionException, UnsupportedTransportError, MCPToolFetchError
 from app.services.chatbot_session.abstract_session_backend import AbstractSessionStorage
+from app.features.dynamic_agent.stores.base_agent_store import BaseDynamicAgentStore
+from pathlib import Path
+
 import logging
 
 logger = logging.getLogger(__name__)
@@ -86,6 +89,16 @@ def get_sessions_store() -> AbstractSessionStorage:
         AbstractSessionStorage: An instance of the sessions store.
     """
     return get_app_context().get_sessions_store()
+
+def get_dynamic_agent_store() -> BaseDynamicAgentStore:
+    """
+    Factory function to create a dynamic agents store instance.
+    As of now, it only supports duckdb.
+    
+    Returns:
+        BaseDynamicAgentStore: An instance of the dynamic agents store.
+    """
+    return get_app_context().get_dynamic_agent_store()
 
 def get_enabled_agent_names() -> List[str]:
     """
@@ -274,6 +287,10 @@ class ApplicationContext:
                 cls._instance.configuration = configuration
                 cls._instance.status = RuntimeStatus()
                 cls._instance._service_instances = {}  # Cache for service instances
+                
+                cls._instance.dynamic_agent_manager_service = get_app_context().get_dynamic_agent_manager_service()
+                cls._instance.dynamic_agent_manager = cls._instance.dynamic_agent_manager_service.get_dynamic_agent_manager()
+                
                 cls._instance.apply_default_models()
                 cls._instance._build_indexes()
 
@@ -304,6 +321,7 @@ class ApplicationContext:
         """
         agent_classes = {}
 
+        # Load class_path from agents in configuration
         for agent in self.configuration.ai.agents:
             if not agent.enabled:
                 continue
@@ -323,6 +341,19 @@ class ApplicationContext:
                 raise ValueError(f"Agent class '{agent.class_path}' must inherit from AgentFlow.")
 
             agent_classes[agent.name] = cls
+
+        # Load class_path from dynamic agent (if any)
+        if self.dynamic_agent_manager:
+            dynamic_agents = self.dynamic_agent_manager.get_agent_classes()
+            for name, cls in dynamic_agents.items():
+                if not issubclass(cls, AgentFlow):
+                    logger.warning(f"Dynamic agent '{name}' does not inherit from AgentFlow and will be skipped.")
+                    continue
+
+                if name in agent_classes:
+                    logger.warning(f"Dynamic agent '{name}' overrides statically defined agent.")
+
+                agent_classes[name] = cls
 
         return agent_classes
     
@@ -393,10 +424,15 @@ class ApplicationContext:
         nest_asyncio.apply() # required to allow nested event loops @TODO Maybe find a more clever way to handle it
         
         mcp_client = MultiServerMCPClient()
-        loop = asyncio.get_event_loop()
-        loop.run_until_complete(self.connect_to_mcp_server(agent_name, mcp_client))
-        return mcp_client
-    
+        try:
+            loop = asyncio.get_event_loop()
+            loop.run_until_complete(self.connect_to_mcp_server(agent_name, mcp_client))
+            return mcp_client
+        except Exception as e:
+            # Log the full traceback
+            logger.exception(f"[MCP] Failed to connect MCP client for agent '{agent_name}'")
+            raise MCPClientConnectionException(agent_name, str(e)) from e
+        
     def get_mcp_agent_tools(self, mcp_client: MultiServerMCPClient) -> list[BaseTool]:
         tools = mcp_client.get_tools()
         if not tools:
@@ -510,3 +546,34 @@ class ApplicationContext:
         else:
             raise ValueError(f"Unsupported sessions storage backend: {config.type}")
         
+    def get_dynamic_agent_store(self) -> BaseDynamicAgentStore:
+        """
+        Factory function to create a dynamic agent store instance based on the configuration.
+        As of now, it only supports duckdb storage.
+        
+        Returns:
+            BaseDynamicAgentStore: An instance of the dynamic agents store.
+        """
+        from app.features.dynamic_agent.stores.mcp_agent.duckdb_mcp_agent_store import DuckdbMCPAgentStorage
+        config = get_configuration().dynamic_agent_storage
+        if config.type == "duckdb":
+            db_path = Path(config.duckdb_path).expanduser()
+            return DuckdbMCPAgentStorage(db_path)
+        else:
+            raise ValueError(f"Unsupported sessions storage backend: {config.type}")
+
+    def get_dynamic_agent_manager_service(self):
+        """
+        Lazily initializes and returns the singleton instance of DynamicAgentManagerService.
+
+        This method ensures that only one instance of the DynamicAgentManagerService is created
+        and reused throughout the application. The service provides access to functionality for
+        building, registering, and managing dynamic agents at runtime.
+
+        Returns:
+            DynamicAgentManagerService: The singleton instance of the dynamic agent manager service.
+        """
+        from app.features.dynamic_agent.service import DynamicAgentManagerService
+        if not hasattr(self, "dynamic_agent_manager_service"):
+            self.dynamic_agent_manager_service = DynamicAgentManagerService()
+        return self.dynamic_agent_manager_service

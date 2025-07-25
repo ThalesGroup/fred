@@ -16,7 +16,7 @@ from typing import Any, Dict, List, Optional, Literal, Union, Annotated
 from datetime import datetime
 from enum import Enum
 import os
-
+from pathlib import Path
 from pydantic import BaseModel, model_validator, Field
 from fred_core import Security
 
@@ -173,7 +173,7 @@ class AgentSettings(BaseModel):
     settings: Dict[str, Any] = Field(default_factory=dict, description="Agent-specific settings (e.g., document directory, chunk size).")
     model: ModelConfiguration = Field(default_factory=ModelConfiguration, description="AI model configuration for this agent.")
     tag: Optional[str] = Field(None, description="Tag of the agent")
-    mcp_servers: List[MCPServerConfiguration] = Field(default_factory=list, description="List of MCP servers associated to an agent.")
+    mcp_servers: Optional[List[MCPServerConfiguration]] = Field(default_factory=list, description="List of MCP servers associated to an agent.")
     max_steps: int = Field(None,description="Max step")
 
 
@@ -255,6 +255,18 @@ SessionStorageConfig = Annotated[
     Field(discriminator="type")
 ]
 
+###########################################################
+#
+#  --- Dynamic Agents Storage Configuration
+#
+
+class DuckdbDynamicAgentStorage(BaseModel):
+    type: Literal["duckdb"]
+    duckdb_path: str = Field(default="~/.fred/dynamic_agents.duckdb", 
+                             description="Path to the DuckDB database file.")
+
+DynamicAgentStorageConfig = Annotated[Union[DuckdbDynamicAgentStorage], Field(discriminator="type")]
+
 # ----------------------------------------------------------------------
 # Other configurations
 # ----------------------------------------------------------------------
@@ -301,6 +313,7 @@ class Configuration(BaseModel):
     node_metrics_storage:  MetricsStorageConfig = Field(..., description="Node Monitoring Storage configuration")
     tool_metrics_storage:  MetricsStorageConfig = Field(..., description="Tool Monitoring Storage configuration")
     session_storage: SessionStorageConfig = Field(..., description="Session Storage configuration")
+    dynamic_agent_storage: DynamicAgentStorageConfig = Field(..., description="Dynamic Agents Storage configuration")
 
 class OfflineStatus(BaseModel):
     is_offline: bool

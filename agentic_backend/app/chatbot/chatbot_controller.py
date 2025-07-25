@@ -16,9 +16,7 @@ import json
 import logging
 from typing import List
 
-from app.application_context import get_app_context
 from app.application_context import get_sessions_store
-from app.features.dynamic_agent.service import get_dynamic_agent_manager
 from app.chatbot.agent_manager import AgentManager
 from app.services.chatbot_session.session_manager import SessionManager
 from app.services.chatbot_session.structure.chat_schema import ChatMessagePayload, ErrorEvent, FinalEvent, SessionWithFiles, StreamEvent
@@ -37,7 +35,7 @@ from fastapi import (
 from fastapi.responses import JSONResponse, StreamingResponse
 from fred_core import KeycloakUser, get_current_user
 from starlette.websockets import WebSocketState
-
+from app.features.dynamic_agent.service import DynamicAgentManagerService
 from app.chatbot.structures.agentic_flow import AgenticFlow
 from app.chatbot.structures.chatbot_message import ChatAskInput
 from app.common.connectors.file_dao import FileDAO
@@ -45,7 +43,7 @@ from app.common.structures import (
     DAOTypeEnum,
 )
 
-from app.application_context import get_configuration
+from app.application_context import get_configuration, get_app_context
 from app.common.utils import log_exception
 
 logger = logging.getLogger(__name__)
@@ -56,9 +54,10 @@ class ChatbotController:
     WebSocket endpoints.
     """
     def __init__(self, app: APIRouter):
+        self.dynamic_agent_manager_service = get_app_context().get_dynamic_agent_manager_service()
+        self.dynamic_agent_manager = self.dynamic_agent_manager_service.get_dynamic_agent_manager()
         self.agent_manager = AgentManager()
-        self.session_manager = SessionManager(get_sessions_store(), self.agent_manager)
-        self.dynamic_agent_manager = get_dynamic_agent_manager()
+        self.session_manager = SessionManager(get_sessions_store(), self.agent_manager, self.dynamic_agent_manager)
         # For import-export operations
         match get_configuration().dao.type:
             case DAOTypeEnum.file:
