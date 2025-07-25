@@ -132,39 +132,39 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
         flexDirection: "column",
       }}
     >
-        {/* Header with title and actions */}
-        <AppBar position="static" color="default" elevation={0}>
-          <Toolbar>
-            <Typography variant="h6" sx={{ flex: 1 }}>
-              {doc?.file_name || "Markdown Document"}
-            </Typography>
-            <IconButton onClick={handleDownload} disabled={!doc?.file_url}>
-              <DownloadIcon />
-            </IconButton>
-            <IconButton onClick={onClose}>
-              <CloseIcon />
-            </IconButton>
-          </Toolbar>
-        </AppBar>
+      {/* Header with title and actions */}
+      <AppBar position="static" color="default" elevation={0}>
+        <Toolbar>
+          <Typography variant="h6" sx={{ flex: 1 }}>
+            {doc?.file_name || "Markdown Document"}
+          </Typography>
+          <IconButton onClick={handleDownload} disabled={!doc?.file_url}>
+            <DownloadIcon />
+          </IconButton>
+          <IconButton onClick={onClose}>
+            <CloseIcon />
+          </IconButton>
+        </Toolbar>
+      </AppBar>
 
-        {/* Main content area */}
-        <Box sx={{ flex: 1, overflow: "auto", p: 3 }}>
-          {isLoadingDoc ? (
-            <Box sx={{ display: "flex", justifyContent: "center", mt: 4 }}>
-              <CircularProgress />
-            </Box>
-          ) : (
-            <>
-              <MarkdownRendererWithHighlights
-                highlightedParts={[...highlightedParts, ...highlightedPartsFromExtracts]}
-                content={docContent}
-                size="medium"
-                enableEmojiSubstitution={true}
-              />
-              {/* <CustomMarkdownRenderer content={docContent} size="small" /> */}
-            </>
-          )}
-        </Box>
+      {/* Main content area */}
+      <Box sx={{ flex: 1, overflow: "auto", p: 3 }}>
+        {isLoadingDoc ? (
+          <Box sx={{ display: "flex", justifyContent: "center", mt: 4 }}>
+            <CircularProgress />
+          </Box>
+        ) : (
+          <>
+            <MarkdownRendererWithHighlights
+              highlightedParts={[...highlightedParts, ...highlightedPartsFromExtracts]}
+              content={docContent}
+              size="medium"
+              enableEmojiSubstitution={true}
+            />
+            {/* <CustomMarkdownRenderer content={docContent} size="small" /> */}
+          </>
+        )}
+      </Box>
     </Box>
   );
 };

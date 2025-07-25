@@ -25,17 +25,19 @@ import {
 import dayjs from "dayjs";
 import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
-import InvisibleLink from "../components/InvisibleLink";
-import { LibraryCreateDrawer } from "../components/documents/LibraryCreateDrawer";
 import {
   TagWithDocumentsId,
   useDeleteTagKnowledgeFlowV1TagsTagIdDeleteMutation,
   useListTagsKnowledgeFlowV1TagsGetQuery,
-} from "../slices/knowledgeFlow/knowledgeFlowOpenApi";
+} from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import InvisibleLink from "../InvisibleLink";
+import { LibraryCreateDrawer } from "./LibraryCreateDrawer";
 
-export function DocumentLibrariesList() {
+export function AllLibrariesList() {
   const { t } = useTranslation();
-  const { data: libraries, refetch: refetchLibraries } = useListTagsKnowledgeFlowV1TagsGetQuery();
+  const { data: libraries, refetch: refetchLibraries } = useListTagsKnowledgeFlowV1TagsGetQuery(undefined, {
+    refetchOnMountOrArgChange: true,
+  });
   const [deleteTag] = useDeleteTagKnowledgeFlowV1TagsTagIdDeleteMutation();
 
   const [selectedIds, setSelectedIds] = useState<string[]>([]);

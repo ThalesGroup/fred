@@ -52,11 +52,7 @@ export const DrawerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   return (
     <DrawerContext.Provider value={{ openDrawer, closeDrawer, isOpen }}>
       {children}
-      <Drawer
-        anchor={config?.anchor || "right"}
-        open={isOpen}
-        onClose={handleDrawerClose}
-      >
+      <Drawer anchor={config?.anchor || "right"} open={isOpen} onClose={handleDrawerClose}>
         {config?.content}
       </Drawer>
     </DrawerContext.Provider>

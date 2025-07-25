@@ -26,11 +26,7 @@ interface LibraryCreateDrawerProps {
   onLibraryCreated?: () => void;
 }
 
-export const LibraryCreateDrawer: React.FC<LibraryCreateDrawerProps> = ({
-  isOpen,
-  onClose,
-  onLibraryCreated,
-}) => {
+export const LibraryCreateDrawer: React.FC<LibraryCreateDrawerProps> = ({ isOpen, onClose, onLibraryCreated }) => {
   const { t } = useTranslation();
   const { showError, showSuccess } = useToast();
   const navigate = useNavigate();

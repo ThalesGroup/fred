@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
-import { Box, Grid2, IconButton, Stack, Tooltip, Typography, useTheme } from "@mui/material";
+import { Box, IconButton, Stack, Tooltip, Typography, useTheme } from "@mui/material";
 import { ReactNode } from "react";
 import InvisibleLink from "../components/InvisibleLink";
 
@@ -42,7 +42,7 @@ export const TopBar = ({ title, description, children, backTo }: TopBarProps) =>
         justifyContent: "space-between",
         alignItems: "center",
         px: 4,
-        py: 2,
+        height: 64,
       }}
     >
       {/* Left content */}
@@ -76,7 +76,9 @@ export const TopBar = ({ title, description, children, backTo }: TopBarProps) =>
       </Box>
 
       {/* Optional right part */}
-      <Grid2>{children}</Grid2>
+      <Stack direction="row" gap={2} alignItems="center">
+        {children}
+      </Stack>
     </Stack>
   );
 };

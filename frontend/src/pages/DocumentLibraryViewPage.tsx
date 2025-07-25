@@ -73,9 +73,7 @@ export const DocumentLibraryViewPage = () => {
 
     try {
       const documentIdsToRemove = documents.map((doc) => doc.document_uid);
-      const updatedDocumentIds = library.document_ids?.filter(
-        (id) => !documentIdsToRemove.includes(id)
-      ) || [];
+      const updatedDocumentIds = library.document_ids?.filter((id) => !documentIdsToRemove.includes(id)) || [];
 
       await updateTag({
         tagId: library.id,
@@ -91,7 +89,6 @@ export const DocumentLibraryViewPage = () => {
         summary: t("documentLibrary.removeSuccess"),
         detail: t("documentLibrary.removedDocuments", { count: documents.length }),
       });
-
     } catch (error: any) {
       showError({
         summary: t("documentLibrary.removeError"),
