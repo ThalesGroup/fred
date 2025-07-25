@@ -230,7 +230,7 @@
         "dateAdded": "Date Added",
         "dateAddedTooltip": "Date added to knowledge base",
         "retrievableYes": "Searchable",
-        "retrievableNo": "Exluded",
+        "retrievableNo": "Excluded",
         "status": "Status",
         "tags": "Tags",
         "actions": "Actions",
