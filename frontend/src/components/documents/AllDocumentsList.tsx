@@ -28,6 +28,7 @@ import {
   Pagination,
   Paper,
   Select,
+  SelectChangeEvent,
   TextField,
   Typography,
   useTheme,
@@ -149,15 +150,16 @@ export const AllDocumentsList = ({}: DocumentsViewProps) => {
     <Container maxWidth="xl">
       {/* Source Selector and Upload Button */}
       <Box display="flex" justifyContent="flex-end" alignItems="center" gap={2} mb={2}>
-        <FormControl size="small" sx={{ minWidth: 220 }}>
-          <InputLabel>Source</InputLabel>
+        <FormControl size="small" sx={{ minWidth: 200 }}>
+          <InputLabel id="sources-label">Document Sources</InputLabel>
           <Select
+            labelId="sources-label"
             value={selectedSourceTag || ""}
-            onChange={(e) => {
+            onChange={(e: SelectChangeEvent) => {
               const value = e.target.value;
               setSelectedSourceTag(value === "" ? null : value);
             }}
-            input={<OutlinedInput label="Source" />}
+            input={<OutlinedInput label="Document Sources" />}
           >
             {allSources?.map((source) => (
               <MenuItem key={source.tag} value={source.tag}>

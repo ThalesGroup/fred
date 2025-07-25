@@ -15,19 +15,66 @@
 
 from pydantic import BaseModel
 from typing import List, Optional
+from datetime import datetime, timezone
+from pathlib import Path
+import hashlib
+
+from app.common.document_structures import DocumentMetadata, SourceType
+from app.core.stores.metadata.base_catalog_store import PullFileEntry
 
 
 class FileToProcess(BaseModel):
+    # Common fields
     source_tag: str
-    document_uid: Optional[str] = None
-    external_path: Optional[str] = None
     tags: List[str] = []
+    display_name: Optional[str] = None
+    
+    # Push-specific
+    document_uid: Optional[str] = None  # Present for push files
 
-    def is_push(self) -> bool:
-        return self.document_uid is not None
+    # Pull-specific
+    external_path: Optional[str] = None
+    size: Optional[int] = None
+    modified_time: Optional[float] = None  # Unix timestamp
+    hash: Optional[str] = None  # Optional, used for UID
 
     def is_pull(self) -> bool:
         return self.external_path is not None
+
+    def is_push(self) -> bool:
+        return not self.is_pull()
+
+    @classmethod
+    def from_pull_entry(cls, entry: PullFileEntry, source_tag: str) -> "FileToProcess":
+        return cls(
+            source_tag=source_tag,
+            external_path=entry.path,
+            size=entry.size,
+            modified_time=entry.modified_time,
+            hash=entry.hash or hashlib.sha256(entry.path.encode()).hexdigest(),
+            display_name=Path(entry.path).name,
+        )
+
+    def to_virtual_metadata(self) -> DocumentMetadata:
+        if not self.is_pull():
+            raise ValueError("Virtual metadata can only be generated for pull files")
+
+        modified_dt = datetime.fromtimestamp(
+            self.modified_time or 0, tz=timezone.utc
+        )
+
+        return DocumentMetadata(
+            document_name=Path(self.external_path).name,
+            document_uid=self.document_uid or f"pull-{self.source_tag}-{self.hash}",
+            date_added_to_kb=modified_dt,
+            retrievable=False,
+            source_tag=self.source_tag,
+            pull_location=self.external_path,
+            source_type=SourceType.PULL,
+            processing_stages={},
+            modified=modified_dt,
+            tags=self.tags,
+        )
 
 
 class PipelineDefinition(BaseModel):

@@ -13,7 +13,6 @@
 // limitations under the License.
 
 import { Box, Button, ButtonGroup, Container } from "@mui/material";
-
 import { useEffect, useState } from "react";
 import { KeyCloakService } from "../security/KeycloakService";
 
@@ -54,7 +53,7 @@ type DocumentLibraryView = "libraries" | "documents";
  *
  * 5. **DocumentViewer Integration**:
  *    - When a user clicks "preview", the backend is queried using the document UID.
- *    - If Markdown content is available, it’s shown in a Drawer viewer with proper rendering.
+ *    - If Markdown content is available, it's shown in a Drawer viewer with proper rendering.
  *
  *
  * ## User Roles:

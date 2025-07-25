@@ -16,7 +16,7 @@ from datetime import datetime
 from uuid import uuid4
 
 from app.application_context import ApplicationContext
-from app.common.structures import DocumentMetadata
+from app.common.document_structures import DocumentMetadata
 from app.features.metadata.service import MetadataService
 from app.features.tag.structure import Tag, TagCreate, TagUpdate, TagWithDocumentsId
 from fred_core import KeycloakUser

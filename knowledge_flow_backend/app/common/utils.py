@@ -12,17 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import argparse
 from datetime import datetime, timezone
 import logging
 import traceback
-from dotenv import load_dotenv
 from pydantic import ValidationError
 from pydantic_settings import BaseSettings
 import tiktoken
 import yaml
 from typing import Dict, Optional, TypeVar
-from rich.logging import RichHandler
 
 from app.common.structures import Configuration
 

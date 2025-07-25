@@ -15,7 +15,8 @@
 from abc import ABC, abstractmethod
 import logging
 
-from app.common.structures import DocumentMetadata, OutputProcessorResponse
+from app.common.document_structures import DocumentMetadata
+from app.common.structures import OutputProcessorResponse
 
 logger = logging.getLogger(__name__)
 

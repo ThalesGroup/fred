@@ -125,18 +125,14 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.bodyStreamLoadKnowledgeFlowV1UploadFilesPost,
       }),
     }),
-    getSchema: build.query<GetSchemaApiResponse, GetSchemaApiArg>({
-      query: (queryArg) => ({ url: `/knowledge-flow/v1/tabular/${queryArg.documentUid}/schema` }),
+    listTableNames: build.query<ListTableNamesApiResponse, ListTableNamesApiArg>({
+      query: () => ({ url: `/knowledge-flow/v1/tabular/tables` }),
     }),
-    makeQuery: build.mutation<MakeQueryApiResponse, MakeQueryApiArg>({
-      query: (queryArg) => ({
-        url: `/knowledge-flow/v1/tabular/${queryArg.documentUid}/query`,
-        method: "POST",
-        body: queryArg.tabularQueryRequest,
-      }),
+    getAllSchemas: build.query<GetAllSchemasApiResponse, GetAllSchemasApiArg>({
+      query: () => ({ url: `/knowledge-flow/v1/tabular/schemas` }),
     }),
-    listTables: build.query<ListTablesApiResponse, ListTablesApiArg>({
-      query: () => ({ url: `/knowledge-flow/v1/tabular/list` }),
+    rawSqlQuery: build.mutation<RawSqlQueryApiResponse, RawSqlQueryApiArg>({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/tabular/sql`, method: "POST", body: queryArg.rawSqlRequest }),
     }),
     listTagsKnowledgeFlowV1TagsGet: build.query<
       ListTagsKnowledgeFlowV1TagsGetApiResponse,
@@ -288,17 +284,14 @@ export type StreamLoadKnowledgeFlowV1UploadFilesPostApiResponse = /** status 200
 export type StreamLoadKnowledgeFlowV1UploadFilesPostApiArg = {
   bodyStreamLoadKnowledgeFlowV1UploadFilesPost: BodyStreamLoadKnowledgeFlowV1UploadFilesPost;
 };
-export type GetSchemaApiResponse = /** status 200 Successful Response */ TabularSchemaResponse;
-export type GetSchemaApiArg = {
-  documentUid: string;
+export type ListTableNamesApiResponse = /** status 200 Successful Response */ string[];
+export type ListTableNamesApiArg = void;
+export type GetAllSchemasApiResponse = /** status 200 Successful Response */ TabularSchemaResponse[];
+export type GetAllSchemasApiArg = void;
+export type RawSqlQueryApiResponse = /** status 200 Successful Response */ TabularQueryResponse;
+export type RawSqlQueryApiArg = {
+  rawSqlRequest: RawSqlRequest;
 };
-export type MakeQueryApiResponse = /** status 200 Successful Response */ TabularQueryResponse;
-export type MakeQueryApiArg = {
-  documentUid: string;
-  tabularQueryRequest: TabularQueryRequest;
-};
-export type ListTablesApiResponse = /** status 200 Successful Response */ TabularDatasetMetadata[];
-export type ListTablesApiArg = void;
 export type ListTagsKnowledgeFlowV1TagsGetApiResponse = /** status 200 Successful Response */ TagWithDocumentsId[];
 export type ListTagsKnowledgeFlowV1TagsGetApiArg = void;
 export type CreateTagKnowledgeFlowV1TagsPostApiResponse = /** status 200 Successful Response */ TagWithDocumentsId;
@@ -338,12 +331,13 @@ export type DocumentMetadata = {
   document_uid: string;
   /** When the document was added to the system */
   date_added_to_kb?: string;
+  /** True if the system can download or access the original file again */
   retrievable?: boolean;
-  /** Tag for identifying the pull source (e.g., 'local-docs') */
+  /** Tag identifying the pull source (e.g., 'local-docs', 'contracts-git') */
   source_tag?: string | null;
-  /** Relative or absolute URI/path to the external document */
+  /** Path or URI to the original pull file */
   pull_location?: string | null;
-  source_type?: SourceType | null;
+  source_type: SourceType;
   /** User-assigned tags */
   tags?: string[] | null;
   title?: string | null;
@@ -410,7 +404,7 @@ export type PullFileEntry = {
   path: string;
   size: number;
   modified_time: number;
-  hash?: string | null;
+  hash: string;
 };
 export type DocumentSourceInfo = {
   tag: string;
@@ -441,53 +435,15 @@ export type TabularSchemaResponse = {
 };
 export type TabularQueryResponse = {
   document_name: string;
-  rows: {
-    [key: string]: any;
-  }[];
+  rows?:
+    | {
+        [key: string]: any;
+      }[]
+    | null;
+  error?: string | null;
 };
-export type FilterCondition = {
-  column: string;
-  op?: string;
-  value: any;
-};
-export type OrderBySpec = {
-  column: string;
-  direction?: string | null;
-};
-export type JoinSpec = {
-  table: string;
-  on: string;
-  type?: string | null;
-};
-export type AggregationSpec = {
-  function: string;
-  column: string;
-  alias?: string | null;
-  distinct?: boolean;
-  filter?: {
-    [key: string]: any;
-  } | null;
-};
-export type SqlQueryPlan = {
-  table: string;
-  columns?: string[] | null;
-  filters?: FilterCondition[] | null;
-  group_by?: string[] | null;
-  order_by?: OrderBySpec[] | null;
-  limit?: number | null;
-  joins?: JoinSpec[] | null;
-  aggregations?: AggregationSpec[] | null;
-};
-export type TabularQueryRequest = {
-  query?: string | SqlQueryPlan | null;
-};
-export type TabularDatasetMetadata = {
-  document_name: string;
-  title: string;
-  description?: string | null;
-  tags?: string[];
-  domain?: string | null;
-  row_count?: number | null;
+export type RawSqlRequest = {
+  query: string;
 };
 export type TagType = "library";
 export type TagWithDocumentsId = {
@@ -544,9 +500,13 @@ export type SearchRequest = {
 };
 export type FileToProcess = {
   source_tag: string;
+  tags?: string[];
+  display_name?: string | null;
   document_uid?: string | null;
   external_path?: string | null;
-  tags?: string[];
+  size?: number | null;
+  modified_time?: number | null;
+  hash?: string | null;
 };
 export type PipelineDefinition = {
   name: string;
@@ -579,11 +539,11 @@ export const {
   useLazyDownloadDocumentKnowledgeFlowV1RawContentDocumentUidGetQuery,
   useStreamProcessKnowledgeFlowV1ProcessFilesPostMutation,
   useStreamLoadKnowledgeFlowV1UploadFilesPostMutation,
-  useGetSchemaQuery,
-  useLazyGetSchemaQuery,
-  useMakeQueryMutation,
-  useListTablesQuery,
-  useLazyListTablesQuery,
+  useListTableNamesQuery,
+  useLazyListTableNamesQuery,
+  useGetAllSchemasQuery,
+  useLazyGetAllSchemasQuery,
+  useRawSqlQueryMutation,
   useListTagsKnowledgeFlowV1TagsGetQuery,
   useLazyListTagsKnowledgeFlowV1TagsGetQuery,
   useCreateTagKnowledgeFlowV1TagsPostMutation,

@@ -123,12 +123,22 @@ export const useDocumentActions = (onRefreshData?: () => void) => {
   const handleProcess = async (files: FileRow[]) => {
     try {
       const payload: ProcessDocumentsRequest = {
-        files: files.map((f) => ({
-          source_tag: f.source_type || "uploads",
-          document_uid: f.document_uid,
-          external_path: undefined,
-          tags: f.tags || [],
-        })),
+        files: files.map((f) => {
+          const isPull = f.source_type === "pull";
+
+          return {
+            source_tag: f.source_tag || "uploads",
+            document_uid: isPull ? undefined : f.document_uid,
+            external_path: isPull ? f.pull_location : undefined,
+            tags: f.tags || [],
+            display_name: f.document_name,
+            // Todo: hash, size, modified_time should not exist in FileRow, this should be
+            // removed of type should be fixed in the Open API spec
+            hash: isPull ? f.hash : undefined,
+            size: isPull ? f.size : undefined,
+            modified_time: isPull ? f.modified_time : undefined,
+          };
+        }),
         pipeline_name: "manual_ui_trigger",
       };
 

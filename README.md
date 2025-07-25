@@ -134,19 +134,20 @@ To get full VS Code Python support (linting, IntelliSense, debugging, etc.) acr
 
   When you open Fred's VS Code workspace, VS Code will load four folders:
 
-  - fred – for any repo‑wide scripts
-  - agentic_backend – first Python backend
-  - knowledge_flow_backend – second Python backend
-  - fred-core - a common python library for both python backends
-  - frontend – UI
+  - ``fred`` – for any repo‑wide files, scripts, etc
+  - ``agentic_backend`` – first Python backend
+  - ``knowledge_flow_backend`` – second Python backend
+  - ``fred-core`` - a common python library for both python backends
+  - ``frontend`` – UI
 
 2. Per‑folder Python interpreters
-  Each backend ships its own virtual environment under .venv. We’ve added a per‑folder VS Code setting (see for instance ``agentic_backend/.vscode/settings.json``) to automatically pick it:
 
-  This ensures that as soon as you open a Python file under agentic_backend/ (or knowledge_flow_backend/), VS Code will:
-  
-  - Activate that folder’s virtual environment
-  - Provide linting, IntelliSense, formatting, and debugging using the correct Python
+    Each backend ships its own virtual environment under .venv. We’ve added a per‑folder VS Code setting (see for instance ``agentic_backend/.vscode/settings.json``) to automatically pick it:
+
+    This ensures that as soon as you open a Python file under agentic_backend/ (or knowledge_flow_backend/), VS Code will:
+    
+    - Activate that folder’s virtual environment
+    - Provide linting, IntelliSense, formatting, and debugging using the correct Python
 
 ---
 
@@ -247,11 +248,10 @@ We welcome pull requests and issues. Start with the [Contributing guide](./CONTR
 Apache 2.0 — see [LICENSE](./LICENSE)
 
 ---
-
 ## Contacts
 
 - alban.capitant@thalesgroup.com
-- fabien.le-solliec@thalesgroup.com
-- florian.muller@thalesgroup.com
-- simon.cariou@thalesgroup.com 
-- dimitri.tombroff@thalesgroup.com
+- fabien.le-solliec@thalesgroup.com
+- florian.muller@thalesgroup.com
+- simon.cariou@thalesgroup.com
+- dimitri.tombroff@thalesgroup.com

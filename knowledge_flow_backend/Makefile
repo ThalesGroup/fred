@@ -97,8 +97,7 @@ run: dev ## Run the app from source
 		--factory ${UVICORN_FACTORY} \
 		--port ${PORT} \
 		--env-file ${ENV_FILE} \
-		--log-level ${LOG_LEVEL} \
-		--reload
+		--log-level ${LOG_LEVEL}
 
 .PHONY: run-worker
 

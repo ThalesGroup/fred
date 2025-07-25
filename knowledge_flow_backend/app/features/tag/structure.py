@@ -17,7 +17,7 @@ from enum import Enum
 from pydantic import BaseModel
 from fred_core import BaseModelWithId
 
-from app.common.structures import DocumentMetadata
+from app.common.document_structures import DocumentMetadata
 
 
 class TagType(Enum):
@@ -37,6 +37,7 @@ class TagUpdate(BaseModel):
     type: TagType
     document_ids: list[str] = []
 
+
 # Saved data to represent a tag
 class Tag(BaseModelWithId):
     created_at: datetime
@@ -47,6 +48,7 @@ class Tag(BaseModelWithId):
     description: str | None = None
     type: TagType
 
+
 # Tag with associated document IDs coming from document metadata store
 class TagWithDocumentsId(Tag, BaseModel):
     document_ids: list[str]
@@ -54,7 +56,6 @@ class TagWithDocumentsId(Tag, BaseModel):
     @classmethod
     def from_tag(cls, tag: Tag, document_ids: list[str]) -> "TagWithDocumentsId":
         return cls(**tag.model_dump(), document_ids=document_ids)
-
 
 
 # Tag with associated full document coming from document metadata store

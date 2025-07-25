@@ -17,7 +17,7 @@
 # Licensed under the Apache License 2.0
 
 from datetime import datetime
-from app.common.structures import DocumentMetadata
+from app.common.document_structures import DocumentMetadata
 from app.core.stores.metadata.base_metadata_store import BaseMetadataStore
 from fastapi.testclient import TestClient
 from fastapi import status
@@ -35,6 +35,7 @@ import pytest
 @pytest.fixture
 def document1():
     return DocumentMetadata(
+            source_type="push",
             document_uid="doc-01",
             document_name="document.md",
             title="Example Document",
@@ -47,6 +48,7 @@ def document1():
 @pytest.fixture
 def document2():
     return DocumentMetadata(
+            source_type="push",
             document_uid="doc-02",
             document_name="ai_revolution.pdf",
             title="AI Revolution",
@@ -75,7 +77,9 @@ class TestMetadataController:
         assert resp.status_code == status.HTTP_404_NOT_FOUND
 
     def test_get_documents_metadata(self, client_fixture, metadata_store: BaseMetadataStore, 
-                                    document1: DocumentMetadata, document2: DocumentMetadata):
+                                    document1: DocumentMetadata, 
+                                    document2: DocumentMetadata):
+        metadata_store.clear()
         metadata_store.save_metadata(document1)
         metadata_store.save_metadata(document2)
 
@@ -89,6 +93,8 @@ class TestMetadataController:
                                                  metadata_store: BaseMetadataStore, 
                                                  document1: DocumentMetadata, 
                                                  document2: DocumentMetadata):
+        metadata_store.clear()
+
         metadata_store.save_metadata(document1)
         metadata_store.save_metadata(document2)
 

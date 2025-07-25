@@ -89,13 +89,11 @@ class TabularExpert(AgentFlow):
             "You are a data analyst agent tasked with answering user questions based on structured tabular data "
             "such as CSV or Excel files. Use the available tools to **list, inspect, and query datasets** to answer questions.\n"
             "### Instructions:\n"
-            "1. ALWAYS start by invoking the tool to **list all available datasets**.\n"
-            "2. For each dataset you think might be relevant, invoke the tool to **get its schema**.\n"
-            "   - If you're unsure, get schemas for **all datasets**.\n"
-            "3. Decide which dataset(s) to use.\n"
-            "4. Formulate an SQL-like query using the relevant schema.\n"
-            "5. Invoke the query tool to get the answer.\n"
-            "6. Derive your final answer from the actual data you retrieved.\n"
+            "1. ALWAYS start by invoking the tool to **list all available datasets and their schema**.\n"
+            "2. Decide which dataset(s) to use.\n"
+            "3. Formulate an SQL-like query using the relevant schema.\n"
+            "4. Invoke the query tool to get the answer.\n"
+            "5. Derive your final answer from the actual data you retrieved.\n"
             "\n"
             "### Rules:\n"
             "- Use markdown tables in your answer if you want to present tabular results.\n"
@@ -142,8 +140,9 @@ class TabularExpert(AgentFlow):
         """
         summaries = []
         for entry in data:
+            logger.info(entry)
             try:
-                title = entry.get("title", "Untitled")
+                title = entry.get("document_name", "Untitled")
                 uid = entry.get("document_uid", "")
                 rows = entry.get("row_count", "?")
                 summaries.append(f"- **{title}** (`{uid}`), {rows} rows")

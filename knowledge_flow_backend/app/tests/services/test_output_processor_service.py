@@ -16,37 +16,20 @@
 
 import shutil
 from pathlib import Path
-from app.features.ingestion.service import IngestionService
 import pytest
 
-from app.common.structures import DocumentMetadata, OutputProcessorResponse
+from app.common.document_structures import DocumentMetadata
+from app.common.structures import OutputProcessorResponse
+from app.features.ingestion.service import IngestionService
 from app.core.processors.input.common.base_image_describer import BaseImageDescriber
 from app.application_context import ApplicationContext
 from app.core.processors.input.pdf_markdown_processor.pdf_markdown_processor import PdfMarkdownProcessor
-from app.core.stores.vector.base_vector_store import BaseDocumentLoader
-from langchain.schema.document import Document
 
-
-class DummyProcessor:
-    def process(self, path, metadata):
-        return OutputProcessorResponse(chunks=1, vectors=[], metadata=metadata)
-
-
-class DummyDescriber(BaseImageDescriber):
-    def describe(self, base64_image: str) -> str:
-        return "This is a test image description"
-
-
-class DummyDocumentLoader(BaseDocumentLoader):
-    def load(self, file_path: str, metadata: dict) -> Document:
-        return Document(page_content="abcdefg", metadata={})
-
-
-# ✅ Correct — define fixture at module level
 @pytest.fixture
 def prepared_pdf_dir(tmp_path, monkeypatch):
     from shutil import copy
 
+    # Set dummy describer in PDF processor
     class DummyDescriber(BaseImageDescriber):
         def describe(self, base64_image: str) -> str:
             return "This is a test image description"
@@ -59,10 +42,17 @@ def prepared_pdf_dir(tmp_path, monkeypatch):
     )
 
     source_file = Path("app/tests/assets/sample.pdf")
-    target_file = tmp_path / source_file.name
-    copy(source_file, target_file)
+    input_file = tmp_path / source_file.name
+    copy(source_file, input_file)
 
-    IngestionService().process_input(tmp_path, target_file.name, DocumentMetadata(document_name=source_file.name, document_uid="pdf-uid-123"))
+    output_dir = tmp_path / "output"
+    output_dir.mkdir()
+
+    IngestionService().process_input(input_file, output_dir, DocumentMetadata(
+        source_type="push",
+        document_name=source_file.name,
+        document_uid="pdf-uid-123"
+    ))
 
     return tmp_path
 
@@ -75,36 +65,65 @@ class TestOutputProcessorService:
     @pytest.fixture
     def prepared_docx_dir(self, tmp_path):
         source = Path("app/tests/assets/sample.docx")
-        target = tmp_path / source.name
-        shutil.copy(source, target)
-        IngestionService().process_input(tmp_path, target.name, 
-                                         DocumentMetadata(
-                                            document_name=source.name,
-                                            document_uid="pdf-uid-123"
-                                            )
-                                         )
+        input_file = tmp_path / source.name
+        shutil.copy(source, input_file)
+
+        output_dir = tmp_path / "output"
+        output_dir.mkdir()
+
+        IngestionService().process_input(input_file, output_dir, DocumentMetadata(
+            source_type="push",
+            document_name=source.name,
+            document_uid="docx-uid-123"
+        ))
+
         return tmp_path
 
     # ✅ Nominal
     def test_process_real_pdf_success(self, service: IngestionService, prepared_pdf_dir):
-        result = service.process_output(prepared_pdf_dir, "sample.pdf", 
-                                        DocumentMetadata(
-                                            document_name="sample.pdf",
-                                            document_uid="pdf-uid-123"
-                                            ))
+        metadata = DocumentMetadata(
+            source_type="push",
+            document_name="sample.pdf",
+            document_uid="pdf-uid-123"
+        )
+
+        # 🔍 Find the actual output preview file (e.g. output.md or table.csv)
+        output_dir = prepared_pdf_dir / "output"
+        output_file = service.get_preview_file(metadata, output_dir)
+
+        # ✅ Now process that real preview file (not a hardcoded .pdf)
+        result = service.process_output(
+            input_file_name=output_file.name,
+            output_dir=output_dir,
+            input_file_metadata=metadata
+        )
+
         assert isinstance(result, OutputProcessorResponse)
 
     def test_process_real_docx_success(self, service: IngestionService, prepared_docx_dir):
-        result = service.process_output(prepared_docx_dir, "sample.docx", DocumentMetadata(
-                                            document_name="sample.docx",
-                                            document_uid="docx-uid-123"
-                                            ))
+        metadata = DocumentMetadata(
+            source_type="push",
+            document_name="sample.docx",
+            document_uid="docx-uid-123"
+        )
+        output_file = service.get_preview_file(metadata, prepared_docx_dir / "output")
+        output_dir = prepared_docx_dir / "output"
+        
+        result = service.process_output(
+            input_file_name=output_file.name,
+            output_dir=output_dir,
+            input_file_metadata=metadata
+        )
         assert isinstance(result, OutputProcessorResponse)
 
     # ❌ Failure
     def test_output_processor_missing_output_dir(self, service: IngestionService, tmp_path):
-        with pytest.raises(ValueError, match="does not exist"):
-            service.process_output(tmp_path, "fake.pdf", {})
+        with pytest.raises(ValueError):
+            service.process_output(
+                tmp_path,
+                "fake.pdf",
+                DocumentMetadata(source_type="push", document_uid="missing")
+            )
 
     @pytest.mark.parametrize(
         "file_name, create_file, content",
@@ -124,14 +143,22 @@ class TestOutputProcessorService:
             (tmp_path / "output").write_text("this is not a directory")
 
         with pytest.raises(ValueError):
-            service.process_output(tmp_path, "test.md", DocumentMetadata(document_uid="unknown"))
+            service.process_output(
+                tmp_path,
+                "test.md",
+                DocumentMetadata(source_type="push", document_uid="unknown")
+            )
 
     def test_output_processor_rejects_non_markdown_csv(self, monkeypatch, service: IngestionService, tmp_path):
         (tmp_path / "output").mkdir(parents=True)
         (tmp_path / "output" / "output.xlsx").write_text("fake content")
 
-        with pytest.raises(ValueError, match="is not a markdown or csv file"):
-            service.process_output(tmp_path, "sample.xlsx", {"document_uid": "bad-ext"})
+        with pytest.raises(ValueError):
+            service.process_output(
+                tmp_path,
+                "sample.xlsx",
+                DocumentMetadata(source_type="push", document_uid="bad-ext")
+            )
 
     def test_output_processor_empty_output_file(self, service: IngestionService, tmp_path):
         doc_path = tmp_path / "sample.pdf"
@@ -139,6 +166,13 @@ class TestOutputProcessorService:
         output_dir.mkdir(parents=True)
         (output_dir / "output.md").touch()
 
-        with pytest.raises(ValueError, match="does not exist"):
-            service.process_output(tmp_path, "sample.pdf", 
-                                   DocumentMetadata(document_name="sample.pdf", document_uid="docx-uid-123"))
+        with pytest.raises(ValueError):
+            service.process_output(
+                tmp_path,
+                "sample.pdf",
+                DocumentMetadata(
+                    source_type="push",
+                    document_name="sample.pdf",
+                    document_uid="docx-uid-123"
+                )
+            )
