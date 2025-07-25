@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import React, { useState } from "react";
-import { Box, Typography, TextField, Button, Drawer } from "@mui/material";
 import SaveIcon from "@mui/icons-material/Save";
+import { Box, Button, Drawer, TextField, Typography } from "@mui/material";
+import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useToast } from "../ToastProvider";
-import { useCreateTagKnowledgeFlowV1TagsPostMutation } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { useNavigate } from "react-router-dom";
+import { useCreateTagKnowledgeFlowV1TagsPostMutation } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { useToast } from "../ToastProvider";
 
 interface LibraryCreateDrawerProps {
   isOpen: boolean;
@@ -41,7 +41,9 @@ export const LibraryCreateDrawer: React.FC<LibraryCreateDrawerProps> = ({ isOpen
     onClose();
   };
 
-  const handleCreate = async () => {
+  const handleCreate = async (e?: React.FormEvent) => {
+    e?.preventDefault();
+    
     if (!name.trim()) {
       showError({
         summary: t("libraryCreateDrawer.validationError"),
@@ -95,7 +97,7 @@ export const LibraryCreateDrawer: React.FC<LibraryCreateDrawerProps> = ({ isOpen
         {t("libraryCreateDrawer.title")}
       </Typography>
 
-      <Box sx={{ mt: 3 }}>
+      <Box component="form" onSubmit={handleCreate} sx={{ mt: 3 }}>
         <TextField
           fullWidth
           label={t("libraryCreateDrawer.libraryName")}
@@ -103,6 +105,7 @@ export const LibraryCreateDrawer: React.FC<LibraryCreateDrawerProps> = ({ isOpen
           onChange={(e) => setName(e.target.value)}
           required
           sx={{ mb: 2 }}
+          autoFocus
         />
 
         <TextField
@@ -125,7 +128,7 @@ export const LibraryCreateDrawer: React.FC<LibraryCreateDrawerProps> = ({ isOpen
           variant="contained"
           color="success"
           startIcon={<SaveIcon />}
-          onClick={handleCreate}
+          type="submit"
           disabled={isLoading || !name.trim()}
           sx={{ borderRadius: "8px" }}
         >
