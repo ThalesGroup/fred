@@ -1,45 +1,24 @@
-# Copyright Thales 2025
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import logging
 from typing import List
-
 from fastapi import APIRouter, HTTPException
-
 from app.features.tabular.service import TabularService
 from app.features.tabular.structures import (
-    TabularDatasetMetadata,
-    TabularQueryRequest,
+    RawSQLRequest,
     TabularQueryResponse,
     TabularSchemaResponse,
+    RawSQLRequest
 )
+from app.features.tabular.utils import extract_safe_sql_query
 
 logger = logging.getLogger(__name__)
 
 
 class TabularController:
     """
-    Controller for interacting with SQL-like tabular datasets
-    stored in DuckDB within the Knowledge Flow system.
-
-    Exposes endpoints to:
-      - Retrieve the schema (columns and types) of a table
-      - Query rows using SQL-like filters
-      - List all registered tabular datasets
-
-    This controller is exposed as an MCP tool, enabling agentic
-    workflows over structured tabular data stored in DuckDB.
+    Lightweight API controller to expose tabular tools to LLM agents:
+      - List available tables
+      - Get full schema for each table
+      - Execute a SQLQueryPlan
     """
 
     def __init__(self, router: APIRouter):
@@ -47,90 +26,59 @@ class TabularController:
         self._register_routes(router)
 
     def _register_routes(self, router: APIRouter):
-        @router.get(
-            "/tabular/{document_uid}/schema",
-            response_model=TabularSchemaResponse,
-            tags=["Tabular"],
-            operation_id="get_schema",
-            summary="Get schema (columns/types) of a SQL-like table"
-        )
-        async def get_schema(document_uid: str):
-            logger.info(f"Received schema request for table UID: {document_uid}")
-            try:
-                return self.service.get_schema(document_uid)
-            except FileNotFoundError:
-                logger.warning(f"Table not found for UID: {document_uid}")
-                raise HTTPException(status_code=404, detail="Table not found")
-            except Exception as e:
-                logger.exception(f"Error fetching schema for UID {document_uid}: {e}")
-                raise HTTPException(status_code=500, detail="Internal server error")
 
+        @router.get(
+            "/tabular/tables",
+            response_model=List[str],
+            tags=["Tabular"],
+            operation_id="list_table_names",
+            summary="List all available table names"
+        )
+        async def list_tables():
+            logger.info("Listing all available table names")
+            try:
+                return self.service.tabular_store.list_tables()
+            except Exception as e:
+                logger.exception("Failed to list table names")
+                raise HTTPException(status_code=500, detail=str(e))
+            
+        @router.get(
+            "/tabular/schemas",
+            response_model=List[TabularSchemaResponse],
+            tags=["Tabular"],
+            operation_id="get_all_schemas",
+            summary="Get schemas for all available tables"
+        )
+        async def get_schemas():
+            logger.info("Fetching schemas for all datasets")
+            try:
+                return self.service.list_datasets_with_schema()
+            except Exception as e:
+                logger.exception("Failed to get schemas")
+                raise HTTPException(status_code=500, detail=str(e))
+            
         @router.post(
-            "/tabular/{document_uid}/query",
+            "/tabular/sql",
             response_model=TabularQueryResponse,
             tags=["Tabular"],
-            operation_id="make_query",
-            summary="Execute a SQL-like query on a tabular dataset",
-            description="""
-                Respond with a **JSON object** describing the SQL query plan. This will be transformed into SQL by the server.
-
-                ## Fields:
-                - `table` *(REQUIRED)*: main table to query.
-                - `columns` *(OPTIONAL)*: columns to SELECT. Use `*` or leave empty to select all.
-                - `filters` *(OPTIONAL)*: list of conditions for the WHERE clause.
-                - `group_by`, `order_by`, `limit` *(OPTIONAL)*: standard SQL clauses.
-                - `joins` *(OPTIONAL)*: list of joins with other tables.
-
-                ### Filters:
-                - `column`: the column to filter on.
-                - `op`: SQL operator (e.g. '=', '<>', '>', '<', 'LIKE', 'IN').
-                - `value` (can be scalar or list for IN).
-                exemple: "filters": [{"column": "status", "op": "=", "value": "active"}]"
-
-                ### OrderBySpec:
-                - `column`: column.
-                - `direction`: ASC or DESC, defaults to ASC.
-                exemple: "order_by": [{"column": "user_id", "direction": "DESC"}]
-
-                ### JoinSpec:
-                - `table`: name of the table to join.
-                - `on`: join condition.
-                - `type`: join type (INNER, LEFT, etc.).
-
-                ### AggregationSpec:
-                - `function`: aggregation function (e.g. SUM, COUNT, AVG, etc.).
-                - `column`: column to aggregate.
-                - `alias`: result alias for the aggregated value.
-                - `distinct` *(OPTIONAL)*: boolean. If true, applies DISTINCT to the aggregation (e.g. `COUNT(DISTINCT column)`).
-                - `filter` *(OPTIONAL)*: dictionary of conditions applied *within* the aggregation using SQL FILTER (WHERE ...) syntax. Example: `{"status": "active"}` will generate `FILTER (WHERE status = 'active')`.
-
-                - `aggregations` *(OPTIONAL)*: list of aggregation specifications to compute in SELECT.
-
-                Always specify `table`. Use `joins`, `filters`, `aggregations`, `group_by`, `order_by`, `limit` as needed.
-                """
+            operation_id="raw_sql_query",
+            summary="Execute raw SQL query directly",
+            description="Submit a raw SQL string. Use this with caution: the query is executed directly."
         )
-        async def query_tabular(document_uid: str, query: TabularQueryRequest):
-            logger.info(f"Received query for table UID: {document_uid} with parameters: {query}")
+        async def raw_sql_query(request: RawSQLRequest):
             try:
-                return self.service.query(document_uid, query)
-            except FileNotFoundError:
-                logger.warning(f"Table not found for UID: {document_uid}")
-                raise HTTPException(status_code=404, detail="Table not found")
+                sql = extract_safe_sql_query(request.query)
+                logger.info(f"Executing raw SQL: {sql}")
+                return self.service.query(document_name="raw_sql", request=RawSQLRequest(query=sql))
+            
+            except PermissionError as e:
+                logger.warning(f"Forbidden SQL query attempt: {e}")
+                raise HTTPException(status_code=403, detail=str(e))
+
             except Exception as e:
-                logger.exception(f"Error querying table for UID {document_uid}: {e}")
+                logger.exception("Raw SQL execution failed")
                 raise HTTPException(status_code=500, detail="Internal server error")
 
-        @router.get(
-            "/tabular/list",
-            response_model=List[TabularDatasetMetadata],
-            tags=["Tabular"],
-            operation_id="list_tables",
-            summary="List available SQL-like tabular datasets"
-        )
-        async def list_tabular_datasets():
-            logger.info("Received request to list all tabular datasets")
-            try:
-                return self.service.list_tabular_datasets()
-            except Exception as e:
-                logger.exception(f"Error listing tabular datasets: {e}")
-                raise HTTPException(status_code=500, detail="Internal server error")
+
+            
+        
