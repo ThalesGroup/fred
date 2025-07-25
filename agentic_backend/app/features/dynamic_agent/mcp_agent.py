@@ -59,7 +59,7 @@ class MCPAgent(AgentFlow):
         )
         
     def build_base_prompt(self) -> str:
-        return f"{self.base_prompt}\n\nThe current date is {self.current_date}."
+        return f"{self.base_prompt}\n\nThe current date is {datetime.now().strftime('%Y-%m-%d')}."
 
     async def reasoner(self, state: MessagesState):
         try:
