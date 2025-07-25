@@ -38,7 +38,7 @@ from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain_core.tools import BaseTool
 from app.flow import AgentFlow, Flow  # Base class for all agent flows
 from app.common.utils import log_exception
-from app.common.error import UnsupportedTransportError, MCPToolFetchError
+from app.common.error import MCPClientConnectionException, UnsupportedTransportError, MCPToolFetchError
 from app.services.chatbot_session.abstract_session_backend import AbstractSessionStorage
 from app.features.dynamic_agent.stores.base_agent_store import BaseDynamicAgentStore
 from pathlib import Path
@@ -424,10 +424,15 @@ class ApplicationContext:
         nest_asyncio.apply() # required to allow nested event loops @TODO Maybe find a more clever way to handle it
         
         mcp_client = MultiServerMCPClient()
-        loop = asyncio.get_event_loop()
-        loop.run_until_complete(self.connect_to_mcp_server(agent_name, mcp_client))
-        return mcp_client
-    
+        try:
+            loop = asyncio.get_event_loop()
+            loop.run_until_complete(self.connect_to_mcp_server(agent_name, mcp_client))
+            return mcp_client
+        except Exception as e:
+            # Log the full traceback
+            logger.exception(f"[MCP] Failed to connect MCP client for agent '{agent_name}'")
+            raise MCPClientConnectionException(agent_name, str(e)) from e
+        
     def get_mcp_agent_tools(self, mcp_client: MultiServerMCPClient) -> list[BaseTool]:
         tools = mcp_client.get_tools()
         if not tools:
