@@ -78,7 +78,7 @@ class VectorSearchController:
             title=metadata.get("title", "Unknown"),
             author=metadata.get("author", "Unknown"),
             created=metadata.get("created", "Unknown"),
-            type=metadata.get("category", "document"),
+            type=metadata.get("category") or "document",
             score=score,
             rank=rank,
             embedding_model=str(metadata.get("embedding_model", "unknown_model")),
