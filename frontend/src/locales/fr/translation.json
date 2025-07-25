@@ -96,6 +96,33 @@
         "categories": {
             "all": "Tous",
             "favorites": "Favoris"
+        },
+        "fields": {
+            "name": "Nom",
+            "nickname": "Diminutif",
+            "description": "Description",
+            "role": "Role",
+            "base_prompt": "Prompt",
+            "agent_type": "Type d'agent",
+            "icon": "Icône",
+            "tags": "Tags",
+            "custom_tag": "Nouveau tag",
+            "custom_tag_placeholder": "Appuyez sur Entrée pour ajouter",
+            "mcp_servers": "Serveurs MCP",
+            "selectFromPredefined": "Choisir", 
+            "mcp_server": {
+                "name": "Nom",
+                "url": "URL",
+                "transport": "Transport",
+                "timeout": "Timeout"
+            }
+        },
+        "actions": {
+            "add_mcp_server": "+ Ajouter un Serveur MCP"
+        },
+        "errors": {
+            "creationFailedSummary": "Échec de la création de l’agent",
+            "creationFailedDetailFallback": "Une erreur inattendue s’est produite lors de la création de l’agent."
         }
     },
     "agentCard": {

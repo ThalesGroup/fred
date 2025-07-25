@@ -16,7 +16,8 @@ import RobotIcon from "@mui/icons-material/SmartToy";
 import ChipIcon from "@mui/icons-material/Memory";
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import EmojiObjectsIcon from "@mui/icons-material/EmojiObjects";
-
+import { Accordion, AccordionSummary, AccordionDetails } from "@mui/material";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import DeleteIcon from "@mui/icons-material/Delete";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -45,10 +46,6 @@ const iconOptions = [
 ];
 
 const TAG_GROUPS = {
-    technology: {
-        tags: ["kube", "gcp", "s3ns", "prometheus", "elastic", "openai", "ollama"],
-        color: "primary",
-    },
     function: {
         tags: ["qa", "search", "audit", "dashboard", "monitoring", "retrieval", "forecasting", "summarization"],
         color: "success",
@@ -110,7 +107,10 @@ export const CreateAgentModal = ({ open, onClose, onCreated }: CreateAgentModalP
             setTags([]);
         } catch (error) {
             console.error("Error creating agent:", error);
-            showError({ summary: "Agent creation failed", detail: error?.data?.detail || error.message });
+            showError({
+                summary: t("agentHub.errors.creationFailedSummary"),
+                detail: error?.data?.detail || t("agentHub.errors.creationFailedDetailFallback"),
+            });
         } finally {
             setIsSubmitting(false);
         }
@@ -146,70 +146,109 @@ export const CreateAgentModal = ({ open, onClose, onCreated }: CreateAgentModalP
                         </Grid2>
                     ))}
 
-                   <Grid2 size={12}>
-  <Typography variant="subtitle2" sx={{ mb: 1 }}>
-    {t("agentHub.fields.tags", "Tags")}
-  </Typography>
+                    <Grid2 size={12}>
+                        <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                            {t("agentHub.fields.tags", "Tags")}
+                        </Typography>
 
-  {/* Selected tags first */}
-  {tags.length > 0 && (
-    <Box display="flex" flexWrap="wrap" gap={1} mb={2}>
-      {tags.map((tag) => (
-        <Chip
-          key={tag}
-          label={tag}
-          size="small"
-          color={getTagColor(tag) || "info"}
-          onDelete={() => setTags((prev) => prev.filter((t) => t !== tag))}
-        />
-      ))}
-    </Box>
-  )}
+                        {/* Selected tags first */}
+                        {tags.length > 0 && (
+                            <Box display="flex" flexWrap="wrap" gap={1} mb={2}>
+                                {tags.map((tag) => (
+                                    <Chip
+                                        key={tag}
+                                        label={tag}
+                                        size="small"
+                                        color={getTagColor(tag) || "info"}
+                                        onDelete={() => setTags((prev) => prev.filter((t) => t !== tag))}
+                                    />
+                                ))}
+                            </Box>
+                        )}
 
-  {/* Predefined tags grouped with left padding */}
-  <Grid2 container spacing={1} sx={{ pl: 3 }}>
-    {Object.entries(TAG_GROUPS).map(([groupName, group]) => (
-      <Grid2 key={groupName} size={12}>
-        <Typography variant="caption" fontWeight="bold" sx={{ mb: 0.5 }}>
-          {groupName.toUpperCase()}
-        </Typography>
-        <Box display="flex" flexWrap="wrap" gap={1} mb={1}>
-          {group.tags.map((tag) => (
-            <Chip
-              key={tag}
-              label={tag}
-              size="small"
-              color={getTagColor(tag)}
-              variant={tags.includes(tag) ? "filled" : "outlined"}
-              onClick={() => handleToggleTag(tag)}
-            />
-          ))}
-        </Box>
-      </Grid2>
-    ))}
-  </Grid2>
+                        <Grid2 container spacing={2} sx={{ pl: 3 }}>
+                            <Grid2 size={{ xs: 12, sm: 6 }}>
+                                <Box sx={{ position: "relative", width: "100%" }}>
+                                    <Accordion
+                                        defaultExpanded={false}
+                                        disableGutters
+                                        square
+                                        sx={{
+                                            height: 40,
+                                            minHeight: 40,
+                                            border: 1,
+                                            borderColor: "divider",
+                                            "& .MuiAccordionSummary-root": {
+                                                minHeight: 40,
+                                                padding: "0 8px",
+                                            },
+                                            "& .MuiAccordionSummary-content": {
+                                                margin: 0,
+                                            },
+                                            "& .MuiAccordionDetails-root": {
+                                                position: "absolute",
+                                                top: 40, // height of collapsed summary
+                                                left: 0,
+                                                width: "100%",
+                                                zIndex: 10,
+                                                bgcolor: "background.paper",
+                                                boxShadow: 3,
+                                                border: 1,
+                                                borderColor: "divider",
+                                                borderTop: "none",
+                                                maxHeight: 200,
+                                                overflowY: "auto",
+                                                p: 1,
+                                            },
+                                        }}
+                                    >
+                                        <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                                            <Typography variant="body2">
+                                                {t("agentHub.fields.selectFromPredefined", "Select from predefined tags")}
+                                            </Typography>
+                                        </AccordionSummary>
+                                        <AccordionDetails>
+                                            <Box display="flex" flexWrap="wrap" gap={1}>
+                                                {Object.values(TAG_GROUPS).flatMap((group) =>
+                                                    group.tags.map((tag) => (
+                                                        <Chip
+                                                            key={tag}
+                                                            label={tag}
+                                                            size="small"
+                                                            color={getTagColor(tag)}
+                                                            variant={tags.includes(tag) ? "filled" : "outlined"}
+                                                            onClick={() => handleToggleTag(tag)}
+                                                        />
+                                                    ))
+                                                )}
+                                            </Box>
+                                        </AccordionDetails>
+                                    </Accordion>
+                                </Box>
 
-  {/* Custom tag input also indented */}
-  <Grid2 size={12} sx={{ mt: 1, pl: 3 }}>
-    <TextField
-      fullWidth
-      size="small"
-      label="Add custom tag"
-      value={customTag}
-      onChange={(e) => setCustomTag(e.target.value)}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" && customTag.trim()) {
-          e.preventDefault();
-          if (!tags.includes(customTag.trim())) {
-            setTags((prev) => [...prev, customTag.trim()]);
-          }
-          setCustomTag("");
-        }
-      }}
-      placeholder="Press Enter to add"
-    />
-  </Grid2>
-</Grid2>
+                            </Grid2>
+
+                            <Grid2 size={{ xs: 12, sm: 6 }}>
+                                <TextField
+                                    fullWidth
+                                    size="small"
+                                    label={t("agentHub.fields.custom_tag", "Add custom tag")}
+                                    value={customTag}
+                                    onChange={(e) => setCustomTag(e.target.value)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === "Enter" && customTag.trim()) {
+                                            e.preventDefault();
+                                            if (!tags.includes(customTag.trim())) {
+                                                setTags((prev) => [...prev, customTag.trim()]);
+                                            }
+                                            setCustomTag("");
+                                        }
+                                    }}
+                                    placeholder={t("agentHub.fields.custom_tag_placeholder", "Press Enter to add")}
+                                />
+                            </Grid2>
+                        </Grid2>
+                    </Grid2>
 
                     <Grid2 size={12}>
                         <TextField
@@ -266,12 +305,12 @@ export const CreateAgentModal = ({ open, onClose, onCreated }: CreateAgentModalP
 
                     {form.agent_type === "mcp" && (
                         <>
-                            <Grid2 size={12}><strong>MCP Servers</strong></Grid2>
+                            <Grid2 size={12}><Typography fontWeight="bold">{t("agentHub.fields.mcp_servers", "MCP Servers")}</Typography></Grid2>
                             {mcpServers.map((server, index) => (
                                 <Grid2 container spacing={1} key={index} wrap="nowrap" alignItems="center">
                                     <Grid2 sx={{ width: 150 }}>
                                         <TextField
-                                            label="Name"
+                                            label={t("agentHub.fields.mcp_server.name", "Name")}
                                             fullWidth
                                             size="small"
                                             value={server.name}
@@ -280,7 +319,7 @@ export const CreateAgentModal = ({ open, onClose, onCreated }: CreateAgentModalP
                                     </Grid2>
                                     <Grid2 sx={{ flexGrow: 1 }}>
                                         <TextField
-                                            label="URL"
+                                            label={t("agentHub.fields.mcp_server.url", "URL")}
                                             fullWidth
                                             size="small"
                                             value={server.url}
@@ -292,7 +331,7 @@ export const CreateAgentModal = ({ open, onClose, onCreated }: CreateAgentModalP
                                             select
                                             fullWidth
                                             size="small"
-                                            label="Transport"
+                                            label={t("agentHub.fields.mcp_server.transport", "Transport")}
                                             value={server.transport ?? "sse"}
                                             onChange={(e) => updateMcpServer(index, { ...server, transport: e.target.value as McpTransport })}
                                         >
@@ -303,7 +342,7 @@ export const CreateAgentModal = ({ open, onClose, onCreated }: CreateAgentModalP
                                     </Grid2>
                                     <Grid2 sx={{ width: 100 }}>
                                         <TextField
-                                            label="Timeout"
+                                            label={t("agentHub.fields.mcp_server.timeout", "Timeout")}
                                             type="number"
                                             size="small"
                                             fullWidth
@@ -329,7 +368,8 @@ export const CreateAgentModal = ({ open, onClose, onCreated }: CreateAgentModalP
                                         ])
                                     }
                                 >
-                                    + Add MCP Server
+                                    {t("agentHub.actions.add_mcp_server", "+ Add MCP Server")}
+
                                 </Button>
                             </Grid2>
                         </>

@@ -80,7 +80,6 @@ export const AgentHub = () => {
   const theme = useTheme();
   const { t } = useTranslation();
   const [agenticFlows, setAgenticFlows] = useState<Agent[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [tabValue, setTabValue] = useState(0);
   const [showElements, setShowElements] = useState(false);
   const [favoriteAgents, setFavoriteAgents] = useState<string[]>([]);
@@ -89,12 +88,10 @@ export const AgentHub = () => {
   const handleOpenCreateAgent = () => setIsCreateModalOpen(true);
   const handleCloseCreateAgent = () => setIsCreateModalOpen(false);
 
-  const [getAgenticFlows] = useGetChatBotAgenticFlowsMutation();
-
+  const [getAgenticFlows, {isLoading}] = useGetChatBotAgenticFlowsMutation();
 
   const fetchAgents = async () => {
     try {
-      setIsLoading(true);
       const response = await getAgenticFlows().unwrap();
       setAgenticFlows(response);
       const tags = extractUniqueTags(response);
@@ -111,8 +108,6 @@ export const AgentHub = () => {
       }
     } catch (error) {
       console.error("Error fetching agents:", error);
-    } finally {
-      setIsLoading(false);
     }
   };
 

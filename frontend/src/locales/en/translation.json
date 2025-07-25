@@ -96,6 +96,30 @@
         "categories": {
             "all": "All",
             "favorites": "Favorites"
+        },
+        "fields": {
+            "name": "Name",
+            "nickname": "Nickname",
+            "description": "Description",
+            "role": "Role",
+            "base_prompt": "Base Prompt",
+            "agent_type": "Agent Type",
+            "icon": "Icon",
+            "tags": "Tags",
+            "custom_tag": "Add custom tag",
+            "custom_tag_placeholder": "Press Enter to add",
+            "mcp_servers": "MCP Servers",
+            "selectFromPredefined": "Select", 
+            "mcp_server": {
+                "name": "Name",
+                "url": "URL",
+                "transport": "Transport",
+                "timeout": "Timeout"
+            }
+        },
+        "errors": {
+            "creationFailedSummary": "Agent creation failed",
+            "creationFailedDetailFallback": "An unexpected error occurred while creating the agent."
         }
     },
     "agentCard": {
