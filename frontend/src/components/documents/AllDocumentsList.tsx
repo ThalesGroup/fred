@@ -41,12 +41,11 @@ import UploadIcon from "@mui/icons-material/Upload";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { KeyCloakService } from "../../security/KeycloakService";
+import { DOCUMENT_PROCESSING_STAGES, useGetDocumentSourcesQuery } from "../../slices/documentApi";
 import {
-  DOCUMENT_PROCESSING_STAGES,
-  KnowledgeDocument,
-  useBrowseDocumentsMutation,
-  useGetDocumentSourcesQuery,
-} from "../../slices/documentApi";
+  DocumentMetadata,
+  useBrowseDocumentsKnowledgeFlowV1DocumentsBrowsePostMutation,
+} from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { LoadingSpinner } from "../../utils/loadingSpinner";
 import { useToast } from "../ToastProvider";
 import { DocumentTable } from "./DocumentTable";
@@ -60,7 +59,7 @@ export const AllDocumentsList = ({}: DocumentsViewProps) => {
   const theme = useTheme();
 
   // API Hooks
-  const [browseDocuments, { isLoading }] = useBrowseDocumentsMutation();
+  const [browseDocuments, { isLoading }] = useBrowseDocumentsKnowledgeFlowV1DocumentsBrowsePostMutation();
   const { data: allSources } = useGetDocumentSourcesQuery();
 
   // UI States
@@ -76,7 +75,7 @@ export const AllDocumentsList = ({}: DocumentsViewProps) => {
   const [searchQuery, setSearchQuery] = useState("");
 
   // Backend Data States
-  const [allDocuments, setAllDocuments] = useState<KnowledgeDocument[]>([]);
+  const [allDocuments, setAllDocuments] = useState<DocumentMetadata[]>([]);
 
   const selectedSource = allSources?.find((s) => s.tag === selectedSourceTag);
   const isPullMode = selectedSource?.type === "pull";
@@ -105,17 +104,13 @@ export const AllDocumentsList = ({}: DocumentsViewProps) => {
       ...(searchableFilter !== "all" ? { retrievable: searchableFilter === "true" } : {}),
     };
     try {
-      console.log("Fetching documents with filters:", {
-        source_tag: selectedSourceTag,
-        filters,
-        offset: (currentPage - 1) * documentsPerPage,
-        limit: documentsPerPage,
-      });
       const response = await browseDocuments({
-        source_tag: selectedSourceTag,
-        filters,
-        offset: (currentPage - 1) * documentsPerPage,
-        limit: documentsPerPage,
+        browseDocumentsRequest: {
+          source_tag: selectedSourceTag,
+          filters,
+          offset: (currentPage - 1) * documentsPerPage,
+          limit: documentsPerPage,
+        },
       }).unwrap();
 
       const docs = response.documents;

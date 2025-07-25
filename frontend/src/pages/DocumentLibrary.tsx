@@ -14,7 +14,6 @@
 
 import { Box, Button, ButtonGroup, Container } from "@mui/material";
 import { useEffect, useState } from "react";
-import { KeyCloakService } from "../security/KeycloakService";
 
 import { useTranslation } from "react-i18next";
 import { TopBar } from "../common/TopBar";
@@ -75,16 +74,6 @@ type DocumentLibraryView = "libraries" | "documents";
  */
 export const DocumentLibrary = () => {
   const { t } = useTranslation();
-
-  const hasDocumentManagementPermission = () => {
-    const userRoles = KeyCloakService.GetUserRoles();
-    return userRoles.includes("admin") || userRoles.includes("editor");
-  };
-  const userInfo = {
-    name: KeyCloakService.GetUserName(),
-    canManageDocuments: hasDocumentManagementPermission(),
-    roles: KeyCloakService.GetUserRoles(),
-  };
 
   // View state: 'libraries' or 'documents', persisted in localStorage
   const VIEW_KEY = "documentLibrary.selectedView";
