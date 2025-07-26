@@ -1,6 +1,8 @@
 {
   "recommendations": [
     "charliermarsh.ruff",
-    "vivaxy.vscode-conventional-commits"
+    "esbenp.prettier-vscode",
+    "vivaxy.vscode-conventional-commits",
+    "lokalise.i18n-ally"
   ]
 }
