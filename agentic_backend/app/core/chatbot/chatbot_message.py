@@ -13,8 +13,8 @@
 # limitations under the License.
 
 from typing import Optional
+from app.core.agents.structures import AgenticFlow
 from pydantic import BaseModel, Field
-from app.core.agents.agentic_flow import AgenticFlow
 
 class ChatBotEventConfiguration(BaseModel):
     """

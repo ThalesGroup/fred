@@ -21,7 +21,7 @@ app:
 
 frontend_settings:
   feature_flags:
-    # If true acuivate the backend and frontend modules in charge of K8
+    # If true activate the backend and frontend modules in charge of K8
     # and frugality monitoring
     enableK8Features: false
     # If true activate support for an electronic warfare demonstration
@@ -170,12 +170,6 @@ ai:
         knowledge_flow_url: "http://localhost:8111/knowledge-flow/v1"
       model: {}
 
-# Where to save fred produced resources like Essentials or Scores
-# and external resources like Kubernetes Workload descriptions
-dao:
-  type: "file"  # Currently the only one supported
-  base_path: "~/.fred/dao-cache"
-  max_cached_delay_seconds: 300  # Cache delay in seconds. Use 0 for no cache or a negative value for limitless cache.
 
 # Security. As of today only keycloak is supported.
 security:
@@ -185,8 +179,6 @@ security:
   authorized_origins:
   - "http://localhost:5173"
 
-# Agentic metrics are stored in a prometheus or opensearch backend. To make development
-# easy by default they are stored on a local file.
 node_metrics_storage:
   type: "local"
   local_path: "~/.fred/node-metrics-store"
@@ -195,11 +187,20 @@ tool_metrics_storage:
   type: "local"
   local_path: "~/.fred/tool-metrics-store"
 
-# Feedbacks are store in a simple local file. It is plan to add
-# additional backend like opensearch or minio.
 feedback_storage:
-  type: local
-  local_path: "~/.fred/feedback-store"
+  type: duckdb
+  local_path: "~/.fred/duckdb.db"
+
+agent_storage:
+  type: "duckdb"
+  duckdb_path: "~/.fred/db.duckdb"
+
+# Where to save fred produced resources like Essentials or Scores
+# and external resources like Kubernetes Workload descriptions
+dao:
+  type: "file"  # Currently the only one supported
+  base_path: "~/.fred/dao-cache"
+  max_cached_delay_seconds: 300  # Cache delay in seconds. Use 0 for no cache or a negative value for limitless cache.
 
 # Sessions and messages are stored by default in_memory
 # but it can be modified to use a backend like opensearch
@@ -214,8 +215,3 @@ session_storage:
   secure: false
   verify_certs: false
 
-# Configuration to store dynamically created agents.
-# For now only DuckDB is supported.
-dynamic_agent_storage:
-  type: "duckdb"
-  duckdb_path: "~/.fred/db.duckdb"

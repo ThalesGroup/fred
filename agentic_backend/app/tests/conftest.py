@@ -86,9 +86,9 @@ def minimal_generalist_config() -> Configuration:
         security={"enabled": False, "keycloak_url": "", "client_id": "fred", "authorized_origins": []},
         node_metrics_storage={"type": "local", "local_path": "/tmp/node-metrics"},
         tool_metrics_storage={"type": "local", "local_path": "/tmp/tool-metrics"},
-        feedback_storage={"type": "local", "local_path": "/tmp/feedback"},
+        feedback_storage={"type": "ducckdb", "duckdb_path": "~/.fred/ducckdb"},
         session_storage={"type": "in_memory"},
-        dynamic_agent_storage={"type": "duckdb", "duckdb_path": "~/.fred/db.duckdb"},
+        agent_storage={"type": "duckdb", "duckdb_path": "~/.fred/ducckdb"},
     )
 
 @pytest.fixture(scope="session")

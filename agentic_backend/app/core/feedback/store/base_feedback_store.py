@@ -14,17 +14,25 @@
 
 
 from abc import ABC, abstractmethod
-from typing import Optional
+from typing import Dict, List, Optional
 
 class BaseFeedbackStore(ABC):
     @abstractmethod
-    def get_feedback(self, agent_id: str) -> Optional[str]:
+    def list(self) -> List[Dict]:
+        """Return all feedback entries as a list of dictionaries."""
         pass
 
     @abstractmethod
-    def set_feedback(self, agent_id: str, feedback: str) -> None:
+    def get(self, feedback_id: str) -> Optional[Dict]:
+        """Retrieve a single feedback entry by ID."""
         pass
 
     @abstractmethod
-    def delete_feedback(self, agent_id: str) -> None:
+    def save(self, feedback: Dict) -> None:
+        """Save or update a feedback entry."""
+        pass
+
+    @abstractmethod
+    def delete(self, feedback_id: str) -> bool:
+        """Delete a feedback entry by ID."""
         pass

@@ -24,11 +24,13 @@ Includes:
 """
 
 from threading import Lock
-from typing import Dict, List, Type
+from typing import Dict, List, Optional, Type
 from app.core.agents.store.base_agent_store import BaseAgentStore
+from app.core.feedback.store.base_feedback_store import BaseFeedbackStore
+
 from pydantic import BaseModel
 from app.model_factory import get_structured_chain
-from app.common.structures import AgentSettings, Configuration, ServicesSettings
+from app.common.structures import AgentSettings, Configuration, ModelConfiguration, ServicesSettings
 from app.model_factory import get_model
 from langchain_core.language_models.base import BaseLanguageModel
 from langchain_mcp_adapters.client import MultiServerMCPClient
@@ -74,24 +76,14 @@ def get_configuration() -> Configuration:
     return get_app_context().configuration
 
 def get_sessions_store() -> AbstractSessionStorage:
-    """
-    Factory function to create a sessions store instance based on the configuration.
-    As of now, it supports in_memory and OpenSearch sessions storage.
-    
-    Returns:
-        AbstractSessionStorage: An instance of the sessions store.
-    """
     return get_app_context().get_sessions_store()
 
 def get_agent_store() -> BaseAgentStore:
-    """
-    Factory function to create an agents store instance.
-    As of now, it only supports duckdb.
-    
-    Returns:
-        BaseAgentStore: An instance of the agents store.
-    """
     return get_app_context().get_agent_store()
+
+def get_feedback_store() -> BaseFeedbackStore:
+    return get_app_context().get_feedback_store()
+
 
 def get_enabled_agent_names() -> List[str]:
     """
@@ -265,15 +257,25 @@ class ApplicationContext:
 
         # Apply to services
         for service in self.configuration.ai.services:
-            if service.enabled:
-                service.model = merge(service.model)
+            service.model = self._merge_with_default_model(service.model)
 
         # Apply to agents
         for agent in self.configuration.ai.agents:
-            if agent.enabled:
-                agent.model = merge(agent.model)
+            agent.model = self._merge_with_default_model(agent.model)
 
-
+    def _merge_with_default_model(self, model: Optional[ModelConfiguration]) -> ModelConfiguration:
+        default_model = self.configuration.ai.default_model.model_dump(exclude_unset=True)
+        model_dict = model.model_dump(exclude_unset=True) if model else {}
+        merged = {**default_model, **model_dict}
+        return ModelConfiguration(**merged)
+    
+    def apply_default_model_to_agent(self, agent_settings: AgentSettings) -> AgentSettings:
+        """
+        Returns a new AgentSettings with the default model merged in, unless already fully specified.
+        """
+        merged_model = self._merge_with_default_model(agent_settings.model)
+        return agent_settings.model_copy(update={"model": merged_model})
+    
     # --- AI Models ---
 
     def get_agent_settings(self, agent_name: str) -> AgentSettings:
@@ -348,11 +350,28 @@ class ApplicationContext:
         Returns:
             BaseDynamicAgentStore: An instance of the dynamic agents store.
         """
-        config = get_configuration().dynamic_agent_storage
+        config = get_configuration().agent_storage
         if config.type == "duckdb":
             from app.core.agents.store.duckdb_agent_store import DuckdbAgentStorage
             db_path = Path(config.duckdb_path).expanduser()
             return DuckdbAgentStorage(db_path)
+        else:
+            raise ValueError(f"Unsupported sessions storage backend: {config.type}")
+
+
+    def get_feedback_store(self) -> BaseFeedbackStore:
+        """
+        Retrieve the configured agent store. It is used to save all the configured or
+        dynamically created agents
+        
+        Returns:
+            BaseDynamicAgentStore: An instance of the dynamic agents store.
+        """
+        config = get_configuration().feedback_storage
+        if config.type == "duckdb":
+            from app.core.feedback.store.duckdb_feedback_store import DuckdbFeedbackStore
+            db_path = Path(config.duckdb_path).expanduser()
+            return DuckdbFeedbackStore(db_path)
         else:
             raise ValueError(f"Unsupported sessions storage backend: {config.type}")
 

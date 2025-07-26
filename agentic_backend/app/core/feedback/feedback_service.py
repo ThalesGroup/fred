@@ -13,32 +13,49 @@
 # limitations under the License.
 
 import uuid
-import json
+from datetime import datetime
+from typing import List, Dict, Optional
 
 from app.core.feedback.store.base_feedback_store import BaseFeedbackStore
 
 
 class FeedbackService:
+    """
+    Service for storing, retrieving, and deleting structured user feedback entries.
+    Supports any backend that implements BaseFeedbackStore.
+    """
+
     def __init__(self, store: BaseFeedbackStore):
         self.store = store
-        self._storage_key = "global_feedback"
 
-    def get_feedback(self) -> dict:
-        raw = self.store.get_feedback(self._storage_key)
-        return json.loads(raw) if raw else {}
+    def get_feedback(self) -> List[Dict]:
+        """
+        Returns all feedback entries stored.
+        """
+        return self.store.list()
 
-    def add_feedback(self, feedback: dict) -> dict:
-        all_feedback = self.get_feedback()
+    def add_feedback(self, feedback: Dict) -> Dict:
+        """
+        Adds a new feedback entry with a UUID and timestamp.
+        """
         feedback_id = str(uuid.uuid4())
-        entry = {**feedback, "id": feedback_id}
-        all_feedback[feedback_id] = entry
-        self.store.set_feedback(self._storage_key, json.dumps(all_feedback, indent=2, ensure_ascii=False))
+        entry = {
+            **feedback,
+            "id": feedback_id,
+            "created_at": datetime.utcnow().isoformat()
+        }
+        self.store.save(entry)
         return entry
 
     def delete_feedback(self, feedback_id: str) -> bool:
-        all_feedback = self.get_feedback()
-        if feedback_id not in all_feedback:
-            return False
-        del all_feedback[feedback_id]
-        self.store.set_feedback(self._storage_key, json.dumps(all_feedback, indent=2, ensure_ascii=False))
-        return True
+        """
+        Deletes a feedback entry by ID.
+        Returns True if the entry was deleted, False if it was not found.
+        """
+        return self.store.delete(feedback_id)
+
+    def get_feedback_by_id(self, feedback_id: str) -> Optional[Dict]:
+        """
+        Returns a single feedback entry by ID, or None if not found.
+        """
+        return self.store.get(feedback_id)

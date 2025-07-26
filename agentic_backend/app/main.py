@@ -136,7 +136,7 @@ def create_app() -> FastAPI:
     FeedbackController(router, configuration.feedback_storage)
     ToolMetricStoreController(router)
     NodeMetricStoreController(router)
-    AgentController(router)
+    AgentController(router,agent_manager=agent_manager)
     ChatbotController(router, session_manager=session_manager, agent_manager=agent_manager)
 
     app.include_router(router)

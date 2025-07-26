@@ -181,18 +181,6 @@ class AgentSettings(BaseModel):
     role: Optional[str] = None
     icon: Optional[str] = None
 
-# class AgentSettings(BaseModel):
-#     name: str = Field(..., description="Agent identifier name.")
-#     class_path: Optional[str] = Field(None, description="Path to the agent class.")
-#     enabled: bool = Field(default=True, description="Whether the agent is enabled.")
-#     categories: List[str] = Field(default_factory=list, description="List of categories for the agent.")
-#     settings: Dict[str, Any] = Field(default_factory=dict, description="Agent-specific settings (e.g., document directory, chunk size).")
-#     model: ModelConfiguration = Field(default_factory=ModelConfiguration, description="AI model configuration for this agent.")
-#     tag: Optional[str] = Field(None, description="Tag of the agent")
-#     mcp_servers: Optional[List[MCPServerConfiguration]] = Field(default_factory=list, description="List of MCP servers associated to an agent.")
-#     max_steps: int = Field(None,description="Max step")
-
-
 class AIConfig(BaseModel):
     timeout: TimeoutSettings = Field(None, description="Timeout settings for the AI client.")
     default_model: ModelConfiguration = Field(default_factory=ModelConfiguration, description="Default model configuration for all agents and services.")
@@ -234,12 +222,8 @@ class AIConfig(BaseModel):
 # ----------------------------------------------------------------------
 
 ## ----------------------------------------------------------------------
-## Metrics and feedback storage configurations
+## Metrics storage configurations
 ## ----------------------------------------------------------------------
-
-class FeedbackStorageConfig(BaseModel):
-    type: str = Field(default="local", description="The storage backend to use (e.g., 'local', 'opensearch')")
-    local_path: str = Field(default="~/.fred/feedback-store", description="The path where local data is stored")
 
 class MetricsStorageConfig(BaseModel):
     type: str = Field(default="local", description="The metrics store to use (e.g., 'local')")
@@ -274,10 +258,21 @@ SessionStorageConfig = Annotated[
 
 class DuckdbDynamicAgentStorage(BaseModel):
     type: Literal["duckdb"]
-    duckdb_path: str = Field(default="~/.fred/dynamic_agents.duckdb", 
+    duckdb_path: str = Field(default="~/.fred/agentic/db.duckdb", 
                              description="Path to the DuckDB database file.")
 
 DynamicAgentStorageConfig = Annotated[Union[DuckdbDynamicAgentStorage], Field(discriminator="type")]
+
+###########################################################
+#
+#  --- Feedback Storage Configuration
+#
+
+class FeedbackStorage(BaseModel):
+    type: Literal["duckdb"]
+    duckdb_path: str = Field(default="~/.fred/agentic/db.duckdb", 
+                             description="Path to the DuckDB database file.")
+FeedbackStorageConfig = Annotated[Union[DuckdbDynamicAgentStorage], Field(discriminator="type")]
 
 # ----------------------------------------------------------------------
 # Other configurations
@@ -325,7 +320,7 @@ class Configuration(BaseModel):
     node_metrics_storage:  MetricsStorageConfig = Field(..., description="Node Monitoring Storage configuration")
     tool_metrics_storage:  MetricsStorageConfig = Field(..., description="Tool Monitoring Storage configuration")
     session_storage: SessionStorageConfig = Field(..., description="Session Storage configuration")
-    dynamic_agent_storage: DynamicAgentStorageConfig = Field(..., description="Dynamic Agents Storage configuration")
+    agent_storage: DynamicAgentStorageConfig = Field(..., description="Agents Storage configuration")
 
 class OfflineStatus(BaseModel):
     is_offline: bool

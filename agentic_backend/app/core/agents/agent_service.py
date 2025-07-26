@@ -12,10 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from app.common.structures import AgentSettings, ModelConfiguration
+from app.common.utils import get_class_path
+from app.core.agents.agent_manager import AgentManager
 from fastapi.responses import JSONResponse
 from app.core.agents.mcp_agent import MCPAgent
-from app.core.agents.mcp_agent_structures import MCPAgentRequest
-from app.application_context import get_agent_store
+from app.core.agents.structures import CreateAgentRequest, MCPAgentRequest
+from app.application_context import get_agent_store, get_app_context
 
 # --- Domain Exceptions ---
 class AgentAlreadyExistsException(Exception):
@@ -23,30 +26,36 @@ class AgentAlreadyExistsException(Exception):
 
 class AgentService:
 
-    def __init__(self):
+    def __init__(self, agent_manager: AgentManager):
         self.store = get_agent_store()
+        self.agent_manager = agent_manager
 
-    def build_and_register_mcp_agent(self, req: MCPAgentRequest):
+    async def build_and_register_mcp_agent(self, req: MCPAgentRequest):
         """
         Builds, registers, and stores the MCP agent, including updating app context and saving to DuckDB.
         """
-        #if req.name in get_app_context().get_enabled_agent_names() + self.dynamic_agent_manager.get_registered_names():
-        #    raise AgentAlreadyExistsException(f"Agent '{req.name}' already exists")
+         # 1. Create config
+        agent_settings = AgentSettings(
+            type=req.agent_type,
+            name=req.name,
+            class_path=get_class_path(MCPAgent),  
+            enabled=True,
+            categories=req.categories or [],
+            tag=req.tag or "mcp",
+            mcp_servers=req.mcp_servers,
+            description=req.description,
+            nickname=req.nickname,
+            role=req.role,
+            icon=req.icon,
+            model=ModelConfiguration(),  # empty
+            settings={},
+        )
 
-        # get_app_context()._agent_index[req.name] = AgentSettings(
-        #     name=req.name,
-        #     class_path="app.features.dynamic_agent.mcp_agent.MCPAgent",
-        #     enabled=True,
-        #     categories=req.categories or [],
-        #     settings={},
-        #     model=get_configuration().ai.default_model,
-        #     tag=req.tag,
-        #     mcp_servers=req.mcp_servers,
-        #     max_steps=10,
-        # )
-
+        # Fill in model from default if not specified
+        agent_settings = get_app_context().apply_default_model_to_agent(agent_settings)
+        # 3. Instantiate and init
         agent_instance = MCPAgent(
-            cluster_fullname="",
+            agent_settings=agent_settings,
             name=req.name,
             base_prompt=req.base_prompt,
             role=req.role,
@@ -56,12 +65,31 @@ class AgentService:
             categories=req.categories,
             tag=req.tag,
         )
+        await agent_instance.async_init()
 
-        def constructor() -> MCPAgent:
-            return agent_instance
-
-        #self.dynamic_agent_manager.register_agent(req.name, constructor, MCPAgent)
-
-        self.store.save(agent_instance)
+        # 4. Persist
+        self.store.save(agent_settings)
+        self.agent_manager.register_dynamic_agent(agent_instance, agent_settings)
+         # 5. Register live
 
         return JSONResponse(content=agent_instance.to_dict())
+
+    async def update_agent(self, name: str, req: CreateAgentRequest):   
+            if name != req.name:
+                raise ValueError("Agent name in URL and body must match.")
+
+            # Delete existing agent (if any)
+            self.agent_manager.unregister_agent(name)
+            self.store.delete(name)
+
+            # Recreate it using the same logic as in create
+            return await self.build_and_register_mcp_agent(req)
+    
+    def delete_agent(self, name: str):
+        # Unregister from memory
+        self.agent_manager.unregister_agent(name)
+
+        # Delete from DuckDB
+        self.store.delete(name)
+
+        return {"message": f"✅ Agent '{name}' deleted successfully."}

@@ -124,6 +124,16 @@ def to_timedelta(duration_str: str) -> timedelta:
     return timedelta(days=days, hours=hours, minutes=minutes, seconds=seconds)
 
 
+def get_class_path(cls: type) -> str:
+    """
+    Returns the fully qualified class path as a string, e.g.:
+    'app.core.agents.mcp_agent.MCPAgent'
+    """
+    module = inspect.getmodule(cls)
+    if not module or not hasattr(cls, "__name__"):
+        raise ValueError(f"Could not determine class path for {cls}")
+    return f"{module.__name__}.{cls.__name__}"
+
 def auc_calculation(values: list[float]) -> float:
     """
     Calculate the area under the curve of the consumption during the period

@@ -12,8 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from app.application_context import get_feedback_store
 from app.core.feedback.feedback_service import FeedbackService
-from app.core.feedback.store.local_feedback_store import LocalFeedbackStore
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from typing import Optional
@@ -35,11 +35,8 @@ class FeedbackPayload(BaseModel):
 
 class FeedbackController:
     def __init__(self, router: APIRouter, config: FeedbackStorageConfig):
-        if config.type == "local":
-            store = LocalFeedbackStore(config.local_path)
-        else:
-            raise NotImplementedError(f"Feedback storage type '{config.type}' is not implemented yet.")
-        self.service = FeedbackService(store)
+
+        self.service = FeedbackService(get_feedback_store())
 
         @router.post("/chatbot/feedback", tags=["Feedback"])
         def post_feedback(feedback: FeedbackPayload):

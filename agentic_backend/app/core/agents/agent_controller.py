@@ -13,9 +13,10 @@
 # limitations under the License.
 
 from app.common.error import MCPClientConnectionException
+from app.core.agents.agent_manager import AgentManager
 from fastapi import APIRouter, HTTPException
 
-from app.core.agents.mcp_agent_structures import CreateAgentRequest
+from app.core.agents.structures import CreateAgentRequest
 from app.core.agents.agent_service import AgentAlreadyExistsException, AgentService
 from app.common.utils import log_exception
 
@@ -30,9 +31,9 @@ class AgentController:
     """
     Controller for managing dynamic MCP agents.
     """
-    def __init__(self, app: APIRouter):
+    def __init__(self, app: APIRouter, agent_manager: AgentManager):
         fastapi_tags = ["Agents"]
-        self.service = AgentService()
+        self.service = AgentService(agent_manager=agent_manager)
         
         @app.post(
             "/agents/create",
@@ -43,6 +44,30 @@ class AgentController:
         async def create_agent(req: CreateAgentRequest):
             try:
                 return self.service.build_and_register_mcp_agent(req)
+            except Exception as e:
+                log_exception(e)
+                raise handle_exception(e)
+
+        @app.put(
+            "/agents/{name}",
+            tags=fastapi_tags,
+            summary="Update a dynamic agent's configuration",
+        )
+        async def update_agent(name: str, req: CreateAgentRequest):
+            try:
+                return await self.service.update_agent(name, req)
+            except Exception as e:
+                log_exception(e)
+                raise handle_exception(e)
+        
+        @app.delete(
+            "/agents/{name}",
+            tags=fastapi_tags,
+            summary="Delete a dynamic agent by name",
+        )
+        async def delete_agent(name: str):
+            try:
+                return self.service.delete_agent(name)
             except Exception as e:
                 log_exception(e)
                 raise handle_exception(e)

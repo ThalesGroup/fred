@@ -31,6 +31,18 @@ logger = logging.getLogger(__name__)
 SUPPORTED_TRANSPORTS = ["sse", "stdio", "streamable_http", "websocket"]
 
 class AgentManager:
+    """
+    Manages the full lifecycle of AI agents (leaders and experts), including:
+    
+    - Loading static agents from configuration at startup.
+    - Persisting new agents to storage (e.g., DuckDB).
+    - Rehydrating all persisted agents at runtime (with class instantiation and async init).
+    - Registering agents into in-memory maps for routing and discovery.
+    - Injecting expert agents into leader agents.
+    - Providing runtime agent discovery (e.g., for the UI).
+
+    Supports both statically declared agents (via configuration.yaml) and dynamically created ones.
+    """
 
     def __init__(self, config: Configuration, store: BaseAgentStore):
         self.config = get_configuration()
@@ -41,6 +53,13 @@ class AgentManager:
         self.agent_settings: Dict[str, AgentSettings] = {}
 
     async def load_agents(self):
+        """
+        Called at application startup.
+        - Seeds static agents from configuration.yaml if missing in storage.
+        - Loads all persisted agents from DuckDB and instantiates them.
+        - Registers them in memory and injects experts into leaders.
+        """
+
         self._seed_static_agents_from_config()
         await self._load_all_persisted_agents()
         self._inject_experts_into_leaders()
@@ -48,8 +67,10 @@ class AgentManager:
 
     def _seed_static_agents_from_config(self):
         """
-        If config defines agents that are not in DuckDB, create and persist them.
-        Validates agent class import and instantiation.
+        For each enabled agent in configuration.yaml:
+        - Validate it can be instantiated
+        - Save to storage (if not already saved)
+        This ensures that static agents are persisted on first run.
         """
         for agent_cfg in self.config.ai.agents:
             if not agent_cfg.enabled: #or self.store.get(agent_cfg.name):
@@ -57,6 +78,11 @@ class AgentManager:
             self._try_seed_agent(agent_cfg)
 
     def _try_seed_agent(self, agent_cfg: AgentSettings):
+        """
+        Attempts to load the class for the given agent and instantiate it.
+        If successful, saves it to persistent store.
+        Logs detailed errors for class import/instantiation issues.
+        """
         try:
             module_name, class_name = agent_cfg.class_path.rsplit(".", 1)
             module = importlib.import_module(module_name)
@@ -83,8 +109,10 @@ class AgentManager:
 
     async def _load_all_persisted_agents(self):
         """
-        Load all agents from persistent store and register them.
-        Supports both sync and async agent initialization.
+        Loads all AgentSettings from persistent storage (e.g., DuckDB),
+        dynamically imports their class, instantiates them, and (if needed) calls `async_init()`.
+
+        On success, the agent is fully usable and added to the in-memory registry.
         """
         for agent_settings in self.store.load_all():
             if not agent_settings.class_path:
@@ -117,7 +145,9 @@ class AgentManager:
 
     def _inject_experts_into_leaders(self):
         """
-        After all agents are loaded, inject expert instances into any leader agents.
+        After all agents are loaded and registered:
+        - Inject each expert agent (AgentFlow) into each leader agent (Flow with type='leader')
+        - Only injects if the leader supports `add_expert()`
         """
         for leader_name, leader_settings in self.agent_settings.items():
             if leader_settings.type != "leader":
@@ -141,11 +171,41 @@ class AgentManager:
                 logger.info(f"👥 Added expert '{expert_name}' to leader '{leader_name}'")
 
     def _register_loaded_agent(self, name: str, instance: Flow, settings: AgentSettings):
+        """
+        Internal helper: registers an already-initialized agent (typically at startup).
+        Adds it to the runtime maps so it's discoverable and usable.
+        """
         self.agent_constructors[name] = lambda a=instance: a
         self.agent_classes[name] = type(instance)
         self.agent_settings[name] = settings
 
+    def register_dynamic_agent(self, instance: Flow, settings: AgentSettings):
+        """
+        Public method to register a dynamically created agent (e.g., via POST /agents/create).
+        This makes the agent immediately available in the running app (UI, routing, etc).
+
+        Should be called after the agent has been fully initialized (including async_init).
+        """
+        name = settings.name
+        self.agent_constructors[name] = lambda a=instance: a
+        self.agent_classes[name] = type(instance)
+        self.agent_settings[name] = settings
+        logger.info(f"✅ Registered dynamic agent '{name}' ({type(instance).__name__}) in memory.")
+
+    def unregister_agent(self, name: str):
+        """
+        Removes an agent from in-memory maps. Does not affect persisted storage.
+        """
+        self.agent_constructors.pop(name, None)
+        self.agent_classes.pop(name, None)
+        self.agent_settings.pop(name, None)
+        logger.info(f"🗑️ Unregistered agent '{name}' from memory.")
+
     def get_agentic_flows(self) -> List[AgenticFlow]:
+        """
+        Returns a list of all expert agents (AgentFlows) that are currently registered.
+        Used by the frontend to display selectable agents.
+        """
         flows = []
         for name, constructor in self.agent_constructors.items():
             instance = constructor()
@@ -179,6 +239,9 @@ class AgentManager:
         return list(self.agent_constructors.keys())
 
     def get_mcp_client(self, agent_name: str) -> MultiServerMCPClient:
+        """
+        Initializes and connects an MCP client based on the given agent's server list.
+        """
         agent_settings = self.get_agent_settings(agent_name)
 
         import asyncio
@@ -212,6 +275,10 @@ class AgentManager:
         return client
 
     def get_mcp_agent_tools(self, mcp_client: MultiServerMCPClient) -> list[BaseTool]:
+        """
+        Retrieves the list of tools from an MCP client.
+        Fails if none are returned.
+        """
         tools = mcp_client.get_tools()
         if not tools:
             raise MCPToolFetchError("The tool list is empty, make sure the MCP server configuration is correct.")

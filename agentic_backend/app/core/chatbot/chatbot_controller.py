@@ -17,6 +17,7 @@ import logging
 from typing import List
 
 from app.core.agents.agent_manager import AgentManager
+from app.core.agents.structures import AgenticFlow
 from app.core.session.session_manager import SessionManager
 from app.core.chatbot.chat_schema import ChatMessagePayload, ErrorEvent, FinalEvent, SessionWithFiles, StreamEvent
 from app.core.chatbot.chatbot_error import ChatBotError
@@ -34,7 +35,6 @@ from fastapi import (
 from fastapi.responses import JSONResponse, StreamingResponse
 from fred_core import KeycloakUser, get_current_user
 from starlette.websockets import WebSocketState
-from app.core.agents.agentic_flow import AgenticFlow
 from app.core.chatbot.chatbot_message import ChatAskInput
 from app.common.file_dao import FileDAO
 from app.common.structures import (
