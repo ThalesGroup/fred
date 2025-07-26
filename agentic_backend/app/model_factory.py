@@ -100,7 +100,7 @@ def get_structured_chain(
 
     logger.debug(f"Falling back to prompt-based structured output for schema {schema_name} with provider '{provider}'")
 
-    field_names = list(schema.__fields__.keys())
+    field_names = list(schema.model_fields.keys())
     prompt = PromptTemplate(
         template=(
             "You are an assistant that extracts structured information.\n"

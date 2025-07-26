@@ -166,21 +166,36 @@ class ServicesSettings(BaseModel):
 
 
 class AgentSettings(BaseModel):
-    name: str = Field(..., description="Agent identifier name.")
-    class_path: Optional[str] = Field(None, description="Path to the agent class.")
-    enabled: bool = Field(default=True, description="Whether the agent is enabled.")
-    categories: List[str] = Field(default_factory=list, description="List of categories for the agent.")
-    settings: Dict[str, Any] = Field(default_factory=dict, description="Agent-specific settings (e.g., document directory, chunk size).")
-    model: ModelConfiguration = Field(default_factory=ModelConfiguration, description="AI model configuration for this agent.")
-    tag: Optional[str] = Field(None, description="Tag of the agent")
-    mcp_servers: Optional[List[MCPServerConfiguration]] = Field(default_factory=list, description="List of MCP servers associated to an agent.")
-    max_steps: int = Field(None,description="Max step")
+    type: Literal["mcp", "custom", "leader"] = "custom"
+    name: str
+    class_path: Optional[str] = None
+    enabled: bool = True
+    categories: List[str] = Field(default_factory=list)
+    settings: Dict[str, Any] = Field(default_factory=dict)
+    model: Optional[ModelConfiguration] = None
+    tag: Optional[str] = None
+    mcp_servers: Optional[List[MCPServerConfiguration]] = Field(default_factory=list)
+    max_steps: Optional[int] = 10
+    description: Optional[str] = None
+    nickname: Optional[str] = None
+    role: Optional[str] = None
+    icon: Optional[str] = None
+
+# class AgentSettings(BaseModel):
+#     name: str = Field(..., description="Agent identifier name.")
+#     class_path: Optional[str] = Field(None, description="Path to the agent class.")
+#     enabled: bool = Field(default=True, description="Whether the agent is enabled.")
+#     categories: List[str] = Field(default_factory=list, description="List of categories for the agent.")
+#     settings: Dict[str, Any] = Field(default_factory=dict, description="Agent-specific settings (e.g., document directory, chunk size).")
+#     model: ModelConfiguration = Field(default_factory=ModelConfiguration, description="AI model configuration for this agent.")
+#     tag: Optional[str] = Field(None, description="Tag of the agent")
+#     mcp_servers: Optional[List[MCPServerConfiguration]] = Field(default_factory=list, description="List of MCP servers associated to an agent.")
+#     max_steps: int = Field(None,description="Max step")
 
 
 class AIConfig(BaseModel):
     timeout: TimeoutSettings = Field(None, description="Timeout settings for the AI client.")
     default_model: ModelConfiguration = Field(default_factory=ModelConfiguration, description="Default model configuration for all agents and services.")
-    leader: AgentSettings = Field(default_factory=AgentSettings, description="Settings for the leader agent.")
     services: List[ServicesSettings] = Field(default_factory=list, description="List of AI services.")
     agents: List[AgentSettings] = Field(default_factory=list, description="List of AI agents.")
     recursion: RecursionConfig = Field(default_factory=int, description="Number of max recursion while using the model")
@@ -204,9 +219,6 @@ class AIConfig(BaseModel):
             target_dict = target.model_dump(exclude_unset=True)
             merged_dict = {**defaults, **target_dict}
             return ModelConfiguration(**merged_dict)
-
-        if self.leader.enabled:
-            self.leader.model = merge(self.leader.model)
 
         for service in self.services:
             if service.enabled:

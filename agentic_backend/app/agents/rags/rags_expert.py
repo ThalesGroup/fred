@@ -13,16 +13,17 @@
 # limitations under the License.
 
 from datetime import datetime
-from typing import List, Optional
+from typing import List
 
+from app.common.structures import AgentSettings
+from app.model_factory import get_model
 import requests
 from langchain_core.messages import HumanMessage
 from langgraph.graph import END, START, MessagesState, StateGraph
 
-from app.flow import AgentFlow
-from app.application_context import get_agent_settings, get_model_for_agent
-from app.common.models.document_source import DocumentSource
-from app.services.chatbot_session.structure.chat_schema import ChatSource
+from app.core.agents.flow import AgentFlow
+from app.common.document_source import DocumentSource
+from app.core.chatbot.chat_schema import ChatSource
 
 class RagsExpert(AgentFlow):
     """
@@ -38,13 +39,13 @@ class RagsExpert(AgentFlow):
     categories: List[str] = []
     tag: str = "Innovation"
 
-    def __init__(self, cluster_fullname: Optional[str] = None):
+    def __init__(self, agent_settings: AgentSettings):
         """
         Initialize the RagsExpert agent with settings and configuration.
         Loads settings from agent configuration and sets up connections to the
         knowledge base service.
         """
-        self.agent_settings = get_agent_settings(self.name)
+        self.agent_settings = agent_settings
         self.knowledge_flow_url = self.agent_settings.settings.get(
             "knowledge_flow_url", "http://localhost:8111/knowledge-flow/v1"
         )
@@ -93,7 +94,7 @@ class RagsExpert(AgentFlow):
         Returns:
             dict: A dictionary containing the agent's response message.
         """
-        model = get_model_for_agent(self.name)
+        model = get_model(self.agent_settings.model)
         question: str = state["messages"][-1].content
 
         try:

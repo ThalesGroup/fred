@@ -15,16 +15,13 @@
 import json
 import logging
 from datetime import datetime
-from typing import Optional
 
 from app.agents.tabular.toolkit import TabularToolkit
-from app.flow import AgentFlow
-from app.application_context import (
-    get_agent_settings,
-    get_mcp_client_for_agent,
-    get_model_for_agent,
-)
-from app.monitoring.node_monitoring.monitor_node import monitor_node
+from app.common.mcp_utils import get_mcp_client_for_agent
+from app.common.structures import AgentSettings
+from app.core.agents.flow import AgentFlow
+from app.model_factory import get_model
+from app.core.monitoring.node_monitoring.monitor_node import monitor_node
 from langchain_core.messages import HumanMessage, ToolMessage
 from langgraph.constants import START
 from langgraph.graph import MessagesState, StateGraph
@@ -51,33 +48,37 @@ class TabularExpert(AgentFlow):
     categories: list[str] = ["tabular", "sql"]
     tag: str = "data"
 
-    def __init__(self, cluster_fullname: Optional[str] = None):
+    def __init__(self, agent_settings: AgentSettings):
         """
         Initialize the TabularExpert agent with settings and configuration.
         Loads settings from agent configuration and sets up connections to the
         knowledge base service.
         """
+        self.agent_settings = agent_settings
         self.current_date = datetime.now().strftime("%Y-%m-%d")
-        self.agent_settings = get_agent_settings(self.name)
-        self.model = get_model_for_agent(self.name)
-        self.mcp_client = get_mcp_client_for_agent(self.name)
-        self.toolkit = TabularToolkit(self.mcp_client)
-        self.categories = (
-            self.agent_settings.categories
-            if self.agent_settings.categories
-            else ["documents"]
-        )
+        self.model = get_model(agent_settings.model)
+        self.mcp_client = None
+        self.toolkit = None
         self.base_prompt = self._generate_prompt()
-        if self.agent_settings.tag:
-            self.tag = self.agent_settings.tag
+        self.categories = agent_settings.categories or ["tabular"]
+        self.tag = agent_settings.tag or "data"
+        self.graph = None
 
+    async def async_init(self):
+
+        # Async load toolkit
+        self.mcp_client = await get_mcp_client_for_agent(self.agent_settings)
+        self.toolkit = TabularToolkit(self.mcp_client)
+        self._graph = self.get_graph()
+
+        # Complete AgentFlow construction
         super().__init__(
             name=self.name,
             role=self.role,
             nickname=self.nickname,
             description=self.description,
             icon=self.icon,
-            graph=self.get_graph(),
+            graph=self._graph,
             base_prompt=self.base_prompt,
             categories=self.categories,
             tag=self.tag,

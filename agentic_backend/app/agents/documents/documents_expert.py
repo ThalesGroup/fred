@@ -15,16 +15,15 @@
 import json
 import logging
 from datetime import datetime
-from typing import Optional
 
-from app.flow import AgentFlow
+from app.common.mcp_utils import get_mcp_client_for_agent
+from app.common.structures import AgentSettings
+from app.core.agents.flow import AgentFlow
 from app.agents.documents.documents_expert_toolkit import DocumentsToolkit
-from app.application_context import (get_agent_settings,
-                                      get_mcp_client_for_agent,
-                                      get_model_for_agent)
-from app.monitoring.node_monitoring.monitor_node import monitor_node
-from app.common.models.document_source import DocumentSource
-from app.services.chatbot_session.structure.chat_schema import ChatSource
+from app.model_factory import get_model
+from app.core.monitoring.node_monitoring.monitor_node import monitor_node
+from app.common.document_source import DocumentSource
+from app.core.chatbot.chat_schema import ChatSource
 from langchain_core.messages import HumanMessage, ToolMessage
 from langgraph.constants import START
 from langgraph.graph import MessagesState, StateGraph
@@ -51,16 +50,16 @@ class DocumentsExpert(AgentFlow):
     categories: list[str] = []
     tag: str = "documents"
     
-    def __init__(self, cluster_fullname: Optional[str] = None):     
+    def __init__(self, agent_settings: AgentSettings):     
         """
         Initialize the DocumentsExpert agent with settings and configuration.
         Loads settings from agent configuration and sets up connections to the
         knowledge base service.
         """
         self.current_date = datetime.now().strftime("%Y-%m-%d")
-        self.agent_settings = get_agent_settings(self.name)
-        self.model = get_model_for_agent(self.name)
-        self.mcp_client = get_mcp_client_for_agent(self.name)
+        self.agent_settings = agent_settings
+        self.model = get_model(self.agent_settings.model)
+        self.mcp_client = get_mcp_client_for_agent(self.agent_settings)
         self.toolkit = DocumentsToolkit(self.mcp_client)
         self.categories = self.agent_settings.categories if self.agent_settings.categories else ["documents"]
         self.base_prompt = self._generate_prompt()

@@ -70,6 +70,8 @@ run: dev ## Run the app from source
 clean: ## Remove virtualenv and build artifacts
 	@echo "🧹 Cleaning project..."
 	rm -rf $(VENV) $(TARGET) .mypy_cache .pytest_cache .coverage htmlcov .tox
+	find . -type d -name '__pycache__' -exec rm -rf {} +
+	find . -type f -name '*.pyc' -delete
 
 ##@ Tests
 

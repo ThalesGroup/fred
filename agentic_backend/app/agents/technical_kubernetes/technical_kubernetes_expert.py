@@ -14,17 +14,17 @@
 
 from datetime import datetime
 from typing import Optional
+from app.common.structures import AgentSettings
+from app.model_factory import get_model
 from langchain_core.messages import SystemMessage
 from langgraph.prebuilt import ToolNode, tools_condition
 from langgraph.graph import END, START, MessagesState, StateGraph
-from app.flow import AgentFlow
+from app.core.agents.flow import AgentFlow
 from app.agents.technical_kubernetes.technical_kubernetes_toolkit import (
     TechnicalKubernetesToolkitBuilder,
 )
-from app.application_context import get_agent_settings, get_model_for_agent
 from app.features.frugal.ai_service import AIService
 from app.features.k8.kube_service import KubeService
-from app.model_factory import get_model
 
 class TechnicalKubernetesExpert(AgentFlow):
     """
@@ -41,6 +41,7 @@ class TechnicalKubernetesExpert(AgentFlow):
     tag: str = "Warfare"
 
     def __init__(self, 
+                 agent_settings: AgentSettings,
                  cluster_fullname: Optional[str]
                  ):
         """
@@ -50,7 +51,7 @@ class TechnicalKubernetesExpert(AgentFlow):
             cluster_fullname (str): The full name of the Kubernetes cluster in the current context.
             ai_service: The AI service used for tool-based interactions.
         """
-        self.agent_settings = get_agent_settings(self.name)
+        self.agent_settings = agent_settings
         self.cluster_fullname = cluster_fullname
         self.current_date = datetime.now().strftime("%Y-%m-%d")
         kube_service = KubeService()
@@ -106,7 +107,7 @@ class TechnicalKubernetesExpert(AgentFlow):
         Returns:
             dict: The updated state with the expert's response.
         """
-        model = get_model_for_agent(self.name)
+        model = get_model(self.agent_settings.model)
         model_with_tools = model.bind_tools(self.toolkit.get_tools())
 
         prompt = SystemMessage(content=self.base_prompt)

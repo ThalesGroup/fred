@@ -22,7 +22,7 @@ from fastapi import FastAPI, APIRouter
 from app.common.structures import AppConfig, Configuration
 from app.application_context import ApplicationContext
 from app.common.structures import PathOrIndexPrefix
-from app.chatbot.chatbot_controller import ChatbotController
+from app.core.chatbot.chatbot_controller import ChatbotController
 
 @pytest.fixture(scope="session")
 def minimal_generalist_config() -> Configuration:
@@ -66,7 +66,7 @@ def minimal_generalist_config() -> Configuration:
             },
             "leader": {
                 "name": "Fred",
-                "class_path": "app.leader.leader.Leader",
+                "class_path": "app.agents.leader.leader.Leader",
                 "enabled": True,
                 "max_steps": 5,
                 "model": {},

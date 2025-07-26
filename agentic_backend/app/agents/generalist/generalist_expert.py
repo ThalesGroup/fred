@@ -14,20 +14,18 @@
 
 from datetime import datetime
 import logging
-from typing import Optional
+from app.common.structures import AgentSettings
+from app.model_factory import get_model
 from langchain_core.messages import SystemMessage
 from langgraph.graph import END, START, MessagesState, StateGraph
-from app.common.structures import AgentSettings, Configuration
-from app.flow import AgentFlow
-from app.application_context import get_agent_settings, get_model_for_agent
-from app.monitoring.node_monitoring.monitor_node import monitor_node
+from app.core.agents.flow import AgentFlow
+from app.core.monitoring.node_monitoring.monitor_node import monitor_node
 
 logger = logging.getLogger(__name__)
 class GeneralistExpert(AgentFlow):
     """
     Generalist Expert provides guidance on a wide range of topics 
-    without deep specialization. It is useful for answering general 
-    questions in a Kubernetes context.
+    without deep specialization. 
     """
 
     # Class-level attributes for metadata
@@ -37,9 +35,9 @@ class GeneralistExpert(AgentFlow):
     description: str = "Provides guidance on a wide range of topics without deep specialization."
     icon: str = "generalist_agent"
     categories: list[str] = []
-    tag: str = "Warfare"  # Tag défini directement ici
+    tag: str = "Generalist"
     
-    def __init__(self, cluster_fullname: Optional[str] = None):     
+    def __init__(self, agent_settings: AgentSettings):     
         """
         Initializes the Generalist Expert agent.
 
@@ -47,11 +45,8 @@ class GeneralistExpert(AgentFlow):
             cluster_fullname (str): The full name of the Kubernetes cluster 
                                     in the current context.
         """
-        # Set basic properties
-        self.cluster_fullname = cluster_fullname
-        
         # Get agent settings
-        agent_settings = get_agent_settings(self.name)
+        self.agent_settings = agent_settings
         
         # Extract categories
         self.categories = agent_settings.categories if agent_settings.categories else ["General"]
@@ -76,8 +71,6 @@ class GeneralistExpert(AgentFlow):
         lines = [
             "You are a friendly generalist expert, skilled at providing guidance on a wide range of topics without deep specialization.",
         ]
-        if self.cluster_fullname:
-            lines.append(f"Your current context involves a Kubernetes cluster named {self.cluster_fullname}.")
     
         lines += [
             "Your role is to respond with clarity, providing accurate and reliable information.",
@@ -98,20 +91,11 @@ class GeneralistExpert(AgentFlow):
         Returns:
             dict: The updated state with the expert's response.
         """
-        model = get_model_for_agent(self.name)
+        model = get_model(self.agent_settings.model)
         prompt = SystemMessage(content=self.base_prompt)
         response = await model.ainvoke([prompt] + state["messages"])
         return {"messages": [response]}
 
-    def set_cluster_name(self, cluster_name: str):
-        """
-        Sets the name of the Kubernetes cluster in the current context.
-
-        Args:
-            cluster_name (str): The name of the Kubernetes cluster.
-        """
-        self.cluster_fullname = cluster_name
-        
     def get_graph(self) -> StateGraph:
         """
         Defines the agentic flow graph for the expert.

@@ -13,16 +13,17 @@
 # limitations under the License.
 
 from typing import override, List
-
-from langchain_core.tools import BaseToolkit, BaseTool
-from pydantic import Field
+from app.core.monitoring.tool_monitoring import monitor_tool
+from langchain_core.tools import BaseTool, BaseToolkit
 from langchain_mcp_adapters.client import MultiServerMCPClient
-from app.application_context import get_mcp_agent_tools
-from app.core.monitoring.tool_monitoring.monitor_tool import monitor_tool
+from pydantic import Field
 
-class DocumentsToolkit(BaseToolkit):
+from app.application_context import get_mcp_agent_tools
+
+class McpAgentToolkit(BaseToolkit):
     """
-    Toolkit for MCP documents expert tools
+    A generic toolkit that loads all available tools from MCP endpoints.
+    Suitable for dynamically created agents that use arbitrary MCP URLs.
     """
 
     tools: List[BaseTool] = Field(default_factory=list, description="List of the tools.")
@@ -34,5 +35,4 @@ class DocumentsToolkit(BaseToolkit):
 
     @override
     def get_tools(self) -> list[BaseTool]:
-        """Get the tools in the toolkit."""
         return self.tools
