@@ -1,13 +1,27 @@
+# Copyright Thales 2025
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from fastapi.responses import JSONResponse
 from app.core.agents.mcp_agent import MCPAgent
-from app.core.agents.structures import MCPAgentRequest
+from app.core.agents.mcp_agent_structures import MCPAgentRequest
 from app.application_context import get_agent_store
 
 # --- Domain Exceptions ---
 class AgentAlreadyExistsException(Exception):
     pass
 
-class AgentManagerService:
+class AgentService:
 
     def __init__(self):
         self.store = get_agent_store()

@@ -32,7 +32,7 @@ from app.features.frugal.ai_service import AIService
 from app.features.frugal.carbon.carbon_controller import CarbonController
 from app.features.frugal.energy.energy_controller import EnergyController
 from app.features.frugal.finops.finops_controller import FinopsController
-from app.core.agents.controller import AgentController
+from app.core.agents.agent_controller import AgentController
 from app.features.k8.kube_service import KubeService
 from app.application_context import ApplicationContext, get_agent_store, get_sessions_store
 from app.core.chatbot.chatbot_controller import ChatbotController
