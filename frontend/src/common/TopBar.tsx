@@ -12,60 +12,73 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Box, Container, Fade, Grid2, Chip, useTheme, Tooltip } from "@mui/material";
+import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import { Box, IconButton, Stack, Tooltip, Typography, useTheme } from "@mui/material";
 import { ReactNode } from "react";
+import InvisibleLink from "../components/InvisibleLink";
 
 interface TopBarProps {
   title: string;
   description: string;
   children?: ReactNode; // e.g. right-hand content like date picker
-  fadeIn?: boolean;
-  leftLg?: number;
+  backTo?: string; // Path to navigate back to
 }
 
-export const TopBar = ({ title, description, children, fadeIn = true, leftLg = 8 }: TopBarProps) => {
+export const TopBar = ({ title, description, children, backTo }: TopBarProps) => {
   const theme = useTheme();
-  const leftGrid = leftLg ?? 8;
-  const rightGrid = 12 - leftGrid;
 
   return (
-    <Box
+    <Stack
+      direction="row"
       sx={{
-        position: "relative",
+        position: "sticky",
+        top: 0,
+        zIndex: theme.zIndex.appBar,
+        backgroundColor: theme.palette.background.paper,
         backgroundSize: "cover",
         backgroundPosition: "center",
         mb: 3,
-        borderRadius: 2,
         boxShadow: theme.shadows[4],
+        justifyContent: "space-between",
+        alignItems: "center",
+        px: 4,
+        height: 64,
       }}
     >
-      <Container maxWidth="xl">
-        <Fade in={fadeIn} timeout={1000}>
-          <Box sx={{ py: 3 }}>
-            <Grid2 container spacing={3} alignItems="center">
-              <Grid2 size={{ xs: 12, md: 8, lg: leftGrid }}>
-                <Box>
-                  <Tooltip
-                    slotProps={{
-                      tooltip: {
-                        sx: {
-                          fontSize: "0.875rem", // Smaller font size (≈ 14px)
-                        },
-                      },
-                    }}
-                    title={description}
-                    placement="bottom-end"
-                    arrow>
-                    <Chip
-                      label={title} color="primary" />
-                  </Tooltip>
-                </Box>
-              </Grid2>
-              <Grid2 size={{ xs: 12, md: 8, lg: rightGrid }}>{children}</Grid2>
-            </Grid2>
-          </Box>
-        </Fade>
-      </Container>
-    </Box>
+      {/* Left content */}
+      <Box display="flex" alignItems="center" gap={1}>
+        {/* Optional back button */}
+        {backTo && (
+          <InvisibleLink to={backTo}>
+            <IconButton size="small">
+              <ArrowBackIcon />
+            </IconButton>
+          </InvisibleLink>
+        )}
+
+        {/* Title */}
+        <Tooltip
+          slotProps={{
+            tooltip: {
+              sx: {
+                fontSize: "0.875rem", // Smaller font size (≈ 14px)
+              },
+            },
+          }}
+          title={description}
+          placement="bottom-end"
+          arrow
+        >
+          <Typography variant="h6" component="h1">
+            {title}
+          </Typography>
+        </Tooltip>
+      </Box>
+
+      {/* Optional right part */}
+      <Stack direction="row" gap={2} alignItems="center">
+        {children}
+      </Stack>
+    </Stack>
   );
 };

@@ -258,7 +258,7 @@ export const Optimize = () => {
   }
   return (
     <>
-      <TopBar title="Optimize" description="Optimize your cloud resources" leftLg={4}>
+      <TopBar title="Optimize" description="Optimize your cloud resources">
         <Grid2 container size={12} alignItems="center" justifyContent="space-between">
           <Grid2 size={{ xs: 4, sm: 6, md: 6, lg: 6, xl: 6 }} display="flex" justifyContent="flex-start">
             {/* First item (aligned to the left) */}

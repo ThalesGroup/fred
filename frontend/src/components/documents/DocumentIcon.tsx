@@ -13,21 +13,25 @@
 // limitations under the License.
 
 // utils/DocumentIcon.tsx
-import { PdfIcon, WordIcon, ExcelIcon } from "../../utils/icons";
+import InsertDriveFileIcon from "@mui/icons-material/InsertDriveFile";
+import { ExcelIcon, PdfIcon, WordIcon } from "../../utils/icons";
+
 export const getDocumentIcon = (filename: string): JSX.Element | null => {
   const ext = filename.split(".").pop()?.toLowerCase();
+  const style = { width: 20, height: 20 };
+
   switch (ext) {
     case "pdf":
-      return <PdfIcon style={{ width: 20, height: 20 }} />;
+      return <PdfIcon style={style} />;
     case "docx":
     case "doc":
-      return <WordIcon style={{ width: 20, height: 20 }} />;
+      return <WordIcon style={style} />;
     case "xlsx":
     case "xls":
-      return <ExcelIcon style={{ width: 20, height: 20 }} />;
+      return <ExcelIcon style={style} />;
     case "csv":
-      return <ExcelIcon style={{ width: 20, height: 20 }} />;
+      return <ExcelIcon style={style} />;
     default:
-      return null;
+      return <InsertDriveFileIcon style={style} />;
   }
 };

@@ -25,6 +25,7 @@ from pydantic import BaseModel
 
 from app.common.document_structures import ProcessingStage
 from app.features.ingestion.service import IngestionService
+from app.features.metadata.service import MetadataService
 
 logger = logging.getLogger(__name__)
 
@@ -171,7 +172,7 @@ class IngestionController:
             metadata_json: str = Form(...),
         ) -> StreamingResponse:
             parsed_input = IngestionInput(**json.loads(metadata_json))
-            tags = parsed_input.tags 
+            tags = parsed_input.tags
             source_tag = parsed_input.source_tag
             #input_metadata = json.loads(metadata_json)
             # ✅ Preload: Call save_file_to_temp on all files before the generator runs
@@ -219,46 +220,46 @@ class IngestionController:
                             input_file_metadata=metadata
                         )
                         logger.info(f"Post-processing completed for {filename}: {metadata}")
-                        yield ProcessingProgress(step=current_step, 
-                                                 status=vectorization_response.status, 
-                                                 document_uid=metadata.document_uid, 
+                        yield ProcessingProgress(step=current_step,
+                                                 status=vectorization_response.status,
+                                                 document_uid=metadata.document_uid,
                                                  filename=filename).model_dump_json() + "\n"
 
                         # Step: Uploading to backend storage
                         current_step = "raw content saving"
                         self.service.save_input(metadata, output_temp_dir / "input")
                         self.service.save_output(metadata, output_temp_dir / "output")
-                        yield ProcessingProgress(step=current_step, status=Status.SUCCESS, 
-                                                 document_uid=metadata.document_uid, 
+                        yield ProcessingProgress(step=current_step, status=Status.SUCCESS,
+                                                 document_uid=metadata.document_uid,
                                                  filename=filename).model_dump_json() + "\n"
                         # Step: Metadata saving
                         current_step = "metadata saving"
                         self.service.save_metadata(metadata)
                         logger.info(f"Metadata saved for {filename}: {metadata}")
-                        yield ProcessingProgress(step=current_step, status=Status.SUCCESS, 
-                                                 document_uid=metadata.document_uid, 
+                        yield ProcessingProgress(step=current_step, status=Status.SUCCESS,
+                                                 document_uid=metadata.document_uid,
                                                  filename=filename).model_dump_json() + "\n"
-                        
+
                         # ✅ At least one file succeeded
                         all_success_flag[0] = True
                     except Exception as e:
                         logger.exception(f"Failed to process {file.filename}")
                         # Send detailed error message (safe for frontend)
                         error_message = f"{type(e).__name__}: {str(e).strip() or 'No error message'}"
-                        yield ProcessingProgress(step=current_step, 
-                                                 status=Status.ERROR, error=error_message, 
+                        yield ProcessingProgress(step=current_step,
+                                                 status=Status.ERROR, error=error_message,
                                                  filename=file.filename).model_dump_json() + "\n"
                 yield json.dumps({"step": "done", "status": Status.SUCCESS if all_success_flag[0] else "error"}) + "\n"
 
             return StatusAwareStreamingResponse(event_generator(), all_success_flag=all_success_flag)
 
- 
+
         @router.post(
             "/upload-files",
             tags=["Library Ingestion"],
             summary="Upload documents only — defer processing to backend (e.g., Temporal)",
             description="""
-        This endpoint allows **fast, lightweight upload of one or more documents** to temporary storage, with metadata extraction. 
+        This endpoint allows **fast, lightweight upload of one or more documents** to temporary storage, with metadata extraction.
 
         It **does not** perform any heavy processing (e.g., vectorization, chunking, indexing). Instead, the uploaded files are stored and **ready for deferred processing** via an asynchronous pipeline (e.g., Temporal workflows).
 
@@ -321,9 +322,9 @@ class IngestionController:
                         # Step: Uploading to backend storage
                         current_step = "raw content saving"
                         self.service.save_input(metadata=metadata, input_dir=output_temp_dir / "input")
-                        yield ProcessingProgress(step=current_step, 
-                                                 status=Status.SUCCESS, 
-                                                 document_uid=metadata.document_uid, 
+                        yield ProcessingProgress(step=current_step,
+                                                 status=Status.SUCCESS,
+                                                 document_uid=metadata.document_uid,
                                                  filename=filename).model_dump_json() + "\n"
                         # ✅ At least one file succeeded
                         # Step 2: Metadata saving
