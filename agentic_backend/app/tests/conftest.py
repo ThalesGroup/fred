@@ -88,7 +88,7 @@ def minimal_generalist_config() -> Configuration:
         tool_metrics_storage={"type": "local", "local_path": "/tmp/tool-metrics"},
         feedback_storage={"type": "local", "local_path": "/tmp/feedback"},
         session_storage={"type": "in_memory"},
-        dynamic_agent_storage={"type": "duckdb", "duckdb_path": "~/.fred/db.duckdb"},
+        dynamic_agent_storage={"type": "duckdb", "duckdb_path": "/tmp/db.duckdb"},
     )
 
 @pytest.fixture(scope="session")
