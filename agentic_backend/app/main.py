@@ -114,12 +114,6 @@ def create_app() -> FastAPI:
         allow_headers=["Content-Type", "Authorization"],
     )
 
-    #@asynccontextmanager
-    async def lifespan(app: FastAPI):
-        await agent_manager.load_agents()
-        logger.info("🚀 AgentManager fully loaded.")
-        yield
-
     router = APIRouter(prefix=base_url)
     enable_k8_features = configuration.frontend_settings.feature_flags.enableK8Features
     if enable_k8_features:

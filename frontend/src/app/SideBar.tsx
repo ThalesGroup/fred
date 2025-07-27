@@ -12,42 +12,42 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useLocation, useNavigate } from "react-router-dom";
+import MonitorHeartIcon from "@mui/icons-material/MonitorHeart";
 import {
+  Avatar,
   Box,
   IconButton,
-  Typography,
-  useMediaQuery,
-  useTheme,
-  Avatar,
   List,
   ListItem,
   ListItemIcon,
   ListItemText,
   Tooltip,
+  Typography,
+  useMediaQuery,
+  useTheme,
 } from "@mui/material";
-import MonitorHeartIcon from "@mui/icons-material/MonitorHeart";
+import { useLocation, useNavigate } from "react-router-dom";
 
-import AssistantIcon from "@mui/icons-material/Assistant";
-import OpenInNewIcon from "@mui/icons-material/OpenInNew";
-import ChatIcon from "@mui/icons-material/Chat";
-import TuneIcon from "@mui/icons-material/Tune";
 import AccountCircleIcon from "@mui/icons-material/AccountCircle";
-import MenuIcon from "@mui/icons-material/Menu";
 import AssessmentIcon from "@mui/icons-material/Assessment";
-import GroupIcon from "@mui/icons-material/Group";
-import MenuBookIcon from "@mui/icons-material/MenuBook";
-import LightModeIcon from "@mui/icons-material/LightMode";
-import DarkModeIcon from "@mui/icons-material/DarkMode";
+import AssistantIcon from "@mui/icons-material/Assistant";
+import ChatIcon from "@mui/icons-material/Chat";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
+import DarkModeIcon from "@mui/icons-material/DarkMode";
+import GroupIcon from "@mui/icons-material/Group";
+import LightModeIcon from "@mui/icons-material/LightMode";
+import MenuIcon from "@mui/icons-material/Menu";
+import MenuBookIcon from "@mui/icons-material/MenuBook";
+import OpenInNewIcon from "@mui/icons-material/OpenInNew";
+import TuneIcon from "@mui/icons-material/Tune";
 import WorkspacesIcon from "@mui/icons-material/Workspaces";
-import { ImageComponent } from "../utils/image.tsx";
 import { useContext } from "react";
-import { ApplicationContext } from "./ApplicationContextProvider.tsx";
-import { SideBarClusterSelector } from "../frugalit/component/SideBarClusterSelector.tsx";
-import { FeatureFlagKey, getProperty, isFeatureEnabled } from "../common/config.tsx";
 import { useTranslation } from "react-i18next";
+import { FeatureFlagKey, getProperty, isFeatureEnabled } from "../common/config.tsx";
+import { SideBarClusterSelector } from "../frugalit/component/SideBarClusterSelector.tsx";
+import { ImageComponent } from "../utils/image.tsx";
+import { ApplicationContext } from "./ApplicationContextProvider.tsx";
 import { K8ApplicationContext } from "./K8ApplicationContextProvider.tsx";
 
 export default function SideBar({ darkMode, onThemeChange }) {
@@ -56,7 +56,7 @@ export default function SideBar({ darkMode, onThemeChange }) {
   const navigate = useNavigate();
   const location = useLocation();
   const applicationContext = useContext(ApplicationContext);
-  const k8ApplicationContext = useContext(K8ApplicationContext)
+  const k8ApplicationContext = useContext(K8ApplicationContext);
   const smallScreen = useMediaQuery(theme.breakpoints.down("md"));
 
   // Couleurs sobres à la manière du second fichier
@@ -170,14 +170,12 @@ export default function SideBar({ darkMode, onThemeChange }) {
   const { isSidebarCollapsed, toggleSidebar } = applicationContext;
   const isSidebarSmall = smallScreen || isSidebarCollapsed;
   const sidebarWidth = isSidebarCollapsed ? theme.layout.sidebarCollapsedWidth : theme.layout.sidebarWidth;
-  // Vérifier si un élément de menu est actif
-  const isActive = (path) => {
-    // Extraire le chemin de base sans les paramètres de requête
+  // Helper function to check if the current path matches the menu item path
+  const isActive = (path: string) => {
     const menuPathBase = path.split("?")[0];
     const currentPathBase = location.pathname;
 
-    // Vérifier si le chemin de base actuel correspond exactement au chemin de base du menu
-    return currentPathBase === menuPathBase;
+    return currentPathBase === menuPathBase || currentPathBase.startsWith(menuPathBase + "/");
   };
 
   const logoName = getProperty("logoName") || "fred";

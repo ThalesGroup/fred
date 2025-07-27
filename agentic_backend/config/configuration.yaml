@@ -155,20 +155,20 @@ ai:
     #       sse_read_timeout: 2000
     #   model: {}
       # The Rags expert essentially is the Document expert before using tools and the knownledge-flow backend as a MCP server
-    - name: "RagsExpert"
-      role: "Document Retrieval Expert"
-      description: >
-        Answers user questions by retrieving relevant information from ingested document corpora.
-        Uses a vector-based retrieval pipeline to ground responses in internal or uploaded knowledge.
-      class_path: "app.agents.rags.rags_expert.RagsExpert"
-      enabled: true
-      categories:
-        - "rag"
-      settings:
-        chunk_size: 512
-        chunk_overlap: 64
-        knowledge_flow_url: "http://localhost:8111/knowledge-flow/v1"
-      model: {}
+    # - name: "RagsExpert"
+    #   role: "Document Retrieval Expert"
+    #   description: >
+    #     Answers user questions by retrieving relevant information from ingested document corpora.
+    #     Uses a vector-based retrieval pipeline to ground responses in internal or uploaded knowledge.
+    #   class_path: "app.agents.rags.rags_expert.RagsExpert"
+    #   enabled: true
+    #   categories:
+    #     - "rag"
+    #   settings:
+    #     chunk_size: 512
+    #     chunk_overlap: 64
+    #     knowledge_flow_url: "http://localhost:8111/knowledge-flow/v1"
+    #   model: {}
 
 
 # Security. As of today only keycloak is supported.
@@ -181,25 +181,25 @@ security:
 
 node_metrics_storage:
   type: "local"
-  local_path: "~/.fred/node-metrics-store"
+  local_path: "~/.fred/agentic/node-metrics-store"
 
 tool_metrics_storage:
   type: "local"
-  local_path: "~/.fred/tool-metrics-store"
+  local_path: "~/.fred/agentic/tool-metrics-store"
 
 feedback_storage:
   type: duckdb
-  local_path: "~/.fred/duckdb.db"
+  duckdb_path: "~/.fred/agentic/db.duckdb"
 
 agent_storage:
   type: "duckdb"
-  duckdb_path: "~/.fred/db.duckdb"
+  duckdb_path: "~/.fred/agentic/db.duckdb"
 
 # Where to save fred produced resources like Essentials or Scores
 # and external resources like Kubernetes Workload descriptions
 dao:
   type: "file"  # Currently the only one supported
-  base_path: "~/.fred/dao-cache"
+  base_path: "~/.fred/agentic/dao-cache"
   max_cached_delay_seconds: 300  # Cache delay in seconds. Use 0 for no cache or a negative value for limitless cache.
 
 # Sessions and messages are stored by default in_memory

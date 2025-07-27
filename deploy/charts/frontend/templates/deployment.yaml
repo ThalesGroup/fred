@@ -48,10 +48,10 @@ spec:
           {{- if .Values.oidc.enabled }}
           volumeMounts:
             - name: {{ .Chart.Name }}-config-vol
-              mountPath: /app/public/keycloak.json
+              mountPath: /usr/share/nginx/html/keycloak.json
               subPath: keycloak.json
             - name: {{ .Chart.Name }}-config-vol
-              mountPath: /app/public/config.json
+              mountPath: /usr/share/nginx/html/config.json
               subPath: config.json
           {{- end }}
           resources:

@@ -19,9 +19,10 @@ from inspect import iscoroutinefunction
 from typing import Callable, Dict, List, Type
 
 from app.application_context import get_configuration
+from app.common.structures import AgentSettings
 from app.common.error import MCPToolFetchError, UnsupportedTransportError
 from app.core.agents.flow import AgentFlow, Flow
-from app.common.structures import AgentSettings, Configuration
+from app.common.structures import Configuration
 from app.core.agents.agentic_flow import AgenticFlow
 from app.core.agents.store.base_agent_store import BaseAgentStore
 from langchain_mcp_adapters.client import MultiServerMCPClient
@@ -224,7 +225,8 @@ class AgentManager:
         constructor = self.agent_constructors.get(name)
         if not constructor:
             raise ValueError(f"No agent constructor for '{name}'")
-        return constructor()
+        instance = constructor()
+        return instance
 
     def get_agent_settings(self, name: str) -> AgentSettings:
         settings = self.agent_settings.get(name)

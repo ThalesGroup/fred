@@ -29,8 +29,7 @@ class TabularToolkit(BaseToolkit):
 
     def __init__(self, mcp_client: MultiServerMCPClient):
         super().__init__()
-        raw_tools = self._fetch_and_wrap_tools(mcp_client)
-        self.tools = [monitor_tool(tool) for tool in raw_tools]
+        self.tools = self._fetch_and_wrap_tools(mcp_client)
 
     def _fetch_and_wrap_tools(self, mcp_client: MultiServerMCPClient) -> List[BaseTool]:
         raw_tools = mcp_client.get_tools()

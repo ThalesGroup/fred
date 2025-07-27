@@ -13,13 +13,14 @@
 // limitations under the License.
 
 // FredUi.tsx
-import React, { useState, useEffect, useContext } from "react";
-import { RouterProvider } from "react-router-dom";
-import { ToastProvider } from "../components/ToastProvider";
-import { ConfirmationDialogProvider } from "../components/ConfirmationDialogProvider";
-import { ApplicationContextProvider, ApplicationContext } from "./ApplicationContextProvider";
 import { ThemeProvider } from "@mui/material/styles";
-import { lightTheme, darkTheme } from "../styles/theme";
+import React, { useContext, useEffect, useState } from "react";
+import { RouterProvider } from "react-router-dom";
+import { ConfirmationDialogProvider } from "../components/ConfirmationDialogProvider";
+import { DrawerProvider } from "../components/DrawerProvider";
+import { ToastProvider } from "../components/ToastProvider";
+import { darkTheme, lightTheme } from "../styles/theme";
+import { ApplicationContext, ApplicationContextProvider } from "./ApplicationContextProvider";
 
 function FredUi() {
   const [router, setRouter] = useState<any>(null);
@@ -35,13 +36,9 @@ function FredUi() {
 
   return (
     <React.Suspense fallback={<div>Loading UI...</div>}>
-      <ToastProvider>
-        <ConfirmationDialogProvider>
-          <ApplicationContextProvider>
-            <AppWithTheme router={router} />
-          </ApplicationContextProvider>
-        </ConfirmationDialogProvider>
-      </ToastProvider>
+      <ApplicationContextProvider>
+        <AppWithTheme router={router} />
+      </ApplicationContextProvider>
     </React.Suspense>
   );
 }
@@ -52,7 +49,14 @@ function AppWithTheme({ router }: { router: any }) {
 
   return (
     <ThemeProvider theme={theme}>
-      <RouterProvider router={router} />
+      {/* Following providers (dialog, toast, drawer...) needs to be inside the ThemeProvider */}
+      <ConfirmationDialogProvider>
+        <ToastProvider>
+          <DrawerProvider>
+            <RouterProvider router={router} />
+          </DrawerProvider>
+        </ToastProvider>
+      </ConfirmationDialogProvider>
     </ThemeProvider>
   );
 }

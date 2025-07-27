@@ -111,6 +111,13 @@ class DuckdbMetadataStore(BaseMetadataStore):
         all_docs = self._query_all()
         return [md for md in all_docs if self._match_nested(md.model_dump(mode="json"), filters)]
 
+    def get_metadata_in_tag(self, tag_id: str) -> List[DocumentMetadata]:
+        with self.store._connect() as conn:
+            rows = conn.execute(
+                f"SELECT * FROM {self._table()} WHERE tags LIKE ?", [f"%{tag_id}%"]
+            ).fetchall()
+        return [self._deserialize(row) for row in rows]
+
     def get_metadata_by_uid(self, document_uid: str) -> DocumentMetadata:
         with self.store._connect() as conn:
             row = conn.execute(

@@ -12,99 +12,75 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from datetime import datetime
 import logging
+from datetime import datetime
+
+from langgraph.graph import START, END, MessagesState, StateGraph
+from langchain_core.messages import SystemMessage
+
 from app.common.structures import AgentSettings
 from app.model_factory import get_model
-from langchain_core.messages import SystemMessage
-from langgraph.graph import END, START, MessagesState, StateGraph
 from app.core.agents.flow import AgentFlow
 from app.core.monitoring.node_monitoring.monitor_node import monitor_node
 
 logger = logging.getLogger(__name__)
+
 class GeneralistExpert(AgentFlow):
     """
     Generalist Expert provides guidance on a wide range of topics 
     without deep specialization. 
     """
 
-    # Class-level attributes for metadata
+    # Class-level metadata
     name: str = "GeneralistExpert"
     role: str = "Generalist Expert"
     nickname: str = "Georges"
     description: str = "Provides guidance on a wide range of topics without deep specialization."
     icon: str = "generalist_agent"
-    categories: list[str] = []
     tag: str = "Generalist"
-    
-    def __init__(self, agent_settings: AgentSettings):     
-        """
-        Initializes the Generalist Expert agent.
 
-        Args:
-            cluster_fullname (str): The full name of the Kubernetes cluster 
-                                    in the current context.
-        """
-        # Get agent settings
+    def __init__(self, agent_settings: AgentSettings):
         self.agent_settings = agent_settings
-        
-        # Extract categories
-        self.categories = agent_settings.categories if agent_settings.categories else ["General"]
+        self.categories = agent_settings.categories or ["General"]
+        self.model = None  # Will be set in async_init
+        self.base_prompt = ""  # Will be set in async_init
+        self._graph = None     # Will be built in async_init
 
-        # Tell the Agent who it is via its base prompt
+    async def async_init(self):
+        self.model = get_model(self.agent_settings.model)
         self.base_prompt = self._generate_prompt()
-        
-        # Initialize parent class
+        self._graph = self._build_graph()
+
         super().__init__(
             name=self.name,
             role=self.role,
             nickname=self.nickname,
             description=self.description,
             icon=self.icon,
-            graph=self.get_graph(),
+            graph=self._graph,
             base_prompt=self.base_prompt,
             categories=self.categories,
-            tag=self.tag
+            tag=self.tag,
         )
 
     def _generate_prompt(self) -> str:
-        lines = [
+        today = datetime.now().strftime('%Y-%m-%d')
+        return "\n".join([
             "You are a friendly generalist expert, skilled at providing guidance on a wide range of topics without deep specialization.",
-        ]
-    
-        lines += [
             "Your role is to respond with clarity, providing accurate and reliable information.",
             "When appropriate, highlight elements that could be particularly relevant.",
-            f"The current date is {datetime.now().strftime('%Y-%m-%d')}.",
+            f"The current date is {today}.",
             "In case of graphical representation, render mermaid diagrams code.",
-            "",
-        ]
-        return "\n".join(lines)
+        ])
 
-    async def expert(self, state: MessagesState):
-        """
-        Processes user messages and interacts with the model.
-
-        Args:
-            state (MessagesState): The current state of the conversation.
-
-        Returns:
-            dict: The updated state with the expert's response.
-        """
-        model = get_model(self.agent_settings.model)
-        prompt = SystemMessage(content=self.base_prompt)
-        response = await model.ainvoke([prompt] + state["messages"])
-        return {"messages": [response]}
-
-    def get_graph(self) -> StateGraph:
-        """
-        Defines the agentic flow graph for the expert.
-
-        Returns:
-            StateGraph: The constructed state graph.
-        """
+    def _build_graph(self) -> StateGraph:
         builder = StateGraph(MessagesState)
-        builder.add_node("expert", monitor_node(self.expert))
+        builder.add_node("expert", monitor_node(self.reasoner))
         builder.add_edge(START, "expert")
         builder.add_edge("expert", END)
         return builder
+
+    async def reasoner(self, state: MessagesState):
+        prompt = SystemMessage(content=self.base_prompt)
+        response = await self.model.ainvoke([prompt] + state["messages"])
+        return {"messages": [response]}

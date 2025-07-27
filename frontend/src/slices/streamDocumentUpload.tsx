@@ -20,22 +20,20 @@ export async function streamUploadOrProcessDocument(
   file: File,
   mode: "upload" | "process",
   onProgress: (update: ProcessingProgress) => void,
+  metadata?: Record<string, any>,
 ): Promise<void> {
   const token = KeyCloakService.GetToken();
   const formData = new FormData();
   formData.append("files", file);
-  const metadata = { tags: ["test"] };// Can extend later if needed
-  formData.append("metadata_json", JSON.stringify(metadata));
+
+  formData.append("metadata_json", JSON.stringify(metadata) || "{}");
 
   const backend_url_knowledge = getConfig().backend_url_knowledge;
   if (!backend_url_knowledge) {
     throw new Error("Knowledge backend URL is not defined");
   }
 
-  const endpoint =
-    mode === "upload"
-      ? "/knowledge-flow/v1/upload-files"
-      : "/knowledge-flow/v1/process-files";
+  const endpoint = mode === "upload" ? "/knowledge-flow/v1/upload-files" : "/knowledge-flow/v1/process-files";
 
   const response = await fetch(`${backend_url_knowledge}${endpoint}`, {
     method: "POST",

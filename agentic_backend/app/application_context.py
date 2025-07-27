@@ -109,19 +109,6 @@ def get_app_context() -> "ApplicationContext":
     return ApplicationContext._instance
 
 
-def toremove_get_model_for_agent(agent_name: str) -> BaseLanguageModel:
-    """
-    Retrieves the AI model instance for a given agent.
-
-    Args:
-        agent_name (str): The name of the agent.
-
-    Returns:
-        BaseLanguageModel: The AI model configured for the agent.
-    """
-    return get_app_context().toremove_get_model_for_agent(agent_name)
-
-
 def get_default_model() -> BaseLanguageModel:
     """
     Retrieves the default AI model instance.
@@ -300,10 +287,6 @@ class ApplicationContext:
         """
         return get_model(self.configuration.ai.default_model)
     
-    def toremove_get_model_for_agent(self, agent_name: str) -> BaseLanguageModel:
-        agent_settings = self.get_agent_settings(agent_name)
-        return get_model(agent_settings.model)
-
     # --- Agent classes ---
 
     def get_enabled_agent_names(self) -> List[str]:
