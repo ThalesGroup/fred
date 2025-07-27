@@ -155,20 +155,20 @@ ai:
     #       sse_read_timeout: 2000
     #   model: {}
       # The Rags expert essentially is the Document expert before using tools and the knownledge-flow backend as a MCP server
-    # - name: "RagsExpert"
-    #   role: "Document Retrieval Expert"
-    #   description: >
-    #     Answers user questions by retrieving relevant information from ingested document corpora.
-    #     Uses a vector-based retrieval pipeline to ground responses in internal or uploaded knowledge.
-    #   class_path: "app.agents.rags.rags_expert.RagsExpert"
-    #   enabled: true
-    #   categories:
-    #     - "rag"
-    #   settings:
-    #     chunk_size: 512
-    #     chunk_overlap: 64
-    #     knowledge_flow_url: "http://localhost:8111/knowledge-flow/v1"
-    #   model: {}
+    - name: "RagsExpert"
+      role: "Document Retrieval Expert"
+      description: >
+        Answers user questions by retrieving relevant information from ingested document corpora.
+        Uses a vector-based retrieval pipeline to ground responses in internal or uploaded knowledge.
+      class_path: "app.agents.rags.rags_expert.RagsExpert"
+      enabled: true
+      categories:
+        - "rag"
+      settings:
+        chunk_size: 512
+        chunk_overlap: 64
+        knowledge_flow_url: "http://localhost:8111/knowledge-flow/v1"
+      model: {}
 
 
 # Security. As of today only keycloak is supported.

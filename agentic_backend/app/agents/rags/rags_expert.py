@@ -13,9 +13,11 @@
 # limitations under the License.
 
 from datetime import datetime
+import logging
 from typing import List
 
 from app.common.structures import AgentSettings
+from app.core.monitoring.node_monitoring import monitor_node
 from app.model_factory import get_model
 import requests
 from langchain_core.messages import HumanMessage
@@ -25,11 +27,13 @@ from app.core.agents.flow import AgentFlow
 from app.common.document_source import DocumentSource
 from app.core.chatbot.chat_schema import ChatSource
 
+logger = logging.getLogger(__name__)
+
 class RagsExpert(AgentFlow):
     """
     An expert agent that searches and analyzes documents to answer user questions.
-    This agent uses a vector search service to find relevant documents and generates
-    responses based on the document content.
+    This agent uses a vector search service using the knowledge-flow search REST API to find relevant documents and generates
+    responses based on the document content. This design is simple and straightworward.
     """
     name: str = "RagsExpert"
     role: str = "Rags Expert"
@@ -40,24 +44,19 @@ class RagsExpert(AgentFlow):
     tag: str = "Innovation"
 
     def __init__(self, agent_settings: AgentSettings):
-        """
-        Initialize the RagsExpert agent with settings and configuration.
-        Loads settings from agent configuration and sets up connections to the
-        knowledge base service.
-        """
         self.agent_settings = agent_settings
-        self.knowledge_flow_url = self.agent_settings.settings.get(
-            "knowledge_flow_url", "http://localhost:8111/knowledge-flow/v1"
-        )
-        self.document_directory = self.agent_settings.settings.get("document_directory", "./resources/knowledge/imported")
-        self.chunk_size = self.agent_settings.settings.get("chunk_size", 512)
-        self.chunk_overlap = self.agent_settings.settings.get("chunk_overlap", 64)
+        self.knowledge_flow_url = agent_settings.settings.get("knowledge_flow_url", "http://localhost:8111/knowledge-flow/v1")
         self.current_date = datetime.now().strftime("%Y-%m-%d")
-        self.vector_store_retriever = None
+        self.model = None
+        self.base_prompt = ""
+        self._graph = None
+        self.categories = agent_settings.categories or ["Documentation"]
+        self.tag = agent_settings.tag or "rags"
+
+    async def async_init(self):
+        self.model = get_model(self.agent_settings.model)
         self.base_prompt = self._generate_prompt()
-        self.categories = self.agent_settings.categories if self.agent_settings.categories else ["Documentation"]
-        if self.agent_settings.tag:
-            self.tag = self.agent_settings.tag
+        self._graph = self._build_graph()
 
         super().__init__(
             name=self.name,
@@ -65,10 +64,10 @@ class RagsExpert(AgentFlow):
             nickname=self.nickname,
             description=self.description,
             icon=self.icon,
-            graph=self.get_graph(),
+            graph=self._graph,
             base_prompt=self.base_prompt,
             categories=self.categories,
-            tag=self.tag
+            tag=self.tag,
         )
 
     def _generate_prompt(self) -> str:
@@ -83,125 +82,66 @@ class RagsExpert(AgentFlow):
             "Whenever you reference a document part, provide citations.\n"
             f"The current date is {self.current_date}.\n"
         )
+    
+    def _build_graph(self) -> StateGraph:
+        builder = StateGraph(MessagesState)
+        builder.add_node("reasoner", self._run_reasoning_step)
+        builder.add_edge(START, "reasoner")
+        builder.add_edge("reasoner", END)
+        return builder
 
-    async def agent(self, state: MessagesState):
-        """
-        Main agent function that processes user questions and retrieves relevant documents.
-
-        Args:
-            state (MessagesState): The current state containing user messages.
-
-        Returns:
-            dict: A dictionary containing the agent's response message.
-        """
-        model = get_model(self.agent_settings.model)
+    async def _run_reasoning_step(self, state: MessagesState):
         question: str = state["messages"][-1].content
-
         try:
-            # Step 1: Send request to vector search service
-            print(f"Sending request to {self.knowledge_flow_url}/vector/search with query: {question}")
             response = requests.post(
                 f"{self.knowledge_flow_url}/vector/search",
-                json={"query": question, "top_k": 10},
+                json={"query": question, "top_k": 3},
                 timeout=10
             )
             response.raise_for_status()
-
-            # Step 2: Process the response
             documents_data = response.json()
-            print(f"Received response with {len(documents_data)} documents")
 
-            # Step 3: Handle empty results
             if not documents_data:
-                ai_message = await model.ainvoke([HumanMessage(content=
-                    f"I couldn't find any relevant documents for your question about '{question}'. "
-                    "Could you rephrase or ask another question?"
-                )])
-                return {"messages": [ai_message]}
+                msg = f"I couldn't find any relevant documents for '{question}'. Try rephrasing?"
+                return {"messages": [await self.model.ainvoke([HumanMessage(content=msg)])]}
 
-            # Step 4: Process documents with error handling
             documents = []
             sources: List[ChatSource] = []
-
             for doc in documents_data:
-                try:
-                    # Handle field name differences (uid vs document_uid)
-                    if "uid" in doc and "document_uid" not in doc:
-                        doc["document_uid"] = doc["uid"]
+                if "uid" in doc and "document_uid" not in doc:
+                    doc["document_uid"] = doc["uid"]
+                doc_source = DocumentSource(**doc)
+                documents.append(doc_source)
+                sources.append(ChatSource(
+                    document_uid=getattr(doc_source, "document_uid", getattr(doc_source, "uid", "unknown")),
+                    file_name=doc_source.file_name,
+                    title=doc_source.title,
+                    author=doc_source.author,
+                    content=doc_source.content,
+                    created=doc_source.created,
+                    modified=doc_source.modified or "",
+                    type=doc_source.type,
+                    score=doc_source.score,
+                ))
 
-                    # Create DocumentSource instance
-                    doc_source = DocumentSource(**doc)
-                    documents.append(doc_source)
-
-                    # Create ChatSource for metadata
-                    source = ChatSource(
-                        document_uid=getattr(doc_source, "document_uid", getattr(doc_source, "uid", "unknown")),
-                        file_name=doc_source.file_name,
-                        title=doc_source.title,
-                        author=doc_source.author,
-                        content=doc_source.content,
-                        created=doc_source.created,
-                        type=doc_source.type,
-                        modified=doc_source.modified or "",
-                        score=doc_source.score
-                    )
-                    sources.append(source)
-                except Exception as e:
-                    print(f"Error processing document: {str(e)}. Document: {doc}")
-
-            # Step 5: Check if we have any valid documents after processing
-            if not documents:
-                ai_message = await model.ainvoke([HumanMessage(content=
-                    "I found some documents but couldn't process them correctly. Please try again later."
-                )])
-                return {"messages": [ai_message]}
-
-            # Step 6: Build prompt with document content
-            documents_str = ""
-            for doc in documents:
-                documents_str += (
-                    f"Source file: {doc.file_name}\n"
-                    f"Page: {doc.page}\n"
-                    f"Content: {doc.content}\n\n"
-                )
+            documents_str = "\n".join(
+                f"Source file: {d.file_name}\nPage: {d.page}\nContent: {d.content}\n"
+                for d in documents
+            )
 
             prompt = (
                 "You are an assistant that answers questions based on retrieved documents.\n"
-                "Use the following related documents to generate your answer and cite sources.\n\n"
+                "Use the following documents to support your response with citations.\n\n"
                 f"{documents_str}\n"
-                f"Question:\n{question}\n\n"
+                f"Question:\n{question}\n"
             )
 
-            # Step 7: Generate response using the LLM
-            response = await model.ainvoke([HumanMessage(content=prompt)])
+            response = await self.model.ainvoke([HumanMessage(content=prompt)])
             response.response_metadata.update({"sources": [s.model_dump() for s in sources]})
             return {"messages": [response]}
 
-        except requests.RequestException as e:
-            # Handle API request errors
-            print(f"Error connecting to vector search service: {str(e)}")
-            error_message = await model.ainvoke([HumanMessage(content=
-                "I couldn't access the document search service. Please try again later."
-            )])
-            return {"messages": [error_message]}
         except Exception as e:
-            # Handle any other unexpected errors
-            print(f"Unexpected error in RagsExpert agent: {str(e)}")
-            error_message = await model.ainvoke([HumanMessage(content=
-                "An error occurred while processing your request. Please try again later."
-            )])
-            return {"messages": [error_message]}
-
-    def get_graph(self) -> StateGraph:
-        """
-        Create the LangGraph workflow for this agent.
-
-        Returns:
-            StateGraph: The graph defining the agent's workflow.
-        """
-        builder = StateGraph(MessagesState)
-        builder.add_node("agent", self.agent)
-        builder.add_edge(START, "agent")
-        builder.add_edge("agent", END)
-        return builder
+            logger.exception("Error in RagsExpert reasoning.")
+            fallback = await self.model.ainvoke([HumanMessage(content="An error occurred. Please try again later.")])
+            return {"messages": [fallback]}
 
