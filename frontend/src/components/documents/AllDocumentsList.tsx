@@ -46,7 +46,8 @@ import {
   DocumentMetadata,
   useBrowseDocumentsKnowledgeFlowV1DocumentsBrowsePostMutation,
 } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
-import { LoadingSpinner } from "../../utils/loadingSpinner";
+import { EmptyState } from "../EmptyState";
+import { TableSkeleton } from "../TableSkeleton";
 import { useToast } from "../ToastProvider";
 import { DocumentTable } from "./DocumentTable";
 import { DocumentUploadDrawer } from "./DocumentUploadDrawer";
@@ -76,6 +77,7 @@ export const AllDocumentsList = ({}: DocumentsViewProps) => {
 
   // Backend Data States
   const [allDocuments, setAllDocuments] = useState<DocumentMetadata[]>([]);
+  const [totalDocCount, setTotalDocCount] = useState<number>();
 
   const selectedSource = allSources?.find((s) => s.tag === selectedSourceTag);
   const isPullMode = selectedSource?.type === "pull";
@@ -114,6 +116,7 @@ export const AllDocumentsList = ({}: DocumentsViewProps) => {
       }).unwrap();
 
       const docs = response.documents;
+      setTotalDocCount(response.total);
       setAllDocuments(docs);
     } catch (error) {
       console.error("Error fetching documents:", error);
@@ -297,13 +300,21 @@ export const AllDocumentsList = ({}: DocumentsViewProps) => {
         }}
       >
         {isLoading ? (
-          <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
-            <LoadingSpinner />
-          </Box>
-        ) : allDocuments.length > 0 ? (
+          <TableSkeleton
+            columns={[
+              { padding: "checkbox" },
+              { width: 200, hasIcon: true },
+              { width: 100 },
+              { width: 100 },
+              { width: 120 },
+              { width: 100 },
+              { width: 15 },
+            ]}
+          />
+        ) : totalDocCount !== undefined && totalDocCount > 0 ? (
           <Box>
             <Typography variant="h6" fontWeight="bold" gutterBottom sx={{ mb: 2 }}>
-              {t("documentLibrary.documents", { count: allDocuments.length })}
+              {t("documentLibrary.documents", { count: totalDocCount })}
             </Typography>
 
             <DocumentTable
@@ -341,25 +352,20 @@ export const AllDocumentsList = ({}: DocumentsViewProps) => {
             </Box>
           </Box>
         ) : (
-          <Box display="flex" flexDirection="column" alignItems="center" justifyContent="center" minHeight="400px">
-            <LibraryBooksRoundedIcon sx={{ fontSize: 60, color: theme.palette.text.secondary, mb: 2 }} />
-            <Typography variant="h5" color="textSecondary" align="center">
-              {t("documentLibrary.noDocument")}
-            </Typography>
-            <Typography variant="body1" color="textSecondary" align="center" sx={{ mt: 1 }}>
-              {t("documentLibrary.modifySearch")}
-            </Typography>
-            {userInfo.canManageDocuments && (
-              <Button
-                variant="outlined"
-                startIcon={<UploadIcon />}
-                onClick={() => setOpenUploadDrawer(true)}
-                sx={{ mt: 2 }}
-              >
-                {t("documentLibrary.addDocuments")}
-              </Button>
-            )}
-          </Box>
+          <EmptyState
+            icon={<LibraryBooksRoundedIcon />}
+            title={t("documentLibrary.noDocument")}
+            description={t("documentLibrary.modifySearch")}
+            actionButton={
+              userInfo.canManageDocuments
+                ? {
+                    label: t("documentLibrary.addDocuments"),
+                    onClick: () => setOpenUploadDrawer(true),
+                    startIcon: <UploadIcon />,
+                  }
+                : undefined
+            }
+          />
         )}
       </Paper>
 

@@ -129,20 +129,9 @@ export const useDocumentActions = (onRefreshData?: () => void) => {
           return {
             source_tag: f.source_tag || "uploads",
             document_uid: isPull ? undefined : f.document_uid,
-            external_path: isPull ? f.pull_location : undefined,
+            external_path: isPull ? (f.pull_location ?? undefined) : undefined,
             tags: f.tags || [],
             display_name: f.document_name,
-
-            // Using `ts-ignore` because `hash`, `size` and `modified_time` should not
-            // exist in DocumentMetadata, but this code was added so I don't want to remove
-            // it. This should be removed or the Open API spec should be fixed to add this
-            // fields in DocumentMetadata (if they are really set by the backend).
-            // @ts-ignore
-            hash: isPull ? f.hash : undefined,
-            // @ts-ignore
-            size: isPull ? f.size : undefined,
-            // @ts-ignore
-            modified_time: isPull ? f.modified_time : undefined,
           };
         }),
         pipeline_name: "manual_ui_trigger",
