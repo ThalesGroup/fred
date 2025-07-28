@@ -1,0 +1,39 @@
+# spe backend
+
+imagePullSecrets: []
+
+ingress:
+  className: "traefik"
+
+dotenv:
+  openai_api_key: "sk-pr*****"
+
+
+env:
+  enabled: true
+  extraEnvVars:
+  - name: OPENAI_API_KEY
+    value: "sk-pr*****"
+
+kubeconfig:
+  data:
+    kubeconfig: |
+      apiVersion: v1
+      clusters:
+      - cluster:
+          certificate-authority-data: LS0********
+          server: https://127.0.0.1:6443
+        name: default
+      contexts:
+      - context:
+          cluster: default
+          user: default
+        name: default
+      current-context: default
+      kind: Config
+      preferences: {}
+      users:
+      - name: default
+        user:
+          client-certificate-data: LS0*******
+          client-key-data: LS0*******
