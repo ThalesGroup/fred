@@ -51,7 +51,7 @@ class TabularExpert(AgentFlow):
         self.model = None
         self.mcp_client = None
         self.toolkit = None
-        self.base_prompt = ""
+        self.base_prompt = self._generate_prompt()
         self._graph = None
         self.categories = agent_settings.categories or ["tabular"]
         self.tag = agent_settings.tag or "data"
@@ -61,7 +61,6 @@ class TabularExpert(AgentFlow):
         self.mcp_client = await get_mcp_client_for_agent(self.agent_settings)
         self.toolkit = TabularToolkit(self.mcp_client)
         self.model = self.model.bind_tools(self.toolkit.get_tools())
-        self.base_prompt = self._generate_prompt()
         self._graph = self._build_graph()
        
         super().__init__(

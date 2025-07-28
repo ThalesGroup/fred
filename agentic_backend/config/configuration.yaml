@@ -145,16 +145,19 @@ ai:
           url: http://localhost:8111/mcp_tabular
           sse_read_timeout: 2000
       model: {}
-    # - name: "DocumentsExpert"
-    #   class_path: "app.agents.documents.documents_expert.DocumentsExpert"
-    #   enabled: true
-    #   mcp_servers:
-    #     - name: knowledge-flow-mcp-server
-    #       transport: sse
-    #       url: http://localhost:8111/mcp_text
-    #       sse_read_timeout: 2000
-    #   model: {}
-      # The Rags expert essentially is the Document expert before using tools and the knownledge-flow backend as a MCP server
+    - name: "DocumentsExpert"
+      role: "Document Retrieval Expert"
+      description: >
+        Answers user questions by retrieving relevant information from ingested document corpora.
+        Uses a MCP search service to ground responses in internal or uploaded knowledge.
+      class_path: "app.agents.documents.documents_expert.DocumentsExpert"
+      enabled: true
+      mcp_servers:
+        - name: knowledge-flow-mcp-server
+          transport: sse
+          url: http://localhost:8111/mcp_text
+          sse_read_timeout: 2000
+      model: {}
     - name: "RagsExpert"
       role: "Document Retrieval Expert"
       description: >
