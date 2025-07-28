@@ -16,7 +16,7 @@ from typing import Any, Dict, List, Optional, Literal, Union, Annotated
 from datetime import datetime
 from enum import Enum
 import os
-
+from pathlib import Path
 from pydantic import BaseModel, model_validator, Field
 from fred_core import Security
 
@@ -166,21 +166,25 @@ class ServicesSettings(BaseModel):
 
 
 class AgentSettings(BaseModel):
-    name: str = Field(..., description="Agent identifier name.")
-    class_path: Optional[str] = Field(None, description="Path to the agent class.")
-    enabled: bool = Field(default=True, description="Whether the agent is enabled.")
-    categories: List[str] = Field(default_factory=list, description="List of categories for the agent.")
-    settings: Dict[str, Any] = Field(default_factory=dict, description="Agent-specific settings (e.g., document directory, chunk size).")
-    model: ModelConfiguration = Field(default_factory=ModelConfiguration, description="AI model configuration for this agent.")
-    tag: Optional[str] = Field(None, description="Tag of the agent")
-    mcp_servers: List[MCPServerConfiguration] = Field(default_factory=list, description="List of MCP servers associated to an agent.")
-    max_steps: int = Field(None,description="Max step")
-
+    type: Literal["mcp", "custom", "leader"] = "custom"
+    name: str
+    class_path: Optional[str] = None
+    enabled: bool = True
+    categories: List[str] = Field(default_factory=list)
+    settings: Dict[str, Any] = Field(default_factory=dict)
+    model: Optional[ModelConfiguration] = None
+    tag: Optional[str] = None
+    mcp_servers: Optional[List[MCPServerConfiguration]] = Field(default_factory=list)
+    max_steps: Optional[int] = 10
+    description: Optional[str] = None
+    base_prompt: Optional[str] = None
+    nickname: Optional[str] = None
+    role: Optional[str] = None
+    icon: Optional[str] = None
 
 class AIConfig(BaseModel):
     timeout: TimeoutSettings = Field(None, description="Timeout settings for the AI client.")
     default_model: ModelConfiguration = Field(default_factory=ModelConfiguration, description="Default model configuration for all agents and services.")
-    leader: AgentSettings = Field(default_factory=AgentSettings, description="Settings for the leader agent.")
     services: List[ServicesSettings] = Field(default_factory=list, description="List of AI services.")
     agents: List[AgentSettings] = Field(default_factory=list, description="List of AI agents.")
     recursion: RecursionConfig = Field(default_factory=int, description="Number of max recursion while using the model")
@@ -205,9 +209,6 @@ class AIConfig(BaseModel):
             merged_dict = {**defaults, **target_dict}
             return ModelConfiguration(**merged_dict)
 
-        if self.leader.enabled:
-            self.leader.model = merge(self.leader.model)
-
         for service in self.services:
             if service.enabled:
                 service.model = merge(service.model)
@@ -222,12 +223,8 @@ class AIConfig(BaseModel):
 # ----------------------------------------------------------------------
 
 ## ----------------------------------------------------------------------
-## Metrics and feedback storage configurations
+## Metrics storage configurations
 ## ----------------------------------------------------------------------
-
-class FeedbackStorageConfig(BaseModel):
-    type: str = Field(default="local", description="The storage backend to use (e.g., 'local', 'opensearch')")
-    local_path: str = Field(default="~/.fred/feedback-store", description="The path where local data is stored")
 
 class MetricsStorageConfig(BaseModel):
     type: str = Field(default="local", description="The metrics store to use (e.g., 'local')")
@@ -254,6 +251,29 @@ SessionStorageConfig = Annotated[
     Union[InMemoryStorageConfig, OpenSearchStorageConfig],
     Field(discriminator="type")
 ]
+
+###########################################################
+#
+#  --- Dynamic Agents Storage Configuration
+#
+
+class DuckdbDynamicAgentStorage(BaseModel):
+    type: Literal["duckdb"]
+    duckdb_path: str = Field(default="~/.fred/agentic/db.duckdb", 
+                             description="Path to the DuckDB database file.")
+
+DynamicAgentStorageConfig = Annotated[Union[DuckdbDynamicAgentStorage], Field(discriminator="type")]
+
+###########################################################
+#
+#  --- Feedback Storage Configuration
+#
+
+class FeedbackStorage(BaseModel):
+    type: Literal["duckdb"]
+    duckdb_path: str = Field(default="~/.fred/agentic/db.duckdb", 
+                             description="Path to the DuckDB database file.")
+FeedbackStorageConfig = Annotated[Union[DuckdbDynamicAgentStorage], Field(discriminator="type")]
 
 # ----------------------------------------------------------------------
 # Other configurations
@@ -301,6 +321,7 @@ class Configuration(BaseModel):
     node_metrics_storage:  MetricsStorageConfig = Field(..., description="Node Monitoring Storage configuration")
     tool_metrics_storage:  MetricsStorageConfig = Field(..., description="Tool Monitoring Storage configuration")
     session_storage: SessionStorageConfig = Field(..., description="Session Storage configuration")
+    agent_storage: DynamicAgentStorageConfig = Field(..., description="Agents Storage configuration")
 
 class OfflineStatus(BaseModel):
     is_offline: bool

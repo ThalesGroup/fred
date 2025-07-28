@@ -19,7 +19,7 @@ from app.common.document_structures import DocumentMetadata, ProcessingStage
 from app.common.structures import OutputProcessorResponse
 from app.core.processors.input.common.base_input_processor import BaseMarkdownProcessor, BaseTabularProcessor
 from app.core.processors.input.duckdb_processor.duckdb_processor import DuckDBProcessor
-from app.features.metadata.service import MetadataService
+from app.features.metadata.service import MetadataNotFound, MetadataService
 
 from app.application_context import ApplicationContext
 
@@ -53,7 +53,25 @@ class IngestionService:
         return self.metadata_service.save_document_metadata(metadata)
 
     def get_metadata(self, document_uid: str) -> DocumentMetadata:
-        return self.metadata_service.get_document_metadata(document_uid)
+        """
+        Retrieve the metadata associated with the given document UID.
+
+        Args:
+            document_uid (str): The unique identifier of the document.
+
+        Returns:
+            Optional[DocumentMetadata]: The metadata if found, or None if the document
+            does not exist in the metadata store.
+
+        Notes:
+            If the underlying metadata service raises a `MetadataNotFound` exception,
+            this method will return `None` instead of propagating the exception.
+        """
+
+        try:
+            return self.metadata_service.get_document_metadata(document_uid)
+        except MetadataNotFound:
+            return None
 
     def get_local_copy(self, metadata: DocumentMetadata, target_dir: pathlib.Path) -> pathlib.Path:
         """

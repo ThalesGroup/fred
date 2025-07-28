@@ -1,4 +1,11 @@
 {
+  "validation": {
+    "required": "Required",
+    "invalid_url": "Invalid URL",
+    "invalid_transport": "Invalid Transport",
+    "timeout_min": "Must be ≥ 0",
+    "invalid_type": "Invalid Type"
+  },
   "sidebar": {
     "cluster": "Cluster",
     "facts": "Facts",
@@ -32,6 +39,53 @@
       "website": "Website"
     }
   },
+  "agentHub": {
+    "title": "Agent Hub",
+    "confirmDeleteTitle": "Confirm deletion",   
+    "confirmDeleteMessage": "Delete this agent ? This action cannot be undone.",  
+    "description": "Explore and manage available AI agents",
+    "allAgents": "All Agents",
+    "favoriteAgents": "Favorite Agents",
+    "agents": "Agents",
+    "search": "Search",
+    "filter": "Filter",
+    "create": "Create",
+    "noAgents": "No agents found",
+    "noFavorites": "You haven't added any agents to your favorites yet",
+    "noTag": "No agents with tag \"{{tag}}\"",
+    "categories": {
+      "all": "All",
+      "favorites": "Favorites"
+    },
+    "fields": {
+      "name": "Name",
+      "nickname": "Nickname",
+      "description": "Description",
+      "role": "Role",
+      "base_prompt": "Base Prompt",
+      "agent_type": "Agent Type",
+      "icon": "Icon",
+      "tags": "Tags",
+      "custom_tag": "Add custom tag",
+      "custom_tag_placeholder": "Press Enter to add",
+      "mcp_servers": "MCP Servers",
+      "selectFromPredefined": "Select",
+      "mcp_server": {
+        "name": "Name",
+        "url": "URL",
+        "transport": "Transport",
+        "timeout": "Timeout"
+      }
+    },
+    "actions": {
+      "add_mcp_server": "+ Add a MCP server"
+    },
+    "errors": {
+      "creationFailedSummary": "Agent creation failed",
+      "creationFailedDetailFallback": "An unexpected error occurred while creating the agent."
+    }
+  },
+
   "chatbot": {
     "startNew": "Start a new conversation with {{name}}",
     "changeAssistant": "You can select another assistant in the settings panel.",
@@ -81,25 +135,11 @@
       "last30d": "Last 30 days"
     }
   },
-  "agentHub": {
-    "title": "Agent Hub",
-    "description": "Explore and manage available AI agents",
-    "allAgents": "All Agents",
-    "favoriteAgents": "Favorite Agents",
-    "agents": "Agents",
-    "search": "Search",
-    "filter": "Filter",
-    "noAgents": "No agents found",
-    "noFavorites": "You haven't added any agents to your favorites yet",
-    "noTag": "No agents with tag \"{{tag}}\"",
-    "categories": {
-      "all": "All",
-      "favorites": "Favorites"
-    }
-  },
   "agentCard": {
-    "taggedWith": "Tagged: {{tag}}",
-    "expertIntegrations": "Expert integrations:"
+    "edit": "Edit agent",
+    "delete": "Delete agent",
+    "taggedWith": "Tagged with {{tag}}",
+    "expertIntegrations": "Expert integrations"
   },
   "workspaces": {
     "title": "Workspaces",
@@ -124,27 +164,23 @@
       "errorSummary": "Creation failed",
       "errorDetail": "Could not create context: {{message}}"
     },
-    "cancel": "Cancel",
-    "edit": {
-      "title": "Edit {{context}}",
-      "name": "Name",
-      "description": "Description",
-      "dropDefault": "Click or drag and drop files here",
-      "dropActive": "Drop files here",
-      "existingDocuments": "Existing documents:",
-      "newDocuments": "New documents:",
-      "documentDescription": "Document description (optional)",
-      "cancel": "Cancel",
-      "save": "Save"
-    }
-  },
-  "profile": {
-    "title": "User Profile",
-    "description": "Manage your user preferences and chat profiles",
-    "menu": {
-      "account": "Account",
-      "token": "Token",
-      "chat": "Chat Profiles"
+    "documentTable": {
+      "selectedCount": "{{count}} selected",
+      "deleteSelected": "Delete",
+      "processSelected": "Process",
+      "downloadSelected": "Download",
+      "fileName": "File Name",
+      "dateAdded": "Date Added",
+      "dateAddedTooltip": "Date added to knowledge base",
+      "retrievableYes": "Searchable",
+      "retrievableNo": "Excluded",
+      "status": "Status",
+      "tags": "Tags",
+      "actions": "Actions",
+      "loadingMetadata": "Loading metadata...",
+      "noMetadata": "No metadata available.",
+      "yes": "Yes",
+      "no": "No"
     },
     "noUser": "No user connected",
     "login": "Log in",

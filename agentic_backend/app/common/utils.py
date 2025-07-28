@@ -14,6 +14,8 @@
 
 from datetime import datetime, timedelta
 from typing import Tuple, Dict, Optional
+from app.common.error import SESSION_NOT_INITIALIZED
+from app.common.structures import CompareResult, Configuration, Difference, PrecisionEnum, SampleDataType, Series, Window
 from fastapi import HTTPException
 import logging
 import traceback
@@ -23,9 +25,6 @@ from functools import wraps
 import inspect
 
 logger = logging.getLogger(__name__)
-
-from app.common.structures import Configuration, PrecisionEnum, SampleDataType, Series, CompareResult, Window, Difference
-from app.common.error import SESSION_NOT_INITIALIZED
 
 def parse_server_configuration(configuration_path: str) -> Configuration:
     """
@@ -125,6 +124,16 @@ def to_timedelta(duration_str: str) -> timedelta:
     return timedelta(days=days, hours=hours, minutes=minutes, seconds=seconds)
 
 
+def get_class_path(cls: type) -> str:
+    """
+    Returns the fully qualified class path as a string, e.g.:
+    'app.core.agents.mcp_agent.MCPAgent'
+    """
+    module = inspect.getmodule(cls)
+    if not module or not hasattr(cls, "__name__"):
+        raise ValueError(f"Could not determine class path for {cls}")
+    return f"{module.__name__}.{cls.__name__}"
+
 def auc_calculation(values: list[float]) -> float:
     """
     Calculate the area under the curve of the consumption during the period
@@ -182,11 +191,6 @@ def compare_two_windows(window_1: Series, window_2: Series,
 def format_to_en(number) -> float:
     return str(number).replace(",", ".")
 
-import logging
-import traceback
-from typing import Optional
-
-logger = logging.getLogger(__name__)
 
 def log_exception(e: Exception, context_message: Optional[str] = None) -> str:
     """
@@ -251,9 +255,9 @@ def authorization_required(method):
         if session_id is None:
             raise ValueError(f"Missing 'session_id' in method '{method.__name__}'")
         if not isinstance(user_id, str):
-            raise ValueError(f"'user_id' must be of type 'str'")
+            raise ValueError("'user_id' must be of type 'str'")
         if not isinstance(session_id, str):
-            raise ValueError(f"'session_id' must be of type 'str'")
+            raise ValueError("'session_id' must be of type 'str'")
         if not hasattr(self, "get_authorized_user_id") or not callable(getattr(self, "get_authorized_user_id")):
             raise NotImplementedError(
                 f"{self.__class__.__name__} must implement 'get_authorized_user_id'"
