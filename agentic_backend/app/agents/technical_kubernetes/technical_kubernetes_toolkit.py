@@ -14,7 +14,7 @@
 
 from langchain_core.tools import BaseToolkit, StructuredTool
 from pydantic import BaseModel, Field
-from app.monitoring.tool_monitoring.monitor_tool import monitor_tool
+from app.core.monitoring.tool_monitoring.monitor_tool import monitor_tool
 
 
 class ClusterTopologyArgs(BaseModel):

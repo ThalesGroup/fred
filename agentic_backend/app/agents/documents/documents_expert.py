@@ -15,16 +15,15 @@
 import json
 import logging
 from datetime import datetime
-from typing import Optional
 
-from app.flow import AgentFlow
+from app.common.mcp_utils import get_mcp_client_for_agent
+from app.common.structures import AgentSettings
+from app.core.agents.flow import AgentFlow
 from app.agents.documents.documents_expert_toolkit import DocumentsToolkit
-from app.application_context import (get_agent_settings,
-                                      get_mcp_client_for_agent,
-                                      get_model_for_agent)
-from app.monitoring.node_monitoring.monitor_node import monitor_node
-from app.common.models.document_source import DocumentSource
-from app.services.chatbot_session.structure.chat_schema import ChatSource
+from app.model_factory import get_model
+from app.core.monitoring.node_monitoring.monitor_node import monitor_node
+from app.common.document_source import DocumentSource
+from app.core.chatbot.chat_schema import ChatSource
 from langchain_core.messages import HumanMessage, ToolMessage
 from langgraph.constants import START
 from langgraph.graph import MessagesState, StateGraph
@@ -44,40 +43,47 @@ class DocumentsExpert(AgentFlow):
     description: str = (
         """
         An expert agent that searches and analyzes documents to answer user questions.
-        This agent uses a vector search service to find relevant documents and generates
-        responses based on the document content.
+        This agent uses a mcp vector search service to find relevant documents and generates
+        responses based on the documents content.
         """)
     icon: str = "documents_agent"
     categories: list[str] = []
     tag: str = "documents"
     
-    def __init__(self, cluster_fullname: Optional[str] = None):     
+    def __init__(self, agent_settings: AgentSettings):     
         """
         Initialize the DocumentsExpert agent with settings and configuration.
         Loads settings from agent configuration and sets up connections to the
         knowledge base service.
         """
+        self.agent_settings = agent_settings
         self.current_date = datetime.now().strftime("%Y-%m-%d")
-        self.agent_settings = get_agent_settings(self.name)
-        self.model = get_model_for_agent(self.name)
-        self.mcp_client = get_mcp_client_for_agent(self.name)
-        self.toolkit = DocumentsToolkit(self.mcp_client)
-        self.categories = self.agent_settings.categories if self.agent_settings.categories else ["documents"]
+        self.agent_settings = agent_settings
+        self.model = None
+        self.mcp_client = None
+        self.toolkit = None
+        self.categories = self.agent_settings.categories or ["documents"]
+        self.tag = agent_settings.tag or "data"
         self.base_prompt = self._generate_prompt()
-        if self.agent_settings.tag:
-            self.tag = self.agent_settings.tag
 
+    async def async_init(self):
+        self.model = get_model(self.agent_settings.model)
+        self.mcp_client = await get_mcp_client_for_agent(self.agent_settings)
+        self.toolkit = DocumentsToolkit(self.mcp_client)
+        self.model = self.model.bind_tools(self.toolkit.get_tools())
+        self._graph = self._build_graph()
+       
         super().__init__(
             name=self.name,
             role=self.role,
             nickname=self.nickname,
             description=self.description,
             icon=self.icon,
-            graph=self.get_graph(),
+            graph=self._graph,
             base_prompt=self.base_prompt,
             categories=self.categories,
             tag=self.tag,
-            toolkit=self.toolkit
+            toolkit=self.toolkit,
         )
         
     def _generate_prompt(self) -> str:
@@ -111,7 +117,7 @@ class DocumentsExpert(AgentFlow):
                     except Exception as e:
                         logger.error(f"Error parsing ToolMessage content: {e}")
                     try:
-                        documents, sources = self.extract_sources_from_tool_response(documents_data)
+                        documents, sources = self._extract_sources_from_tool_response(documents_data)
                         # Check if we have any valid documents after processing
                         if not documents:
                             ai_message = await self.model.ainvoke([HumanMessage(content=
@@ -131,7 +137,7 @@ class DocumentsExpert(AgentFlow):
             )])
             return {"messages": [error_message]}
 
-    def extract_sources_from_tool_response(self, documents_data):
+    def _extract_sources_from_tool_response(self, documents_data):
         logger.info(f"Received response with {len(documents_data)} documents")
         
         # Process documents with error handling
@@ -165,7 +171,7 @@ class DocumentsExpert(AgentFlow):
                 print(f"Error processing document: {str(e)}. Document: {doc}")
         return documents, sources
 
-    def get_graph(self):
+    def _build_graph(self):
         builder = StateGraph(MessagesState)
 
         builder.add_node("reasoner", monitor_node(self.reasoner))
