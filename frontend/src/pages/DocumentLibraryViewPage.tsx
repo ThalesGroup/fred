@@ -1,22 +1,7 @@
 import FolderOpenIcon from "@mui/icons-material/FolderOpen";
 import RemoveCircleOutlineIcon from "@mui/icons-material/RemoveCircleOutline";
 import UploadIcon from "@mui/icons-material/Upload";
-import {
-  Box,
-  Button,
-  CircularProgress,
-  Container,
-  Paper,
-  Skeleton,
-  Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Typography,
-} from "@mui/material";
+import { Box, Button, CircularProgress, Container, Paper, Stack, Typography } from "@mui/material";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
@@ -27,6 +12,8 @@ import { CustomBulkAction } from "../components/documents/DocumentTableSelection
 import { DocumentUploadDrawer } from "../components/documents/DocumentUploadDrawer";
 import { LibraryInfoCard } from "../components/documents/LibraryInfoCard";
 import { useDocumentActions } from "../components/documents/useDocumentActions";
+import { EmptyState } from "../components/EmptyState";
+import { TableSkeleton } from "../components/TableSkeleton";
 import { useToast } from "../components/ToastProvider";
 import { KeyCloakService } from "../security/KeycloakService";
 import {
@@ -200,11 +187,31 @@ export const DocumentLibraryViewPage = () => {
             }}
           >
             {isLoadingDocumentsMetadata ? (
-              <DocumentTableSkeleton />
+              <TableSkeleton
+                columns={[
+                  { padding: "checkbox" },
+                  { width: 200, hasIcon: true },
+                  { width: 100 },
+                  { width: 80 },
+                  { width: 80 },
+                  { width: 60 },
+                ]}
+              />
             ) : documents.length === 0 ? (
-              <EmptyLibraryState
-                hasUploadPermission={hasDocumentManagementPermission()}
-                onUploadClick={() => setOpenUploadDrawer(true)}
+              <EmptyState
+                icon={<FolderOpenIcon />}
+                title={t("documentLibrary.emptyLibraryTitle")}
+                description={t("documentLibrary.emptyLibraryDescription")}
+                actionButton={
+                  hasDocumentManagementPermission()
+                    ? {
+                        label: t("documentLibrary.uploadFirstDocument"),
+                        onClick: () => setOpenUploadDrawer(true),
+                        startIcon: <UploadIcon />,
+                        variant: "outlined",
+                      }
+                    : undefined
+                }
               />
             ) : (
               <DocumentTable
@@ -239,89 +246,5 @@ export const DocumentLibraryViewPage = () => {
         />
       )}
     </>
-  );
-};
-
-const DocumentTableSkeleton = () => {
-  return (
-    <TableContainer>
-      <Table>
-        <TableHead>
-          <TableRow>
-            <TableCell padding="checkbox">
-              <Skeleton variant="rectangular" width={20} height={20} />
-            </TableCell>
-            <TableCell>
-              <Skeleton variant="text" width={100} />
-            </TableCell>
-            <TableCell>
-              <Skeleton variant="text" width={80} />
-            </TableCell>
-            <TableCell>
-              <Skeleton variant="text" width={60} />
-            </TableCell>
-            <TableCell>
-              <Skeleton variant="text" width={80} />
-            </TableCell>
-            <TableCell align="right">
-              <Skeleton variant="text" width={60} />
-            </TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {[...Array(5)].map((_, index) => (
-            <TableRow key={index}>
-              <TableCell padding="checkbox">
-                <Skeleton variant="rectangular" width={20} height={20} />
-              </TableCell>
-              <TableCell>
-                <Box display="flex" alignItems="center" gap={1}>
-                  <Skeleton variant="rectangular" width={24} height={24} />
-                  <Skeleton variant="text" width={200} />
-                </Box>
-              </TableCell>
-              <TableCell>
-                <Skeleton variant="text" width={100} />
-              </TableCell>
-              <TableCell>
-                <Skeleton variant="text" width={80} />
-              </TableCell>
-              <TableCell>
-                <Skeleton variant="text" width={60} />
-              </TableCell>
-              <TableCell align="right">
-                <Skeleton variant="rectangular" width={32} height={32} />
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </TableContainer>
-  );
-};
-
-interface EmptyLibraryStateProps {
-  hasUploadPermission: boolean;
-  onUploadClick: () => void;
-}
-
-const EmptyLibraryState = ({ hasUploadPermission, onUploadClick }: EmptyLibraryStateProps) => {
-  const { t } = useTranslation();
-
-  return (
-    <Box display="flex" flexDirection="column" alignItems="center" justifyContent="center" py={8} gap={1}>
-      <FolderOpenIcon sx={{ fontSize: 64, color: "text.secondary" }} />
-      <Typography variant="h6" color="text.secondary">
-        {t("documentLibrary.emptyLibraryTitle")}
-      </Typography>
-      <Typography variant="body2" color="text.secondary" textAlign="center" maxWidth={400}>
-        {t("documentLibrary.emptyLibraryDescription")}
-      </Typography>
-      {hasUploadPermission && (
-        <Button variant="outlined" startIcon={<UploadIcon />} onClick={onUploadClick} sx={{ mt: 1 }}>
-          {t("documentLibrary.uploadFirstDocument")}
-        </Button>
-      )}
-    </Box>
   );
 };

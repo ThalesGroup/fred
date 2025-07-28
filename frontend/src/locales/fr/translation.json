@@ -41,8 +41,8 @@
   },
   "agentHub": {
     "title": "Centre des Agents",
-    "confirmDeleteTitle": "Confirmer la suppression",   
-    "confirmDeleteMessage": "Supprimer cet agent ? Cette action est irréversible.",  
+    "confirmDeleteTitle": "Confirmer la suppression",
+    "confirmDeleteMessage": "Supprimer cet agent ? Cette action est irréversible.",
     "description": "Explorez et gérez les agents IA disponibles",
     "allAgents": "Tous les Agents",
     "favoriteAgents": "Agents Favoris",
@@ -137,7 +137,7 @@
   },
   "agentCard": {
     "edit": "Modifier",
-    "delete": "Supprimer", 
+    "delete": "Supprimer",
     "taggedWith": "Tagué : {{tag}}",
     "expertIntegrations": "Intégrations expertes :"
   },
@@ -272,6 +272,7 @@
     "actions": "Actions",
     "delete": "Supprimer",
     "noLibrariesFound": "Aucune bibliothèque de documents trouvée.",
+    "noLibrariesFoundDescription": "Commencez par créer votre première bibliothèque pour organiser et gérer vos documents.",
     "documentCountSingular": "{{count}} document",
     "documentCountPlural": "{{count}} documents",
     "createLibrary": "Créer une bibliothèque"
