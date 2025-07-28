@@ -44,6 +44,7 @@ class AgentService:
             tag=req.tag or "mcp",
             mcp_servers=req.mcp_servers,
             description=req.description,
+            base_prompt=req.base_prompt,
             nickname=req.nickname,
             role=req.role,
             icon=req.icon,
@@ -56,14 +57,6 @@ class AgentService:
         # 3. Instantiate and init
         agent_instance = MCPAgent(
             agent_settings=agent_settings,
-            name=req.name,
-            base_prompt=req.base_prompt,
-            role=req.role,
-            nickname=req.nickname,
-            description=req.description,
-            icon=req.icon,
-            categories=req.categories,
-            tag=req.tag,
         )
         await agent_instance.async_init()
 

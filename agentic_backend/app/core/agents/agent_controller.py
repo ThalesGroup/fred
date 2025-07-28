@@ -43,7 +43,7 @@ class AgentController:
         # @TODO: check for authorization
         async def create_agent(req: CreateAgentRequest):
             try:
-                return self.service.build_and_register_mcp_agent(req)
+                return await self.service.build_and_register_mcp_agent(req)
             except Exception as e:
                 log_exception(e)
                 raise handle_exception(e)
