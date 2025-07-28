@@ -43,7 +43,7 @@ export const LibraryCreateDrawer: React.FC<LibraryCreateDrawerProps> = ({ isOpen
 
   const handleCreate = async (e?: React.FormEvent) => {
     e?.preventDefault();
-    
+
     if (!name.trim()) {
       showError({
         summary: t("libraryCreateDrawer.validationError"),
@@ -97,14 +97,13 @@ export const LibraryCreateDrawer: React.FC<LibraryCreateDrawerProps> = ({ isOpen
         {t("libraryCreateDrawer.title")}
       </Typography>
 
-      <Box component="form" onSubmit={handleCreate} sx={{ mt: 3 }}>
+      <Box component="form" onSubmit={handleCreate} sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
         <TextField
           fullWidth
           label={t("libraryCreateDrawer.libraryName")}
           value={name}
           onChange={(e) => setName(e.target.value)}
           required
-          sx={{ mb: 2 }}
           autoFocus
         />
 
@@ -115,25 +114,24 @@ export const LibraryCreateDrawer: React.FC<LibraryCreateDrawerProps> = ({ isOpen
           onChange={(e) => setDescription(e.target.value)}
           multiline
           rows={3}
-          sx={{ mb: 3 }}
         />
-      </Box>
 
-      <Box sx={{ mt: 3, display: "flex", justifyContent: "space-between" }}>
-        <Button variant="outlined" onClick={handleClose} sx={{ borderRadius: "8px" }}>
-          {t("libraryCreateDrawer.cancel")}
-        </Button>
+        <Box sx={{ display: "flex", justifyContent: "space-between" }}>
+          <Button variant="outlined" onClick={handleClose} sx={{ borderRadius: "8px" }}>
+            {t("libraryCreateDrawer.cancel")}
+          </Button>
 
-        <Button
-          variant="contained"
-          color="success"
-          startIcon={<SaveIcon />}
-          type="submit"
-          disabled={isLoading || !name.trim()}
-          sx={{ borderRadius: "8px" }}
-        >
-          {isLoading ? t("libraryCreateDrawer.saving") : t("libraryCreateDrawer.save")}
-        </Button>
+          <Button
+            variant="contained"
+            color="success"
+            startIcon={<SaveIcon />}
+            type="submit"
+            disabled={isLoading || !name.trim()}
+            sx={{ borderRadius: "8px" }}
+          >
+            {isLoading ? t("libraryCreateDrawer.saving") : t("libraryCreateDrawer.save")}
+          </Button>
+        </Box>
       </Box>
     </Drawer>
   );
