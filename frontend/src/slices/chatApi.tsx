@@ -17,7 +17,6 @@ import { AgenticFlow } from "../pages/Chat";
 import { createDynamicBaseQuery } from "../common/dynamicBaseQuery.tsx";
 import { ChatMessagePayload, CreateAgentRequest, CreateAgentResponse, SessionSchema } from "./chatApiStructures.ts";
 
-
 export const chatApiSlice = createApi({
   reducerPath: "chatApi",
   baseQuery: createDynamicBaseQuery({ backend: "api" }),
@@ -41,7 +40,19 @@ const extendedChatApi = chatApiSlice.injectEndpoints({
         body,
       }),
     }),
-
+    editAgent: builder.mutation<CreateAgentResponse, { name: string; body: CreateAgentRequest }>({
+      query: ({ name, body }) => ({
+        url: `/agentic/v1/agents/${name}`,
+        method: "PUT",
+        body,
+      }),
+    }),
+    deleteAgent: builder.mutation<{ message: string }, string>({
+      query: (name) => ({
+        url: `/agentic/v1/agents/${name}`,
+        method: "DELETE",
+      }),
+    }),
     getChatBotAgenticFlows: builder.mutation<AgenticFlow[], void>({
       query: () => ({
         url: `/agentic/v1/chatbot/agenticflows`,
@@ -111,4 +122,6 @@ export const {
   useSaveAgentContextMutation,
   useDeleteAgentContextMutation,
   useCreateAgentMutation,
+  useEditAgentMutation,
+  useDeleteAgentMutation,
 } = extendedChatApi;

@@ -3,15 +3,27 @@ import { Box, Card, CardContent, Typography, IconButton, Chip, Tooltip, Avatar }
 import StarIcon from "@mui/icons-material/Star";
 import StarOutlineIcon from "@mui/icons-material/StarOutline";
 import LocalOfferIcon from "@mui/icons-material/LocalOffer";
-import { getAgentBadge } from "../utils/avatar";
-import { useTranslation } from "react-i18next";
+//import EditIcon from "@mui/icons-material/Edit";
+import DeleteIcon from "@mui/icons-material/Delete";
 
+import { getAgentBadge } from "../../utils/avatar";
+import { useTranslation } from "react-i18next";
+import { Agent } from "../../slices/chatApiStructures";
+
+interface AgentCardProps {
+  agent: Agent;
+  isFavorite: boolean;
+  onToggleFavorite: (name: string) => void;
+  onDelete: (name: string) => void;
+  allAgents: Agent[];
+}
 export const AgentCard = ({
   agent,
   isFavorite,
   onToggleFavorite,
+  onDelete,
   allAgents = [],
-}) => {
+}: AgentCardProps) => {
   const { t } = useTranslation();
 
   return (
@@ -70,6 +82,17 @@ export const AgentCard = ({
           >
             {isFavorite ? <StarIcon /> : <StarOutlineIcon />}
           </IconButton>
+          {/* <Tooltip title={t("agentCard.edit")}>
+            <IconButton size="small" onClick={() => onEdit(agent)} sx={{ ml: 0.5 }}>
+              <EditIcon fontSize="small" />
+            </IconButton>
+          </Tooltip> */}
+
+          <Tooltip title={t("agentCard.delete")}>
+            <IconButton size="small" onClick={() => onDelete(agent.name)} sx={{ ml: 0.5 }}>
+              <DeleteIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
         </Box>
       </Box>
 

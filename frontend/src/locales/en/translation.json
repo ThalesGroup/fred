@@ -41,6 +41,8 @@
   },
   "agentHub": {
     "title": "Agent Hub",
+    "confirmDeleteTitle": "Confirm deletion",   
+    "confirmDeleteMessage": "Delete this agent ? This action cannot be undone.",  
     "description": "Explore and manage available AI agents",
     "allAgents": "All Agents",
     "favoriteAgents": "Favorite Agents",
@@ -134,8 +136,10 @@
     }
   },
   "agentCard": {
-    "taggedWith": "Tagged: {{tag}}",
-    "expertIntegrations": "Expert integrations:"
+    "edit": "Edit agent",
+    "delete": "Delete agent",
+    "taggedWith": "Tagged with {{tag}}",
+    "expertIntegrations": "Expert integrations"
   },
   "workspaces": {
     "title": "Workspaces",

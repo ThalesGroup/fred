@@ -14,7 +14,7 @@
 
 from typing import override, List
 
-from app.core.monitoring.tool_monitoring import monitor_tool
+from app.core.monitoring.tool_monitoring.monitor_tool import monitor_tool
 from langchain_core.tools import BaseToolkit, BaseTool
 from pydantic import Field
 from langchain_mcp_adapters.client import MultiServerMCPClient

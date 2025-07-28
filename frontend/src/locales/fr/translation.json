@@ -41,6 +41,8 @@
   },
   "agentHub": {
     "title": "Centre des Agents",
+    "confirmDeleteTitle": "Confirmer la suppression",   
+    "confirmDeleteMessage": "Supprimer cet agent ? Cette action est irréversible.",  
     "description": "Explorez et gérez les agents IA disponibles",
     "allAgents": "Tous les Agents",
     "favoriteAgents": "Agents Favoris",
@@ -134,6 +136,8 @@
     }
   },
   "agentCard": {
+    "edit": "Modifier",
+    "delete": "Supprimer", 
     "taggedWith": "Tagué : {{tag}}",
     "expertIntegrations": "Intégrations expertes :"
   },

@@ -177,6 +177,7 @@ class AgentSettings(BaseModel):
     mcp_servers: Optional[List[MCPServerConfiguration]] = Field(default_factory=list)
     max_steps: Optional[int] = 10
     description: Optional[str] = None
+    base_prompt: Optional[str] = None
     nickname: Optional[str] = None
     role: Optional[str] = None
     icon: Optional[str] = None

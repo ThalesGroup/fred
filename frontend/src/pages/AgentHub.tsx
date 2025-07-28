@@ -22,17 +22,12 @@ import StarIcon from "@mui/icons-material/Star";
 import Grid2 from "@mui/material/Grid2";
 import LocalOfferIcon from "@mui/icons-material/LocalOffer";
 import { LoadingSpinner } from "../utils/loadingSpinner";
-import { useGetChatBotAgenticFlowsMutation } from "../slices/chatApi";
+import { useDeleteAgentMutation, useGetChatBotAgenticFlowsMutation } from "../slices/chatApi";
 import { TopBar } from "../common/TopBar";
-import { AgentCard } from "../components/AgentCard";
+import { AgentCard } from "../components/agentHub/AgentCard";
 import { CreateAgentModal } from "../components/agentHub/CreateAgentModal";
-
-interface Agent {
-  name: string;
-  tag?: string;
-  tags?: string;
-  [key: string]: any;
-}
+import { Agent } from "../slices/chatApiStructures";
+import { useConfirmationDialog } from "../components/ConfirmationDialogProvider";
 
 interface AgentCategory {
   name: string;
@@ -75,7 +70,6 @@ const ActionButton = ({
   );
 };
 
-
 export const AgentHub = () => {
   const theme = useTheme();
   const { t } = useTranslation();
@@ -88,8 +82,24 @@ export const AgentHub = () => {
   const handleOpenCreateAgent = () => setIsCreateModalOpen(true);
   const handleCloseCreateAgent = () => setIsCreateModalOpen(false);
 
-  const [getAgenticFlows, {isLoading}] = useGetChatBotAgenticFlowsMutation();
+  const [getAgenticFlows, { isLoading }] = useGetChatBotAgenticFlowsMutation();
+  const [deleteAgent] = useDeleteAgentMutation();
+  const { showConfirmationDialog } = useConfirmationDialog();
 
+  const handleDeleteAgent = (name: string) => {
+    showConfirmationDialog({
+      title: t("agentHub.confirmDeleteTitle"),
+      message: t("agentHub.confirmDeleteMessage", { name }),
+      onConfirm: async () => {
+        try {
+          await deleteAgent(name).unwrap();
+          fetchAgents();
+        } catch (error) {
+          console.error("Failed to delete agent:", error);
+        }
+      },
+    });
+  };
   const fetchAgents = async () => {
     try {
       const response = await getAgenticFlows().unwrap();
@@ -115,7 +125,6 @@ export const AgentHub = () => {
     setShowElements(true);
     fetchAgents();
   }, []);
-
 
   const handleTabChange = (_event: SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
@@ -240,7 +249,6 @@ export const AgentHub = () => {
                     <ActionButton icon={<AddIcon />} onClick={() => handleOpenCreateAgent()}>
                       {t("agentHub.create")}
                     </ActionButton>
-
                   </Box>
                 </Box>
 
@@ -252,6 +260,7 @@ export const AgentHub = () => {
                           <Box>
                             <AgentCard
                               agent={agent}
+                              onDelete={handleDeleteAgent}
                               isFavorite={favoriteAgents.includes(agent.name)}
                               onToggleFavorite={toggleFavorite}
                               allAgents={agenticFlows}
@@ -294,7 +303,6 @@ export const AgentHub = () => {
                     }}
                   />
                 )}
-
               </>
             )}
           </Paper>

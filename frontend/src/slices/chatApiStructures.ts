@@ -95,6 +95,13 @@ export type AgentType = typeof agentTypes[number];
 export const mcpTransports = ["sse"] as const;
 export type McpTransport = typeof mcpTransports[number];
 
+export interface Agent {
+  name: string;
+  tag?: string;
+  tags?: string;
+  [key: string]: any;
+}
+
 export interface McpServer {
   name: string;
   url: string;
