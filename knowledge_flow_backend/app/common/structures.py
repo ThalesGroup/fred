@@ -72,7 +72,7 @@ class ObjectStorage(BaseModel):
 
 class LocalContentStorage(BaseModel):
     type: Literal["local"]
-    root_path: str = Field(default=str(Path("~/.knowledge-flow/content-store")), description="Local storage directory")
+    root_path: str = Field(default=str(Path("~/.fred/knowledge-flow/content-store")), description="Local storage directory")
 
 ContentStorageConfig = Annotated[
     Union[LocalContentStorage, ObjectStorage],
@@ -87,11 +87,11 @@ ContentStorageConfig = Annotated[
 
 class LocalMetadataStorage(BaseModel):
     type: Literal["local"]
-    root_path: str = Field(default=str(Path("~/.knowledge-flow/metadata-store.json")), description="Local storage json file")
+    root_path: str = Field(default=str(Path("~/.fred/knowledge-flow/metadata-store.json")), description="Local storage json file")
 
 class DuckdbMetadataStorage(BaseModel):
     type: Literal["duckdb"]
-    duckdb_path: str = Field(default="~/.knowledge-flow/db.duckdb", 
+    duckdb_path: str = Field(default="~/.fred/knowledge-flow/db.duckdb", 
                              description="Path to the DuckDB database file.")
 
 class SearchEngineStorage(BaseModel):
@@ -115,7 +115,7 @@ MetadataStorageConfig = Annotated[Union[LocalMetadataStorage, DuckdbMetadataStor
 
 class LocalTagStore(BaseModel):
     type: Literal["local"]
-    root_path: str = Field(default=str(Path("~/.fred/knowledge/tags-store.json")), description="Local storage json file")
+    root_path: str = Field(default=str(Path("~/.fred/knowledge-flow/tags-store.json")), description="Local storage json file")
 
 TagStorageConfig = Annotated[Union[LocalTagStore], Field(discriminator="type")]
 
@@ -131,7 +131,7 @@ VectorStorageConfig = Annotated[Union[InMemoryVectorStorage, SearchEngineStorage
 
 class DuckDBTabularStorage(BaseModel):
     type: Literal["duckdb"]
-    duckdb_path: str = Field(default="~/.knowledge-flow/db.duckdb", 
+    duckdb_path: str = Field(default="~/.fred/knowledge-flow/db.duckdb", 
                              description="Path to the DuckDB database file.")
 
 TabularStorageConfig = Annotated[
@@ -149,7 +149,7 @@ class EmbeddingConfig(BaseModel):
 
 class KnowledgeContextStorageConfig(BaseModel):
     type: str = Field(..., description="The storage backend to use (e.g., 'local', 'minio')")
-    local_path: str = Field(default="~/.fred/knowledge-context", description="The path of the local metrics store")
+    local_path: str = Field(default="~/.fred/knowledge-flow/knowledge-context", description="The path of the local metrics store")
 
 class AppSecurity(Security):
     client_id: str = "knowledge-flow"

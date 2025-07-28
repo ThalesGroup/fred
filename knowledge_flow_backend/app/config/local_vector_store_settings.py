@@ -22,7 +22,7 @@ class LocalVectorStoreSettings:
     """
     Local vector store settings class.
     This class is responsible for managing the local vector store settings.
-    The defauls is "~/.fred/knowledge/vectore-store".
+    The defauls is "~/.fred/knowledge-flow/vectore-store".
     The path can be overridden by setting the "LOCAL_VECTOR_STORAGE_PATH" environment variable.
     """
 

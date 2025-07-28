@@ -89,15 +89,18 @@ helm-push: ## Push Helm chart to GitLab package registry
 
 ##@ Run
 
-.PHONY: run
-run: PORT ?= 8111
-run: UVICORN_FACTORY ?= app.main:create_app
-run: dev ## Run the app from source
+.PHONY: run-local
+run-local: PORT ?= 8111
+run-local: UVICORN_FACTORY ?= app.main:create_app
+run-local: UVICORN_LOOP ?= asyncio
+run-local: ## Run the app assuming dependencies already exist
 	$(UV) run uvicorn \
 		--factory ${UVICORN_FACTORY} \
 		--port ${PORT} \
 		--env-file ${ENV_FILE} \
-		--log-level ${LOG_LEVEL}
+		--log-level ${LOG_LEVEL} \
+		--loop ${UVICORN_LOOP} \
+		--reload
 
 .PHONY: run-worker
 
@@ -107,6 +110,9 @@ run-worker: dev ## Run an ingestion worker this requires a temporal daemon
 	LOG_LEVEL=$(LOG_LEVEL) \
 	ENV_FILE=$(ENV_FILE) \
 	$(PYTHON) ${PY_PACKAGE}/main_worker.py --config-path ./config/configuration_worker.yaml
+
+.PHONY: run
+run: dev run-local ## Run the app from source
 
 .PHONY: docker-run
 

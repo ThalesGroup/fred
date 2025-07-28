@@ -40,6 +40,7 @@ import Inspect from "../frugalit/pages/Inspect";
 import { Monitoring } from "../pages/Monitoring";
 import { Workspaces } from "../pages/Workspaces";
 import { K8ApplicationContextProvider } from "./K8ApplicationContextProvider";
+import { DocumentLibraryViewPage } from "../pages/DocumentLibraryViewPage";
 
 const RootLayout = ({ children }: React.PropsWithChildren<{}>) => (
   <ProtectedRoute permission="viewer">
@@ -67,61 +68,101 @@ export const routes: RouteObject[] = [
 
       isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES) && {
         path: "score/:cluster/:namespace/:application",
-        element:  <K8ApplicationContextProvider><Scores /></K8ApplicationContextProvider>,
+        element: (
+          <K8ApplicationContextProvider>
+            <Scores />
+          </K8ApplicationContextProvider>
+        ),
       },
       isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES) && {
         path: "audit",
-        element: <K8ApplicationContextProvider><Audit /></K8ApplicationContextProvider>,
+        element: (
+          <K8ApplicationContextProvider>
+            <Audit />
+          </K8ApplicationContextProvider>
+        ),
       },
       isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES) && {
         path: "facts",
-        element: <K8ApplicationContextProvider><Facts /></K8ApplicationContextProvider>,
+        element: (
+          <K8ApplicationContextProvider>
+            <Facts />
+          </K8ApplicationContextProvider>
+        ),
       },
       isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES) && {
         path: "facts-workload",
-        element: <K8ApplicationContextProvider><FactsWorkload /></K8ApplicationContextProvider>,
+        element: (
+          <K8ApplicationContextProvider>
+            <FactsWorkload />
+          </K8ApplicationContextProvider>
+        ),
       },
       isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES) && {
         path: "facts-cluster",
-        element: <K8ApplicationContextProvider><FactsCluster /></K8ApplicationContextProvider>,
+        element: (
+          <K8ApplicationContextProvider>
+            <FactsCluster />
+          </K8ApplicationContextProvider>
+        ),
       },
       isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES) && {
         path: "facts-namespace",
-        element: <K8ApplicationContextProvider><FactsNamespace /></K8ApplicationContextProvider>,
+        element: (
+          <K8ApplicationContextProvider>
+            <FactsNamespace />
+          </K8ApplicationContextProvider>
+        ),
       },
       isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES) && {
         path: "explain",
-        element: <K8ApplicationContextProvider><Explain /></K8ApplicationContextProvider>,
+        element: (
+          <K8ApplicationContextProvider>
+            <Explain />
+          </K8ApplicationContextProvider>
+        ),
       },
       isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES) && {
         path: "explain-cluster",
-        element: <K8ApplicationContextProvider><ExplainCluster /></K8ApplicationContextProvider>,
+        element: (
+          <K8ApplicationContextProvider>
+            <ExplainCluster />
+          </K8ApplicationContextProvider>
+        ),
       },
       isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES) && {
         path: "explain-namespace",
-        element: <K8ApplicationContextProvider><ExplainNamespace /></K8ApplicationContextProvider>,
+        element: (
+          <K8ApplicationContextProvider>
+            <ExplainNamespace />
+          </K8ApplicationContextProvider>
+        ),
       },
       isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES) && {
         path: "explain-workload",
         element: (
           <K8ApplicationContextProvider>
-          <ExplainContextProvider>
-            <ExplainWorkload />
-          </ExplainContextProvider>
+            <ExplainContextProvider>
+              <ExplainWorkload />
+            </ExplainContextProvider>
           </K8ApplicationContextProvider>
         ),
       },
       isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES) && {
         path: "optimize",
-        element:  <K8ApplicationContextProvider><Optimize /></K8ApplicationContextProvider>,
+        element: (
+          <K8ApplicationContextProvider>
+            <Optimize />
+          </K8ApplicationContextProvider>
+        ),
       },
       isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES) && {
         path: "inspect",
         element: (
-           <K8ApplicationContextProvider>
-          <FootprintContextProvider>
-            <Inspect />
-          </FootprintContextProvider>
+          <K8ApplicationContextProvider>
+            <FootprintContextProvider>
+              <Inspect />
+            </FootprintContextProvider>
           </K8ApplicationContextProvider>
         ),
       },
@@ -154,6 +195,14 @@ export const routes: RouteObject[] = [
         element: <Workspaces />,
       },
     ].filter(Boolean),
+  },
+  {
+    path: "/documentLibrary/:libraryId",
+    element: (
+      <RootLayout>
+        <DocumentLibraryViewPage />
+      </RootLayout>
+    ),
   },
   {
     path: "*",

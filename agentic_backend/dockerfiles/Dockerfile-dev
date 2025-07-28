@@ -9,7 +9,7 @@ ARG GROUP_ID=1000
 
 # Install required system dependencies
 RUN apt-get update && \
-    apt-get install -y git curl && \
+    apt-get install -y git curl make && \
     rm -rf /var/lib/apt/lists/*
 
 # Install uv globally
@@ -32,14 +32,17 @@ ENV OPENAI_API_KEY=<MUST_BE_DEFINED>
 WORKDIR /app
 
 # Copy only dependency files first to leverage Docker layer caching
-COPY agentic_backend/pyproject.toml agentic_backend/uv.lock* /app/
+COPY agentic_backend/Makefile agentic_backend/pyproject.toml agentic_backend/uv.lock* /app/
 COPY fred-core /fred-core
 
 # Install dependencies with uv
-RUN uv sync
+RUN make dev
 
 # Copy the rest of the project files
 COPY agentic_backend/. /app
+
+# Remove test configuration.yaml files
+RUN rm /app/config/configuration.yaml
 
 # Adjust ownership of copied files
 RUN chown -R ${USER_ID}:${GROUP_ID} /app
@@ -52,6 +55,5 @@ USER ${USER_NAME}
 EXPOSE 8000
 
 # Run the application
-ENV PYTHONPATH=/app
-ENTRYPOINT ["python", "app/main.py"]
-CMD ["--server.configurationPath /app/config/configuration.yaml --server.baseUrlPath /fred"]
+ENV PYTHONPATH=/app/app
+ENTRYPOINT ["make", "run-local"]

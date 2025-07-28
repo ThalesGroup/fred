@@ -14,9 +14,12 @@
 
 import logging
 import pathlib
+import shutil
 from app.common.document_structures import DocumentMetadata, ProcessingStage
 from app.common.structures import OutputProcessorResponse
 from app.core.processors.input.common.base_input_processor import BaseMarkdownProcessor, BaseTabularProcessor
+from app.core.processors.input.duckdb_processor.duckdb_processor import DuckDBProcessor
+from app.features.metadata.service import MetadataNotFound, MetadataService
 
 from app.application_context import ApplicationContext
 
@@ -35,7 +38,7 @@ class IngestionService:
     def __init__(self):
         self.context = ApplicationContext.get_instance()
         self.content_store = ApplicationContext.get_instance().get_content_store()
-        self.metadata_store = ApplicationContext.get_instance().get_metadata_store()
+        self.metadata_service = MetadataService()
 
     def save_input(self, metadata: DocumentMetadata, input_dir: pathlib.Path) -> None:
         self.content_store.save_input(metadata.document_uid, input_dir)
@@ -47,19 +50,37 @@ class IngestionService:
 
     def save_metadata(self, metadata: DocumentMetadata) -> None:
         logger.debug(f"Saving metadata {metadata}")
-        self.metadata_store.save_metadata(metadata)
+        return self.metadata_service.save_document_metadata(metadata)
 
     def get_metadata(self, document_uid: str) -> DocumentMetadata:
-        return self.metadata_store.get_metadata_by_uid(document_uid)
-        
+        """
+        Retrieve the metadata associated with the given document UID.
+
+        Args:
+            document_uid (str): The unique identifier of the document.
+
+        Returns:
+            Optional[DocumentMetadata]: The metadata if found, or None if the document
+            does not exist in the metadata store.
+
+        Notes:
+            If the underlying metadata service raises a `MetadataNotFound` exception,
+            this method will return `None` instead of propagating the exception.
+        """
+
+        try:
+            return self.metadata_service.get_document_metadata(document_uid)
+        except MetadataNotFound:
+            return None
+
     def get_local_copy(self, metadata: DocumentMetadata, target_dir: pathlib.Path) -> pathlib.Path:
         """
         Downloads the file content from the store into target_dir and returns the path to the file.
         """
         return self.content_store.get_local_copy(metadata.document_uid, target_dir)
-    
-    def extract_metadata(self, file_path: pathlib.Path, 
-                         tags: list[str], 
+
+    def extract_metadata(self, file_path: pathlib.Path,
+                         tags: list[str],
                          source_tag: str = "uploads") -> DocumentMetadata:
         """
         Extracts metadata from the input file.
@@ -69,7 +90,7 @@ class IngestionService:
         suffix = file_path.suffix.lower()
         processor = self.context.get_input_processor_instance(suffix)
         source_config = self.context.get_config().document_sources.get(source_tag)
-        
+
         # Step 1: run processor
         metadata = processor.process_metadata(file_path, tags=tags, source_tag=source_tag)
 
@@ -86,7 +107,7 @@ class IngestionService:
             value = getattr(metadata, field, None)
             if isinstance(value, str) and value.strip().lower() == "none":
                 setattr(metadata, field, None)
-        
+
         return metadata
 
     def process_input(
@@ -112,15 +133,18 @@ class IngestionService:
 
         if isinstance(processor, BaseMarkdownProcessor):
             processor.convert_file_to_markdown(input_path, output_dir, metadata.document_uid)
+        elif isinstance(processor, DuckDBProcessor):
+            output_path = output_dir / input_path.name
+            shutil.copy(input_path, output_path)
         elif isinstance(processor, BaseTabularProcessor):
             df = processor.convert_file_to_table(input_path)
             df.to_csv(output_dir / "table.csv", index=False)
         else:
             raise RuntimeError(f"Unknown processor type for: {input_path}")
 
-    def process_output(self, 
+    def process_output(self,
                        input_file_name: str,
-                       output_dir: pathlib.Path, 
+                       output_dir: pathlib.Path,
                        input_file_metadata: DocumentMetadata) -> OutputProcessorResponse:
         """
         Processes data resulting from the input processing.
@@ -138,15 +162,15 @@ class IngestionService:
             raise ValueError(f"Output directory {output_dir} does not contain output files")
         # get the first file in the output_dir
         output_file = next(output_dir.glob("*.*"))
-        # check if the file is a markdown or csv file
-        if output_file.suffix.lower() not in [".md", ".csv"]:
+        # check if the file is a markdown, csv or duckdb file
+        if output_file.suffix.lower() not in [".md", ".csv",".duckdb"]:
             raise ValueError(f"Output file {output_file} is not a markdown or csv file")
         # check if the file is empty
         if output_file.stat().st_size == 0:
             raise ValueError(f"Output file {output_file} is empty")
         # check if the file is a markdown or csv file
         return processor.process(output_file, input_file_metadata)
-    
+
     def get_markdown(self, metadata: DocumentMetadata, target_dir: pathlib.Path) -> pathlib.Path:
         """
         Downloads the preview file (markdown or CSV) for the document and saves it into `target_dir`.
@@ -157,10 +181,10 @@ class IngestionService:
             md_content = self.content_store.get_markdown(metadata.document_uid)
             target_file = target_dir / "output.md"
             target_file.write_text(md_content, encoding="utf-8")
-            logger.info(f"✅ Markdown preview saved to {target_file}")
+            logger.info(f"Markdown preview saved to {target_file}")
             return target_file
         except FileNotFoundError:
-            raise RuntimeError(f"⚠️ No preview available for document {metadata.document_uid} in content store")
+            raise RuntimeError(f"No preview available for document {metadata.document_uid} in content store")
 
     def get_preview_file(self, metadata: DocumentMetadata, output_dir: pathlib.Path) -> pathlib.Path:
         """

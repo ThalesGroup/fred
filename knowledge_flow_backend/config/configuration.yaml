@@ -97,10 +97,8 @@ content_storage:
   # - GCS_PROJECT_ID
   # - GCS_BUCKET_NAME
   # - GCS_CREDENTIALS_PATH
-  # If you are using local storage, make sure to set the following environment variable:
-  # - LOCAL_CONTENT_STORAGE_PATH default to '~/.knowledge-flow/content-store'
   type: "local"
-  root_path: ~/.knowledge-flow/content-storage
+  root_path: ~/.fred/knowledge-flow/content-storage
   ################################################
   # Example using MinIO as content storage backend
   ################################################
@@ -128,12 +126,8 @@ metadata_storage:
   # - local       → Deprecated, stores metadata in a JSON file on disk
   # - duckdb      → stores metadata in a local duckdb file
   # - opensearch  → stores metadata in a persistent OpenSearch index (recommended for production)
-  #
-  # ✅ Default is "local" for easy startup. No external services are needed.
-  # If you are using local storage, make sure to set the following environment variable:
-  # - LOCAL_METADATA_STORAGE_PATH default to '~/.knowledge-flow/metadata-store.json'
   type: "duckdb"
-  root_path: ~/.knowledge-flow/db.duckdb
+  root_path: ~/.fred/knowledge-flow/db.duckdb
 
   # --- Example: SearchEngine configuration
   #
@@ -181,11 +175,11 @@ vector_storage:
 
 tabular_storage:
   type: "duckdb"
-  duckdb_path: "~/.knowledge-flow/db.duckdb"
+  duckdb_path: "~/.fred/knowledge-flow/db.duckdb"
 
 catalog_storage:
   type: "duckdb"
-  duckdb_path: "~/.knowledge-flow/db.duckdb"
+  duckdb_path: "~/.fred/knowledge-flow/db.duckdb"
 
 embedding:
   # -----------------------------------------------------------------------------
@@ -243,7 +237,7 @@ knowledge_context_storage:
   # Both can have associated files.
   # -------------------------------------
   type: local  # as of now only local storage is supported
-  local_path: "~/.fred/knowledge-context"
+  local_path: "~/.fred/knowledge-flow/knowledge-context"
 
 knowledge_context_max_tokens: 8000
 # -----------------------------------------------------------------------------
