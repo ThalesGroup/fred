@@ -329,9 +329,11 @@ configuration:
   security:
     enabled: false
     client_id: "fred"
-    keycloak_url: "http://keycloak:8080/realms/app"
+    keycloak_url: "http://keycloak/realms/fred"
     authorized_origins:
     - "http://localhost:5173"
+    - "http://fred.dev.fred.thalesgroup.com"
+    - "https://fred.dev.fred.thalesgroup.com"
 
   node_metrics_storage:
     type: "local"
