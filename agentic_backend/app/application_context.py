@@ -147,20 +147,6 @@ def get_model_for_service(service_name: str) -> BaseLanguageModel:
     """
     return get_app_context().get_model_for_service(service_name)
 
-
-def get_mcp_agent_tools(mcp_client: MultiServerMCPClient) -> list[BaseTool]:
-    """
-    Retrieves the AI MCP client tools list.
-
-    Args:
-        mcp_client (MultiServerMCPClient): The MCP client connected to the MCP servers.
-
-    Returns:
-        list[BaseTool]: A list of all the tools associated to the agent
-    """
-    return get_app_context().get_mcp_agent_tools(mcp_client)
-
-
 # -------------------------------
 # Runtime status class
 # -------------------------------

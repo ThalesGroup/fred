@@ -60,23 +60,35 @@ class AgentManager:
         - Loads all persisted agents from DuckDB and instantiates them.
         - Registers them in memory and injects experts into leaders.
         """
-
-        self._seed_static_agents_from_config()
+        for agent_cfg in self.config.ai.agents:
+            if not agent_cfg.enabled:
+                continue
+            await self._register_static_agent(agent_cfg)
         await self._load_all_persisted_agents()
         self._inject_experts_into_leaders()
 
 
-    def _seed_static_agents_from_config(self):
-        """
-        For each enabled agent in configuration.yaml:
-        - Validate it can be instantiated
-        - Save to storage (if not already saved)
-        This ensures that static agents are persisted on first run.
-        """
-        for agent_cfg in self.config.ai.agents:
-            if not agent_cfg.enabled: #or self.store.get(agent_cfg.name):
-                continue
-            self._try_seed_agent(agent_cfg)
+    async def _register_static_agent(self, agent_cfg: AgentSettings):
+        try:
+            module_name, class_name = agent_cfg.class_path.rsplit(".", 1)
+            module = importlib.import_module(module_name)
+            cls = getattr(module, class_name)
+        except (ValueError, ImportError, AttributeError) as e:
+            logger.error(f"❌ Failed to import class '{agent_cfg.class_path}' for '{agent_cfg.name}': {e}")
+            return
+
+        if not issubclass(cls, (Flow, AgentFlow)):
+            logger.error(f"Class '{agent_cfg.class_path}' is not a supported Flow or AgentFlow.")
+            return
+
+        try:
+            instance = cls(agent_settings=agent_cfg)
+            if iscoroutinefunction(getattr(instance, "async_init", None)):
+                await instance.async_init()
+            self._register_loaded_agent(agent_cfg.name, instance, agent_cfg)
+            logger.info(f"✅ Registered static agent '{agent_cfg.name}' from configuration.")
+        except Exception as e:
+            logger.error(f"❌ Failed to instantiate or register static agent '{agent_cfg.name}': {e}")
 
     def _try_seed_agent(self, agent_cfg: AgentSettings):
         """
@@ -276,12 +288,3 @@ class AgentManager:
         loop.run_until_complete(connect_all())
         return client
 
-    def get_mcp_agent_tools(self, mcp_client: MultiServerMCPClient) -> list[BaseTool]:
-        """
-        Retrieves the list of tools from an MCP client.
-        Fails if none are returned.
-        """
-        tools = mcp_client.get_tools()
-        if not tools:
-            raise MCPToolFetchError("The tool list is empty, make sure the MCP server configuration is correct.")
-        return tools
