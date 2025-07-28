@@ -53,14 +53,14 @@ class TagController:
         self._register_routes(router, handle_exception)
 
     def _register_routes(self, router: APIRouter, handle_exception):
-        @router.get("/tags", response_model=List[TagWithDocumentsId], tags=["Tag"], summary="List all tags")
+        @router.get("/tags", response_model=TagWithDocumentsId, tags=["Tag"], summary="List all tags")
         async def list_tags(user: KeycloakUser = Depends(get_current_user)):
             try:
                 return self.service.list_tags_for_user(user)
             except Exception as e:
                 raise handle_exception(e)
 
-        @router.get("/tags/{tag_id}", response_model=TagWithDocumentsId, tags=["Tag"], summary="Get a tag by ID")
+        @router.get("/tags/{tag_id}", response_model=List[TagWithDocumentsId], tags=["Tag"], summary="Get a tag by ID")
         async def get_tag(tag_id: str, user: KeycloakUser = Depends(get_current_user)):
             try:
                 return self.service.get_tag_for_user(tag_id, user)
