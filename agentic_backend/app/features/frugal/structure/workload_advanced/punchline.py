@@ -80,7 +80,7 @@ class PunchlineAdvanced(BaseModel):
         langfuse_handler: Optional[CallbackHandler] = None,
     ) -> "PunchlineAdvanced":
         """
-        Extract advanced information about a OpenSearch workload based on its context (YAML
+        Extract advanced information about a SearchEngine workload based on its context (YAML
         definitions).
 
         Args:

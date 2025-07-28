@@ -129,10 +129,10 @@ metadata_storage:
   type: "duckdb"
   root_path: ~/.fred/knowledge-flow/db.duckdb
 
-  # --- Example: OpenSearch configuration
+  # --- Example: SearchEngine configuration
   #
   # type: opensearch
-  # host: https://localhost:9200              # OpenSearch host
+  # host: https://localhost:9200              # SearchEngine host
   # secure: true                              # Use HTTPS (set to false for HTTP)
   # verify_certs: false                       # Whether to verify TLS certificates
   # metadata_index: metadata-index            # Index for storing metadata
@@ -152,8 +152,8 @@ vector_storage:
   #
   # ⚠️ in_memory is used by default to ensure startup always succeeds, but it does NOT persist vectors between restarts.
   # Use it only for testing or development.
-  type: in_memory
-  # --- Example: OpenSearch configuration
+  type: opensearch
+  # --- Example: SearchEngine configuration
   #
   # type: opensearch
   # host: https://localhost:9200              # Opensearch HTTP URL

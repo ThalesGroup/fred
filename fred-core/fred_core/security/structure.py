@@ -15,7 +15,6 @@
 from typing import Protocol
 from pydantic import BaseModel
 
-
 class KeycloakUser(BaseModel):
     """Represents an authenticated Keycloak user."""
 

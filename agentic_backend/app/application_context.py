@@ -294,12 +294,13 @@ class ApplicationContext:
         """
         # Import here to avoid avoid circular dependencies:
         from app.core.session.stores.in_memory_session_store import InMemorySessionStorage
-        from app.core.session.stores.opensearch_session_store import OpensearchSessionStorage
+        from app.core.session.stores.search_engine_session_store import SearchEngineSessionStorage
+
         config = get_configuration().session_storage
         if config.type == "in_memory":
             return InMemorySessionStorage()
         elif config.type == "opensearch":
-            return OpensearchSessionStorage(
+            return SearchEngineSessionStorage(
                 host=config.host,
                 username=config.username,
                 password=config.password,

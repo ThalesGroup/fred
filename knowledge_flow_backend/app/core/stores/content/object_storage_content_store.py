@@ -18,7 +18,7 @@ import logging
 from pathlib import Path
 import tempfile
 from typing import BinaryIO
-from minio import Minio
+from minio import Minio as ObjectStorage
 from minio.error import S3Error
 import pandas as pd
 from app.core.stores.content.base_content_store import BaseContentStore
@@ -26,18 +26,18 @@ from app.core.stores.content.base_content_store import BaseContentStore
 logger = logging.getLogger(__name__)
 
 
-class MinioStorageBackend(BaseContentStore):
+class ObjectStorageBackend(BaseContentStore):
     """
-    MinIO content store for uploading files to a MinIO bucket.
+    ObjectStorage content store for uploading files to a ObjectStorage bucket.
     This class implements the BaseContentStore interface.
     """
 
     def __init__(self, endpoint: str, access_key: str, secret_key: str, bucket_name: str, secure: bool):
         """
-        Initializes the MinIO client and ensures the bucket exists.
+        Initializes the ObjectStorage client and ensures the bucket exists.
         """
         self.bucket_name = bucket_name
-        self.client = Minio(endpoint, access_key=access_key, secret_key=secret_key, secure=secure)
+        self.client = ObjectStorage(endpoint, access_key=access_key, secret_key=secret_key, secure=secure)
 
         # Ensure bucket exists or create it
         if not self.client.bucket_exists(bucket_name):
@@ -46,7 +46,7 @@ class MinioStorageBackend(BaseContentStore):
 
     def save_content(self, document_uid: str, document_dir: Path):
         """
-        Uploads all files in the given directory to MinIO,
+        Uploads all files in the given directory to ObjectStorage,
         preserving the document UID as the root prefix.
         """
         for file_path in document_dir.rglob("*"):
@@ -117,7 +117,7 @@ class MinioStorageBackend(BaseContentStore):
 
         except S3Error as e:
             logger.error(f"❌ Failed to delete objects for document {document_uid}: {e}")
-            raise ValueError(f"Failed to delete document content from MinIO: {e}")
+            raise ValueError(f"Failed to delete document content from ObjectStorage: {e}")
 
     def get_content(self, document_uid: str) -> BinaryIO:
         """
@@ -181,7 +181,7 @@ class MinioStorageBackend(BaseContentStore):
 
     def clear(self) -> None:
             """
-            Deletes all objects in the MinIO bucket.
+            Deletes all objects in the ObjectStorage bucket.
             """
             try:
                 objects_to_delete = self.client.list_objects(self.bucket_name, recursive=True)
@@ -197,7 +197,7 @@ class MinioStorageBackend(BaseContentStore):
 
             except S3Error as e:
                 logger.error(f"❌ Failed to delete objects from bucket{self.bucket_name}: {e}")
-                raise ValueError(f"Failed to delete document content from MinIO: {e}")
+                raise ValueError(f"Failed to delete document content from ObjectStorage: {e}")
 
 
     def get_local_copy(self, document_uid: str, destination_dir: Path) -> Path:
