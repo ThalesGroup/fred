@@ -1,5 +1,5 @@
 {
-  "schemaFile": "http://127.0.0.1:8000/agentic/v1/openapi.json",
+  "schemaFile": "../../../../agentic_backend/openapi.json",
   "apiFile": "./agenticApi.ts",
   "apiImport": "agenticApi",
   "outputFile": "agenticOpenApi.ts",

@@ -114,6 +114,11 @@ run-worker: dev ## Run an ingestion worker this requires a temporal daemon
 .PHONY: run
 run: dev run-local ## Run the app from source
 
+.PHONY: generate-openapi
+generate-openapi: dev ## Generate OpenAPI JSON specification without starting the server
+	@echo "🔧 Generating OpenAPI specification..."
+	$(PYTHON) ../scripts/generate_openapi.py
+
 .PHONY: docker-run
 
 docker-run: ## Run the app in Docker
