@@ -1,6 +1,7 @@
 import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
 import FolderIcon from "@mui/icons-material/Folder";
+import FolderOpenIcon from "@mui/icons-material/FolderOpen";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import {
   Box,
@@ -20,7 +21,6 @@ import {
   TableRow,
   TableSortLabel,
   Tooltip,
-  Typography,
 } from "@mui/material";
 import dayjs from "dayjs";
 import React, { useState } from "react";
@@ -30,12 +30,18 @@ import {
   useDeleteTagKnowledgeFlowV1TagsTagIdDeleteMutation,
   useListTagsKnowledgeFlowV1TagsGetQuery,
 } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { EmptyState } from "../EmptyState";
 import InvisibleLink from "../InvisibleLink";
+import { TableSkeleton } from "../TableSkeleton";
 import { LibraryCreateDrawer } from "./LibraryCreateDrawer";
 
 export function AllLibrariesList() {
   const { t } = useTranslation();
-  const { data: libraries, refetch: refetchLibraries } = useListTagsKnowledgeFlowV1TagsGetQuery(undefined, {
+  const {
+    data: libraries,
+    refetch: refetchLibraries,
+    isLoading,
+  } = useListTagsKnowledgeFlowV1TagsGetQuery(undefined, {
     refetchOnMountOrArgChange: true,
   });
   const [deleteTag] = useDeleteTagKnowledgeFlowV1TagsTagIdDeleteMutation();
@@ -128,7 +134,17 @@ export function AllLibrariesList() {
       </Box>
 
       <Card sx={{ borderRadius: 4, p: 2 }}>
-        {sortedLibraries && sortedLibraries.length > 0 ? (
+        {isLoading ? (
+          <TableSkeleton
+            columns={[
+              { padding: "checkbox" },
+              { width: 200, hasIcon: true },
+              { width: 100 },
+              { width: 120 },
+              { width: 100 },
+            ]}
+          />
+        ) : sortedLibraries && sortedLibraries.length > 0 ? (
           <TableContainer>
             <Table>
               <TableHead>
@@ -196,9 +212,16 @@ export function AllLibrariesList() {
             </Menu>
           </TableContainer>
         ) : (
-          <Typography color="text.secondary" px={2} py={2}>
-            {t("documentLibrariesList.noLibrariesFound")}
-          </Typography>
+          <EmptyState
+            icon={<FolderOpenIcon />}
+            title={t("documentLibrariesList.noLibrariesFound")}
+            description={t("documentLibrariesList.noLibrariesFoundDescription")}
+            actionButton={{
+              label: t("documentLibrariesList.createLibrary"),
+              onClick: () => setIsCreateDrawerOpen(true),
+              startIcon: <AddIcon />,
+            }}
+          />
         )}
       </Card>
 
