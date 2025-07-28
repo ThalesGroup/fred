@@ -32,6 +32,9 @@ def main():
         os.environ.setdefault("ENV_FILE", str(config_dir / ".env"))
         os.environ.setdefault("CONFIG_FILE", str(config_dir / "configuration.yaml"))
         
+        # Set dummy API key for static generation (prevents validation errors)
+        os.environ.setdefault("OPENAI_API_KEY", "sk-dummy-key-for-static-generation")
+        
         # Import and create the FastAPI app
         from main import create_app
         app = create_app()
