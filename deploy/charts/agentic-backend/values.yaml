@@ -161,11 +161,20 @@ tolerations: []
 affinity: {}
 
 configuration:
+  app:
+    name: "Agentic Backend"
+    base_url: "/agentic/v1"
+    # address: "127.0.0.1"
+    port: 8000
+    log_level: "info"
+    reload: false
+    reload_dir: "."
+
   frontend_settings:
     feature_flags:
-      # If true acuivate the backend and frontend modules in charge of K8 
+      # If true activate the backend and frontend modules in charge of K8
       # and frugality monitoring
-      enableK8Features: true
+      enableK8Features: false
       # If true activate support for an electronic warfare demonstration
       enableElecWarfare: false
     properties:
@@ -176,9 +185,9 @@ configuration:
     csv_files:
       # Can be absolute paths or relative paths to the main
       energy_mix: './services/cluster_consumption/data/simulated_energy_mix.csv'
-      carbon_footprint: './services/cluster_consumption/data/simulated_cluster_consumption_gco2_sep_to_feb.csv'
-      energy_footprint: './services/cluster_consumption/data/simulated_cluster_consumption_wh_sep_to_feb.csv'
-      financial_footprint: './services/cluster_consumption/data/simulated_cluster_consumption_usd_sep_to_feb.csv'
+      carbon_footprint: './services/cluster_consumption/data/simulated_cluster_consumption_gco2.csv'
+      energy_footprint: './services/cluster_consumption/data/simulated_cluster_consumption_wh.csv'
+      financial_footprint: './services/cluster_consumption/data/simulated_cluster_consumption_usd.csv'
       # Guerre elec & ship identification service
       frequencies: './services/sensor/data/bandes_freq.csv'
       sensors_test_new: './services/theater_analysis/data/detections-capteur-donnees-test_new_scenario.csv'
@@ -187,8 +196,8 @@ configuration:
       signal_identification_guide: './services/theorical_radio/data/Signal_identification_guide_new.csv'
 
   kubernetes:
-    kube_config: '/home/fred-user/.kube/config'
-    aws_config: '/home/fred-user/.aws/config' # Optional, needed for aws EKS clusters.
+    kube_config: '~/.kube/config'
+    aws_config: '~/.aws/config' # Optional, needed for aws EKS clusters.
     # Timeout settings for the client
     timeout:
       connect: 5  # Time to wait for a connection in seconds
@@ -200,145 +209,169 @@ configuration:
       connect: 5  # Time to wait for a connection in seconds
       read: 15    # Time to wait for a response in seconds
     default_model:
-      #provider: "ollama"
-      #name: "llama2"
+      # Required in .env:
+      # - OPENAI_API_KEY
       provider: "openai"
       name: "gpt-4o"
-      #provider: "azure"
-      #name: "fred-gpt-4o"
-      api_version: "2024-05-01-preview"
-      temperature: 0.0
-    leader:
-      name: "Fred"
-      class_path: "leader.leader.Leader"
-      enabled: true
-      max_steps: 5
-      model: {}
+      settings:
+        temperature: 0.0
+        max_retries: 2
+        request_timeout: 30
+
+      # --- OR uncomment for Azure OpenAI ---
+      # Required in .env:
+      # - AZURE_OPENAI_API_KEY
+      #
+      # Optional for token-based auth:
+      # - AZURE_TENANT_ID
+      # - AZURE_CLIENT_ID
+      # - AZURE_CLIENT_SECRET
+      # provider: "azure"
+      # name: "fred-gpt-4o"
+      # settings:
+      #  api_version: "2024-05-01-preview"
+      #  temperature: 0.0
+      #  max_retries: 2
+      #  request_timeout: 30
+      #  azure_endpoint: "https://tehopenai.openai.azure.com/"
+
+      # --- OR uncomment for Ollama ---
+      # provider: "ollama"
+      # name: "llama2"
+      # settings:
+      #   base_url: "http://localhost:11434"
+      #   temperature: 0.0
     services:
       - name: "kubernetes"
         enabled: false
         model: {}
     recursion:
-      recursion_limit: 40 #Number or max recursion use by the agents while using the model
+      recursion_limit: 40 # Number or max recursion use by the agents while using the model
     agents:
-      - name: "JiraExpert"
-        class_path: "agents.jira.jira_expert.JiraExpert"
-        enabled: false
-        mcp_servers:
-          - name: jira-mcp-server
-            transport: stdio
-            command: uvx
-            args:
-              - "mcp-atlassian"
-            env:
-              JIRA_URL: "@TO_CHANGE"
-              JIRA_USERNAME: "@TO_CHANGE"
-              JIRA_API_TOKEN: "@TO_CHANGE"
-              READ_ONLY_MODE: "true"
-            sse_read_timeout: 600 # 10 minutes. It is 5 minutes by default but it is too short.
-        model: {}
-      - name: K8SOperatorExpert
-        class_path: "agents.kubernetes_monitoring.k8s_operator_expert.K8SOperatorExpert"
+      # - name: "JiraExpert"
+      #   class_path: "app.agents.jira.jira_expert.JiraExpert"
+      #   enabled: false
+      #   mcp_servers:
+      #     - name: jira-mcp-server
+      #       transport: stdio
+      #       command: uvx
+      #       args:
+      #         - "mcp-atlassian"
+      #       env:
+      #         JIRA_URL: "@TO_CHANGE"
+      #         JIRA_USERNAME: "@TO_CHANGE"
+      #         JIRA_API_TOKEN: "@TO_CHANGE"
+      #         READ_ONLY_MODE: "true"
+      #       sse_read_timeout: 600 # 10 minutes. It is 5 minutes by default but it is too short.
+      #   model: {}
+      - name: "Fred"
+        role: "Multi-Agent Orchestrator"
+        description: >
+          Handles complex, ambiguous, or multi-step user queries. Delegates tasks to the most suitable experts 
+          based on context, capabilities, and relevance. Ensures coherent, high-quality responses by coordinating the expert team.
+        class_path: "app.agents.leader.leader.Leader"
+        type: "leader"
         enabled: true
-        mcp_servers:
-          - name: k8s-mcp-server
-            transport: sse
-            url: http://mcp-server-k8s:8081/sse
-            sse_read_timeout: 600 # 10 minutes. It is 5 minutes by default but it is too short.
-          #######################################
-          #### Example using STDIO transport ####
-          #######################################
-          # - name: prometheus-mcp-server
-          #   transport: stdio
-          #   command: uv
-          #   args:
-          #     - "--directory"
-          #     - "/home/xxx/Documents/github_repos/prometheus-mcp-server"
-          #     -  "run"
-          #     -  "src/prometheus_mcp_server/main.py"
-          #   env: 
-          #     PROMETHEUS_URL: "http://localhost:9091"
+        max_steps: 5
         model: {}
       - name: "GeneralistExpert"
-        class_path: "agents.generalist.generalist_expert.GeneralistExpert"
+        role: "Fallback Generalist Expert"
+        description: >
+          Provides broad, high-level guidance when no specific expert is better suited. 
+          Acts as a default agent to assist with general questions across all domains.
+        class_path: "app.agents.generalist.generalist_expert.GeneralistExpert"
         enabled: true
         model: {}
-      - name: "DocumentsExpert"
-        class_path: "agents.documents.documents_expert.DocumentsExpert"
+      - name: "TabularExpert"
+        role: "Data Query and SQL Expert"
+        description: >
+          Executes advanced SQL queries (including joins and aggregations) 
+          over structured datasets like CSVs, Postgres exports, or DuckDB files. 
+          Ideal for analyzing tabular data ingested into the platform.
+        class_path: "app.agents.tabular.tabular_expert.TabularExpert"
         enabled: true
         mcp_servers:
           - name: knowledge-flow-mcp-server
             transport: sse
-            #url: http://knowledge-flow-backend:8111/mcp
-            url: http://knowledge-flow-backend/mcp
+            url: http://knowledge-flow-backend:8080/mcp_tabular
             sse_read_timeout: 2000
         model: {}
-      # The Monitoring expert requires you activate the 'enableK8Features' flags above
-      - name: "MonitoringExpert"
-        class_path: "agents.monitoring.monitoring_expert.MonitoringExpert"
+      - name: "DocumentsExpert"
+        role: "Document Retrieval Expert"
+        description: >
+          Answers user questions by retrieving relevant information from ingested document corpora.
+          Uses a MCP search service to ground responses in internal or uploaded knowledge.
+        class_path: "app.agents.documents.documents_expert.DocumentsExpert"
+        enabled: true
+        mcp_servers:
+          - name: knowledge-flow-mcp-server
+            transport: sse
+            url: http://knowledge-flow-backend:8080/mcp_text
+            sse_read_timeout: 2000
+        model: {}
+      - name: "RagsExpert"
+        role: "Document Retrieval Expert"
+        description: >
+          Answers user questions by retrieving relevant information from ingested document corpora.
+          Uses a vector-based retrieval pipeline to ground responses in internal or uploaded knowledge.
+        class_path: "app.agents.rags.rags_expert.RagsExpert"
         enabled: true
         categories:
-          - "monitoring"
-          - "observability"
+          - "rag"
+        settings:
+          chunk_size: 512
+          chunk_overlap: 64
+          knowledge_flow_url: "http://knowledge-flow-backend:8080/knowledge-flow/v1"
         model: {}
+
+
+  # Security. As of today only keycloak is supported.
+  security:
+    enabled: false
+    client_id: "fred"
+    keycloak_url: "http://keycloak:8080/realms/app"
+    authorized_origins:
+    - "http://localhost:5173"
+
+  node_metrics_storage:
+    type: "local"
+    local_path: "~/.fred/agentic/node-metrics-store"
+
+  tool_metrics_storage:
+    type: "local"
+    local_path: "~/.fred/agentic/tool-metrics-store"
+
+  feedback_storage:
+    type: duckdb
+    duckdb_path: "~/.fred/agentic/db.duckdb"
+
+  agent_storage:
+    type: "duckdb"
+    duckdb_path: "~/.fred/agentic/db.duckdb"
 
   # Where to save fred produced resources like Essentials or Scores
   # and external resources like Kubernetes Workload descriptions
   dao:
     type: "file"  # Currently the only one supported
-    base_path: "/home/fred-user/.fred/dao-cache"
+    base_path: "~/.fred/agentic/dao-cache"
     max_cached_delay_seconds: 300  # Cache delay in seconds. Use 0 for no cache or a negative value for limitless cache.
 
-  # Enable or disable the security layer
-  security:
-    enabled: true
-    keycloak_url: "http://keycloak/realms/app"
-    authorized_origins:
-    - "http://fred.dev.fred.thalesgroup.com"
-    - "http://fred"
-
-  # Environment variables for the application
-
-  # AZURE
-  azure:
-    tenant_id: ""
-    client_id: ""
-    client_secret: ""
-    client_scope: ""
-    apim_key: ""
-    api_version: ""
-    deployment:
-      llm: ""
-      embedding: ""
-
-  # CONTEXT STORAGE CONFIGURATION
-  context_storage:
-    type: "local"
-    options:
-      path: "/home/fred-user/.fred/context-store"
-
-  feedback:
-    db_host: postgres
-
-  feedback_storage:
-    type: local
-    local_path: "/home/fred-user/.fred/feedback-store"
-
-  node_metrics_storage:
-    type: "local" 
-    local_path:  "/home/fred-user/.fred/metrics-store"
-
-  tool_metrics_storage:
-    type: "local" 
-    local_path: "/home/fred-user/.fred/metrics-store"
-
+  # Sessions and messages are stored by default in_memory
+  # but it can be modified to use a backend like opensearch
   session_storage:
-    type: opensearch
-    host: https://opensearch.dev.svc.cluster.local:9200
-    # username: admin # Overrides the OPENSEARCH_USER env variable
-    # password: xxx  # Overrides the OPENSEARCH_PASSWORD env variable
-    secure: true
+    ## Session Storage in memory:
+    type: in_memory
+    ## Session Storage using OpenSearch:
+    # type: opensearch # username and password are passed via the OPENSEARCH_USER and OPENSEARCH_PASSWORD env variables defined in thes .env file
+    # host: https://localhost:9200
+    # username: Admin # Overrides the OPENSEARCH_USER environment variable
+    # password: xxx # Overrides the OPENSEARCH_PASSWORD environment variable
+    secure: false
     verify_certs: false
+
+
+
+
 
 dotenv:
   AZURE_TENANT_ID: ""
