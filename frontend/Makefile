@@ -74,6 +74,11 @@ docker-run: ## Docker run
 format: ## Use prettier to format all codebase
 	npx prettier . --write
 
+.PHONY: update-agentic-api
+update-agentic-api: ## update the generated hooks used in UI based on agentic backend openApi spec
+	@curl -sSf http://localhost:8000/agentic/v1/openapi.json >/dev/null || (echo "Warning: to generate the sdk, you need to start the agentic backend on localhost:8000" && exit 1)
+	npx -y @rtk-query/codegen-openapi src/slices/agentic/agenticOpenApiConfig.json
+
 .PHONY: update-knowledge-flow-api
 update-knowledge-flow-api: ## update the generated hooks used in UI based on knowledge-flow backend openApi spec
 	@curl -sSf http://localhost:8111/knowledge-flow/v1/openapi.json >/dev/null || (echo "Warning: to generate the sdk, you need to start the knowledge-flow backend on localhost:8111" && exit 1)
