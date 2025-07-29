@@ -10,13 +10,20 @@ runs:
   steps:
     - name: Set up uv
       uses: astral-sh/setup-uv@v6
+      with:
+        enable-cache: true
+
 
     - name: Set up Python
-      run: uv python install python
+      run: uv python install
       shell: bash
       working-directory: ${{ inputs.working-directory }}
 
     - name: Install dependencies
-      run: uv sync --all-extras
+      run: uv sync --locked  --all-extras --dev
       shell: bash
       working-directory: ${{ inputs.working-directory }}
+    
+    - name: Minimize uv cache
+      run: uv cache prune --ci
+      shell: bash
