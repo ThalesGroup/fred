@@ -1,4 +1,3 @@
-from typing import List, Optional
 from datetime import datetime
 from app.common.mcp_utils import get_mcp_client_for_agent
 from app.common.structures import AgentSettings
