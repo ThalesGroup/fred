@@ -13,6 +13,8 @@
 # limitations under the License.
 
 import logging
+from typing import List
+from app.common.document_structures import DocumentMetadata
 from opensearchpy import OpenSearch, RequestsHttpConnection, OpenSearchException
 
 from app.core.stores.metadata.base_metadata_store import BaseMetadataStore
@@ -189,3 +191,33 @@ class OpenSearchMetadataStore(BaseMetadataStore):
         except Exception as e:
             logger.error(f"❌ Failed to clear metadata store: {e}")
             raise e
+
+    def list_by_source_tag(self, source_tag: str) -> List[DocumentMetadata]:
+        """
+        Return all metadata entries that match a specific pull source tag
+        (stored in front_metadata.source or similar).
+        """
+        try:
+            query = {
+                "query": {
+                    "term": {
+                        "front_metadata.source.keyword": source_tag
+                    }
+                }
+            }
+            response = self.client.search(
+                index=self.metadata_index_name,
+                body=query,
+                size=1000
+            )
+            hits = response["hits"]["hits"]
+            documents = []
+            for h in hits:
+                src = h["_source"].copy()
+                front_metadata = src.pop("front_metadata", {})
+                merged = {**src, **front_metadata}
+                documents.append(DocumentMetadata(**merged))
+            return documents
+        except Exception as e:
+            logger.error(f"Error in list_by_source_tag('{source_tag}'): {e}")
+            return []
