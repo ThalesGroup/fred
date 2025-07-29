@@ -1,0 +1,7 @@
+// Pyright config used when opening project with workspace
+// in vscode and by the pyright CLI
+{
+  "include": ["app"],
+  "typeCheckingMode": "basic",
+  "reportMissingTypeStubs": false
+}

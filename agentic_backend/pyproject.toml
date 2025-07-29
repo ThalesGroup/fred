@@ -59,6 +59,11 @@ include = ["fred*"]
 [tool.uv.sources]
 fred-core = { path = "../fred-core", editable = true }
 
+[dependency-groups]
+dev = [
+    "pyright>=1.1.403",
+]
+
 [tool.uv]
 # Using `editable_mode = "compat"` when installing fred-core to make editable install work with Pylance (vscode):
 # https://github.com/microsoft/pylance-release/blob/main/TROUBLESHOOTING.md#editable-install-modules-not-found
