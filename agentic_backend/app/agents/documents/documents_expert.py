@@ -20,7 +20,7 @@ from app.common.mcp_utils import get_mcp_client_for_agent
 from app.common.structures import AgentSettings
 from app.core.agents.flow import AgentFlow
 from app.agents.documents.documents_expert_toolkit import DocumentsToolkit
-from app.model_factory import get_model
+from app.core.model.model_factory import get_model
 from app.core.monitoring.node_monitoring.monitor_node import monitor_node
 from app.common.document_source import DocumentSource
 from app.core.chatbot.chat_schema import ChatSource

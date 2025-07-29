@@ -36,6 +36,7 @@ dependencies = [
   "rich>=14.0.0",
   "cryptography>=45.0.4",
   "fred-core",
+  "azure-identity>=1.23.1",
 ]
 
 [project.optional-dependencies]
