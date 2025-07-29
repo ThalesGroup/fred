@@ -39,16 +39,16 @@ class OpenSearchVectorStoreAdapter(BaseVectoreStore):
         self,
         embedding_model: BaseEmbeddingModel,
         host: str,
-        vector_index: str,
+        index: str,
         username: str,
         password: str,
         secure: bool = False,
         verify_certs: bool = False,
     ):
-        self.vector_index = vector_index
+        self.vector_index = index
         self.opensearch_vector_search = OpenSearchVectorSearch(
             opensearch_url=host,
-            index_name=vector_index,
+            index_name=index,
             embedding_function=embedding_model,
             use_ssl=secure,
             verify_certs=verify_certs,

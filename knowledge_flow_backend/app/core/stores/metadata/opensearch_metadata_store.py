@@ -15,8 +15,9 @@
 import logging
 from typing import List
 from opensearchpy import OpenSearch, RequestsHttpConnection, OpenSearchException
+from pydantic import ValidationError
 
-from app.common.document_structures import DocumentMetadata
+from app.common.document_structures import DocumentMetadata, ProcessingStage
 from app.core.stores.metadata.base_metadata_store import (
     BaseMetadataStore,
     MetadataDeserializationError,
@@ -24,13 +25,95 @@ from app.core.stores.metadata.base_metadata_store import (
 
 logger = logging.getLogger(__name__)
 
+# ==============================================================================
+# METADATA_INDEX_MAPPING
+# ==============================================================================
+# This mapping defines the OpenSearch schema used for storing DocumentMetadata.
+#
+# ⚠️ WARNING: This mapping is embedded directly in code and applied when the
+# OpenSearchMetadataStore is initialized, if the index does not already exist.
+#
+# ✅ This approach works well for local development and lightweight deployments.
+# ❗ In production environments, it is recommended to pre-create indices using
+# provisioning tools (Terraform, Ansible, OpenSearch Dashboards, etc.) so you
+# can control:
+#   - number_of_shards / number_of_replicas
+#   - refresh interval
+#   - ILM policies
+#   - index templates and mappings evolution
+#
+# 🛠️ If needed, you can extend this dictionary to include full "settings":
+# {
+#     "settings": {
+#         "number_of_shards": 1,
+#         "number_of_replicas": 0,
+#         "refresh_interval": "1s"
+#     },
+#     "mappings": { ... }
+# }
+#
+# Note: Fields like 'document_name' are stored both as full text (for search)
+# and as 'keyword' (for exact match filters). The 'processing_stages' object
+# is partially structured, but allows new stage keys thanks to `dynamic: true`.
+# ==============================================================================
+
+METADATA_INDEX_MAPPING = {
+    "mappings": {
+        "properties": {
+            "document_uid": {"type": "keyword"},
+            "document_name": {
+                "type": "text",
+                "fields": {"keyword": {"type": "keyword", "ignore_above": 256}}
+            },
+            "date_added_to_kb": {"type": "date"},
+            "source_tag": {"type": "keyword"},
+            "tags": {"type": "keyword"},
+            "retrievable": {"type": "boolean"},
+            "processing_stages": {
+                "type": "object",
+                "properties": {
+                    "VECTORIZED": {"type": "keyword"},
+                    "OCR_DONE": {"type": "keyword"},
+                    "INGESTED": {"type": "keyword"},
+                },
+                "dynamic": True
+            }
+        }
+    }
+}
 
 class OpenSearchMetadataStore(BaseMetadataStore):
+    """
+    OpenSearch-based implementation of the metadata store.
+
+    Required OpenSearch mapping for 'metadata-index':
+
+    {
+      "mappings": {
+        "properties": {
+          "document_uid":     { "type": "keyword" },
+          "document_name":    { "type": "text", "fields": { "keyword": { "type": "keyword", "ignore_above": 256 } } },
+          "date_added_to_kb": { "type": "date" },
+          "source_tag":       { "type": "keyword" },
+          "tags":             { "type": "keyword" },
+          "retrievable":      { "type": "boolean" },
+          "processing_stages": {
+            "type": "object",
+            "properties": {
+              "VECTORIZED": { "type": "keyword" },
+              "OCR_DONE":   { "type": "keyword" },
+              "INGESTED":   { "type": "keyword" }
+            },
+            "dynamic": true
+          }
+        }
+      }
+    }
+    """
     def __init__(
         self,
         host: str,
-        metadata_index_name: str,
-        vector_index_name: str,
+        index: str,
         username: str = None,
         password: str = None,
         secure: bool = False,
@@ -43,144 +126,90 @@ class OpenSearchMetadataStore(BaseMetadataStore):
             verify_certs=verify_certs,
             connection_class=RequestsHttpConnection,
         )
-        self.metadata_index_name = metadata_index_name
-        self.vector_index_name = vector_index_name
+        self.metadata_index_name = index
 
-        if not self.client.indices.exists(index=metadata_index_name):
-            self.client.indices.create(index=metadata_index_name)
-            logger.info(f"Opensearch index '{metadata_index_name}' created.")
+        if not self.client.indices.exists(index=self.metadata_index_name):
+            self.client.indices.create(index=self.metadata_index_name, body=METADATA_INDEX_MAPPING)
+            logger.info(f"Opensearch index '{index}' created.")
         else:
-            logger.warning(f"Opensearch index '{metadata_index_name}' already exists.")
+            logger.warning(f"Opensearch index '{index}' already exists.")
 
     def get_metadata_by_uid(self, document_uid: str) -> DocumentMetadata:
+        """
+        Retrieve metadata for a document by its unique identifier (UID).
+        Returns None if the document does not exist.
+        """
+        if not document_uid:
+            raise ValueError("Document UID must be provided.")
         try:
-            response = self.client.get(index=self.metadata_index_name, id=document_uid)
+            response = self.client.get(index=self.metadata_index_name, id=document_uid, ignore=[404])
             if not response.get("found"):
-                raise ValueError(f"Metadata with UID '{document_uid}' not found.")
+                return None
             source = response["_source"]
-            front_metadata = source.pop("front_metadata", {})
-            combined = {**source, **front_metadata}
-            return DocumentMetadata(**combined)
         except Exception as e:
-            logger.error(f"Failed to get metadata by UID '{document_uid}': {e}")
+            logger.error(f"OpenSearch request failed for UID '{document_uid}': {e}")
+            raise
+
+        try:
+            return DocumentMetadata(**source)
+        except Exception as e:
+            logger.error(f"Deserialization failed for UID '{document_uid}': {e}")
             raise MetadataDeserializationError from e
+        
 
     def get_all_metadata(self, filters_dict: dict) -> List[DocumentMetadata]:
+        """
+        Retrieve all metadata documents that match the given filters.
+        Filters should be a dictionary where keys are field names and values are the filter values.
+        Example: {"source_tag": "local-docs", "category": "reports"}
+        """
         try:
-            must_clauses = [
-                {"term": {f"front_metadata.{k}.keyword": v}}
-                for k, v in filters_dict.items()
-            ]
-            query = (
-                {"match_all": {}}
-                if not must_clauses
-                else {"bool": {"must": must_clauses}}
-            )
+            must_clauses = self._build_must_clauses(filters_dict)
+            query = {"match_all": {}} if not must_clauses else {"bool": {"must": must_clauses}}
+
             response = self.client.search(
                 index=self.metadata_index_name,
                 body={"query": query},
                 size=1000,
-                _source=[
-                    "document_name",
-                    "document_uid",
-                    "date_added_to_kb",
-                    "retrievable",
-                    "front_metadata",
-                ],
+                _source=True,
             )
             hits = response["hits"]["hits"]
-            return [
-                DocumentMetadata(**{**h["_source"], **h["_source"].get("front_metadata", {})})
-                for h in hits
-            ]
         except Exception as e:
-            logger.error(f"Failed to retrieve metadata with filters {filters_dict}: {e}")
-            raise MetadataDeserializationError from e
-
-    def list_by_source_tag(self, source_tag: str) -> List[DocumentMetadata]:
-        try:
-            query = {
-                "query": {"term": {"front_metadata.source.keyword": source_tag}}
-            }
-            response = self.client.search(
-                index=self.metadata_index_name, body=query, size=1000
-            )
-            return [
-                DocumentMetadata(**{**h["_source"], **h["_source"].get("front_metadata", {})})
-                for h in response["hits"]["hits"]
-            ]
-        except Exception as e:
-            logger.error(f"Error in list_by_source_tag('{source_tag}'): {e}")
-            raise MetadataDeserializationError from e
-
-    def update_metadata_field(self, document_uid: str, field: str, value: any):
-        try:
-            response_meta = self.client.update(
-                index=self.metadata_index_name,
-                id=document_uid,
-                body={"doc": {field: value}},
-            )
-            logger.info(f"[METADATA] Updated '{field}' for UID '{document_uid}' => {value}")
-
-            script = f"ctx._source.metadata.{field} = params.value"
-            query = {
-                "script": {"source": script, "lang": "painless", "params": {"value": value}},
-                "query": {"term": {"metadata.document_uid": document_uid}},
-            }
-            response_vector = self.client.update_by_query(
-                index=self.vector_index_name, body=query
-            )
-            logger.info(f"[VECTOR] Updated 'metadata.{field}' for UID '{document_uid}'")
-
-            return {
-                "metadata_index_response": response_meta,
-                "vector_index_response": response_vector,
-            }
-        except Exception as e:
-            logger.error(f"Failed to update field '{field}' for UID '{document_uid}': {e}")
+            logger.error(f"OpenSearch search failed with filters {filters_dict}: {e}")
             raise
 
-    def save_metadata(self, metadata: DocumentMetadata) -> None:
-        if not metadata.document_uid:
-            raise ValueError("Missing 'document_uid' in metadata.")
-        try:
-            self.write_metadata(metadata.document_uid, metadata.dict())
-        except Exception as e:
-            logger.error(f"Failed to save metadata for UID '{metadata.document_uid}': {e}")
-            raise
+        results = []
+        for h in hits:
+            try:
+                results.append(DocumentMetadata(**h["_source"]))
+            except Exception as e:
+                logger.warning(f"Deserialization failed for doc {h.get('_id')}: {e}")
+        return results
 
-    def write_metadata(self, document_uid: str, metadata: dict):
-        try:
-            self.client.index(index=self.metadata_index_name, id=document_uid, body=metadata)
-            logger.info(f"Metadata written to index '{self.metadata_index_name}' for UID '{document_uid}'.")
-        except OpenSearchException as e:
-            logger.error(f"❌ Failed to write metadata with UID {document_uid}: {e}")
-            raise ValueError(f"Failed to write metadata to Opensearch: {e}")
-
-    def delete_metadata(self, metadata: DocumentMetadata) -> None:
-        document_uid = metadata.document_uid
-        if not document_uid:
-            raise ValueError("Missing 'document_uid' in metadata.")
-        try:
-            self.client.delete(index=self.metadata_index_name, id=document_uid)
-            logger.info(f"Deleted metadata UID '{document_uid}' from index '{self.metadata_index_name}'.")
-
-            delete_query = {"query": {"match": {"metadata.document_uid": document_uid}}}
-            self.client.delete_by_query(index=self.vector_index_name, body=delete_query)
-            logger.info(f"Deleted all vector chunks for UID '{document_uid}'.")
-        except Exception as e:
-            logger.error(f"Failed to delete metadata for UID '{document_uid}': {e}")
-            raise
-
-    def get_metadata_in_tag(self, tag_id: str) -> List[DocumentMetadata]:
+    def _build_must_clauses(self, filters_dict: dict) -> List[dict]:
         """
-        Return all metadata entries where 'tags' contains the specified tag_id.
+        Build the 'must' clauses for the OpenSearch query based on the provided filters.
+        Each key in filters_dict corresponds to a field in the metadata.
+        Values can be single values or lists for 'terms' queries.
+        This executes an exact match it correspond to mapping type like  "source_tag": {"type": "keyword"}
+        """
+        must = []
+        for field, value in filters_dict.items():
+            if isinstance(value, list):
+                must.append({"terms": {field: value}})
+            else:
+                must.append({"term": {field: value}})
+        return must
+    
+    def list_by_source_tag(self, source_tag: str) -> List[DocumentMetadata]:
+        """
+        List all metadata documents that match a specific source tag.
         """
         try:
             query = {
                 "query": {
                     "term": {
-                        "front_metadata.tags.keyword": tag_id
+                        "source_tag.keyword": source_tag
                     }
                 }
             }
@@ -190,18 +219,127 @@ class OpenSearchMetadataStore(BaseMetadataStore):
                 size=1000
             )
             hits = response["hits"]["hits"]
-            return [
-                DocumentMetadata(**{**hit["_source"], **hit["_source"].get("front_metadata", {})})
-                for hit in hits
-            ]
         except Exception as e:
-            logger.error(f"Error in get_metadata_in_tag('{tag_id}'): {e}")
+            logger.error(f"OpenSearch query failed for source_tag='{source_tag}': {e}")
+            raise
+
+        results = []
+        errors = 0
+        for h in hits:
+            try:
+                results.append(DocumentMetadata(**h["_source"]))
+            except ValidationError as e:
+                errors += 1
+                doc_id = h.get("_id", "<unknown>")
+                logger.warning(
+                    f"[Deserialization error] Skipping document '{doc_id}': {e}"
+                )
+
+        if errors > 0:
+            logger.warning(f"{errors} documents failed to deserialize in list_by_source_tag('{source_tag}').")
+
+        return results
+
+    def update_processing_stage(self, document_uid: str, stage: ProcessingStage, status: str) -> None:
+        try:
+            field_path = f"processing_stages.{stage}"
+            self.client.update(
+                index=self.metadata_index_name,
+                id=document_uid,
+                body={"doc": {field_path: status}},
+            )
+            logger.info(f"[METADATA] Updated processing stage '{stage}' for UID '{document_uid}' => {status}")
+        except Exception as e:
+            logger.error(f"Failed to update processing stage '{stage}' for UID '{document_uid}': {e}")
+            raise
+
+    def set_retrievable_flag(self, document_uid: str, value: bool) -> None:
+        """ Set the 'retrievable' flag for a document in the metadata index.
+        This flag indicates whether the document will be searchable from AI services.
+        """
+        try:
+            self.client.update(
+                index=self.metadata_index_name,
+                id=document_uid,
+                body={"doc": {"retrievable": value}},
+            )
+            logger.info(f"[METADATA] Set 'retrievable' for UID '{document_uid}' => {value}")
+        except Exception as e:
+            logger.error(f"Failed to update 'retrievable' for UID '{document_uid}': {e}")
+            raise
+
+    def save_metadata(self, metadata: DocumentMetadata) -> None:
+        """
+        Index the metadata into OpenSearch by document UID.
+        Overwrites any existing document with the same UID.
+        """
+        if not metadata.document_uid:
+            raise ValueError("Missing 'document_uid' in metadata.")
+
+        try:
+            self.client.index(
+                index=self.metadata_index_name,
+                id=metadata.document_uid,
+                body=metadata.model_dump(),
+                refresh="wait_for",  # Optional: ensures immediate visibility
+            )
+            logger.info(f"[METADATA] Indexed document with UID '{metadata.document_uid}' into '{self.metadata_index_name}'.")
+        except OpenSearchException as e:
+            logger.error(f"❌ Failed to index metadata for UID '{metadata.document_uid}': {e}")
+            raise RuntimeError(f"Failed to index metadata: {e}") from e
+
+    def delete_metadata(self, metadata: DocumentMetadata) -> bool:
+        """
+        Delete the metadata document identified by its UID.
+        Returns True if deletion succeeded, False otherwise.
+        """
+        document_uid = metadata.document_uid
+        if not document_uid:
+            logger.warning("Attempted to delete metadata without a document UID.")
+            return False
+
+        try:
+            self.client.delete(index=self.metadata_index_name, id=document_uid)
+            logger.info(f"✅ Deleted metadata UID '{document_uid}' from index '{self.metadata_index_name}'.")
+            return True
+        except Exception as e:
+            logger.error(f"❌ Failed to delete metadata UID '{document_uid}': {e}")
+            return False
+        
+    def get_metadata_in_tag(self, tag_id: str) -> List[DocumentMetadata]:
+        """
+        Return all metadata entries where 'tags' contains the specified tag_id.
+        """
+        if not tag_id:
+            raise ValueError("Tag ID must be provided.")
+
+        try:
+            query = {
+                "query": {
+                    "term": {
+                        "tags.keyword": tag_id
+                    }
+                }
+            }
+            response = self.client.search(
+                index=self.metadata_index_name,
+                body=query,
+                size=1000
+            )
+            hits = response["hits"]["hits"]
+        except Exception as e:
+            logger.error(f"OpenSearch query failed for tag '{tag_id}': {e}")
+            raise
+
+        try:
+            return [DocumentMetadata(**hit["_source"]) for hit in hits]
+        except Exception as e:
+            logger.error(f"Deserialization failed for results tagged '{tag_id}': {e}")
             raise MetadataDeserializationError from e
 
     def clear(self) -> None:
         try:
             self.client.delete_by_query(index=self.metadata_index_name, body={"query": {"match_all": {}}})
-            self.client.delete_by_query(index=self.vector_index_name, body={"query": {"match_all": {}}})
             logger.info(f"Cleared all documents from '{self.metadata_index_name}' and '{self.vector_index_name}'.")
         except Exception as e:
             logger.error(f"❌ Failed to clear metadata store: {e}")

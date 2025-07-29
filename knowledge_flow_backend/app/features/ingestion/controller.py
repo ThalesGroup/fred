@@ -233,7 +233,7 @@ class IngestionController:
                                                  filename=filename).model_dump_json() + "\n"
                         # Step: Metadata saving
                         current_step = "metadata saving"
-                        self.service.save_metadata(metadata)
+                        self.service.save_metadata(metadata=metadata)
                         logger.info(f"Metadata saved for {filename}: {metadata}")
                         yield ProcessingProgress(step=current_step, status=Status.SUCCESS,
                                                  document_uid=metadata.document_uid,

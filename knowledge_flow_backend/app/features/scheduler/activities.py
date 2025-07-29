@@ -54,7 +54,7 @@ def extract_metadata(file: FileToProcess) -> DocumentMetadata:
         logger.info(f"[extract_metadata] generated : {metadata}")
 
         # Step 4: Save metadata
-        ingestion_service.save_metadata(metadata)
+        ingestion_service.save_metadata(metadata=metadata)
 
         logger.info(f"[extract_metadata] Metadata extracted and saved for pull file: {metadata.document_uid}")
         return metadata

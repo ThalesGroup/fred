@@ -84,11 +84,6 @@ ContentStorageConfig = Annotated[
 #  --- Metadata Storage Configuration
 #
 
-
-class LocalMetadataStorage(BaseModel):
-    type: Literal["local"]
-    root_path: str = Field(default=str(Path("~/.fred/knowledge-flow/metadata-store.json")), description="Local storage json file")
-
 class DuckdbMetadataStorage(BaseModel):
     type: Literal["duckdb"]
     duckdb_path: str = Field(default="~/.fred/knowledge-flow/db.duckdb", 
@@ -101,12 +96,11 @@ class OpenSearchStorage(BaseModel):
     password: Optional[str] = Field(default_factory=lambda: os.getenv("OPENSEARCH_PASSWORD"), description="Password from env")
     secure: bool = Field(default=False, description="Use TLS (https)")
     verify_certs: bool = Field(default=False, description="Verify TLS certs")
-    metadata_index: str = Field(..., description="OpenSearch index name for metadata")
-    vector_index: str = Field(..., description="OpenSearch index name for vectors")
+    index: str = Field(..., description="OpenSearch index name")
 
 
 # --- Final union config (with discriminator)
-MetadataStorageConfig = Annotated[Union[LocalMetadataStorage, DuckdbMetadataStorage, OpenSearchStorage], Field(discriminator="type")]
+MetadataStorageConfig = Annotated[Union[DuckdbMetadataStorage, OpenSearchStorage], Field(discriminator="type")]
 
 ###########################################################
 #

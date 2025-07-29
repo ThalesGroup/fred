@@ -38,7 +38,6 @@ from app.core.processors.output.base_output_processor import BaseOutputProcessor
 from app.core.processors.output.vectorization_processor.azure_apim_embedder import AzureApimEmbedder
 from app.core.processors.output.vectorization_processor.embedder import Embedder
 from app.core.stores.metadata.base_metadata_store import BaseMetadataStore
-from app.core.stores.metadata.local_metadata_store import LocalMetadataStore
 from app.core.stores.metadata.opensearch_metadata_store import OpenSearchMetadataStore
 from app.core.stores.tags.base_tag_store import BaseTagStore
 from app.core.stores.tags.local_tag_store import LocalTagStore
@@ -119,8 +118,8 @@ class ApplicationContext:
             return
 
         self.config = config
-        validate_input_processor_config(config)
-        validate_output_processor_config(config)
+        #validate_input_processor_config(config)
+        #validate_output_processor_config(config)
         self.input_processor_registry: Dict[str, Type[BaseInputProcessor]] = self._load_input_processor_registry()
         self.output_processor_registry: Dict[str, Type[BaseInputProcessor]] = self._load_output_processor_registry()
         ApplicationContext._instance = self
@@ -382,7 +381,7 @@ class ApplicationContext:
                 self._vector_store_instance = OpenSearchVectorStoreAdapter(
                     embedding_model=embedding_model,
                     host=s.host,
-                    vector_index=s.vector_index,
+                    index=s.index,
                     username=s.username,
                     password=s.password,
                     secure=s.secure,
@@ -405,10 +404,7 @@ class ApplicationContext:
         if self._metadata_store_instance is not None:
             return self._metadata_store_instance
         config = self.config.metadata_storage
-        if config.type == "local":
-            path = Path(config.root_path).expanduser()
-            self._metadata_store_instance = LocalMetadataStore(path)
-        elif config.type == "duckdb":
+        if config.type == "duckdb":
             db_path = Path(config.duckdb_path).expanduser()
             self._metadata_store_instance = DuckdbMetadataStore(db_path)
         elif config.type == "opensearch":
@@ -425,8 +421,7 @@ class ApplicationContext:
                 password=password,
                 secure=config.secure,
                 verify_certs=config.verify_certs,
-                metadata_index_name=config.metadata_index,
-                vector_index_name=config.vector_index
+                index=config.index,
             )
 
         else:
@@ -540,8 +535,7 @@ class ApplicationContext:
                 s = self.config.vector_storage
                 if vector_type == "opensearch":
                     logger.info(f"     ↳ Host: {s.host}")
-                    logger.info(f"     ↳ Vector Index: {s.vector_index}")
-                    logger.info(f"     ↳ Metadata Index: {s.metadata_index}")
+                    logger.info(f"     ↳ Vector Index: {s.index}")
                     logger.info(f"     ↳ Secure (TLS): {s.secure}")
                     logger.info(f"     ↳ Verify Certs: {s.verify_certs}")
                     self._log_sensitive("OPENSEARCH_USER", os.getenv("OPENSEARCH_USER"))
