@@ -12,10 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from app.application_context import get_app_context, get_configuration
+from app.application_context import get_configuration
 from app.features.frugal.cluster_consumption.cluster_consumption_abstract_service import AbstractClusterConsumptionService
 from app.features.frugal.cluster_consumption.cluster_consumption_csv_service import ClusterConsumptionCsvService
-from app.common.structures import Configuration, DatabaseTypeEnum
+from app.common.structures import DatabaseTypeEnum
 
 
 class ClusterConsumptionService:
