@@ -13,14 +13,15 @@
 # limitations under the License.
 
 from datetime import datetime
-from typing import Optional
 
-from app.flow import AgentFlow
+from app.common.mcp_utils import get_mcp_client_for_agent
+from app.common.structures import AgentSettings
+from app.core.agents.flow import AgentFlow
+from app.model_factory import get_model
 from langgraph.graph import MessagesState, StateGraph
 from langgraph.constants import START
 from langgraph.prebuilt import ToolNode, tools_condition
 
-from app.application_context import get_agent_settings, get_model_for_agent, get_mcp_client_for_agent
 from app.agents.jira.jira_toolkit import JiraExpertToolkit
 
 class JiraExpert(AgentFlow):
@@ -36,13 +37,11 @@ class JiraExpert(AgentFlow):
     categories: list[str] = []
     tag: str = "jira operator"  # Défini au niveau de la classe
     
-    def __init__(self, 
-                 cluster_fullname: Optional[str]
-                 ):
+    def __init__(self, agent_settings: AgentSettings):
         self.current_date = datetime.now().strftime("%Y-%m-%d")
-        self.agent_settings = get_agent_settings(self.name)
-        self.model = get_model_for_agent(self.name)
-        self.mcp_client = get_mcp_client_for_agent(self.name)
+        self.agent_settings = agent_settings
+        self.model = get_model(self.agent_settings.model)
+        self.mcp_client =  get_mcp_client_for_agent(self.agent_settings)
         self.toolkit = JiraExpertToolkit(self.mcp_client)
         self.base_prompt=self._generate_prompt()
         self.categories = self.agent_settings.categories if self.agent_settings.categories else ["Jira"]

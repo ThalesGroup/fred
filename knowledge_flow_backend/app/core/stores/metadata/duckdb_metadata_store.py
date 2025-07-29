@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import List, Any
 from pydantic import ValidationError
 
-from app.common.duckdb_store import DuckDBTableStore
+from fred_core.store.duckdb_store import DuckDBTableStore
 from app.core.stores.metadata.base_metadata_store import BaseMetadataStore, MetadataDeserializationError
 from app.common.document_structures import DocumentMetadata
 
@@ -110,6 +110,13 @@ class DuckdbMetadataStore(BaseMetadataStore):
         # In-memory filtering for now
         all_docs = self._query_all()
         return [md for md in all_docs if self._match_nested(md.model_dump(mode="json"), filters)]
+
+    def get_metadata_in_tag(self, tag_id: str) -> List[DocumentMetadata]:
+        with self.store._connect() as conn:
+            rows = conn.execute(
+                f"SELECT * FROM {self._table()} WHERE tags LIKE ?", [f"%{tag_id}%"]
+            ).fetchall()
+        return [self._deserialize(row) for row in rows]
 
     def get_metadata_by_uid(self, document_uid: str) -> DocumentMetadata:
         with self.store._connect() as conn:

@@ -49,15 +49,11 @@ rollingUpdate:
   maxSurge: 1
 
 command:
-  enabled: true
-  data:
+  enabled: false
+  data: []
     # - /bin/sh
     # - -c
     # - tail -f /dev/null
-    - python
-    - /app/app/main.py
-    - --config-path
-    - /app/config/configuration.yaml
 
 env:
   data:
@@ -200,7 +196,7 @@ configuration:
   # - GCS_BUCKET_NAME
   # - GCS_CREDENTIALS_PATH
   # If you are using local storage, make sure to set the following environment variable:
-  # - LOCAL_CONTENT_STORAGE_PATH default to '~/.knowledge-flow/content-store'
+  # - LOCAL_CONTENT_STORAGE_PATH default to '~/.fred/knowledge-flow/content-store'
     type: "minio"
     endpoint: minio:9000
     # access_key: minioadmin # Overrides the MINIO_ACCESS_KEY environment variable
@@ -219,7 +215,7 @@ configuration:
   #   OPENSEARCH_USER=admin
   #   OPENSEARCH_PASSWORD=xxx
   # If you are using local storage, make sure to set the following environment variable:
-  # - LOCAL_METADATA_STORAGE_PATH default to '~/.knowledge-flow/metadata-store.json'
+  # - LOCAL_METADATA_STORAGE_PATH default to '~/.fred/knowledge-flow/metadata-store.json'
   
   vector_storage:
     type: opensearch 
@@ -384,8 +380,8 @@ dotenv:
   GCS_PROJECT_ID: "my-gcp-project"
 
   # LOCAL STORAGE
-  LOCAL_CONTENT_STORAGE_PATH: "~/.knowledge-flow/content-store"
-  LOCAL_METADATA_STORAGE_PATH: "~/.knowledge-flow/metadata-store.json"
+  LOCAL_CONTENT_STORAGE_PATH: "~/.fred/knowledge-flow/content-store"
+  LOCAL_METADATA_STORAGE_PATH: "~/.fred/knowledge-flow/metadata-store.json"
 
 kubeconfig:
   data:

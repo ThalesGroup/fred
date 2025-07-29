@@ -7,11 +7,11 @@ FROM mirror.gcr.io/node:22.13.0 AS builder
 RUN apt-get update && \
     apt-get install -y make
 
-# Copy project files
-COPY frontend/* /app
-
 # Move to project directory
 WORKDIR /app
+
+# Copy project files
+COPY frontend/ /app/
 
 # Build web app
 RUN make build

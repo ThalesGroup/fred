@@ -29,6 +29,7 @@ export const LayoutWithSidebar = ({ children }: React.PropsWithChildren<{}>) => 
         <Box
           sx={{
             flexGrow: 1,
+            height: "100vh",
             overflow: "auto",
           }}
         >

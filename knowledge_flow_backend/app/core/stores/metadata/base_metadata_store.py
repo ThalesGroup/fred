@@ -28,12 +28,19 @@ class BaseMetadataStore(BaseCatalogStore):
         pass
 
     @abstractmethod
+    def get_metadata_in_tag(self, tag_id: str) -> List[DocumentMetadata]:
+        """
+        Return all metadata entries associated with a specific tag.
+        """
+        pass
+
+    @abstractmethod
     def list_by_source_tag(self, source_tag: str) -> List[DocumentMetadata]:
         """
         Return all metadata entries ingested from a specific pull source.
         """
         pass
-    
+
     @abstractmethod
     def get_metadata_by_uid(self, document_uid: str) -> DocumentMetadata:
         pass

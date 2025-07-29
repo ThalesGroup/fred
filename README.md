@@ -33,6 +33,8 @@ It is composed of:
 
 Fred is not a framework, but a full reference implementation that shows how to build practical multi-agent applications with LangChain and LangGraph. Agents cooperate to answer technical, context-aware questions.
 
+
+
 See the project site: <https://fredk8.dev>
 
 ---
@@ -226,6 +228,7 @@ See `agentic_backend/config/configuration.yaml` (section `ai:`) for concrete exa
 
 * Main docs: <https://fredk8.dev/docs>  
 * [Agentic backend README](./agentic_backend/README.md)  
+* [Agentic backend agentic design](./agentic_backend/docs/AGENTS.md)  
 * [Frontend README](./frontend/README.md)  
 * [Knowledge Flow backend README](./knowledge_flow_backend/README.md)
 * [Developer Tools](./developer_tools/README.md)    

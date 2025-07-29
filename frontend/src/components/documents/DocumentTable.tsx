@@ -12,113 +12,211 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import React, { useMemo, useState } from "react";
+import EventAvailableIcon from "@mui/icons-material/EventAvailable";
 import {
+  Avatar,
+  Box,
+  Checkbox,
+  Chip,
   Table,
   TableBody,
   TableCell,
   TableContainer,
   TableHead,
   TableRow,
-  Paper,
-  Checkbox,
+  TableSortLabel,
   Tooltip,
   Typography,
-  Box,
-  TableSortLabel,
-  Button,
-  Collapse,
-  IconButton,
-  Chip,
-  Avatar,
 } from "@mui/material";
-import EventAvailableIcon from "@mui/icons-material/EventAvailable";
-import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
-import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
 import dayjs from "dayjs";
-import { getDocumentIcon } from "./DocumentIcon";
-import { DocumentTableRowActionsMenu } from "./DocumentTableRowActionsMenu";
-import { DOCUMENT_PROCESSING_STAGES, useGetDocumentMetadataMutation } from "../../slices/documentApi";
+import React, { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-// import CheckCircleIcon from "@mui/icons-material/CheckCircle";
-// import HourglassTopIcon from "@mui/icons-material/HourglassTop";
-// import CancelIcon from "@mui/icons-material/Cancel";
-// import RadioButtonUncheckedIcon from "@mui/icons-material/RadioButtonUnchecked";
-// import { shallowEqual } from "react-redux";
-export interface FileRow {
-  document_uid: string;
-  document_name: string;
-  date_added_to_kb?: string;
-  retrievable?: boolean;
-  ingestion_type?: string;
-  source_type?: string;
-  processing_stages?: Record<string, string>;
-  tags?: string[];
-  source_tag?: string;         
-  pull_location?: string;    
-  size?: number;              
-  modified_time?: number;      
-  hash?: string;              
-}
+import { DOCUMENT_PROCESSING_STAGES, useUpdateDocumentRetrievableMutation } from "../../slices/documentApi";
+import {
+  DocumentMetadata,
+  TagWithDocumentsId,
+  useLazyGetTagKnowledgeFlowV1TagsTagIdGetQuery,
+} from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { useToast } from "../ToastProvider";
+import { getDocumentIcon } from "./DocumentIcon";
+import { CustomRowAction, DocumentTableRowActionsMenu } from "./DocumentTableRowActionsMenu";
+import { CustomBulkAction, DocumentTableSelectionToolbar } from "./DocumentTableSelectionToolbar";
+import { useDocumentActions } from "./useDocumentActions";
+
+// Todo: use `DocumentMetadata` directly (as `DocumentMetadata` is auto-generated from OpenAPI spec)
 
 export interface Metadata {
   metadata: any;
 }
 
+interface DocumentTableColumns {
+  fileName?: boolean;
+  dateAdded?: boolean;
+  librairies?: boolean;
+  status?: boolean;
+  retrievable?: boolean;
+  actions?: boolean;
+}
+
 interface FileTableProps {
-  files: FileRow[];
-  selectedFiles: FileRow[];
-  onToggleSelect: (file: FileRow) => void;
-  onToggleAll: (checked: boolean) => void;
-  onDelete: (file: FileRow) => void | Promise<void>;
-  onDownload: (file: FileRow) => void | Promise<void>;
-  onToggleRetrievable?: (file: FileRow) => void;
-  onOpen: (file: FileRow) => void | Promise<void>;
-  onProcess: (file: FileRow[]) => void | Promise<void>;
-  isAdmin?: boolean;
+  files: DocumentMetadata[];
+  onRefreshData?: () => void;
+  showSelectionActions?: boolean;
+  columns?: DocumentTableColumns;
+  rowActions?: CustomRowAction[]; // Action in the 3 dots menu of each row. If empty list is passed, not actions.
+  bulkActions?: CustomBulkAction[]; // Actions on selected documents, in the selection toolbar. If empty list is passed, no actions.
+  nameClickAction?: null | ((file: DocumentMetadata) => void); // Action when clicking on file name. If undefined, open document preview. If null, no action.
+  isAdmin?: boolean; // For retrievable toggle functionality
 }
 
 export const DocumentTable: React.FC<FileTableProps> = ({
   files,
-  selectedFiles,
-  onToggleSelect,
-  onToggleAll,
-  onDelete,
-  onDownload,
-  onToggleRetrievable,
-  onOpen,
-  onProcess,
+  onRefreshData,
+  showSelectionActions = true,
+  columns = {
+    fileName: true,
+    dateAdded: true,
+    librairies: true,
+    status: true,
+    retrievable: true,
+    actions: true,
+  },
+  rowActions,
+  bulkActions,
+  nameClickAction,
   isAdmin = false,
 }) => {
   const { t } = useTranslation();
-  const allSelected = selectedFiles.length === files.length && files.length > 0;
-  const [sortBy, setSortBy] = useState<keyof FileRow>("date_added_to_kb");
+  const { showInfo, showError } = useToast();
+
+  // Internal state management
+  const [selectedFiles, setSelectedFiles] = useState<DocumentMetadata[]>([]);
+  const [sortBy, setSortBy] = useState<keyof DocumentMetadata>("date_added_to_kb");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
+  const [tagsById, setTagsById] = useState<Record<string, TagWithDocumentsId>>({});
 
-  const [openRows, setOpenRows] = useState<Record<string, boolean>>({});
-  const [metadataByUid, setMetadataByUid] = useState<Record<string, Record<string, any>>>({});
-  const [loadingMetadata, setLoadingMetadata] = useState<Record<string, boolean>>({});
-  const [retrieveMetadata] = useGetDocumentMetadataMutation();
+  // API hooks
+  const [updateDocumentRetrievable] = useUpdateDocumentRetrievableMutation();
+  const [getTag] = useLazyGetTagKnowledgeFlowV1TagsTagIdGetQuery();
 
-  const toggleRow = async (uid: string) => {
-    const isOpen = openRows[uid];
-    setOpenRows((prev) => ({ ...prev, [uid]: !isOpen }));
+  const allSelected = selectedFiles.length === files.length && files.length > 0;
 
-    if (!isOpen && !metadataByUid[uid]) {
-      setLoadingMetadata((prev) => ({ ...prev, [uid]: true }));
-      try {
-        const response = await retrieveMetadata({ document_uid: uid }).unwrap();
-        setMetadataByUid((prev) => ({ ...prev, [uid]: response.metadata }));
-      } catch (error) {
-        console.error("Failed to fetch metadata:", error);
-        setMetadataByUid((prev) => ({ ...prev, [uid]: {} }));
-      } finally {
-        setLoadingMetadata((prev) => ({ ...prev, [uid]: false }));
+  // Fetch tag information when files change and tags column is enabled
+  useEffect(() => {
+    if (!columns.librairies) return;
+
+    const allTagIds = new Set<string>();
+    files.forEach((file) => {
+      file.tags?.forEach((tagId) => allTagIds.add(tagId));
+    });
+
+    const fetchTags = async () => {
+      const promises: Promise<void>[] = [];
+      const updatedTags: Record<string, TagWithDocumentsId> = {};
+
+      allTagIds.forEach((tagId) => {
+        if (!tagsById[tagId]) {
+          promises.push(
+            getTag({ tagId })
+              .unwrap()
+              .then((tagData) => {
+                updatedTags[tagId] = tagData;
+              })
+              .catch(() => {
+                // If tag fetch fails, create a fallback tag object
+                updatedTags[tagId] = {
+                  id: tagId,
+                  name: tagId,
+                  description: null,
+                  created_at: "",
+                  updated_at: "",
+                  owner_id: "",
+                  type: "library",
+                  document_ids: [],
+                };
+              }),
+          );
+        }
+      });
+
+      if (promises.length > 0) {
+        await Promise.all(promises);
+        setTagsById((prev) => ({ ...prev, ...updatedTags }));
       }
+    };
+
+    fetchTags();
+  }, [files, columns.librairies, getTag]);
+
+  // Internal handlers
+  const handleToggleSelect = (file: DocumentMetadata) => {
+    setSelectedFiles((prev) =>
+      prev.some((f) => f.document_uid === file.document_uid)
+        ? prev.filter((f) => f.document_uid !== file.document_uid)
+        : [...prev, file],
+    );
+  };
+
+  const handleToggleAll = (checked: boolean) => {
+    setSelectedFiles(checked ? [...files] : []);
+  };
+
+  const handleToggleRetrievable = async (file: DocumentMetadata) => {
+    try {
+      await updateDocumentRetrievable({
+        document_uid: file.document_uid,
+        retrievable: !file.retrievable,
+      }).unwrap();
+
+      showInfo({
+        summary: "Updated",
+        detail: `"${file.document_name}" is now ${!file.retrievable ? "searchable" : "excluded from search"}.`,
+      });
+
+      onRefreshData?.();
+    } catch (error) {
+      console.error("Update failed:", error);
+      showError({
+        summary: "Error updating document",
+        detail: error?.data?.detail || error.message,
+      });
     }
   };
 
-  const handleSortChange = (column: keyof FileRow) => {
+  // If actions are undefined, use default actions from useDocumentActions
+  const { defaultBulkActions, defaultRowActions, handleDocumentPreview } = useDocumentActions();
+  const rowActionsWithDefault = rowActions === undefined ? defaultRowActions : rowActions;
+  const bulkActionsWithDefault = bulkActions === undefined ? defaultBulkActions : bulkActions;
+  const nameClickActionWithDefault = nameClickAction === undefined ? handleDocumentPreview : nameClickAction;
+
+  // Enhanced action handler that refreshes data after execution
+  const enhancedRowActions = useMemo(
+    () =>
+      rowActionsWithDefault.map((action) => ({
+        ...action,
+        handler: async (file: DocumentMetadata) => {
+          await action.handler(file);
+          onRefreshData?.(); // Refresh data after action
+        },
+      })),
+    [rowActionsWithDefault, onRefreshData],
+  );
+
+  // Enhanced bulk action handler that clears selection and refresh data after execution
+  const enhancedBulkActions = useMemo(
+    () =>
+      bulkActionsWithDefault.map((action) => ({
+        ...action,
+        handler: async (files: DocumentMetadata[]) => {
+          await action.handler(files);
+          setSelectedFiles([]); // Clear selection after action
+          onRefreshData?.(); // Refresh data after action
+        },
+      })),
+    [bulkActionsWithDefault, setSelectedFiles, onRefreshData],
+  );
+
+  const handleSortChange = (column: keyof DocumentMetadata) => {
     if (sortBy === column) {
       setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
     } else {
@@ -141,81 +239,50 @@ export const DocumentTable: React.FC<FileTableProps> = ({
   const formatDate = (date?: string) => {
     return date ? dayjs(date).format("DD/MM/YYYY") : "-";
   };
+
   return (
     <>
-      {selectedFiles.length > 0 && (
-        <Box sx={{ position: "absolute", left: 24, right: 24, zIndex: 10, p: 2, top: 0, display: "flex", justifyContent: "flex-end", alignItems: "center" }}>
-          <Typography pr={2} variant="subtitle2">
-            {t("documentTable.selectedCount", { count: selectedFiles.length })}
-          </Typography>
-          <Box display="flex" gap={1}>
-            <Button
-              size="small"
-              variant="outlined"
-              color="error"
-              onClick={() => selectedFiles.forEach((f) => onDelete(f))}
-            >
-              {t("documentTable.deleteSelected")}
-            </Button>
-            <Button
-              size="small"
-              variant="outlined"
-              onClick={() =>
-                selectedFiles.forEach((f) => {
-                  const link = document.createElement("a");
-                  link.href = `/knowledge-flow/v1/fullDocument/${f.document_uid}`;
-                  link.download = "";
-                  document.body.appendChild(link);
-                  link.click();
-                  document.body.removeChild(link);
-                })
-              }
-            >
-              {t("documentTable.downloadSelected")}
-            </Button>
-            <Button
-              size="small"
-              variant="outlined"
-              color="primary"
-              onClick={() => onProcess(selectedFiles)}
-            >
-              {t("documentTable.processSelected")}
-            </Button>
-          </Box>
-        </Box>
+      {showSelectionActions && (
+        <DocumentTableSelectionToolbar
+          selectedFiles={selectedFiles}
+          actions={enhancedBulkActions}
+          isVisible={selectedFiles.length > 0}
+        />
       )}
 
-      <TableContainer component={Paper}>
-
+      <TableContainer>
         <Table size="medium">
           <TableHead>
             <TableRow>
               <TableCell padding="checkbox">
-                <Checkbox checked={allSelected} onChange={(e) => onToggleAll(e.target.checked)} />
+                <Checkbox checked={allSelected} onChange={(e) => handleToggleAll(e.target.checked)} />
               </TableCell>
-              <TableCell />
-              <TableCell>
-                <TableSortLabel
-                  active={sortBy === "document_name"}
-                  direction={sortBy === "document_name" ? sortDirection : "asc"}
-                  onClick={() => handleSortChange("document_name")}
-                >
-                  {t("documentTable.fileName")}
-                </TableSortLabel>
-              </TableCell>
-              <TableCell>
-                <TableSortLabel
-                  active={sortBy === "date_added_to_kb"}
-                  direction={sortBy === "date_added_to_kb" ? sortDirection : "asc"}
-                  onClick={() => handleSortChange("date_added_to_kb")}
-                >
-                  {t("documentTable.dateAdded")}
-                </TableSortLabel>
-              </TableCell>
-              <TableCell>{t("documentTable.tags")}</TableCell>
-              <TableCell>{t("documentTable.status")}</TableCell>
-              <TableCell>{t("documentTable.retrievableYes")}</TableCell>
-              <TableCell align="right">{t("documentTable.actions")}</TableCell>
+              {columns.fileName && (
+                <TableCell>
+                  <TableSortLabel
+                    active={sortBy === "document_name"}
+                    direction={sortBy === "document_name" ? sortDirection : "asc"}
+                    onClick={() => handleSortChange("document_name")}
+                  >
+                    {t("documentTable.fileName")}
+                  </TableSortLabel>
+                </TableCell>
+              )}
+              {columns.dateAdded && (
+                <TableCell>
+                  <TableSortLabel
+                    active={sortBy === "date_added_to_kb"}
+                    direction={sortBy === "date_added_to_kb" ? sortDirection : "asc"}
+                    onClick={() => handleSortChange("date_added_to_kb")}
+                  >
+                    {t("documentTable.dateAdded")}
+                  </TableSortLabel>
+                </TableCell>
+              )}
+              {columns.librairies && <TableCell>{t("documentTable.librairies")}</TableCell>}
+              {columns.status && <TableCell>{t("documentTable.status")}</TableCell>}
+              {columns.retrievable && <TableCell>{t("documentTable.retrievableYes")}</TableCell>}
+              {columns.actions && <TableCell align="right">{t("documentTable.actions")}</TableCell>}
             </TableRow>
           </TableHead>
           <TableBody>
@@ -225,163 +292,138 @@ export const DocumentTable: React.FC<FileTableProps> = ({
                   <TableCell padding="checkbox">
                     <Checkbox
                       checked={selectedFiles.some((f) => f.document_uid === file.document_uid)}
-                      onChange={() => onToggleSelect(file)}
+                      onChange={() => handleToggleSelect(file)}
                     />
                   </TableCell>
-                  <TableCell>
-                    <IconButton size="small" onClick={() => toggleRow(file.document_uid)}>
-                      {openRows[file.document_uid] ? <KeyboardArrowUpIcon /> : <KeyboardArrowDownIcon />}
-                    </IconButton>
-                  </TableCell>
-                  <TableCell>
-                    <Box display="flex" alignItems="center" gap={1}>
-                      {getDocumentIcon(file.document_name)}
-                      <Typography variant="body2" noWrap>{file.document_name}</Typography>
-                    </Box>
-                  </TableCell>
-                  <TableCell>
-                    <Tooltip title={t("documentTable.dateAddedTooltip")}>
-                      <Typography variant="body2">
-                        <EventAvailableIcon fontSize="small" sx={{ mr: 0.5 }} />
-                        {formatDate(file.date_added_to_kb)}
-                      </Typography>
-                    </Tooltip>
-                  </TableCell>
-                  <TableCell>
-                    <Box display="flex" flexWrap="wrap" gap={0.5}>
+                  {columns.fileName && (
+                    <TableCell>
+                      <Box
+                        display="flex"
+                        alignItems="center"
+                        gap={1}
+                        onClick={() => nameClickActionWithDefault?.(file)}
+                        sx={{ cursor: nameClickActionWithDefault ? "pointer" : "default" }}
+                      >
+                        {getDocumentIcon(file.document_name)}
+                        <Typography variant="body2" noWrap>
+                          {file.document_name}
+                        </Typography>
+                      </Box>
+                    </TableCell>
+                  )}
+                  {columns.dateAdded && (
+                    <TableCell>
+                      <Tooltip title={file.date_added_to_kb}>
+                        <Typography variant="body2">
+                          <EventAvailableIcon fontSize="small" sx={{ mr: 0.5 }} />
+                          {formatDate(file.date_added_to_kb)}
+                        </Typography>
+                      </Tooltip>
+                    </TableCell>
+                  )}
+                  {columns.librairies && (
+                    <TableCell>
+                      <Box display="flex" flexWrap="wrap" gap={0.5}>
+                        {file.tags?.map((tagId) => {
+                          const tag = tagsById[tagId];
+                          const tagName = tag?.name || tagId;
 
-                      {file.tags?.map((tag) => (
-                        <Tooltip key={tag} title={`Tag: ${tag}`}>
-                          <Chip
-                            label={tag}
-                            size="small"
-                            variant="filled"
-                            sx={{ fontSize: "0.6rem" }}
-                          />
-                        </Tooltip>
-                      ))}
+                          return (
+                            <Tooltip key={tagId} title={tag?.description || ""}>
+                              <Chip label={tagName} size="small" variant="filled" sx={{ fontSize: "0.6rem" }} />
+                            </Tooltip>
+                          );
+                        })}
+                      </Box>
+                    </TableCell>
+                  )}
+                  {columns.status && (
+                    <TableCell>
+                      <Box display="flex" flexWrap="wrap" gap={0.5}>
+                        {DOCUMENT_PROCESSING_STAGES.map((stage) => {
+                          const status = file.processing_stages?.[stage] ?? "not_started";
 
-                    </Box>
-                  </TableCell>
+                          const statusStyleMap: Record<string, { bgColor: string; color: string }> = {
+                            done: {
+                              bgColor: "#c8e6c9", // green
+                              color: "#2e7d32",
+                            },
+                            in_progress: {
+                              bgColor: "#fff9c4", // yellow
+                              color: "#f9a825",
+                            },
+                            failed: {
+                              bgColor: "#ffcdd2", // red
+                              color: "#c62828",
+                            },
+                            not_started: {
+                              bgColor: "#e0e0e0", // gray
+                              color: "#757575",
+                            },
+                          };
 
+                          const stageLabelMap: Record<string, string> = {
+                            raw: "R",
+                            preview: "P",
+                            vector: "V",
+                            sql: "S",
+                            mcp: "M",
+                          };
 
-                  <TableCell>
-                    <Box display="flex" flexWrap="wrap" gap={0.5}>
-                      {DOCUMENT_PROCESSING_STAGES.map((stage) => {
-                        const status = file.processing_stages?.[stage] ?? "not_started";
+                          const label = stageLabelMap[stage] ?? "?";
+                          const { bgColor, color } = statusStyleMap[status];
 
-                        const statusStyleMap: Record<string, { bgColor: string; color: string }> = {
-                          done: {
-                            bgColor: "#c8e6c9", // green
-                            color: "#2e7d32",
-                          },
-                          in_progress: {
-                            bgColor: "#fff9c4", // yellow
-                            color: "#f9a825",
-                          },
-                          failed: {
-                            bgColor: "#ffcdd2", // red
-                            color: "#c62828",
-                          },
-                          not_started: {
-                            bgColor: "#e0e0e0", // gray
-                            color: "#757575",
-                          },
-                        };
-
-                        const stageLabelMap: Record<string, string> = {
-                          raw: "R",
-                          preview: "P",
-                          vector: "V",
-                          sql: "S",
-                          mcp: "M",
-                        };
-
-                        const label = stageLabelMap[stage] ?? "?";
-                        const { bgColor, color } = statusStyleMap[status];
+                          return (
+                            <Tooltip key={stage} title={`${stage.replace(/_/g, " ")}: ${status}`} arrow>
+                              <Avatar
+                                sx={{
+                                  bgcolor: bgColor,
+                                  color,
+                                  width: 24,
+                                  height: 24,
+                                  fontSize: "0.75rem",
+                                  fontWeight: 600,
+                                }}
+                              >
+                                {label}
+                              </Avatar>
+                            </Tooltip>
+                          );
+                        })}
+                      </Box>
+                    </TableCell>
+                  )}
+                  {columns.retrievable && (
+                    <TableCell>
+                      {(() => {
+                        const isRetrievable = file.retrievable;
 
                         return (
-                          <Tooltip key={stage} title={`${stage.replace(/_/g, " ")}: ${status}`} arrow>
-                            <Avatar
-                              sx={{
-                                bgcolor: bgColor,
-                                color,
-                                width: 24,
-                                height: 24,
-                                fontSize: "0.75rem",
-                                fontWeight: 600,
-                              }}
-                            >
-                              {label}
-                            </Avatar>
-                          </Tooltip>
+                          <Chip
+                            label={isRetrievable ? t("documentTable.retrievableYes") : t("documentTable.retrievableNo")}
+                            size="small"
+                            variant="outlined"
+                            onClick={isAdmin ? () => handleToggleRetrievable(file) : undefined}
+                            sx={{
+                              cursor: isAdmin ? "pointer" : "default",
+                              backgroundColor: isRetrievable ? "#e6f4ea" : "#eceff1",
+                              borderColor: isRetrievable ? "#2e7d32" : "#90a4ae",
+                              color: isRetrievable ? "#2e7d32" : "#607d8b",
+                              fontWeight: 500,
+                              fontSize: "0.75rem",
+                            }}
+                          />
                         );
-                      })}
-                    </Box>
-                  </TableCell>
-
-
-
-                  <TableCell>
-                    {(() => {
-                      const isRetrievable = file.retrievable;
-
-                      return (
-                        <Chip
-                          label={isRetrievable ? t("documentTable.retrievableYes") : t("documentTable.retrievableNo")}
-                          size="small"
-                          variant="outlined"
-                          onClick={isAdmin && onToggleRetrievable ? () => onToggleRetrievable(file) : undefined}
-                          sx={{
-                            cursor: isAdmin ? "pointer" : "default",
-                            backgroundColor: isRetrievable ? "#e6f4ea" : "#eceff1",
-                            borderColor: isRetrievable ? "#2e7d32" : "#90a4ae",
-                            color: isRetrievable ? "#2e7d32" : "#607d8b",
-                            fontWeight: 500,
-                            fontSize: "0.75rem",
-                          }}
-                        />
-                      );
-                    })()}
-                  </TableCell>
-                  <TableCell align="right">
-                    {isAdmin && (
-                      <DocumentTableRowActionsMenu
-                        file={file}
-                        onDelete={() => onDelete(file)}
-                        onDownload={() => onDownload(file)}
-                        onOpen={() => onOpen(file)}
-                        onProcess={() => onProcess([file])}
-                      />
-                    )}
-                  </TableCell>
-                </TableRow>
-
-                <TableRow>
-                  <TableCell colSpan={6} sx={{ p: 0, borderBottom: "none" }}>
-                    <Collapse in={openRows[file.document_uid]} timeout="auto" unmountOnExit>
-                      <Box sx={{ p: 2, bgcolor: "background.default" }}>
-                        {loadingMetadata[file.document_uid] ? (
-                          <Typography variant="body2" fontStyle="italic" color="text.secondary">
-                            {t("documentTable.loadingMetadata")}
-                          </Typography>
-                        ) : metadataByUid[file.document_uid] && Object.keys(metadataByUid[file.document_uid]).length > 0 ? (
-                          Object.entries(metadataByUid[file.document_uid]).map(([key, value]) => (
-                            <Box key={key} sx={{ display: "flex", flexDirection: "row", mb: 0.5 }}>
-                              <Typography variant="body2" fontWeight={500}>{key}:</Typography>
-                              <Typography variant="body2" sx={{ ml: 1 }}>
-                                {typeof value === "object" ? JSON.stringify(value, null, 2) : String(value)}
-                              </Typography>
-                            </Box>
-                          ))
-                        ) : (
-                          <Typography variant="body2" fontStyle="italic" color="text.secondary">
-                            {t("documentTable.noMetadata")}
-                          </Typography>
-                        )}
-                      </Box>
-                    </Collapse>
-                  </TableCell>
+                      })()}
+                    </TableCell>
+                  )}
+                  {columns.actions && (
+                    <TableCell align="right">
+                      {enhancedRowActions.length > 0 && (
+                        <DocumentTableRowActionsMenu file={file} actions={enhancedRowActions} />
+                      )}
+                    </TableCell>
+                  )}
                 </TableRow>
               </React.Fragment>
             ))}
@@ -390,4 +432,4 @@ export const DocumentTable: React.FC<FileTableProps> = ({
       </TableContainer>
     </>
   );
-}
+};
