@@ -18,7 +18,7 @@ from typing import List
 
 from app.common.structures import AgentSettings
 from app.core.monitoring.node_monitoring.monitor_node import monitor_node
-from app.model_factory import get_model
+from app.core.model.model_factory import get_model
 import requests
 from langchain_core.messages import HumanMessage
 from langgraph.graph import END, START, MessagesState, StateGraph
