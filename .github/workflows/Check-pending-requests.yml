@@ -15,6 +15,7 @@ jobs:
       agentic: ${{ steps.changes.outputs.agentic }}
       knowledge-flow: ${{ steps.changes.outputs.knowledge-flow }}
       deploy-chart: ${{ steps.changes.outputs.deploy-chart }}
+      fred-core: ${{ steps.changes.outputs.fred-core }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -34,21 +35,47 @@ jobs:
               - 'deploy/charts/**'
             knowledge-flow:
               - 'knowledge_flow_backend/**'
+            fred-core:
+              - 'fred-core/**'
 
   # Job to run code quality checks on the entire repository
   code-quality:
     runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.agentic == 'true' || needs.detect-changes.outputs.knowledge-flow == 'true' || needs.detect-changes.outputs.fred-core == 'true'
+    strategy:
+      matrix:
+        directory: [agentic_backend, knowledge_flow_backend, fred-core]
+        check: [lint, format, sast, detect-secret, type-check]
+        include:
+          # Agentic backend runs when agentic or fred-core changes
+          - directory: agentic_backend
+            condition: needs.detect-changes.outputs.agentic == 'true' || needs.detect-changes.outputs.fred-core == 'true'
+          # Knowledge flow backend runs when knowledge-flow or fred-core changes  
+          - directory: knowledge_flow_backend
+            condition: needs.detect-changes.outputs.knowledge-flow == 'true' || needs.detect-changes.outputs.fred-core == 'true'
+          # Fred core runs when fred-core changes
+          - directory: fred-core
+            condition: needs.detect-changes.outputs.fred-core == 'true'
+    name: Code Quality - ${{ matrix.directory }} - ${{ matrix.check }}
     
     steps:
       - uses: actions/checkout@v4
+        if: ${{ matrix.condition }}
         with:
           ref: ${{ github.event.pull_request.head.sha }}
       
-      - uses: actions/setup-python@v5
+      - name: Setup Python environment
+        if: ${{ matrix.condition }}
+        uses: ./.github/actions/setup-python-env
         with:
-          python-version: '3.12'
+          working-directory: ${{ matrix.directory }}
       
-      - uses: pre-commit/action@v3.0.1
+      - name: Run ${{ matrix.check }}
+        if: ${{ matrix.condition }}
+        run: |
+          cd ${{ matrix.directory }}/
+          UV=uv make ${{ matrix.check }}
 
   # Job to check the frontend
   frontend-checks:
@@ -105,7 +132,7 @@ jobs:
   agentic-backend-checks:
     runs-on: ubuntu-latest
     needs: detect-changes
-    if: needs.detect-changes.outputs.agentic == 'true'
+    if: needs.detect-changes.outputs.agentic == 'true' || needs.detect-changes.outputs.fred-core == 'true'
     
     steps:
       - name: Checkout code
@@ -128,7 +155,7 @@ jobs:
   knowledge-flow-backend-checks:
     runs-on: ubuntu-latest
     needs: detect-changes
-    if: needs.detect-changes.outputs.knowledge-flow == 'true'
+    if: needs.detect-changes.outputs.knowledge-flow == 'true' || needs.detect-changes.outputs.fred-core == 'true'
     
     steps:
       - name: Checkout code
