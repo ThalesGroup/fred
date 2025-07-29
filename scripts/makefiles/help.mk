@@ -1,3 +1,5 @@
+.DEFAULT_GOAL := help
+
 ##@ Help
 
 help:  ## Show this help message
