@@ -60,10 +60,9 @@ ai:
   default_model:
     # Required in .env:
     # - OPENAI_API_KEY
-    provider: "azureapim"
+    provider: "openai"
     name: "gpt-4o"
     settings:
-      api_version: "2024-06-01"
       temperature: 0.0
       max_retries: 2
       request_timeout: 30
@@ -84,6 +83,15 @@ ai:
     #  max_retries: 2
     #  request_timeout: 30
     #  azure_endpoint: "https://tehopenai.openai.azure.com/"
+
+    # --- OR uncomment for AzureAPim ---
+    # provider: "azureapim"
+    # name: "gpt-4o"
+    # settings:
+    #   api_version: "2024-06-01"
+    #   temperature: 0.0
+    #   max_retries: 2
+    #   request_timeout: 30
 
     # --- OR uncomment for Ollama ---
     # provider: "ollama"
