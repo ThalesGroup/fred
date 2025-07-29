@@ -7,12 +7,10 @@ IMG=$(PROJECT_REGISTRY)/$(PROJECT_NAME):$(VERSION)
 HELM_ARCHIVE=./knowledge_flow_app-0.1.0.tgz
 PROJECT_ID="74648"
 
-include ../scripts/makefiles/python-vars.mk
-
-
-## Dependcy and Run section
-
 PORT ?= 8111
+
+include ../scripts/makefiles/python-vars.mk
+include ../scripts/makefiles/python-deps.mk
 include ../scripts/makefiles/python-run.mk
 
 ##@ Other run
