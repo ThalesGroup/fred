@@ -20,7 +20,7 @@ from app.agents.tabular.tabular_toolkit import TabularToolkit
 from app.common.mcp_utils import get_mcp_client_for_agent
 from app.common.structures import AgentSettings
 from app.core.agents.flow import AgentFlow
-from app.model_factory import get_model
+from app.core.model.model_factory import get_model
 from app.core.monitoring.node_monitoring.monitor_node import monitor_node
 
 from langchain_core.messages import HumanMessage, ToolMessage, SystemMessage

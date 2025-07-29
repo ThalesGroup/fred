@@ -19,7 +19,7 @@ from langgraph.graph import START, END, MessagesState, StateGraph
 from langchain_core.messages import SystemMessage
 
 from app.common.structures import AgentSettings
-from app.model_factory import get_model
+from app.core.model.model_factory import get_model
 from app.core.agents.flow import AgentFlow
 from app.core.monitoring.node_monitoring.monitor_node import monitor_node
 

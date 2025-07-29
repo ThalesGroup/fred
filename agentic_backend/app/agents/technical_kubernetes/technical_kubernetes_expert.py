@@ -15,7 +15,7 @@
 from datetime import datetime
 from typing import Optional
 from app.common.structures import AgentSettings
-from app.model_factory import get_model
+from app.core.model.model_factory import get_model
 from langchain_core.messages import SystemMessage
 from langgraph.prebuilt import ToolNode, tools_condition
 from langgraph.graph import END, START, MessagesState, StateGraph

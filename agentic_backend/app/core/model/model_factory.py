@@ -14,12 +14,15 @@
 
 
 import logging
+import os
+from app.core.model.azure_apim_model import AzureApimModel
 from langchain_openai import AzureChatOpenAI, ChatOpenAI
 from langchain_ollama import ChatOllama
 from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import RunnableLambda
 from pydantic import BaseModel
 from typing import Type, Any
+
 
 from app.common.structures import ModelConfiguration
 
@@ -57,6 +60,11 @@ def get_model(model_config: ModelConfiguration):
             api_version=settings.pop("api_version", "2024-05-01-preview"),
             **settings
         )
+
+    elif provider == "azureapim":
+        logger.info("Creating Azure APIM Chat model instance with config %s", model_config)
+        return AzureApimModel().get_llm()
+    
     elif provider == "openai":
         logger.info("Creating OpenAI Chat model instance with config %s", model_config)
         return ChatOpenAI(
