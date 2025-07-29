@@ -243,8 +243,6 @@ class Configuration(BaseModel):
     tabular_storage: TabularStorageConfig = Field(..., description="Tabular storage configuration")
     catalog_storage: CatalogStorageConfig = Field(..., description="Catalog storage configuration")
     embedding: EmbeddingConfig = Field(..., description="Embedding configuration")
-    knowledge_context_storage: KnowledgeContextStorageConfig = Field(..., description="Knowledge context storage configuration")
-    knowledge_context_max_tokens: int = 50000
     scheduler: SchedulerConfig
     document_sources: Optional[Dict[str, DocumentSourceConfig]] = Field(
         default_factory=dict,

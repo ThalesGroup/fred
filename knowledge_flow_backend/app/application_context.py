@@ -584,6 +584,3 @@ class ApplicationContext:
             logger.info(f"    • {ext} → {cls.__name__}")
 
         logger.info("--------------------------------------------------")
-
-    def get_knowledge_context_max_tokens(self) -> int:
-        return self.config.knowledge_context_max_tokens

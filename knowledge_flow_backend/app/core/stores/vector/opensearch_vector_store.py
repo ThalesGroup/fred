@@ -20,7 +20,6 @@ from langchain_community.vectorstores import OpenSearchVectorSearch
 
 from app.common.utils import get_embedding_model_name
 from app.core.stores.vector.base_vector_store import BaseEmbeddingModel, BaseVectoreStore
-
 logger = logging.getLogger(__name__)
 
 
@@ -54,7 +53,28 @@ class OpenSearchVectorStoreAdapter(BaseVectoreStore):
             verify_certs=verify_certs,
             http_auth=(username, password),
         )
+        expected_dim = self._get_embedding_dimension()
+        self._check_vector_index_dimension(expected_dim)
 
+    def _check_vector_index_dimension(self, expected_dim: int):
+        mapping = self.opensearch_vector_search.client.indices.get_mapping(index=self.vector_index)
+        actual_dim = mapping[self.vector_index]["mappings"]["properties"]["vector_field"]["dimension"]
+        
+        model_name = get_embedding_model_name(self.opensearch_vector_search.embedding_function)
+        
+        if actual_dim != expected_dim:
+            raise ValueError(
+                f"❌ Vector dimension mismatch:\n"
+                f"   - OpenSearch index '{self.vector_index}' expects: {actual_dim}\n"
+                f"   - Embedding model '{model_name}' outputs: {expected_dim}\n"
+                f"💡 Make sure the index and embedding model are compatible."
+            )
+        logger.info(f"✅ Vector dimension check passed: model '{model_name}' outputs {expected_dim}")
+
+    def _get_embedding_dimension(self) -> int:
+        dummy_vector = self.opensearch_vector_search.embedding_function.embed_query("dummy")
+        return len(dummy_vector)
+    
     def add_documents(self, documents: List[Document]) -> None:
         """
         Add raw documents to OpenSearch.
@@ -68,7 +88,7 @@ class OpenSearchVectorStoreAdapter(BaseVectoreStore):
             logger.info("✅ Documents added successfully.")
         except Exception as e:
             logger.exception("❌ Failed to add documents to OpenSearch.")
-            raise RuntimeError(f"Failed to add documents to OpenSearch: {e}") from e
+            raise RuntimeError("Unexpected error during vector indexing.") from e
 
     def similarity_search_with_score(self, query: str, k: int = 5) -> List[Tuple[Document, float]]:
         results = self.opensearch_vector_search.similarity_search_with_score(query, k=k)
