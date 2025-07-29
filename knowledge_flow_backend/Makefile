@@ -171,33 +171,5 @@ clean-test: ## Clean test cache
 	@echo "************ CLEANING TESTS ************"
 	rm -rf .tox .coverage htmlcov $(TARGET)/.tested
 
-##@ Code quality
-
-.PHONY: lint lint-fix format sast code-quality
-
-lint: ## Run the linter (ruff) on all the project
-	@echo "************ Executing Ruff linter ************"
-	$(UV) run ruff check
-
-lint-fix: ## Run the linter (ruff) to fix all the auto fixable linter error
-	@echo "************ Executing Ruff linter and apply fix if possible ************"
-	$(UV) run ruff check --fix
-
-format: ## Run the formatter (ruff)
-	@echo "************ Executing Ruff formatter ************"
-	$(UV) run ruff format
-
-sast: ## Run bandit
-	@echo "************ Executing Ruff formatter with rules B101 (assert_used) and B108 (hardcoded_tmp_directory) ignored ************"
-	$(UV) run bandit -r app -s B101,B108
-
-code-quality: ## Run all pre-commit checks
-	@echo "************ Executing pre-commit ************"
-	$(UV) run pre-commit run --all-files
-
-##@ Help
-
-.PHONY: help
-
-help: ## Show this help
-	@awk 'BEGIN {FS = ":.*##"; printf "\n"} /^[a-zA-Z0-9._-]+:.*?##/ { printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
+include ../scripts/makefiles/python-code-quality.mk
+include ../scripts/makefiles/help.mk

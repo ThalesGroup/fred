@@ -17,7 +17,7 @@ export ENV_FILE ?= $(ROOT_DIR)/config/.env
 export CONFIG_FILE ?= $(ROOT_DIR)/config/configuration.yaml
 export LOG_LEVEL ?= info
 
-##@ Setup
+# Setup
 
 $(TARGET)/.venv-created:
 	@echo "🔧 Creating virtualenv..."
@@ -96,9 +96,6 @@ test: dev ## Run all tests
 	@echo "✅ Coverage report: htmlcov/index.html"
 	@xdg-open htmlcov/index.html || echo "📎 Open manually htmlcov/index.html"
 
-##@ Help
 
-.PHONY: help
-
-help:  ## Show this help message
-	@awk 'BEGIN {FS = ":.*##"; printf "\n\033[1mAvailable targets:\033[0m\n"} /^[a-zA-Z_-]+:.*?##/ { printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
+include ../scripts/makefiles/python-code-quality.mk
+include ../scripts/makefiles/help.mk

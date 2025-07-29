@@ -89,7 +89,9 @@ fred-core = { path = "../fred-core", editable = true }
 
 [dependency-groups]
 dev = [
+    "bandit>=1.8.5",
     "pyright>=1.1.403",
+    "ruff>=0.12.0",
 ]
 
 [tool.uv]

@@ -1188,7 +1188,9 @@ dev = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "bandit" },
     { name = "pyright" },
+    { name = "ruff" },
 ]
 
 [package.metadata]
@@ -1242,7 +1244,11 @@ requires-dist = [
 provides-extras = ["dev"]
 
 [package.metadata.requires-dev]
-dev = [{ name = "pyright", specifier = ">=1.1.403" }]
+dev = [
+    { name = "bandit", specifier = ">=1.8.5" },
+    { name = "pyright", specifier = ">=1.1.403" },
+    { name = "ruff", specifier = ">=0.12.0" },
+]
 
 [[package]]
 name = "langchain"
