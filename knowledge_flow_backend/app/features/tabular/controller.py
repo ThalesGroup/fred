@@ -3,7 +3,6 @@ from typing import List
 from fastapi import APIRouter, HTTPException
 from app.features.tabular.service import TabularService
 from app.features.tabular.structures import (
-    RawSQLRequest,
     TabularQueryResponse,
     TabularSchemaResponse,
     RawSQLRequest
@@ -75,7 +74,7 @@ class TabularController:
                 logger.warning(f"Forbidden SQL query attempt: {e}")
                 raise HTTPException(status_code=403, detail=str(e))
 
-            except Exception as e:
+            except Exception:
                 logger.exception("Raw SQL execution failed")
                 raise HTTPException(status_code=500, detail="Internal server error")
 

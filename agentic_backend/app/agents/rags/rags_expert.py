@@ -139,7 +139,7 @@ class RagsExpert(AgentFlow):
             response.response_metadata.update({"sources": [s.model_dump() for s in sources]})
             return {"messages": [response]}
 
-        except Exception as e:
+        except Exception:
             logger.exception("Error in RagsExpert reasoning.")
             fallback = await self.model.ainvoke([HumanMessage(content="An error occurred. Please try again later.")])
             return {"messages": [fallback]}

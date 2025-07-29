@@ -122,7 +122,7 @@ class TabularExpert(AgentFlow):
 
             return {"messages": [response]}
 
-        except Exception as e:
+        except Exception:
             logger.exception("TabularExpert failed during reasoning.")
             fallback = await self.model.ainvoke([
                 HumanMessage(content="An error occurred while analyzing tabular data.")

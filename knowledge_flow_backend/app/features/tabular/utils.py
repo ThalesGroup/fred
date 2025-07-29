@@ -18,8 +18,6 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-import re
-from typing import Optional
 
 
 def extract_safe_sql_query(text: str) -> Optional[str]:
