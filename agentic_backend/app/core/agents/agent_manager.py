@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import asyncio
 import logging
 import importlib
 from builtins import ExceptionGroup
@@ -20,13 +21,13 @@ from typing import Callable, Dict, List, Type
 
 from app.application_context import get_configuration
 from app.common.structures import AgentSettings
-from app.common.error import MCPToolFetchError, UnsupportedTransportError
+from app.common.error import UnsupportedTransportError
 from app.core.agents.flow import AgentFlow, Flow
 from app.common.structures import Configuration
 from app.core.agents.agentic_flow import AgenticFlow
 from app.core.agents.store.base_agent_store import BaseAgentStore
 from langchain_mcp_adapters.client import MultiServerMCPClient
-from langchain_core.tools import BaseTool
+from tenacity import RetryError, retry, stop_after_delay, wait_fixed
 
 logger = logging.getLogger(__name__)
 SUPPORTED_TRANSPORTS = ["sse", "stdio", "streamable_http", "websocket"]
@@ -52,6 +53,12 @@ class AgentManager:
         self.agent_constructors: Dict[str, Callable[[], Flow]] = {}
         self.agent_classes: Dict[str, Type[Flow]] = {}
         self.agent_settings: Dict[str, AgentSettings] = {}
+        self.failed_agents: Dict[str, AgentSettings] = {}
+        self._retry_task: asyncio.Task | None = None
+
+    def start_retry_loop(self):
+        if self._retry_task is None:
+            self._retry_task = asyncio.create_task(self._retry_failed_agents_loop())
 
     async def load_agents(self):
         """
@@ -63,23 +70,25 @@ class AgentManager:
         for agent_cfg in self.config.ai.agents:
             if not agent_cfg.enabled:
                 continue
-            await self._register_static_agent(agent_cfg)
+            success = await self._register_static_agent(agent_cfg)
+            if not success:
+                self.failed_agents[agent_cfg.name] = agent_cfg  # ✅ ensure failed ones are tracked
         await self._load_all_persisted_agents()
         self._inject_experts_into_leaders()
 
 
-    async def _register_static_agent(self, agent_cfg: AgentSettings):
+    async def _register_static_agent(self, agent_cfg: AgentSettings) -> bool:
         try:
             module_name, class_name = agent_cfg.class_path.rsplit(".", 1)
             module = importlib.import_module(module_name)
             cls = getattr(module, class_name)
         except (ValueError, ImportError, AttributeError) as e:
             logger.error(f"❌ Failed to import class '{agent_cfg.class_path}' for '{agent_cfg.name}': {e}")
-            return
+            return False
 
         if not issubclass(cls, (Flow, AgentFlow)):
             logger.error(f"Class '{agent_cfg.class_path}' is not a supported Flow or AgentFlow.")
-            return
+            return False
 
         try:
             instance = cls(agent_settings=agent_cfg)
@@ -87,9 +96,11 @@ class AgentManager:
                 await instance.async_init()
             self._register_loaded_agent(agent_cfg.name, instance, agent_cfg)
             logger.info(f"✅ Registered static agent '{agent_cfg.name}' from configuration.")
+            return True
         except Exception as e:
             logger.error(f"❌ Failed to instantiate or register static agent '{agent_cfg.name}': {e}")
-
+            return False
+        
     def _try_seed_agent(self, agent_cfg: AgentSettings):
         """
         Attempts to load the class for the given agent and instantiate it.
@@ -252,7 +263,7 @@ class AgentManager:
     def get_enabled_agent_names(self) -> List[str]:
         return list(self.agent_constructors.keys())
 
-    def get_mcp_client(self, agent_name: str) -> MultiServerMCPClient:
+    def old_get_mcp_client(self, agent_name: str) -> MultiServerMCPClient:
         """
         Initializes and connects an MCP client based on the given agent's server list.
         """
@@ -288,3 +299,71 @@ class AgentManager:
         loop.run_until_complete(connect_all())
         return client
 
+
+    def get_mcp_client(self, agent_name: str) -> MultiServerMCPClient:
+        agent_settings = self.get_agent_settings(agent_name)
+        import asyncio
+        import nest_asyncio
+        nest_asyncio.apply()
+
+        client = MultiServerMCPClient()
+        loop = asyncio.get_event_loop()
+
+        async def connect_all():
+            exceptions = []
+            for server in agent_settings.mcp_servers:
+                if server.transport not in SUPPORTED_TRANSPORTS:
+                    raise UnsupportedTransportError(f"Unsupported transport: {server.transport}")
+                try:
+                    await client.connect_to_server(
+                        server_name=server.name,
+                        url=server.url,
+                        transport=server.transport,
+                        command=server.command,
+                        args=server.args,
+                        env=server.env,
+                        sse_read_timeout=server.sse_read_timeout
+                    )
+                    logger.info(f"✅ Connected to MCP server '{server.name}' at '{server.url}'")
+                except Exception as eg:
+                    logger.warning(f"⚠️ Failed to connect to MCP server '{server.name}': {eg}")
+                    exceptions.extend(getattr(eg, "exceptions", [eg]))
+            if exceptions:
+                raise ExceptionGroup("Some MCP connections failed", exceptions)
+
+        @retry(wait=wait_fixed(2), stop=stop_after_delay(20))
+        async def retry_connect_all():
+            await connect_all()
+
+        try:
+            loop.run_until_complete(retry_connect_all())
+        except RetryError as re:
+            logger.error(f"❌ MCP client for agent '{agent_name}' failed to connect after retries.")
+            logger.debug(re)
+        except Exception as e:
+            logger.exception(f"❌ MCP client for agent '{agent_name}' raised an unexpected error.")
+        
+        return client
+
+    async def _retry_failed_agents_loop(self):
+        logger.debug("🔄 Agent retry loop started.")
+        while True:
+            await asyncio.sleep(10)
+            if not self.failed_agents:
+                logger.debug("🔄 Agent retry all is all right.")
+                continue
+
+            try:
+                logger.info("🔁 Retrying failed agents...")
+                to_remove = []
+                for name, agent_cfg in list(self.failed_agents.items()):
+                    success = await self._register_static_agent(agent_cfg)
+                    if success:
+                        logger.info(f"✅ Recovered agent '{name}' on retry.")
+                        to_remove.append(name)
+                    else:
+                        logger.debug(f"🔁 Agent '{name}' still failing.")
+                for name in to_remove:
+                    del self.failed_agents[name]
+            except Exception:
+                logger.exception("🔥 Unexpected error in retry loop — will continue anyway")

@@ -16,7 +16,6 @@ from io import BytesIO
 import io
 import logging
 from pathlib import Path
-import tempfile
 from typing import BinaryIO
 from minio import Minio
 from minio.error import S3Error
