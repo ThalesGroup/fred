@@ -35,6 +35,21 @@ jobs:
             knowledge-flow:
               - 'knowledge_flow_backend/**'
 
+  # Job to run code quality checks on the entire repository
+  code-quality:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      
+      - uses: pre-commit/action@v3.0.1
+
   # Job to check the frontend
   frontend-checks:
     runs-on: ubuntu-latest
@@ -103,10 +118,6 @@ jobs:
         with:
           working-directory: agentic_backend
       
-      - name: Run code quality checks
-        run: |
-          cd agentic_backend/
-          make code-quality
       
       - name: Test backend startup
         run: |
@@ -130,10 +141,6 @@ jobs:
         with:
           working-directory: knowledge_flow_backend
       
-      - name: Run code quality checks
-        run: |
-          cd knowledge_flow_backend/
-          make code-quality
       
       - name: Build and test
         run: |

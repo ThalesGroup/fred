@@ -8,21 +8,15 @@ inputs:
 runs:
   using: "composite"
   steps:
-    - name: Install Python
-      uses: actions/setup-python@v5
-      with:
-        python-version-file: "${{ inputs.working-directory }}/.python-version"
+    - name: Set up uv
+      uses: astral-sh/setup-uv@v6
 
-    - name: Install uv
-      env:
-        UV_VERSION: 0.7.12
-        UV_PROJECT_ENVIRONMENT: $HOME/.venv
+    - name: Set up Python
+      run: uv python install python
       shell: bash
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y curl
-        curl -Ls https://astral.sh/uv/${UV_VERSION}/install.sh | bash
-        cd ${{ inputs.working-directory }}
-        uv venv
-        uv sync --all-extras
-        echo "$UV_PROJECT_ENVIRONMENT/bin" >> $GITHUB_PATH
+      working-directory: ${{ inputs.working-directory }}
+
+    - name: Install dependencies
+      run: uv sync --all-extras
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}

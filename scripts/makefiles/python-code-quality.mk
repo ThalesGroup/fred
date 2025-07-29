@@ -26,6 +26,5 @@ type-check: ## Run type checker (basedpyright)
 	$(UV) run basedpyright
 
 .PHONY: code-quality
-code-quality: ## Run all pre-commit checks
-	@echo "************ Executing pre-commit ************"
-	$(UV) run pre-commit run --all-files
+code-quality: lint format sast type-check ## Run all code quality checks
+	@echo "************ All code quality checks completed ************"
