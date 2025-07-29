@@ -1,5 +1,5 @@
 {
-  "schemaFile": "http://localhost:8111/knowledge-flow/v1/openapi.json",
+  "schemaFile": "../../../../knowledge_flow_backend/openapi.json",
   "apiFile": "./knowledgeFlowApi.ts",
   "apiImport": "knowledgeFlowApi",
   "outputFile": "knowledgeFlowOpenApi.ts",
