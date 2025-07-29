@@ -19,5 +19,10 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 include = ["fred_core*"]
 
+[dependency-groups]
+dev = [
+    "detect-secrets>=1.5.0",
+]
+
 [project.optional-dependencies]
 dev = ["bandit>=1.8.6", "basedpyright>=1.31.0", "ruff>=0.12.5"]
