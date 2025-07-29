@@ -98,10 +98,15 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
       
-      - name: Setup backend dependencies
+      - name: Setup Python environment
+        uses: ./.github/actions/setup-python-env
+        with:
+          working-directory: agentic_backend
+      
+      - name: Run code quality checks
         run: |
           cd agentic_backend/
-          make dev
+          make code-quality
       
       - name: Test backend startup
         run: |
@@ -120,7 +125,17 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
       
-      - name: knowledge-flow-backend checks
+      - name: Setup Python environment
+        uses: ./.github/actions/setup-python-env
+        with:
+          working-directory: knowledge_flow_backend
+      
+      - name: Run code quality checks
+        run: |
+          cd knowledge_flow_backend/
+          make code-quality
+      
+      - name: Build and test
         run: |
           cd knowledge_flow_backend/
           make build

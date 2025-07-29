@@ -1,0 +1,28 @@
+name: Setup Python environment
+description: Create a virtual environment and install dependencies with uv
+inputs:
+  working-directory:
+    description: 'Working directory for the Python project'
+    required: true
+    default: '.'
+runs:
+  using: "composite"
+  steps:
+    - name: Install Python
+      uses: actions/setup-python@v5
+      with:
+        python-version-file: "${{ inputs.working-directory }}/.python-version"
+
+    - name: Install uv
+      env:
+        UV_VERSION: 0.7.12
+        UV_PROJECT_ENVIRONMENT: $HOME/.venv
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y curl
+        curl -Ls https://astral.sh/uv/${UV_VERSION}/install.sh | bash
+        cd ${{ inputs.working-directory }}
+        uv venv
+        uv sync --all-extras
+        echo "$UV_PROJECT_ENVIRONMENT/bin" >> $GITHUB_PATH

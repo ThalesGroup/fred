@@ -21,9 +21,9 @@ sast: ## Run bandit
 	$(UV) run bandit -r app -s B101,B108
 
 .PHONY: type-check
-type-check: ## Run type checker (pyright)
-	@echo "************ Executing Pyright type checker ************"
-	$(UV) run pyright
+type-check: ## Run type checker (basedpyright)
+	@echo "************ Executing Basedpyright type checker ************"
+	$(UV) run basedpyright
 
 .PHONY: code-quality
 code-quality: ## Run all pre-commit checks
