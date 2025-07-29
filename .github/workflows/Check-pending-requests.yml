@@ -75,7 +75,9 @@ jobs:
         if: ${{ matrix.condition }}
         run: |
           cd ${{ matrix.directory }}/
-          UV=uv make ${{ matrix.check }}
+          make ${{ matrix.check }}
+        env:
+          UV: uv
 
   # Job to check the frontend
   frontend-checks:
