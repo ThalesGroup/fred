@@ -19,7 +19,7 @@ from app.common.structures import AgentSettings
 from app.agents.leader.structures.decision import ExecuteDecision, PlanDecision
 from app.agents.leader.structures.plan import Plan
 from app.agents.leader.structures.state import State
-from app.model_factory import get_model
+from app.core.model.model_factory import get_model
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from langgraph.graph.state import END, START, CompiledStateGraph, StateGraph
 

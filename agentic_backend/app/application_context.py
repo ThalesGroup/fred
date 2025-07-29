@@ -29,12 +29,10 @@ from app.core.agents.store.base_agent_store import BaseAgentStore
 from app.core.feedback.store.base_feedback_store import BaseFeedbackStore
 
 from pydantic import BaseModel
-from app.model_factory import get_structured_chain
+from app.core.model.model_factory import get_structured_chain
 from app.common.structures import AgentSettings, Configuration, ModelConfiguration, ServicesSettings
-from app.model_factory import get_model
+from app.core.model.model_factory import get_model
 from langchain_core.language_models.base import BaseLanguageModel
-from langchain_mcp_adapters.client import MultiServerMCPClient
-from langchain_core.tools import BaseTool
 from app.core.session.stores.abstract_session_backend import AbstractSessionStorage
 from pathlib import Path
 

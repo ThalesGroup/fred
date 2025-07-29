@@ -25,7 +25,6 @@ from pydantic import BaseModel
 
 from app.common.document_structures import ProcessingStage
 from app.features.ingestion.service import IngestionService
-from app.features.metadata.service import MetadataService
 
 logger = logging.getLogger(__name__)
 

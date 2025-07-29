@@ -1,11 +1,10 @@
-from typing import List, Optional
 from datetime import datetime
 from app.common.mcp_utils import get_mcp_client_for_agent
 from app.common.structures import AgentSettings
 from app.core.agents.mcp_agent_toolkit import McpAgentToolkit
 from app.core.agents.flow import AgentFlow
 from app.core.monitoring.node_monitoring.monitor_node import monitor_node
-from app.model_factory import get_model
+from app.core.model.model_factory import get_model
 from langgraph.graph import StateGraph, MessagesState
 from langgraph.constants import START
 from langgraph.prebuilt import ToolNode, tools_condition

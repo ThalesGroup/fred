@@ -69,6 +69,7 @@ helm-push: ## Push Helm chart to GitLab package registry
 		 --user ${GITLAB_USER}:${GITLAB_TOKEN} \
 		 https://gitlab.thalesdigital.io/api/v4/projects/${PROJECT_ID}/packages/helm/api/release/charts
 
+include ../scripts/makefiles/python-openapi.mk
 include ../scripts/makefiles/python-code-quality.mk
 include ../scripts/makefiles/python-test.mk
 include ../scripts/makefiles/python-clean.mk

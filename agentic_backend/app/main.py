@@ -97,9 +97,10 @@ def create_app() -> FastAPI:
 
     async def lifespan(app: FastAPI):
         await agent_manager.load_agents()
+        agent_manager.start_retry_loop()
         logger.info("🚀 AgentManager fully loaded.")
         yield
-
+    
     app = FastAPI(
         docs_url=f"{base_url}/docs",
         redoc_url=f"{base_url}/redoc",
