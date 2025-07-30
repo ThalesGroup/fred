@@ -15,7 +15,7 @@
 """
 base_hybrid_store.py
 
-Provides HybridJsonlStore: a generic, thread-safe, hybrid (in-memory + JSONL) 
+Provides HybridJsonlStore: a generic, thread-safe, hybrid (in-memory + JSONL)
 persistent store for metrics.
 
 Features:
@@ -27,7 +27,6 @@ Features:
 Intended use:
 - Backing stores for NodeMetricStore, ToolMetricStore, etc.
 """
-
 
 import os
 import json
@@ -45,7 +44,8 @@ from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
-T = TypeVar('T', bound=BaseModel)
+T = TypeVar("T", bound=BaseModel)
+
 
 class HybridJsonlStore(Generic[T], MetricStore):
     """
@@ -86,7 +86,7 @@ class HybridJsonlStore(Generic[T], MetricStore):
                     try:
                         self._metrics.append(self.model_cls(**json.loads(line)))
                     except Exception as e:
-                        msg =(
+                        msg = (
                             f"\n\n❌ Failed to load metric from JSONL file: {self.data_path}\n"
                             f"   → invalid metric that does not match the expected schema for {self.model_cls.__name__}.\n"
                             f"   → Offending line: {line.strip()}\n"
@@ -96,7 +96,9 @@ class HybridJsonlStore(Generic[T], MetricStore):
                             f"   - Or delete the file entirely if the data isn't critical.\n"
                         )
                         raise RuntimeError(msg) from e
-            logger.info(f"HybridJsonlStore: Loaded {len(self._metrics)} metrics from {self.data_path}")
+            logger.info(
+                f"HybridJsonlStore: Loaded {len(self._metrics)} metrics from {self.data_path}"
+            )
 
     def _save(self, metric: T):
         with open(self.data_path, "a") as f:
@@ -113,8 +115,11 @@ class HybridJsonlStore(Generic[T], MetricStore):
 
     def get_by_date_range(self, start: datetime, end: datetime) -> List[T]:
         return [
-            m for m in self._metrics
-            if hasattr(m, 'timestamp') and m.timestamp and start.timestamp() <= m.timestamp <= end.timestamp()
+            m
+            for m in self._metrics
+            if hasattr(m, "timestamp")
+            and m.timestamp
+            and start.timestamp() <= m.timestamp <= end.timestamp()
         ]
 
     def _round_bucket(self, ts: float, precision: Precision) -> str:
@@ -135,7 +140,7 @@ class HybridJsonlStore(Generic[T], MetricStore):
         end: datetime,
         precision: str,
         agg_mapping: Dict[str, str],
-        groupby_fields: Optional[List[str]] = None
+        groupby_fields: Optional[List[str]] = None,
     ) -> List[Dict[str, Any]]:
         """
         Aggregates numerical fields from stored metrics over time buckets and groupby dimensions.
@@ -157,7 +162,9 @@ class HybridJsonlStore(Generic[T], MetricStore):
         metrics = self.get_by_date_range(start, end)
 
         # (time_bucket, *groupby) => { field -> [values] }
-        buckets: DefaultDict[Tuple[str, ...], Dict[str, List[float]]] = defaultdict(lambda: defaultdict(list))
+        buckets: DefaultDict[Tuple[str, ...], Dict[str, List[float]]] = defaultdict(
+            lambda: defaultdict(list)
+        )
 
         for m in metrics:
             if m.timestamp is None:
@@ -219,4 +226,3 @@ class HybridJsonlStore(Generic[T], MetricStore):
             result.append(record)
 
         return result
-

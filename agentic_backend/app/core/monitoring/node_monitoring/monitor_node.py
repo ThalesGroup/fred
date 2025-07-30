@@ -35,6 +35,7 @@ from app.core.monitoring.node_monitoring.node_metric_type import NodeMetric
 
 logger = logging.getLogger(__name__)
 
+
 def monitor_node(func):
     """
     Decorator to automatically record metrics for a LangGraph node function.
@@ -67,7 +68,7 @@ def monitor_node(func):
             ai_message = (result.get("messages") or [{}])[0]
             message = ai_message.__dict__
             response_metadata = message.get("response_metadata", {})
-            usage_metadata =  message.get("usage_metadata", {})
+            usage_metadata = message.get("usage_metadata", {})
 
             metric = NodeMetric(
                 timestamp=time.time(),
@@ -85,12 +86,16 @@ def monitor_node(func):
             )
             metric_store.add_metric(metric)
 
-            logger.info(f"Node '{node_name}' completed in {latency:.2f}s - Metric : {metric}")
+            logger.info(
+                f"Node '{node_name}' completed in {latency:.2f}s - Metric : {metric}"
+            )
             return result
 
         except Exception as e:
             latency = time.perf_counter() - start
-            logger.exception(f"Node '{node_name}' failed in {latency:.2f}s with error: {e}")
+            logger.exception(
+                f"Node '{node_name}' failed in {latency:.2f}s with error: {e}"
+            )
             raise
 
     def _run_sync(*args, **kwargs):
@@ -127,7 +132,9 @@ def monitor_node(func):
 
         except Exception as e:
             latency = time.perf_counter() - start
-            logger.exception(f"Node '{node_name}' failed in {latency:.2f}s with error: {e}")
+            logger.exception(
+                f"Node '{node_name}' failed in {latency:.2f}s with error: {e}"
+            )
             raise
 
     wrapper = _run_async if inspect.iscoroutinefunction(func) else _run_sync

@@ -20,21 +20,26 @@ from app.core.agents.structures import CreateAgentRequest
 from app.core.agents.agent_service import AgentAlreadyExistsException, AgentService
 from app.common.utils import log_exception
 
+
 def handle_exception(e: Exception) -> HTTPException:
     if isinstance(e, AgentAlreadyExistsException):
         return HTTPException(status_code=409, detail=str(e))
     if isinstance(e, MCPClientConnectionException):
-        return HTTPException(status_code=502, detail=f"MCP connection failed: {e.reason}")
+        return HTTPException(
+            status_code=502, detail=f"MCP connection failed: {e.reason}"
+        )
     return HTTPException(status_code=500, detail="Internal server error")
+
 
 class AgentController:
     """
     Controller for managing dynamic MCP agents.
     """
+
     def __init__(self, app: APIRouter, agent_manager: AgentManager):
         fastapi_tags = ["Agents"]
         self.service = AgentService(agent_manager=agent_manager)
-        
+
         @app.post(
             "/agents/create",
             tags=fastapi_tags,
@@ -59,7 +64,7 @@ class AgentController:
             except Exception as e:
                 log_exception(e)
                 raise handle_exception(e)
-        
+
         @app.delete(
             "/agents/{name}",
             tags=fastapi_tags,

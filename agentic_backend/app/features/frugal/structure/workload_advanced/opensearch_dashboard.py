@@ -25,13 +25,16 @@ from app.application_context import get_structured_chain_for_service
 
 from app.features.frugal.structure.workload_context import WorkloadContext
 
+
 class OpenSearchDashboardAdvanced(BaseModel):
     """
     Represents advanced informations about an OpenSearch Dashboard workload.
     """
+
     type: Literal["opensearch-dashboard"] = Field(
         default="opensearch-dashboard",
-        description="The type of workload, used for discriminated union")
+        description="The type of workload, used for discriminated union",
+    )
     opensearch_hosts: list = Field(
         default_factory=list, description="List of OpenSearch backend hosts"
     )
@@ -66,7 +69,9 @@ class OpenSearchDashboardAdvanced(BaseModel):
     server_ssl_certificate: Optional[str] = Field(
         default=None, description="Path to the SSL certificate"
     )
-    server_ssl_key: Optional[str] = Field(default=None, description="Path to the SSL key")
+    server_ssl_key: Optional[str] = Field(
+        default=None, description="Path to the SSL key"
+    )
     logging_dest: str = Field(
         default="stdout", description="Destination for logging output"
     )
@@ -140,7 +145,9 @@ class OpenSearchDashboardAdvanced(BaseModel):
             input_variables=["workload_context"],
         )
 
-        structured_model = get_structured_chain_for_service("kubernetes", OpenSearchDashboardAdvanced)
+        structured_model = get_structured_chain_for_service(
+            "kubernetes", OpenSearchDashboardAdvanced
+        )
         chain = prompt | structured_model
         invocation_args = {"workload_context": workload_context}
 

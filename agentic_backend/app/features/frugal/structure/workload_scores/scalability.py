@@ -30,15 +30,18 @@ class ScalabilityScore(BaseModel):
     """
     Represents the scalability score of a workload.
 
-    The scalability score is a numerical grade on a scale of 0 to 10, 
-    where 0 represents the worst scalability optimization and 10 represents 
+    The scalability score is a numerical grade on a scale of 0 to 10,
+    where 0 represents the worst scalability optimization and 10 represents
     the best possible scalability performance.
     """
+
     score: float = Field(
         default=None,
         description="The scalability score, a grade on a scale of 0 to 10",
     )
-    reason: str = Field(default=None, description="An explanation of the scalability score")
+    reason: str = Field(
+        default=None, description="An explanation of the scalability score"
+    )
 
     def __str__(self) -> str:
         """
@@ -47,10 +50,7 @@ class ScalabilityScore(BaseModel):
         Returns:
             str: A formatted string containing the scalability score.
         """
-        return (
-            f"Scalability Score: {self.score}\n"
-            f"Reason: {self.reason}"
-        )
+        return f"Scalability Score: {self.score}\nReason: {self.reason}"
 
     @classmethod
     def from_workload_context(
@@ -60,7 +60,7 @@ class ScalabilityScore(BaseModel):
     ) -> "ScalabilityScore":
         """
         Extract the scalability score based on the workload context.
-        
+
         Args:
             workload_context (WorkloadContext): The workload context.
             langfuse_handler (Optional[CallbackHandler]): The LangFuse callback handler.
@@ -82,7 +82,9 @@ class ScalabilityScore(BaseModel):
             input_variables=["workload_context"],
         )
 
-        structured_model = get_structured_chain_for_service("kubernetes", ScalabilityScore)
+        structured_model = get_structured_chain_for_service(
+            "kubernetes", ScalabilityScore
+        )
         chain = prompt | structured_model
         if langfuse_handler is not None:
             return chain.invoke(

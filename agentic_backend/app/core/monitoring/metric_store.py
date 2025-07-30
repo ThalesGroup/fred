@@ -23,7 +23,6 @@ Includes:
 - Abstract MetricStore interface specifying required store methods.
 """
 
-
 from abc import ABC, abstractmethod
 from datetime import datetime
 from typing import List, Optional
@@ -35,7 +34,7 @@ from enum import Enum
 class TokenDetails(BaseModel):
     """
     Detailed breakdown of token categories during model usage.
-    
+
     Attributes:
         cached_tokens: Number of tokens fetched from cache.
         audio_tokens: Number of tokens for audio processing.
@@ -43,6 +42,7 @@ class TokenDetails(BaseModel):
         rejected_prediction_tokens: Tokens from predictions that were rejected.
         accepted_prediction_tokens: Tokens from accepted predictions.
     """
+
     cached_tokens: Optional[int] = 0
     audio_tokens: Optional[int] = 0
     reasoning_tokens: Optional[int] = 0
@@ -61,11 +61,13 @@ class TokenUsage(BaseModel):
         prompt_tokens_details: Detailed breakdown of prompt tokens.
         completion_tokens_details: Detailed breakdown of completion tokens.
     """
+
     prompt_tokens: int
     completion_tokens: int
     total_tokens: int
     prompt_tokens_details: Optional[TokenDetails] = None
     completion_tokens_details: Optional[TokenDetails] = None
+
 
 class Metric(BaseModel):
     """
@@ -83,6 +85,7 @@ class Metric(BaseModel):
         service_tier: SLA or environment type (e.g., premium, free).
         token_usage: Token usage information associated with the inference.
     """
+
     timestamp: float
     latency: float
     user_id: str
@@ -96,17 +99,20 @@ class Metric(BaseModel):
     service_tier: Optional[str] = None
     token_usage: Optional[TokenUsage] = None
 
+
 class Precision(str, Enum):
     sec = "sec"
     min = "min"
     hour = "hour"
     day = "day"
 
+
 class Aggregation(str, Enum):
     avg = "avg"
     max = "max"
     min = "min"
     sum = "sum"
+
 
 class MetricStore(ABC):
     """
@@ -118,6 +124,7 @@ class MetricStore(ABC):
     - Aggregating numerical values
     - Extracting categorical fields
     """
+
     @abstractmethod
     def add_metric(self, metric: Metric) -> None:
         """Store a single metric instance."""
@@ -160,4 +167,3 @@ class MetricStore(ABC):
             end: End datetime.
         """
         pass
-

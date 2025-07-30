@@ -1,6 +1,6 @@
 {
   "errors": [],
-  "generated_at": "2025-07-29T19:22:38Z",
+  "generated_at": "2025-07-30T11:37:45Z",
   "metrics": {
     "_totals": {
       "CONFIDENCE.HIGH": 0,
@@ -11,7 +11,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 7,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 12685,
+      "loc": 13650,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -50,7 +50,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 145,
+      "loc": 163,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -63,7 +63,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 18,
+      "loc": 20,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -89,7 +89,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 60,
+      "loc": 64,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -115,7 +115,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 81,
+      "loc": 85,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -128,7 +128,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 22,
+      "loc": 26,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -154,7 +154,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 362,
+      "loc": 374,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -180,7 +180,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 17,
+      "loc": 18,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -232,7 +232,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 114,
+      "loc": 128,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -245,7 +245,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 109,
+      "loc": 121,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -258,7 +258,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 22,
+      "loc": 26,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -284,7 +284,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 104,
+      "loc": 107,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -310,7 +310,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 245,
+      "loc": 268,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -349,7 +349,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 24,
+      "loc": 19,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -362,7 +362,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 376,
+      "loc": 421,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -375,7 +375,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 26,
+      "loc": 30,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -388,7 +388,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 238,
+      "loc": 319,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -401,7 +401,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 216,
+      "loc": 235,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -427,7 +427,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 52,
+      "loc": 54,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -440,7 +440,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 301,
+      "loc": 349,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -492,7 +492,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 82,
+      "loc": 89,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -505,7 +505,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 23,
+      "loc": 27,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -544,7 +544,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 3,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 68,
+      "loc": 70,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -557,7 +557,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 37,
+      "loc": 38,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -583,7 +583,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 99,
+      "loc": 115,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -596,7 +596,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 239,
+      "loc": 283,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -752,7 +752,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 102,
+      "loc": 105,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -778,7 +778,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 158,
+      "loc": 165,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -804,7 +804,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 60,
+      "loc": 63,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -869,7 +869,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 102,
+      "loc": 108,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -882,7 +882,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 71,
+      "loc": 69,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -934,7 +934,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 83,
+      "loc": 87,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -947,7 +947,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 75,
+      "loc": 73,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -999,7 +999,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 388,
+      "loc": 434,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1025,7 +1025,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 36,
+      "loc": 40,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1051,7 +1051,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 50,
+      "loc": 62,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1064,7 +1064,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 144,
+      "loc": 132,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1103,7 +1103,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 1101,
+      "loc": 1111,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1116,7 +1116,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 1476,
+      "loc": 1474,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1142,7 +1142,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 54,
+      "loc": 75,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1168,7 +1168,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 124,
+      "loc": 168,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1181,7 +1181,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 152,
+      "loc": 206,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1194,7 +1194,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 11,
+      "loc": 17,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1207,7 +1207,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 26,
+      "loc": 39,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1220,7 +1220,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 75,
+      "loc": 84,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1246,7 +1246,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 68,
+      "loc": 92,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1272,7 +1272,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 51,
+      "loc": 71,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1298,7 +1298,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 19,
+      "loc": 17,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1311,7 +1311,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 334,
+      "loc": 353,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1324,7 +1324,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 57,
+      "loc": 77,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1363,7 +1363,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 60,
+      "loc": 62,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1376,7 +1376,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 43,
+      "loc": 36,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1389,7 +1389,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 55,
+      "loc": 57,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1402,7 +1402,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 121,
+      "loc": 123,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1428,7 +1428,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 64,
+      "loc": 66,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1441,7 +1441,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 42,
+      "loc": 41,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1467,7 +1467,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 109,
+      "loc": 111,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1480,7 +1480,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 47,
+      "loc": 61,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1519,7 +1519,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 56,
+      "loc": 61,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1584,7 +1584,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 75,
+      "loc": 83,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1597,7 +1597,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 176,
+      "loc": 178,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1610,7 +1610,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 72,
+      "loc": 76,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1623,7 +1623,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 1,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 129,
+      "loc": 134,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1636,7 +1636,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 97,
+      "loc": 105,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1649,7 +1649,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 33,
+      "loc": 31,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1662,7 +1662,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 91,
+      "loc": 93,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1701,7 +1701,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 66,
+      "loc": 67,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1714,7 +1714,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 66,
+      "loc": 65,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1727,7 +1727,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 66,
+      "loc": 65,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1740,7 +1740,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 66,
+      "loc": 63,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1753,7 +1753,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 66,
+      "loc": 67,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1779,7 +1779,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 77,
+      "loc": 71,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1805,7 +1805,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 255,
+      "loc": 312,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1818,7 +1818,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 945,
+      "loc": 1036,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1831,7 +1831,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 119,
+      "loc": 200,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1844,7 +1844,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 98,
+      "loc": 114,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1883,7 +1883,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 83,
+      "loc": 92,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1896,14 +1896,14 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 20,
+      "loc": 18,
       "nosec": 0,
       "skipped_tests": 0
     }
   },
   "results": [
     {
-      "code": "60             row = conn.execute(\n61                 f\"SELECT settings_json FROM {self.store._prefixed(self.table_name)} WHERE name = ?\",\n62                 (name,),\n",
+      "code": "62             row = conn.execute(\n63                 f\"SELECT settings_json FROM {self.store._prefixed(self.table_name)} WHERE name = ?\",\n64                 (name,),\n",
       "col_offset": 18,
       "end_col_offset": 44,
       "filename": "app/core/agents/store/duckdb_agent_store.py",
@@ -1914,16 +1914,16 @@
       },
       "issue_severity": "MEDIUM",
       "issue_text": "Possible SQL injection vector through string-based query construction.",
-      "line_number": 61,
+      "line_number": 63,
       "line_range": [
-        61
+        63
       ],
       "more_info": "https://bandit.readthedocs.io/en/1.8.6/plugins/b608_hardcoded_sql_expressions.html",
       "test_id": "B608",
       "test_name": "hardcoded_sql_expressions"
     },
     {
-      "code": "73             rows = conn.execute(\n74                 f\"SELECT settings_json FROM {self.store._prefixed(self.table_name)}\"\n75             ).fetchall()\n",
+      "code": "75             rows = conn.execute(\n76                 f\"SELECT settings_json FROM {self.store._prefixed(self.table_name)}\"\n77             ).fetchall()\n",
       "col_offset": 18,
       "end_col_offset": 44,
       "filename": "app/core/agents/store/duckdb_agent_store.py",
@@ -1934,16 +1934,16 @@
       },
       "issue_severity": "MEDIUM",
       "issue_text": "Possible SQL injection vector through string-based query construction.",
-      "line_number": 74,
+      "line_number": 76,
       "line_range": [
-        74
+        76
       ],
       "more_info": "https://bandit.readthedocs.io/en/1.8.6/plugins/b608_hardcoded_sql_expressions.html",
       "test_id": "B608",
       "test_name": "hardcoded_sql_expressions"
     },
     {
-      "code": "88             conn.execute(\n89                 f\"DELETE FROM {self.store._prefixed(self.table_name)} WHERE name = ?\",\n90                 (name,),\n",
+      "code": "90             conn.execute(\n91                 f\"DELETE FROM {self.store._prefixed(self.table_name)} WHERE name = ?\",\n92                 (name,),\n",
       "col_offset": 18,
       "end_col_offset": 30,
       "filename": "app/core/agents/store/duckdb_agent_store.py",
@@ -1954,9 +1954,9 @@
       },
       "issue_severity": "MEDIUM",
       "issue_text": "Possible SQL injection vector through string-based query construction.",
-      "line_number": 89,
+      "line_number": 91,
       "line_range": [
-        89
+        91
       ],
       "more_info": "https://bandit.readthedocs.io/en/1.8.6/plugins/b608_hardcoded_sql_expressions.html",
       "test_id": "B608",
@@ -2023,7 +2023,7 @@
       "test_name": "hardcoded_sql_expressions"
     },
     {
-      "code": "53     server_host: str = Field(\n54         default=\"0.0.0.0\", description=\"Host to which the server binds\"\n55     )\n",
+      "code": "56     server_host: str = Field(\n57         default=\"0.0.0.0\", description=\"Host to which the server binds\"\n58     )\n",
       "col_offset": 16,
       "end_col_offset": 25,
       "filename": "app/features/frugal/structure/workload_advanced/opensearch_dashboard.py",
@@ -2034,9 +2034,9 @@
       },
       "issue_severity": "MEDIUM",
       "issue_text": "Possible binding to all interfaces.",
-      "line_number": 54,
+      "line_number": 57,
       "line_range": [
-        54
+        57
       ],
       "more_info": "https://bandit.readthedocs.io/en/1.8.6/plugins/b104_hardcoded_bind_all_interfaces.html",
       "test_id": "B104",

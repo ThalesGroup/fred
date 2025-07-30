@@ -29,15 +29,22 @@
 """
 Controllers to expose the carbon endpoints
 """
+
 import traceback
 from datetime import datetime
 
-from app.features.frugal.cluster_consumption.cluster_consumption_structures import ClusterConsumptionSeries
+from app.features.frugal.cluster_consumption.cluster_consumption_structures import (
+    ClusterConsumptionSeries,
+)
 from fastapi import Depends, HTTPException, Query, APIRouter
 
 from fred_core import KeycloakUser, get_current_user
-from app.features.frugal.cluster_consumption.cluster_consumption_abstract_service import AbstractClusterConsumptionService
-from app.features.frugal.cluster_consumption.cluster_consumption_service import ClusterConsumptionService
+from app.features.frugal.cluster_consumption.cluster_consumption_abstract_service import (
+    AbstractClusterConsumptionService,
+)
+from app.features.frugal.cluster_consumption.cluster_consumption_service import (
+    ClusterConsumptionService,
+)
 from app.common.structures import CompareResult
 from app.common.structures import PrecisionEnum
 from app.common.utils import API_COMPARE_DOC
@@ -49,41 +56,56 @@ class CarbonController:
 
         fastapi_tags = ["Carbon footprint"]
 
-        @app.get("/carbon/consumption/",
-                 tags=fastapi_tags,
-                 description="Get the carbon consumption for a given time range",
-                 summary="Get the carbon consumption for a given time range"
-                 )
-        async def get_carbon_consumption(start: datetime, end: datetime,
-                                         cluster: str,
-                                         precision: PrecisionEnum = PrecisionEnum.NONE,
-                                         user: KeycloakUser = Depends(get_current_user)
-                                         ) -> ClusterConsumptionSeries:
+        @app.get(
+            "/carbon/consumption/",
+            tags=fastapi_tags,
+            description="Get the carbon consumption for a given time range",
+            summary="Get the carbon consumption for a given time range",
+        )
+        async def get_carbon_consumption(
+            start: datetime,
+            end: datetime,
+            cluster: str,
+            precision: PrecisionEnum = PrecisionEnum.NONE,
+            user: KeycloakUser = Depends(get_current_user),
+        ) -> ClusterConsumptionSeries:
             try:
                 return service.consumption_gco2(start, end, cluster, precision)
             except Exception as e:
                 traceback.print_exc()
                 raise HTTPException(status_code=500, detail=str(e))
 
-        @app.get("/carbon/consumption/compare",
-                 tags=fastapi_tags,
-                 summary="Compare two windows of carbon consumption for a given cluster and time ranges",
-                 description=API_COMPARE_DOC,
-                 )
+        @app.get(
+            "/carbon/consumption/compare",
+            tags=fastapi_tags,
+            summary="Compare two windows of carbon consumption for a given cluster and time ranges",
+            description=API_COMPARE_DOC,
+        )
         async def get_carbon_consumption_compare(
-                start_window_1: datetime = Query(..., description="Start datetime of the first window"),
-                end_window_1: datetime = Query(..., description="End datetime of the first window"),
-                start_window_2: datetime = Query(..., description="Start datetime of the second window"),
-                end_window_2: datetime = Query(..., description="End datetime of the second window"),
-                cluster: str = Query(..., description="The measured cluster"),
-                user: KeycloakUser = Depends(get_current_user)
+            start_window_1: datetime = Query(
+                ..., description="Start datetime of the first window"
+            ),
+            end_window_1: datetime = Query(
+                ..., description="End datetime of the first window"
+            ),
+            start_window_2: datetime = Query(
+                ..., description="Start datetime of the second window"
+            ),
+            end_window_2: datetime = Query(
+                ..., description="End datetime of the second window"
+            ),
+            cluster: str = Query(..., description="The measured cluster"),
+            user: KeycloakUser = Depends(get_current_user),
         ) -> CompareResult:
             try:
-                return service.consumption_gco2_compare(start_window_1, end_window_1, start_window_2, end_window_2,
-                                                        cluster)
+                return service.consumption_gco2_compare(
+                    start_window_1, end_window_1, start_window_2, end_window_2, cluster
+                )
             except ValueError as e:
                 traceback.print_exc()
-                raise HTTPException(status_code=500, detail=f"Internally invalid data: {e}")
+                raise HTTPException(
+                    status_code=500, detail=f"Internally invalid data: {e}"
+                )
             except Exception as e:
                 traceback.print_exc()
                 raise HTTPException(status_code=500, detail=str(e))

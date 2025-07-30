@@ -24,12 +24,10 @@ class TestChatbotController:
         "user_id": "mock@user.com",
         "message": "Qui est shakespeare ?",
         "agent_name": "GeneralistExpert",
-        "argument": "none"
+        "argument": "none",
     }
 
-    headers = {
-        "Authorization": "Bearer dummy-token"
-    }
+    headers = {"Authorization": "Bearer dummy-token"}
 
     def test_get_agentic_flows(self, client: TestClient):
         response = client.get("/agentic/v1/chatbot/agenticflows", headers=self.headers)

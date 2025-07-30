@@ -18,6 +18,7 @@ from pydantic import ValidationError
 
 logger = logging.getLogger(__name__)
 
+
 def validate_settings_or_exit(settings_class):
     try:
         settings = settings_class()

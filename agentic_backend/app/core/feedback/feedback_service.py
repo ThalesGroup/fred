@@ -42,7 +42,7 @@ class FeedbackService:
         entry = {
             **feedback,
             "id": feedback_id,
-            "created_at": datetime.utcnow().isoformat()
+            "created_at": datetime.utcnow().isoformat(),
         }
         self.store.save(entry)
         return entry

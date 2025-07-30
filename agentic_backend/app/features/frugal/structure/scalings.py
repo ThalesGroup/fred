@@ -67,4 +67,4 @@ class Scalings(BaseModel):
         Returns:
             str: A formatted string containing the scalings.
         """
-        return "\n\n".join(str(scaling) for scaling in self.scalings) # pylint: disable=not-an-iterable
+        return "\n\n".join(str(scaling) for scaling in self.scalings)  # pylint: disable=not-an-iterable

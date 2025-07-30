@@ -16,10 +16,12 @@ from typing import Optional
 from app.core.agents.structures import AgenticFlow
 from pydantic import BaseModel, Field
 
+
 class ChatBotEventConfiguration(BaseModel):
     """
     The configuration of the chatbot message
     """
+
     session_id: str = Field(description="The unique ID of the chatbot")
     agentic_flow: Optional[AgenticFlow] = Field(
         default=None, description="The agentic flow of the chatbot"
@@ -28,6 +30,7 @@ class ChatBotEventConfiguration(BaseModel):
         default=None, description="The cluster name of the chatbot"
     )
 
+
 class ChatAskInput(BaseModel):
     user_id: str
     session_id: Optional[str] = None
@@ -35,6 +38,7 @@ class ChatAskInput(BaseModel):
     agent_name: str
     argument: Optional[str]
     chat_profile_id: Optional[str] = None
+
 
 class ChatBotEvent(BaseModel):
     """

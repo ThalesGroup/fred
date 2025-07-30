@@ -28,4 +28,4 @@ class Plan(BaseModel):
         """
         Return a string representation of the plan.
         """
-        return "\n".join(f"{i+1}. {step}" for i, step in enumerate(self.steps))
+        return "\n".join(f"{i + 1}. {step}" for i, step in enumerate(self.steps))

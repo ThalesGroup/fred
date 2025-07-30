@@ -34,8 +34,5 @@ def cloud_billings_to_series(cloud_billings: list[CloudBilling]) -> Series:
         values.append(cloud_billing.value)
 
     return Series(
-        timestamps=timestamps,
-        values=values,
-        auc=auc_calculation(values),
-        unit=unit
+        timestamps=timestamps, values=values, auc=auc_calculation(values), unit=unit
     )

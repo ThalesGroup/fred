@@ -13,8 +13,12 @@
 # limitations under the License.
 
 from app.application_context import get_configuration
-from app.features.frugal.cluster_consumption.cluster_consumption_abstract_service import AbstractClusterConsumptionService
-from app.features.frugal.cluster_consumption.cluster_consumption_csv_service import ClusterConsumptionCsvService
+from app.features.frugal.cluster_consumption.cluster_consumption_abstract_service import (
+    AbstractClusterConsumptionService,
+)
+from app.features.frugal.cluster_consumption.cluster_consumption_csv_service import (
+    ClusterConsumptionCsvService,
+)
 from app.common.structures import DatabaseTypeEnum
 
 
@@ -24,4 +28,6 @@ class ClusterConsumptionService:
             case DatabaseTypeEnum.csv:
                 return ClusterConsumptionCsvService()
             case _:
-                raise NotImplementedError(f"Database type {get_configuration().database.type} is not supported.")
+                raise NotImplementedError(
+                    f"Database type {get_configuration().database.type} is not supported."
+                )

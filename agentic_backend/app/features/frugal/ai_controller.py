@@ -29,8 +29,16 @@ from app.features.frugal.structure.workload_id import WorkloadId
 from app.features.frugal.structure.workload_scores import WorkloadScores
 from app.features.frugal.structure.workload_summary import WorkloadSummary
 from app.features.frugal.structure.workload_topology import WorkloadTopology
-from fastapi import (APIRouter, Body, Depends, FastAPI, File, HTTPException, Query,
-                     UploadFile)
+from fastapi import (
+    APIRouter,
+    Body,
+    Depends,
+    FastAPI,
+    File,
+    HTTPException,
+    Query,
+    UploadFile,
+)
 
 from app.common.utils import log_exception
 from fred_core import KeycloakUser, get_current_user
@@ -39,6 +47,7 @@ from app.features.k8.structure import WorkloadKind
 
 # 🔹 Create a module-level logger
 logger = logging.getLogger(__name__)
+
 
 class AIController:  # pylint: disable=R0914, R0915, R0903
     """
@@ -93,17 +102,13 @@ class AIController:  # pylint: disable=R0914, R0915, R0903
                 return await ai_service.get_speech(text)
             except HTTPException as e:
                 logger.error(
-                    (
-                        f"An unexpected error occurred while generating the speech: {e}"
-                    )
+                    (f"An unexpected error occurred while generating the speech: {e}")
                 )
 
                 raise e
             except Exception as e:
                 logger.error(
-                    (
-                        f"An unexpected error occurred while generating the speech: {e}"
-                    )
+                    (f"An unexpected error occurred while generating the speech: {e}")
                 )
 
                 raise HTTPException(
@@ -116,7 +121,9 @@ class AIController:  # pylint: disable=R0914, R0915, R0903
             tags=fastapi_tags,
             summary="Generate all the resources for the cluster",
         )
-        async def generate_all_resources(cluster_name: str = Query(..., description="The Cluster name")):
+        async def generate_all_resources(
+            cluster_name: str = Query(..., description="The Cluster name"),
+        ):
             """
             Generate all the resources for the cluster.
 
@@ -146,7 +153,9 @@ class AIController:  # pylint: disable=R0914, R0915, R0903
             tags=fastapi_tags,
             summary="Generate all the missing resources for the cluster",
         )
-        async def generate_missing_resources(cluster_name: str = Query(..., description="The Cluster name")):
+        async def generate_missing_resources(
+            cluster_name: str = Query(..., description="The Cluster name"),
+        ):
             """
             Generate the missing resources for the cluster.
 
@@ -177,8 +186,8 @@ class AIController:  # pylint: disable=R0914, R0915, R0903
             summary="Add a Fact to the Cluster",
         )
         async def put_cluster_fact(
-                cluster_name: str = Query(..., description="The Cluster name"),
-                fact: Fact = Body(...),
+            cluster_name: str = Query(..., description="The Cluster name"),
+            fact: Fact = Body(...),
         ):
             """
             Add a Fact to the Cluster.
@@ -210,8 +219,8 @@ class AIController:  # pylint: disable=R0914, R0915, R0903
             summary="Delete a Fact from the Cluster",
         )
         async def delete_cluster_fact(
-                cluster_name: str = Query(..., description="The Cluster name"),
-                fact: Fact = Body(...),
+            cluster_name: str = Query(..., description="The Cluster name"),
+            fact: Fact = Body(...),
         ):
             """
             Delete a Fact from the Cluster.
@@ -243,8 +252,8 @@ class AIController:  # pylint: disable=R0914, R0915, R0903
             summary="Get the Cluster Facts",
         )
         async def get_cluster_facts(
-                cluster_name: str = Query(..., description="The Cluster name"),
-                user: KeycloakUser = Depends(get_current_user)
+            cluster_name: str = Query(..., description="The Cluster name"),
+            user: KeycloakUser = Depends(get_current_user),
         ) -> Facts:
             """
             Get the Cluster Facts.
@@ -278,10 +287,10 @@ class AIController:  # pylint: disable=R0914, R0915, R0903
             tags=fastapi_tags,
             summary="Get the Cluster Summary",
         )
-        async def get_cluster_summary(cluster_name: str = Query(..., description="The Cluster name"),
-                                      user: KeycloakUser = Depends(get_current_user)
-                                      ) \
-                -> ClusterSummary:
+        async def get_cluster_summary(
+            cluster_name: str = Query(..., description="The Cluster name"),
+            user: KeycloakUser = Depends(get_current_user),
+        ) -> ClusterSummary:
             """
             Get the Cluster Summary.
 
@@ -294,9 +303,10 @@ class AIController:  # pylint: disable=R0914, R0915, R0903
             try:
                 return ai_service.get_cluster_summary(cluster_name)
             except Exception as e:
-                log_exception(e,
-                        f"An unexpected error occurred while retrieving the Cluster Summary for "
-                        f"Cluster {cluster_name}: {e}"
+                log_exception(
+                    e,
+                    f"An unexpected error occurred while retrieving the Cluster Summary for "
+                    f"Cluster {cluster_name}: {e}",
                 )
                 raise HTTPException(
                     status_code=500,
@@ -312,7 +322,7 @@ class AIController:  # pylint: disable=R0914, R0915, R0903
             summary="Generate the Cluster Summary",
         )
         async def post_cluster_summary(
-                cluster_name: str = Query(..., description="The Cluster name"),
+            cluster_name: str = Query(..., description="The Cluster name"),
         ):
             """
             Generate the Cluster Summary.
@@ -323,9 +333,10 @@ class AIController:  # pylint: disable=R0914, R0915, R0903
             try:
                 ai_service.post_cluster_summary(cluster_name)
             except Exception as e:
-                log_exception(e,
-                        f"An unexpected error occurred while generating the Cluster Summary for "
-                        f"Cluster {cluster_name}: {e}"
+                log_exception(
+                    e,
+                    f"An unexpected error occurred while generating the Cluster Summary for "
+                    f"Cluster {cluster_name}: {e}",
                 )
 
                 raise HTTPException(
@@ -342,8 +353,8 @@ class AIController:  # pylint: disable=R0914, R0915, R0903
             summary="Get the Cluster Topology",
         )
         async def get_cluster_topology(
-                cluster_name: str = Query(..., description="The Cluster name"),
-                user: KeycloakUser = Depends(get_current_user)
+            cluster_name: str = Query(..., description="The Cluster name"),
+            user: KeycloakUser = Depends(get_current_user),
         ) -> ClusterTopology:
             """
             Get the Cluster Topology.
@@ -378,9 +389,9 @@ class AIController:  # pylint: disable=R0914, R0915, R0903
             summary="Add a Fact to the Namespace",
         )
         async def put_namespace_fact(
-                cluster_name: str = Query(..., description="The Cluster name"),
-                namespace: str = Query(..., description="The Namespace"),
-                fact: Fact = Body(...),
+            cluster_name: str = Query(..., description="The Cluster name"),
+            namespace: str = Query(..., description="The Namespace"),
+            fact: Fact = Body(...),
         ):
             """
             Add a Fact to the Namespace.
@@ -413,9 +424,9 @@ class AIController:  # pylint: disable=R0914, R0915, R0903
             summary="Delete a Fact from the Namespace",
         )
         async def delete_namespace_fact(
-                cluster_name: str = Query(..., description="The Cluster name"),
-                namespace: str = Query(..., description="The Namespace"),
-                fact: Fact = Body(...),
+            cluster_name: str = Query(..., description="The Cluster name"),
+            namespace: str = Query(..., description="The Namespace"),
+            fact: Fact = Body(...),
         ):
             """
             Delete a Fact from the Namespace.
@@ -448,9 +459,9 @@ class AIController:  # pylint: disable=R0914, R0915, R0903
             summary="Get the Namespace Facts",
         )
         async def get_namespace_facts(
-                cluster_name: str = Query(..., description="The Cluster name"),
-                namespace: str = Query(..., description="The Namespace"),
-                user: KeycloakUser = Depends(get_current_user)
+            cluster_name: str = Query(..., description="The Cluster name"),
+            namespace: str = Query(..., description="The Namespace"),
+            user: KeycloakUser = Depends(get_current_user),
         ) -> Facts:
             """
             Get the Namespace Facts.
@@ -486,9 +497,9 @@ class AIController:  # pylint: disable=R0914, R0915, R0903
             summary="Get the Namespace Summary",
         )
         async def get_namespace_summary(
-                cluster_name: str = Query(..., description="The Cluster name"),
-                namespace: str = Query(..., description="The Namespace"),
-                user: KeycloakUser = Depends(get_current_user)
+            cluster_name: str = Query(..., description="The Cluster name"),
+            namespace: str = Query(..., description="The Namespace"),
+            user: KeycloakUser = Depends(get_current_user),
         ) -> NamespaceSummary:
             """
             Get the Namespace Summary.
@@ -524,8 +535,8 @@ class AIController:  # pylint: disable=R0914, R0915, R0903
             summary="Generate the Namespace Summary",
         )
         async def post_namespace_summary(
-                cluster_name: str = Query(..., description="The Cluster name"),
-                namespace: str = Query(..., description="The Namespace"),
+            cluster_name: str = Query(..., description="The Cluster name"),
+            namespace: str = Query(..., description="The Namespace"),
         ):
             """
             Generate the Namespace Summary.
@@ -558,9 +569,9 @@ class AIController:  # pylint: disable=R0914, R0915, R0903
             summary="Get the Namespace Topology",
         )
         async def get_namespace_topology(
-                cluster_name: str = Query(..., description="The Cluster name"),
-                namespace: str = Query(..., description="The Namespace"),
-                user: KeycloakUser = Depends(get_current_user)
+            cluster_name: str = Query(..., description="The Cluster name"),
+            namespace: str = Query(..., description="The Namespace"),
+            user: KeycloakUser = Depends(get_current_user),
         ) -> NamespaceTopology:
             """
             Get the Namespace Topology.
@@ -596,11 +607,11 @@ class AIController:  # pylint: disable=R0914, R0915, R0903
             summary="Get the Workload ID (Commercial Off-The-Shelf software name)",
         )
         async def get_workload_id(
-                cluster_name: str = Query(..., description="The Cluster name"),
-                namespace: str = Query(..., description="The Namespace"),
-                workload_name: str = Query(..., description="The Workload name"),
-                kind: WorkloadKind = Query(..., description="The Workload kind"),
-                user: KeycloakUser = Depends(get_current_user)
+            cluster_name: str = Query(..., description="The Cluster name"),
+            namespace: str = Query(..., description="The Namespace"),
+            workload_name: str = Query(..., description="The Workload name"),
+            kind: WorkloadKind = Query(..., description="The Workload kind"),
+            user: KeycloakUser = Depends(get_current_user),
         ) -> WorkloadId:
             """
             Get the Workload id (Commercial Off-The-Shelf software name).
@@ -643,10 +654,10 @@ class AIController:  # pylint: disable=R0914, R0915, R0903
             summary="Generate the Workload ID (Commercial Off-The-Shelf software name)",
         )
         async def post_workload_id(
-                cluster_name: str = Query(..., description="The Cluster name"),
-                namespace: str = Query(..., description="The Namespace"),
-                workload_name: str = Query(..., description="The Workload name"),
-                kind: WorkloadKind = Query(..., description="The Workload kind"),
+            cluster_name: str = Query(..., description="The Cluster name"),
+            namespace: str = Query(..., description="The Namespace"),
+            workload_name: str = Query(..., description="The Workload name"),
+            kind: WorkloadKind = Query(..., description="The Workload kind"),
         ):
             """
             Generate Workload ID (Commercial Off-The-Shelf software name).
@@ -686,11 +697,11 @@ class AIController:  # pylint: disable=R0914, R0915, R0903
             summary="Get the Workload Essentials",
         )
         async def get_workload_essentials(
-                cluster_name: str = Query(..., description="The Cluster name"),
-                namespace: str = Query(..., description="The Namespace"),
-                workload_name: str = Query(..., description="The Workload name"),
-                kind: WorkloadKind = Query(..., description="The Workload kind"),
-                user: KeycloakUser = Depends(get_current_user)
+            cluster_name: str = Query(..., description="The Cluster name"),
+            namespace: str = Query(..., description="The Namespace"),
+            workload_name: str = Query(..., description="The Workload name"),
+            kind: WorkloadKind = Query(..., description="The Workload kind"),
+            user: KeycloakUser = Depends(get_current_user),
         ) -> WorkloadEssentials:
             """
             Get the Workload Essentials.
@@ -733,10 +744,10 @@ class AIController:  # pylint: disable=R0914, R0915, R0903
             summary="Generate the Workload Essentials",
         )
         async def post_workload_essentials(
-                cluster_name: str = Query(..., description="The Cluster name"),
-                namespace: str = Query(..., description="The Namespace"),
-                workload_name: str = Query(..., description="The Workload name"),
-                kind: WorkloadKind = Query(..., description="The Workload kind"),
+            cluster_name: str = Query(..., description="The Cluster name"),
+            namespace: str = Query(..., description="The Namespace"),
+            workload_name: str = Query(..., description="The Workload name"),
+            kind: WorkloadKind = Query(..., description="The Workload kind"),
         ):
             """
             Generate Workload Essentials.
@@ -776,11 +787,11 @@ class AIController:  # pylint: disable=R0914, R0915, R0903
             summary="Get the Workload Summary",
         )
         async def get_workload_summary(
-                cluster_name: str = Query(..., description="The Cluster name"),
-                namespace: str = Query(..., description="The Namespace"),
-                workload_name: str = Query(..., description="The Workload name"),
-                kind: WorkloadKind = Query(..., description="The Workload kind"),
-                user: KeycloakUser = Depends(get_current_user)
+            cluster_name: str = Query(..., description="The Cluster name"),
+            namespace: str = Query(..., description="The Namespace"),
+            workload_name: str = Query(..., description="The Workload name"),
+            kind: WorkloadKind = Query(..., description="The Workload kind"),
+            user: KeycloakUser = Depends(get_current_user),
         ) -> WorkloadSummary:
             """
             Get the Workload Summary.
@@ -823,10 +834,10 @@ class AIController:  # pylint: disable=R0914, R0915, R0903
             summary="Generate the Workload Summary",
         )
         async def post_workload_summary(
-                cluster_name: str = Query(..., description="The Cluster name"),
-                namespace: str = Query(..., description="The Namespace"),
-                workload_name: str = Query(..., description="The Workload name"),
-                kind: WorkloadKind = Query(..., description="The Workload kind"),
+            cluster_name: str = Query(..., description="The Cluster name"),
+            namespace: str = Query(..., description="The Namespace"),
+            workload_name: str = Query(..., description="The Workload name"),
+            kind: WorkloadKind = Query(..., description="The Workload kind"),
         ):
             """
             Generate Workload Summary.
@@ -866,11 +877,11 @@ class AIController:  # pylint: disable=R0914, R0915, R0903
             summary="Get the Workload Advanced",
         )
         async def get_workload_advanced(
-                cluster_name: str = Query(..., description="The Cluster name"),
-                namespace: str = Query(..., description="The Namespace"),
-                workload_name: str = Query(..., description="The Workload name"),
-                kind: WorkloadKind = Query(..., description="The Workload kind"),
-                user: KeycloakUser = Depends(get_current_user)
+            cluster_name: str = Query(..., description="The Cluster name"),
+            namespace: str = Query(..., description="The Namespace"),
+            workload_name: str = Query(..., description="The Workload name"),
+            kind: WorkloadKind = Query(..., description="The Workload kind"),
+            user: KeycloakUser = Depends(get_current_user),
         ) -> WorkloadAdvanced:
             """
             Get the Workload Advanced.
@@ -913,10 +924,10 @@ class AIController:  # pylint: disable=R0914, R0915, R0903
             summary="Generate the Workload Advanced",
         )
         async def post_workload_advanced(
-                cluster_name: str = Query(..., description="The Cluster name"),
-                namespace: str = Query(..., description="The Namespace"),
-                workload_name: str = Query(..., description="The Workload name"),
-                kind: WorkloadKind = Query(..., description="The Workload kind"),
+            cluster_name: str = Query(..., description="The Cluster name"),
+            namespace: str = Query(..., description="The Namespace"),
+            workload_name: str = Query(..., description="The Workload name"),
+            kind: WorkloadKind = Query(..., description="The Workload kind"),
         ):
             """
             Generate Workload Advanced.
@@ -956,11 +967,11 @@ class AIController:  # pylint: disable=R0914, R0915, R0903
             summary="Get the Workload Scores",
         )
         async def get_workload_scores(
-                cluster_name: str = Query(..., description="The Cluster name"),
-                namespace: str = Query(..., description="The Namespace"),
-                workload_name: str = Query(..., description="The Workload name"),
-                kind: WorkloadKind = Query(..., description="The Workload kind"),
-                user: KeycloakUser = Depends(get_current_user)
+            cluster_name: str = Query(..., description="The Cluster name"),
+            namespace: str = Query(..., description="The Namespace"),
+            workload_name: str = Query(..., description="The Workload name"),
+            kind: WorkloadKind = Query(..., description="The Workload kind"),
+            user: KeycloakUser = Depends(get_current_user),
         ) -> WorkloadScores:
             """
             Get the Workload Scores.
@@ -1003,10 +1014,10 @@ class AIController:  # pylint: disable=R0914, R0915, R0903
             summary="Generate the Workload Scores",
         )
         async def post_workload_scores(
-                cluster_name: str = Query(..., description="The Cluster name"),
-                namespace: str = Query(..., description="The Namespace"),
-                workload_name: str = Query(..., description="The Workload name"),
-                kind: WorkloadKind = Query(..., description="The Workload kind"),
+            cluster_name: str = Query(..., description="The Cluster name"),
+            namespace: str = Query(..., description="The Namespace"),
+            workload_name: str = Query(..., description="The Workload name"),
+            kind: WorkloadKind = Query(..., description="The Workload kind"),
         ):
             """
             Generate Workload Scores.
@@ -1046,11 +1057,11 @@ class AIController:  # pylint: disable=R0914, R0915, R0903
             summary="Add a Fact to the Workload",
         )
         async def put_workload_fact(
-                cluster_name: str = Query(..., description="The Cluster name"),
-                namespace: str = Query(..., description="The Namespace"),
-                workload_name: str = Query(..., description="The Workload name"),
-                kind: WorkloadKind = Query(..., description="The Workload kind"),
-                fact: Fact = Body(...),
+            cluster_name: str = Query(..., description="The Cluster name"),
+            namespace: str = Query(..., description="The Namespace"),
+            workload_name: str = Query(..., description="The Workload name"),
+            kind: WorkloadKind = Query(..., description="The Workload kind"),
+            fact: Fact = Body(...),
         ):
             """
             Add a Fact to the Workload.
@@ -1091,11 +1102,11 @@ class AIController:  # pylint: disable=R0914, R0915, R0903
             summary="Delete a Fact from the Workload",
         )
         async def delete_workload_fact(
-                cluster_name: str = Query(..., description="The Cluster name"),
-                namespace: str = Query(..., description="The Namespace"),
-                workload_name: str = Query(..., description="The Workload name"),
-                kind: WorkloadKind = Query(..., description="The Workload kind"),
-                fact: Fact = Body(...),
+            cluster_name: str = Query(..., description="The Cluster name"),
+            namespace: str = Query(..., description="The Namespace"),
+            workload_name: str = Query(..., description="The Workload name"),
+            kind: WorkloadKind = Query(..., description="The Workload kind"),
+            fact: Fact = Body(...),
         ):
             """
             Delete a Fact from the Workload.
@@ -1136,11 +1147,11 @@ class AIController:  # pylint: disable=R0914, R0915, R0903
             summary="Get the Workload Facts",
         )
         async def get_workload_facts(
-                cluster_name: str = Query(..., description="The Cluster name"),
-                namespace: str = Query(..., description="The Namespace"),
-                workload_name: str = Query(..., description="The Workload name"),
-                kind: WorkloadKind = Query(..., description="The Workload kind"),
-                user: KeycloakUser = Depends(get_current_user)
+            cluster_name: str = Query(..., description="The Cluster name"),
+            namespace: str = Query(..., description="The Namespace"),
+            workload_name: str = Query(..., description="The Workload name"),
+            kind: WorkloadKind = Query(..., description="The Workload kind"),
+            user: KeycloakUser = Depends(get_current_user),
         ) -> Facts:
             """
             Get the Workload Facts.
@@ -1183,11 +1194,11 @@ class AIController:  # pylint: disable=R0914, R0915, R0903
             summary="Get the Workload Topology",
         )
         async def get_workload_topology(
-                cluster_name: str = Query(..., description="The Cluster name"),
-                namespace: str = Query(..., description="The Namespace"),
-                workload_name: str = Query(..., description="The Workload name"),
-                kind: WorkloadKind = Query(..., description="The Workload kind"),
-                user: KeycloakUser = Depends(get_current_user)
+            cluster_name: str = Query(..., description="The Cluster name"),
+            namespace: str = Query(..., description="The Namespace"),
+            workload_name: str = Query(..., description="The Workload name"),
+            kind: WorkloadKind = Query(..., description="The Workload kind"),
+            user: KeycloakUser = Depends(get_current_user),
         ) -> WorkloadTopology:
             """
             Get the Workload Topology.

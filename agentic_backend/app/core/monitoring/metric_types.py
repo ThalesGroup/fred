@@ -39,6 +39,7 @@ class TokenDetails(BaseModel):
         audio_tokens: Tokens used for audio processing.
         cached_tokens: Tokens retrieved from cache.
     """
+
     accepted_prediction_tokens: Optional[int] = 0
     rejected_prediction_tokens: Optional[int] = 0
     reasoning_tokens: Optional[int] = 0
@@ -57,6 +58,7 @@ class TokenUsage(BaseModel):
         completion_tokens_details: Detailed breakdown of generated tokens.
         prompt_tokens_details: Detailed breakdown of input tokens.
     """
+
     completion_tokens: Optional[int] = None
     prompt_tokens: Optional[int] = None
     total_tokens: Optional[int] = None
@@ -73,6 +75,7 @@ class ContentFilterResult(BaseModel):
         severity: Severity level of the filtering.
         detected: Whether unsafe content was detected.
     """
+
     filtered: Optional[bool] = None
     severity: Optional[str] = None
     detected: Optional[bool] = None
@@ -86,6 +89,7 @@ class PromptFilterResult(BaseModel):
         prompt_index: Index of the prompt.
         content_filter_results: Map of filter categories to results.
     """
+
     prompt_index: Optional[int] = None
     content_filter_results: Dict[str, ContentFilterResult]
 
@@ -110,6 +114,7 @@ class MetaData(BaseModel):
         timestamp: Time of the request (UNIX).
         model_type: High-level model category (e.g., chat, completion).
     """
+
     token_usage: Optional[TokenUsage] = None
     model_name: Optional[str] = None
     system_fingerprint: Optional[str] = None
@@ -124,6 +129,7 @@ class MetaData(BaseModel):
     latency: Optional[float] = None
     timestamp: Optional[float] = None
     model_type: Optional[str] = None
+
 
 class NumericalMetric(BaseModel):
     """
@@ -143,12 +149,12 @@ class NumericalMetric(BaseModel):
             "values": {"latency--avg": 1.23, "tokens--sum": 2000}
         }
     """
+
     time_bucket: str
     values: Dict[str, float]
 
     class Config:
         extra = "allow"
-
 
 
 class CategoricalMetric(BaseModel):
@@ -167,6 +173,7 @@ class CategoricalMetric(BaseModel):
         system_fingerprint: Deployment hash or version.
         service_tier: Tier or SLA level of the request.
     """
+
     timestamp: float
     user_id: Optional[str]
     session_id: Optional[str]

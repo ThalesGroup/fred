@@ -24,6 +24,7 @@ from app.application_context import ApplicationContext
 from app.common.structures import PathOrIndexPrefix
 from app.core.chatbot.chatbot_controller import ChatbotController
 
+
 @pytest.fixture(scope="session")
 def minimal_generalist_config() -> Configuration:
     return Configuration(
@@ -50,8 +51,8 @@ def minimal_generalist_config() -> Configuration:
                 sensors_test_new="dummy.csv",
                 mission="dummy.csv",
                 radio="dummy.csv",
-                signal_identification_guide="dummy.csv"
-            )
+                signal_identification_guide="dummy.csv",
+            ),
         },
         kubernetes={
             "kube_config": "~/.kube/config",
@@ -62,7 +63,11 @@ def minimal_generalist_config() -> Configuration:
             "default_model": {
                 "provider": "openai",
                 "name": "gpt-4o",
-                "settings": {"temperature": 0.0, "max_retries": 2, "request_timeout": 30},
+                "settings": {
+                    "temperature": 0.0,
+                    "max_retries": 2,
+                    "request_timeout": 30,
+                },
             },
             "leader": {
                 "name": "Fred",
@@ -83,13 +88,19 @@ def minimal_generalist_config() -> Configuration:
             "recursion": {"recursion_limit": 40},
         },
         dao={"type": "file", "base_path": "/tmp/fred-dao"},
-        security={"enabled": False, "keycloak_url": "", "client_id": "fred", "authorized_origins": []},
+        security={
+            "enabled": False,
+            "keycloak_url": "",
+            "client_id": "fred",
+            "authorized_origins": [],
+        },
         node_metrics_storage={"type": "local", "local_path": "/tmp/node-metrics"},
         tool_metrics_storage={"type": "local", "local_path": "/tmp/tool-metrics"},
         feedback_storage={"type": "ducckdb", "duckdb_path": "/tmp/ducckdb.db"},
         session_storage={"type": "in_memory"},
         agent_storage={"type": "duckdb", "duckdb_path": "/tmp/duckdb.db"},
     )
+
 
 @pytest.fixture(scope="session")
 def app_context(minimal_generalist_config):

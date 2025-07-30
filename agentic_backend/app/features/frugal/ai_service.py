@@ -55,6 +55,7 @@ from app.common.structures import Configuration, DAOTypeEnum
 # 🔹 Create a module-level logger
 logger = logging.getLogger(__name__)
 
+
 class AIService:  # pylint: disable=R0904
     """
     Service to handle GenAI operations.
@@ -78,7 +79,7 @@ class AIService:  # pylint: disable=R0904
             langfuse_handler (Optional[CallbackHandler]): The LangFuse callback handler.
         """
         self.configuration = get_configuration()
-        
+
         # Bring the storage solution based on configuration.
         match self.configuration.dao.type:
             case DAOTypeEnum.file:
@@ -362,7 +363,7 @@ class AIService:  # pylint: disable=R0904
             return cluster_facts
         except Exception as e:  # pylint: disable=W0718
             logger.info(
-                "Failed to retreive Cluster Facts from storage for Cluster " "'%s': %s",
+                "Failed to retreive Cluster Facts from storage for Cluster '%s': %s",
                 cluster_name,
                 e,
             )
@@ -392,8 +393,7 @@ class AIService:  # pylint: disable=R0904
             return cluster_summary
         except Exception as e:
             logger.info(
-                "Failed to retrieve Cluster Summary from storage for Cluster "
-                "'%s': %s",
+                "Failed to retrieve Cluster Summary from storage for Cluster '%s': %s",
                 cluster_name,
                 e,
             )
@@ -595,8 +595,7 @@ class AIService:  # pylint: disable=R0904
             return namespace_facts
         except Exception as e:  # pylint: disable=W0718
             logger.debug(
-                "No saved Facts defined for Namespace "
-                "'%s': %s",
+                "No saved Facts defined for Namespace '%s': %s",
                 namespace,
                 e,
             )
@@ -619,7 +618,9 @@ class AIService:  # pylint: disable=R0904
             NamespaceSummary: The Namespace Summary.
         """
         try:
-            namespace_summary = self.dao.loadCacheItem(NamespaceSummary, cluster_name, namespace)
+            namespace_summary = self.dao.loadCacheItem(
+                NamespaceSummary, cluster_name, namespace
+            )
             logger.debug(
                 "Namespace Summary for Namespace '%s' retrieved from storage",
                 namespace,
@@ -808,7 +809,7 @@ class AIService:  # pylint: disable=R0904
             return workload_id
         except Exception as e:  # pylint: disable=W0718
             logger.info(
-                "Failed to retreive Workload Id from storage for Workload " "'%s': %s",
+                "Failed to retreive Workload Id from storage for Workload '%s': %s",
                 workload_name,
                 e,
             )
@@ -1048,8 +1049,7 @@ class AIService:  # pylint: disable=R0904
             workload_summary, cluster_name, namespace, workload_kind, workload_name
         )
         logger.info(
-            "Generated and stored new Workload Summary for %s '%s' "
-            "from Namespace '%s'",
+            "Generated and stored new Workload Summary for %s '%s' from Namespace '%s'",
             workload_kind.value,
             workload_name,
             namespace,
@@ -1180,7 +1180,8 @@ class AIService:  # pylint: disable=R0904
             return workload_scores
         except Exception as e:  # pylint: disable=W0718
             logger.debug(
-                f"Failed to retrieve Workload Scores from storage for Workload '{workload_name}': {e}")
+                f"Failed to retrieve Workload Scores from storage for Workload '{workload_name}': {e}"
+            )
 
             if get_app_context().status.offline:
                 raise UnavailableError("AI client") from e
@@ -1627,9 +1628,7 @@ class AIService:  # pylint: disable=R0904
         try:
             openai.api_key = os.getenv("OPENAI_API_KEY")
         except Exception as e:
-            logger.error(
-                "OpenAI API key not found for transcribe generation: %s", e
-            )
+            logger.error("OpenAI API key not found for transcribe generation: %s", e)
 
             if get_app_context().status.offline:
                 raise UnavailableError("AI client") from e
