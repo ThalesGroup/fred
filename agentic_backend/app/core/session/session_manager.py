@@ -235,6 +235,9 @@ class SessionManager:
             # Ensure correct ranks for assistant messages
             for i, m in enumerate(agent_messages):
                 m.rank = base_rank + 1 + i
+                if m.metadata is None:
+                    m.metadata = {}
+                m.metadata["agent_name"] = agent_name
 
             all_payloads.extend(agent_messages)
 
