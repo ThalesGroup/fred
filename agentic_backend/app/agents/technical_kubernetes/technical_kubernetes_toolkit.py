@@ -61,5 +61,5 @@ class TechnicalKubernetesToolkitBuilder:
             args_schema=ClusterTopologyArgs,
             return_direct=True,
         )
-        tool = monitor_tool(tool)
+        tool = monitor_tool(raw_tool)
         return TechnicalKubernetesToolkit(tools=[tool])

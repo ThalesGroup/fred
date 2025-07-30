@@ -15,6 +15,7 @@
 """
 Pydantic structure definitions to use in the carbon microservice
 """
+
 from datetime import datetime
 from typing import List, Optional
 
@@ -25,26 +26,39 @@ from app.features.k8.structure import Cluster
 
 
 class Detail(BaseModel):
-    timestamp: Optional[datetime] = Field(None, description="The timestamp of the post of consumption.")
+    timestamp: Optional[datetime] = Field(
+        None, description="The timestamp of the post of consumption."
+    )
     name: str = Field(..., description="The name of the post of consumption.")
     kind: str = Field(..., description="The kind of the post of consumption.")
-    value: float = Field(..., description="The global value of the post of consumption.")
+    value: float = Field(
+        ..., description="The global value of the post of consumption."
+    )
 
 
 class ClusterConsumption(BaseModel):
-    timestamp: datetime = Field(..., description="The list of timestamps of the consumption period.")
-    value: float = Field(..., description="The global values of the consumption during the period.")
-    details: List[Detail] = Field(..., description="The details of the consumption during the period.")
+    timestamp: datetime = Field(
+        ..., description="The list of timestamps of the consumption period."
+    )
+    value: float = Field(
+        ..., description="The global values of the consumption during the period."
+    )
+    details: List[Detail] = Field(
+        ..., description="The details of the consumption during the period."
+    )
     unit: str = Field(..., description="The unit of the consumption.")
     cluster: Cluster = Field(..., description="The cluster of the consumption.")
 
 
 class DetailSeries(BaseModel):
     name: str = Field(..., description="The name of the consumption source.")
-    kind: str = Field(..., description="The kind of the consumption source, for example a namespace.")
+    kind: str = Field(
+        ..., description="The kind of the consumption source, for example a namespace."
+    )
     values: List[float] = Field(..., description="The values.")
 
 
 class ClusterConsumptionSeries(Series, BaseModel):
-    details: List[DetailSeries] = Field(...,
-                                        description="The details of the consumption during the period.")
+    details: List[DetailSeries] = Field(
+        ..., description="The details of the consumption during the period."
+    )

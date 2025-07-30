@@ -27,10 +27,11 @@ from app.common.structures import ModelConfiguration
 
 logger = logging.getLogger(__name__)
 
+
 def get_model(model_config: ModelConfiguration):
     """
     Factory function to create a model instance based on configuration.
-    
+
     Args:
         config (dict): Configuration dict with keys 'model_type' and model-specific settings.
                        Example:
@@ -41,14 +42,17 @@ def get_model(model_config: ModelConfiguration):
                          "temperature": 0,
                          "max_retries": 2
                        }
-    
+
     Returns:
         An instance of a Chat model.
     """
     provider = model_config.provider
 
     if not provider:
-        logger.error("Missing mandatory model_type property in model configuration: %s", model_config)
+        logger.error(
+            "Missing mandatory model_type property in model configuration: %s",
+            model_config,
+        )
         raise ValueError("Missing mandatory_model type in model configuration.")
     settings = (model_config.settings or {}).copy()
 
@@ -57,35 +61,30 @@ def get_model(model_config: ModelConfiguration):
         return AzureChatOpenAI(
             azure_deployment=model_config.name,
             api_version=settings.pop("api_version", "2024-05-01-preview"),
-            **settings
+            **settings,
         )
 
     elif provider == "azureapim":
-        logger.info("Creating Azure APIM Chat model instance with config %s", model_config)
+        logger.info(
+            "Creating Azure APIM Chat model instance with config %s", model_config
+        )
         return AzureApimModel().get_llm()
-    
+
     elif provider == "openai":
         logger.info("Creating OpenAI Chat model instance with config %s", model_config)
-        return ChatOpenAI(
-            model=model_config.name,
-            **settings
-        )
+        return ChatOpenAI(model=model_config.name, **settings)
     elif provider == "ollama":
         logger.info("Creating Ollama Chat model instance with config %s", model_config)
         return ChatOllama(
-            model=model_config.name,
-            base_url=settings.pop("base_url", None),
-            **settings
+            model=model_config.name, base_url=settings.pop("base_url", None), **settings
         )
     else:
         logger.error("Unsupported model provider %s", provider)
         raise ValueError(f"Unknown model provider {provider}")
 
 
-
 def get_structured_chain(
-    schema: Type[BaseModel],
-    model_config: ModelConfiguration
+    schema: Type[BaseModel], model_config: ModelConfiguration
 ) -> Any:
     """
     Returns a LangChain chain for structured output, with fallback for unsupported providers.
@@ -102,10 +101,14 @@ def get_structured_chain(
     schema_name = schema.__name__
 
     if provider in {"openai", "azure"}:
-        logger.debug(f"Using function_calling for schema {schema_name} with provider '{provider}'")
+        logger.debug(
+            f"Using function_calling for schema {schema_name} with provider '{provider}'"
+        )
         return model.with_structured_output(schema, method="function_calling")
 
-    logger.debug(f"Falling back to prompt-based structured output for schema {schema_name} with provider '{provider}'")
+    logger.debug(
+        f"Falling back to prompt-based structured output for schema {schema_name} with provider '{provider}'"
+    )
 
     field_names = list(schema.model_fields.keys())
     prompt = PromptTemplate(
@@ -116,22 +119,23 @@ def get_structured_chain(
             "Please return a valid JSON with the following fields:\n"
             "{fields}"
         ),
-        input_variables=["input", "fields"]
+        input_variables=["input", "fields"],
     )
 
     def parse_fallback(inputs):
-        prompt_input = {
-            "input": inputs["input"],
-            "fields": ", ".join(field_names)
-        }
+        prompt_input = {"input": inputs["input"], "fields": ", ".join(field_names)}
 
         raw_response = model.invoke(prompt_input)
         try:
             return schema.model_validate_json(raw_response)
         except Exception as e:
-            logger.warning(f"Failed to parse fallback structured output for {schema_name}")
+            logger.warning(
+                f"Failed to parse fallback structured output for {schema_name}"
+            )
             logger.warning("Raw model response: %s", raw_response)
             logger.exception(e)
-            raise RuntimeError(f"Structured output parsing failed for schema: {schema_name}")
+            raise RuntimeError(
+                f"Structured output parsing failed for schema: {schema_name}"
+            )
 
     return prompt | RunnableLambda(parse_fallback)

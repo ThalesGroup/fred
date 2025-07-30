@@ -30,8 +30,11 @@ class OpenSearchAdvanced(BaseModel):
     """
     Represents advanced informations about a OpenSearch workload.
     """
+
     type: Literal["opensearch"] = Field(
-        default="opensearch", description="The type of workload, used for discriminated union")
+        default="opensearch",
+        description="The type of workload, used for discriminated union",
+    )
     shard_size_gb: Optional[str] = Field(
         default=None,
         description="Size of each shard, typically between 10 GB and 50 GB",
@@ -44,6 +47,7 @@ class OpenSearchAdvanced(BaseModel):
         default=None,
         description="Recommended to aim for 25 shards or fewer per GiB of heap memory",
     )
+
     def __str__(self) -> str:
         """
         Provide a string representation of the advanced OpenSearch workload attributes.
@@ -83,7 +87,9 @@ class OpenSearchAdvanced(BaseModel):
             input_variables=["workload_context"],
         )
 
-        structured_model = get_structured_chain_for_service("kubernetes", OpenSearchAdvanced)
+        structured_model = get_structured_chain_for_service(
+            "kubernetes", OpenSearchAdvanced
+        )
         chain = prompt | structured_model
         invocation_args = {"workload_context": workload_context}
 

@@ -110,7 +110,9 @@ class IngressEssentials(BaseModel):
             input_variables=["ingress_definition"],
         )
 
-        structured_model = get_structured_chain_for_service("kubernetes", IngressEssentials)
+        structured_model = get_structured_chain_for_service(
+            "kubernetes", IngressEssentials
+        )
         chain = prompt | structured_model
 
         invocation_args = {"ingress_definition": ingress_definition}
@@ -123,10 +125,12 @@ class IngressEssentials(BaseModel):
 
         return chain.invoke(invocation_args)
 
+
 class IngressesEssentials(BaseModel):
     """
     Helper class to store multiple IngressEssentials objects.
     """
+
     ingresses_essentials: List[IngressEssentials] = Field(
         description="The essential attributes of the ingresses associated with the workload"
     )

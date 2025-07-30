@@ -107,7 +107,9 @@ class WorkloadEssentials(BaseModel):
             input_variables=["workload_definition"],
         )
 
-        structured_model = get_structured_chain_for_service("kubernetes", WorkloadEssentials)
+        structured_model = get_structured_chain_for_service(
+            "kubernetes", WorkloadEssentials
+        )
         chain = prompt | structured_model
         invocation_args = {"workload_definition": workload_definition}
 

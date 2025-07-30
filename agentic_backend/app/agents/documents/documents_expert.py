@@ -31,26 +31,27 @@ from langgraph.prebuilt import ToolNode, tools_condition
 
 logger = logging.getLogger(__name__)
 
+
 class DocumentsExpert(AgentFlow):
     """
     An expert agent that searches and analyzes documents to answer user questions.
     This agent uses a vector search service to find relevant documents and generates
     responses based on the document content.
     """
+
     name: str = "DocumentsExpert"
     role: str = "Documents Expert"
     nickname: str = "Dominic"
-    description: str = (
-        """
+    description: str = """
         An expert agent that searches and analyzes documents to answer user questions.
         This agent uses a mcp vector search service to find relevant documents and generates
         responses based on the documents content.
-        """)
+        """
     icon: str = "documents_agent"
     categories: list[str] = []
     tag: str = "documents"
-    
-    def __init__(self, agent_settings: AgentSettings):     
+
+    def __init__(self, agent_settings: AgentSettings):
         """
         Initialize the DocumentsExpert agent with settings and configuration.
         Loads settings from agent configuration and sets up connections to the
@@ -72,7 +73,7 @@ class DocumentsExpert(AgentFlow):
         self.toolkit = DocumentsToolkit(self.mcp_client)
         self.model = self.model.bind_tools(self.toolkit.get_tools())
         self._graph = self._build_graph()
-       
+
         super().__init__(
             name=self.name,
             role=self.role,
@@ -85,11 +86,11 @@ class DocumentsExpert(AgentFlow):
             tag=self.tag,
             toolkit=self.toolkit,
         )
-        
+
     def _generate_prompt(self) -> str:
         """
         Generates the base prompt for the Document expert.
-        
+
         Returns:
             str: The base prompt for the agent.
         """
@@ -106,7 +107,7 @@ class DocumentsExpert(AgentFlow):
             "3. Present the results clearly, with summaries, breakdowns, and trends where applicable.\n\n"
             f"The current date is {self.current_date}.\n\n"
         )
-    
+
     async def reasoner(self, state: MessagesState):
         try:
             response = self.model.invoke([self.base_prompt] + state["messages"])
@@ -117,55 +118,74 @@ class DocumentsExpert(AgentFlow):
                     except Exception as e:
                         logger.error(f"Error parsing ToolMessage content: {e}")
                     try:
-                        documents, sources = self._extract_sources_from_tool_response(documents_data)
+                        documents, sources = self._extract_sources_from_tool_response(
+                            documents_data
+                        )
                         # Check if we have any valid documents after processing
                         if not documents:
-                            ai_message = await self.model.ainvoke([HumanMessage(content=
-                                "I found some documents but couldn't process them correctly. Please try again later."
-                            )])
+                            ai_message = await self.model.ainvoke(
+                                [
+                                    HumanMessage(
+                                        content="I found some documents but couldn't process them correctly. Please try again later."
+                                    )
+                                ]
+                            )
                             return {"messages": [ai_message]}
 
-                        response.response_metadata["sources"] = response.response_metadata.get("sources", []) + [s.model_dump() for s in sources]
+                        response.response_metadata["sources"] = (
+                            response.response_metadata.get("sources", [])
+                            + [s.model_dump() for s in sources]
+                        )
                     except Exception as e:
-                        logger.error(f"Error extracting sources from ToolMessage response: {e}")    
-            return {"messages": [response]}    
+                        logger.error(
+                            f"Error extracting sources from ToolMessage response: {e}"
+                        )
+            return {"messages": [response]}
         except Exception as e:
             # Handle any other unexpected errors
             print(f"Unexpected error in DocumentsExpert agent: {str(e)}")
-            error_message = await self.model.ainvoke([HumanMessage(content=
-                "An error occurred while processing your request. Please try again later."
-            )])
+            error_message = await self.model.ainvoke(
+                [
+                    HumanMessage(
+                        content="An error occurred while processing your request. Please try again later."
+                    )
+                ]
+            )
             return {"messages": [error_message]}
 
     def _extract_sources_from_tool_response(self, documents_data):
         logger.info(f"Received response with {len(documents_data)} documents")
-        
+
         # Process documents with error handling
         documents: list[DocumentSource] = []
         sources: list[ChatSource] = []
-                
+
         for doc in documents_data:
             try:
                 # Handle field name differences (uid vs document_uid)
                 if "uid" in doc and "document_uid" not in doc:
                     doc["document_uid"] = doc["uid"]
-                        
+
                 # Create DocumentSource instance
                 doc_source = DocumentSource(**doc)
                 documents.append(doc_source)
-                        
-                        # Create ChatSource for metadata
+
+                # Create ChatSource for metadata
                 source = ChatSource(
-                            document_uid=getattr(doc_source, "document_uid", getattr(doc_source, "uid", "unknown")),
-                            file_name=doc_source.file_name,
-                            title=doc_source.title,
-                            author=doc_source.author,
-                            content=doc_source.content,
-                            created=doc_source.created,
-                            type=doc_source.type,
-                            modified=doc_source.modified or "",
-                            score=doc_source.score
-                        )
+                    document_uid=getattr(
+                        doc_source,
+                        "document_uid",
+                        getattr(doc_source, "uid", "unknown"),
+                    ),
+                    file_name=doc_source.file_name,
+                    title=doc_source.title,
+                    author=doc_source.author,
+                    content=doc_source.content,
+                    created=doc_source.created,
+                    type=doc_source.type,
+                    modified=doc_source.modified or "",
+                    score=doc_source.score,
+                )
                 sources.append(source)
             except Exception as e:
                 print(f"Error processing document: {str(e)}. Document: {doc}")

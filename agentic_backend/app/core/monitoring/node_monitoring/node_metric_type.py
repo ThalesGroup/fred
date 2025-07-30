@@ -22,8 +22,9 @@ including latency, user/session info, token usage, model info,
 and any custom metadata.
 """
 
-from pydantic import BaseModel,Field
-from typing import Optional,Dict,Any
+from pydantic import BaseModel, Field
+from typing import Optional, Dict, Any
+
 
 class NodeMetric(BaseModel):
     """
@@ -43,6 +44,7 @@ class NodeMetric(BaseModel):
         result_summary (Optional[str]): Text summary of the response.
         metadata (Dict[str, Any]): Arbitrary extra metadata.
     """
+
     timestamp: float
     node_name: str
     latency: float

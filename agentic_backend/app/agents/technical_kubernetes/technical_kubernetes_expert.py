@@ -26,6 +26,7 @@ from app.agents.technical_kubernetes.technical_kubernetes_toolkit import (
 from app.features.frugal.ai_service import AIService
 from app.features.k8.kube_service import KubeService
 
+
 class TechnicalKubernetesExpert(AgentFlow):
     """
     Expert to provide technical guidance on Kubernetes.
@@ -40,10 +41,7 @@ class TechnicalKubernetesExpert(AgentFlow):
     categories: list[str] = []
     tag: str = "Warfare"
 
-    def __init__(self, 
-                 agent_settings: AgentSettings,
-                 cluster_fullname: Optional[str]
-                 ):
+    def __init__(self, agent_settings: AgentSettings, cluster_fullname: Optional[str]):
         """
         Initializes the Kubernetes expert agent.
 
@@ -57,9 +55,13 @@ class TechnicalKubernetesExpert(AgentFlow):
         kube_service = KubeService()
         ai_service = AIService(kube_service)
         self.toolkit = TechnicalKubernetesToolkitBuilder(ai_service).build()
-        self.categories = self.agent_settings.categories if self.agent_settings.categories else ["Kubernetes"]
-        self.base_prompt=self._generate_prompt()
-        
+        self.categories = (
+            self.agent_settings.categories
+            if self.agent_settings.categories
+            else ["Kubernetes"]
+        )
+        self.base_prompt = self._generate_prompt()
+
         super().__init__(
             name=self.name,
             role=self.role,
@@ -70,7 +72,7 @@ class TechnicalKubernetesExpert(AgentFlow):
             base_prompt=self.base_prompt(),
             categories=self.categories,
             toolkit=self.toolkit,
-            tag=self.tag, 
+            tag=self.tag,
         )
 
     def _generate_prompt(self) -> str:
@@ -84,7 +86,9 @@ class TechnicalKubernetesExpert(AgentFlow):
             "You are a friendly technical Kubernetes expert.",
         ]
         if self.cluster_fullname:
-            lines.append(f"Your current context involves a Kubernetes cluster named {self.cluster_fullname}.")
+            lines.append(
+                f"Your current context involves a Kubernetes cluster named {self.cluster_fullname}."
+            )
 
         lines += [
             "Your role is to provide clear and precise technical guidance about this cluster.",
@@ -95,7 +99,6 @@ class TechnicalKubernetesExpert(AgentFlow):
             "",
         ]
         return "\n".join(lines)
-
 
     async def expert(self, state: MessagesState):
         """

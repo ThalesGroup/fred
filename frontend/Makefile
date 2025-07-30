@@ -1,6 +1,3 @@
-
-
-
 .DEFAULT_GOAL := help
 
 VERSION ?= 0.1-dev
@@ -120,9 +117,4 @@ helm-push: ## Push the Helm chart to the project registry
          https://gitlab.thalesdigital.io/api/v4/projects/${PROJECT_ID}/packages/helm/api/release/charts
 
 
-
-##@ Help
-
-.PHONY: help
-help: ## Print help
-	@awk 'BEGIN {FS = ":.*##"; printf "\033[36m\033[0m\n"} /^[ 0-9a-zA-Z_-]+:.*?##/ { printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
+include ../scripts/makefiles/help.mk

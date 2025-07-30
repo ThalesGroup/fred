@@ -18,6 +18,7 @@ from langchain_core.tools import StructuredTool
 from openai import BaseModel
 from pydantic import Field
 
+
 class ClusterTopologyInput(BaseModel):
     """
     The input to the cluster topology tool

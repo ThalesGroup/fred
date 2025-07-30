@@ -24,8 +24,11 @@ class MCPAgent(AgentFlow):
         self.name = agent_settings.name
         self.base_prompt = agent_settings.base_prompt
         self.role = agent_settings.role or "Agent using external MCP tools"
-        self.nickname = agent_settings.nickname 
-        self.description = agent_settings.description or "Agent dynamically created to use MCP-based tools."
+        self.nickname = agent_settings.nickname
+        self.description = (
+            agent_settings.description
+            or "Agent dynamically created to use MCP-based tools."
+        )
         self.icon = agent_settings.icon or "agent_generic"
         self.categories = agent_settings.categories or []
         self.tag = agent_settings.tag or "mcp"
@@ -64,11 +67,15 @@ class MCPAgent(AgentFlow):
 
     async def reasoner(self, state: MessagesState):
         try:
-            response = await self.model.ainvoke([self.build_base_prompt()] + state["messages"])
+            response = await self.model.ainvoke(
+                [self.build_base_prompt()] + state["messages"]
+            )
             return {"messages": [response]}
         except Exception:
             logger.exception(f"Error in MCPAgent.reasoner for agent {self.name}")
-            fallback = await self.model.ainvoke([HumanMessage(content="An error occurred.")])
+            fallback = await self.model.ainvoke(
+                [HumanMessage(content="An error occurred.")]
+            )
             return {"messages": [fallback]}
 
     def get_graph(self):

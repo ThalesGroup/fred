@@ -40,7 +40,9 @@ class TabularExpert(AgentFlow):
     name: str = "TabularExpert"
     role: str = "Tabular Data Expert"
     nickname: str = "Tessa"
-    description: str = "An agent specialized in analyzing structured tabular data (e.g., CSV, XLSX)."
+    description: str = (
+        "An agent specialized in analyzing structured tabular data (e.g., CSV, XLSX)."
+    )
     icon: str = "tabulat_agent"
     categories: list[str] = ["tabular", "sql"]
     tag: str = "data"
@@ -62,7 +64,7 @@ class TabularExpert(AgentFlow):
         self.toolkit = TabularToolkit(self.mcp_client)
         self.model = self.model.bind_tools(self.toolkit.get_tools())
         self._graph = self._build_graph()
-       
+
         super().__init__(
             name=self.name,
             role=self.role,
@@ -95,12 +97,16 @@ class TabularExpert(AgentFlow):
 
     def _build_graph(self) -> StateGraph:
         builder = StateGraph(MessagesState)
-        
+
         builder.add_node("reasoner", monitor_node(self._run_reasoning_step))
-        builder.add_node("tools", ToolNode(self.toolkit.get_tools()))  # 🧩 THIS LINE WAS MISSING
+        builder.add_node(
+            "tools", ToolNode(self.toolkit.get_tools())
+        )  # 🧩 THIS LINE WAS MISSING
 
         builder.add_edge(START, "reasoner")
-        builder.add_conditional_edges("reasoner", tools_condition)  # conditional → "tools"
+        builder.add_conditional_edges(
+            "reasoner", tools_condition
+        )  # conditional → "tools"
         builder.add_edge("tools", "reasoner")
 
         return builder
@@ -116,7 +122,9 @@ class TabularExpert(AgentFlow):
                         datasets = json.loads(msg.content)
                         summaries = self._extract_dataset_summaries(datasets)
                         if summaries:
-                            response.content += "\n\n### Available Datasets:\n" + "\n".join(summaries)
+                            response.content += (
+                                "\n\n### Available Datasets:\n" + "\n".join(summaries)
+                            )
                     except Exception as e:
                         logger.warning(f"Failed to parse tool response: {e}")
 
@@ -124,9 +132,13 @@ class TabularExpert(AgentFlow):
 
         except Exception:
             logger.exception("TabularExpert failed during reasoning.")
-            fallback = await self.model.ainvoke([
-                HumanMessage(content="An error occurred while analyzing tabular data.")
-            ])
+            fallback = await self.model.ainvoke(
+                [
+                    HumanMessage(
+                        content="An error occurred while analyzing tabular data."
+                    )
+                ]
+            )
             return {"messages": [fallback]}
 
     def _extract_dataset_summaries(self, data: list[dict]) -> list[str]:

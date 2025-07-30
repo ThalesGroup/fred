@@ -20,13 +20,14 @@ class UnavailableError(HTTPException):
         super().__init__(status_code=503, detail=f"Resource unavailable: {message}")
 
 
-class InvalidCacheError(FileNotFoundError):
-    ...
+class InvalidCacheError(FileNotFoundError): ...
+
 
 # ------------------------------
 # MCP & Agent setup Exceptions
 # ------------------------------
 # app/features/dynamic_agent/exceptions.py
+
 
 class MCPClientConnectionException(Exception):
     def __init__(self, agent_name: str, reason: str):
@@ -34,18 +35,20 @@ class MCPClientConnectionException(Exception):
         self.agent_name = agent_name
         self.reason = reason
 
-class UnsupportedTransportError(ValueError):
-    ...
-    
-class MCPToolFetchError(ValueError):
-    ...
-    
-class NoToolkitProvidedError(ValueError):
-    ...
+
+class UnsupportedTransportError(ValueError): ...
+
+
+class MCPToolFetchError(ValueError): ...
+
+
+class NoToolkitProvidedError(ValueError): ...
+
 
 # ------------------------------
 # Session storage exceptions
 # ------------------------------
+
 
 class SessionNotFoundError(Exception):
     def __init__(self, session_id: str):
@@ -53,8 +56,7 @@ class SessionNotFoundError(Exception):
         super().__init__(f"Session '{session_id}' not found")
 
 
+class AuthorizationSentinel: ...
 
-class AuthorizationSentinel:
-    ...
 
 SESSION_NOT_INITIALIZED = AuthorizationSentinel()

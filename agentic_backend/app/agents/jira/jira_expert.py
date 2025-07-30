@@ -24,10 +24,12 @@ from langgraph.prebuilt import ToolNode, tools_condition
 
 from app.agents.jira.jira_toolkit import JiraExpertToolkit
 
+
 class JiraExpert(AgentFlow):
     """
     Expert to execute actions on a a Jira Instance.
     """
+
     # Class-level attributes for metadata
     name: str = "JiraExpert"
     role: str = "Jira Expert"
@@ -36,15 +38,19 @@ class JiraExpert(AgentFlow):
     icon: str = "jira_agent"
     categories: list[str] = []
     tag: str = "jira operator"  # Défini au niveau de la classe
-    
+
     def __init__(self, agent_settings: AgentSettings):
         self.current_date = datetime.now().strftime("%Y-%m-%d")
         self.agent_settings = agent_settings
         self.model = get_model(self.agent_settings.model)
-        self.mcp_client =  get_mcp_client_for_agent(self.agent_settings)
+        self.mcp_client = get_mcp_client_for_agent(self.agent_settings)
         self.toolkit = JiraExpertToolkit(self.mcp_client)
-        self.base_prompt=self._generate_prompt()
-        self.categories = self.agent_settings.categories if self.agent_settings.categories else ["Jira"]
+        self.base_prompt = self._generate_prompt()
+        self.categories = (
+            self.agent_settings.categories
+            if self.agent_settings.categories
+            else ["Jira"]
+        )
         # On conserve le tag de classe si agent_settings.tag est None ou vide
         if self.agent_settings.tag:
             self.tag = self.agent_settings.tag
@@ -59,9 +65,8 @@ class JiraExpert(AgentFlow):
             base_prompt=self.base_prompt,
             categories=self.categories,
             tag=self.tag,
-            toolkit=self.toolkit
+            toolkit=self.toolkit,
         )
-        
 
     def _generate_prompt(self) -> str:
         """
@@ -89,11 +94,10 @@ class JiraExpert(AgentFlow):
             "4. Everytime you mention a ticket, indicate who created it, the creation date and time, the status, who it is assigned to and a summary of the issue.",
             "5. Always summarize the comments of the tickets if there are any.",
             "6. When listing tickets, provide its title as a bold clickable link that redirects to the issue in Jira (not the API link, the actual link.)."
-            f"The current date is {datetime.now().strftime('%Y-%m-%d')}."
+            f"The current date is {datetime.now().strftime('%Y-%m-%d')}.",
         ]
         return "\n".join(lines)
 
-    
     async def reasoner(self, state: MessagesState):
         response = self.model.invoke([self.base_prompt] + state["messages"])
 
