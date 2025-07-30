@@ -90,12 +90,14 @@ helm-push: ## Push Helm chart to GitLab package registry
 ##@ Run
 
 .PHONY: run-local
+run-local: HOST ?= 0.0.0.0
 run-local: PORT ?= 8111
 run-local: UVICORN_FACTORY ?= app.main:create_app
 run-local: UVICORN_LOOP ?= asyncio
 run-local: ## Run the app assuming dependencies already exist
 	$(UV) run uvicorn \
 		--factory ${UVICORN_FACTORY} \
+		--host ${HOST} \
 		--port ${PORT} \
 		--env-file ${ENV_FILE} \
 		--log-level ${LOG_LEVEL} \
