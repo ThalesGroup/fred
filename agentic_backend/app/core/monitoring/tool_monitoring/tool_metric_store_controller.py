@@ -47,6 +47,7 @@ class ToolMetricStoreController:
     Endpoints prefix:
         /metrics/tools
     """
+
     def __init__(self, router: APIRouter):
         """
         Registers metric routes to the provided FastAPI router.
@@ -61,5 +62,5 @@ class ToolMetricStoreController:
             MetricType=ToolMetric,
             NumericalType=NumericalMetric,
             CategoricalType=CategoricalMetric,
-            prefix="tools"
+            prefix="tools",
         )

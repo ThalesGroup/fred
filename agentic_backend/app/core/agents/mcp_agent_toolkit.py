@@ -25,7 +25,9 @@ class McpAgentToolkit(BaseToolkit):
     Suitable for dynamically created agents that use arbitrary MCP URLs.
     """
 
-    tools: List[BaseTool] = Field(default_factory=list, description="List of the tools.")
+    tools: List[BaseTool] = Field(
+        default_factory=list, description="List of the tools."
+    )
 
     def __init__(self, mcp_client: MultiServerMCPClient):
         super().__init__()
@@ -35,7 +37,9 @@ class McpAgentToolkit(BaseToolkit):
     def _fetch_and_wrap_tools(self, mcp_client: MultiServerMCPClient) -> List[BaseTool]:
         raw_tools = mcp_client.get_tools()
         if not raw_tools:
-            raise ValueError("❌ MCP server returned no tools. Check server config or availability.")
+            raise ValueError(
+                "❌ MCP server returned no tools. Check server config or availability."
+            )
         return [monitor_tool(tool) for tool in raw_tools]
 
     @override

@@ -32,10 +32,11 @@ from tenacity import RetryError, retry, stop_after_delay, wait_fixed
 logger = logging.getLogger(__name__)
 SUPPORTED_TRANSPORTS = ["sse", "stdio", "streamable_http", "websocket"]
 
+
 class AgentManager:
     """
     Manages the full lifecycle of AI agents (leaders and experts), including:
-    
+
     - Loading static agents from configuration at startup.
     - Persisting new agents to storage (e.g., DuckDB).
     - Rehydrating all persisted agents at runtime (with class instantiation and async init).
@@ -72,10 +73,11 @@ class AgentManager:
                 continue
             success = await self._register_static_agent(agent_cfg)
             if not success:
-                self.failed_agents[agent_cfg.name] = agent_cfg  # ✅ ensure failed ones are tracked
+                self.failed_agents[agent_cfg.name] = (
+                    agent_cfg  # ✅ ensure failed ones are tracked
+                )
         await self._load_all_persisted_agents()
         self._inject_experts_into_leaders()
-
 
     async def _register_static_agent(self, agent_cfg: AgentSettings) -> bool:
         try:
@@ -83,11 +85,15 @@ class AgentManager:
             module = importlib.import_module(module_name)
             cls = getattr(module, class_name)
         except (ValueError, ImportError, AttributeError) as e:
-            logger.error(f"❌ Failed to import class '{agent_cfg.class_path}' for '{agent_cfg.name}': {e}")
+            logger.error(
+                f"❌ Failed to import class '{agent_cfg.class_path}' for '{agent_cfg.name}': {e}"
+            )
             return False
 
         if not issubclass(cls, (Flow, AgentFlow)):
-            logger.error(f"Class '{agent_cfg.class_path}' is not a supported Flow or AgentFlow.")
+            logger.error(
+                f"Class '{agent_cfg.class_path}' is not a supported Flow or AgentFlow."
+            )
             return False
 
         try:
@@ -95,12 +101,16 @@ class AgentManager:
             if iscoroutinefunction(getattr(instance, "async_init", None)):
                 await instance.async_init()
             self._register_loaded_agent(agent_cfg.name, instance, agent_cfg)
-            logger.info(f"✅ Registered static agent '{agent_cfg.name}' from configuration.")
+            logger.info(
+                f"✅ Registered static agent '{agent_cfg.name}' from configuration."
+            )
             return True
         except Exception as e:
-            logger.error(f"❌ Failed to instantiate or register static agent '{agent_cfg.name}': {e}")
+            logger.error(
+                f"❌ Failed to instantiate or register static agent '{agent_cfg.name}': {e}"
+            )
             return False
-        
+
     def _try_seed_agent(self, agent_cfg: AgentSettings):
         """
         Attempts to load the class for the given agent and instantiate it.
@@ -112,11 +122,15 @@ class AgentManager:
             module = importlib.import_module(module_name)
             cls = getattr(module, class_name)
         except (ValueError, ImportError, AttributeError) as e:
-            logger.error(f"❌ Failed to load class '{agent_cfg.class_path}' for '{agent_cfg.name}': {e}")
+            logger.error(
+                f"❌ Failed to load class '{agent_cfg.class_path}' for '{agent_cfg.name}': {e}"
+            )
             return
 
         if not issubclass(cls, (Flow, AgentFlow)):
-            logger.error(f"Class '{agent_cfg.class_path}' is not a supported Flow or AgentFlow.")
+            logger.error(
+                f"Class '{agent_cfg.class_path}' is not a supported Flow or AgentFlow."
+            )
             return
 
         try:
@@ -140,7 +154,9 @@ class AgentManager:
         """
         for agent_settings in self.store.load_all():
             if not agent_settings.class_path:
-                logger.warning(f"No class_path for agent '{agent_settings.name}' — skipping.")
+                logger.warning(
+                    f"No class_path for agent '{agent_settings.name}' — skipping."
+                )
                 continue
 
             try:
@@ -157,15 +173,23 @@ class AgentManager:
                 if iscoroutinefunction(getattr(instance, "async_init", None)):
                     await instance.async_init()
 
-                self._register_loaded_agent(agent_settings.name, instance, agent_settings)
+                self._register_loaded_agent(
+                    agent_settings.name, instance, agent_settings
+                )
 
                 if isinstance(instance, AgentFlow):
-                    logger.info(f"✅ Loaded expert agent '{agent_settings.name}' ({agent_settings.class_path})")
+                    logger.info(
+                        f"✅ Loaded expert agent '{agent_settings.name}' ({agent_settings.class_path})"
+                    )
                 elif isinstance(instance, Flow):
-                    logger.info(f"✅ Loaded leader agent '{agent_settings.name}' ({agent_settings.class_path})")
+                    logger.info(
+                        f"✅ Loaded leader agent '{agent_settings.name}' ({agent_settings.class_path})"
+                    )
 
             except Exception as e:
-                logger.exception(f"❌ Failed to load agent '{agent_settings.name}': {e}")
+                logger.exception(
+                    f"❌ Failed to load agent '{agent_settings.name}': {e}"
+                )
 
     def _inject_experts_into_leaders(self):
         """
@@ -179,7 +203,9 @@ class AgentManager:
 
             leader_instance = self.get_agent_instance(leader_name)
             if not hasattr(leader_instance, "add_expert"):
-                logger.warning(f"⚠️ Leader '{leader_name}' does not support expert injection (missing 'add_expert').")
+                logger.warning(
+                    f"⚠️ Leader '{leader_name}' does not support expert injection (missing 'add_expert')."
+                )
                 continue
 
             for expert_name, expert_settings in self.agent_settings.items():
@@ -192,9 +218,13 @@ class AgentManager:
                 compiled_graph = expert_instance.get_compiled_graph()
 
                 leader_instance.add_expert(expert_name, expert_instance, compiled_graph)
-                logger.info(f"👥 Added expert '{expert_name}' to leader '{leader_name}'")
+                logger.info(
+                    f"👥 Added expert '{expert_name}' to leader '{leader_name}'"
+                )
 
-    def _register_loaded_agent(self, name: str, instance: Flow, settings: AgentSettings):
+    def _register_loaded_agent(
+        self, name: str, instance: Flow, settings: AgentSettings
+    ):
         """
         Internal helper: registers an already-initialized agent (typically at startup).
         Adds it to the runtime maps so it's discoverable and usable.
@@ -214,7 +244,9 @@ class AgentManager:
         self.agent_constructors[name] = lambda a=instance: a
         self.agent_classes[name] = type(instance)
         self.agent_settings[name] = settings
-        logger.info(f"✅ Registered dynamic agent '{name}' ({type(instance).__name__}) in memory.")
+        logger.info(
+            f"✅ Registered dynamic agent '{name}' ({type(instance).__name__}) in memory."
+        )
 
     def unregister_agent(self, name: str):
         """
@@ -233,15 +265,17 @@ class AgentManager:
         flows = []
         for name, constructor in self.agent_constructors.items():
             instance = constructor()
-            flows.append(AgenticFlow(
-                name=instance.name,
-                role=instance.role,
-                nickname=instance.nickname,
-                description=instance.description,
-                icon=instance.icon,
-                tag=instance.tag,
-                experts=[],
-            ))
+            flows.append(
+                AgenticFlow(
+                    name=instance.name,
+                    role=instance.role,
+                    nickname=instance.nickname,
+                    description=instance.description,
+                    icon=instance.icon,
+                    tag=instance.tag,
+                    experts=[],
+                )
+            )
         return flows
 
     def get_agent_instance(self, name: str) -> Flow:
@@ -271,6 +305,7 @@ class AgentManager:
 
         import asyncio
         import nest_asyncio
+
         nest_asyncio.apply()
 
         client = MultiServerMCPClient()
@@ -280,7 +315,9 @@ class AgentManager:
             exceptions = []
             for server in agent_settings.mcp_servers:
                 if server.transport not in SUPPORTED_TRANSPORTS:
-                    raise UnsupportedTransportError(f"Unsupported transport: {server.transport}")
+                    raise UnsupportedTransportError(
+                        f"Unsupported transport: {server.transport}"
+                    )
                 try:
                     await client.connect_to_server(
                         server_name=server.name,
@@ -289,7 +326,7 @@ class AgentManager:
                         command=server.command,
                         args=server.args,
                         env=server.env,
-                        sse_read_timeout=server.sse_read_timeout
+                        sse_read_timeout=server.sse_read_timeout,
                     )
                 except Exception as eg:
                     exceptions.extend(getattr(eg, "exceptions", [eg]))
@@ -299,11 +336,11 @@ class AgentManager:
         loop.run_until_complete(connect_all())
         return client
 
-
     def get_mcp_client(self, agent_name: str) -> MultiServerMCPClient:
         agent_settings = self.get_agent_settings(agent_name)
         import asyncio
         import nest_asyncio
+
         nest_asyncio.apply()
 
         client = MultiServerMCPClient()
@@ -313,7 +350,9 @@ class AgentManager:
             exceptions = []
             for server in agent_settings.mcp_servers:
                 if server.transport not in SUPPORTED_TRANSPORTS:
-                    raise UnsupportedTransportError(f"Unsupported transport: {server.transport}")
+                    raise UnsupportedTransportError(
+                        f"Unsupported transport: {server.transport}"
+                    )
                 try:
                     await client.connect_to_server(
                         server_name=server.name,
@@ -322,11 +361,15 @@ class AgentManager:
                         command=server.command,
                         args=server.args,
                         env=server.env,
-                        sse_read_timeout=server.sse_read_timeout
+                        sse_read_timeout=server.sse_read_timeout,
                     )
-                    logger.info(f"✅ Connected to MCP server '{server.name}' at '{server.url}'")
+                    logger.info(
+                        f"✅ Connected to MCP server '{server.name}' at '{server.url}'"
+                    )
                 except Exception as eg:
-                    logger.warning(f"⚠️ Failed to connect to MCP server '{server.name}': {eg}")
+                    logger.warning(
+                        f"⚠️ Failed to connect to MCP server '{server.name}': {eg}"
+                    )
                     exceptions.extend(getattr(eg, "exceptions", [eg]))
             if exceptions:
                 raise ExceptionGroup("Some MCP connections failed", exceptions)
@@ -338,11 +381,15 @@ class AgentManager:
         try:
             loop.run_until_complete(retry_connect_all())
         except RetryError as re:
-            logger.error(f"❌ MCP client for agent '{agent_name}' failed to connect after retries.")
+            logger.error(
+                f"❌ MCP client for agent '{agent_name}' failed to connect after retries."
+            )
             logger.debug(re)
         except Exception:
-            logger.exception(f"❌ MCP client for agent '{agent_name}' raised an unexpected error.")
-        
+            logger.exception(
+                f"❌ MCP client for agent '{agent_name}' raised an unexpected error."
+            )
+
         return client
 
     async def _retry_failed_agents_loop(self):
@@ -366,4 +413,6 @@ class AgentManager:
                 for name in to_remove:
                     del self.failed_agents[name]
             except Exception:
-                logger.exception("🔥 Unexpected error in retry loop — will continue anyway")
+                logger.exception(
+                    "🔥 Unexpected error in retry loop — will continue anyway"
+                )

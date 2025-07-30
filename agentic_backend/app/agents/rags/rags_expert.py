@@ -28,12 +28,14 @@ from app.core.chatbot.chat_schema import ChatSource
 
 logger = logging.getLogger(__name__)
 
+
 class RagsExpert(AgentFlow):
     """
     An expert agent that searches and analyzes documents to answer user questions.
     This agent uses a vector search service using the knowledge-flow search REST API to find relevant documents and generates
     responses based on the document content. This design is simple and straightworward.
     """
+
     name: str = "RagsExpert"
     role: str = "Rags Expert"
     nickname: str = "Rico"
@@ -44,7 +46,9 @@ class RagsExpert(AgentFlow):
 
     def __init__(self, agent_settings: AgentSettings):
         self.agent_settings = agent_settings
-        self.knowledge_flow_url = agent_settings.settings.get("knowledge_flow_url", "http://localhost:8111/knowledge-flow/v1")
+        self.knowledge_flow_url = agent_settings.settings.get(
+            "knowledge_flow_url", "http://localhost:8111/knowledge-flow/v1"
+        )
         self.current_date = datetime.now().strftime("%Y-%m-%d")
         self.model = None
         self.base_prompt = ""
@@ -81,7 +85,7 @@ class RagsExpert(AgentFlow):
             "Whenever you reference a document part, provide citations.\n"
             f"The current date is {self.current_date}.\n"
         )
-    
+
     def _build_graph(self) -> StateGraph:
         builder = StateGraph(MessagesState)
         builder.add_node("reasoner", self._run_reasoning_step)
@@ -95,14 +99,16 @@ class RagsExpert(AgentFlow):
             response = requests.post(
                 f"{self.knowledge_flow_url}/vector/search",
                 json={"query": question, "top_k": 3},
-                timeout=10
+                timeout=10,
             )
             response.raise_for_status()
             documents_data = response.json()
 
             if not documents_data:
                 msg = f"I couldn't find any relevant documents for '{question}'. Try rephrasing?"
-                return {"messages": [await self.model.ainvoke([HumanMessage(content=msg)])]}
+                return {
+                    "messages": [await self.model.ainvoke([HumanMessage(content=msg)])]
+                }
 
             documents = []
             sources: List[ChatSource] = []
@@ -111,17 +117,23 @@ class RagsExpert(AgentFlow):
                     doc["document_uid"] = doc["uid"]
                 doc_source = DocumentSource(**doc)
                 documents.append(doc_source)
-                sources.append(ChatSource(
-                    document_uid=getattr(doc_source, "document_uid", getattr(doc_source, "uid", "unknown")),
-                    file_name=doc_source.file_name,
-                    title=doc_source.title,
-                    author=doc_source.author,
-                    content=doc_source.content,
-                    created=doc_source.created,
-                    modified=doc_source.modified or "",
-                    type=doc_source.type,
-                    score=doc_source.score,
-                ))
+                sources.append(
+                    ChatSource(
+                        document_uid=getattr(
+                            doc_source,
+                            "document_uid",
+                            getattr(doc_source, "uid", "unknown"),
+                        ),
+                        file_name=doc_source.file_name,
+                        title=doc_source.title,
+                        author=doc_source.author,
+                        content=doc_source.content,
+                        created=doc_source.created,
+                        modified=doc_source.modified or "",
+                        type=doc_source.type,
+                        score=doc_source.score,
+                    )
+                )
 
             documents_str = "\n".join(
                 f"Source file: {d.file_name}\nPage: {d.page}\nContent: {d.content}\n"
@@ -136,11 +148,14 @@ class RagsExpert(AgentFlow):
             )
 
             response = await self.model.ainvoke([HumanMessage(content=prompt)])
-            response.response_metadata.update({"sources": [s.model_dump() for s in sources]})
+            response.response_metadata.update(
+                {"sources": [s.model_dump() for s in sources]}
+            )
             return {"messages": [response]}
 
         except Exception:
             logger.exception("Error in RagsExpert reasoning.")
-            fallback = await self.model.ainvoke([HumanMessage(content="An error occurred. Please try again later.")])
+            fallback = await self.model.ainvoke(
+                [HumanMessage(content="An error occurred. Please try again later.")]
+            )
             return {"messages": [fallback]}
-

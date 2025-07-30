@@ -38,6 +38,7 @@ logger = logging.getLogger(__name__)
 
 _instance: Optional["NodeMetricStore"] = None
 
+
 class NodeMetricStore(HybridJsonlStore[NodeMetric]):
     """
     Concrete store for NodeMetric objects.
@@ -49,6 +50,7 @@ class NodeMetricStore(HybridJsonlStore[NodeMetric]):
         - get_categorical_rows_by_date_range: Converts stored metrics to CategoricalMetric representations
           for analytics and filtering on categorical dimensions.
     """
+
     def get_categorical_rows_by_date_range(self, start: datetime, end: datetime):
         metrics = self.get_by_date_range(start, end)
         return [
@@ -62,10 +64,11 @@ class NodeMetricStore(HybridJsonlStore[NodeMetric]):
                 finish_reason=None,
                 id=None,
                 system_fingerprint=None,
-                service_tier=None
+                service_tier=None,
             )
             for m in metrics
         ]
+
 
 def create_node_metric_store(config: MetricsStorageConfig) -> NodeMetricStore:
     """
@@ -82,11 +85,10 @@ def create_node_metric_store(config: MetricsStorageConfig) -> NodeMetricStore:
     global _instance
     if _instance is None:
         _instance = NodeMetricStore(
-            config=config,
-            filename="node_metrics.jsonl",
-            model=NodeMetric
+            config=config, filename="node_metrics.jsonl", model=NodeMetric
         )
     return _instance
+
 
 def get_node_metric_store() -> NodeMetricStore:
     """

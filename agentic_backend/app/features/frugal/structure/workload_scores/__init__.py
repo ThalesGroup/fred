@@ -51,7 +51,7 @@ class WorkloadScores(BaseModel):
         default=None, description="The compression score"
     )
 
-    def __init__( # pylint: disable=R0913, R0917
+    def __init__(  # pylint: disable=R0913, R0917
         self,
         cpu: CpuScore,
         ram: RamScore,

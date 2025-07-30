@@ -25,20 +25,23 @@ from app.application_context import get_structured_chain_for_service
 
 from app.features.frugal.structure.workload_context import WorkloadContext
 
+
 class CompressionScore(BaseModel):
     """
     Represents the compression score of a workload.
 
-    The compression score is a numerical grade on a scale of 0 to 10, 
-    where 0 represents the worst compression efficiency and 10 represents 
+    The compression score is a numerical grade on a scale of 0 to 10,
+    where 0 represents the worst compression efficiency and 10 represents
     the best possible compression performance.
     """
+
     score: float = Field(
         default=None,
         description="The compression score, a grade on a scale of 0 to 10",
     )
-    reason: str = Field(default=None, description="An explanation of the compression score")
-
+    reason: str = Field(
+        default=None, description="An explanation of the compression score"
+    )
 
     def __str__(self) -> str:
         """
@@ -47,10 +50,7 @@ class CompressionScore(BaseModel):
         Returns:
             str: A formatted string containing the compression score.
         """
-        return (
-            f"Compression Score: {self.score}\n"
-            f"Reason: {self.reason}"
-        )
+        return f"Compression Score: {self.score}\nReason: {self.reason}"
 
     @classmethod
     def from_workload_context(
@@ -60,7 +60,7 @@ class CompressionScore(BaseModel):
     ) -> "CompressionScore":
         """
         Extract the compression score based on the workload context.
-        
+
         Args:
             workload_context (WorkloadContext): The workload context.
             langfuse_handler (Optional[CallbackHandler]): The LangFuse callback handler.
@@ -82,7 +82,9 @@ class CompressionScore(BaseModel):
             input_variables=["workload_context"],
         )
 
-        structured_model = get_structured_chain_for_service("kubernetes", CompressionScore)
+        structured_model = get_structured_chain_for_service(
+            "kubernetes", CompressionScore
+        )
         chain = prompt | structured_model
         if langfuse_handler is not None:
             return chain.invoke(

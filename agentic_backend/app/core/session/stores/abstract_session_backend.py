@@ -17,8 +17,8 @@ from abc import ABC, abstractmethod
 
 from app.core.chatbot.chat_schema import ChatMessagePayload, SessionSchema
 
-class AbstractSessionStorage(ABC):
 
+class AbstractSessionStorage(ABC):
     @abstractmethod
     def save_session(self, session: SessionSchema) -> None:
         """
@@ -48,11 +48,15 @@ class AbstractSessionStorage(ABC):
         pass
 
     @abstractmethod
-    def save_messages(self, session_id: str, messages: List[ChatMessagePayload], user_id: str) -> None:
+    def save_messages(
+        self, session_id: str, messages: List[ChatMessagePayload], user_id: str
+    ) -> None:
         """Save a batch of messages to the session history."""
         pass
 
     @abstractmethod
-    def get_message_history(self, session_id: str, user_id: str) -> List[ChatMessagePayload]:
+    def get_message_history(
+        self, session_id: str, user_id: str
+    ) -> List[ChatMessagePayload]:
         """Retrieve messages for a given session."""
         pass

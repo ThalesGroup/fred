@@ -16,6 +16,7 @@ from abc import ABC, abstractmethod
 from typing import List, Optional
 from app.common.structures import AgentSettings
 
+
 class BaseAgentStore(ABC):
     """
     Interface for persistent storage of agent metadata (not instances).

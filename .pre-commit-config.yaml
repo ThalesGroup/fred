@@ -12,6 +12,7 @@ repos:
     rev: v1.5.0
     hooks:
       - id: detect-secrets
+        args: ['--baseline', '.secrets.baseline']
         name: leak
   - repo: https://github.com/PyCQA/bandit
     rev: 1.8.5
@@ -19,3 +20,14 @@ repos:
       - id: bandit
         args: ["-r", "-s", "B101,B108", "--", "agentic_backend/app", "knowledge_flow_backend/app"]
         name: sast
+  - repo: https://github.com/DetachHead/basedpyright-pre-commit-mirror
+    rev: v1.13.0
+    hooks:
+      - id: basedpyright
+        name: type-check-agentic
+        files: ^agentic_backend/
+        args: ["--project", "agentic_backend"]
+      - id: basedpyright
+        name: type-check-knowledge-flow
+        files: ^knowledge_flow_backend/
+        args: ["--project", "knowledge_flow_backend"]

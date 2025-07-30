@@ -25,20 +25,23 @@ from app.application_context import get_structured_chain_for_service
 
 from app.features.frugal.structure.workload_context import WorkloadContext
 
+
 class IoScore(BaseModel):
     """
     Represents the I/O optimization score of a workload.
 
-    The I/O score is a numerical grade on a scale of 0 to 10, 
-    where 0 represents the worst I/O efficiency and 10 represents 
+    The I/O score is a numerical grade on a scale of 0 to 10,
+    where 0 represents the worst I/O efficiency and 10 represents
     the best possible I/O optimization performance.
     """
+
     score: float = Field(
         default=None,
         description="The I/O optimization score, a grade on a scale of 0 to 10",
     )
-    reason: str = Field(default=None, description="An explanation of the I/O optimization score")
-
+    reason: str = Field(
+        default=None, description="An explanation of the I/O optimization score"
+    )
 
     def __str__(self) -> str:
         """
@@ -47,10 +50,7 @@ class IoScore(BaseModel):
         Returns:
             str: A formatted string containing the I/O optimization score.
         """
-        return (
-            f"I/O Optimization Score: {self.score}\n"
-            f"Reason: {self.reason}"
-        )
+        return f"I/O Optimization Score: {self.score}\nReason: {self.reason}"
 
     @classmethod
     def from_workload_context(
@@ -60,7 +60,7 @@ class IoScore(BaseModel):
     ) -> "IoScore":
         """
         Extract the I/O optimization score based on the workload context.
-        
+
         Args:
             workload_context (WorkloadContext): The workload context.
             langfuse_handler (Optional[CallbackHandler]): The LangFuse callback handler.

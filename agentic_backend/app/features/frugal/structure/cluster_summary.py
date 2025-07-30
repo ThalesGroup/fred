@@ -76,7 +76,9 @@ class ClusterSummary(BaseModel):
             input_variables=["cluster_context"],
         )
 
-        structured_model = get_structured_chain_for_service("kubernetes", ClusterSummary)
+        structured_model = get_structured_chain_for_service(
+            "kubernetes", ClusterSummary
+        )
         chain = prompt | structured_model
 
         invocation_args = {"cluster_context": cluster_context}

@@ -24,15 +24,18 @@ from langfuse.callback import CallbackHandler
 from pydantic import Field, BaseModel
 from app.application_context import get_structured_chain_for_service
 
-#from app.features.frugal.structure.workload_context import WorkloadContext
+# from app.features.frugal.structure.workload_context import WorkloadContext
 
 
 class PunchlineAdvanced(BaseModel):
     """
     Represents advanced informations about a Punchline workload.
     """
+
     type: Literal["punchline"] = Field(
-        default="punchline", description="The type of workload, used for discriminated union")
+        default="punchline",
+        description="The type of workload, used for discriminated union",
+    )
     pipeline_workers: Optional[int] = Field(
         default=None, description="Number of workers in the Punchline"
     )
@@ -42,8 +45,12 @@ class PunchlineAdvanced(BaseModel):
     pipeline_batch_delay: Optional[int] = Field(
         default=None, description="Batch delay in the Punchline"
     )
-    heap_size: Optional[str] = Field(default=None, description="Heap size for the Punchline")
-    log_level: Optional[str] = Field(default=None, description="Log level for the Punchline")
+    heap_size: Optional[str] = Field(
+        default=None, description="Heap size for the Punchline"
+    )
+    log_level: Optional[str] = Field(
+        default=None, description="Log level for the Punchline"
+    )
     input_plugin: Optional[str] = Field(
         default=None, description="Input plugin for the Punchline"
     )
@@ -110,7 +117,9 @@ class PunchlineAdvanced(BaseModel):
             input_variables=["workload_context"],
         )
 
-        structured_model = get_structured_chain_for_service("kubernetes", PunchlineAdvanced)
+        structured_model = get_structured_chain_for_service(
+            "kubernetes", PunchlineAdvanced
+        )
         chain = prompt | structured_model
         invocation_args = {"workload_context": workload_context}
 

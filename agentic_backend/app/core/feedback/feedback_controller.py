@@ -23,6 +23,7 @@ import logging
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
+
 class FeedbackPayload(BaseModel):
     rating: int
     comment: Optional[str] = None
@@ -33,9 +34,9 @@ class FeedbackPayload(BaseModel):
     class Config:
         populate_by_name = True
 
+
 class FeedbackController:
     def __init__(self, router: APIRouter, config: FeedbackStorageConfig):
-
         self.service = FeedbackService(get_feedback_store())
 
         @router.post("/chatbot/feedback", tags=["Feedback"])

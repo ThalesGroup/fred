@@ -98,7 +98,9 @@ class ServiceEssentials(BaseModel):
             input_variables=["service_definition"],
         )
 
-        structured_model = get_structured_chain_for_service("kubernetes", ServiceEssentials)
+        structured_model = get_structured_chain_for_service(
+            "kubernetes", ServiceEssentials
+        )
         chain = prompt | structured_model
         invocation_args = {"service_definition": service_definition}
 
@@ -110,10 +112,12 @@ class ServiceEssentials(BaseModel):
 
         return chain.invoke(invocation_args)
 
+
 class ServicesEssentials(BaseModel):
     """
     Helper class to store multiple ServiceEssentials objects.
     """
+
     services_essentials: List[ServiceEssentials] = Field(
         description="The essential attributes of the services associated with the workload"
     )

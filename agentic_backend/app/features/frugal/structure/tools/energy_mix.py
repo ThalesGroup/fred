@@ -31,6 +31,7 @@ class EnergyMixInput(BaseModel):
         end_date (str): The end date for the energy mix data retrieval (e.g., '2024-01-07').
         precision (PrecisionEnum): Specifies the granularity of the data, such as daily or hourly breakdown.
     """
+
     start_date: str = Field(
         description="Start date for the energy mix data retrieval in 'YYYY-MM-DD' format. Example: '2024-01-01'."
     )
@@ -46,7 +47,7 @@ class EnergyMixInput(BaseModel):
 
 
 def get_energy_mix(
-        start_date: str, end_date: str, precision: PrecisionEnum
+    start_date: str, end_date: str, precision: PrecisionEnum
 ) -> ClusterConsumption:
     """
     Get the energy-mix also known as the electricity mix or power mix measurement for a given date range

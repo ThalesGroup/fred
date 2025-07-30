@@ -20,12 +20,13 @@ from app.core.agents.mcp_agent import MCPAgent
 from app.core.agents.structures import CreateAgentRequest, MCPAgentRequest
 from app.application_context import get_agent_store, get_app_context
 
+
 # --- Domain Exceptions ---
 class AgentAlreadyExistsException(Exception):
     pass
 
-class AgentService:
 
+class AgentService:
     def __init__(self, agent_manager: AgentManager):
         self.store = get_agent_store()
         self.agent_manager = agent_manager
@@ -34,11 +35,11 @@ class AgentService:
         """
         Builds, registers, and stores the MCP agent, including updating app context and saving to DuckDB.
         """
-         # 1. Create config
+        # 1. Create config
         agent_settings = AgentSettings(
             type=req.agent_type,
             name=req.name,
-            class_path=get_class_path(MCPAgent),  
+            class_path=get_class_path(MCPAgent),
             enabled=True,
             categories=req.categories or [],
             tag=req.tag or "mcp",
@@ -63,21 +64,21 @@ class AgentService:
         # 4. Persist
         self.store.save(agent_settings)
         self.agent_manager.register_dynamic_agent(agent_instance, agent_settings)
-         # 5. Register live
+        # 5. Register live
 
         return JSONResponse(content=agent_instance.to_dict())
 
-    async def update_agent(self, name: str, req: CreateAgentRequest):   
-            if name != req.name:
-                raise ValueError("Agent name in URL and body must match.")
+    async def update_agent(self, name: str, req: CreateAgentRequest):
+        if name != req.name:
+            raise ValueError("Agent name in URL and body must match.")
 
-            # Delete existing agent (if any)
-            self.agent_manager.unregister_agent(name)
-            self.store.delete(name)
+        # Delete existing agent (if any)
+        self.agent_manager.unregister_agent(name)
+        self.store.delete(name)
 
-            # Recreate it using the same logic as in create
-            return await self.build_and_register_mcp_agent(req)
-    
+        # Recreate it using the same logic as in create
+        return await self.build_and_register_mcp_agent(req)
+
     def delete_agent(self, name: str):
         # Unregister from memory
         self.agent_manager.unregister_agent(name)

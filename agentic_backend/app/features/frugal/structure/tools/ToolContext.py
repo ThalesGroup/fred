@@ -14,18 +14,33 @@
 
 from langchain_core.tools import StructuredTool
 
-from app.features.frugal.structure.tools.cluster_topology import get_cluster_topology_tool
-from app.features.frugal.structure.tools.energy_consumption import get_energy_consumption_tool
+from app.features.frugal.structure.tools.cluster_topology import (
+    get_cluster_topology_tool,
+)
+from app.features.frugal.structure.tools.energy_consumption import (
+    get_energy_consumption_tool,
+)
 from app.features.frugal.structure.tools.energy_mix import get_energy_mix_tool
-from app.features.frugal.structure.tools.finops_consumption import get_finops_consumption_tool
+from app.features.frugal.structure.tools.finops_consumption import (
+    get_finops_consumption_tool,
+)
 from app.features.frugal.structure.tools.svg import get_svg_tool
 from app.features.frugal.structure.tools.sensor_frequency import get_sweep_tool
-from app.features.frugal.structure.tools.sensor_configuration import get_sensor_configurations_tool
-from app.features.frugal.structure.tools.theater_analysis import get_ship_identification_tool
-from app.features.frugal.structure.tools.theater_analysis_get_active_ships import get_active_ships_tool
+from app.features.frugal.structure.tools.sensor_configuration import (
+    get_sensor_configurations_tool,
+)
+from app.features.frugal.structure.tools.theater_analysis import (
+    get_ship_identification_tool,
+)
+from app.features.frugal.structure.tools.theater_analysis_get_active_ships import (
+    get_active_ships_tool,
+)
 from app.features.frugal.structure.tools.mission import get_mission_tool
-from app.features.frugal.structure.tools.theater_analysis_sensor_data import get_sensor_data_tool
+from app.features.frugal.structure.tools.theater_analysis_sensor_data import (
+    get_sensor_data_tool,
+)
 from app.features.frugal.structure.tools.theorical_radio import get_radio_data_tool
+
 
 class ToolContext:
     """

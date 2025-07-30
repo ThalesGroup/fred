@@ -5,13 +5,18 @@ from builtins import ExceptionGroup
 
 SUPPORTED_TRANSPORTS = ["sse", "stdio", "streamable_http", "websocket"]
 
-async def get_mcp_client_for_agent(agent_settings: AgentSettings) -> MultiServerMCPClient:
+
+async def get_mcp_client_for_agent(
+    agent_settings: AgentSettings,
+) -> MultiServerMCPClient:
     client = MultiServerMCPClient()
     exceptions = []
 
     for server in agent_settings.mcp_servers:
         if server.transport not in SUPPORTED_TRANSPORTS:
-            raise UnsupportedTransportError(f"Unsupported transport: {server.transport}")
+            raise UnsupportedTransportError(
+                f"Unsupported transport: {server.transport}"
+            )
         try:
             await client.connect_to_server(
                 server_name=server.name,
@@ -20,7 +25,7 @@ async def get_mcp_client_for_agent(agent_settings: AgentSettings) -> MultiServer
                 command=server.command,
                 args=server.args,
                 env=server.env,
-                sse_read_timeout=server.sse_read_timeout
+                sse_read_timeout=server.sse_read_timeout,
             )
         except Exception as eg:
             exceptions.extend(getattr(eg, "exceptions", [eg]))

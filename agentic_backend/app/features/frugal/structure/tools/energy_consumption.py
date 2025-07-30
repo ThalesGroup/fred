@@ -35,17 +35,23 @@ class EnergyConsumptionInput(BaseModel):
         precision (PrecisionEnum): Specifies the precision of the data.
                                    Options may include 'daily', 'hourly', or 'minute-level' granularity.
     """
+
     start_date: datetime = Field(
-        description="Start date and time for the data retrieval period (e.g., '2024-01-01T00:00:00').")
+        description="Start date and time for the data retrieval period (e.g., '2024-01-01T00:00:00')."
+    )
     end_date: datetime = Field(
-        description="End date and time for the data retrieval period (e.g., '2024-01-07T23:59:59').")
-    cluster: str = Field(description="The full name of the cluster to retrieve energy consumption data for.")
+        description="End date and time for the data retrieval period (e.g., '2024-01-07T23:59:59')."
+    )
+    cluster: str = Field(
+        description="The full name of the cluster to retrieve energy consumption data for."
+    )
     precision: PrecisionEnum = Field(
-        description="The level of granularity for the retrieved data (e.g., daily, hourly).")
+        description="The level of granularity for the retrieved data (e.g., daily, hourly)."
+    )
 
 
 def get_energy_consumption(
-        start_date: datetime, end_date: datetime, cluster: str, precision: PrecisionEnum
+    start_date: datetime, end_date: datetime, cluster: str, precision: PrecisionEnum
 ) -> ClusterConsumption:
     """
     Get the cluster energy consumption also known as the eletricity consumption or power consumption for a given time range
