@@ -20,6 +20,7 @@ from app.core.processors.input.common.base_input_processor import BaseTabularPro
 
 logger = logging.getLogger(__name__)
 
+
 class DuckDBProcessor(BaseTabularProcessor):
     """
     Input processor for DuckDB dump files (.duckdb).
@@ -69,4 +70,3 @@ class DuckDBProcessor(BaseTabularProcessor):
                 continue
 
         return result
-

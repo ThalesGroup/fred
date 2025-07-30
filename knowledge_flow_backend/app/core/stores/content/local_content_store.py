@@ -133,10 +133,9 @@ class LocalStorageBackend(BaseContentStore):
         Returns a file stream (BinaryIO) for the given file URI.
         """
         return open(self.destination_root / document_uid / "output" / "media" / media_id, "rb")
-    
+
     def get_local_copy(self, document_uid: str, destination_dir: Path) -> Path:
         source_dir = self.destination_root / document_uid
         if not source_dir.exists():
             raise FileNotFoundError(f"No stored document for: {document_uid}")
         shutil.copytree(source_dir, destination_dir, dirs_exist_ok=True)
-

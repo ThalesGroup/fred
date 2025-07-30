@@ -19,7 +19,6 @@ from pathlib import Path
 from app.core.processors.input.common.base_input_processor import BaseMarkdownProcessor
 
 
-
 class TextMarkdownProcessor(BaseMarkdownProcessor):
     def check_file_validity(self, file_path: Path) -> bool:
         return file_path.exists() and file_path.suffix in [".txt", ".md"]

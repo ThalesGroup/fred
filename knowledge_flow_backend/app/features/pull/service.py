@@ -4,10 +4,12 @@ from app.features.metadata.utils import file_entry_to_metadata
 from app.core.stores.metadata.base_catalog_store import PullFileEntry
 from app.common.document_structures import DocumentMetadata
 
+
 class SourceNotFoundError(ValueError):
     def __init__(self, source_tag: str):
         super().__init__(f"Unknown source_tag: {source_tag}")
         self.source_tag = source_tag
+
 
 class PullDocumentService:
     def __init__(self):
@@ -15,12 +17,7 @@ class PullDocumentService:
         self.catalog_store = ApplicationContext.get_instance().get_catalog_store()
         self.metadata_store = ApplicationContext.get_instance().get_metadata_store()
 
-    def list_pull_documents(
-        self,
-        source_tag: str,
-        offset: int = 0,
-        limit: int = 50
-    ) -> Tuple[List[DocumentMetadata], int]:
+    def list_pull_documents(self, source_tag: str, offset: int = 0, limit: int = 50) -> Tuple[List[DocumentMetadata], int]:
         source = self.config.document_sources.get(source_tag)
         if not source or source.type != "pull":
             raise SourceNotFoundError(source_tag)
@@ -30,7 +27,7 @@ class PullDocumentService:
         total_count = len(all_entries)
 
         # Step 2: Paginate
-        paginated_entries = all_entries[offset:offset + limit]
+        paginated_entries = all_entries[offset : offset + limit]
 
         # Step 3: Map known metadata
         known_docs: List[DocumentMetadata] = self.metadata_store.list_by_source_tag(source_tag)

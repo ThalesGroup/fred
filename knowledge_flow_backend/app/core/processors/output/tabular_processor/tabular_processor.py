@@ -27,6 +27,7 @@ from app.core.processors.output.base_output_processor import BaseOutputProcessor
 
 logger = logging.getLogger(__name__)
 
+
 def parse_date(value: str) -> pd.Timestamp | None:
     dt = dateparser.parse(value, settings={"PREFER_DAY_OF_MONTH": "first", "RETURN_AS_TIMEZONE_AWARE": False})
     if dt:
@@ -56,10 +57,10 @@ class TabularProcessor(BaseOutputProcessor):
             logger.debug(f"Document loaded: {document}")
             if not document:
                 raise ValueError("Document is empty or not loaded correctly.")
-            
+
             # 2. Load the DataFrame from the document
             df = pd.read_csv(io.StringIO(document.page_content))
-            document_name = metadata.document_name.split('.')[0]
+            document_name = metadata.document_name.split(".")[0]
             for col in df.columns:
                 if df[col].dtype == object:
                     sample_values = df[col].dropna().astype(str).head(10)
@@ -70,8 +71,8 @@ class TabularProcessor(BaseOutputProcessor):
                         df[col] = df[col].astype(str).map(parse_date)
 
             logger.debug(f"document {document}")
-            
-            # 3. save the document into the selected tabular storage            
+
+            # 3. save the document into the selected tabular storage
             try:
                 result = self.tabular_store.save_table(document_name, df)
                 logger.debug(f"Document added to Tabular Store: {result}")
@@ -80,9 +81,7 @@ class TabularProcessor(BaseOutputProcessor):
                 raise HTTPException(status_code=500, detail="Failed to add documents to Tabular Storage") from e
             metadata.mark_stage_done(ProcessingStage.SQL_INDEXED)
             return OutputProcessorResponse(status=Status.SUCCESS)
-        
+
         except Exception as e:
             logger.exception(f"Error during vectorization: {e}")
             raise HTTPException(status_code=500, detail=str(e))
-
-

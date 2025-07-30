@@ -3,41 +3,32 @@ from enum import Enum
 from typing import Dict, List, Literal, Optional
 from pydantic import BaseModel, Field, field_validator
 
+
 class SourceType(str, Enum):
     PUSH = "push"
     PULL = "pull"
 
+
 class ProcessingStage(str, Enum):
-    RAW_AVAILABLE = "raw"        # raw file can be downloaded
-    PREVIEW_READY = "preview"        # e.g. Markdown or DataFrame generated
-    VECTORIZED = "vector"              # content chunked and embedded
-    SQL_INDEXED = "sql"            # content indexed into SQL backend
-    MCP_SYNCED = "mcp"              # content synced to external system
-    
+    RAW_AVAILABLE = "raw"  # raw file can be downloaded
+    PREVIEW_READY = "preview"  # e.g. Markdown or DataFrame generated
+    VECTORIZED = "vector"  # content chunked and embedded
+    SQL_INDEXED = "sql"  # content indexed into SQL backend
+    MCP_SYNCED = "mcp"  # content synced to external system
+
+
 class DocumentMetadata(BaseModel):
     # Core identity
     document_name: str
     document_uid: str
-    date_added_to_kb: datetime = Field(
-        default_factory=lambda: datetime.now(tz=timezone.utc),
-        description="When the document was added to the system"
-    )
+    date_added_to_kb: datetime = Field(default_factory=lambda: datetime.now(tz=timezone.utc), description="When the document was added to the system")
 
     # If true, the raw file can be retrieved again (e.g., from push uploads or a stable pull source)
-    retrievable: bool = Field(
-        default=False,
-        description="True if the system can download or access the original file again"
-    )
+    retrievable: bool = Field(default=False, description="True if the system can download or access the original file again")
 
     # Pull-mode specific fields (optional for push documents)
-    source_tag: Optional[str] = Field(
-        default=None,
-        description="Tag identifying the pull source (e.g., 'local-docs', 'contracts-git')"
-    )
-    pull_location: Optional[str] = Field(
-        default=None,
-        description="Path or URI to the original pull file"
-    )
+    source_tag: Optional[str] = Field(default=None, description="Tag identifying the pull source (e.g., 'local-docs', 'contracts-git')")
+    pull_location: Optional[str] = Field(default=None, description="Path or URI to the original pull file")
 
     source_type: SourceType
 
@@ -53,10 +44,7 @@ class DocumentMetadata(BaseModel):
     keywords: Optional[str] = None
 
     # Ingestion processing stages and their status
-    processing_stages: Dict[ProcessingStage, Literal["not_started", "in_progress", "done", "failed"]] = Field(
-        default_factory=dict,
-        description="Status of each well-defined processing stage"
-    )
+    processing_stages: Dict[ProcessingStage, Literal["not_started", "in_progress", "done", "failed"]] = Field(default_factory=dict, description="Status of each well-defined processing stage")
 
     def mark_stage_done(self, stage: ProcessingStage) -> None:
         self.processing_stages[stage] = "done"
@@ -96,16 +84,13 @@ class DocumentMetadata(BaseModel):
                     "source_tag": "local-docs",
                     "pull_location": "Archive/2025/report_2025.pdf",
                     "source_type": "pull",
-                    "processing_stages": {
-                        "preview": "done",
-                        "vector": "done"
-                    },
+                    "processing_stages": {"preview": "done", "vector": "done"},
                     "tags": ["finance", "q2"],
                     "title": "Quarterly Report Q2",
                     "author": "Finance Team",
                     "created": "2025-07-01T10:00:00+00:00",
-                    "modified": "2025-07-02T14:30:00+00:00"
+                    "modified": "2025-07-02T14:30:00+00:00",
                 }
             ]
-        }
+        },
     }

@@ -19,7 +19,6 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from app.core.stores.vector.base_vector_store import BaseTextSplitter
 
 
-
 class RecursiveSplitter(BaseTextSplitter):
     """
     Concrete implementation of TextSplitterInterface using LangChain's

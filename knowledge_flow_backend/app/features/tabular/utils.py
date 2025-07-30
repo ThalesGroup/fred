@@ -19,7 +19,6 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-
 def extract_safe_sql_query(text: str) -> Optional[str]:
     """
     Extract a safe SQL query (SELECT/WITH only) from the given text.
@@ -51,6 +50,6 @@ def extract_safe_sql_query(text: str) -> Optional[str]:
 
 
 def column_name_corrector(col: str) -> str:
-    if any(c in col for c in ' ()'):
+    if any(c in col for c in " ()"):
         return f'"{col}"'
     return col

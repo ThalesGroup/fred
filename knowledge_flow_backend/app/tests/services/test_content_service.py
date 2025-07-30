@@ -35,6 +35,7 @@ from app.core.stores.metadata.local_metadata_store import LocalMetadataStore
 # ⚙️ Realistic Setup
 # ----------------------------
 
+
 @pytest.fixture
 def service(tmp_path) -> ContentService:
     """Sets up a real ContentService with local stores and one valid document."""
@@ -65,6 +66,7 @@ def service(tmp_path) -> ContentService:
 # ✅ Nominal
 # ----------------------------
 
+
 @pytest.mark.asyncio
 async def test_get_original_content_success(service: ContentService):
     stream, name, ctype = await service.get_original_content("valid")
@@ -89,6 +91,7 @@ async def test_get_document_metadata_success(service: ContentService):
 # ----------------------------
 # ❌ Failure
 # ----------------------------
+
 
 @pytest.mark.asyncio
 async def test_get_original_content_not_found(service: ContentService):

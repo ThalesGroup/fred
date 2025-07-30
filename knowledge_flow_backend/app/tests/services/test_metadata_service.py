@@ -61,11 +61,7 @@ class TestMetadataService:
 
     def test_update_document_retrievable(self, monkeypatch, dummy_update):
         mock_updated = DocumentMetadata(source_type="push", document_uid="doc1", document_name="doc.md", retrievable=True)
-        monkeypatch.setattr(
-            self.service.metadata_store,
-            "update_metadata_field",
-            lambda **kwargs: mock_updated
-        )
+        monkeypatch.setattr(self.service.metadata_store, "update_metadata_field", lambda **kwargs: mock_updated)
 
         result = self.service.update_document_retrievable("doc1", dummy_update)
         assert result.status == "success"

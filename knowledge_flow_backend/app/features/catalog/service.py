@@ -4,10 +4,12 @@ from app.features.metadata.utils import scan_pull_source
 from app.core.stores.metadata.base_catalog_store import PullFileEntry
 from typing import List
 
+
 class PullSourceNotFoundError(ValueError):
     def __init__(self, source_tag: str):
         super().__init__(f"Unknown source_tag: {source_tag}")
         self.source_tag = source_tag
+
 
 class CatalogService:
     def __init__(self):
@@ -25,6 +27,6 @@ class CatalogService:
         entries = scan_pull_source(source_tag)
         self.store.save_entries(source_tag, entries)
         return len(entries)
-    
+
     def get_document_sources(self) -> dict[str, DocumentSourceConfig]:
         return self.config.document_sources or {}
