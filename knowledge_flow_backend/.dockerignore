@@ -69,3 +69,4 @@ dockerfiles
 
 # Local development related files
 target/
+**/configuration.yaml
