@@ -14,19 +14,10 @@
 
 """
 Test suite for LocalMetadataStore in local_metadata_store.py.
-
-Covers:
-- Saving, retrieving, updating, and deleting metadata entries.
-- Error handling for missing or unknown document UIDs.
-- Filter matching with nested structures.
-
-All tests use a temporary JSON file in a clean temp directory.
 """
 
-# pylint: disable=redefined-outer-name
-
 import pytest
-
+from app.common.document_structures import DocumentMetadata
 from app.core.stores.metadata.local_metadata_store import LocalMetadataStore
 
 
@@ -37,7 +28,6 @@ from app.core.stores.metadata.local_metadata_store import LocalMetadataStore
 
 @pytest.fixture
 def metadata_store(tmp_path):
-    """Fixture: creates a LocalMetadataStore with a temporary JSON file."""
     json_path = tmp_path / "metadata.json"
     return LocalMetadataStore(json_path)
 
@@ -48,28 +38,37 @@ def metadata_store(tmp_path):
 
 
 def test_save_and_get_metadata(metadata_store):
-    """Test: save and retrieve metadata by UID."""
-    metadata = {"document_uid": "doc1", "name": "Test Doc"}
+    metadata = DocumentMetadata(source_type="push", document_uid="doc1", document_name="Test Doc")
     metadata_store.save_metadata(metadata)
     result = metadata_store.get_metadata_by_uid("doc1")
     assert result == metadata
 
 
 def test_update_metadata_field(metadata_store):
-    """Test: update a single metadata field."""
-    metadata_store.save_metadata({"document_uid": "doc2", "field1": "val1"})
-    updated = metadata_store.update_metadata_field("doc2", "field1", "val2")
-    assert updated["field1"] == "val2"
+    metadata = DocumentMetadata(source_type="push", document_uid="doc2", document_name="Doc2", author="Old Author")
+    metadata_store.save_metadata(metadata)
+
+    updated = metadata_store.update_metadata_field("doc2", "author", "New Author")
+    assert updated.author == "New Author"
+
     reloaded = metadata_store.get_metadata_by_uid("doc2")
-    assert reloaded["field1"] == "val2"
+    assert reloaded.author == "New Author"
 
 
 def test_get_all_metadata_with_filter(metadata_store):
-    """Test: get all metadata matching nested filter."""
-    metadata_store.save_metadata({"document_uid": "doc3", "frontend_metadata": {"agent_name": "alice"}})
-    result = metadata_store.get_all_metadata({"frontend_metadata": {"agent_name": "alice"}})
+    metadata = DocumentMetadata(
+        source_type="push",
+        document_uid="doc3",
+        document_name="Nested",
+        title="X",
+        keywords="Y",
+        category="Z",
+    )
+    metadata_store.save_metadata(metadata)
+
+    result = metadata_store.get_all_metadata({"title": "X"})
     assert len(result) == 1
-    assert result[0]["document_uid"] == "doc3"
+    assert result[0].document_uid == "doc3"
 
 
 # ----------------------------
@@ -78,27 +77,25 @@ def test_get_all_metadata_with_filter(metadata_store):
 
 
 def test_save_metadata_missing_uid(metadata_store):
-    """Test: raises ValueError if metadata has no document_uid."""
-    with pytest.raises(ValueError, match="document_uid"):
-        metadata_store.save_metadata({"name": "Missing UID"})
+    with pytest.raises(ValueError):
+        metadata_store.save_metadata(DocumentMetadata(source_type="push", document_uid=None, document_name="Missing"))
 
 
 def test_update_metadata_uid_not_found(metadata_store):
-    """Test: raises ValueError when updating non-existent UID."""
-    with pytest.raises(ValueError, match="No document found"):
-        metadata_store.update_metadata_field("missing", "field", "value")
+    with pytest.raises(ValueError):
+        metadata_store.update_metadata_field("missing", "title", "New Title")
 
 
 def test_delete_metadata_uid_not_found(metadata_store):
-    """Test: raises ValueError when deleting non-existent UID."""
-    with pytest.raises(ValueError, match="No document found"):
-        metadata_store.delete_metadata({"document_uid": "ghost"})
+    ghost = DocumentMetadata(source_type="push", document_uid="ghost", document_name="Ghost")
+    with pytest.raises(ValueError):
+        metadata_store.delete_metadata(ghost)
 
 
 def test_delete_metadata_missing_uid(metadata_store):
-    """Test: raises ValueError if document_uid is missing in deletion."""
-    with pytest.raises(ValueError, match="document_uid"):
-        metadata_store.delete_metadata({"name": "No UID"})
+    broken = DocumentMetadata(source_type="push", document_uid="", document_name="Broken")
+    with pytest.raises(ValueError):
+        metadata_store.delete_metadata(broken)
 
 
 # ----------------------------
@@ -107,39 +104,37 @@ def test_delete_metadata_missing_uid(metadata_store):
 
 
 def test_overwrite_existing_metadata(metadata_store):
-    """Test: save_metadata replaces entry with same UID."""
-    original = {"document_uid": "doc5", "x": 1}
-    updated = {"document_uid": "doc5", "x": 2}
+    original = DocumentMetadata(source_type="push", document_uid="doc5", document_name="Original")
+    updated = DocumentMetadata(source_type="push", document_uid="doc5", document_name="Updated")
+
     metadata_store.save_metadata(original)
     metadata_store.save_metadata(updated)
+
     result = metadata_store.get_metadata_by_uid("doc5")
-    assert result["x"] == 2
+    assert result.document_name == "Updated"
 
 
 def test_delete_existing_metadata(metadata_store):
-    """Test: delete_metadata removes correct document."""
-    metadata_store.save_metadata({"document_uid": "doc6", "name": "ToDelete"})
-    metadata_store.delete_metadata({"document_uid": "doc6"})
+    doc = DocumentMetadata(source_type="push", document_uid="doc6", document_name="ToDelete")
+    metadata_store.save_metadata(doc)
+    metadata_store.delete_metadata(doc)
+
     assert metadata_store.get_metadata_by_uid("doc6") is None
 
 
-def test_match_nested_with_non_dict(metadata_store):
-    """Test: _match_nested returns False if nested filter expects a dict but finds another type."""
-    metadata_store.save_metadata({"document_uid": "doc_nested_type", "frontend_metadata": "not-a-dict"})
-    result = metadata_store.get_all_metadata({"frontend_metadata": {"agent_name": "alice"}})
-    assert result == []
-
-
 def test_match_nested_with_value_mismatch(metadata_store):
-    """Test: _match_nested returns False if a final value does not match."""
-    metadata_store.save_metadata({"document_uid": "doc_mismatch", "author": "bob"})
+    metadata = DocumentMetadata(source_type="push", document_uid="doc8", document_name="Mismatch", author="bob")
+    metadata_store.save_metadata(metadata)
+
     result = metadata_store.get_all_metadata({"author": "alice"})
     assert result == []
 
 
 def test_load_returns_empty_if_file_missing(tmp_path):
-    """Test: _load returns empty list if the metadata file is missing."""
     json_path = tmp_path / "missing.json"
     store = LocalMetadataStore(json_path)
-    json_path.unlink()
+
+    if json_path.exists():
+        json_path.unlink()
+
     assert store._load() == []

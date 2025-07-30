@@ -10,10 +10,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+app:
+  name: "Agentic Backend"
+  base_url: "/agentic/v1"
+  address: "127.0.0.1"
+  port: 8000
+  log_level: "info"
+  reload: false
+  reload_dir: "."
 
 frontend_settings:
   feature_flags:
-    # If true acuivate the backend and frontend modules in charge of K8
+    # If true activate the backend and frontend modules in charge of K8
     # and frugality monitoring
     enableK8Features: false
     # If true activate support for an electronic warfare demonstration
@@ -76,18 +84,21 @@ ai:
     #  request_timeout: 30
     #  azure_endpoint: "https://tehopenai.openai.azure.com/"
 
+    # --- OR uncomment for AzureAPim ---
+    # provider: "azureapim"
+    # name: "gpt-4o"
+    # settings:
+    #   api_version: "2024-06-01"
+    #   temperature: 0.0
+    #   max_retries: 2
+    #   request_timeout: 30
+
     # --- OR uncomment for Ollama ---
     # provider: "ollama"
     # name: "llama2"
     # settings:
     #   base_url: "http://localhost:11434"
     #   temperature: 0.0
-  leader:
-    name: "Fred"
-    class_path: "app.leader.leader.Leader"
-    enabled: true
-    max_steps: 5
-    model: {}
   services:
     - name: "kubernetes"
       enabled: false
@@ -95,49 +106,46 @@ ai:
   recursion:
     recursion_limit: 40 # Number or max recursion use by the agents while using the model
   agents:
-    - name: "JiraExpert"
-      class_path: "app.agents.jira.jira_expert.JiraExpert"
-      enabled: false
-      mcp_servers:
-        - name: jira-mcp-server
-          transport: stdio
-          command: uvx
-          args:
-            - "mcp-atlassian"
-          env:
-            JIRA_URL: "@TO_CHANGE"
-            JIRA_USERNAME: "@TO_CHANGE"
-            JIRA_API_TOKEN: "@TO_CHANGE"
-            READ_ONLY_MODE: "true"
-          sse_read_timeout: 600 # 10 minutes. It is 5 minutes by default but it is too short.
-      model: {}
-    - name: K8SOperatorExpert
-      class_path: "app.agents.kubernetes_monitoring.k8s_operator_expert.K8SOperatorExpert"
-      enabled: false
-      mcp_servers:
-        - name: k8s-mcp-server
-          transport: sse
-          url: http://k8s-mcp:8081/sse
-          sse_read_timeout: 600 # 10 minutes. It is 5 minutes by default but it is too short.
-        #######################################
-        #### Example using STDIO transport ####
-        #######################################
-        # - name: prometheus-mcp-server
-        #   transport: stdio
-        #   command: uv
-        #   args:
-        #     - "--directory"
-        #     - "/home/xxx/Documents/github_repos/prometheus-mcp-server"
-        #     -  "run"
-        #     -  "src/prometheus_mcp_server/main.py"
-        #   env:
-        #     PROMETHEUS_URL: "http://localhost:9091"
+    # - name: "JiraExpert"
+    #   class_path: "app.agents.jira.jira_expert.JiraExpert"
+    #   enabled: false
+    #   mcp_servers:
+    #     - name: jira-mcp-server
+    #       transport: stdio
+    #       command: uvx
+    #       args:
+    #         - "mcp-atlassian"
+    #       env:
+    #         JIRA_URL: "@TO_CHANGE"
+    #         JIRA_USERNAME: "@TO_CHANGE"
+    #         JIRA_API_TOKEN: "@TO_CHANGE"
+    #         READ_ONLY_MODE: "true"
+    #       sse_read_timeout: 600 # 10 minutes. It is 5 minutes by default but it is too short.
+    #   model: {}
+    - name: "Fred"
+      role: "Multi-Agent Orchestrator"
+      description: >
+        Handles complex, ambiguous, or multi-step user queries. Delegates tasks to the most suitable experts 
+        based on context, capabilities, and relevance. Ensures coherent, high-quality responses by coordinating the expert team.
+      class_path: "app.agents.leader.leader.Leader"
+      type: "leader"
+      enabled: true
+      max_steps: 5
       model: {}
     - name: "GeneralistExpert"
+      role: "Fallback Generalist Expert"
+      description: >
+        Provides broad, high-level guidance when no specific expert is better suited. 
+        Acts as a default agent to assist with general questions across all domains.
       class_path: "app.agents.generalist.generalist_expert.GeneralistExpert"
       enabled: true
       model: {}
     - name: "TabularExpert"
+      role: "Data Query and SQL Expert"
+      description: >
+        Executes advanced SQL queries (including joins and aggregations) 
+        over structured datasets like CSVs, Postgres exports, or DuckDB files. 
+        Ideal for analyzing tabular data ingested into the platform.
       class_path: "app.agents.tabular.tabular_expert.TabularExpert"
       enabled: true
       mcp_servers:
@@ -147,6 +155,10 @@ ai:
           sse_read_timeout: 2000
       model: {}
     - name: "DocumentsExpert"
+      role: "Document Retrieval Expert"
+      description: >
+        Answers user questions by retrieving relevant information from ingested document corpora.
+        Uses a MCP search service to ground responses in internal or uploaded knowledge.
       class_path: "app.agents.documents.documents_expert.DocumentsExpert"
       enabled: true
       mcp_servers:
@@ -155,8 +167,11 @@ ai:
           url: http://localhost:8111/mcp_text
           sse_read_timeout: 2000
       model: {}
-      # The Rags expert essentially is the Document expert before using tools and the knownledge-flow backend as a MCP server
     - name: "RagsExpert"
+      role: "Document Retrieval Expert"
+      description: >
+        Answers user questions by retrieving relevant information from ingested document corpora.
+        Uses a vector-based retrieval pipeline to ground responses in internal or uploaded knowledge.
       class_path: "app.agents.rags.rags_expert.RagsExpert"
       enabled: true
       categories:
@@ -166,21 +181,7 @@ ai:
         chunk_overlap: 64
         knowledge_flow_url: "http://localhost:8111/knowledge-flow/v1"
       model: {}
-    # The Monitoring expert requires you activate the 'enableK8Features' flags above
-    - name: "MonitoringExpert"
-      class_path: "app.agents.monitoring.monitoring_expert.MonitoringExpert"
-      enabled: true
-      categories:
-        - "monitoring"
-        - "observability"
-      model: {}
 
-# Where to save fred produced resources like Essentials or Scores
-# and external resources like Kubernetes Workload descriptions
-dao:
-  type: "file"  # Currently the only one supported
-  base_path: "~/.fred/dao-cache"
-  max_cached_delay_seconds: 300  # Cache delay in seconds. Use 0 for no cache or a negative value for limitless cache.
 
 # Security. As of today only keycloak is supported.
 security:
@@ -190,21 +191,28 @@ security:
   authorized_origins:
   - "http://localhost:5173"
 
-# Agentic metrics are stored in a prometheus or opensearch backend. To make development
-# easy by default they are stored on a local file.
 node_metrics_storage:
   type: "local"
-  local_path: "~/.fred/node-metrics-store"
+  local_path: "~/.fred/agentic/node-metrics-store"
 
 tool_metrics_storage:
   type: "local"
-  local_path: "~/.fred/tool-metrics-store"
+  local_path: "~/.fred/agentic/tool-metrics-store"
 
-# Feedbacks are store in a simple local file. It is plan to add
-# additional backend like opensearch or minio.
 feedback_storage:
-  type: local
-  local_path: "~/.fred/feedback-store"
+  type: duckdb
+  duckdb_path: "~/.fred/agentic/db.duckdb"
+
+agent_storage:
+  type: "duckdb"
+  duckdb_path: "~/.fred/agentic/db.duckdb"
+
+# Where to save fred produced resources like Essentials or Scores
+# and external resources like Kubernetes Workload descriptions
+dao:
+  type: "file"  # Currently the only one supported
+  base_path: "~/.fred/agentic/dao-cache"
+  max_cached_delay_seconds: 300  # Cache delay in seconds. Use 0 for no cache or a negative value for limitless cache.
 
 # Sessions and messages are stored by default in_memory
 # but it can be modified to use a backend like opensearch
@@ -218,3 +226,4 @@ session_storage:
   # password: xxx # Overrides the OPENSEARCH_PASSWORD environment variable
   secure: false
   verify_certs: false
+

@@ -14,11 +14,12 @@
 
 import { combineReducers, configureStore, createReducer, isFulfilled, isPending, isRejected } from "@reduxjs/toolkit";
 import { apiSlice } from "../frugalit/slices/api.tsx";
+import { agenticApi } from "../slices/agentic/agenticApi.ts";
 import { chatApiSlice } from "../slices/chatApi";
 import { documentApiSlice } from "../slices/documentApi.tsx";
-import { monitoringApiMiddleware, monitoringApiReducer } from "../slices/monitoringApi.tsx";
 import { knowledgeContextApiSlice } from "../slices/knowledgeContextApi.tsx";
 import { knowledgeFlowApi } from "../slices/knowledgeFlow/knowledgeFlowApi.ts";
+import { monitoringApiMiddleware, monitoringApiReducer } from "../slices/monitoringApi.tsx";
 
 // Optional: Logging middleware for debugging
 const loggingMiddleware = () => (next) => (action) => {
@@ -45,6 +46,7 @@ const combinedReducer = combineReducers({
       .addCase("decrementIgnoredRefresh", (state) => state - 1),
   ),
   [knowledgeFlowApi.reducerPath]: knowledgeFlowApi.reducer,
+  [agenticApi.reducerPath]: agenticApi.reducer,
   api: apiSlice.reducer,
   documentApi: documentApiSlice.reducer,
   chatApi: chatApiSlice.reducer,
@@ -58,6 +60,7 @@ export const store = configureStore({
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware().concat(
       knowledgeFlowApi.middleware,
+      agenticApi.middleware,
       apiSlice.middleware,
       documentApiSlice.middleware,
       chatApiSlice.middleware,

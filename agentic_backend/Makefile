@@ -34,32 +34,41 @@ $(TARGET)/.uv-installed: $(TARGET)/.venv-created
 ##@ Dependency Management
 
 .PHONY: dev
-
 dev: $(TARGET)/.compiled ## Install from compiled lock
 	@echo "✅ Dependencies installed using uv."
-
 $(TARGET)/.compiled: pyproject.toml $(TARGET)/.uv-installed
 	$(UV) sync --extra dev
 	touch $@
 
 .PHONY: update
-
 update: $(TARGET)/.uv-installed ## Re-resolve and update all dependencies
 	$(UV) sync
 	touch $(TARGET)/.compiled
 
 ##@ Run
 
-.PHONY: run
-run: PORT ?= 8000
-run: UVICORN_FACTORY ?= app.main:create_app
-run: dev ## Run the app from source
+.PHONY: run-local
+run-local: HOST ?= 0.0.0.0
+run-local: PORT ?= 8000
+run-local: UVICORN_FACTORY ?= app.main:create_app
+run-local: UVICORN_LOOP ?= asyncio
+run-local: ## Run the app assuming dependencies already exist
 	$(UV) run uvicorn \
 		--factory ${UVICORN_FACTORY} \
+		--host ${HOST} \
 		--port ${PORT} \
 		--env-file ${ENV_FILE} \
 		--log-level ${LOG_LEVEL} \
+		--loop ${UVICORN_LOOP} \
 		--reload
+
+.PHONY: run
+run: dev run-local ## Run the app from source
+
+.PHONY: generate-openapi
+generate-openapi: dev ## Generate OpenAPI JSON specification without starting the server
+	@echo "🔧 Generating OpenAPI specification..."
+	$(PYTHON) ../scripts/generate_openapi.py
 
 ##@ Clean
 
@@ -68,6 +77,8 @@ run: dev ## Run the app from source
 clean: ## Remove virtualenv and build artifacts
 	@echo "🧹 Cleaning project..."
 	rm -rf $(VENV) $(TARGET) .mypy_cache .pytest_cache .coverage htmlcov .tox
+	find . -type d -name '__pycache__' -exec rm -rf {} +
+	find . -type f -name '*.pyc' -delete
 
 ##@ Tests
 

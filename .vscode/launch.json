@@ -5,42 +5,54 @@
       "name": "Debug Agentic Backend",
       "type": "debugpy",
       "request": "launch",
-      "cwd": "${workspaceFolder}/agentic_backend",
-      "program": "app/main.py",
-      "args": [
-        "--config-path",
-        "config/configuration.yaml"
-      ],
       "python": "${workspaceFolder}/agentic_backend/.venv/bin/python",
+      "cwd": "${workspaceFolder}/agentic_backend",
+      "module": "uvicorn",
+      "args": [
+        "app.main:create_app",
+        "--factory",
+        "--port",
+        "8000",
+        "--env-file",
+        "config/.env",
+        "--log-level",
+        "info",
+        "--loop",
+        "asyncio"
+      ],
       "env": {
-        "PYTHONPATH": "${workspaceFolder}/agentic_backend:${env:PYTHONPATH}",
-        "PATH": "${workspaceFolder}/agentic_backend/.venv/bin:${env:PATH}",
-        "LOG_LEVEL": "DEBUG"
+        "PYTHONPATH": "${workspaceFolder}/agentic_backend",
+        "CONFIG_FILE": "${workspaceFolder}/agentic_backend/config/configuration.yaml"
       },
-      "justMyCode": true,
+      "justMyCode": false,
       "console": "integratedTerminal"
     },
     {
       "name": "Debug Knowledge Flow Backend",
       "type": "debugpy",
       "request": "launch",
-      "cwd": "${workspaceFolder}/knowledge_flow_backend",
-      "program": "app/main.py",
-      "args": [
-        "--config-path",
-        "config/configuration.yaml",
-      ],
       "python": "${workspaceFolder}/knowledge_flow_backend/.venv/bin/python",
+      "cwd": "${workspaceFolder}/knowledge_flow_backend",
+      "module": "uvicorn",
+      "args": [
+        "app.main:create_app",
+        "--factory",
+        "--port",
+        "8111",
+        "--env-file",
+        "config/.env",
+        "--log-level",
+        "info"
+      ],
       "env": {
-        "PYTHONPATH": "${workspaceFolder}/knowledge_flow_backend/app",
-        "PATH": "${workspaceFolder}/knowledge_flow_backend/.venv/bin:${env:PATH}",
-        "LOG_LEVEL": "DEBUG"
+        "PYTHONPATH": "${workspaceFolder}/knowledge_flow_backend",
+        "CONFIG_FILE": "${workspaceFolder}/knowledge_flow_backend/config/configuration.yaml"
       },
-      "justMyCode": true,
+      "justMyCode": false,
       "console": "integratedTerminal"
     },
     {
-      "name": "Debug all Kknowledge flow tests",
+      "name": "Debug all Knowledge Flow Backend tests",
       "type": "debugpy",
       "request": "launch",
       "module": "pytest",
@@ -58,7 +70,7 @@
       "justMyCode": false
     },
     {
-      "name": "Debug all agentic tests",
+      "name": "Debug all Agentic Backend tests",
       "type": "debugpy",
       "request": "launch",
       "module": "pytest",
@@ -76,7 +88,7 @@
       "justMyCode": false
     },
     {
-      "name": "Debug one knowledge flow test",
+      "name": "Debug one Knowledge Flow Backend test",
       "type": "debugpy",
       "request": "launch",
       "module": "pytest",
@@ -84,7 +96,6 @@
       "args": [
         "-s",
         "-vv",
-         // "app/tests/services/test_metadata_service.py::TestMetadataService::test_delete_document_metadata_not_found"
         "app/tests/services/test_output_processor_service.py::TestOutputProcessorService::test_process_real_pdf_success"
       ],
       "justMyCode": false,
@@ -97,7 +108,7 @@
       "console": "integratedTerminal"
     },
     {
-      "name": "Debug current knowledge flow test file",
+      "name": "Debug current Knowledge Flow Backend test file",
       "type": "debugpy",
       "request": "launch",
       "module": "pytest",
@@ -116,7 +127,7 @@
       "justMyCode": false
     },
     {
-      "name": "Debug current agentic test file",
+      "name": "Debug current Agentic Backend test file",
       "type": "debugpy",
       "request": "launch",
       "module": "pytest",
@@ -140,6 +151,25 @@
       "request": "launch",
       "command": "npm run dev",
       "cwd": "${workspaceFolder}/frontend"
+    },
+    {
+      "name": "Debug Knowledge Flow Worker",
+      "type": "debugpy",
+      "request": "launch",
+      "cwd": "${workspaceFolder}/knowledge_flow_backend",
+      "program": "${workspaceFolder}/knowledge_flow_backend/app/main_worker.py",
+      "args": [
+        "--config-path",
+        "./config/configuration_worker.yaml"
+      ],
+      "env": {
+        "PYTHONPATH": ".",
+        "ENV_FILE": "${workspaceFolder}/knowledge_flow_backend/config/.env",
+        "CONFIG_FILE": "${workspaceFolder}/knowledge_flow_backend/config/configuration_worker.yaml",
+        "LOG_LEVEL": "info"
+      },
+      "console": "integratedTerminal",
+      "justMyCode": false
     }
   ]
 }

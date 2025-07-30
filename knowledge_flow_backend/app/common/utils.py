@@ -113,7 +113,7 @@ def log_exception(e: Exception, context_message: Optional[str] = None) -> str:
         logger.error("🔍 Context: %s", context_message, stacklevel=2)
     logger.error("🧩 Error message: %s", error_message, stacklevel=2)
     logger.error("📦 Root cause: %s", root_cause, stacklevel=2)
-    logger.error("🧵 Stack trace:\n%s", stack_trace, stacklevel=2)
+    logger.debug("🧵 Stack trace:\n%s", stack_trace, stacklevel=2)
 
     return summary
 

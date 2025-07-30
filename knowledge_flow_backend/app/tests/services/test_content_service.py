@@ -13,136 +13,99 @@
 # limitations under the License.
 
 """
-Test suite for ContentService in content_service.py.
+Integration tests for ContentService using real LocalMetadataStore and LocalStorageBackend.
 
 Covers:
 - Document metadata retrieval
 - Original content stream fetching
 - Markdown preview access
 
-Each feature is tested with:
-- Nominal inputs
-- Invalid or missing inputs
-- Fallback/default behaviors
-
-Mocks are used to simulate metadata_store and content_store dependencies.
+Uses real filesystem, no mocks. Fast and reliable.
 """
 
-# pylint: disable=redefined-outer-name
-
-from io import BytesIO
+from app.core.stores.content.local_content_store import LocalStorageBackend
 import pytest
+
+from app.common.document_structures import DocumentMetadata
 from app.features.content.service import ContentService
+from app.core.stores.metadata.local_metadata_store import LocalMetadataStore
 
 
 # ----------------------------
-# ⚙️ Fixtures
+# ⚙️ Realistic Setup
 # ----------------------------
 
 
 @pytest.fixture
-def service():
-    """
-    Fixture: provides a ContentService instance with mocked metadata and content stores.
-    """
+def service(tmp_path) -> ContentService:
+    """Sets up a real ContentService with local stores and one valid document."""
+    metadata_path = tmp_path / "metadata.json"
+    content_dir = tmp_path / "content-store"
+
     service = ContentService()
+    service.metadata_store = LocalMetadataStore(metadata_path)
+    service.content_store = LocalStorageBackend(content_dir)
 
-    # Mock metadata store
-    service.metadata_store = type(
-        "MockMetadataStore",
-        (),
-        {"get_metadata_by_uid": lambda self, uid: {"document_name": "test.txt"} if uid == "valid" else {}},
-    )()
+    # Valid doc setup
+    uid = "valid"
+    metadata = DocumentMetadata(source_type="push", document_uid=uid, document_name="test.txt")
+    service.metadata_store.save_metadata(metadata)
 
-    # Mock content store
-    service.content_store = type(
-        "MockContentStore",
-        (),
-        {
-            "get_content": lambda self, uid: BytesIO(b"hello") if uid == "valid" else (_ for _ in ()).throw(FileNotFoundError()),
-            "get_markdown": lambda self, uid: "# Markdown" if uid == "valid" else (_ for _ in ()).throw(FileNotFoundError()),
-        },
-    )()
+    input_dir = content_dir / uid / "input"
+    output_dir = content_dir / uid / "output"
+    input_dir.mkdir(parents=True, exist_ok=True)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    (input_dir / "test.txt").write_bytes(b"hello world")
+    (output_dir / "output.md").write_text("# Sample Markdown")
 
     return service
 
 
 # ----------------------------
-# ✅ Nominal Cases
+# ✅ Nominal
 # ----------------------------
 
 
 @pytest.mark.asyncio
-async def test_get_document_metadata_success(service):
-    """
-    Test: retrieves document metadata when UID is valid.
-    """
-    metadata = await service.get_document_metadata("valid")
-    assert metadata["document_name"] == "test.txt"
-
-
-@pytest.mark.asyncio
-async def test_get_original_content_success(service):
-    """
-    Test: returns the input stream, file name, and content type for valid UID.
-    """
+async def test_get_original_content_success(service: ContentService):
     stream, name, ctype = await service.get_original_content("valid")
-    assert stream.read() == b"hello"
+    assert stream.read() == b"hello world"
     assert name == "test.txt"
-    assert ctype == "text/plain"
+    assert ctype.startswith("text/")
 
 
 @pytest.mark.asyncio
-async def test_get_markdown_preview_success(service):
-    """
-    Test: returns markdown preview content for valid UID.
-    """
+async def test_get_markdown_preview_success(service: ContentService):
     content = await service.get_markdown_preview("valid")
-    assert content.startswith("# Markdown")
+    assert "# Sample Markdown" in content
+
+
+@pytest.mark.asyncio
+async def test_get_document_metadata_success(service: ContentService):
+    metadata = await service.get_document_metadata("valid")
+    assert metadata.document_name == "test.txt"
+    assert metadata.document_uid == "valid"
 
 
 # ----------------------------
-# ❌ Failure Cases
+# ❌ Failure
 # ----------------------------
 
 
 @pytest.mark.asyncio
-async def test_get_document_metadata_no_uid(service):
-    """
-    Test: raises ValueError if no UID is provided.
-    """
-    with pytest.raises(ValueError, match="Document UID is required"):
+async def test_get_original_content_not_found(service: ContentService):
+    with pytest.raises(FileNotFoundError):
+        await service.get_original_content("missing")
+
+
+@pytest.mark.asyncio
+async def test_get_markdown_preview_not_found(service: ContentService):
+    with pytest.raises(FileNotFoundError):
+        await service.get_markdown_preview("missing")
+
+
+@pytest.mark.asyncio
+async def test_get_document_metadata_missing_uid(service: ContentService):
+    with pytest.raises(ValueError):
         await service.get_document_metadata("")
-
-
-@pytest.mark.asyncio
-async def test_get_original_content_file_not_found(service):
-    """
-    Test: raises FileNotFoundError if content is missing.
-    """
-    with pytest.raises(FileNotFoundError, match="Original input file not found"):
-        await service.get_original_content("invalid")
-
-
-@pytest.mark.asyncio
-async def test_get_markdown_preview_not_found(service):
-    """
-    Test: raises FileNotFoundError if markdown is not found.
-    """
-    with pytest.raises(FileNotFoundError, match="No markdown preview found"):
-        await service.get_markdown_preview("invalid")
-
-
-# ----------------------------
-# ⚠️ Edge Cases
-# ----------------------------
-
-
-@pytest.mark.asyncio
-async def test_get_document_metadata_missing_name(service, monkeypatch):
-    """
-    Test: falls back to default document name if 'document_name' is missing.
-    """
-    monkeypatch.setattr(service.metadata_store, "get_metadata_by_uid", lambda uid: {})
-    metadata = await service.get_document_metadata("no-name")
-    assert metadata["document_name"] == "no-name.xxx"

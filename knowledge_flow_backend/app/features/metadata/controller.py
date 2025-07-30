@@ -13,19 +13,48 @@
 # limitations under the License.
 
 import logging
-from typing import Any, Dict
+from typing import Any, Dict, Optional
+from app.common.utils import log_exception
+from app.features.pull.controller import PullDocumentsResponse
+from app.features.pull.service import PullDocumentService
 from fastapi import APIRouter, Body, HTTPException
 
 from app.common.structures import Status
 from app.application_context import ApplicationContext
-from app.core.stores.content.content_storage_factory import get_content_store
 from app.features.metadata.service import InvalidMetadataRequest, MetadataNotFound, MetadataService, MetadataUpdateError
-from app.features.metadata.structures import DeleteDocumentMetadataResponse, GetDocumentMetadataResponse, GetDocumentsMetadataResponse, UpdateDocumentMetadataRequest, UpdateDocumentMetadataResponse, UpdateRetrievableRequest
+from app.features.metadata.structures import (
+    DeleteDocumentMetadataResponse,
+    GetDocumentMetadataResponse,
+    GetDocumentsMetadataResponse,
+    UpdateDocumentMetadataRequest,
+    UpdateDocumentMetadataResponse,
+    UpdateRetrievableRequest,
+)
 from threading import Lock
+
+from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
 lock = Lock()
+
+
+class BrowseDocumentsRequest(BaseModel):
+    source_tag: str = Field(..., description="Tag of the document source to browse (pull or push)")
+    filters: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Optional metadata filters")
+    offset: int = Field(0, ge=0)
+    limit: int = Field(50, gt=0, le=500)
+
+
+def handle_exception(e: Exception) -> HTTPException:
+    if isinstance(e, MetadataNotFound):
+        return HTTPException(status_code=404, detail=str(e))
+    elif isinstance(e, InvalidMetadataRequest):
+        return HTTPException(status_code=400, detail=str(e))
+    elif isinstance(e, MetadataUpdateError):
+        return HTTPException(status_code=500, detail=str(e))
+    return HTTPException(status_code=500, detail="Internal server error")
+
 
 class MetadataController:
     """
@@ -63,50 +92,61 @@ class MetadataController:
     - All business exceptions are wrapped and exposed as HTTP errors only in the controller.
     """
 
-    def __init__(self, router: APIRouter):
+    def __init__(self, router: APIRouter, pull_document_service: PullDocumentService):
         self.context = ApplicationContext.get_instance()
         self.service = MetadataService()
-        self.content_store = get_content_store()
-        self.tabular_store = self.context.get_tabular_store()
-
-        def handle_exception(e: Exception) -> HTTPException:
-            if isinstance(e, MetadataNotFound):
-                return HTTPException(status_code=404, detail=str(e))
-            elif isinstance(e, InvalidMetadataRequest):
-                return HTTPException(status_code=400, detail=str(e))
-            elif isinstance(e, MetadataUpdateError):
-                return HTTPException(status_code=500, detail=str(e))
-            return HTTPException(status_code=500, detail="Internal server error")
+        self.content_store = ApplicationContext.get_instance().get_content_store()
+        self.pull_document_service = pull_document_service
 
         @router.post(
             "/documents/metadata",
-            tags=["Metadata"],
+            tags=["Library Metadata"],
             response_model=GetDocumentsMetadataResponse,
-            summary="List document metadata, with optional filters. All documents if no filters are given.",
+            summary="List metadata for all ingested documents (optional filters)",
+            description=(
+                "Returns metadata for all ingested documents in the knowledge base. "
+                "You can optionally filter by metadata fields such as tags, title, source_tag, or retrievability.\n\n"
+                "**Note:** Only ingested documents have persisted metadata. "
+                "Discovered files (e.g., in pull-mode) are not returned by this endpoint — see `/documents/pull`."
+            ),
         )
         def get_documents_metadata(filters: Dict[str, Any] = Body(default={})):
             try:
-                return self.service.get_documents_metadata(filters)
+                push_docs = self.service.get_documents_metadata(filters)
+                return GetDocumentsMetadataResponse(status=Status.SUCCESS, documents=push_docs)
             except Exception as e:
+                log_exception(e)
                 raise handle_exception(e)
 
         @router.get(
             "/document/{document_uid}",
-            tags=["Metadata"],
+            tags=["Library Metadata"],
             response_model=GetDocumentMetadataResponse,
-            summary="Get metadata for a specific document",
+            summary="Fetch metadata for an ingested document",
+            description=(
+                "Returns full metadata for a document that has already been ingested, either via push or pull. "
+                "This endpoint does not support transient/discovered documents that haven't been ingested yet. "
+                "Use `/documents/pull` to inspect discovered-but-unprocessed files."
+            ),
         )
         def get_document_metadata(document_uid: str):
             try:
-                return self.service.get_document_metadata(document_uid)
+                metadata = self.service.get_document_metadata(document_uid)
+                return GetDocumentMetadataResponse(status=Status.SUCCESS, metadata=metadata)
             except Exception as e:
                 raise handle_exception(e)
 
         @router.put(
             "/document/{document_uid}",
-            tags=["Metadata"],
+            tags=["Library Metadata"],
             response_model=UpdateDocumentMetadataResponse,
-            summary="Update 'retrievable' field of a document",
+            summary="Toggle document retrievability (indexed for search)",
+            description=(
+                "Updates the `retrievable` flag for an ingested document. "
+                "This affects whether the document is considered by vector search and agent responses.\n\n"
+                "This endpoint applies only to ingested documents. For discovered files not yet ingested, "
+                "the flag has no effect."
+            ),
         )
         def update_document_retrievable(document_uid: str, update: UpdateRetrievableRequest):
             try:
@@ -116,34 +156,34 @@ class MetadataController:
 
         @router.delete(
             "/document/{document_uid}",
-            tags=["Metadata"],
+            tags=["Library Metadata"],
             response_model=DeleteDocumentMetadataResponse,
-            summary="Delete document metadata",
+            summary="Delete metadata and optionally raw content for an ingested document",
+            description=(
+                "Deletes the stored metadata and associated raw content for a document. "
+                "This is a destructive operation and only applies to documents that have been ingested. "
+                "Discovered-only (non-ingested) files are unaffected."
+            ),
         )
         def delete_document_metadata(document_uid: str):
             try:
-                with lock:
-                    try:
-                        document_metadata = self.service.get_document_metadata(document_uid).metadata
-                    except Exception as e:
-                        document_metadata = {}
-                    self.content_store.delete_content(document_uid)
-                    if document_metadata.get("suffix") in ("CSV", "XLSX", "XLS"):
-                        self.tabular_store.delete_table(document_metadata["document_name"])
-                    self.service.delete_document_metadata(document_uid)
-                    return DeleteDocumentMetadataResponse(
-                        status=Status.SUCCESS,
-                        message=f"Metadata for document {document_uid} has been deleted.",
-                    )
+                self.service.delete_document_metadata(document_uid)
+                self.content_store.delete_content(document_uid)
+                return DeleteDocumentMetadataResponse(status=Status.SUCCESS, message=f"Metadata for document {document_uid} has been deleted.")
             except Exception as e:
                 logger.exception(f"Failed to delete document metadata: {e}")
                 raise handle_exception(e)
 
         @router.post(
             "/document/{document_uid}/update_metadata",
-            tags=["Metadata"],
+            tags=["Library Metadata"],
             response_model=UpdateDocumentMetadataResponse,
             summary="Update multiple metadata fields for a document",
+            description=(
+                "Allows partial updates of metadata fields (e.g., title, description, tags, category) "
+                "for an already ingested document. Fields not included in the request body will remain unchanged.\n\n"
+                "This endpoint is used for managing user-defined annotations or descriptive updates."
+            ),
         )
         def update_document_metadata(document_uid: str, update: UpdateDocumentMetadataRequest):
             try:
@@ -154,3 +194,43 @@ class MetadataController:
             except Exception as e:
                 logger.error(f"Failed to update metadata for {document_uid}: {e}")
                 raise handle_exception(e)
+
+        @router.post(
+            "/documents/browse",
+            tags=["Library"],
+            summary="Unified endpoint to browse documents from any source (push or pull)",
+            response_model=PullDocumentsResponse,
+            description="""
+            Returns a paginated list of documents from any configured source.
+
+            - If the source is **push**, returns metadata for ingested documents (with filters).
+            - If the source is **pull**, returns both ingested and discovered-but-not-ingested documents.
+            - Supports optional filtering and pagination.
+
+            **Example filters:** `tags`, `retrievable`, `title`, etc.
+            """,
+        )
+        def browse_documents(req: BrowseDocumentsRequest):
+            config = self.context.get_config().document_sources.get(req.source_tag)
+            if not config:
+                raise HTTPException(status_code=404, detail=f"Source tag '{req.source_tag}' not found")
+
+            try:
+                if config.type == "push":
+                    filters = req.filters or {}
+                    filters["source_tag"] = req.source_tag
+                    docs = self.service.get_documents_metadata(filters)
+                    paginated = docs[req.offset : req.offset + req.limit]
+                    return PullDocumentsResponse(documents=paginated, total=len(docs))
+
+                elif config.type == "pull":
+                    docs, total = self.pull_document_service.list_pull_documents(source_tag=req.source_tag, offset=req.offset, limit=req.limit)
+                    # You could apply extra filtering here if needed
+                    return PullDocumentsResponse(documents=docs, total=total)
+
+                else:
+                    raise HTTPException(status_code=400, detail=f"Unsupported source type '{config.type}'")
+
+            except Exception as e:
+                log_exception(e, "An unexpected error occurred while rbrowsing document")
+                raise HTTPException(status_code=500, detail="Internal server error")

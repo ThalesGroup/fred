@@ -25,7 +25,7 @@ from typing import List, Optional, Dict, Any
 from croniter import croniter, CroniterBadCronError, CroniterBadDateError
 from pydantic import BaseModel, ConfigDict, Field, model_validator, RootModel
 
-from app.common.structure import WorkloadKind
+from app.common.structures import WorkloadKind
 
 
 class Cluster(BaseModel):

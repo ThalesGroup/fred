@@ -19,7 +19,7 @@ from pydantic import BaseModel, Field
 from app.features.frugal.cluster_consumption.cluster_consumption_structures import (
     ClusterConsumption,
 )
-from app.common.structure import PrecisionEnum
+from app.common.structures import PrecisionEnum
 
 
 class EnergyMixInput(BaseModel):

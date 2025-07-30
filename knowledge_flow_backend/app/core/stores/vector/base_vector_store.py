@@ -51,6 +51,7 @@ This design allows easy switching of backends (e.g., OpenSearch ➔ ChromaDB, Az
 
 from abc import ABC, abstractmethod
 from typing import List, Tuple
+from app.common.document_structures import DocumentMetadata
 from langchain.schema.document import Document
 
 
@@ -82,7 +83,7 @@ class BaseDocumentLoader(ABC):
     """
 
     @abstractmethod
-    def load(self, file_path: str, metadata: dict) -> Document:
+    def load(self, file_path: str, metadata: DocumentMetadata) -> Document:
         """Load a document from a file."""
         pass
 

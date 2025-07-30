@@ -13,6 +13,33 @@ containers:
 spec:
   revisionHistoryLimit: 2
 
+serviceAccount:
+  enabled: true
+  name: fred-knowledge-fl-back
+  annotations: {}
+  labels: {}
+  automount: true
+  rbac:
+    enabled: true
+    permissions:
+    # Permissions at namespace level
+      namespaced:
+      - apiGroups: [""]
+        resources: ["pods", "configmaps", "secrets"]
+        verbs: ["get", "list", "watch"]
+      - apiGroups: ["apps"]
+        resources: ["deployments", "replicasets"]
+        verbs: ["get", "list", "watch", "create", "update", "patch"]
+      - apiGroups: [""]
+        resources: ["events"]
+        verbs: ["create"]
+    
+      # Permissions at cluster level
+      cluster:
+      - apiGroups: [""]
+        resources: ["nodes"]
+        verbs: ["get", "list", "watch"]
+
 ports:
   enabled: true
   data:
@@ -22,15 +49,11 @@ rollingUpdate:
   maxSurge: 1
 
 command:
-  enabled: true
-  data:
+  enabled: false
+  data: []
     # - /bin/sh
     # - -c
     # - tail -f /dev/null
-    - python
-    - /app/app/main.py
-    - --config-path
-    - /app/config/configuration.yaml
 
 env:
   data:
@@ -173,7 +196,7 @@ configuration:
   # - GCS_BUCKET_NAME
   # - GCS_CREDENTIALS_PATH
   # If you are using local storage, make sure to set the following environment variable:
-  # - LOCAL_CONTENT_STORAGE_PATH default to '~/.knowledge-flow/content-store'
+  # - LOCAL_CONTENT_STORAGE_PATH default to '~/.fred/knowledge-flow/content-store'
     type: "minio"
     endpoint: minio:9000
     # access_key: minioadmin # Overrides the MINIO_ACCESS_KEY environment variable
@@ -192,7 +215,7 @@ configuration:
   #   OPENSEARCH_USER=admin
   #   OPENSEARCH_PASSWORD=xxx
   # If you are using local storage, make sure to set the following environment variable:
-  # - LOCAL_METADATA_STORAGE_PATH default to '~/.knowledge-flow/metadata-store.json'
+  # - LOCAL_METADATA_STORAGE_PATH default to '~/.fred/knowledge-flow/metadata-store.json'
   
   vector_storage:
     type: opensearch 
@@ -270,18 +293,6 @@ configuration:
   embedding:
     type: "openai"   # can be "openai" or "azureopenai" or "azureapim" or "ollama"
 
-  # -----------------------------------------------------------------------------
-  # KNOWLEDGE CONTEXT STORAGE BACKEND
-  # -----------------------------------------------------------------------------
-  # Backend used to store Knowledge Contexts (Workspaces) and user profiles.
-  # Both can have associated files. 
-  # -------------------------------------
-  knowledge_context_storage:
-    type: "local"   # as of now only local storage is supported
-    local_path: "~/.fred/knowledge-context"
-
-  knowledge_context_max_tokens: 8000
-
 dotenv:
 
   # -----------------------------------------------------------------------------
@@ -357,8 +368,8 @@ dotenv:
   GCS_PROJECT_ID: "my-gcp-project"
 
   # LOCAL STORAGE
-  LOCAL_CONTENT_STORAGE_PATH: "~/.knowledge-flow/content-store"
-  LOCAL_METADATA_STORAGE_PATH: "~/.knowledge-flow/metadata-store.json"
+  LOCAL_CONTENT_STORAGE_PATH: "~/.fred/knowledge-flow/content-store"
+  LOCAL_METADATA_STORAGE_PATH: "~/.fred/knowledge-flow/metadata-store.json"
 
 kubeconfig:
   data:

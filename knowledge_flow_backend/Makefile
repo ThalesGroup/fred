@@ -89,16 +89,37 @@ helm-push: ## Push Helm chart to GitLab package registry
 
 ##@ Run
 
-.PHONY: run
-run: PORT ?= 8111
-run: UVICORN_FACTORY ?= app.main:create_app
-run: dev ## Run the app from source
+.PHONY: run-local
+run-local: HOST ?= 0.0.0.0
+run-local: PORT ?= 8111
+run-local: UVICORN_FACTORY ?= app.main:create_app
+run-local: UVICORN_LOOP ?= asyncio
+run-local: ## Run the app assuming dependencies already exist
 	$(UV) run uvicorn \
 		--factory ${UVICORN_FACTORY} \
+		--host ${HOST} \
 		--port ${PORT} \
 		--env-file ${ENV_FILE} \
 		--log-level ${LOG_LEVEL} \
+		--loop ${UVICORN_LOOP} \
 		--reload
+
+.PHONY: run-worker
+
+run-worker: dev ## Run an ingestion worker this requires a temporal daemon
+	@echo "🚀 Running the app..."
+	PYTHONPATH=. \
+	LOG_LEVEL=$(LOG_LEVEL) \
+	ENV_FILE=$(ENV_FILE) \
+	$(PYTHON) ${PY_PACKAGE}/main_worker.py --config-path ./config/configuration_worker.yaml
+
+.PHONY: run
+run: dev run-local ## Run the app from source
+
+.PHONY: generate-openapi
+generate-openapi: dev ## Generate OpenAPI JSON specification without starting the server
+	@echo "🔧 Generating OpenAPI specification..."
+	$(PYTHON) ../scripts/generate_openapi.py
 
 .PHONY: docker-run
 
@@ -106,9 +127,7 @@ docker-run: ## Run the app in Docker
 	docker run -it \
 		-p 8111:8111 \
 		-v ~/.kube/:/home/fred-user/.kube/ \
-		-v ~/.aws/:/home/fred-user/.aws/ \
 		-v $(realpath app/config/configuration.yaml):/app/configuration.yaml \
-		-e LOG_LEVEL="$(LOG_LEVEL)" \
 		$(IMG) --config-path /app/configuration.yaml
 
 ##@ Tests
@@ -182,23 +201,6 @@ sast: ## Run bandit
 code-quality: ## Run all pre-commit checks
 	@echo "************ Executing pre-commit ************"
 	$(UV) run pre-commit run --all-files
-
-##@ Review
-
-.PHONY: review-pull-request
-review-pull-request: dev ## Run AI-based PR review locally
-	@echo "🤖 Reviewing Python changes using AI..."
-	$(PYTHON) ../developer_tools/ai_review_pull_request.py --mode committed
-
-.PHONY: review-uncommitted
-review-uncommitted: dev ## Run AI-based PR review locally
-	@echo "🤖 Reviewing Python changes using AI..."
-	$(PYTHON) ../developer_tools/ai_review_pull_request.py --mode uncommitted
-
-.PHONY: review-all
-review-all: dev ## Run AI-based PR review locally
-	@echo "🤖 Reviewing Python changes using AI..."
-	$(PYTHON) ../developer_tools/ai_review_pull_request.py --mode all
 
 ##@ Help
 

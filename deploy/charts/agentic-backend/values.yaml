@@ -1,7 +1,3 @@
-# Default values for backend.
-# This is a YAML-formatted file.
-# Declare variables to be passed into your templates.
-
 applicationName: agentic-backend
 
 # This will set the replicaset count more information can be found here: https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/
@@ -17,6 +13,13 @@ image:
 
 imagePullSecrets:
   - name: "gitlab-registry-creds"
+
+command:
+  enabled: false
+  data: []
+    # - /bin/sh
+    # - -c
+    # - tail -f /dev/null
 
 # This is for setting Kubernetes Annotations to a Pod.
 # For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/
@@ -90,6 +93,33 @@ autoscaling:
   targetCPUUtilizationPercentage: 80
   # targetMemoryUtilizationPercentage: 80
 
+serviceAccount:
+  enabled: true
+  name: fred-agentic-back
+  annotations: {}
+  labels: {}
+  automount: true
+  rbac:
+    enabled: true
+    permissions:
+    # Permissions at namespace level
+      namespaced:
+      - apiGroups: [""]
+        resources: ["pods", "configmaps", "secrets"]
+        verbs: ["get", "list", "watch"]
+      - apiGroups: ["apps"]
+        resources: ["deployments", "replicasets"]
+        verbs: ["get", "list", "watch", "create", "update", "patch"]
+      - apiGroups: [""]
+        resources: ["events"]
+        verbs: ["create"]
+    
+      # Permissions at cluster level
+      cluster:
+      - apiGroups: [""]
+        resources: ["nodes"]
+        verbs: ["get", "list", "watch"]
+
 # Additional volumes on the output Deployment definition.
 volumes: []
 # - name: foo
@@ -108,8 +138,6 @@ nodeSelector: {}
 tolerations: []
 
 affinity: {}
-
-baseUrlPath: /fred
 
 config:
   frontend_settings:

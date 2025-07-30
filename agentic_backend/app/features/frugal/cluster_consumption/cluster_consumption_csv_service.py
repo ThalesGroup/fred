@@ -28,9 +28,9 @@ from datetime import datetime
 from app.application_context import get_configuration
 from app.features.frugal.cluster_consumption.cluster_consumption_abstract_service import AbstractClusterConsumptionService
 from app.features.frugal.cluster_consumption.cluster_consumption_structures import ClusterConsumptionSeries, DetailSeries
-from app.common.structure import PrecisionEnum, Configuration, Series
+from app.common.structures import PrecisionEnum, Series
 from app.common.utils import sample_data, SampleDataType
-from app.services.frontend.frontend_structures import Observation
+from app.features.frugal.frontend_structures import Observation
 logger = logging.getLogger(__name__)
 
 class ClusterConsumptionCsvService(AbstractClusterConsumptionService):

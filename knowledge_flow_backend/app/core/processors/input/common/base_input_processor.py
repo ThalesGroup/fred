@@ -16,9 +16,9 @@ import hashlib
 import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
+from app.common.document_structures import DocumentMetadata
+from app.common.source_utils import resolve_source_type
 import pandas
-
-from app.common.utils import utc_now_iso
 
 logger = logging.getLogger(__name__)
 
@@ -29,64 +29,35 @@ class BaseInputProcessor(ABC):
     This class provides a common interface and utility methods for file processing.
     """
 
-    def _generate_file_unique_id(self, metadata: dict, front_metadata: dict) -> str:
+    def _generate_file_unique_id(self, document_name: str) -> str:
         """
         Generate a unique identifier for the file based on its metadata.
         This identifier is used to track the file in the system.
         """
-        document_name = metadata.get("document_name", "")
-        # Combine both fields into a deterministic string
-        identifier_str = f"{document_name}"
-        return hashlib.sha256(identifier_str.encode("utf-8")).hexdigest()
+        return hashlib.sha256(document_name.encode("utf-8")).hexdigest()
 
-    def _add_common_metadata(self, file_path: Path, front_metadata: dict) -> dict:
-        common_metadata = {
-            "document_name": file_path.name,
-            "date_added_to_kb": utc_now_iso(),
-            "retrievable": True,
-        }
-        common_metadata["document_uid"] = self._generate_file_unique_id(common_metadata, front_metadata)
-        return common_metadata
+    def _add_common_metadata(self, file_path: Path, tags: list[str], source_tag: str) -> DocumentMetadata:
+        document_uid = self._generate_file_unique_id(file_path.name)
+        source_type = resolve_source_type(source_tag)
+        return DocumentMetadata(document_name=file_path.name, document_uid=document_uid, tags=tags, source_tag=source_tag, source_type=source_type)
 
-    def _sanitize_front_metadata(self, front_metadata: dict) -> dict:
-        sanitized = {key.replace(" ", "_"): (value if value else "unknown") for key, value in front_metadata.items() if value not in (None, "", [], {})}
-        return sanitized
-
-    def validate_metadata(self, metadata: dict) -> None:
-        required_fields = ["document_uid"]
-        for field in required_fields:
-            if field not in metadata:
-                raise ValueError(f"Missing required metadata field: {field}")
-
-    def process_metadata(self, file_path: Path, front_metadata: dict = None) -> dict:
-        """
-        Process the metadata of the input file.
-        This method is responsible for extracting metadata from the file and
-        validating it. It also generates a unique identifier for the file.
-
-        Args:
-            file_path (Path): The path to the input file.
-        Returns:
-            dict: A dictionary containing the processed metadata.
-        Raises:
-            ValueError: If the metadata is invalid or if required fields are missing.
-        """
+    def process_metadata(self, file_path: Path, tags: list[str], source_tag: str = "uploads") -> DocumentMetadata:
         if not self.check_file_validity(file_path):
             return {"document_name": file_path.name, "error": "Invalid file structure"}
-        final_metadata = {}
-        file_metadata = self.extract_file_metadata(file_path)
-        common_metadata = self._add_common_metadata(file_path, front_metadata)
 
-        if front_metadata:
-            final_metadata["front_metadata"] = self._sanitize_front_metadata(front_metadata)
+        # Step 1: Create initial metadata
+        base_metadata = self._add_common_metadata(file_path, tags, source_tag)
 
-        final_metadata.update(file_metadata)
-        final_metadata.update(common_metadata)
+        # Step 2: Extract enrichment fields (e.g., author, created, etc.)
+        enrichment = self.extract_file_metadata(file_path)
 
-        self.validate_metadata(final_metadata)
-        return final_metadata
+        # Step 3: Merge fields into base model
+        enriched_dict = base_metadata.model_dump()
+        enriched_dict.update(enrichment)
 
-    @abstractmethod
+        # Step 4: Return final validated model
+        return DocumentMetadata(**enriched_dict)
+
     def check_file_validity(self, file_path: Path) -> bool:
         pass
 

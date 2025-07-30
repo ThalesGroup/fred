@@ -14,17 +14,18 @@
 
 #!/usr/bin/env python
 
-import os
 import argparse
+import glob
+import logging
+import os
 import subprocess  # nosec B404
 from pathlib import Path
+
+import openai
 from dotenv import load_dotenv
 from rich.console import Console
-from rich.panel import Panel
-import logging
 from rich.logging import RichHandler
-import openai
-import glob
+from rich.panel import Panel
 
 # Configure logging
 logging.basicConfig(

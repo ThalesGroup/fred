@@ -1,0 +1,105 @@
+# -----------------------------------------------------------------------------
+# BUILD STAGE
+# -----------------------------------------------------------------------------
+FROM mirror.gcr.io/python:3.12.8-slim AS builder
+
+# Set the poetry env
+# ENV POETRY_VIRTUALENVS_CREATE=true
+# ENV POETRY_VIRTUALENVS_IN_PROJECT=true
+# ENV POETRY_CACHE_DIR=/tmp/poetry_cache
+
+ARG USER_NAME=fred-user
+ARG USER_ID=1000
+ARG GROUP_ID=1000
+
+# Install system deps required for build
+RUN apt-get update && \
+    apt-get install -y curl make && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install uv globally
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
+    mv /root/.local/bin/uv /usr/local/bin/uv && \
+    chmod +x /usr/local/bin/uv
+
+# Create virtualenv manually (outside project for portability)
+ENV VENV_PATH=/opt/python/venv
+RUN python3 -m venv $VENV_PATH
+
+ENV PATH="$VENV_PATH/bin:$PATH"
+ENV UV_PROJECT_ENVIRONMENT=$VENV_PATH
+
+# Set working directory
+WORKDIR /app
+
+# RUN pip install poetry==1.7.1 --root-user-action=ignore && \
+#     poetry install
+
+# Copy pyproject & lock to install deps
+COPY agentic_backend/pyproject.toml agentic_backend/uv.lock* /app/
+COPY fred-core /fred-core
+COPY agentic_backend/* /app/
+
+# Install only dependencies
+RUN make dev
+
+# -----------------------------------------------------------------------------
+# FINAL STAGE: PROD IMAGE
+# -----------------------------------------------------------------------------
+FROM mirror.gcr.io/python:3.12.8-slim
+
+ARG USER_NAME=fred-user
+ARG USER_ID=1000
+ARG GROUP_ID=1000
+
+# System deps (minimal)
+RUN apt-get update && \
+    apt-get install -y curl && \
+    rm -rf /var/lib/apt/lists/*
+
+# # Install dependencies
+# RUN apt-get update && \
+#     apt-get install -y apt-transport-https ca-certificates gnupg curl unzip
+
+# # Install gcloud-cli
+# RUN curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg && \
+#     echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | tee -a /etc/apt/sources.list.d/google-cloud-sdk.list && \
+#     apt-get update && apt-get -y install google-cloud-cli google-cloud-cli-gke-gcloud-auth-plugin
+
+# # Install AWS CLI v2
+# RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip" && \
+#     unzip awscliv2.zip && \
+#     ./aws/install && \
+#     rm -rf awscliv2.zip aws
+
+# Create user
+RUN groupadd -g ${GROUP_ID} ${USER_NAME} && \
+    useradd -u ${USER_ID} -g ${GROUP_ID} -m ${USER_NAME}
+
+# Copy virtualenv from build stage
+COPY --from=builder /opt/python/venv /opt/python/venv
+ENV PATH="/opt/python/venv/bin:$PATH"
+
+# Set working directory
+WORKDIR /app
+
+# Copy app source
+COPY agentic_backend/. /app
+COPY fred-core /fred-core
+
+# Set environment (prod should inject via secrets/CI, not hardcoded)
+ENV PYTHONPATH=/app/app
+
+# Remove dev/test/config if needed
+RUN rm -f /app/config/configuration.yaml
+
+# Fix permissions
+RUN chown -R ${USER_ID}:${GROUP_ID} /app /fred-core
+USER ${USER_NAME}
+
+# Expose port
+EXPOSE 8000
+
+# Entrypoint without make
+ENTRYPOINT ["uvicorn", "app.main:create_app", "--factory"]
+CMD ["--port", "8000", "--env-file", "/app/config/.env", "--log-level", "info", "--loop", "asyncio"]

@@ -36,9 +36,9 @@ from app.application_context import get_app_context, get_configuration
 from app.features.k8.structure import Cluster, ClusterList, WorkloadKind, WorkloadNameList, Workload, IngressesList, \
     CustomObject, CustomObjectInfo
 from app.features.k8.structure import ConfigMapsList, NamespacesList, Namespace, ServicesList
-from app.common.connectors.file_dao import FileDAO
+from app.common.file_dao import FileDAO
 from app.common.error import UnavailableError
-from app.common.structure import Configuration, DAOTypeEnum
+from app.common.structures import DAOTypeEnum
 
 logger = logging.getLogger(__name__)
 

@@ -48,9 +48,9 @@ from app.features.frugal.structure.workload_summary import WorkloadSummary
 from app.features.frugal.structure.workload_topology import WorkloadTopology
 from app.features.k8.kube_service import KubeService
 from app.features.k8.structure import WorkloadKind
-from app.common.connectors.file_dao import FileDAO
+from app.common.file_dao import FileDAO
 from app.common.error import UnavailableError
-from app.common.structure import Configuration, DAOTypeEnum
+from app.common.structures import Configuration, DAOTypeEnum
 
 # 🔹 Create a module-level logger
 logger = logging.getLogger(__name__)

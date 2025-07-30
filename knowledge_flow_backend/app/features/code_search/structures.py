@@ -13,14 +13,16 @@
 # limitations under the License.
 
 # app/features/code_search/structures.py
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from typing import Optional
 
 from app.common.structures import Status
 
+
 class CodeSearchRequest(BaseModel):
     query: str
     top_k: int = 10
+
 
 class CodeDocumentSource(BaseModel):
     content: str
@@ -37,6 +39,7 @@ class CodeDocumentSource(BaseModel):
 
 class CodeIndexRequest(BaseModel):
     path: str
+
 
 class CodeIndexProgress(BaseModel):
     step: str

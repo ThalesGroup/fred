@@ -58,6 +58,42 @@ class MinioStorageBackend(BaseContentStore):
                     logger.error(f"Failed to upload '{file_path}': {e}")
                     raise ValueError(f"Failed to upload '{file_path}': {e}")
 
+    def _upload_folder(self, document_uid: str, local_path: Path, subfolder: str):
+        """
+        Uploads all files inside `local_path` to MinIO under the given subfolder
+        (e.g. input/ or output/) using the structure:
+            {document_uid}/{subfolder}/<relative_path>
+
+        Example:
+            If local_path contains:
+                /tmp/output/output.md
+                /tmp/output/media/image1.png
+
+            It uploads to:
+                {document_uid}/output/output.md
+                {document_uid}/output/media/image1.png
+        """
+        if not local_path.exists() or not local_path.is_dir():
+            raise ValueError(f"Path {local_path} does not exist or is not a directory")
+
+        for file_path in local_path.rglob("*"):
+            if file_path.is_file():
+                relative_path = file_path.relative_to(local_path)
+                object_name = f"{document_uid}/{subfolder}/{relative_path}"
+
+                try:
+                    self.client.fput_object(self.bucket_name, object_name, str(file_path))
+                    logger.info(f"📤 Uploaded '{object_name}' to bucket '{self.bucket_name}'")
+                except S3Error as e:
+                    logger.error(f"❌ Failed to upload '{file_path}' as '{object_name}': {e}")
+                    raise ValueError(f"Upload failed for '{object_name}': {e}")
+
+    def save_input(self, document_uid: str, input_dir: Path) -> None:
+        self._upload_folder(document_uid, input_dir, subfolder="input")
+
+    def save_output(self, document_uid: str, output_dir: Path) -> None:
+        self._upload_folder(document_uid, output_dir, subfolder="output")
+
     def delete_content(self, document_uid: str) -> None:
         """
         Deletes all objects in the bucket under the given document UID prefix.
@@ -139,21 +175,43 @@ class MinioStorageBackend(BaseContentStore):
             raise
 
     def clear(self) -> None:
-            """
-            Deletes all objects in the MinIO bucket.
-            """
-            try:
-                objects_to_delete = self.client.list_objects(self.bucket_name, recursive=True)
-                deleted_any = False
+        """
+        Deletes all objects in the MinIO bucket.
+        """
+        try:
+            objects_to_delete = self.client.list_objects(self.bucket_name, recursive=True)
+            deleted_any = False
 
-                for obj in objects_to_delete:
-                    self.client.remove_object(self.bucket_name, obj.object_name)
-                    logger.info(f"🗑️ Deleted '{obj.object_name}' from bucket '{self.bucket_name}'.")
-                    deleted_any = True
+            for obj in objects_to_delete:
+                self.client.remove_object(self.bucket_name, obj.object_name)
+                logger.info(f"🗑️ Deleted '{obj.object_name}' from bucket '{self.bucket_name}'.")
+                deleted_any = True
 
-                if not deleted_any:
-                    logger.warning("⚠️ No objects found to delete.")
+            if not deleted_any:
+                logger.warning("⚠️ No objects found to delete.")
 
-            except S3Error as e:
-                logger.error(f"❌ Failed to delete objects from bucket{self.bucket_name}: {e}")
-                raise ValueError(f"Failed to delete document content from MinIO: {e}")
+        except S3Error as e:
+            logger.error(f"❌ Failed to delete objects from bucket{self.bucket_name}: {e}")
+            raise ValueError(f"Failed to delete document content from MinIO: {e}")
+
+    def get_local_copy(self, document_uid: str, destination_dir: Path) -> Path:
+        """
+        Downloads the first input file of the given document_uid to a temporary file,
+        and returns the local filesystem Path to it.
+        """
+        try:
+            objects = list(self.client.list_objects(self.bucket_name, prefix=f"{document_uid}/", recursive=True))
+            if not objects:
+                raise FileNotFoundError(f"No content found for document: {document_uid}")
+
+            for obj in objects:
+                relative_path = Path(obj.object_name).relative_to(document_uid)
+                target_path = destination_dir / relative_path
+                target_path.parent.mkdir(parents=True, exist_ok=True)
+                self.client.fget_object(self.bucket_name, obj.object_name, str(target_path))
+
+            logger.info(f"✅ Restored document {document_uid} to {destination_dir}")
+
+        except S3Error as e:
+            logger.error(f"Failed to restore document {document_uid}: {e}")
+            raise

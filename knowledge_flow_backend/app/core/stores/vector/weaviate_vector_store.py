@@ -49,7 +49,7 @@ class WeaviateVectorStore(BaseVectoreStore):
             index_name=self.index_name,
             text_key=self.text_key,
             embedding=self.embedding_model,
-            by_text=False  # We handle embedding ourselves
+            by_text=False,  # We handle embedding ourselves
         )
 
         logger.info(f"✅ Weaviate vector store initialized on {host} (index: {index_name})")

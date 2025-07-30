@@ -14,7 +14,7 @@
 
 import CloseIcon from "@mui/icons-material/Close";
 import DownloadIcon from "@mui/icons-material/Download";
-import { AppBar, Box, CircularProgress, Drawer, IconButton, Toolbar, Typography } from "@mui/material";
+import { AppBar, Box, CircularProgress, IconButton, Toolbar, Typography } from "@mui/material";
 import { useEffect, useState } from "react";
 import { useGetDocumentMarkdownPreviewMutation } from "../../slices/documentApi.tsx";
 import MarkdownRendererWithHighlights, { HighlightedPart } from "../markdown/MarkdownRendererWithHighlights.tsx";
@@ -27,8 +27,7 @@ interface DocumentViewerProps {
     file_url?: string; // Optional direct URL to fetch content from
     content?: string; // Optional inline content (may be base64-encoded)
   } | null;
-  open: boolean; // Controls whether the Drawer is open
-  onClose: () => void; // Callback when the Drawer should be closed
+  onClose: () => void; // Callback when the component should be closed
   highlightedParts?: HighlightedPart[]; // Optional array of parts to highlight in the document
   chunksToHighlight?: string[]; // Optional array of text chunks to highlight in the document
 }
@@ -47,7 +46,6 @@ interface DocumentViewerProps {
  */
 export const DocumentViewer: React.FC<DocumentViewerProps> = ({
   document: doc,
-  open,
   onClose,
   highlightedParts = [],
   chunksToHighlight = [],
@@ -63,9 +61,9 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
     return { start, end };
   });
 
-  // Load markdown content whenever the viewer is opened with a document
+  // Load markdown content whenever a document is provided
   useEffect(() => {
-    if (!open || !doc?.document_uid) return;
+    if (!doc?.document_uid) return;
 
     const load = async () => {
       setIsLoadingDoc(true);
@@ -110,7 +108,7 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
     };
 
     load();
-  }, [doc, open]);
+  }, [doc]);
 
   // Triggers file download via <a download>
   const handleDownload = () => {
@@ -126,50 +124,48 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
   };
   //console.log("DocumentViewer rendering docContent: ", docContent);
   return (
-    <Drawer anchor="right" open={open} onClose={onClose}>
-      <Box
-        sx={{
-          width: "80vw",
-          height: "100vh",
-          display: "flex",
-          flexDirection: "column",
-        }}
-      >
-        {/* Header with title and actions */}
-        <AppBar position="static" color="default" elevation={0}>
-          <Toolbar>
-            <Typography variant="h6" sx={{ flex: 1 }}>
-              {doc?.file_name || "Markdown Document"}
-            </Typography>
-            <IconButton onClick={handleDownload} disabled={!doc?.file_url}>
-              <DownloadIcon />
-            </IconButton>
-            <IconButton onClick={onClose}>
-              <CloseIcon />
-            </IconButton>
-          </Toolbar>
-        </AppBar>
+    <Box
+      sx={{
+        width: "80vw",
+        height: "100vh",
+        display: "flex",
+        flexDirection: "column",
+      }}
+    >
+      {/* Header with title and actions */}
+      <AppBar position="static" color="default" elevation={0}>
+        <Toolbar>
+          <Typography variant="h6" sx={{ flex: 1 }}>
+            {doc?.file_name || "Markdown Document"}
+          </Typography>
+          <IconButton onClick={handleDownload} disabled={!doc?.file_url}>
+            <DownloadIcon />
+          </IconButton>
+          <IconButton onClick={onClose}>
+            <CloseIcon />
+          </IconButton>
+        </Toolbar>
+      </AppBar>
 
-        {/* Main content area */}
-        <Box sx={{ flex: 1, overflow: "auto", p: 3 }}>
-          {isLoadingDoc ? (
-            <Box sx={{ display: "flex", justifyContent: "center", mt: 4 }}>
-              <CircularProgress />
-            </Box>
-          ) : (
-            <>
-              <MarkdownRendererWithHighlights
-                highlightedParts={[...highlightedParts, ...highlightedPartsFromExtracts]}
-                content={docContent}
-                size="medium"
-                enableEmojiSubstitution={true}
-              />
-              {/* <CustomMarkdownRenderer content={docContent} size="small" /> */}
-            </>
-          )}
-        </Box>
+      {/* Main content area */}
+      <Box sx={{ flex: 1, overflow: "auto", p: 3 }}>
+        {isLoadingDoc ? (
+          <Box sx={{ display: "flex", justifyContent: "center", mt: 4 }}>
+            <CircularProgress />
+          </Box>
+        ) : (
+          <>
+            <MarkdownRendererWithHighlights
+              highlightedParts={[...highlightedParts, ...highlightedPartsFromExtracts]}
+              content={docContent}
+              size="medium"
+              enableEmojiSubstitution={true}
+            />
+            {/* <CustomMarkdownRenderer content={docContent} size="small" /> */}
+          </>
+        )}
       </Box>
-    </Drawer>
+    </Box>
   );
 };
 

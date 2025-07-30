@@ -15,7 +15,7 @@
 from abc import ABC, abstractmethod
 from datetime import datetime
 
-from app.common.structure import PrecisionEnum, CompareResult, Series
+from app.common.structures import PrecisionEnum, CompareResult, Series
 from app.common.utils import compare_two_windows
 from app.features.frugal.cluster_consumption.cluster_consumption_structures import ClusterConsumptionSeries
 

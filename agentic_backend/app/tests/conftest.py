@@ -14,20 +14,27 @@
 
 # app/tests/conftest.py
 
+
 import pytest
 from fastapi.testclient import TestClient
 from fastapi import FastAPI, APIRouter
 
-from app.common.structure import Configuration, PathOrIndexPrefix
+from app.common.structures import AppConfig, Configuration
 from app.application_context import ApplicationContext
-from app.chatbot.chatbot_controller import ChatbotController
-from app.features.frugal.ai_service import AIService
-from app.features.k8.kube_service import KubeService
-
+from app.common.structures import PathOrIndexPrefix
+from app.core.chatbot.chatbot_controller import ChatbotController
 
 @pytest.fixture(scope="session")
 def minimal_generalist_config() -> Configuration:
     return Configuration(
+        app=AppConfig(
+            base_url="/knowledge-flow/v1",
+            address="127.0.0.1",
+            port=8000,
+            log_level="info",
+            reload=False,
+            reload_dir=".",
+        ),
         frontend_settings={
             "feature_flags": {"enableK8Features": False, "enableElecWarfare": False},
             "properties": {"logoName": "fred"},
@@ -59,7 +66,7 @@ def minimal_generalist_config() -> Configuration:
             },
             "leader": {
                 "name": "Fred",
-                "class_path": "app.leader.leader.Leader",
+                "class_path": "app.agents.leader.leader.Leader",
                 "enabled": True,
                 "max_steps": 5,
                 "model": {},
@@ -79,8 +86,9 @@ def minimal_generalist_config() -> Configuration:
         security={"enabled": False, "keycloak_url": "", "client_id": "fred", "authorized_origins": []},
         node_metrics_storage={"type": "local", "local_path": "/tmp/node-metrics"},
         tool_metrics_storage={"type": "local", "local_path": "/tmp/tool-metrics"},
-        feedback_storage={"type": "local", "local_path": "/tmp/feedback"},
+        feedback_storage={"type": "ducckdb", "duckdb_path": "/tmp/ducckdb.db"},
         session_storage={"type": "in_memory"},
+        agent_storage={"type": "duckdb", "duckdb_path": "/tmp/duckdb.db"},
     )
 
 @pytest.fixture(scope="session")

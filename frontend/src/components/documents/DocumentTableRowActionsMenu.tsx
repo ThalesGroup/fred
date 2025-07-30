@@ -1,25 +1,29 @@
-import React, { useState } from "react";
-import { IconButton, Menu, MenuItem, ListItemIcon, ListItemText } from "@mui/material";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
-import DeleteIcon from "@mui/icons-material/Delete";
-import DownloadIcon from "@mui/icons-material/Download";
-import VisibilityIcon from "@mui/icons-material/Visibility";
-import { useTranslation } from "react-i18next";
+import { IconButton, ListItemIcon, ListItemText, Menu, MenuItem } from "@mui/material";
+import React, { useState } from "react";
 
-interface DocumentTableRowActionsMenuProps {
-  onDelete: () => void;
-  onDownload: () => void;
-  onOpen: () => void;
+import { useTranslation } from "react-i18next";
+import { DocumentMetadata } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+
+export interface CustomRowAction {
+  icon: React.ReactElement;
+  name: string;
+  handler: (file: DocumentMetadata) => Promise<void>;
 }
 
-export const DocumentTableRowActionsMenu: React.FC<DocumentTableRowActionsMenuProps> = ({
-  onDelete,
-  onDownload,
-  onOpen,
-}) => {
+interface DocumentTableRowActionsMenuProps {
+  file: DocumentMetadata;
+  actions: CustomRowAction[];
+}
+
+export const DocumentTableRowActionsMenu: React.FC<DocumentTableRowActionsMenuProps> = ({ file, actions }) => {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const open = Boolean(anchorEl);
   const { t } = useTranslation();
+
+  if (actions.length === 0) {
+    return null;
+  }
 
   return (
     <>
@@ -37,39 +41,18 @@ export const DocumentTableRowActionsMenu: React.FC<DocumentTableRowActionsMenuPr
         anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
         transformOrigin={{ vertical: "top", horizontal: "right" }}
       >
-        <MenuItem
-          onClick={() => {
-            onOpen();
-            setAnchorEl(null);
-          }}
-        >
-          <ListItemIcon>
-            <VisibilityIcon fontSize="small" />
-          </ListItemIcon>
-          <ListItemText primary={t("documentActions.preview")} />
-        </MenuItem>
-        <MenuItem
-          onClick={() => {
-            onDownload();
-            setAnchorEl(null);
-          }}
-        >
-          <ListItemIcon>
-            <DownloadIcon fontSize="small" />
-          </ListItemIcon>
-          <ListItemText primary={t("documentActions.download")} />
-        </MenuItem>
-        <MenuItem
-          onClick={() => {
-            onDelete();
-            setAnchorEl(null);
-          }}
-        >
-          <ListItemIcon>
-            <DeleteIcon fontSize="small" />
-          </ListItemIcon>
-          <ListItemText primary={t("documentActions.delete")} />
-        </MenuItem>
+        {actions.map((action, index) => (
+          <MenuItem
+            key={index}
+            onClick={() => {
+              action.handler(file);
+              setAnchorEl(null);
+            }}
+          >
+            <ListItemIcon>{React.cloneElement(action.icon, { fontSize: "small" })}</ListItemIcon>
+            <ListItemText primary={action.name} />
+          </MenuItem>
+        ))}
       </Menu>
     </>
   );

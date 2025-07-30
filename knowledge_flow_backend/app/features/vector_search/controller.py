@@ -19,6 +19,7 @@ from langchain.schema.document import Document
 from app.features.vector_search.structures import DocumentSource, SearchRequest
 from app.features.vector_search.service import VectorSearchService
 
+
 class VectorSearchController:
     """app/features/tabular/__init__.py
     Controller responsible for document search using vector similarity.
@@ -78,7 +79,7 @@ class VectorSearchController:
             title=metadata.get("title", "Unknown"),
             author=metadata.get("author", "Unknown"),
             created=metadata.get("created", "Unknown"),
-            type=metadata.get("category", "document"),
+            type=metadata.get("category") or "document",
             score=score,
             rank=rank,
             embedding_model=str(metadata.get("embedding_model", "unknown_model")),
