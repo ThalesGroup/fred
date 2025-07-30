@@ -52,9 +52,7 @@ class ContentService:
         metadata = self.metadata_store.get_metadata_by_uid(document_uid)
         if metadata is None:
             # Let the controller map this to a 404
-            raise FileNotFoundError(
-                f"No metadata found for document {document_uid}"
-            )
+            raise FileNotFoundError(f"No metadata found for document {document_uid}")
         return metadata
 
     async def get_original_content(self, document_uid: str) -> Tuple[BinaryIO, str, str]:
@@ -76,12 +74,12 @@ class ContentService:
         Returns media file associated with a document if it exists.
         """
         content_type = mimetypes.guess_type(media_id)[0] or "application/octet-stream"
-        
+
         try:
             stream = self.content_store.get_media(document_uid, media_id)
         except FileNotFoundError:
             raise FileNotFoundError(f"No media found for document {document_uid} with media ID {media_id}")
-        
+
         return stream, media_id, content_type
 
     async def get_markdown_preview(self, document_uid: str) -> str:

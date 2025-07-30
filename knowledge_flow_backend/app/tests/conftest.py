@@ -23,7 +23,6 @@ from app.common.structures import (
     DuckdbMetadataStorage,
     EmbeddingConfig,
     InMemoryVectorStorage,
-    KnowledgeContextStorageConfig,
     LocalContentStorage,
     LocalTagStore,
     ProcessorConfig,
@@ -94,10 +93,6 @@ def app_context(monkeypatch, fake_embedder):
         catalog_storage=DuckDBTabularStorage(type="duckdb", duckdb_path="/tmp/testdb.duckdb"),
         embedding=EmbeddingConfig(type="openai"),
         tag_storage=LocalTagStore(type="local"),
-        knowledge_context_storage=KnowledgeContextStorageConfig(
-            type="local",
-            local_path="/tmp",
-        ),
         input_processors=[
             ProcessorConfig(
                 prefix=".docx",
@@ -130,7 +125,6 @@ def app_context(monkeypatch, fake_embedder):
                 class_path=f"{TestOutputProcessor.__module__}.{TestOutputProcessor.__qualname__}",
             ),
         ],
-        knowledge_context_max_tokens=50000,
     )
 
     return ApplicationContext(config)

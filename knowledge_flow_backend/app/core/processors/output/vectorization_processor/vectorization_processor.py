@@ -23,6 +23,7 @@ from app.core.processors.output.base_output_processor import BaseOutputProcessor
 
 logger = logging.getLogger(__name__)
 
+
 class VectorizationProcessor(BaseOutputProcessor):
     """
     A pipeline for vectorizing documents.

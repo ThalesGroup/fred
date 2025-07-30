@@ -340,7 +340,7 @@ class AgentManager:
         except RetryError as re:
             logger.error(f"❌ MCP client for agent '{agent_name}' failed to connect after retries.")
             logger.debug(re)
-        except Exception as e:
+        except Exception:
             logger.exception(f"❌ MCP client for agent '{agent_name}' raised an unexpected error.")
         
         return client

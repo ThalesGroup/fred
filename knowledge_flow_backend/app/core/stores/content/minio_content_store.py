@@ -82,11 +82,7 @@ class MinioStorageBackend(BaseContentStore):
                 object_name = f"{document_uid}/{subfolder}/{relative_path}"
 
                 try:
-                    self.client.fput_object(
-                        self.bucket_name,
-                        object_name,
-                        str(file_path)
-                    )
+                    self.client.fput_object(self.bucket_name, object_name, str(file_path))
                     logger.info(f"📤 Uploaded '{object_name}' to bucket '{self.bucket_name}'")
                 except S3Error as e:
                     logger.error(f"❌ Failed to upload '{file_path}' as '{object_name}': {e}")
@@ -179,25 +175,24 @@ class MinioStorageBackend(BaseContentStore):
             raise
 
     def clear(self) -> None:
-            """
-            Deletes all objects in the MinIO bucket.
-            """
-            try:
-                objects_to_delete = self.client.list_objects(self.bucket_name, recursive=True)
-                deleted_any = False
+        """
+        Deletes all objects in the MinIO bucket.
+        """
+        try:
+            objects_to_delete = self.client.list_objects(self.bucket_name, recursive=True)
+            deleted_any = False
 
-                for obj in objects_to_delete:
-                    self.client.remove_object(self.bucket_name, obj.object_name)
-                    logger.info(f"🗑️ Deleted '{obj.object_name}' from bucket '{self.bucket_name}'.")
-                    deleted_any = True
+            for obj in objects_to_delete:
+                self.client.remove_object(self.bucket_name, obj.object_name)
+                logger.info(f"🗑️ Deleted '{obj.object_name}' from bucket '{self.bucket_name}'.")
+                deleted_any = True
 
-                if not deleted_any:
-                    logger.warning("⚠️ No objects found to delete.")
+            if not deleted_any:
+                logger.warning("⚠️ No objects found to delete.")
 
-            except S3Error as e:
-                logger.error(f"❌ Failed to delete objects from bucket{self.bucket_name}: {e}")
-                raise ValueError(f"Failed to delete document content from MinIO: {e}")
-
+        except S3Error as e:
+            logger.error(f"❌ Failed to delete objects from bucket{self.bucket_name}: {e}")
+            raise ValueError(f"Failed to delete document content from MinIO: {e}")
 
     def get_local_copy(self, document_uid: str, destination_dir: Path) -> Path:
         """

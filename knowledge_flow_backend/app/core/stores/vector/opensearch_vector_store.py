@@ -35,25 +35,47 @@ class OpenSearchVectorStoreAdapter(BaseVectoreStore):
 
     It accepts documents + embeddings and stores them into the configured OpenSearch vector index.
     """
+
     def __init__(
         self,
         embedding_model: BaseEmbeddingModel,
         host: str,
-        vector_index: str,
+        index: str,
         username: str,
         password: str,
         secure: bool = False,
         verify_certs: bool = False,
     ):
-        self.vector_index = vector_index
+        self.vector_index = index
         self.opensearch_vector_search = OpenSearchVectorSearch(
             opensearch_url=host,
-            index_name=vector_index,
+            index_name=index,
             embedding_function=embedding_model,
             use_ssl=secure,
             verify_certs=verify_certs,
             http_auth=(username, password),
         )
+        expected_dim = self._get_embedding_dimension()
+        self._check_vector_index_dimension(expected_dim)
+
+    def _check_vector_index_dimension(self, expected_dim: int):
+        mapping = self.opensearch_vector_search.client.indices.get_mapping(index=self.vector_index)
+        actual_dim = mapping[self.vector_index]["mappings"]["properties"]["vector_field"]["dimension"]
+
+        model_name = get_embedding_model_name(self.opensearch_vector_search.embedding_function)
+
+        if actual_dim != expected_dim:
+            raise ValueError(
+                f"❌ Vector dimension mismatch:\n"
+                f"   - OpenSearch index '{self.vector_index}' expects: {actual_dim}\n"
+                f"   - Embedding model '{model_name}' outputs: {expected_dim}\n"
+                f"💡 Make sure the index and embedding model are compatible."
+            )
+        logger.info(f"✅ Vector dimension check passed: model '{model_name}' outputs {expected_dim}")
+
+    def _get_embedding_dimension(self) -> int:
+        dummy_vector = self.opensearch_vector_search.embedding_function.embed_query("dummy")
+        return len(dummy_vector)
 
     def add_documents(self, documents: List[Document]) -> None:
         """
@@ -68,7 +90,7 @@ class OpenSearchVectorStoreAdapter(BaseVectoreStore):
             logger.info("✅ Documents added successfully.")
         except Exception as e:
             logger.exception("❌ Failed to add documents to OpenSearch.")
-            raise RuntimeError(f"Failed to add documents to OpenSearch: {e}") from e
+            raise RuntimeError("Unexpected error during vector indexing.") from e
 
     def similarity_search_with_score(self, query: str, k: int = 5) -> List[Tuple[Document, float]]:
         results = self.opensearch_vector_search.similarity_search_with_score(query, k=k)

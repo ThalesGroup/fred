@@ -28,12 +28,13 @@ from app.features.tabular.structures import (
 
 logger = logging.getLogger(__name__)
 
+
 class TabularService:
     def __init__(self):
         self.tabular_store = ApplicationContext.get_instance().get_tabular_store()
 
     def _sanitize_table_name(self, name: str) -> str:
-        return name.replace('-', '_')
+        return name.replace("-", "_")
 
     def _format_date(self, dt: datetime) -> str:
         return dt.isoformat()
@@ -56,9 +57,7 @@ class TabularService:
         datasets = []
         for table_name in self.tabular_store.list_tables():
             try:
-                count_df = self.tabular_store.execute_sql_query(
-                    f"SELECT COUNT(*) AS count FROM {table_name}"
-                )
+                count_df = self.tabular_store.execute_sql_query(f"SELECT COUNT(*) AS count FROM {table_name}")
                 row_count = count_df["count"][0]
             except Exception as e:
                 logger.warning(f"Failed to count rows for {table_name}: {e}")
@@ -80,20 +79,13 @@ class TabularService:
         table_name = document_name.replace("-", "_")
         schema = self.tabular_store.get_table_schema(table_name)
 
-        columns = [
-            TabularColumnSchema(name=col, dtype=self._map_duckdb_type_to_literal(dtype))
-            for col, dtype in schema
-        ]
+        columns = [TabularColumnSchema(name=col, dtype=self._map_duckdb_type_to_literal(dtype)) for col, dtype in schema]
 
-        count_df = self.tabular_store.execute_sql_query(
-            f"SELECT COUNT(*) AS count FROM {table_name}"
-        )
+        count_df = self.tabular_store.execute_sql_query(f"SELECT COUNT(*) AS count FROM {table_name}")
         row_count = count_df["count"][0]
 
-        return TabularSchemaResponse(
-            document_name=document_name, columns=columns, row_count=row_count
-        )
-    
+        return TabularSchemaResponse(document_name=document_name, columns=columns, row_count=row_count)
+
     def list_datasets_with_schema(self) -> list[TabularSchemaResponse]:
         responses = []
         table_names = self.tabular_store.list_tables()
@@ -101,20 +93,11 @@ class TabularService:
         for table in table_names:
             try:
                 schema_info = self.tabular_store.get_table_schema(table)
-                columns = [
-                    TabularColumnSchema(name=col_name, dtype=self._map_duckdb_type_to_literal(col_type))
-                    for col_name, col_type in schema_info
-                ]
+                columns = [TabularColumnSchema(name=col_name, dtype=self._map_duckdb_type_to_literal(col_type)) for col_name, col_type in schema_info]
                 count_df = self.tabular_store.execute_sql_query(f"SELECT COUNT(*) AS count FROM {table}")
                 row_count = count_df["count"][0]
 
-                responses.append(
-                    TabularSchemaResponse(
-                        document_name=table,
-                        columns=columns,
-                        row_count=row_count
-                    )
-                )
+                responses.append(TabularSchemaResponse(document_name=table, columns=columns, row_count=row_count))
             except Exception as e:
                 logger.warning(f"Failed to load schema for {table}: {e}")
                 continue

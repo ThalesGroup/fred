@@ -19,7 +19,6 @@ from langchain.schema.document import Document
 from app.core.stores.vector.base_vector_store import BaseDocumentLoader
 
 
-
 class LocalFileLoader(BaseDocumentLoader):
     """
     Local File Loader
@@ -45,4 +44,3 @@ class LocalFileLoader(BaseDocumentLoader):
         content = path.read_text(encoding="utf-8")
 
         return Document(page_content=content, metadata=metadata.model_dump(mode="json"))
-

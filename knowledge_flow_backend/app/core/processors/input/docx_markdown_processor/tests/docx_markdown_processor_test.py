@@ -42,7 +42,7 @@ async def test_process_docx_file(processor: DocxMarkdownProcessor):
         result = processor.convert_file_to_markdown(
             test_docx_path,
             output_dir,
-            metadata.document_uid  # ✅ now access attribute, not dict key
+            metadata.document_uid,  # ✅ now access attribute, not dict key
         )
 
         assert "md_file" in result

@@ -194,4 +194,3 @@ def count_tokens(text: str) -> int:
         logger.warning(f"Fallback to cl100k_base tokenizer due to error: {e}")
         encoding = tiktoken.get_encoding("cl100k_base")
         return len(encoding.encode(text))
-

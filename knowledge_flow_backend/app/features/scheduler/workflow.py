@@ -9,38 +9,30 @@ from temporalio import workflow
 from app.features.scheduler.structure import PipelineDefinition
 from temporalio.common import RetryPolicy
 
+
 @workflow.defn
 class ExtractMetadata:
     @workflow.run
     async def run(self, file):
         workflow.logger.info(f"📂 ExtractMetadataWorkflow: {file}")
-        return await workflow.execute_activity(
-            extract_metadata,
-            args=[file],
-            schedule_to_close_timeout=timedelta(seconds=60)
-        )
+        return await workflow.execute_activity(extract_metadata, args=[file], schedule_to_close_timeout=timedelta(seconds=60))
+
 
 @workflow.defn
 class InputProcess:
     @workflow.run
     async def run(self, file, metadata):
         workflow.logger.info(f"📂 InputProcess: {file}")
-        return await workflow.execute_activity(
-            input_process,
-            args=[file, metadata],
-            schedule_to_close_timeout=timedelta(seconds=60)
-        )
+        return await workflow.execute_activity(input_process, args=[file, metadata], schedule_to_close_timeout=timedelta(seconds=60))
+
 
 @workflow.defn
 class OutputProcess:
     @workflow.run
     async def run(self, file, metadata):
         workflow.logger.info(f"📂 OutputProcess: {file}")
-        await workflow.execute_activity(
-            output_process,
-            args=[file, metadata],
-            schedule_to_close_timeout=timedelta(seconds=60)
-        )
+        await workflow.execute_activity(output_process, args=[file, metadata], schedule_to_close_timeout=timedelta(seconds=60))
+
 
 @workflow.defn
 class Process:
@@ -50,33 +42,19 @@ class Process:
 
         for file in definition.files:
             workflow.logger.info(f"Before pipeline for file: {file}")
-            metadata = await workflow.execute_child_workflow(
-                ExtractMetadata.run,
-                args=[file],
-                id=f"extract-{file.display_name or 'unknown'}",
-                retry_policy=RetryPolicy(maximum_attempts=2)
-            )
+            metadata = await workflow.execute_child_workflow(ExtractMetadata.run, args=[file], id=f"extract-{file.display_name or 'unknown'}", retry_policy=RetryPolicy(maximum_attempts=2))
 
             workflow.logger.info(f"Before  InputProcess: {file}")
             workflow.logger.info(f"Before  InputProcess: {metadata}")
-            #file.document_uid = metadata.document_uid
+            # file.document_uid = metadata.document_uid
             metadata = await workflow.execute_child_workflow(
-                InputProcess.run,
-                args=[file, metadata],
-                id=f"input-process-{file.display_name or 'unknown'}",
-                retry_policy=RetryPolicy(maximum_attempts=2)
+                InputProcess.run, args=[file, metadata], id=f"input-process-{file.display_name or 'unknown'}", retry_policy=RetryPolicy(maximum_attempts=2)
             )
 
             workflow.logger.info(f"Before  OutputProcess: {file}")
             workflow.logger.info(f"Before  OutputProcess: {metadata}")
-            await workflow.execute_child_workflow(
-                OutputProcess.run,
-                args=[file, metadata],
-                id=f"output-process-{file.display_name or 'unknown'}",
-                retry_policy=RetryPolicy(maximum_attempts=2)
-            )
+            await workflow.execute_child_workflow(OutputProcess.run, args=[file, metadata], id=f"output-process-{file.display_name or 'unknown'}", retry_policy=RetryPolicy(maximum_attempts=2))
 
             workflow.logger.info(f"✅ Completed file: {file.display_name}")
 
         return "success"
-

@@ -25,6 +25,7 @@ from app.core.stores.metadata.local_metadata_store import LocalMetadataStore
 # ⚙️ Fixtures
 # ----------------------------
 
+
 @pytest.fixture
 def metadata_store(tmp_path):
     json_path = tmp_path / "metadata.json"
@@ -34,6 +35,7 @@ def metadata_store(tmp_path):
 # ----------------------------
 # ✅ Nominal Cases
 # ----------------------------
+
 
 def test_save_and_get_metadata(metadata_store):
     metadata = DocumentMetadata(source_type="push", document_uid="doc1", document_name="Test Doc")
@@ -73,6 +75,7 @@ def test_get_all_metadata_with_filter(metadata_store):
 # ❌ Error Cases
 # ----------------------------
 
+
 def test_save_metadata_missing_uid(metadata_store):
     with pytest.raises(ValueError):
         metadata_store.save_metadata(DocumentMetadata(source_type="push", document_uid=None, document_name="Missing"))
@@ -98,6 +101,7 @@ def test_delete_metadata_missing_uid(metadata_store):
 # ----------------------------
 # ⚠️ Edge Cases
 # ----------------------------
+
 
 def test_overwrite_existing_metadata(metadata_store):
     original = DocumentMetadata(source_type="push", document_uid="doc5", document_name="Original")

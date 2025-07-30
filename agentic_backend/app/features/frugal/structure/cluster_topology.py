@@ -55,7 +55,7 @@ class ClusterTopology(BaseModel):
         representation += "\n\n"
 
         if self.facts.facts:
-            representation += f"cluster facts:\n"
+            representation += "cluster facts:\n"
             for fact in self.facts.facts: # pylint: disable=E1101
                 representation += f"  - {fact.user}, {fact.date}: |\n"
                 representation += textwrap.indent(

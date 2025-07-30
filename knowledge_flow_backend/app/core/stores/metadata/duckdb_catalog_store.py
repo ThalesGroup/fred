@@ -17,6 +17,7 @@ from typing import List
 from fred_core.store.duckdb_store import DuckDBTableStore
 from app.core.stores.metadata.base_catalog_store import PullFileEntry
 
+
 class DuckdbCatalogStore:
     """
     Catalog store for pull-mode documents backed by DuckDB.
@@ -53,13 +54,7 @@ class DuckdbCatalogStore:
                     INSERT INTO {full_table} (source_tag, path, size, modified_time, hash)
                     VALUES (?, ?, ?, ?, ?)
                     """,
-                    [
-                        source_tag,
-                        entry.path,
-                        entry.size,
-                        entry.modified_time,
-                        entry.hash
-                    ]
+                    [source_tag, entry.path, entry.size, entry.modified_time, entry.hash],
                 )
 
     def list_entries(self, source_tag: str) -> List[PullFileEntry]:
@@ -71,7 +66,7 @@ class DuckdbCatalogStore:
                 FROM {full_table}
                 WHERE source_tag = ?
                 """,
-                [source_tag]
+                [source_tag],
             ).fetchall()
 
         return [PullFileEntry(path=r[0], size=r[1], modified_time=r[2], hash=r[3]) for r in result]

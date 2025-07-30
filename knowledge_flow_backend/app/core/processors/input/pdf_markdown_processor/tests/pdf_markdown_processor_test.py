@@ -50,7 +50,7 @@ def test_pdf_processor_end_to_end(processor: PdfMarkdownProcessor, sample_pdf_fi
     metadata = processor.process_metadata(sample_pdf_file, [], "uploads")
 
     assert metadata.document_name == "sample.pdf"
-    #assert metadata.num_pages == 2
+    # assert metadata.num_pages == 2
     assert metadata.document_uid
 
     result = processor.convert_file_to_markdown(sample_pdf_file, output_dir, metadata.document_uid)

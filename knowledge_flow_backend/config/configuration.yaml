@@ -19,13 +19,11 @@ app:
   reload: false
   reload_dir: "."
 
-
-# Enable or disable the security layer
 security:
   enabled: false
   keycloak_url: "http://fred-keycloak:8080/realms/fred"
   authorized_origins:
-  - "http://localhost:5173"
+    - "http://localhost:5173"
 
 scheduler:
   enabled: true
@@ -36,12 +34,6 @@ scheduler:
     task_queue: "ingestion"
     workflow_prefix: "pipeline"
     connect_timeout_seconds: 5
-
-# -----------------------------------------------------------------------------
-# INPUT PROCESSORS
-# -----------------------------------------------------------------------------
-# Mandatory: Input processors MUST be explicitly defined.
-# These classes parse incoming files (e.g., PDFs, DOCXs, CSVs) into structured documents.
 
 input_processors:
   - prefix: ".pdf"
@@ -59,55 +51,11 @@ input_processors:
   - prefix: ".xlsm"
     class_path: app.core.processors.input.pps_tabular_processor.pps_tabular_processor.PpsTabularProcessor
 
-
-# -----------------------------------------------------------------------------
-# OUTPUT PROCESSORS (Optional)
-# -----------------------------------------------------------------------------
-# Optional: You can override the default behavior for output processing.
-# If not defined, the system automatically selects based on input type:
-#   - Markdown files → VectorizationProcessor
-#   - Tabular files (CSV, XLSX) → TabularProcessor
-#
-# You can specialize behavior by mapping file extensions to custom classes.
-#
-# Example to OVERRIDE default behavior:
-#
-# output_processors:
-#   - prefix: ".docx"
-#     class_path: app.core.processors.output.vectorization_processor.vectorization_processor.VectorizationProcessor
-#   - prefix: ".csv"
-#     class_path: app.core.processors.output.tabular_processor.tabular_processor.TabularProcessor
-#   - prefix: ".xlsx"
-#     class_path: app.core.processors.output.tabular_processor.tabular_processor.TabularProcessor
-#   - prefix: ".pptx"
-#     class_path: app.core.processors.output.vectorization_processor.vectorization_processor.VectorizationProcessor
-#
-# To SKIP processing for a specific file type, you can specify an empty output processor.
-#
-# output_processors:
-#  - prefix: ".txt"
-#    class_path: app.core.processors.output.empty_output_processor.EmptyOutputProcessor
-
+# --- Content storage ---
+# type: one of [local, minio]
 content_storage:
-  # The content store type can be either "local" or "minio" or "gcs"
-  # If you are using minio, make sure to set the following environment variables:
-  # - MINIO_ACCESS_KEY
-  # - MINIO_SECRET_KEY
-  # If you are using gcs, make sure to set the following environment variables:
-  # - GCS_PROJECT_ID
-  # - GCS_BUCKET_NAME
-  # - GCS_CREDENTIALS_PATH
   type: "local"
   root_path: ~/.fred/knowledge-flow/content-storage
-  ################################################
-  # Example using MinIO as content storage backend
-  ################################################
-  # type: "minio"
-  # endpoint: localhost:9000
-  # access_key: minioadmin # Overrides the MINIO_ACCESS_KEY environment variable
-  # secret_key: minioadmin # Overrides the MINIO_SECRET_KEY environment variable
-  # secure: False
-  # bucket_name: app-bucket
 
 document_sources:
   uploads:
@@ -119,70 +67,48 @@ document_sources:
     base_path: ~/Documents
     description: "Personal local documents available for pull-mode ingestion"
 
+# --- Metadata storage ---
+# type: one of [duckdb, opensearch]
 metadata_storage:
-  # Metadata Storage Configuration
-  #
-  # Available backends:
-  # - local       → Deprecated, stores metadata in a JSON file on disk
-  # - duckdb      → stores metadata in a local duckdb file
-  # - opensearch  → stores metadata in a persistent OpenSearch index (recommended for production)
   type: "duckdb"
-  root_path: ~/.fred/knowledge-flow/db.duckdb
-
-  # --- Example: OpenSearch configuration
-  #
-  # type: opensearch
-  # host: https://localhost:9200              # OpenSearch host
-  # secure: true                              # Use HTTPS (set to false for HTTP)
-  # verify_certs: false                       # Whether to verify TLS certificates
-  # metadata_index: metadata-index            # Index for storing metadata
-  # vector_index: vector-index                # Vector index (required if reusing OpenSearch backend)
-  # ➤ Required environment variables (not stored in this file):
-  #   OPENSEARCH_USER=admin
-  #   OPENSEARCH_PASSWORD=xxx
-
-tag_storage:
-  type: "local"
-
-vector_storage:
-  # Available backends:
-  # - in_memory  → ephemeral, dev-only (no persistence)
-  # - opensearch → persistent, secure, production-ready
-  # - weaviate   → persistent, fast, lightweight alternative. Still beta
-  #
-  # ⚠️ in_memory is used by default to ensure startup always succeeds, but it does NOT persist vectors between restarts.
-  # Use it only for testing or development.
-  type: in_memory
-  # --- Example: OpenSearch configuration
-  #
+  duckdb_path: "~/.fred/knowledge-flow/db.duckdb"
   # type: opensearch
   # host: https://localhost:9200              # Opensearch HTTP URL
   # secure: true                              # Use HTTPS (set to false for HTTP)
   # verify_certs: false                       # Whether to verify TLS certificates
-  # vector_index: vector-index                # Index name for vectors
-  # metadata_index: metadata-index            # Index name for metadata
-  #
-  # ➤ Required environment variables (not stored in this file):
-  # OPENSEARCH_USER=admin
-  # OPENSEARCH_PASSWORD=xxx
-  #
-  # --- Example: Weaviate configuration
-  #
-  # type: weaviate
-  # host: http://localhost:8080               # Weaviate HTTP host
-  # index_name: CodeDocuments                 # Class name used to store chunks
-  #
+  # index: metadata-index                     # Index name for vectors
+
+# --- Tag storage ---
+# type: one of [local]
+tag_storage:
+  type: "local"
+
+# --- Vector storage ---
+# type: one of [in_memory, opensearch, weaviate]
+vector_storage:
+  type: in_memory
+  # type: opensearch
+  # host: https://localhost:9200              # Opensearch HTTP URL
+  # secure: true                              # Use HTTPS (set to false for HTTP)
+  # verify_certs: false                       # Whether to verify TLS certificates
+  # index: vector-index                       # Index name for vectors
 
 tabular_storage:
   type: "duckdb"
   duckdb_path: "~/.fred/knowledge-flow/db.duckdb"
 
+# --- Catalog storage ---
+# type: one of [duckdb]
 catalog_storage:
   type: "duckdb"
   duckdb_path: "~/.fred/knowledge-flow/db.duckdb"
 
+# --- Embedding backend ---
+# type: string (e.g., openai, azureopenai, ollama, etc.)
 embedding:
-  # -----------------------------------------------------------------------------
+  type:
+    "openai"
+    # -----------------------------------------------------------------------------
   # EMBEDDING BACKEND
   # -----------------------------------------------------------------------------
   # Set the embedding backend to use:
@@ -227,25 +153,3 @@ embedding:
   # All environment variables are expected to be present in the .env file
   # pointed to by the ENV_FILE variable in your Makefile.
   #
-  type: "openai"  # can be "openai" or "azureopenai" or "azureapim" or "ollama"
-
-knowledge_context_storage:
-  # -----------------------------------------------------------------------------
-  # KNOWLEDGE CONTEXT STORAGE BACKEND
-  # -----------------------------------------------------------------------------
-  # Backend used to store Knowledge Contexts (Workspaces) and user profiles.
-  # Both can have associated files.
-  # -------------------------------------
-  type: local  # as of now only local storage is supported
-  local_path: "~/.fred/knowledge-flow/knowledge-context"
-
-knowledge_context_max_tokens: 8000
-# -----------------------------------------------------------------------------
-# TOKEN LIMIT PER KNOWLEDGE CONTEXT
-# -----------------------------------------------------------------------------
-# Maximum total token count allowed for all documents in a single knowledge context.
-# This limit ensures consistent performance and avoids processing overhead.
-# If the total tokens of uploaded documents exceeds this value,
-# the upload or update will fail with a clear error (400).
-#
-# Use a value aligned with your model capabilities (e.g. 8192 for GPT-4 Turbo).

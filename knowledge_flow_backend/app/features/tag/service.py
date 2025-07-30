@@ -58,18 +58,20 @@ class TagService:
 
         # Create tag from input data
         now = datetime.now()
-        tag = self._tag_store.create_tag(Tag(
-            name=tag_data.name,
-            description=tag_data.description,
-            type=tag_data.type,
-            # Set a unique id
-            id=str(uuid4()),
-            # Associate to user
-            owner_id=user.uid,
-            # Set timestamps
-            created_at=now,
-            updated_at=now,
-        ))
+        tag = self._tag_store.create_tag(
+            Tag(
+                name=tag_data.name,
+                description=tag_data.description,
+                type=tag_data.type,
+                # Set a unique id
+                id=str(uuid4()),
+                # Associate to user
+                owner_id=user.uid,
+                # Set timestamps
+                created_at=now,
+                updated_at=now,
+            )
+        )
 
         # Add new tag id to each document metadata
         for doc in documents:

@@ -69,13 +69,6 @@ data:
     embedding:
       type: "{{ .Values.configuration.embedding.type }}"
 
-    knowledge_context_storage:
-      type: "{{ .Values.configuration.knowledge_context_storage.type }}"
-      local_path: "{{ .Values.configuration.knowledge_context_storage.local_path }}"
-
-    knowledge_context_max_tokens: {{ .Values.configuration.knowledge_context_max_tokens }}
-
-
   .env: |
     # This file contains the environment variables for the application
 
