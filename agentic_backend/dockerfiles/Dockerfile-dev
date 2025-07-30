@@ -9,7 +9,7 @@ ARG GROUP_ID=1000
 
 # Install required system dependencies
 RUN apt-get update && \
-    apt-get install -y git curl make && \
+    apt-get install -y git curl make net-tools && \
     rm -rf /var/lib/apt/lists/*
 
 # Install uv globally
@@ -24,8 +24,8 @@ RUN groupadd -g ${GROUP_ID} ${USER_NAME} && \
     chown -R ${USER_ID}:${GROUP_ID} /opt/python
 
 # Set environment variables for uv and Python
-ENV UV_PROJECT_ENVIRONMENT=/opt/python/venv
-ENV PATH="/opt/python/venv/bin:$PATH"
+ENV UV_PROJECT_ENVIRONMENT=/app/venv
+ENV PATH="/app/venv/bin:$PATH"
 ENV OPENAI_API_KEY=<MUST_BE_DEFINED>
 
 # Set working directory
@@ -35,14 +35,8 @@ WORKDIR /app
 COPY agentic_backend/Makefile agentic_backend/pyproject.toml agentic_backend/uv.lock* /app/
 COPY fred-core /fred-core
 
-# Install dependencies with uv
-RUN make dev
-
 # Copy the rest of the project files
 COPY agentic_backend/. /app
-
-# Remove test configuration.yaml files
-RUN rm /app/config/configuration.yaml
 
 # Adjust ownership of copied files
 RUN chown -R ${USER_ID}:${GROUP_ID} /app
@@ -51,9 +45,12 @@ RUN chown -R ${USER_ID}:${GROUP_ID} /fred-core
 # Switch to the created user
 USER ${USER_NAME}
 
+# Install dependencies with uv
+RUN make dev
+
 # Expose FastAPI default port
 EXPOSE 8000
 
 # Run the application
-ENV PYTHONPATH=/app/app
+ENV PYTHONPATH=/app
 ENTRYPOINT ["make", "run-local"]
