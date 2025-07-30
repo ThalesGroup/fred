@@ -14,7 +14,6 @@
 
 from langchain_core.tools import BaseToolkit, StructuredTool
 from pydantic import BaseModel, Field
-from app.core.monitoring.tool_monitoring.monitor_tool import monitor_tool
 
 
 class ClusterTopologyArgs(BaseModel):
@@ -61,5 +60,4 @@ class TechnicalKubernetesToolkitBuilder:
             args_schema=ClusterTopologyArgs,
             return_direct=True,
         )
-        tool = monitor_tool(tool)
-        return TechnicalKubernetesToolkit(tools=[tool])
+        return TechnicalKubernetesToolkit(tools=[raw_tool])

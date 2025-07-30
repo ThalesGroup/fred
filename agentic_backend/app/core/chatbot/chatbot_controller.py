@@ -36,7 +36,6 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from fred_core import KeycloakUser, get_current_user
 from starlette.websockets import WebSocketState
 from app.core.chatbot.chatbot_message import ChatAskInput
-from app.core.chatbot.chatbot_utils import enrich_latencies
 from app.common.file_dao import FileDAO
 from app.common.structures import (
     DAOTypeEnum,
@@ -245,7 +244,7 @@ class ChatbotController:
             response_model=List[ChatMessagePayload]
         )
         def get_session_history(session_id: str, user: KeycloakUser = Depends(get_current_user)) -> list[ChatMessagePayload]:
-            return enrich_latencies(self.session_manager.get_session_history(session_id, user.uid))
+            return self.session_manager.get_session_history(session_id, user.uid)
 
         @app.delete(
             "/chatbot/session/{session_id}",

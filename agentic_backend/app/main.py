@@ -24,10 +24,6 @@ import os
 
 from app.core.agents.agent_manager import AgentManager
 from app.core.feedback.feedback_controller import FeedbackController
-from app.core.monitoring.node_monitoring.node_metric_store import create_node_metric_store
-from app.core.monitoring.node_monitoring.node_metric_store_controller import NodeMetricStoreController
-from app.core.monitoring.tool_monitoring.tool_metric_store import create_tool_metric_store
-from app.core.monitoring.tool_monitoring.tool_metric_store_controller import ToolMetricStoreController
 from app.features.frugal.ai_service import AIService
 from app.features.frugal.carbon.carbon_controller import CarbonController
 from app.features.frugal.energy.energy_controller import EnergyController
@@ -90,8 +86,6 @@ def create_app() -> FastAPI:
     ApplicationContext(configuration)
 
     initialize_keycloak(configuration)
-    create_tool_metric_store(configuration.tool_metrics_storage)
-    create_node_metric_store(configuration.node_metrics_storage)
     agent_manager = AgentManager(configuration, get_agent_store())
     session_manager = SessionManager(session_storage=get_sessions_store(), agent_manager=agent_manager)
 
@@ -129,8 +123,6 @@ def create_app() -> FastAPI:
 
     # Register controllers
     FeedbackController(router, configuration.feedback_storage)
-    ToolMetricStoreController(router)
-    NodeMetricStoreController(router)
     AgentController(router,agent_manager=agent_manager)
     ChatbotController(router, session_manager=session_manager, agent_manager=agent_manager)
 

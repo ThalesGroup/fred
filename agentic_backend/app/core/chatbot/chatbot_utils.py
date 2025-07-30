@@ -1,4 +1,5 @@
-from typing import List, Dict, Any
+from typing import List
+from app.core.chatbot.chat_schema import ChatMessagePayload
 from collections import defaultdict
 from datetime import datetime
 import logging
@@ -6,7 +7,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def enrich_latencies(metrics: List[Any]) -> List[Any]:
+def enrich_ChatMessagePayloads_with_latencies(metrics: List[ChatMessagePayload]) -> List[ChatMessagePayload]:
     """
     Enrich metrics in memory by adding latency_seconds between sequential steps
     (by exchange_id and rank). Returns a new flat list of enriched messages.

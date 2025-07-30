@@ -29,6 +29,7 @@ import requests
 from app.core.agents.flow import AgentFlow
 from app.core.session.attachement_processing import AttachementProcessing
 from app.core.chatbot.chat_schema import ChatMessagePayload, SessionSchema, SessionWithFiles, clean_agent_metadata, clean_token_usage
+from app.core.chatbot.chatbot_utils import enrich_ChatMessagePayloads_with_latencies
 from app.core.session.stores.abstract_session_backend import AbstractSessionStorage
 
 from app.application_context import get_configuration, get_default_model
@@ -250,7 +251,7 @@ class SessionManager:
         self.storage.save_session(session)
         self.storage.save_messages(session.id, all_payloads, user_id)
 
-        return session, all_payloads
+        return session, enrich_ChatMessagePayloads_with_latencies(all_payloads)
 
 
     def _prepare_session_and_history(
