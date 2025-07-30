@@ -6,6 +6,7 @@ from app.common.structures import DocumentSourceConfig
 
 def resolve_source_type(source_tag: str) -> SourceType:
     from app.application_context import ApplicationContext
+
     config = ApplicationContext.get_instance().get_config()
     source_config: DocumentSourceConfig = config.document_sources.get(source_tag)
 
@@ -22,6 +23,7 @@ def resolve_source_type(source_tag: str) -> SourceType:
 
 def get_pull_base_path(source_tag: str) -> Path:
     from app.application_context import ApplicationContext
+
     config = ApplicationContext.get_instance().get_config()
     source_config: DocumentSourceConfig = config.document_sources.get(source_tag)
 

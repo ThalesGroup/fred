@@ -118,8 +118,8 @@ class ApplicationContext:
             return
 
         self.config = config
-        #validate_input_processor_config(config)
-        #validate_output_processor_config(config)
+        validate_input_processor_config(config)
+        validate_output_processor_config(config)
         self.input_processor_registry: Dict[str, Type[BaseInputProcessor]] = self._load_input_processor_registry()
         self.output_processor_registry: Dict[str, Type[BaseInputProcessor]] = self._load_output_processor_registry()
         ApplicationContext._instance = self
@@ -136,7 +136,7 @@ class ApplicationContext:
             return isinstance(processor, BaseTabularProcessor)
         except ValueError:
             return False
-    
+
     def get_output_processor_instance(self, extension: str) -> BaseOutputProcessor:
         """
         Get an instance of the output processor for a given file extension.
@@ -285,13 +285,7 @@ class ApplicationContext:
         backend_type = config.type
 
         if backend_type == "minio":
-            return MinioStorageBackend(
-                endpoint=config.endpoint,
-                access_key=config.access_key,
-                secret_key=config.secret_key,
-                bucket_name=config.bucket_name,
-                secure=config.secure
-            )
+            return MinioStorageBackend(endpoint=config.endpoint, access_key=config.access_key, secret_key=config.secret_key, bucket_name=config.bucket_name, secure=config.secure)
         elif backend_type == "local":
             return LocalStorageBackend(Path(config.root_path).expanduser())
         else:
@@ -400,7 +394,6 @@ class ApplicationContext:
         raise ValueError(f"Unsupported vector store backend: {backend_type}")
 
     def get_metadata_store(self) -> BaseMetadataStore:
-
         if self._metadata_store_instance is not None:
             return self._metadata_store_instance
         config = self.config.metadata_storage
@@ -408,7 +401,6 @@ class ApplicationContext:
             db_path = Path(config.duckdb_path).expanduser()
             self._metadata_store_instance = DuckdbMetadataStore(db_path)
         elif config.type == "opensearch":
-
             username = config.username
             password = config.password
 
@@ -458,7 +450,7 @@ class ApplicationContext:
             raise ValueError(f"Unsupported tabular storage backend: {config.type}")
 
         return self._tabular_store_instance
-    
+
     def get_catalog_store(self) -> BaseCatalogStore:
         """
         Lazy-initialize and return the configured tabular store backend.
@@ -476,7 +468,6 @@ class ApplicationContext:
             raise ValueError(f"Unsupported catalog storage backend: {config.type}")
 
         return self._catalog_store_instance
-
 
     def get_document_loader(self) -> BaseDocumentLoader:
         """
@@ -557,13 +548,10 @@ class ApplicationContext:
         if catalog_type == "duckdb":
             logger.info(f"     ↳ DB Path: {self.config.catalog_storage.duckdb_path}")
         content_type = self.config.content_storage.type
-        
+
         logger.info(f"  📁 Content storage backend: {content_type}")
         if content_type == "local":
             logger.info(f"     ↳ Local Path: {self.config.content_storage.root_path}")
-
-        knowledge_context_type = self.config.knowledge_context_storage.type
-        logger.info(f"  📁 Knwoledge context storage backend: {knowledge_context_type}")
 
         logger.info("  🧩 Input Processor Mappings:")
         for ext, cls in self.input_processor_registry.items():

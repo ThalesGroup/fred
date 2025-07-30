@@ -28,7 +28,7 @@ class FileToProcess(BaseModel):
     source_tag: str
     tags: List[str] = []
     display_name: Optional[str] = None
-    
+
     # Push-specific
     document_uid: Optional[str] = None  # Present for push files
 
@@ -59,9 +59,7 @@ class FileToProcess(BaseModel):
         if not self.is_pull():
             raise ValueError("Virtual metadata can only be generated for pull files")
 
-        modified_dt = datetime.fromtimestamp(
-            self.modified_time or 0, tz=timezone.utc
-        )
+        modified_dt = datetime.fromtimestamp(self.modified_time or 0, tz=timezone.utc)
 
         return DocumentMetadata(
             document_name=Path(self.external_path).name,
@@ -80,6 +78,7 @@ class FileToProcess(BaseModel):
 class PipelineDefinition(BaseModel):
     name: str
     files: List[FileToProcess]
+
 
 class ProcessDocumentsRequest(BaseModel):
     files: List[FileToProcess]

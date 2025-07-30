@@ -20,6 +20,7 @@ from langchain_community.vectorstores import OpenSearchVectorSearch
 
 from app.common.utils import get_embedding_model_name
 from app.core.stores.vector.base_vector_store import BaseEmbeddingModel, BaseVectoreStore
+
 logger = logging.getLogger(__name__)
 
 
@@ -34,6 +35,7 @@ class OpenSearchVectorStoreAdapter(BaseVectoreStore):
 
     It accepts documents + embeddings and stores them into the configured OpenSearch vector index.
     """
+
     def __init__(
         self,
         embedding_model: BaseEmbeddingModel,
@@ -59,9 +61,9 @@ class OpenSearchVectorStoreAdapter(BaseVectoreStore):
     def _check_vector_index_dimension(self, expected_dim: int):
         mapping = self.opensearch_vector_search.client.indices.get_mapping(index=self.vector_index)
         actual_dim = mapping[self.vector_index]["mappings"]["properties"]["vector_field"]["dimension"]
-        
+
         model_name = get_embedding_model_name(self.opensearch_vector_search.embedding_function)
-        
+
         if actual_dim != expected_dim:
             raise ValueError(
                 f"❌ Vector dimension mismatch:\n"
@@ -74,7 +76,7 @@ class OpenSearchVectorStoreAdapter(BaseVectoreStore):
     def _get_embedding_dimension(self) -> int:
         dummy_vector = self.opensearch_vector_search.embedding_function.embed_query("dummy")
         return len(dummy_vector)
-    
+
     def add_documents(self, documents: List[Document]) -> None:
         """
         Add raw documents to OpenSearch.

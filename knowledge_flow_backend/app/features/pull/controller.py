@@ -35,7 +35,8 @@ class PullDocumentController:
         self._register_routes(router)
 
     def _register_routes(self, router: APIRouter):
-        @router.get("/pull/documents",
+        @router.get(
+            "/pull/documents",
             tags=["Library Pull"],
             response_model=PullDocumentsResponse,
             summary="List documents available from a pull-mode source",
@@ -46,12 +47,12 @@ class PullDocumentController:
                 "entry is returned to help preview what can be ingested.\n\n"
                 "This endpoint **does not trigger ingestion**, it only provides visibility into what is available. "
                 "Use `/documents/sources` to discover the configured document sources."
-            )
+            ),
         )
         def list_pull_documents(
             source_tag: str = Query(..., description="The pull source tag to list documents from"),
             offset: int = Query(0, ge=0, description="Start offset for pagination"),
-            limit: int = Query(50, gt=0, le=500, description="Maximum number of documents to return")
+            limit: int = Query(50, gt=0, le=500, description="Maximum number of documents to return"),
         ):
             try:
                 documents, total = self.pull_document_service.list_pull_documents(source_tag, offset=offset, limit=limit)

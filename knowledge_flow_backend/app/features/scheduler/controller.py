@@ -32,7 +32,7 @@ class SchedulerController:
             "/pipelines/process-documents",
             tags=["Ingestion"],
             summary="Submit processing for push/pull files via Temporal",
-            description="Accepts a list of files (document_uid or external_path) and launches the appropriate ingestion workflow"
+            description="Accepts a list of files (document_uid or external_path) and launches the appropriate ingestion workflow",
         )
         async def process_documents(req: ProcessDocumentsRequest):
             logger.info(f"Processing {len(req.files)} file(s) via Temporal pipeline")
@@ -50,11 +50,11 @@ class SchedulerController:
                 )
                 workflow_id = f"{self.config.workflow_prefix}-{uuid4()}"
                 handle = await client.start_workflow(
-                     Process.run,
-                     definition,
-                     id=workflow_id,
-                     task_queue=self.config.task_queue,
-                 )
+                    Process.run,
+                    definition,
+                    id=workflow_id,
+                    task_queue=self.config.task_queue,
+                )
                 logger.info(f"🛠️ started temporal workflow={workflow_id}")
                 return {
                     "workflow_id": handle.id,
@@ -66,12 +66,7 @@ class SchedulerController:
                 raise HTTPException(status_code=500, detail="Workflow submission failed")
 
     def _register_routes(self, router: APIRouter):
-        @router.post(
-            "/pipelines/submit",
-            tags=["Ingestion"],
-            summary="Submit a structured ingestion pipeline to Temporal",
-            response_description="Temporal workflow ID and run ID"
-        )
+        @router.post("/pipelines/submit", tags=["Ingestion"], summary="Submit a structured ingestion pipeline to Temporal", response_description="Temporal workflow ID and run ID")
         async def submit_pipeline(definition: PipelineDefinition):
             logger.info(f"Received pipeline submission request: {definition.name}")
             try:

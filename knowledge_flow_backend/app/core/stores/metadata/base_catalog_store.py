@@ -16,11 +16,12 @@ from typing import List, Protocol
 
 from pydantic import BaseModel
 
+
 class PullFileEntry(BaseModel):
-    path: str            # Relative path from base pull location (e.g. "reports/2024/q2.pdf")
-    size: int            # Size in bytes
-    modified_time: float # Unix timestamp (last modified time)
-    hash: str            # SHA256 hash of path, precomputed or generated during scan
+    path: str  # Relative path from base pull location (e.g. "reports/2024/q2.pdf")
+    size: int  # Size in bytes
+    modified_time: float  # Unix timestamp (last modified time)
+    hash: str  # SHA256 hash of path, precomputed or generated during scan
 
 
 # ------------------------------------------------------------------------------
@@ -46,6 +47,7 @@ class PullFileEntry(BaseModel):
 #
 # In short: the catalog is a lightweight, queryable index of pull-source files.
 # ------------------------------------------------------------------------------
+
 
 class BaseCatalogStore(Protocol):
     def save_entries(self, source_tag: str, entries: List[PullFileEntry]) -> None: ...

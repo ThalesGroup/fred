@@ -14,7 +14,6 @@
 
 
 import logging
-import os
 from app.core.model.azure_apim_model import AzureApimModel
 from langchain_openai import AzureChatOpenAI, ChatOpenAI
 from langchain_ollama import ChatOllama

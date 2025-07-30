@@ -1,4 +1,3 @@
-
 import pytest
 from app.features.ingestion.service import IngestionService
 from app.common.document_structures import DocumentMetadata
@@ -59,6 +58,7 @@ def test_process_input_then_output(sample_docx, output_dir):
     # Then process output
     result = service.process_output(sample_docx.name, output_dir, metadata)
     assert result is not None
+
 
 def test_get_preview_file_fallback(sample_docx, output_dir):
     service = IngestionService()

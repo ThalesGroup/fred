@@ -21,7 +21,6 @@ from uuid import uuid4
 
 
 class TestInputProcessorService:
-
     @pytest.fixture
     def service(self):
         return IngestionService()
@@ -46,11 +45,7 @@ class TestInputProcessorService:
         input_file = tmp_path / "test.md"
         input_file.write_text("dummy")
 
-        metadata = DocumentMetadata(
-            source_type="push",
-            document_name=input_file.name,
-            document_uid="markdown-uid-001"
-        )
+        metadata = DocumentMetadata(source_type="push", document_name=input_file.name, document_uid="markdown-uid-001")
 
         service.process_input(input_path=input_file, output_dir=tmp_path, metadata=metadata)
 
@@ -62,14 +57,10 @@ class TestInputProcessorService:
         input_file = tmp_path / "table.xlsx"
         input_file.write_text("dummy")
 
-        metadata = DocumentMetadata(
-            source_type="push",
-            document_name=input_file.name,
-            document_uid="tabular-uid-001"
-        )
+        metadata = DocumentMetadata(source_type="push", document_name=input_file.name, document_uid="tabular-uid-001")
 
         service.process_input(input_path=input_file, output_dir=tmp_path, metadata=metadata)
-        
+
         output_file = tmp_path / "table.csv"
         assert output_file.exists()
         content = output_file.read_text()
@@ -86,11 +77,7 @@ class TestInputProcessorService:
         input_file = tmp_path / "weird.bin"
         input_file.write_text("data")
 
-        metadata = DocumentMetadata(
-            source_type="push",
-            document_name=input_file.name,
-            document_uid=str(uuid4())
-        )
+        metadata = DocumentMetadata(source_type="push", document_name=input_file.name, document_uid=str(uuid4()))
 
         with pytest.raises(RuntimeError, match="Unknown processor type"):
             service.process_input(input_path=input_file, output_dir=tmp_path, metadata=metadata)

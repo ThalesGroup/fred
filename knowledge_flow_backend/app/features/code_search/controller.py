@@ -24,23 +24,15 @@ from app.common.structures import Status
 
 logger = logging.getLogger(__name__)
 
+
 class CodeSearchController:
     def __init__(self, router: APIRouter):
         self.service = CodeSearchService()
 
-        @router.post(
-            "/code/search",
-            tags=["Code Search"],
-            summary="Search Java codebase using vectorization",
-            response_model=List[CodeDocumentSource],
-            operation_id="search_codebase"
-        )
+        @router.post("/code/search", tags=["Code Search"], summary="Search Java codebase using vectorization", response_model=List[CodeDocumentSource], operation_id="search_codebase")
         def code_search(request: CodeSearchRequest):
             results = self.service.similarity_search_with_score(request.query, k=request.top_k)
-            return [
-                self._to_code_document_source(doc, score, rank)
-                for rank, (doc, score) in enumerate(results, start=1)
-            ]
+            return [self._to_code_document_source(doc, score, rank) for rank, (doc, score) in enumerate(results, start=1)]
 
         @router.post("/code/index", tags=["Code Search"])
         def index_codebase(request: CodeIndexRequest) -> StreamingResponse:

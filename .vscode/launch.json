@@ -42,7 +42,7 @@
         "--env-file",
         "config/.env",
         "--log-level",
-        "debug"
+        "info"
       ],
       "env": {
         "PYTHONPATH": "${workspaceFolder}/knowledge_flow_backend",

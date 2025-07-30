@@ -61,10 +61,7 @@ METADATA_INDEX_MAPPING = {
     "mappings": {
         "properties": {
             "document_uid": {"type": "keyword"},
-            "document_name": {
-                "type": "text",
-                "fields": {"keyword": {"type": "keyword", "ignore_above": 256}}
-            },
+            "document_name": {"type": "text", "fields": {"keyword": {"type": "keyword", "ignore_above": 256}}},
             "date_added_to_kb": {"type": "date"},
             "source_tag": {"type": "keyword"},
             "tags": {"type": "keyword"},
@@ -76,11 +73,12 @@ METADATA_INDEX_MAPPING = {
                     "OCR_DONE": {"type": "keyword"},
                     "INGESTED": {"type": "keyword"},
                 },
-                "dynamic": True
-            }
+                "dynamic": True,
+            },
         }
     }
 }
+
 
 class OpenSearchMetadataStore(BaseMetadataStore):
     """
@@ -110,6 +108,7 @@ class OpenSearchMetadataStore(BaseMetadataStore):
       }
     }
     """
+
     def __init__(
         self,
         host: str,
@@ -155,7 +154,6 @@ class OpenSearchMetadataStore(BaseMetadataStore):
         except Exception as e:
             logger.error(f"Deserialization failed for UID '{document_uid}': {e}")
             raise MetadataDeserializationError from e
-        
 
     def get_all_metadata(self, filters_dict: dict) -> List[DocumentMetadata]:
         """
@@ -200,24 +198,14 @@ class OpenSearchMetadataStore(BaseMetadataStore):
             else:
                 must.append({"term": {field: value}})
         return must
-    
+
     def list_by_source_tag(self, source_tag: str) -> List[DocumentMetadata]:
         """
         List all metadata documents that match a specific source tag.
         """
         try:
-            query = {
-                "query": {
-                    "term": {
-                        "source_tag.keyword": source_tag
-                    }
-                }
-            }
-            response = self.client.search(
-                index=self.metadata_index_name,
-                body=query,
-                size=1000
-            )
+            query = {"query": {"term": {"source_tag.keyword": source_tag}}}
+            response = self.client.search(index=self.metadata_index_name, body=query, size=1000)
             hits = response["hits"]["hits"]
         except Exception as e:
             logger.error(f"OpenSearch query failed for source_tag='{source_tag}': {e}")
@@ -231,9 +219,7 @@ class OpenSearchMetadataStore(BaseMetadataStore):
             except ValidationError as e:
                 errors += 1
                 doc_id = h.get("_id", "<unknown>")
-                logger.warning(
-                    f"[Deserialization error] Skipping document '{doc_id}': {e}"
-                )
+                logger.warning(f"[Deserialization error] Skipping document '{doc_id}': {e}")
 
         if errors > 0:
             logger.warning(f"{errors} documents failed to deserialize in list_by_source_tag('{source_tag}').")
@@ -254,7 +240,7 @@ class OpenSearchMetadataStore(BaseMetadataStore):
             raise
 
     def set_retrievable_flag(self, document_uid: str, value: bool) -> None:
-        """ Set the 'retrievable' flag for a document in the metadata index.
+        """Set the 'retrievable' flag for a document in the metadata index.
         This flag indicates whether the document will be searchable from AI services.
         """
         try:
@@ -305,7 +291,7 @@ class OpenSearchMetadataStore(BaseMetadataStore):
         except Exception as e:
             logger.error(f"❌ Failed to delete metadata UID '{document_uid}': {e}")
             return False
-        
+
     def get_metadata_in_tag(self, tag_id: str) -> List[DocumentMetadata]:
         """
         Return all metadata entries where 'tags' contains the specified tag_id.
@@ -314,18 +300,8 @@ class OpenSearchMetadataStore(BaseMetadataStore):
             raise ValueError("Tag ID must be provided.")
 
         try:
-            query = {
-                "query": {
-                    "term": {
-                        "tags.keyword": tag_id
-                    }
-                }
-            }
-            response = self.client.search(
-                index=self.metadata_index_name,
-                body=query,
-                size=1000
-            )
+            query = {"query": {"term": {"tags.keyword": tag_id}}}
+            response = self.client.search(index=self.metadata_index_name, body=query, size=1000)
             hits = response["hits"]["hits"]
         except Exception as e:
             logger.error(f"OpenSearch query failed for tag '{tag_id}': {e}")

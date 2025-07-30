@@ -293,18 +293,6 @@ configuration:
   embedding:
     type: "openai"   # can be "openai" or "azureopenai" or "azureapim" or "ollama"
 
-  # -----------------------------------------------------------------------------
-  # KNOWLEDGE CONTEXT STORAGE BACKEND
-  # -----------------------------------------------------------------------------
-  # Backend used to store Knowledge Contexts (Workspaces) and user profiles.
-  # Both can have associated files. 
-  # -------------------------------------
-  knowledge_context_storage:
-    type: "local"   # as of now only local storage is supported
-    local_path: "~/.fred/knowledge-context"
-
-  knowledge_context_max_tokens: 8000
-
 dotenv:
 
   # -----------------------------------------------------------------------------

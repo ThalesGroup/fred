@@ -18,12 +18,7 @@ def _scan_local_path(base_path: Path, source_tag: str) -> List[PullFileEntry]:
         if path.is_file():
             relative = str(path.relative_to(base))
             stat = path.stat()
-            entries.append(PullFileEntry(
-                path=relative,
-                size=stat.st_size,
-                modified_time=stat.st_mtime,
-                hash=hashlib.sha256(str(path).encode()).hexdigest()
-            ))
+            entries.append(PullFileEntry(path=relative, size=stat.st_size, modified_time=stat.st_mtime, hash=hashlib.sha256(str(path).encode()).hexdigest()))
     return entries
 
 
@@ -54,5 +49,5 @@ def file_entry_to_metadata(entry: PullFileEntry, source_tag: str) -> DocumentMet
         last_modified_by=None,
         category=None,
         subject=None,
-        keywords=None
+        keywords=None,
     )

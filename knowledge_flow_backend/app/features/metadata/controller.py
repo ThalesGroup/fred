@@ -38,11 +38,13 @@ logger = logging.getLogger(__name__)
 
 lock = Lock()
 
+
 class BrowseDocumentsRequest(BaseModel):
     source_tag: str = Field(..., description="Tag of the document source to browse (pull or push)")
     filters: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Optional metadata filters")
     offset: int = Field(0, ge=0)
     limit: int = Field(50, gt=0, le=500)
+
 
 def handle_exception(e: Exception) -> HTTPException:
     if isinstance(e, MetadataNotFound):
@@ -193,7 +195,6 @@ class MetadataController:
                 logger.error(f"Failed to update metadata for {document_uid}: {e}")
                 raise handle_exception(e)
 
-
         @router.post(
             "/documents/browse",
             tags=["Library"],
@@ -207,10 +208,9 @@ class MetadataController:
             - Supports optional filtering and pagination.
 
             **Example filters:** `tags`, `retrievable`, `title`, etc.
-            """
+            """,
         )
         def browse_documents(req: BrowseDocumentsRequest):
-
             config = self.context.get_config().document_sources.get(req.source_tag)
             if not config:
                 raise HTTPException(status_code=404, detail=f"Source tag '{req.source_tag}' not found")
@@ -224,11 +224,7 @@ class MetadataController:
                     return PullDocumentsResponse(documents=paginated, total=len(docs))
 
                 elif config.type == "pull":
-                    docs, total = self.pull_document_service.list_pull_documents(
-                        source_tag=req.source_tag,
-                        offset=req.offset,
-                        limit=req.limit
-                    )
+                    docs, total = self.pull_document_service.list_pull_documents(source_tag=req.source_tag, offset=req.offset, limit=req.limit)
                     # You could apply extra filtering here if needed
                     return PullDocumentsResponse(documents=docs, total=total)
 
@@ -236,6 +232,5 @@ class MetadataController:
                     raise HTTPException(status_code=400, detail=f"Unsupported source type '{config.type}'")
 
             except Exception as e:
-                log_exception(e,
-                    "An unexpected error occurred while rbrowsing document")
+                log_exception(e, "An unexpected error occurred while rbrowsing document")
                 raise HTTPException(status_code=500, detail="Internal server error")

@@ -21,6 +21,7 @@ from app.core.stores.metadata.base_catalog_store import BaseCatalogStore
 
 class MetadataDeserializationError(Exception):
     """Raised when document metadata cannot be parsed correctly due to invalid fields or enum mismatches."""
+
     pass
 
 
@@ -28,7 +29,7 @@ class BaseMetadataStore(BaseCatalogStore):
     """
     Abstract interface for reading and writing structured metadata records
     (typically associated with ingested documents).
-    
+
     Concrete implementations may rely on OpenSearch, a local store, or other backends.
     """
 
