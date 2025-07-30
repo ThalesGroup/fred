@@ -31,6 +31,7 @@ sast: ## Run bandit
 		-s ${BANDIT_IGNORED_RULES} \
 		--baseline ${BANDIT_BASELINE_FILE}
 
+.PHONY: detect-secret
 detect-secret: ## Run a secret detection tool
 	cd .. && git ls-files -z ${CURDIR} | xargs -0 ${VENV}/bin/detect-secrets-hook --baseline ${DETECT_SECRET_BASELINE_FILE}
 
@@ -49,6 +50,7 @@ code-quality: lint format sast detect-secret type-check ## Run all code quality 
 ${BASELINE_DIR}:
 	mkdir -p ${BASELINE_DIR}
 
+.PHONY: baseline-sast
 baseline-sast: ${BASELINE_DIR} ## Set bandit baseline
 	$(UV) run bandit \
 		-r ${PY_PACKAGE} \
@@ -56,11 +58,20 @@ baseline-sast: ${BASELINE_DIR} ## Set bandit baseline
 		-f json \
 		-o ${BANDIT_BASELINE_FILE}
 
+.PHONY: baseline-detect-secret
 baseline-detect-secret: ${BASELINE_DIR} ## Set detect-secrets baseline
 	cd .. && ${VENV}/bin/detect-secrets scan $(CURDIR) > ${DETECT_SECRET_BASELINE_FILE} 
 
+.PHONY: baseline-type-check
 baseline-type-check: ${BASELINE_DIR} ## Set basedpyright baseline
 	${UV} run basedpyright --baseline-file ${BASEDPYRIGHT_BASELINE_FILE} --writebaseline 
+
+.PHONY: baseline
+baseline: format ## Format code and set all baselines
+	-$(MAKE) baseline-sast
+	-$(MAKE) baseline-detect-secret
+	-$(MAKE) baseline-type-check
+
 
 # ------------------------------------------------------------
 # One time setup
