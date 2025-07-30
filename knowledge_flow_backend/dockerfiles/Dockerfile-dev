@@ -35,6 +35,7 @@ WORKDIR /app
 # Copy only dependency files first to leverage Docker layer caching
 COPY knowledge_flow_backend/Makefile knowledge_flow_backend/pyproject.toml knowledge_flow_backend/uv.lock* /app/
 COPY fred-core /fred-core
+COPY scripts /scripts
 
 # Copy the rest of the project files
 COPY knowledge_flow_backend/. /app
@@ -42,6 +43,7 @@ COPY knowledge_flow_backend/. /app
 # Adjust ownership of copied files
 RUN chown -R ${USER_ID}:${GROUP_ID} /app
 RUN chown -R ${USER_ID}:${GROUP_ID} /fred-core
+RUN chown -R ${USER_ID}:${GROUP_ID} /scripts
 
 # Switch to the created user
 USER ${USER_NAME}

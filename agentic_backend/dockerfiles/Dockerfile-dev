@@ -34,6 +34,7 @@ WORKDIR /app
 # Copy only dependency files first to leverage Docker layer caching
 COPY agentic_backend/Makefile agentic_backend/pyproject.toml agentic_backend/uv.lock* /app/
 COPY fred-core /fred-core
+COPY scripts /scripts
 
 # Copy the rest of the project files
 COPY agentic_backend/. /app

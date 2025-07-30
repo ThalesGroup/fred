@@ -36,6 +36,7 @@ WORKDIR /app
 COPY agentic_backend/pyproject.toml agentic_backend/uv.lock* /app/
 COPY fred-core /fred-core
 COPY agentic_backend/* /app/
+COPY scripts /scripts
 
 # Install only dependencies
 RUN make dev
@@ -83,12 +84,13 @@ WORKDIR /app
 # Copy app source
 COPY agentic_backend/. /app
 COPY fred-core /fred-core
+COPY scripts /scripts
 
 # Set environment (prod should inject via secrets/CI, not hardcoded)
 ENV PYTHONPATH=/app
 
 # Fix permissions
-RUN chown -R ${USER_ID}:${GROUP_ID} /app /fred-core
+RUN chown -R ${USER_ID}:${GROUP_ID} /app /fred-core /scripts
 
 USER ${USER_NAME}
 

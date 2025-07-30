@@ -28,6 +28,7 @@ WORKDIR /app
 COPY knowledge_flow_backend/pyproject.toml knowledge_flow_backend/uv.lock* /app/
 COPY fred-core /fred-core
 COPY knowledge_flow_backend/. /app/
+COPY scripts /scripts
 
 # Install dependencies using make with both VENV and TARGET properly set
 RUN make dev
@@ -59,12 +60,13 @@ WORKDIR /app
 # Copy app source
 COPY knowledge_flow_backend/. /app
 COPY fred-core /fred-core
+COPY scripts /scripts
 
 # Set environment
 ENV PYTHONPATH=/app
 
 # Fix permissions
-RUN chown -R ${USER_ID}:${GROUP_ID} /app /fred-core
+RUN chown -R ${USER_ID}:${GROUP_ID} /app /fred-core /scripts
 
 # Switch to non-root user
 USER ${USER_NAME}
