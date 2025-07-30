@@ -9,7 +9,7 @@ image:
   # This sets the pull policy for images.
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
-  tag: 0.1
+  tag: "v0.0.3"
 
 imagePullSecrets:
   - name: "gitlab-registry-creds"

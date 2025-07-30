@@ -86,7 +86,7 @@ Then deploy the backend :
 
 ```
 cd deploy/charts/
-helm upgrade -i agentic-backend ./agentic-backend/ --values ./custom-values-examples/agentic-backend-custom.yaml -n dev
+helm upgrade -i agentic-backend ./agentic-backend/ -n dev --values ./custom-values-examples/agentic-backend-custom.yaml
 ```
 
 ## Install the Fred frontend
@@ -102,7 +102,7 @@ Deploy the frontend
 
 ```
 cd deploy/charts/
-helm upgrade -i fred-frontend ./frontend/ --values ./fred-frontend-custom.yaml -n dev
+helm upgrade -i fred-frontend ./frontend/ -n dev --values ./fred-frontend-custom.yaml
 ```
 
 ## Access

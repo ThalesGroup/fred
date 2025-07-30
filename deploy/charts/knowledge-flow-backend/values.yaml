@@ -2,7 +2,7 @@ applicationName: knowledge-flow-backend
 
 image:
   repository: ghcr.io/thalesgroup/fred-agent/knowledge-flow-backend
-  tag: "0.1"
+  tag: "v0.0.3"
 
 Deployment:
   enabled: true
