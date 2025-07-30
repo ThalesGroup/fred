@@ -18,6 +18,7 @@
 """
 Entrypoint for the Knowledge Flow Backend App.
 """
+
 import logging
 import os
 from rich.logging import RichHandler
@@ -56,9 +57,7 @@ def configure_logging(log_level: str):
         datefmt="%Y-%m-%d %H:%M:%S",
         handlers=[RichHandler(rich_tracebacks=False, show_time=False, show_path=False)],
     )
-    logging.getLogger(__name__).info(
-        f"Logging configured at {log_level.upper()} level."
-    )
+    logging.getLogger(__name__).info(f"Logging configured at {log_level.upper()} level.")
 
 
 def load_environment(dotenv_path: str = "./config/.env"):
@@ -68,11 +67,10 @@ def load_environment(dotenv_path: str = "./config/.env"):
         logging.getLogger().warning(f"⚠️ No .env file found at: {dotenv_path}")
 
 
-
-
 # -----------------------
 # APP CREATION
 # -----------------------
+
 
 def create_app() -> FastAPI:
     load_environment()
@@ -83,9 +81,9 @@ def create_app() -> FastAPI:
     logger.info(f"🛠️ create_app() called with base_url={base_url}")
 
     ApplicationContext(configuration)
-    
+
     initialize_keycloak(configuration)
-    
+
     app = FastAPI(
         docs_url=f"{configuration.app.base_url}/docs",
         redoc_url=f"{configuration.app.base_url}/redoc",
@@ -109,7 +107,7 @@ def create_app() -> FastAPI:
     ContentController(router)
     IngestionController(router)
     TabularController(router)
-    #CodeSearchController(router)
+    # CodeSearchController(router)
     TagController(router)
     VectorSearchController(router)
 
@@ -149,6 +147,7 @@ def create_app() -> FastAPI:
     mcp_code.mount(mount_path="/mcp_code")
 
     return app
+
 
 # -----------------------
 # MAIN ENTRYPOINT

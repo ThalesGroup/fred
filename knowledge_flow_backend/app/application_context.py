@@ -38,7 +38,6 @@ from app.core.processors.output.base_output_processor import BaseOutputProcessor
 from app.core.processors.output.vectorization_processor.azure_apim_embedder import AzureApimEmbedder
 from app.core.processors.output.vectorization_processor.embedder import Embedder
 from app.core.stores.metadata.base_metadata_store import BaseMetadataStore
-from app.core.stores.metadata.local_metadata_store import LocalMetadataStore
 from app.core.stores.metadata.opensearch_metadata_store import OpenSearchMetadataStore
 from app.core.stores.tags.base_tag_store import BaseTagStore
 from app.core.stores.tags.local_tag_store import LocalTagStore
@@ -137,7 +136,7 @@ class ApplicationContext:
             return isinstance(processor, BaseTabularProcessor)
         except ValueError:
             return False
-    
+
     def get_output_processor_instance(self, extension: str) -> BaseOutputProcessor:
         """
         Get an instance of the output processor for a given file extension.
@@ -286,13 +285,7 @@ class ApplicationContext:
         backend_type = config.type
 
         if backend_type == "minio":
-            return MinioStorageBackend(
-                endpoint=config.endpoint,
-                access_key=config.access_key,
-                secret_key=config.secret_key,
-                bucket_name=config.bucket_name,
-                secure=config.secure
-            )
+            return MinioStorageBackend(endpoint=config.endpoint, access_key=config.access_key, secret_key=config.secret_key, bucket_name=config.bucket_name, secure=config.secure)
         elif backend_type == "local":
             return LocalStorageBackend(Path(config.root_path).expanduser())
         else:
@@ -382,7 +375,7 @@ class ApplicationContext:
                 self._vector_store_instance = OpenSearchVectorStoreAdapter(
                     embedding_model=embedding_model,
                     host=s.host,
-                    vector_index=s.vector_index,
+                    index=s.index,
                     username=s.username,
                     password=s.password,
                     secure=s.secure,
@@ -401,18 +394,13 @@ class ApplicationContext:
         raise ValueError(f"Unsupported vector store backend: {backend_type}")
 
     def get_metadata_store(self) -> BaseMetadataStore:
-
         if self._metadata_store_instance is not None:
             return self._metadata_store_instance
         config = self.config.metadata_storage
-        if config.type == "local":
-            path = Path(config.root_path).expanduser()
-            self._metadata_store_instance = LocalMetadataStore(path)
-        elif config.type == "duckdb":
+        if config.type == "duckdb":
             db_path = Path(config.duckdb_path).expanduser()
             self._metadata_store_instance = DuckdbMetadataStore(db_path)
         elif config.type == "opensearch":
-
             username = config.username
             password = config.password
 
@@ -425,8 +413,7 @@ class ApplicationContext:
                 password=password,
                 secure=config.secure,
                 verify_certs=config.verify_certs,
-                metadata_index_name=config.metadata_index,
-                vector_index_name=config.vector_index
+                index=config.index,
             )
 
         else:
@@ -463,7 +450,7 @@ class ApplicationContext:
             raise ValueError(f"Unsupported tabular storage backend: {config.type}")
 
         return self._tabular_store_instance
-    
+
     def get_catalog_store(self) -> BaseCatalogStore:
         """
         Lazy-initialize and return the configured tabular store backend.
@@ -481,7 +468,6 @@ class ApplicationContext:
             raise ValueError(f"Unsupported catalog storage backend: {config.type}")
 
         return self._catalog_store_instance
-
 
     def get_document_loader(self) -> BaseDocumentLoader:
         """
@@ -540,8 +526,7 @@ class ApplicationContext:
                 s = self.config.vector_storage
                 if vector_type == "opensearch":
                     logger.info(f"     ↳ Host: {s.host}")
-                    logger.info(f"     ↳ Vector Index: {s.vector_index}")
-                    logger.info(f"     ↳ Metadata Index: {s.metadata_index}")
+                    logger.info(f"     ↳ Vector Index: {s.index}")
                     logger.info(f"     ↳ Secure (TLS): {s.secure}")
                     logger.info(f"     ↳ Verify Certs: {s.verify_certs}")
                     self._log_sensitive("OPENSEARCH_USER", os.getenv("OPENSEARCH_USER"))
@@ -563,13 +548,10 @@ class ApplicationContext:
         if catalog_type == "duckdb":
             logger.info(f"     ↳ DB Path: {self.config.catalog_storage.duckdb_path}")
         content_type = self.config.content_storage.type
-        
+
         logger.info(f"  📁 Content storage backend: {content_type}")
         if content_type == "local":
             logger.info(f"     ↳ Local Path: {self.config.content_storage.root_path}")
-
-        knowledge_context_type = self.config.knowledge_context_storage.type
-        logger.info(f"  📁 Knwoledge context storage backend: {knowledge_context_type}")
 
         logger.info("  🧩 Input Processor Mappings:")
         for ext, cls in self.input_processor_registry.items():
@@ -590,6 +572,3 @@ class ApplicationContext:
             logger.info(f"    • {ext} → {cls.__name__}")
 
         logger.info("--------------------------------------------------")
-
-    def get_knowledge_context_max_tokens(self) -> int:
-        return self.config.knowledge_context_max_tokens

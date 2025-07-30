@@ -66,7 +66,7 @@ class MCPAgent(AgentFlow):
         try:
             response = await self.model.ainvoke([self.build_base_prompt()] + state["messages"])
             return {"messages": [response]}
-        except Exception as e:
+        except Exception:
             logger.exception(f"Error in MCPAgent.reasoner for agent {self.name}")
             fallback = await self.model.ainvoke([HumanMessage(content="An error occurred.")])
             return {"messages": [fallback]}

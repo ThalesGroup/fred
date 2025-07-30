@@ -24,15 +24,17 @@ logger = logging.getLogger(__name__)
 
 # --- Domain Exceptions ---
 
+
 class MetadataNotFound(Exception):
     pass
+
 
 class MetadataUpdateError(Exception):
     pass
 
+
 class InvalidMetadataRequest(Exception):
     pass
-
 
 
 class MetadataService:
@@ -94,11 +96,7 @@ class MetadataService:
         if not document_uid:
             raise InvalidMetadataRequest("Document UID cannot be empty")
         try:
-            result = self.metadata_store.update_metadata_field(
-                document_uid=document_uid,
-                field="retrievable",
-                value=update.retrievable
-            )
+            result = self.metadata_store.update_metadata_field(document_uid=document_uid, field="retrievable", value=update.retrievable)
             return UpdateDocumentMetadataResponse(status=Status.SUCCESS, metadata=result)
         except Exception as e:
             logger.error(f"Error updating retrievable flag for {document_uid}: {e}")
@@ -118,11 +116,7 @@ class MetadataService:
 
             result = None
             for field, value in update_fields.items():
-                result = self.metadata_store.update_metadata_field(
-                    document_uid=document_uid,
-                    field=field,
-                    value=value
-                )
+                result = self.metadata_store.update_metadata_field(document_uid=document_uid, field=field, value=value)
             return UpdateDocumentMetadataResponse(status=Status.SUCCESS, metadata=result)
         except Exception as e:
             logger.error(f"Error updating metadata for {document_uid}: {e}")
@@ -135,11 +129,11 @@ class MetadataService:
         try:
             # Save the metadata first
             self.metadata_store.save_metadata(metadata)
-            
+
             # Update tag timestamps for any tags assigned to this document
             if metadata.tags:
                 self._update_tag_timestamps(metadata.tags)
-                
+
         except Exception as e:
             logger.error(f"Error saving metadata for {metadata.document_uid}: {e}")
             raise MetadataUpdateError(f"Failed to save metadata: {e}")
@@ -173,6 +167,7 @@ class MetadataService:
         try:
             # Import here to avoid circular imports
             from app.features.tag.service import TagService
+
             tag_service = TagService()
 
             for tag_id in tag_ids:
@@ -183,4 +178,3 @@ class MetadataService:
 
         except Exception as e:
             logger.warning(f"Failed to update tag timestamps: {e}")
-

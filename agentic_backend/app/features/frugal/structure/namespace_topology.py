@@ -54,7 +54,7 @@ class NamespaceTopology(BaseModel):
         )
 
         if self.facts.facts:
-            representation += f"namespace facts:\n"
+            representation += "namespace facts:\n"
             for fact in self.facts.facts: # pylint: disable=E1101
                 representation += f"  - {fact.user}, {fact.date}: |\n"
                 representation += textwrap.indent(

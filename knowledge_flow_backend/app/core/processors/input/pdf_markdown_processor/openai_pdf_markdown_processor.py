@@ -15,7 +15,6 @@
 # app/core/processors/input/pdf_markdown_processor/openai_pdf_markdown_processor.py
 
 
-
 from app.core.processors.input.common.image_describers.openai_image_describer import OpenaiImageDescriber
 from app.core.processors.input.pdf_markdown_processor.pdf_markdown_processor import PdfMarkdownProcessor
 

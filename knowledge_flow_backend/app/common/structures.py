@@ -27,6 +27,7 @@ unit tests. It helps to decouple the different components of the application and
 to define clear workflows and data structures.
 """
 
+
 class Status(str, Enum):
     SUCCESS = "success"
     IGNORED = "ignored"
@@ -56,11 +57,11 @@ class ProcessorConfig(BaseModel):
     class_path: str = Field(..., description="Dotted import path of the processor class")
 
 
-
 ###########################################################
 #
 #  --- Content Storage Configuration
 #
+
 
 class MinioStorage(BaseModel):
     type: Literal["minio"]
@@ -70,14 +71,13 @@ class MinioStorage(BaseModel):
     bucket_name: str = Field(default="app-bucket", description="Content store bucket name")
     secure: bool = Field(default=False, description="Use TLS (https)")
 
+
 class LocalContentStorage(BaseModel):
     type: Literal["local"]
     root_path: str = Field(default=str(Path("~/.fred/knowledge-flow/content-store")), description="Local storage directory")
 
-ContentStorageConfig = Annotated[
-    Union[LocalContentStorage, MinioStorage],
-    Field(discriminator="type")
-]
+
+ContentStorageConfig = Annotated[Union[LocalContentStorage, MinioStorage], Field(discriminator="type")]
 
 ###########################################################
 #
@@ -85,14 +85,10 @@ ContentStorageConfig = Annotated[
 #
 
 
-class LocalMetadataStorage(BaseModel):
-    type: Literal["local"]
-    root_path: str = Field(default=str(Path("~/.fred/knowledge-flow/metadata-store.json")), description="Local storage json file")
-
 class DuckdbMetadataStorage(BaseModel):
     type: Literal["duckdb"]
-    duckdb_path: str = Field(default="~/.fred/knowledge-flow/db.duckdb", 
-                             description="Path to the DuckDB database file.")
+    duckdb_path: str = Field(default="~/.fred/knowledge-flow/db.duckdb", description="Path to the DuckDB database file.")
+
 
 class OpenSearchStorage(BaseModel):
     type: Literal["opensearch"]
@@ -101,59 +97,62 @@ class OpenSearchStorage(BaseModel):
     password: Optional[str] = Field(default_factory=lambda: os.getenv("OPENSEARCH_PASSWORD"), description="Password from env")
     secure: bool = Field(default=False, description="Use TLS (https)")
     verify_certs: bool = Field(default=False, description="Verify TLS certs")
-    metadata_index: str = Field(..., description="OpenSearch index name for metadata")
-    vector_index: str = Field(..., description="OpenSearch index name for vectors")
+    index: str = Field(..., description="OpenSearch index name")
 
 
 # --- Final union config (with discriminator)
-MetadataStorageConfig = Annotated[Union[LocalMetadataStorage, DuckdbMetadataStorage, OpenSearchStorage], Field(discriminator="type")]
+MetadataStorageConfig = Annotated[Union[DuckdbMetadataStorage, OpenSearchStorage], Field(discriminator="type")]
 
 ###########################################################
 #
 # --- Tag Storage Configuration
 #
 
+
 class LocalTagStore(BaseModel):
     type: Literal["local"]
     root_path: str = Field(default=str(Path("~/.fred/knowledge-flow/tags-store.json")), description="Local storage json file")
 
+
 TagStorageConfig = Annotated[Union[LocalTagStore], Field(discriminator="type")]
+
 
 class InMemoryVectorStorage(BaseModel):
     type: Literal["in_memory"]
+
 
 class WeaviateVectorStorage(BaseModel):
     type: Literal["weaviate"]
     host: str = Field(default="https://localhost:8080", description="Weaviate host")
     index_name: str = Field(default="CodeDocuments", description="Weaviate class (collection) name")
 
+
 VectorStorageConfig = Annotated[Union[InMemoryVectorStorage, OpenSearchStorage, WeaviateVectorStorage], Field(discriminator="type")]
+
 
 class DuckDBTabularStorage(BaseModel):
     type: Literal["duckdb"]
-    duckdb_path: str = Field(default="~/.fred/knowledge-flow/db.duckdb", 
-                             description="Path to the DuckDB database file.")
+    duckdb_path: str = Field(default="~/.fred/knowledge-flow/db.duckdb", description="Path to the DuckDB database file.")
 
-TabularStorageConfig = Annotated[
-    Union[DuckDBTabularStorage,],
-    Field(discriminator="type")
-]
 
-CatalogStorageConfig = Annotated[
-    Union[DuckDBTabularStorage,],
-    Field(discriminator="type")
-]
+TabularStorageConfig = Annotated[Union[DuckDBTabularStorage,], Field(discriminator="type")]
+
+CatalogStorageConfig = Annotated[Union[DuckDBTabularStorage,], Field(discriminator="type")]
+
 
 class EmbeddingConfig(BaseModel):
     type: str = Field(..., description="The embedding backend to use (e.g., 'openai', 'azureopenai')")
+
 
 class KnowledgeContextStorageConfig(BaseModel):
     type: str = Field(..., description="The storage backend to use (e.g., 'local', 'minio')")
     local_path: str = Field(default="~/.fred/knowledge-flow/knowledge-context", description="The path of the local metrics store")
 
+
 class AppSecurity(Security):
     client_id: str = "knowledge-flow"
     keycloak_url: str = "http://localhost:9080/realms/knowledge-flow"
+
 
 class KnowledgeContextDocument(BaseModel):
     id: str
@@ -175,6 +174,7 @@ class KnowledgeContext(BaseModel):
     tokens: Optional[int] = Field(default=0)
     tag: Optional[str] = Field(default="workspace")
 
+
 class TemporalSchedulerConfig(BaseModel):
     host: str = "localhost:7233"
     namespace: str = "default"
@@ -182,11 +182,13 @@ class TemporalSchedulerConfig(BaseModel):
     workflow_prefix: str = "pipeline"
     connect_timeout_seconds: Optional[int] = 5
 
+
 class SchedulerConfig(BaseModel):
     enabled: bool = False
     backend: str = "temporal"
     temporal: TemporalSchedulerConfig
-   
+
+
 class AppConfig(BaseModel):
     name: Optional[str] = "Knowledge Flow Backend"
     base_url: str = "/knowledge-flow/v1"
@@ -196,6 +198,7 @@ class AppConfig(BaseModel):
     reload: bool = False
     reload_dir: str = "."
 
+
 class PullProvider(str, Enum):
     LOCAL_PATH = "local_path"
     WEBDAV = "webdav"
@@ -204,25 +207,31 @@ class PullProvider(str, Enum):
     HTTP = "http"
     OTHER = "other"
 
+
 class BaseDocumentSourceConfig(BaseModel):
     type: Literal["push", "pull"]
     description: Optional[str] = Field(default=None, description="Human-readable description of this source")
+
 
 class PushSourceConfig(BaseDocumentSourceConfig):
     type: Literal["push"] = "push"
     # No additional fields
 
+
 class BasePullSourceConfig(BaseModel):
     type: Literal["pull"] = "pull"
     description: Optional[str] = None
+
 
 class LocalPathPullSource(BasePullSourceConfig):
     provider: Literal["local_path"]
     base_path: str
 
+
 class GitPullSource(BasePullSourceConfig):
     provider: Literal["github"]
     repo: str
+
 
 PullSourceConfig = Annotated[
     Union[
@@ -230,13 +239,12 @@ PullSourceConfig = Annotated[
         GitPullSource,
         # Add WebDAV, HTTP, etc. here
     ],
-    Field(discriminator="provider")
+    Field(discriminator="provider"),
 ]
 
-DocumentSourceConfig = Annotated[
-    Union[PushSourceConfig, PullSourceConfig],
-    Field(discriminator="type")
-]
+DocumentSourceConfig = Annotated[Union[PushSourceConfig, PullSourceConfig], Field(discriminator="type")]
+
+
 class Configuration(BaseModel):
     app: AppConfig
     security: AppSecurity
@@ -249,13 +257,5 @@ class Configuration(BaseModel):
     tabular_storage: TabularStorageConfig = Field(..., description="Tabular storage configuration")
     catalog_storage: CatalogStorageConfig = Field(..., description="Catalog storage configuration")
     embedding: EmbeddingConfig = Field(..., description="Embedding configuration")
-    knowledge_context_storage: KnowledgeContextStorageConfig = Field(..., description="Knowledge context storage configuration")
-    knowledge_context_max_tokens: int = 50000
     scheduler: SchedulerConfig
-    document_sources: Optional[Dict[str, DocumentSourceConfig]] = Field(
-        default_factory=dict,
-        description="Mapping of source_tag identifiers to push/pull source configurations"
-    )
-
-
-
+    document_sources: Optional[Dict[str, DocumentSourceConfig]] = Field(default_factory=dict, description="Mapping of source_tag identifiers to push/pull source configurations")

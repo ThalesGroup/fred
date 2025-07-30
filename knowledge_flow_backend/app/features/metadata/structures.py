@@ -31,7 +31,6 @@ class GetDocumentsMetadataResponse(BaseModel):
     documents: List[DocumentMetadata]
 
 
-
 class DeleteDocumentMetadataResponse(BaseModel):
     """
     Response model for deleting a document's metadata.
@@ -67,6 +66,7 @@ class UpdateDocumentMetadataResponse(BaseModel):
 
     status: str
     metadata: DocumentMetadata
+
 
 class UpdateDocumentMetadataRequest(BaseModel):
     description: str | None = None

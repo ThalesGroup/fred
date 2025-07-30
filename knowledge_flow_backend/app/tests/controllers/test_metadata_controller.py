@@ -30,33 +30,33 @@ import pytest
 @pytest.mark.metadata_storage_type(type="local")
 @pytest.mark.vector_storage_type(type="in_memory")
 @pytest.mark.content_storage_type(type="local")
-
-
 @pytest.fixture
 def document1():
     return DocumentMetadata(
-            source_type="push",
-            document_uid="doc-01",
-            document_name="document.md",
-            title="Example Document",
-            author="Jane Doe",
-            created=datetime.fromisoformat("2024-06-01T12:00:00+00:00"),
-            modified=datetime.fromisoformat("2024-06-02T15:30:00+00:00"),
-            retrievable=True,
+        source_type="push",
+        document_uid="doc-01",
+        document_name="document.md",
+        title="Example Document",
+        author="Jane Doe",
+        created=datetime.fromisoformat("2024-06-01T12:00:00+00:00"),
+        modified=datetime.fromisoformat("2024-06-02T15:30:00+00:00"),
+        retrievable=True,
     )
+
 
 @pytest.fixture
 def document2():
     return DocumentMetadata(
-            source_type="push",
-            document_uid="doc-02",
-            document_name="ai_revolution.pdf",
-            title="AI Revolution",
-            author="Ada Lovelace",
-            created=datetime.fromisoformat("2023-01-15T09:00:00+00:00"),
-            modified=datetime.fromisoformat("2023-02-10T10:30:00+00:00"),
-            retrievable=False,
+        source_type="push",
+        document_uid="doc-02",
+        document_name="ai_revolution.pdf",
+        title="AI Revolution",
+        author="Ada Lovelace",
+        created=datetime.fromisoformat("2023-01-15T09:00:00+00:00"),
+        modified=datetime.fromisoformat("2023-02-10T10:30:00+00:00"),
+        retrievable=False,
     )
+
 
 class TestMetadataController:
     """
@@ -65,20 +65,16 @@ class TestMetadataController:
     """
 
     # ──────────── Tests ────────────
-    def test_delete_metadata_found(self, client_fixture: TestClient, 
-                                   metadata_store: BaseMetadataStore, document1: DocumentMetadata):
+    def test_delete_metadata_found(self, client_fixture: TestClient, metadata_store: BaseMetadataStore, document1: DocumentMetadata):
         metadata_store.save_metadata(document1)
         resp = client_fixture.delete(f"/knowledge-flow/v1/document/{document1.document_uid}")
         assert resp.status_code == status.HTTP_200_OK
-
 
     def test_delete_metadata_not_found(self, client_fixture: TestClient):
         resp = client_fixture.delete("/knowledge-flow/v1/document/does_not_exist")
         assert resp.status_code == status.HTTP_404_NOT_FOUND
 
-    def test_get_documents_metadata(self, client_fixture, metadata_store: BaseMetadataStore, 
-                                    document1: DocumentMetadata, 
-                                    document2: DocumentMetadata):
+    def test_get_documents_metadata(self, client_fixture, metadata_store: BaseMetadataStore, document1: DocumentMetadata, document2: DocumentMetadata):
         metadata_store.clear()
         metadata_store.save_metadata(document1)
         metadata_store.save_metadata(document2)
@@ -89,10 +85,7 @@ class TestMetadataController:
         assert data["status"] == "success"
         assert len(data["documents"]) == 2
 
-    def test_get_documents_metadata_with_filters(self, client_fixture, 
-                                                 metadata_store: BaseMetadataStore, 
-                                                 document1: DocumentMetadata, 
-                                                 document2: DocumentMetadata):
+    def test_get_documents_metadata_with_filters(self, client_fixture, metadata_store: BaseMetadataStore, document1: DocumentMetadata, document2: DocumentMetadata):
         metadata_store.clear()
 
         metadata_store.save_metadata(document1)
@@ -105,9 +98,7 @@ class TestMetadataController:
         assert resp.status_code == status.HTTP_200_OK
         assert len(resp.json()["documents"]) == 2
 
-    def test_get_document_metadata(self, client_fixture, 
-                                   metadata_store: BaseMetadataStore, 
-                                   document1: DocumentMetadata):
+    def test_get_document_metadata(self, client_fixture, metadata_store: BaseMetadataStore, document1: DocumentMetadata):
         metadata_store.save_metadata(document1)
 
         resp = client_fixture.get(f"/knowledge-flow/v1/document/{document1.document_uid}")
@@ -115,8 +106,7 @@ class TestMetadataController:
         body = resp.json()
         assert body["metadata"]["document_uid"] == document1.document_uid
 
-    def test_update_document_retrievable(self, client_fixture, 
-                                         metadata_store: BaseMetadataStore, document1: DocumentMetadata):
+    def test_update_document_retrievable(self, client_fixture, metadata_store: BaseMetadataStore, document1: DocumentMetadata):
         metadata_store.save_metadata(document1)
 
         put = client_fixture.put(

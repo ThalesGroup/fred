@@ -10,12 +10,14 @@ from temporalio import exceptions
 
 logger = logging.getLogger(__name__)
 
+
 def prepare_working_dir(document_uid: str) -> pathlib.Path:
-        base = pathlib.Path(tempfile.mkdtemp(prefix=f"doc-{document_uid}-"))
-        base.mkdir(parents=True, exist_ok=True)
-        (base / "input").mkdir(exist_ok=True)
-        (base / "output").mkdir(exist_ok=True)
-        return base
+    base = pathlib.Path(tempfile.mkdtemp(prefix=f"doc-{document_uid}-"))
+    base.mkdir(parents=True, exist_ok=True)
+    (base / "input").mkdir(exist_ok=True)
+    (base / "output").mkdir(exist_ok=True)
+    return base
+
 
 @activity.defn
 def extract_metadata(file: FileToProcess) -> DocumentMetadata:
@@ -25,17 +27,18 @@ def extract_metadata(file: FileToProcess) -> DocumentMetadata:
 
     ingestion_service = IngestionService()
     if file.is_push():
-         logger.info(f"[extract_metadata] push file UID: {file.document_uid}.")
-         metadata = ingestion_service.get_metadata(file.document_uid)
-         if metadata is None:
-             logger.error(f"[extract_metadata] Metadata not found for push file UID: {file.document_uid}")
-             raise RuntimeError(f"Metadata missing for push file: {file.document_uid}")
+        logger.info(f"[extract_metadata] push file UID: {file.document_uid}.")
+        metadata = ingestion_service.get_metadata(file.document_uid)
+        if metadata is None:
+            logger.error(f"[extract_metadata] Metadata not found for push file UID: {file.document_uid}")
+            raise RuntimeError(f"Metadata missing for push file: {file.document_uid}")
 
-         logger.info(f"[extract_metadata] Metadata found for push file UID: {file.document_uid}, skipping extraction.")
-         return metadata
-        
+        logger.info(f"[extract_metadata] Metadata found for push file UID: {file.document_uid}, skipping extraction.")
+        return metadata
+
     else:
         from app.common.source_utils import get_pull_base_path
+
         # Step 1: Resolve full path
         base_path = get_pull_base_path(file.source_tag)
         full_path = base_path / file.external_path
@@ -46,18 +49,15 @@ def extract_metadata(file: FileToProcess) -> DocumentMetadata:
         logger.info(f"[extract_metadata] Found file at: {full_path}")
 
         # Step 2: Extract metadata using input processor
-        metadata = ingestion_service.extract_metadata(
-            full_path,
-            tags=file.tags,
-            source_tag=file.source_tag
-        )
+        metadata = ingestion_service.extract_metadata(full_path, tags=file.tags, source_tag=file.source_tag)
         logger.info(f"[extract_metadata] generated : {metadata}")
 
         # Step 4: Save metadata
-        ingestion_service.save_metadata(metadata)
+        ingestion_service.save_metadata(metadata=metadata)
 
         logger.info(f"[extract_metadata] Metadata extracted and saved for pull file: {metadata.document_uid}")
         return metadata
+
 
 @activity.defn
 def input_process(file: FileToProcess, metadata: DocumentMetadata) -> DocumentMetadata:
@@ -65,7 +65,7 @@ def input_process(file: FileToProcess, metadata: DocumentMetadata) -> DocumentMe
     logger.info(f"[process_document] Starting for UID: {metadata.document_uid}")
 
     from app.features.ingestion.service import IngestionService
-    
+
     ingestion_service = IngestionService()
     working_dir = prepare_working_dir(metadata.document_uid)
     input_dir = working_dir / "input"
@@ -79,6 +79,7 @@ def input_process(file: FileToProcess, metadata: DocumentMetadata) -> DocumentMe
         input_file = next(input_dir.glob("*"))
     else:
         from app.common.source_utils import get_pull_base_path
+
         logger.info(f"[process_document] Resolving pull file: source_tag={file.source_tag}, path={file.external_path}")
         full_path = get_pull_base_path(file.source_tag) / file.external_path
 
@@ -100,6 +101,7 @@ def input_process(file: FileToProcess, metadata: DocumentMetadata) -> DocumentMe
     logger.info(f"[process_document] Done for UID: {metadata.document_uid}")
     return metadata
 
+
 @activity.defn
 def output_process(file: FileToProcess, metadata: DocumentMetadata):
     logger = activity.logger
@@ -107,7 +109,7 @@ def output_process(file: FileToProcess, metadata: DocumentMetadata):
 
     from app.features.ingestion.service import IngestionService
     from app.application_context import ApplicationContext
-    
+
     working_dir = prepare_working_dir(metadata.document_uid)
     output_dir = working_dir / "output"
     ingestion_service = IngestionService()
@@ -120,18 +122,13 @@ def output_process(file: FileToProcess, metadata: DocumentMetadata):
 
     if not ApplicationContext.get_instance().is_tabular_file(preview_file.name):
         vector_store_type = ApplicationContext.get_instance().get_config().vector_storage.type
-        if (vector_store_type == "in_memory"):
+        if vector_store_type == "in_memory":
             raise exceptions.ApplicationError(
-                "❌ Vectorization from temporal activity is not allowed with an in-memory vector store. "
-                "Please configure a persistent vector store like OpenSearch.",
-                 non_retryable=True,
+                "❌ Vectorization from temporal activity is not allowed with an in-memory vector store. Please configure a persistent vector store like OpenSearch.",
+                non_retryable=True,
             )
-    # Proceed with the output processing    
-    ingestion_service.process_output(
-        output_dir=output_dir,
-        input_file_name=preview_file.name,
-        input_file_metadata=metadata
-    )
+    # Proceed with the output processing
+    ingestion_service.process_output(output_dir=output_dir, input_file_name=preview_file.name, input_file_metadata=metadata)
 
     # 💾 Save updated output and metadata
     ingestion_service.save_output(metadata=metadata, output_dir=output_dir)

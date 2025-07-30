@@ -21,6 +21,7 @@ DTypes = Literal["string", "integer", "float", "boolean", "datetime", "unknown"]
 
 # -- Schema models --
 
+
 class TabularColumnSchema(BaseModel):
     name: str
     dtype: DTypes
@@ -31,13 +32,14 @@ class TabularSchemaResponse(BaseModel):
     columns: List[TabularColumnSchema]
     row_count: Optional[int] = None
 
+
 class RawSQLRequest(BaseModel):
     query: str
 
 
 class TabularQueryResponse(BaseModel):
     document_name: str
-    rows:  Optional[List[dict]] = []
+    rows: Optional[List[dict]] = []
     error: Optional[str] = None
 
 
@@ -53,7 +55,9 @@ class TabularDatasetMetadata(BaseModel):
     domain: Optional[str] = ""
     row_count: Optional[int] = None
 
+
 # -- Aggregation Models --
+
 
 class Precision(str, Enum):
     sec = "sec"

@@ -34,6 +34,7 @@ class TestMarkdownProcessor(BaseMarkdownProcessor):
         output_path.write_text("# Test Markdown Content")
         return {"markdown_path": str(output_path)}
 
+
 class TestTabularProcessor(BaseTabularProcessor):
     def check_file_validity(self, file_path: Path) -> bool:
         return True
@@ -44,8 +45,7 @@ class TestTabularProcessor(BaseTabularProcessor):
     def convert_file_to_table(self, file_path: Path) -> pd.DataFrame:
         return pd.DataFrame({"col1": [1, 2], "col2": ["A", "B"]})
 
+
 class TestOutputProcessor(BaseOutputProcessor):
     def process(self, path, metadata):
-        return OutputProcessorResponse(
-            status=Status.SUCCESS,
-            chunks=1, vectors=[], metadata=metadata)
+        return OutputProcessorResponse(status=Status.SUCCESS, chunks=1, vectors=[], metadata=metadata)

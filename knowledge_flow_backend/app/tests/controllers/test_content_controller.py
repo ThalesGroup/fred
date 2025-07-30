@@ -73,12 +73,11 @@ class TestContentController:
             author="Jane Doe",
             created=datetime.fromisoformat("2024-06-01T12:00:00+00:00"),
             modified=datetime.fromisoformat("2024-06-02T15:30:00+00:00"),
-            retrievable=True
+            retrievable=True,
         )
 
     # ─────────────────────────────── tests ────────────────────────────────
-    def test_get_markdown_preview(self, client_fixture: TestClient, markdown_file, 
-                                  content_store: BaseContentStore):
+    def test_get_markdown_preview(self, client_fixture: TestClient, markdown_file, content_store: BaseContentStore):
         """The `/markdown/{uid}` endpoint should return the rendered markdown."""
         content_store.save_content(markdown_file["document_uid"], markdown_file["document_dir"])
 

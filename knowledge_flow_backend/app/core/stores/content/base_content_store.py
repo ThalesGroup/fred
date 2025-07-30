@@ -21,7 +21,6 @@ logger = logging.getLogger(__name__)
 
 
 class BaseContentStore(ABC):
-
     @abstractmethod
     def save_input(self, document_uid: str, input_dir: Path) -> None:
         """Saves the input/ folder (raw user-uploaded file)."""
