@@ -49,11 +49,25 @@ rollingUpdate:
   maxSurge: 1
 
 command:
-  enabled: false
+  enabled: true
+  # data:
+  #   - /bin/sh
+  #   - -c
+  #   - tail -f /dev/null
   data:
-    - /bin/sh
-    - -c
-    - tail -f /dev/null
+  - "uvicorn"
+  - "app.main:create_app"
+  - "--factory"
+  - "--host"
+  - "0.0.0.0"
+  - "--port"
+  - "8111"
+  - "--env-file"
+  - "/app/config/.env"
+  - "--log-level"
+  - "info"
+  - "--loop"
+  - "asyncio"
 
 env:
   enabled: true
@@ -133,13 +147,11 @@ volumeMounts:
     mountPath: /home/knowledge-flow-user/.kube/config
     subPath: kubeconfig
 
-
-
 configuration:
   app:
     name: "Knowledge Flow Backend"
     base_url: "/knowledge-flow/v1"
-    address: "127.0.0.1"
+    #address: "127.0.0.1"
     port: 8111
     log_level: "info"
     reload: false
@@ -148,7 +160,7 @@ configuration:
 
   # Enable or disable the security layer
   security:
-    enabled: false
+    enabled: true
     keycloak_url: "http://fred-keycloak:8080/realms/fred"
     authorized_origins:
     - "http://localhost:5173"
@@ -273,33 +285,11 @@ configuration:
     type: "local"
 
   vector_storage:
-    # Available backends:
-    # - in_memory  → ephemeral, dev-only (no persistence)
-    # - opensearch → persistent, secure, production-ready
-    # - weaviate   → persistent, fast, lightweight alternative. Still beta
-    #
-    # ⚠️ in_memory is used by default to ensure startup always succeeds, but it does NOT persist vectors between restarts.
-    # Use it only for testing or development.
-    type: in_memory
-    # --- Example: OpenSearch configuration
-    #
-    # type: opensearch
-    # host: https://localhost:9200              # Opensearch HTTP URL
-    # secure: true                              # Use HTTPS (set to false for HTTP)
-    # verify_certs: false                       # Whether to verify TLS certificates
-    # vector_index: vector-index                # Index name for vectors
-    # metadata_index: metadata-index            # Index name for metadata
-    #
-    # ➤ Required environment variables (not stored in this file):
-    # OPENSEARCH_USER=admin
-    # OPENSEARCH_PASSWORD=xxx
-    #
-    # --- Example: Weaviate configuration
-    #
-    # type: weaviate
-    # host: http://localhost:8080               # Weaviate HTTP host
-    # index_name: CodeDocuments                 # Class name used to store chunks
-    #
+    type: opensearch
+    host: https://opensearch:9200
+    secure: true
+    verify_certs: false
+    index: metadata-index
 
   tabular_storage:
     type: "duckdb"

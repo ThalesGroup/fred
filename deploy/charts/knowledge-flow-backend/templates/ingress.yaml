@@ -27,7 +27,7 @@ spec:
               service:
                 name: {{ $.Values.applicationName }}
                 port:
-                  name: http
+                  number: 8080
           {{- end }}
     {{- end }}
 

@@ -6,14 +6,7 @@ ingress:
   className: "traefik"
 
 dotenv:
-  openai_api_key: "sk-pr*****"
-
-
-env:
-  enabled: true
-  extraEnvVars:
-  - name: OPENAI_API_KEY
-    value: "sk-pr*****"
+  OPENAI_API_KEY: "sk-pr*****"
 
 kubeconfig:
   data:

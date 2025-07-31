@@ -26,6 +26,8 @@ configuration:
     username: "admin"
     password: "*****"
 
+dotenv:
+  OPENAI_API_KEY: "sk-****"
 
 kubeconfig:
   data:
