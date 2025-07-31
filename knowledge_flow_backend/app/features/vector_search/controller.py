@@ -17,6 +17,7 @@ from datetime import datetime, timezone
 from typing import List
 
 from fastapi import APIRouter, HTTPException
+from fred_core import KeycloakUser
 from langchain.schema.document import Document
 
 from app.features.vector_search.service import VectorSearchService
@@ -73,8 +74,11 @@ class VectorSearchController:
             operation_id="search_documents_using_vectorization",
         )
         def vector_search(request: SearchRequest):
+            # todo: get user from MCP controller
+            user = KeycloakUser(uid="admin", username="admin", roles=["admin"], email="dev@localhost")
+
             try:
-                results = self.service.similarity_search_with_score(request.query, k=request.top_k, tags=request.tags)
+                results = self.service.similarity_search_with_score(request.query, user, k=request.top_k, tags_ids=request.tags)
                 return [self._to_document_source(doc, score, rank) for rank, (doc, score) in enumerate(results, start=1)]
             except Exception as e:
                 logger.error("Vector search failed:", e)

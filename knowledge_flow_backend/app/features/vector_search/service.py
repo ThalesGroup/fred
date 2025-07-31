@@ -11,10 +11,18 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+# type: strict
 
+import logging
 from typing import List
+
+from fred_core import KeycloakUser
 from langchain.schema.document import Document
+
 from app.application_context import ApplicationContext
+from app.features.tag.service import TagService
+
+logger = logging.getLogger(__name__)
 
 
 class VectorSearchService:
@@ -26,7 +34,18 @@ class VectorSearchService:
     def __init__(self):
         context = ApplicationContext.get_instance()
         embedder = context.get_embedder()
+        self.tag_service = TagService()
         self.vector_store = context.get_vector_store(embedder)
 
-    def similarity_search_with_score(self, question: str, k: int = 10, tags: list[str] | None = None) -> List[tuple[Document, float]]:
-        return self.vector_store.similarity_search_with_score(question, k=k, tags=tags)
+    def similarity_search_with_score(self, question: str, user: KeycloakUser, k: int = 10, tags_ids: list[str] | None = None) -> List[tuple[Document, float]]:
+        # todo: handle autorization (check if use can rag on listed tags OR restrict research to all document users has access to ?)
+
+        documents_ids: set[str] | None = None
+        if tags_ids is not None and len(tags_ids) >= 1:
+            documents_ids = set()
+            for tag_id in tags_ids:
+                tag = self.tag_service.get_tag_for_user(tag_id, user)
+                documents_ids.update(tag.document_ids)
+
+        logger.debug("doing similartiy search on following document uids:", documents_ids)
+        return self.vector_store.similarity_search_with_score(question, k=k, documents_ids=documents_ids)
