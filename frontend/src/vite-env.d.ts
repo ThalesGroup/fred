@@ -13,3 +13,10 @@
 // limitations under the License.
 
 /// <reference types="vite/client" />
+interface Window {
+  __ENV__?: {
+    VITE_USE_AUTH?: string;
+    // Add more keys here as needed
+    [key: string]: any;
+  };
+}
