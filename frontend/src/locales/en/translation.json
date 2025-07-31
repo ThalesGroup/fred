@@ -168,6 +168,7 @@
       "selectedCount": "{{count}} selected",
       "deleteSelected": "Delete",
       "processSelected": "Process",
+      "scheduleSelected": "Schedule",
       "downloadSelected": "Download",
       "fileName": "File Name",
       "dateAdded": "Date Added",
@@ -211,6 +212,7 @@
     "title": "Document Library",
     "description": "Access the knowledge base documents",
     "upload": "Upload a document",
+    "refresh": "Refresh",
     "uploadInLibrary": "Add to library",
     "uploadDrawerTitle": "Upload a document",
     "dropFiles": "Drop your files here",
@@ -259,7 +261,8 @@
     "preview": "Preview",
     "download": "Download",
     "delete": "Delete",
-    "process": "Process"
+    "process": "Process",
+    "schedule": "Schedule"
   },
   "documentLibrariesList": {
     "libraryName": "Library Name",

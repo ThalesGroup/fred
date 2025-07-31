@@ -16,13 +16,7 @@ import { createApi } from "@reduxjs/toolkit/query/react";
 import { createDynamicBaseQuery } from "../common/dynamicBaseQuery.tsx";
 import { Metadata } from "../components/documents/DocumentTable.tsx";
 
-export const DOCUMENT_PROCESSING_STAGES = [
-  "raw",
-  "preview",
-  "vector",
-  "sql",
-  "mcp",
-] as const;
+export const DOCUMENT_PROCESSING_STAGES = ["raw", "preview", "vector", "sql", "mcp"] as const;
 export interface KnowledgeDocument {
   document_name: string;
   document_uid: string;
@@ -58,7 +52,7 @@ export interface PullFileEntry {
   modified: string;
   metadata: KnowledgeDocument | null;
 }
-export type DocumentProcessingStage = typeof DOCUMENT_PROCESSING_STAGES[number];
+export type DocumentProcessingStage = (typeof DOCUMENT_PROCESSING_STAGES)[number];
 
 export interface MarkdownDocumentPreview {
   content: string;
@@ -68,7 +62,7 @@ export interface FileToProcess {
   document_uid?: string;
   external_path?: string;
   tags?: string[];
-  display_name: string
+  display_name: string;
 }
 
 export interface ProcessDocumentsRequest {
@@ -114,9 +108,16 @@ const extendedDocumentApi = documentApiSlice.injectEndpoints({
         responseHandler: async (response) => await response.blob(),
       }),
     }),
-    processDocuments: builder.mutation<ProcessDocumentsResponse, ProcessDocumentsRequest>({
+    processDocumentsSync: builder.mutation<ProcessDocumentsResponse, ProcessDocumentsRequest>({
       query: (body) => ({
-        url: "/knowledge-flow/v1/pipelines/process-documents",
+        url: "/knowledge-flow/v1/pipelines/process-documents-sync",
+        method: "POST",
+        body,
+      }),
+    }),
+    processDocumentsAsync: builder.mutation<ProcessDocumentsResponse, ProcessDocumentsRequest>({
+      query: (body) => ({
+        url: "/knowledge-flow/v1/pipelines/process-documents-async",
         method: "POST",
         body,
       }),
@@ -127,23 +128,33 @@ const extendedDocumentApi = documentApiSlice.injectEndpoints({
         method: "GET",
       }),
     }),
-    browseDocuments: builder.mutation<{ documents: KnowledgeDocument[]; total: number }, {
-  source_tag: string;
-  filters?: Record<string, any>;
-  offset?: number;
-  limit?: number;
-}>({
-  query: ({ source_tag, filters = {}, offset = 0, limit = 100 }) => ({
-    url: "/knowledge-flow/v1/documents/browse",
-    method: "POST",
-    body: {
-      source_tag,
-      filters,
-      offset,
-      limit,
-    },
-  }),
-}),
+    browseDocuments: builder.mutation<
+      { documents: KnowledgeDocument[]; total: number },
+      {
+        source_tag: string;
+        filters?: Record<string, any>;
+        offset?: number;
+        limit?: number;
+      }
+    >({
+      query: ({ source_tag, filters = {}, offset = 0, limit = 100 }) => ({
+        url: "/knowledge-flow/v1/documents/browse",
+        method: "POST",
+        body: {
+          source_tag,
+          filters,
+          offset,
+          limit,
+        },
+      }),
+    }),
+    rescanCatalogSource: builder.mutation<void, string>({
+      query: (sourceTag) => ({
+        url: `/knowledge-flow/v1/pull/catalog/rescan/${sourceTag}`,
+        method: "POST",
+        headers: { accept: "application/json" },
+      }),
+    }),
     getDocumentsWithFilter: builder.mutation<{ documents: KnowledgeDocument[] }, Record<string, any>>({
       query: (filters) => ({
         url: `/knowledge-flow/v1/documents/metadata`, // Single endpoint
@@ -177,5 +188,7 @@ export const {
   useGetDocumentSourcesQuery,
   useGetCatalogFilesQuery,
   useBrowseDocumentsMutation,
-  useProcessDocumentsMutation
+  useProcessDocumentsSyncMutation,
+  useProcessDocumentsAsyncMutation,
+  useRescanCatalogSourceMutation,
 } = extendedDocumentApi;

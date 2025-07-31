@@ -25,6 +25,8 @@ from pydantic import BaseModel
 
 from app.common.document_structures import ProcessingStage
 from app.features.ingestion.service import IngestionService
+from app.features.scheduler.activities import extract_metadata, input_process, output_process
+from app.features.scheduler.structure import FileToProcess
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +67,6 @@ class StatusAwareStreamingResponse(StreamingResponse):
         self.all_success_flag = all_success_flag
 
     async def listen_for_close(self):
-        await super().listen_for_close()
         # Set final HTTP status based on content
         if not self.all_success_flag[0]:
             self.status_code = 422  # or 207 if you prefer partial success
@@ -73,7 +74,8 @@ class StatusAwareStreamingResponse(StreamingResponse):
 
 def uploadfile_to_path(file: UploadFile) -> pathlib.Path:
     tmp_dir = tempfile.mkdtemp()
-    tmp_path = pathlib.Path(tmp_dir) / file.filename
+    filename = file.filename if file.filename is not None else "uploaded_file"
+    tmp_path = pathlib.Path(tmp_dir) / filename
     with open(tmp_path, "wb") as f_out:
         shutil.copyfileobj(file.file, f_out)
     return tmp_path
@@ -147,7 +149,7 @@ class IngestionController:
         logger.info("IngestionController initialized.")
 
         @router.post(
-            "/process-files",
+            "/sync-process-files",
             tags=["Library Ingestion"],
             summary="Upload and process documents immediately (end-to-end)",
             description="""
@@ -171,7 +173,7 @@ class IngestionController:
         **Not recommended for high-volume ingestion** due to synchronous, blocking behavior.
         """,
         )
-        def stream_process(
+        def sync_stream_process(
             files: List[UploadFile] = File(...),
             metadata_json: str = Form(...),
         ) -> StreamingResponse:
@@ -206,23 +208,25 @@ class IngestionController:
                             logger.error(f"Metadata already exists for {filename}: {metadata}")
 
                         # Step: Processing
-                        current_step = "document knowledge extraction"
+                        current_step = "input processing"
                         self.service.process_input(input_path=input_temp_file, output_dir=output_temp_dir / "output", metadata=metadata)
                         logger.info(f"Document processed for {filename}: {metadata}")
                         yield ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n"
 
-                        # Step: Post-processing (optional)
-                        current_step = "knowledge post processing"
-                        metadata.mark_stage_done(ProcessingStage.VECTORIZED)
-                        vectorization_response = self.service.process_output(output_dir=output_temp_dir / "output", input_file_name=input_temp_file.name, input_file_metadata=metadata)
-                        logger.info(f"Post-processing completed for {filename}: {metadata}")
-                        yield ProcessingProgress(step=current_step, status=vectorization_response.status, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n"
-
                         # Step: Uploading to backend storage
-                        current_step = "raw content saving"
+                        current_step = "input content saving"
                         self.service.save_input(metadata, output_temp_dir / "input")
-                        self.service.save_output(metadata, output_temp_dir / "output")
                         yield ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n"
+                        current_step = "preview content saving"
+                        self.service.save_output(metadata, output_temp_dir / "output")# Step: Post-processing (optional)
+                        yield ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n"
+                        
+                        current_step = "preview content processing"
+                        metadata.mark_stage_done(ProcessingStage.VECTORIZED)
+                        output_response = self.service.process_output(output_dir=output_temp_dir / "output", input_file_name=input_temp_file.name, input_file_metadata=metadata)
+                        logger.info(f"Post-processing completed for {filename}: {metadata}")
+                        yield ProcessingProgress(step=current_step, status=output_response.status, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n"
+
                         # Step: Metadata saving
                         current_step = "metadata saving"
                         self.service.save_metadata(metadata=metadata)
@@ -232,10 +236,10 @@ class IngestionController:
                         # ✅ At least one file succeeded
                         all_success_flag[0] = True
                     except Exception as e:
-                        logger.exception(f"Failed to process {file.filename}")
+                        logger.exception(f"Failed to process {filename}")
                         # Send detailed error message (safe for frontend)
                         error_message = f"{type(e).__name__}: {str(e).strip() or 'No error message'}"
-                        yield ProcessingProgress(step=current_step, status=Status.ERROR, error=error_message, filename=file.filename).model_dump_json() + "\n"
+                        yield ProcessingProgress(step=current_step, status=Status.ERROR, error=error_message, filename=filename).model_dump_json() + "\n"
                 yield json.dumps({"step": "done", "status": Status.SUCCESS if all_success_flag[0] else "error"}) + "\n"
 
             return StatusAwareStreamingResponse(event_generator(), all_success_flag=all_success_flag)
@@ -315,10 +319,115 @@ class IngestionController:
                         logger.info(f"Metadata saved for {filename}: {metadata}")
                         all_success_flag[0] = True
                     except Exception as e:
-                        logger.exception(f"Failed to process {file.filename}")
+                        logger.exception(f"Failed to process {filename}")
                         # Send detailed error message (safe for frontend)
                         error_message = f"{type(e).__name__}: {str(e).strip() or 'No error message'}"
-                        yield ProcessingProgress(step=current_step, status=Status.ERROR, error=error_message, filename=file.filename).model_dump_json() + "\n"
+                        yield ProcessingProgress(step=current_step, status=Status.ERROR, error=error_message, filename=filename).model_dump_json() + "\n"
                 yield json.dumps({"step": "done", "status": Status.SUCCESS if all_success_flag[0] else "error"}) + "\n"
 
+            return StatusAwareStreamingResponse(event_generator(), all_success_flag=all_success_flag)
+
+        @router.post(
+            "/process-files",
+            tags=["Library Ingestion"],
+            summary="Upload and process documents immediately (end-to-end)",
+            description="""
+        This endpoint handles the **full ingestion pipeline in one step**, ideal for local development, demo environments, or smaller-scale backends.
+
+        ### Responsibilities:
+        - Saves uploaded files to temporary storage
+        - Extracts document metadata
+        - Processes the document (e.g., parsing, chunking, embedding)
+        - Saves content to persistent storage
+        - Persists metadata and indexing info
+
+        ### Response Format:
+        A **streaming NDJSON response** containing `ProcessingProgress` updates for each step of each file. The client receives real-time feedback.
+
+        ### When to use:
+        - Development or laptop-based deployments
+        - Manual ingestion workflows
+        - Small file batches with real-time feedback
+
+        **Not recommended for high-volume ingestion** due to synchronous, blocking behavior.
+        """,
+        )
+        def stream_process(
+            files: List[UploadFile] = File(...),
+            metadata_json: str = Form(...),
+        ) -> StreamingResponse:
+            parsed_input = IngestionInput(**json.loads(metadata_json))
+            tags = parsed_input.tags
+            source_tag = parsed_input.source_tag
+            # input_metadata = json.loads(metadata_json)
+            # ✅ Preload: Call save_file_to_temp on all files before the generator runs
+            # This is to ensure that the files are saved to temp storage before processing
+            # and to avoid blocking the generator with file I/O operations.
+            preloaded_files = []
+            for file in files:
+                raw_path = uploadfile_to_path(file)
+                input_temp_file = save_file_to_temp(raw_path)
+                logger.info(f"File {file.filename} saved to temp storage at {input_temp_file}")
+                preloaded_files.append((file.filename, input_temp_file))
+            all_success_flag = [False]  # Track success across all files
+
+
+            def event_generator() -> Generator[str, None, None]:
+                for filename, input_temp_file in preloaded_files:
+                    current_step = "metadata extraction"
+
+                    try:
+                        metadata = self.service.extract_metadata(file_path=input_temp_file, tags=tags, source_tag=source_tag)
+                        # 👇 Create a mock FileToProcess object
+                        file_to_process = FileToProcess(
+                            document_uid=metadata.document_uid,
+                            external_path=None,
+                            source_tag=source_tag,
+                            tags=tags,
+                        )
+
+                        # Step: extract_metadata activity
+                        metadata = extract_metadata(file=file_to_process)
+                        yield ProcessingProgress(
+                            step=current_step,
+                            status=Status.SUCCESS,
+                            document_uid=metadata.document_uid,
+                            filename=filename
+                        ).model_dump_json() + "\n"
+
+                        # Step: input_process activity
+                        current_step = "input processing"
+                        metadata = input_process(file=file_to_process, metadata=metadata)
+                        yield ProcessingProgress(
+                            step=current_step,
+                            status=Status.SUCCESS,
+                            document_uid=metadata.document_uid,
+                            filename=filename
+                        ).model_dump_json() + "\n"
+
+                        # Step: output_process activity
+                        current_step = "preview content processing"
+                        metadata = output_process(file=file_to_process, metadata=metadata)
+                        yield ProcessingProgress(
+                            step=current_step,
+                            status=Status.SUCCESS,
+                            document_uid=metadata.document_uid,
+                            filename=filename
+                        ).model_dump_json() + "\n"
+
+                        current_step = "metadata saving (done)"
+                        all_success_flag[0] = True
+
+                    except Exception as e:
+                        logger.exception(f"Failed to process {filename}")
+                        error_message = f"{type(e).__name__}: {str(e).strip() or 'No error message'}"
+                        yield ProcessingProgress(
+                            step=current_step,
+                            status=Status.ERROR,
+                            error=error_message,
+                            filename=filename
+                        ).model_dump_json() + "\n"
+
+                yield json.dumps({"step": "done", "status": Status.SUCCESS if all_success_flag[0] else "error"}) + "\n"
+            
             return StatusAwareStreamingResponse(event_generator(), all_success_flag=all_success_flag)

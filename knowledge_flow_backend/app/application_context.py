@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Dict, Type, Union, Optional
 from app.core.stores.content.base_content_loader import BaseContentLoader
 from app.core.stores.content.filesystem_content_loader import FileSystemContentLoader
-from app.core.stores.content.minio_content_loader import MinioProvider
+from app.core.stores.content.minio_content_loader import MinioContentLoader
 from app.features.catalog.sphere_provider import SphereProvider
 from fred_core.store.duckdb_store import DuckDBTableStore
 from app.common.structures import Configuration, DuckdbMetadataStorage, InMemoryVectorStorage, FileSystemPullSource, MinioPullSource, MinioStorage, OpenSearchStorage, WeaviateVectorStorage
@@ -469,15 +469,6 @@ class ApplicationContext:
 
         return self._catalog_store_instance
 
-    def get_langchain_document_loader(self) -> BaseLangchainDocumentLoader:
-        """
-        Factory method to create a document loader instance based on configuration.
-        this document loader is legacy it returns directly langchain documents
-        Currently supports LocalFileLoader.
-        """
-        # TODO: In future we can allow other backends, based on config.
-        return LocalFileLoader()
-    
     def get_documeget_content_loader_for_source(self, source: str) -> BaseContentLoader:
         """
         Factory method to create a document loader instance based on configuration.
@@ -494,7 +485,7 @@ class ApplicationContext:
         if isinstance(source_config, FileSystemPullSource):
             return FileSystemContentLoader(source_config, source)
         elif isinstance(source_config, MinioPullSource):
-            return MinioProvider(source_config, source)
+            return MinioContentLoader(source_config, source)
         else:
             raise NotImplementedError(f"No pull provider implemented for '{source_config.provider}'")
 
@@ -516,7 +507,7 @@ class ApplicationContext:
         if source_config.provider == "local_path":
             return FileSystemContentLoader(source_config, source_tag)
         elif source_config.provider == "minio":
-             return MinioProvider(source_config, source_tag)
+             return MinioContentLoader(source_config, source_tag)
         else:
             raise NotImplementedError(f"No pull provider implemented for '{source_config.provider}'")
 

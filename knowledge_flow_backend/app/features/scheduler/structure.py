@@ -58,7 +58,7 @@ class FileToProcess(BaseModel):
     def to_virtual_metadata(self) -> DocumentMetadata:
         if not self.is_pull():
             raise ValueError("Virtual metadata can only be generated for pull files")
-
+        assert self.external_path, "Pull files must have an external path"
         modified_dt = datetime.fromtimestamp(self.modified_time or 0, tz=timezone.utc)
 
         return DocumentMetadata(
@@ -82,4 +82,4 @@ class PipelineDefinition(BaseModel):
 
 class ProcessDocumentsRequest(BaseModel):
     files: List[FileToProcess]
-    pipeline_name: Optional[str] = "manual_ui_trigger"
+    pipeline_name: str 

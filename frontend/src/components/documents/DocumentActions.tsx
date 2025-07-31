@@ -57,6 +57,14 @@ export const createProcessAction = (
   name: t("documentActions.process"),
   handler: onProcess,
 });
+export const createScheduleAction = (
+  onSchedule: (file: DocumentMetadata) => Promise<void>,
+  t: TFunction,
+): CustomRowAction => ({
+  icon: <RocketLaunchIcon />,
+  name: t("documentActions.schedule"),
+  handler: onSchedule,
+});
 
 // Bulk action creators
 export const createBulkDeleteAction = (
@@ -77,7 +85,7 @@ export const createBulkDownloadAction = (
   handler: onBulkDownload,
 });
 
-export const createBulkProcessAction = (
+export const createBulkProcessSyncAction = (
   onBulkProcess: (files: DocumentMetadata[]) => Promise<void>,
   t: TFunction,
 ): CustomBulkAction => ({
@@ -85,3 +93,12 @@ export const createBulkProcessAction = (
   name: t("documentTable.processSelected"),
   handler: onBulkProcess,
 });
+export const createBulkProcessAsyncAction = (
+  onBulkProcess: (files: DocumentMetadata[]) => Promise<void>,
+  t: TFunction,
+): CustomBulkAction => ({
+  icon: <RocketLaunchIcon />,
+  name: t("documentTable.scheduleSelected"),
+  handler: onBulkProcess,
+});
+

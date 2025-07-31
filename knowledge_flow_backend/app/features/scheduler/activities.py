@@ -28,6 +28,7 @@ def extract_metadata(file: FileToProcess) -> DocumentMetadata:
     ingestion_service = IngestionService()
     if file.is_push():
         logger.info(f"[extract_metadata] push file UID: {file.document_uid}.")
+        assert file.document_uid, "Push files must have a document UID"
         metadata = ingestion_service.get_metadata(file.document_uid)
         if metadata is None:
             logger.error(f"[extract_metadata] Metadata not found for push file UID: {file.document_uid}")
@@ -41,6 +42,8 @@ def extract_metadata(file: FileToProcess) -> DocumentMetadata:
 
         # Step 1: Resolve full path
         base_path = get_pull_base_path(file.source_tag)
+        assert file.external_path, "Pull files must have an external path"
+        assert base_path, "Base path for pull files must be defined"
         full_path = base_path / file.external_path
 
         if not full_path.exists() or not full_path.is_file():
@@ -79,7 +82,7 @@ def input_process(file: FileToProcess, metadata: DocumentMetadata) -> DocumentMe
         input_file = next(input_dir.glob("*"))
     else:
         from app.common.source_utils import get_pull_base_path
-
+        assert file.external_path, "Pull files must have an external path"
         logger.info(f"[process_document] Resolving pull file: source_tag={file.source_tag}, path={file.external_path}")
         full_path = get_pull_base_path(file.source_tag) / file.external_path
 
@@ -103,7 +106,7 @@ def input_process(file: FileToProcess, metadata: DocumentMetadata) -> DocumentMe
 
 
 @activity.defn
-def output_process(file: FileToProcess, metadata: DocumentMetadata):
+def output_process(file: FileToProcess, metadata: DocumentMetadata, accept_memory_storage: bool = False) -> DocumentMetadata:
     logger = activity.logger
     logger.info(f"[vectorize_and_save] Starting for UID: {metadata.document_uid}")
 
@@ -122,7 +125,7 @@ def output_process(file: FileToProcess, metadata: DocumentMetadata):
 
     if not ApplicationContext.get_instance().is_tabular_file(preview_file.name):
         vector_store_type = ApplicationContext.get_instance().get_config().vector_storage.type
-        if vector_store_type == "in_memory":
+        if vector_store_type == "in_memory" and not accept_memory_storage:
             raise exceptions.ApplicationError(
                 "❌ Vectorization from temporal activity is not allowed with an in-memory vector store. Please configure a persistent vector store like OpenSearch.",
                 non_retryable=True,
@@ -136,3 +139,4 @@ def output_process(file: FileToProcess, metadata: DocumentMetadata):
 
     logger.info(f"[vectorize_and_save] Done for UID: {metadata.document_uid}")
     return metadata
+

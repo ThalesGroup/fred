@@ -17,7 +17,9 @@ import {
   ProcessDocumentsRequest,
   useDeleteDocumentMutation,
   useLazyGetDocumentRawContentQuery,
-  useProcessDocumentsMutation,
+  useProcessDocumentsAsyncMutation,
+  useProcessDocumentsSyncMutation,
+
 } from "../../slices/documentApi";
 import { DocumentMetadata } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { downloadFile } from "../../utils/downloadUtils";
@@ -25,11 +27,13 @@ import { useToast } from "../ToastProvider";
 import {
   createBulkDeleteAction,
   createBulkDownloadAction,
-  createBulkProcessAction,
+  createBulkProcessSyncAction,
+  createBulkProcessAsyncAction,
   createDeleteAction,
   createDownloadAction,
   createPreviewAction,
   createProcessAction,
+  createScheduleAction,
 } from "./DocumentActions";
 import { useDocumentViewer } from "./useDocumentViewer";
 
@@ -41,7 +45,8 @@ export const useDocumentActions = (onRefreshData?: () => void) => {
   // API hooks
   const [deleteDocument] = useDeleteDocumentMutation();
   const [triggerDownload] = useLazyGetDocumentRawContentQuery();
-  const [processDocuments] = useProcessDocumentsMutation();
+  const [processDocumentsSync] = useProcessDocumentsSyncMutation();
+  const [processDocumentsAsync] = useProcessDocumentsAsyncMutation();
 
   // Action handlers
   const handleDelete = async (file: DocumentMetadata) => {
@@ -119,49 +124,57 @@ export const useDocumentActions = (onRefreshData?: () => void) => {
       file_name: file.document_name,
     });
   };
+  type ProcessMode = "sync" | "async";
 
-  const handleProcess = async (files: DocumentMetadata[]) => {
-    try {
-      const payload: ProcessDocumentsRequest = {
-        files: files.map((f) => {
-          const isPull = f.source_type === "pull";
+const handleProcess = async (files: DocumentMetadata[], mode: ProcessMode) => {
+  try {
+    const payload: ProcessDocumentsRequest = {
+      files: files.map((f) => {
+        const isPull = f.source_type === "pull";
+        return {
+          source_tag: f.source_tag || "uploads",
+          document_uid: isPull ? undefined : f.document_uid,
+          external_path: isPull ? f.pull_location ?? undefined : undefined,
+          tags: f.tags || [],
+          display_name: f.document_name,
+        };
+      }),
+      pipeline_name: mode === "sync" ? "manual_ui_sync" : "manual_ui_async",
+    };
 
-          return {
-            source_tag: f.source_tag || "uploads",
-            document_uid: isPull ? undefined : f.document_uid,
-            external_path: isPull ? (f.pull_location ?? undefined) : undefined,
-            tags: f.tags || [],
-            display_name: f.document_name,
-          };
-        }),
-        pipeline_name: "manual_ui_trigger",
-      };
+    const endpoint = mode === "sync"
+      ? processDocumentsSync
+      : processDocumentsAsync; 
+    const result = await endpoint(payload).unwrap();
 
-      const result = await processDocuments(payload).unwrap();
-      showInfo({
-        summary: "Processing started",
-        detail: `Workflow ${result.workflow_id} submitted`,
-      });
-    } catch (error) {
-      showError({
-        summary: "Processing Failed",
-        detail: error?.data?.detail || error.message,
-      });
-    }
-  };
+    showInfo({
+      summary: "Processing started",
+      detail: mode === "sync"
+        ? `Immediate ingestion triggered.`
+        : `Workflow ${result.workflow_id} submitted`,
+    });
+  } catch (error) {
+    showError({
+      summary: "Processing Failed",
+      detail: error?.data?.detail || error.message,
+    });
+  }
+};
 
   // Create default actions
   const defaultRowActions = [
     createPreviewAction(handleDocumentPreview, t),
     createDownloadAction(handleDownload, t),
     createDeleteAction(handleDelete, t),
-    createProcessAction((file) => handleProcess([file]), t),
+    createProcessAction((file) => handleProcess([file], "sync"), t),
+    createScheduleAction((file) => handleProcess([file], "async"), t), 
   ];
 
   const defaultBulkActions = [
     createBulkDeleteAction(handleBulkDelete, t),
     createBulkDownloadAction(handleBulkDownload, t),
-    createBulkProcessAction(handleProcess, t),
+    createBulkProcessSyncAction((files) => handleProcess(files, "sync"), t),
+    createBulkProcessAsyncAction((file) => handleProcess(file, "async"), t), // Optional if your library supports bulk createScheduleAction
   ];
 
   return {

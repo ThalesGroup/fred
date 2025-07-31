@@ -70,7 +70,6 @@ def validate_settings_or_exit(cls: type[B], name: str = "Settings") -> B:
         logger.critical("📌 Tip: Check your .env file or environment variables.")
         raise SystemExit(1)
 
-
 def log_exception(e: Exception, context_message: Optional[str] = None) -> str:
     """
     Logs an exception with full details (preserving caller's location)

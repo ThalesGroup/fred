@@ -11,7 +11,7 @@ from app.core.stores.metadata.base_catalog_store import PullFileEntry
 
 logger = logging.getLogger(__name__)
 
-class MinioProvider(BaseContentLoader):
+class MinioContentLoader(BaseContentLoader):
     def __init__(self, source: MinioPullSource, source_tag: str):
         super().__init__(source, source_tag)
 

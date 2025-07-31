@@ -151,15 +151,16 @@ class IngestionService:
         if not any(output_dir.glob("*.*")):
             raise ValueError(f"Output directory {output_dir} does not contain output files")
         # get the first file in the output_dir
-        output_file = next(output_dir.glob("*.*"))
+        file_to_process = next(output_dir.glob("*.*"))
         # check if the file is a markdown, csv or duckdb file
-        if output_file.suffix.lower() not in [".md", ".csv", ".duckdb"]:
-            raise ValueError(f"Output file {output_file} is not a markdown or csv file")
+        if file_to_process.suffix.lower() not in [".md", ".csv", ".duckdb"]:
+            raise ValueError(f"Output file {file_to_process} is not a markdown or csv file")
         # check if the file is empty
-        if output_file.stat().st_size == 0:
-            raise ValueError(f"Output file {output_file} is empty")
+        if file_to_process.stat().st_size == 0:
+            raise ValueError(f"Output file {file_to_process} is empty")
         # check if the file is a markdown or csv file
-        return processor.process(output_file, input_file_metadata)
+        file_to_process_abs_str = str(file_to_process.resolve())
+        return processor.process(file_path=file_to_process_abs_str, metadata=input_file_metadata)
 
     def get_markdown(self, metadata: DocumentMetadata, target_dir: pathlib.Path) -> pathlib.Path:
         """

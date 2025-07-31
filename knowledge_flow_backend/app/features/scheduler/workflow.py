@@ -31,7 +31,7 @@ class OutputProcess:
     @workflow.run
     async def run(self, file, metadata):
         workflow.logger.info(f"📂 OutputProcess: {file}")
-        await workflow.execute_activity(output_process, args=[file, metadata], schedule_to_close_timeout=timedelta(seconds=60))
+        await workflow.execute_activity(output_process, args=[file, metadata, False], schedule_to_close_timeout=timedelta(seconds=60))
 
 
 @workflow.defn
