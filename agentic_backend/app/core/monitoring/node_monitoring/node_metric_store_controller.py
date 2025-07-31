@@ -25,7 +25,6 @@ Registers:
 Routes are prefixed under /metrics/nodes
 """
 
-
 from app.core.monitoring.metric_controller_factory import register_metric_routes
 from app.core.monitoring.metric_types import CategoricalMetric, NumericalMetric
 from app.core.monitoring.node_monitoring.node_metric_store import get_node_metric_store
@@ -45,6 +44,7 @@ class NodeMetricStoreController:
     - /metrics/nodes/numerical : Aggregated numerical metrics with time bucketing, groupby, aggregation.
     - /metrics/nodes/categorical : Extracted categorical dimensions for filtering/analysis.
     """
+
     def __init__(self, router: APIRouter):
         """
         Registers metric routes to the provided FastAPI router.
@@ -59,5 +59,5 @@ class NodeMetricStoreController:
             MetricType=NodeMetric,
             NumericalType=NumericalMetric,
             CategoricalType=CategoricalMetric,
-            prefix="nodes"
+            prefix="nodes",
         )

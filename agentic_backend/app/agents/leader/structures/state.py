@@ -21,6 +21,7 @@ from app.agents.leader.structures.plan import Plan
 from langchain_core.messages import AnyMessage
 from langgraph.graph import MessagesState
 
+
 class State(MessagesState):
     """State of the assistant."""
 

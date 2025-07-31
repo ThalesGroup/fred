@@ -32,3 +32,6 @@
 
 # VScode-related files
 **/.vscode
+
+# Fred related files
+**/configuration.yaml

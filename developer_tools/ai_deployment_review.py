@@ -27,7 +27,7 @@ AI Deployment Review with RAG-style Prompting
 import argparse
 import logging
 import os
-import subprocess
+import subprocess # nosec
 import time
 from io import StringIO
 from pathlib import Path
@@ -141,7 +141,7 @@ def get_git_diff(path: str) -> str:
 
     cmd = ["git", "diff", "--", str(rel_path)]
     logger.info(f"📁 Running: {' '.join(cmd)}")
-    result = subprocess.run(cmd, capture_output=True, text=True, cwd=PROJECT_ROOT)
+    result = subprocess.run(cmd, capture_output=True, text=True, cwd=PROJECT_ROOT) # nosec
     if result.returncode != 0:
         logger.error(f"❌ Git diff failed: {result.stderr.strip()}")
         return ""

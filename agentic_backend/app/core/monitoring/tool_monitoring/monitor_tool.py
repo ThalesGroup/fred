@@ -25,7 +25,6 @@ Features:
 - Adds minimal overhead and preserves original signature.
 """
 
-
 import time
 import logging
 from functools import wraps
@@ -35,6 +34,7 @@ from app.core.monitoring.tool_monitoring.tool_metric_store import get_tool_metri
 from app.core.monitoring.tool_monitoring.tool_metric_type import ToolMetric
 
 logger = logging.getLogger(__name__)
+
 
 def monitor_tool(tool):
     """
@@ -52,15 +52,16 @@ def monitor_tool(tool):
         The same tool, with wrapped methods.
     """
     if getattr(tool, "_is_monitored", False):
-        logger.info('Tool already monitored')
+        logger.info("Tool already monitored")
         return tool
 
     original_run = getattr(tool, "_run", None)
     original_arun = getattr(tool, "_arun", None)
-    
+
     tool_metric_store = get_tool_metric_store()
 
     if original_run:
+
         @wraps(original_run)
         def monitored_run(*args, **kwargs):
             logger.info(f"Tool '{tool.name}' started with args: {args}")
@@ -68,18 +69,20 @@ def monitor_tool(tool):
             try:
                 result = original_run(*args, **kwargs)
                 latency = time.perf_counter() - start
-                
+
                 ctx = get_logging_context()
-                
+
                 tool_metric = ToolMetric(
                     timestamp=time.time(),
                     tool_name=tool.name,
                     latency=latency,
-                    user_id=ctx.get("user_id","unknown-user"),
-                    session_id=ctx.get("session_id","unknown-session"),
-                    )
+                    user_id=ctx.get("user_id", "unknown-user"),
+                    session_id=ctx.get("session_id", "unknown-session"),
+                )
                 tool_metric_store.add_metric(tool_metric)
-                logger.info(f"Tool '{tool.name}' completed in {latency:.2f}s with result: {result}")
+                logger.info(
+                    f"Tool '{tool.name}' completed in {latency:.2f}s with result: {result}"
+                )
                 return result
             except Exception as e:
                 logger.exception(f"[{tool.name}] failed: {e}")
@@ -88,6 +91,7 @@ def monitor_tool(tool):
         tool._run = monitored_run
 
     if original_arun:
+
         @wraps(original_arun)
         async def monitored_arun(*args, **kwargs):
             logger.info(f"Tool '{tool.name}' started with args: {args}")
@@ -95,18 +99,20 @@ def monitor_tool(tool):
             try:
                 result = await original_arun(*args, **kwargs)
                 latency = time.perf_counter() - start
-                
+
                 ctx = get_logging_context()
-                
+
                 tool_metric = ToolMetric(
                     timestamp=time.time(),
                     tool_name=tool.name,
                     latency=latency,
-                    user_id=ctx.get("user_id","unknown-user"),
-                    session_id=ctx.get("session_id","unknown-session"),
-                    )
+                    user_id=ctx.get("user_id", "unknown-user"),
+                    session_id=ctx.get("session_id", "unknown-session"),
+                )
                 tool_metric_store.add_metric(tool_metric)
-                logger.info(f"Tool '{tool.name}' completed in {latency:.2f}s with result: {result}")
+                logger.info(
+                    f"Tool '{tool.name}' completed in {latency:.2f}s with result: {result}"
+                )
                 return result
             except Exception as e:
                 logger.exception(f"[{tool.name}] async failed: {e}")

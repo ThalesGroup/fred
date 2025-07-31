@@ -21,6 +21,7 @@ import duckdb
 
 logger = logging.getLogger(__name__)
 
+
 class DuckDBTableStore:
     """
     General-purpose DuckDB table store with prefix-based table scoping.
@@ -83,11 +84,17 @@ class DuckDBTableStore:
                 tables = [row[0] for row in result]
                 if full_table in tables:
                     con.execute(f'DROP TABLE "{full_table}"')
-                    logger.info(f"Deleted DuckDB table '{full_table}' from {self.db_path}")
+                    logger.info(
+                        f"Deleted DuckDB table '{full_table}' from {self.db_path}"
+                    )
                 else:
-                    logger.info(f"DuckDB table '{full_table}' does not exist in {self.db_path}, nothing to delete.")
+                    logger.info(
+                        f"DuckDB table '{full_table}' does not exist in {self.db_path}, nothing to delete."
+                    )
         except Exception as e:
-            logger.error(f"Failed to delete DuckDB table '{full_table}': {e}", exc_info=True)
+            logger.error(
+                f"Failed to delete DuckDB table '{full_table}': {e}", exc_info=True
+            )
             raise
 
     def list_tables(self) -> List[str]:
@@ -116,7 +123,9 @@ class DuckDBTableStore:
             logger.info(f"Schema for table '{full_table}': {schema}")
             return schema
         except Exception as e:
-            logger.error(f"Failed to get schema for table '{full_table}': {e}", exc_info=True)
+            logger.error(
+                f"Failed to get schema for table '{full_table}': {e}", exc_info=True
+            )
             raise
 
     def execute_sql_query(self, sql: str) -> pd.DataFrame:

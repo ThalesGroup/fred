@@ -24,7 +24,9 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, System
 from langgraph.graph.state import END, START, CompiledStateGraph, StateGraph
 
 from app.core.agents.flow import AgentFlow, Flow
+
 logger = logging.getLogger(__name__)
+
 
 class Leader(Flow):
     """
@@ -40,9 +42,8 @@ class Leader(Flow):
     tag: str = "leader"
 
     def __init__(self, agent_settings: AgentSettings):
-        
         """
-        Initializes Fred 
+        Initializes Fred
         """
         super().__init__(
             name=self.name,
@@ -53,19 +54,20 @@ class Leader(Flow):
             graph=None,
         )
 
-        self.graph = None # the graph is built only when we need it, after the method are available
+        self.graph = None  # the graph is built only when we need it, after the method are available
         self.model = get_model(agent_settings.model)
         self.experts: dict[str, AgentFlow] = {}
-        self.compiled_expert_graphs: dict[str, CompiledStateGraph] =  {}
+        self.compiled_expert_graphs: dict[str, CompiledStateGraph] = {}
         self.graph = self.get_graph()
         self.max_steps = agent_settings.max_steps
 
-            
     def reset_experts(self):
         """
         Reset the list of experts.
         """
-        logger.info(f"Resetting Fred experts. Previous experts: {list(self.experts.keys())}")
+        logger.info(
+            f"Resetting Fred experts. Previous experts: {list(self.experts.keys())}"
+        )
         self.experts = {}
         self.compiled_expert_graphs = {}
 
@@ -109,7 +111,7 @@ class Leader(Flow):
 
         Args:
             state: State of the agent.
-        """        
+        """
         if len(state["progress"]) >= self.max_steps:
             logger.warning(f"Reached max_steps={self.max_steps}, forcing final answer.")
             return "validate"
@@ -177,18 +179,18 @@ class Leader(Flow):
 
         if new_objective is None:
             raise ValueError("No human message found for objective.")
-        
+
         # Initialize initial_objective if it doesn't exist
         if "initial_objective" not in state:
             state["progress"] = []  # Clear previous progress
-            state["plan"] = None    # Reset the plan
+            state["plan"] = None  # Reset the plan
             state["initial_objective"] = new_objective
 
         # Use the stored initial_objective for comparison
         if state["initial_objective"].content != new_objective.content:
             logger.info("New initial objective detected. Resetting plan and progress.")
             state["progress"] = []  # Clear previous progress
-            state["plan"] = None    # Reset the plan
+            state["plan"] = None  # Reset the plan
             state["initial_objective"] = new_objective
 
         # Then use state["initial_objective"] in your prompts instead of state["objective"]
@@ -328,8 +330,10 @@ class Leader(Flow):
             raise ValueError("No experts available to execute the task.")
 
         all_experts_info = "\n".join(
-        [f"{name}: {expert.description} (Categories: {', '.join(expert.categories)})"
-         for name, expert in self.experts.items()]
+            [
+                f"{name}: {expert.description} (Categories: {', '.join(expert.categories)})"
+                for name, expert in self.experts.items()
+            ]
         )
         # select the expert to execute the task
         # experts_list = "\n".join([str(expert) for expert in self.experts])
@@ -348,12 +352,16 @@ class Leader(Flow):
         selected_expert = expert_decision.expert
         logger.info(f"Fred selected expert: {selected_expert} for step {task_number}")
         if selected_expert not in self.experts:
-            logger.warning(f"Expert {selected_expert} is no longer available. Replanning...")
+            logger.warning(
+                f"Expert {selected_expert} is no longer available. Replanning..."
+            )
             raise ValueError("No experts available to execute the task.")
 
         compiled_expert_graph = self.compiled_expert_graphs.get(selected_expert)
         if not compiled_expert_graph:
-            logger.error(f"Expert {selected_expert} not found in compiled_expert_graphs.")
+            logger.error(
+                f"Expert {selected_expert} not found in compiled_expert_graphs."
+            )
             return await self.plan(state)  # Trigger replanning
 
         # Execute the task
@@ -414,12 +422,16 @@ class Leader(Flow):
             state: State of the agent.
         """
         if len(state["progress"]) >= self.max_steps:
-            logger.warning(f"Validation triggered by max_steps={self.max_steps} — skipping LLM validation and forcing respond.")
+            logger.warning(
+                f"Validation triggered by max_steps={self.max_steps} — skipping LLM validation and forcing respond."
+            )
             return {
                 "plan_decision": PlanDecision(action="respond"),
-                "traces": [f"Forced respond due to reaching max_steps={self.max_steps}"],
+                "traces": [
+                    f"Forced respond due to reaching max_steps={self.max_steps}"
+                ],
             }
-        
+
         objective = state["messages"][0].content
         current_plan = state["plan"]
 

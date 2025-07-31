@@ -16,8 +16,12 @@ from pydantic import BaseModel, Field
 from typing import Literal, List, Optional, Union, Annotated
 from app.common.structures import MCPServerConfiguration
 
+
 class BaseAgentRequest(BaseModel):
-    agent_type: str = Field(..., description="The type of agent to create (e.g., 'mcp', 'rag').")
+    agent_type: str = Field(
+        ..., description="The type of agent to create (e.g., 'mcp', 'rag')."
+    )
+
 
 class MCPAgentRequest(BaseAgentRequest):
     agent_type: Literal["mcp"]
@@ -31,15 +35,16 @@ class MCPAgentRequest(BaseAgentRequest):
     categories: Optional[List[str]] = None
     tag: Optional[str] = None
 
+
 # In the future, other types:
 # class RagAgentRequest(BaseAgentRequest):
 #     agent_type: Literal["rag"]
 #     ...
 
 CreateAgentRequest = Annotated[
-    Union[MCPAgentRequest],
-    Field(discriminator="agent_type")
+    Union[MCPAgentRequest], Field(discriminator="agent_type")
 ]
+
 
 class AgenticFlow(BaseModel):
     """

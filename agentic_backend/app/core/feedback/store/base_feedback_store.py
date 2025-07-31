@@ -16,6 +16,7 @@
 from abc import ABC, abstractmethod
 from typing import Dict, List, Optional
 
+
 class BaseFeedbackStore(ABC):
     @abstractmethod
     def list(self) -> List[Dict]:

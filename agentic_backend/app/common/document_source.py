@@ -15,6 +15,7 @@
 from pydantic import BaseModel, Field
 from typing import Optional
 
+
 class DocumentSource(BaseModel):
     content: str
     file_path: str

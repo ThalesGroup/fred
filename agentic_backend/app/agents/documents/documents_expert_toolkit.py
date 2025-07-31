@@ -19,12 +19,15 @@ from pydantic import Field
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from app.core.monitoring.tool_monitoring.monitor_tool import monitor_tool
 
+
 class DocumentsToolkit(BaseToolkit):
     """
     Toolkit for MCP documents expert tools
     """
 
-    tools: List[BaseTool] = Field(default_factory=list, description="List of the tools.")
+    tools: List[BaseTool] = Field(
+        default_factory=list, description="List of the tools."
+    )
 
     def __init__(self, mcp_client: MultiServerMCPClient):
         super().__init__()

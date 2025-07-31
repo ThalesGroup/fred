@@ -26,28 +26,39 @@ from app.features.frugal.structure.workload_id import WorkloadId
 from app.features.frugal.structure.workload_context import WorkloadContext
 
 from app.features.frugal.structure.workload_advanced.punchline import PunchlineAdvanced
-from app.features.frugal.structure.workload_advanced.opensearch import OpenSearchAdvanced
+from app.features.frugal.structure.workload_advanced.opensearch import (
+    OpenSearchAdvanced,
+)
 
 from app.features.frugal.structure.workload_advanced.kafka import KafkaAdvanced
 from app.features.frugal.structure.workload_advanced.opensearch_dashboard import (
     OpenSearchDashboardAdvanced,
 )
 
+
 class WorkloadAdvanced(BaseModel):
     """
     Represents advanced informations about a workload knowing its commercial off-the-shelf software
     nature.
     """
-    data: Union[
-            KafkaAdvanced, OpenSearchDashboardAdvanced,
-            OpenSearchAdvanced, PunchlineAdvanced,
-            None
-        ] = Field(discriminator="type")
 
-    def __init__(self, data: Union[
-            KafkaAdvanced, OpenSearchDashboardAdvanced,
-            OpenSearchAdvanced, PunchlineAdvanced
-        ]):
+    data: Union[
+        KafkaAdvanced,
+        OpenSearchDashboardAdvanced,
+        OpenSearchAdvanced,
+        PunchlineAdvanced,
+        None,
+    ] = Field(discriminator="type")
+
+    def __init__(
+        self,
+        data: Union[
+            KafkaAdvanced,
+            OpenSearchDashboardAdvanced,
+            OpenSearchAdvanced,
+            PunchlineAdvanced,
+        ],
+    ):
         super().__init__(data=data)
 
     @classmethod
@@ -56,7 +67,7 @@ class WorkloadAdvanced(BaseModel):
         workload_id: WorkloadId,
         workload_context: WorkloadContext,
         langfuse_handler: Optional[CallbackHandler] = None,
-    ) -> Optional['WorkloadAdvanced']:
+    ) -> Optional["WorkloadAdvanced"]:
         """
         Return an advanced workload instance based on its context and its commercial off-the-shelf
         software name.
@@ -71,15 +82,14 @@ class WorkloadAdvanced(BaseModel):
 
         # Return the appropriate advanced workload instance based on the workload name.
         # Import classes inside to avoid circular imports.
-        if 'kafka' in workload_name:
+        if "kafka" in workload_name:
             return cls(
                 data=KafkaAdvanced.from_workload_context(
-                    workload_context,
-                    langfuse_handler
+                    workload_context, langfuse_handler
                 )
             )
 
-        if 'opensearch' in workload_name and 'dashboard' in workload_name:
+        if "opensearch" in workload_name and "dashboard" in workload_name:
             return cls(
                 data=OpenSearchDashboardAdvanced.from_workload_context(
                     workload_context,
@@ -87,7 +97,7 @@ class WorkloadAdvanced(BaseModel):
                 )
             )
 
-        if 'opensearch' in workload_name:
+        if "opensearch" in workload_name:
             return cls(
                 data=OpenSearchAdvanced.from_workload_context(
                     workload_context,
@@ -95,7 +105,7 @@ class WorkloadAdvanced(BaseModel):
                 )
             )
 
-        if 'punchline' in workload_name:
+        if "punchline" in workload_name:
             return cls(
                 data=PunchlineAdvanced.from_workload_context(
                     workload_context,

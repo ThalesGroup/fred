@@ -13,6 +13,7 @@
 # limitations under the License.
 
 """Module for File Data Access Object (DAO) to handle storage and retrieval of resources as files."""
+
 import logging
 import os
 import zipfile
@@ -28,6 +29,7 @@ from app.common.structures import WorkloadKind, DAOConfiguration
 # 🔹 Create a module-level logger
 logger = logging.getLogger(__name__)
 
+
 class FileDAO:
     """
     Data Access Object (DAO) class for storing and retrieving resources as files.
@@ -40,7 +42,8 @@ class FileDAO:
     Attributes:
         base_dir (str): The base directory where all resource files are stored.
     """
-    T = TypeVar('T', bound=BaseModel)
+
+    T = TypeVar("T", bound=BaseModel)
 
     def __init__(self, configuration: DAOConfiguration, subdir: str = ""):
         """
@@ -52,25 +55,31 @@ class FileDAO:
         """
         self.base_dir = os.path.expanduser(configuration.base_path + "/" + subdir)
         self.max_cached_delay_seconds = configuration.max_cached_delay_seconds
-        self.cache_date: Dict[str, datetime] = dict()  # associate each bath to its date of writing
-        logger.info(
-            f"File DAO initialized with base directory '{self.base_dir}'"
-        )
+        self.cache_date: Dict[str, datetime] = (
+            dict()
+        )  # associate each bath to its date of writing
+        logger.info(f"File DAO initialized with base directory '{self.base_dir}'")
         if self.max_cached_delay_seconds < 0:
-            logger.warning("Caching is unlimited; data will never expire once saved in the cache.")
+            logger.warning(
+                "Caching is unlimited; data will never expire once saved in the cache."
+            )
         elif self.max_cached_delay_seconds == 0:
-            logger.warning("Caching is disabled; data will always be retrieved from external sources.")
+            logger.warning(
+                "Caching is disabled; data will always be retrieved from external sources."
+            )
         else:
-            logger.warning(f"Caching is enabled with a delay of {self.max_cached_delay_seconds} seconds. ")
+            logger.warning(
+                f"Caching is enabled with a delay of {self.max_cached_delay_seconds} seconds. "
+            )
 
     def _get_file_path(
-            self,
-            obj_class_name: str,
-            cluster: str | None = None,
-            namespace: str | None = None,
-            kind: WorkloadKind | str | None = None,
-            workload: str | None = None,
-            **kwargs: Any
+        self,
+        obj_class_name: str,
+        cluster: str | None = None,
+        namespace: str | None = None,
+        kind: WorkloadKind | str | None = None,
+        workload: str | None = None,
+        **kwargs: Any,
     ) -> AnyStr:
         """
         Constructs a resource-based path similar to a URL, organized by `cluster`, `namespace`, `kind`, and `workload`.
@@ -111,7 +120,9 @@ class FileDAO:
         """
         # Ensure that **kwargs contains at most one key-value pair
         if len(kwargs) > 1:
-            raise ValueError("Only one keyword argument (e.g., 'ingress', 'service', or 'facts') can be provided.")
+            raise ValueError(
+                "Only one keyword argument (e.g., 'ingress', 'service', or 'facts') can be provided."
+            )
 
         # Determine the filename and final part of the path
         if kwargs:
@@ -197,13 +208,13 @@ class FileDAO:
         return False
 
     def saveCache(
-            self,
-            obj: T,
-            cluster: str | None = None,
-            namespace: str | None = None,
-            kind: WorkloadKind | str | None = None,
-            workload: str | None = None,
-            **kwargs: Any
+        self,
+        obj: T,
+        cluster: str | None = None,
+        namespace: str | None = None,
+        kind: WorkloadKind | str | None = None,
+        workload: str | None = None,
+        **kwargs: Any,
     ):
         """
         Saves the given object to a file based on the model class and identifiers and records its cache date.
@@ -220,7 +231,9 @@ class FileDAO:
         :raises ValueError: If more than one key-value pair is provided in `kwargs`.
         :raises IOError: If the file operation fails.
         """
-        file_path = self._get_file_path(obj.__class__.__name__, cluster, namespace, kind, workload, **kwargs)
+        file_path = self._get_file_path(
+            obj.__class__.__name__, cluster, namespace, kind, workload, **kwargs
+        )
         os.makedirs(os.path.dirname(file_path), exist_ok=True)
 
         try:
@@ -232,13 +245,13 @@ class FileDAO:
             raise IOError(f"Failed to save object to {file_path}: {e}") from e
 
     def save(
-            self,
-            obj: T,
-            cluster: str | None = None,
-            namespace: str | None = None,
-            kind: WorkloadKind | str | None = None,
-            workload: str | None = None,
-            **kwargs: Any
+        self,
+        obj: T,
+        cluster: str | None = None,
+        namespace: str | None = None,
+        kind: WorkloadKind | str | None = None,
+        workload: str | None = None,
+        **kwargs: Any,
     ):
         """
         Saves the given object to a file based on the model class and identifiers and records its cache date.
@@ -255,7 +268,9 @@ class FileDAO:
         :raises ValueError: If more than one key-value pair is provided in `kwargs`.
         :raises IOError: If the file operation fails.
         """
-        file_path = self._get_file_path(obj.__class__.__name__, cluster, namespace, kind, workload, **kwargs)
+        file_path = self._get_file_path(
+            obj.__class__.__name__, cluster, namespace, kind, workload, **kwargs
+        )
         os.makedirs(os.path.dirname(file_path), exist_ok=True)
 
         try:
@@ -265,15 +280,14 @@ class FileDAO:
         except IOError as e:
             raise IOError(f"Failed to save object to {file_path}: {e}") from e
 
-
     def loadCacheItem(
-            self,
-            model_class: Type[T],
-            cluster: str | None = None,
-            namespace: str | None = None,
-            kind: WorkloadKind | str | None = None,
-            workload: str | None = None,
-            **kwargs: Any
+        self,
+        model_class: Type[T],
+        cluster: str | None = None,
+        namespace: str | None = None,
+        kind: WorkloadKind | str | None = None,
+        workload: str | None = None,
+        **kwargs: Any,
     ) -> T:
         """
         Loads an object from a file, checking for cache expiration.
@@ -288,9 +302,15 @@ class FileDAO:
 
         :return: (T) An instance of the loaded Pydantic model.
         """
-        file_path = self._get_file_path(model_class.__name__, cluster, namespace, kind, workload, **kwargs)
-        if self._remove_expired_cache_file(file_path):  # Check and remove the expired file if so
-            raise InvalidCacheError(f"The cache has been invalided for file {file_path}")
+        file_path = self._get_file_path(
+            model_class.__name__, cluster, namespace, kind, workload, **kwargs
+        )
+        if self._remove_expired_cache_file(
+            file_path
+        ):  # Check and remove the expired file if so
+            raise InvalidCacheError(
+                f"The cache has been invalided for file {file_path}"
+            )
 
         if not os.path.exists(file_path):
             raise FileNotFoundError(f"File not found: {file_path}")
@@ -300,16 +320,18 @@ class FileDAO:
                 data = f.read()
             return model_class.model_validate_json(data)
         except Exception as e:
-            raise ValueError(f"Failed to load or parse object from {file_path}: {e}") from e
+            raise ValueError(
+                f"Failed to load or parse object from {file_path}: {e}"
+            ) from e
 
     def loadItem(
-            self,
-            model_class: Type[T],
-            cluster: str | None = None,
-            namespace: str | None = None,
-            kind: WorkloadKind | str | None = None,
-            workload: str | None = None,
-            **kwargs: Any
+        self,
+        model_class: Type[T],
+        cluster: str | None = None,
+        namespace: str | None = None,
+        kind: WorkloadKind | str | None = None,
+        workload: str | None = None,
+        **kwargs: Any,
     ) -> T:
         """
         Loads an object from a file. There is no cache logic here the item must exist.
@@ -324,7 +346,9 @@ class FileDAO:
 
         :return: (T) An instance of the loaded Pydantic model.
         """
-        file_path = self._get_file_path(model_class.__name__, cluster, namespace, kind, workload, **kwargs)
+        file_path = self._get_file_path(
+            model_class.__name__, cluster, namespace, kind, workload, **kwargs
+        )
         if not os.path.exists(file_path):
             raise FileNotFoundError(f"File not found: {file_path}")
         try:
@@ -332,16 +356,18 @@ class FileDAO:
                 data = f.read()
             return model_class.model_validate_json(data)
         except Exception as e:
-            raise ValueError(f"Failed to load or parse object from {file_path}: {e}") from e
+            raise ValueError(
+                f"Failed to load or parse object from {file_path}: {e}"
+            ) from e
 
     def list(
-            self,
-            model_class: Type[T],
-            cluster: str | None = None,
-            namespace: str | None = None,
-            kind: WorkloadKind | str | None = None,
-            workload: str | None = None,
-            **kwargs: Any,
+        self,
+        model_class: Type[T],
+        cluster: str | None = None,
+        namespace: str | None = None,
+        kind: WorkloadKind | str | None = None,
+        workload: str | None = None,
+        **kwargs: Any,
     ) -> List[T]:
         """
         Lists all instances of a model class, removing expired files along the way.
@@ -359,44 +385,53 @@ class FileDAO:
         :raises IOError: If a file operation fails.
         :raises InvalidCacheError: If the cache of one or multiple files is invalid.
         """
-        base_path = self._get_file_path(model_class.__name__, cluster, namespace, kind, workload, **kwargs)
+        base_path = self._get_file_path(
+            model_class.__name__, cluster, namespace, kind, workload, **kwargs
+        )
         instances = []
         invalid_cache_path_list = []
 
         try:
             path = Path(os.path.dirname(base_path))
-            for file_path in path.rglob('*.json'):
-                with open(file_path, 'r', encoding='utf-8') as f:
+            for file_path in path.rglob("*.json"):
+                with open(file_path, "r", encoding="utf-8") as f:
                     data = f.read()
 
                 # Try to load the content as the given structures type that implements BaseModel
                 try:
                     instance = model_class.model_validate_json(data)
-                    if self._remove_expired_cache_file(str(file_path)):  # Remove expired files
+                    if self._remove_expired_cache_file(
+                        str(file_path)
+                    ):  # Remove expired files
                         invalid_cache_path_list.append(file_path)
                         continue
                 except ValidationError:
                     logger.debug(
-                        f"Skipping file '{file_path}' as it does not match model '{model_class.__name__}'.")
+                        f"Skipping file '{file_path}' as it does not match model '{model_class.__name__}'."
+                    )
                     continue
                 instances.append(instance)
 
             if len(invalid_cache_path_list) > 0:
-                raise InvalidCacheError(f"The cache has been invalided for files: {invalid_cache_path_list}.")
+                raise InvalidCacheError(
+                    f"The cache has been invalided for files: {invalid_cache_path_list}."
+                )
 
         except IOError as e:
-            raise IOError(f"Failed to read instances from path: {base_path}: {e}") from e
+            raise IOError(
+                f"Failed to read instances from path: {base_path}: {e}"
+            ) from e
 
         return instances
 
     def delete[T](
-            self,
-            model_class: Type[T],
-            cluster: str | None = None,
-            namespace: str | None = None,
-            kind: WorkloadKind | str | None = None,
-            workload: str | None = None,
-            **kwargs: Any
+        self,
+        model_class: Type[T],
+        cluster: str | None = None,
+        namespace: str | None = None,
+        kind: WorkloadKind | str | None = None,
+        workload: str | None = None,
+        **kwargs: Any,
     ):
         """
         Deletes a specified file and its cache entry.
@@ -412,19 +447,21 @@ class FileDAO:
         :raises OSError: In the case of the internal built path does not point to a file (e.g., a directory).
         :raises FileNotFoundError: In the case of the internal built path does not point to an existing file.
         """
-        file_path = self._get_file_path(model_class.__name__, cluster, namespace, kind, workload, **kwargs)
+        file_path = self._get_file_path(
+            model_class.__name__, cluster, namespace, kind, workload, **kwargs
+        )
         os.remove(file_path)
         self.cache_date.pop(file_path, None)  # Remove cache entry if exists
         logger.info(f"Deleted file and cache entry for '{file_path}'.")
 
     def exists[T](
-            self,
-            model_class: Type[T],
-            cluster: str | None = None,
-            namespace: str | None = None,
-            kind: WorkloadKind | str | None = None,
-            workload: str | None = None,
-            **kwargs: Any
+        self,
+        model_class: Type[T],
+        cluster: str | None = None,
+        namespace: str | None = None,
+        kind: WorkloadKind | str | None = None,
+        workload: str | None = None,
+        **kwargs: Any,
     ) -> bool:
         """
         Checks if a file exists, removing it if the cache delay is expired.
@@ -441,8 +478,12 @@ class FileDAO:
 
         :raises FileNotFoundError: If the resource does not exist.
         """
-        file_path = self._get_file_path(model_class.__name__, cluster, namespace, kind, workload, **kwargs)
-        expired = self._remove_expired_cache_file(file_path)  # Check for cache expiration
+        file_path = self._get_file_path(
+            model_class.__name__, cluster, namespace, kind, workload, **kwargs
+        )
+        expired = self._remove_expired_cache_file(
+            file_path
+        )  # Check for cache expiration
         return not expired and os.path.exists(file_path)
 
     def export_all(self, destination_directory: str):
@@ -454,13 +495,17 @@ class FileDAO:
         zip_filename = f"{destination_directory}/export-{current_date}.zip"
         logger.debug(f"Exporting files to {zip_filename}")
 
-        with zipfile.ZipFile(zip_filename, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+        with zipfile.ZipFile(zip_filename, "w", zipfile.ZIP_DEFLATED) as zip_file:
             # Walk through the directory
-            for file_path in directory_to_archive_path.rglob('*'):
+            for file_path in directory_to_archive_path.rglob("*"):
                 # Add the file to the ZIP, using its relative path
-                zip_file.write(file_path, file_path.relative_to(directory_to_archive_path))
+                zip_file.write(
+                    file_path, file_path.relative_to(directory_to_archive_path)
+                )
 
-        logger.info(f"Successfully exported files of {directory_to_archive_path} to {zip_filename}")
+        logger.info(
+            f"Successfully exported files of {directory_to_archive_path} to {zip_filename}"
+        )
         return zip_filename
 
     def import_all(self, zip_path: str):
@@ -468,9 +513,11 @@ class FileDAO:
         Import a ZIP file and extract its contents to the base directory
         """
         extract_path = Path(self.base_dir)
-        extract_path.mkdir(parents=True, exist_ok=True)  # Create directory if it doesn't exist
+        extract_path.mkdir(
+            parents=True, exist_ok=True
+        )  # Create directory if it doesn't exist
 
-        with zipfile.ZipFile(zip_path, 'r') as zip_file:
+        with zipfile.ZipFile(zip_path, "r") as zip_file:
             zip_file.extractall(extract_path)
 
         logger.info(f"Successfully imported files from {zip_path} in {self.base_dir}")

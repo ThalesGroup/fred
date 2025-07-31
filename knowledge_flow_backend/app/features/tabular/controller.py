@@ -1,8 +1,10 @@
 import logging
 from typing import List
+
 from fastapi import APIRouter, HTTPException
+
 from app.features.tabular.service import TabularService
-from app.features.tabular.structures import TabularQueryResponse, TabularSchemaResponse, RawSQLRequest
+from app.features.tabular.structures import RawSQLRequest, TabularQueryResponse, TabularSchemaResponse
 from app.features.tabular.utils import extract_safe_sql_query
 
 logger = logging.getLogger(__name__)

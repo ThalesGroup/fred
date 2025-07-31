@@ -30,8 +30,11 @@ class KafkaAdvanced(BaseModel):
     """
     Represents advanced informations about a Kafka workload.
     """
+
     type: Literal["kafka"] = Field(
-        default="kafka", description="The type of workload, used for discriminated union")
+        default="kafka",
+        description="The type of workload, used for discriminated union",
+    )
     broker_id: str = Field(
         default="None",
         description="The ID of the Kafka broker",

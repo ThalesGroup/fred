@@ -78,7 +78,9 @@ class NamespaceSummary(BaseModel):
             input_variables=["namespace_context"],
         )
 
-        structured_model = get_structured_chain_for_service("kubernetes", NamespaceSummary)
+        structured_model = get_structured_chain_for_service(
+            "kubernetes", NamespaceSummary
+        )
         chain = prompt | structured_model
 
         invocation_args = {"namespace_context": namespace_context}

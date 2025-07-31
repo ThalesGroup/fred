@@ -14,23 +14,22 @@
 from app.common.structures import PrecisionEnum
 from app.common.structures import SampleDataType
 from common.utils import sample_data, auc_calculation
-from services.cluster_consumption.cluster_consumption_structures import ClusterConsumptionSeries, \
-    ClusterConsumption, DetailSeries, \
-    Detail
+from services.cluster_consumption.cluster_consumption_structures import (
+    ClusterConsumptionSeries,
+    ClusterConsumption,
+    DetailSeries,
+    Detail,
+)
 
 
 # Parse ClusterConsumption data to ClusterConsumptionSeries
-def parse_to_cluster_consumption_series(cluster_consumptions: list[ClusterConsumption]) -> ClusterConsumptionSeries:
+def parse_to_cluster_consumption_series(
+    cluster_consumptions: list[ClusterConsumption],
+) -> ClusterConsumptionSeries:
     """
     Parse the consumption data to the series format
     """
-    res = ClusterConsumptionSeries(
-        timestamps=[],
-        values=[],
-        auc=0,
-        details=[],
-        unit=""
-    )
+    res = ClusterConsumptionSeries(timestamps=[], values=[], auc=0, details=[], unit="")
 
     # Extract the main serie of consumption
     for cluster_consumption in cluster_consumptions:
@@ -58,35 +57,45 @@ def parse_to_cluster_consumption_series(cluster_consumptions: list[ClusterConsum
             if detail.name == name and detail.kind == kind:
                 timestamps.append(detail.timestamp)
                 values.append(detail.value)
-        res.details.append(DetailSeries(
-            name=name,
-            kind=kind,
-            values=values,
-        ))
+        res.details.append(
+            DetailSeries(
+                name=name,
+                kind=kind,
+                values=values,
+            )
+        )
 
     return res
 
 
 # Aggregation of consumption data by steps in minutes
-def resample_cluster_consumption(cluster_consumption_series: ClusterConsumptionSeries,
-                                 precision: PrecisionEnum) -> ClusterConsumptionSeries:
+def resample_cluster_consumption(
+    cluster_consumption_series: ClusterConsumptionSeries, precision: PrecisionEnum
+) -> ClusterConsumptionSeries:
     """
     Aggregate the consumption data by the given precision
     """
-    resampled_timestamps, resampled_values = sample_data(cluster_consumption_series.timestamps,
-                                                         cluster_consumption_series.values,
-                                                         precision, SampleDataType.SUM)
+    resampled_timestamps, resampled_values = sample_data(
+        cluster_consumption_series.timestamps,
+        cluster_consumption_series.values,
+        precision,
+        SampleDataType.SUM,
+    )
 
     for detail in cluster_consumption_series.details:
-        _, detail.values = sample_data(cluster_consumption_series.timestamps, detail.values, precision,
-                                       SampleDataType.SUM)
+        _, detail.values = sample_data(
+            cluster_consumption_series.timestamps,
+            detail.values,
+            precision,
+            SampleDataType.SUM,
+        )
 
     return ClusterConsumptionSeries(
         timestamps=resampled_timestamps,
         values=resampled_values,
         auc=auc_calculation(resampled_values),
         details=cluster_consumption_series.details,
-        unit=cluster_consumption_series.unit
+        unit=cluster_consumption_series.unit,
     )
 
 

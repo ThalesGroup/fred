@@ -24,6 +24,7 @@ including latency, user/session identifiers, and timestamp.
 from pydantic import BaseModel
 from typing import Optional
 
+
 class ToolMetric(BaseModel):
     """
     Single metric record for a Tool execution.
@@ -35,6 +36,7 @@ class ToolMetric(BaseModel):
         tool_name (str): Name of the tool.
         latency (float): Execution latency in seconds.
     """
+
     timestamp: float
     user_id: Optional[str]
     session_id: Optional[str]

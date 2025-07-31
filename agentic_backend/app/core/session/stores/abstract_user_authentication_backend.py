@@ -14,10 +14,10 @@
 
 from abc import ABC, abstractmethod
 
-class AbstractSecuredResourceAccess(ABC):
 
+class AbstractSecuredResourceAccess(ABC):
     @abstractmethod
-    def get_authorized_user_id(session_id: str)  -> str | None:
+    def get_authorized_user_id(session_id: str) -> str | None:
         """
         Get the authorized user_id that can access a session
         """

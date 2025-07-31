@@ -27,13 +27,13 @@ class FactType(str, Enum):
     """
     Enumeration for different types of facts.
     """
+
     DOMAIN = "domain"
     REQUIREMENT = "requirement"
     GOAL = "goal"
     COMPLIANCE = "compliance"
     SECURITY = "security"
     COST = "cost"
-
 
 
 class Fact(BaseModel):
@@ -51,8 +51,9 @@ class Fact(BaseModel):
     date: datetime = Field(description="The date the fact was provided")
     content: str = Field(description="The content of the fact")
     title: str = Field(description="The title of the fact")
-    type: Optional[FactType] = Field(None, description="The type of the fact (optional)")
-
+    type: Optional[FactType] = Field(
+        None, description="The type of the fact (optional)"
+    )
 
     def __str__(self) -> str:
         """
@@ -83,4 +84,4 @@ class Facts(BaseModel):
         Returns:
             str: A formatted string containing the facts.
         """
-        return "\n\n".join(str(fact) for fact in self.facts) # pylint: disable=not-an-iterable
+        return "\n\n".join(str(fact) for fact in self.facts)  # pylint: disable=not-an-iterable

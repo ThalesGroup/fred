@@ -30,10 +30,11 @@ class RamScore(BaseModel):
     """
     Represents the RAM score of a workload.
 
-    The RAM score is a numerical grade on a scale of 0 to 10, 
-    where 0 represents the worst RAM optimization and 10 represents 
+    The RAM score is a numerical grade on a scale of 0 to 10,
+    where 0 represents the worst RAM optimization and 10 represents
     the best possible RAM usage efficiency.
     """
+
     score: float = Field(
         default=None,
         description="The RAM score, a grade on a scale of 0 to 10",
@@ -47,10 +48,7 @@ class RamScore(BaseModel):
         Returns:
             str: A formatted string containing the RAM score.
         """
-        return (
-            f"RAM Score: {self.score}\n"
-            f"Reason: {self.reason}"
-        )
+        return f"RAM Score: {self.score}\nReason: {self.reason}"
 
     @classmethod
     def from_workload_context(
@@ -60,7 +58,7 @@ class RamScore(BaseModel):
     ) -> "RamScore":
         """
         Extract the RAM score based on the workload context.
-        
+
         Args:
             workload_context (WorkloadContext): The workload context.
             langfuse_handler (Optional[CallbackHandler]): The LangFuse callback handler.

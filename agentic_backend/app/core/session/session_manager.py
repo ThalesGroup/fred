@@ -28,12 +28,18 @@ import requests
 
 from app.core.agents.flow import AgentFlow
 from app.core.session.attachement_processing import AttachementProcessing
-from app.core.chatbot.chat_schema import ChatMessagePayload, SessionSchema, SessionWithFiles, clean_agent_metadata, clean_token_usage
+from app.core.chatbot.chat_schema import (
+    ChatMessagePayload,
+    SessionSchema,
+    SessionWithFiles,
+    clean_agent_metadata,
+    clean_token_usage,
+)
 from app.core.session.stores.abstract_session_backend import AbstractSessionStorage
 
 from app.application_context import get_configuration, get_default_model
 
-from langchain_core.messages import (BaseMessage, HumanMessage, AIMessage, SystemMessage)
+from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, SystemMessage
 from langgraph.graph.state import CompiledStateGraph
 
 import asyncio
@@ -43,15 +49,17 @@ logger = logging.getLogger(__name__)
 # Type for callback functions (synchronous or asynchronous)
 CallbackType = Union[Callable[[Dict], None], Callable[[Dict], Awaitable[None]]]
 
+
 class SessionManager:
     """
     Manages user sessions and interactions with the chatbot.
     This class is responsible for creating, retrieving, and deleting sessions,
     as well as handling chat interactions.
-    """ 
-    def __init__(self,
-                 session_storage: AbstractSessionStorage, 
-                 agent_manager: AgentManager):
+    """
+
+    def __init__(
+        self, session_storage: AbstractSessionStorage, agent_manager: AgentManager
+    ):
         """
         Initializes the SessionManager with a storage backend and an optional agent manager.
         :param storage: An instance of AbstractSessionStorage for session management.
@@ -66,8 +74,10 @@ class SessionManager:
 
         config = get_configuration()
         self.recursion_limit = config.ai.recursion.recursion_limit
-        
-    def _infer_message_subtype(self, metadata: dict, message_type: str | None = None) -> Optional[str]:
+
+    def _infer_message_subtype(
+        self, metadata: dict, message_type: str | None = None
+    ) -> Optional[str]:
         """
         Infers the semantic subtype of a message based on its metadata and optionally its message type.
         """
@@ -94,21 +104,24 @@ class SessionManager:
             return "error"
 
         return None
-    
-    def get_chat_profile_data(self, chat_profile_id: str, knowledge_base_url: str = "http://localhost:8111/knowledge-flow/v1") -> dict:
+
+    def get_chat_profile_data(
+        self,
+        chat_profile_id: str,
+        knowledge_base_url: str = "http://localhost:8111/knowledge-flow/v1",
+    ) -> dict:
         try:
-            response = requests.get(f"{knowledge_base_url}/chatProfiles/{chat_profile_id}", timeout=5)
+            response = requests.get(
+                f"{knowledge_base_url}/chatProfiles/{chat_profile_id}", timeout=5
+            )
             response.raise_for_status()
             return response.json()
         except requests.RequestException as e:
             raise RuntimeError(f"Failed to fetch chat profile {chat_profile_id}: {e}")
 
-
-
-    def _get_or_create_session(self, 
-                               user_id: str, 
-                               query: str,
-                               session_id: Optional[str]) -> Tuple[SessionSchema, bool]:
+    def _get_or_create_session(
+        self, user_id: str, query: str, session_id: Optional[str]
+    ) -> Tuple[SessionSchema, bool]:
         """
         Retrieves an existing session or creates a new one if not found.
 
@@ -126,10 +139,14 @@ class SessionManager:
                 return session, False
 
         new_session_id = secrets.token_urlsafe(8)
-        title: str = get_default_model().invoke(
-            "Give a short, clear title for this conversation based on the user's question. Just a few keywords. Here's the question: " + query
-        ).content
-
+        title: str = (
+            get_default_model()
+            .invoke(
+                "Give a short, clear title for this conversation based on the user's question. Just a few keywords. Here's the question: "
+                + query
+            )
+            .content
+        )
 
         session = SessionSchema(
             id=new_session_id,
@@ -149,18 +166,22 @@ class SessionManager:
         message: str,
         agent_name: str,
         argument: str,
-        chat_profile_id: Optional[str] = None
+        chat_profile_id: Optional[str] = None,
     ) -> Tuple[SessionSchema, List[ChatMessagePayload]]:
-        logger.info(f"chat_ask_websocket called with user_id: {user_id}, session_id: {session_id}, message: {message}, agent_name: {agent_name}, chat_profile_id: {chat_profile_id}")
+        logger.info(
+            f"chat_ask_websocket called with user_id: {user_id}, session_id: {session_id}, message: {message}, agent_name: {agent_name}, chat_profile_id: {chat_profile_id}"
+        )
 
         session, history, agent, is_new_session = self._prepare_session_and_history(
             user_id=user_id,
             session_id=session_id,
             message=message,
             agent_name=agent_name,
-            argument=argument
+            argument=argument,
         )
-        set_logging_context(user_id=user_id, session_id=session.id, agent_name=agent_name)
+        set_logging_context(
+            user_id=user_id, session_id=session.id, agent_name=agent_name
+        )
         exchange_id = str(uuid4())
         base_rank = len(history)
 
@@ -177,7 +198,7 @@ class SessionManager:
 
                 profile_message = AIMessage(
                     content=full_context,
-                    response_metadata={"injected": True, "origin": "chat_profile"}
+                    response_metadata={"injected": True, "origin": "chat_profile"},
                 )
                 history.insert(0, profile_message)
 
@@ -190,18 +211,25 @@ class SessionManager:
                     session_id=session.id,
                     rank=base_rank,  # injected context comes before user message
                     metadata={"injected": True, "origin": "chat_profile"},
-                    subtype="injected_context"
+                    subtype="injected_context",
                 )
 
-                logger.info(f"[PROFILE CONTEXT INJECTED] Profile {chat_profile_id} injected successfully.")
+                logger.info(
+                    f"[PROFILE CONTEXT INJECTED] Profile {chat_profile_id} injected successfully."
+                )
 
             except Exception as e:
                 logger.error(f"Failed to inject chat profile context: {e}")
 
         # 🕐 Generate timestamp and extract metadata
         timestamp = datetime.now().isoformat()
-        metadata = clean_agent_metadata(getattr(message, "response_metadata", getattr(message, "metadata", {})) or {})
-        subtype = self._infer_message_subtype(metadata, message.type if isinstance(message, BaseMessage) else None)
+        metadata = clean_agent_metadata(
+            getattr(message, "response_metadata", getattr(message, "metadata", {}))
+            or {}
+        )
+        subtype = self._infer_message_subtype(
+            metadata, message.type if isinstance(message, BaseMessage) else None
+        )
 
         # 👤 Create the user message payload first (before any agent response)
         user_payload = ChatMessagePayload(
@@ -212,7 +240,7 @@ class SessionManager:
             timestamp=timestamp,
             session_id=session.id,
             rank=base_rank,
-            subtype=subtype
+            subtype=subtype,
         )
 
         all_payloads = []
@@ -249,13 +277,13 @@ class SessionManager:
 
         return session, all_payloads
 
-
     def _prepare_session_and_history(
-        self, user_id: str, 
-        session_id: str | None, 
+        self,
+        user_id: str,
+        session_id: str | None,
         message: str,
         agent_name: str,
-        argument: str
+        argument: str,
     ) -> Tuple[SessionSchema, List[BaseMessage], AgentFlow, bool]:
         """
         Prepares the session, message history, and agent instance.
@@ -273,8 +301,10 @@ class SessionManager:
             - agent: the LangGraph agent instance
             - is_new_session: whether this session was newly created
         """
-       
-        session, is_new_session = self._get_or_create_session(user_id, message, session_id)
+
+        session, is_new_session = self._get_or_create_session(
+            user_id, message, session_id
+        )
 
         # Build up message history
         history: List[BaseMessage] = []
@@ -282,13 +312,19 @@ class SessionManager:
             messages = self.get_session_history(session.id, user_id)
 
             for msg in messages:
-                logger.debug(f"[RESTORED] session_id={msg.session_id} exchange_id={msg.exchange_id} rank={msg.rank} | type={msg.type} | subtype={msg.subtype} | fred.task={msg.metadata.get('fred', {}).get('task')}")
+                logger.debug(
+                    f"[RESTORED] session_id={msg.session_id} exchange_id={msg.exchange_id} rank={msg.rank} | type={msg.type} | subtype={msg.subtype} | fred.task={msg.metadata.get('fred', {}).get('task')}"
+                )
                 if msg.type == "human":
                     history.append(HumanMessage(content=msg.content))
                 elif msg.type == "ai":
-                        history.append(AIMessage(content=msg.content, response_metadata=msg.metadata or {}))
+                    history.append(
+                        AIMessage(
+                            content=msg.content, response_metadata=msg.metadata or {}
+                        )
+                    )
                 elif msg.type == "system":
-                        history.append(SystemMessage(content=msg.content))
+                    history.append(SystemMessage(content=msg.content))
 
         # Append the new question
         history.append(HumanMessage(message))
@@ -303,7 +339,7 @@ class SessionManager:
         Retrieves all sessions for a user and enriches them with file names.
         The reason we enrich with file names is that the session storage does not
         store file names, but only the session ID.
-        This is because the files are stored in a temporary directory they are meant to be 
+        This is because the files are stored in a temporary directory they are meant to be
         moderatively persistent.
         Args:
             user_id: The ID of the user.
@@ -321,17 +357,14 @@ class SessionManager:
                 file_names = []
 
             enriched_sessions.append(
-                SessionWithFiles(
-                    **session.dict(),
-                    file_names=file_names
-                )
+                SessionWithFiles(**session.dict(), file_names=file_names)
             )
         return enriched_sessions
 
-
-    def get_session_history(self, session_id: str, user_id: str) -> List[ChatMessagePayload]:
+    def get_session_history(
+        self, session_id: str, user_id: str
+    ) -> List[ChatMessagePayload]:
         return self.storage.get_message_history(session_id, user_id)
-    
 
     async def _stream_agent_response(
         self,
@@ -353,21 +386,19 @@ class SessionManager:
             callback: A function that takes a `dict` and handles the streamed message.
             exchange_id:  the ID of the exchange, used to identify the messages part of a single request-replies group.
             config: Optional LangGraph config dict override.
-            
+
         Returns:
             The final AIMessage.
         """
 
         config = config or {
             "configurable": {"thread_id": session_id},
-            "recursion_limit": self.recursion_limit
+            "recursion_limit": self.recursion_limit,
         }
         all_payloads: list[ChatMessagePayload] = []
         try:
             async for event in compiled_graph.astream(
-                {"messages": input_messages},
-                config=config,
-                stream_mode="updates"
+                {"messages": input_messages}, config=config, stream_mode="updates"
             ):
                 # LangGraph returns events like {'end': {'messages': [...]}} or {'next': {...}}
                 key = next(iter(event))
@@ -378,18 +409,23 @@ class SessionManager:
                     token_usage = getattr(message, "usage_metadata", {}) or {}
                     cleaned_metadata["token_usage"] = clean_token_usage(token_usage)
                     # If LangChain returns type='tool', force subtype to 'tool_result'
-                    #subtype = self._infer_message_subtype(cleaned_metadata)
-                    subtype = self._infer_message_subtype(cleaned_metadata, message.type if isinstance(message, BaseMessage) else None)
+                    # subtype = self._infer_message_subtype(cleaned_metadata)
+                    subtype = self._infer_message_subtype(
+                        cleaned_metadata,
+                        message.type if isinstance(message, BaseMessage) else None,
+                    )
                     enriched = ChatMessagePayload(
                         exchange_id=exchange_id,
                         type=message.type,
-                        sender="assistant" if isinstance(message, AIMessage) else "system",
+                        sender="assistant"
+                        if isinstance(message, AIMessage)
+                        else "system",
                         content=message.content,
                         timestamp=datetime.now().isoformat(),
-                        rank=base_rank + 1 + i, 
+                        rank=base_rank + 1 + i,
                         session_id=session_id,
                         metadata=cleaned_metadata,
-                        subtype=subtype
+                        subtype=subtype,
                     )
 
                     all_payloads.append(enriched)  # ✅ collect all messages
@@ -399,7 +435,9 @@ class SessionManager:
                         enriched.exchange_id,
                         enriched.type,
                         enriched.subtype,
-                        enriched.metadata.get("fred", {}).get("task") if isinstance(enriched.metadata.get("fred"), dict) else None
+                        enriched.metadata.get("fred", {}).get("task")
+                        if isinstance(enriched.metadata.get("fred"), dict)
+                        else None,
                     )
 
                     result = callback(enriched.model_dump())
@@ -415,10 +453,10 @@ class SessionManager:
     def _get_agent_contexts(self, agent_name: str) -> List[Dict[str, Any]]:
         """
         Gets contexts for an agent using the existing context service.
-        
+
         Args:
             agent_name: Name of the agent for which to retrieve contexts
-            
+
         Returns:
             List of context dictionaries
         """
@@ -426,16 +464,16 @@ class SessionManager:
         if agent_name in self.context_cache:
             logger.debug(f"Using cached contexts for agent '{agent_name}'")
             return self.context_cache[agent_name]
-            
+
         try:
             # Retrieve contexts from the service
             contexts = self.context_service.get_context(agent_name)
             logger.debug(f"Retrieved {len(contexts)} contexts for agent '{agent_name}'")
-            
+
             # Cache it
             self.context_cache[agent_name] = contexts
             return contexts
-                
+
         except Exception as e:
             logger.error(f"Error retrieving contexts for agent '{agent_name}': {e}")
             return []
@@ -443,10 +481,10 @@ class SessionManager:
     def refresh_context_for_agent(self, agent_name: str) -> bool:
         """
         Refreshes an agent's context by removing it from the cache.
-        
+
         Args:
             agent_name: Name of the agent whose context to refresh
-            
+
         Returns:
             True if the context was refreshed, False otherwise
         """
@@ -455,7 +493,6 @@ class SessionManager:
             logger.debug(f"Context refreshed for agent '{agent_name}'")
             return True
         return False
-    
 
     def get_session_temp_folder(self, session_id: str) -> Path:
         base_temp_dir = Path(tempfile.gettempdir()) / "chatbot_uploads"
@@ -463,7 +500,9 @@ class SessionManager:
         session_folder.mkdir(parents=True, exist_ok=True)
         return session_folder
 
-    async def upload_file(self, user_id: str, session_id: str, agent_name: str, file: UploadFile) -> dict:
+    async def upload_file(
+        self, user_id: str, session_id: str, agent_name: str, file: UploadFile
+    ) -> dict:
         """
         Handle file upload from a user to be attached to a chatbot session.
 
@@ -489,11 +528,13 @@ class SessionManager:
             if str(file_path) not in self.temp_files[session_id]:
                 self.temp_files[session_id].append(str(file_path))
                 self.attachement_processing.process_attachment(file_path)
-            logger.info(f"[📁 Upload] File '{file.filename}' saved to {file_path} for session '{session_id}'")
+            logger.info(
+                f"[📁 Upload] File '{file.filename}' saved to {file_path} for session '{session_id}'"
+            )
             return {
                 "filename": file.filename,
                 "saved_path": str(file_path),
-                "message": "File uploaded successfully"
+                "message": "File uploaded successfully",
             }
 
         except Exception as e:

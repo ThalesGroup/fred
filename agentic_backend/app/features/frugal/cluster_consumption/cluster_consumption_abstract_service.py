@@ -17,7 +17,9 @@ from datetime import datetime
 
 from app.common.structures import PrecisionEnum, CompareResult, Series
 from app.common.utils import compare_two_windows
-from app.features.frugal.cluster_consumption.cluster_consumption_structures import ClusterConsumptionSeries
+from app.features.frugal.cluster_consumption.cluster_consumption_structures import (
+    ClusterConsumptionSeries,
+)
 
 
 class AbstractClusterConsumptionService(ABC):
@@ -28,8 +30,9 @@ class AbstractClusterConsumptionService(ABC):
     """
 
     @abstractmethod
-    def consumption_gco2(self, start: datetime, end: datetime, cluster: str, precision: PrecisionEnum) \
-            -> ClusterConsumptionSeries:
+    def consumption_gco2(
+        self, start: datetime, end: datetime, cluster: str, precision: PrecisionEnum
+    ) -> ClusterConsumptionSeries:
         """
         Get the gCO2 metrics consumption for a given time range.
 
@@ -45,8 +48,9 @@ class AbstractClusterConsumptionService(ABC):
         ...
 
     @abstractmethod
-    def consumption_wh(self, start: datetime, end: datetime, cluster: str, precision: PrecisionEnum) \
-            -> ClusterConsumptionSeries:
+    def consumption_wh(
+        self, start: datetime, end: datetime, cluster: str, precision: PrecisionEnum
+    ) -> ClusterConsumptionSeries:
         """
         Get the Wh metrics consumption for a given time range.
 
@@ -62,7 +66,9 @@ class AbstractClusterConsumptionService(ABC):
         ...
 
     @abstractmethod
-    def consumption_finops(self, start: datetime, end: datetime, cluster: str, precision: PrecisionEnum) -> Series:
+    def consumption_finops(
+        self, start: datetime, end: datetime, cluster: str, precision: PrecisionEnum
+    ) -> Series:
         """
         Get the finops metrics for a given time range.
 
@@ -78,7 +84,9 @@ class AbstractClusterConsumptionService(ABC):
         ...
 
     @abstractmethod
-    def consumption_mix(self, start: datetime, end: datetime, precision: PrecisionEnum) -> ClusterConsumptionSeries:
+    def consumption_mix(
+        self, start: datetime, end: datetime, precision: PrecisionEnum
+    ) -> ClusterConsumptionSeries:
         """
         Get the energy mix consumption for a given time range.
 
@@ -92,10 +100,14 @@ class AbstractClusterConsumptionService(ABC):
         """
         ...
 
-    def consumption_gco2_compare(self,
-                                 start_window_1: datetime, end_window_1: datetime,
-                                 start_window_2: datetime, end_window_2: datetime,
-                                 cluster: str) -> CompareResult:
+    def consumption_gco2_compare(
+        self,
+        start_window_1: datetime,
+        end_window_1: datetime,
+        start_window_2: datetime,
+        end_window_2: datetime,
+        cluster: str,
+    ) -> CompareResult:
         """
         Compare two windows of gCO2 metrics consumption for a given cluster and time ranges.
 
@@ -110,15 +122,27 @@ class AbstractClusterConsumptionService(ABC):
             CompareResult: The comparison result of the two windows.
         """
         return compare_two_windows(
-            self.consumption_gco2(start_window_1, end_window_1, cluster, PrecisionEnum.NONE),
-            self.consumption_gco2(start_window_2, end_window_2, cluster, PrecisionEnum.NONE),
-            start_window_1, end_window_1, start_window_2, end_window_2, cluster
+            self.consumption_gco2(
+                start_window_1, end_window_1, cluster, PrecisionEnum.NONE
+            ),
+            self.consumption_gco2(
+                start_window_2, end_window_2, cluster, PrecisionEnum.NONE
+            ),
+            start_window_1,
+            end_window_1,
+            start_window_2,
+            end_window_2,
+            cluster,
         )
 
-    def consumption_wh_compare(self,
-                               start_window_1: datetime, end_window_1: datetime,
-                               start_window_2: datetime, end_window_2: datetime,
-                               cluster: str) -> CompareResult:
+    def consumption_wh_compare(
+        self,
+        start_window_1: datetime,
+        end_window_1: datetime,
+        start_window_2: datetime,
+        end_window_2: datetime,
+        cluster: str,
+    ) -> CompareResult:
         """
         Compare two windows of energy metrics consumption for a given cluster and time ranges.
 
@@ -133,15 +157,27 @@ class AbstractClusterConsumptionService(ABC):
             CompareResult: The comparison result of the two windows.
         """
         return compare_two_windows(
-            self.consumption_wh(start_window_1, end_window_1, cluster, PrecisionEnum.NONE),
-            self.consumption_wh(start_window_2, end_window_2, cluster, PrecisionEnum.NONE),
-            start_window_1, end_window_1, start_window_2, end_window_2, cluster
+            self.consumption_wh(
+                start_window_1, end_window_1, cluster, PrecisionEnum.NONE
+            ),
+            self.consumption_wh(
+                start_window_2, end_window_2, cluster, PrecisionEnum.NONE
+            ),
+            start_window_1,
+            end_window_1,
+            start_window_2,
+            end_window_2,
+            cluster,
         )
 
-    def consumption_finops_compare(self,
-                                   start_window_1: datetime, end_window_1: datetime,
-                                   start_window_2: datetime, end_window_2: datetime,
-                                   cluster: str) -> CompareResult:
+    def consumption_finops_compare(
+        self,
+        start_window_1: datetime,
+        end_window_1: datetime,
+        start_window_2: datetime,
+        end_window_2: datetime,
+        cluster: str,
+    ) -> CompareResult:
         """
         Compare two windows of finops metrics for a given cluster and time ranges.
 
@@ -156,7 +192,15 @@ class AbstractClusterConsumptionService(ABC):
             CompareResult: The comparison result of the two windows.
         """
         return compare_two_windows(
-            self.consumption_finops(start_window_1, end_window_1, cluster, PrecisionEnum.NONE),
-            self.consumption_finops(start_window_2, end_window_2, cluster, PrecisionEnum.NONE),
-            start_window_1, end_window_1, start_window_2, end_window_2, cluster
+            self.consumption_finops(
+                start_window_1, end_window_1, cluster, PrecisionEnum.NONE
+            ),
+            self.consumption_finops(
+                start_window_2, end_window_2, cluster, PrecisionEnum.NONE
+            ),
+            start_window_1,
+            end_window_1,
+            start_window_2,
+            end_window_2,
+            cluster,
         )

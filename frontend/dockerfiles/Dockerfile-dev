@@ -11,20 +11,20 @@ ARG GROUP_ID=1000
 RUN apt-get update && \
     apt-get install -y make git
 
+# Setup user
+RUN userdel node && \
+    groupadd -g ${GROUP_ID} ${USER_NAME} && \
+    useradd -u ${USER_ID} -g ${GROUP_ID} -m ${USER_NAME} 
+
 # Move to project directory
 WORKDIR /app
 
 # Copy only package files first for cache efficiency
-COPY frontend/ /app/
+COPY --chown=${USER_ID}:${GROUP_ID} frontend/ /app/
+COPY --chown=${USER_ID}:${GROUP_ID} scripts/ /scripts/
 
 # Install node modules (at build time)
 RUN make build
-
-# Setup user
-RUN userdel node && \
-    groupadd -g ${GROUP_ID} ${USER_NAME} && \
-    useradd -u ${USER_ID} -g ${GROUP_ID} -m ${USER_NAME}  && \
-    chown -R ${USER_ID}:${GROUP_ID} /app
 
 # Change user
 USER ${USER_NAME}
