@@ -4,14 +4,14 @@ from typing import List
 
 from app.core.stores.metadata.base_catalog_store import PullFileEntry
 from app.common.document_structures import DocumentMetadata
-from app.common.structures import DocumentSourceConfig
-from app.features.catalog.base_pull_provider import BaseContentProvider
+from app.common.structures import FileSystemPullSource
+from app.core.stores.content.base_content_loader import BaseContentLoader
 
 
-class LocalPathProvider(BaseContentProvider):
-    def __init__(self, source: DocumentSourceConfig, source_tag: str):
+class FileSystemContentLoader(BaseContentLoader):
+    def __init__(self, source: FileSystemPullSource, source_tag: str):
         super().__init__(source, source_tag)
-        self.base_path = Path(self.source.base_path).expanduser().resolve()
+        self.base_path = Path(source.base_path).expanduser().resolve()
 
     def scan(self) -> List[PullFileEntry]:
         entries: List[PullFileEntry] = []

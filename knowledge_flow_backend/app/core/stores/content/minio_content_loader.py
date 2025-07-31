@@ -1,27 +1,32 @@
+import logging
 from pathlib import Path
 from typing import List
 from app.common.document_structures import DocumentMetadata
-from app.features.catalog.base_pull_provider import BaseContentProvider
+from app.core.stores.content.base_content_loader import BaseContentLoader
 from minio import Minio
 from minio.error import S3Error
 import hashlib
-from app.common.structures import DocumentSourceConfig
+from app.common.structures import MinioPullSource
 from app.core.stores.metadata.base_catalog_store import PullFileEntry
 
+logger = logging.getLogger(__name__)
 
-class MinioProvider(BaseContentProvider):
-    def __init__(self, source: DocumentSourceConfig, source_tag: str):
+class MinioProvider(BaseContentLoader):
+    def __init__(self, source: MinioPullSource, source_tag: str):
         super().__init__(source, source_tag)
 
         self.bucket_name = source.bucket_name
         self.prefix = source.prefix or ""
 
-        self.client = Minio(
-            endpoint=source.endpoint_url,
-            access_key=source.access_key,
-            secret_key=source.secret_key,
-            secure=source.secure,
-        )
+        try:
+            self.client = Minio(
+                endpoint=source.endpoint_url,
+                access_key=source.access_key,
+                secret_key=source.secret_key,
+                secure=source.secure,
+            )
+        except S3Error as e:
+            raise RuntimeError(f"Failed to connect to MinIO: {e}")
 
     def fetch_from_pull_entry(self, entry: PullFileEntry, destination_dir: Path) -> Path:
         """
@@ -39,9 +44,9 @@ class MinioProvider(BaseContentProvider):
         remote_key = self.prefix + entry.path
 
         try:
-            self.client.fget_object(self.bucket, remote_key, str(local_path))
+            self.client.fget_object(self.bucket_name, remote_key, str(local_path))
         except S3Error as e:
-            raise RuntimeError(f"Failed to fetch {remote_key} from bucket {self.bucket}: {e}")
+            raise RuntimeError(f"Failed to fetch {remote_key} from bucket {self.bucket_name}: {e}")
 
         return local_path
     
@@ -63,22 +68,17 @@ class MinioProvider(BaseContentProvider):
             entries: List[PullFileEntry] = []
 
             for obj in objects:
-                key = obj.object_name
-                size = obj.size
-                modified = obj.last_modified.timestamp()
-                hash_id = hashlib.sha256(f"{key}:{size}".encode()).hexdigest()
-
-                relative_path = key[len(self.prefix) :] if key.startswith(self.prefix) else key
-
-                entries.append(
-                    PullFileEntry(
+                if obj.is_dir:
+                    continue
+                if obj.object_name:
+                    relative_path = obj.object_name[len(self.prefix):]
+                    entries.append(PullFileEntry(
                         path=relative_path,
-                        size=size,
-                        modified_time=modified,
-                        hash=hash_id,
-                    )
-                )
-
+                        size=obj.size if obj.size else 0,
+                        modified_time=obj.last_modified.timestamp() if obj.last_modified else 0,
+                        hash=hashlib.sha256(obj.object_name.encode()).hexdigest()
+                    ))
             return entries
         except S3Error as e:
-            raise RuntimeError(f"Error accessing MinIO bucket: {e}")
+            logger.error(f"Failed to list objects in bucket {self.bucket_name}: {e}")
+            raise RuntimeError(f"Failed to list objects in bucket {self.bucket_name}: {e}")

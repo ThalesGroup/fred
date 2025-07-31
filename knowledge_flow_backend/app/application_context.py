@@ -17,25 +17,26 @@ import logging
 import os
 from pathlib import Path
 from typing import Dict, Type, Union, Optional
-from app.features.catalog.base_pull_provider import BaseContentProvider
-from app.features.catalog.local_file_provider import LocalPathProvider
-from app.features.catalog.minio_provider import MinioProvider
+from app.core.stores.content.base_content_loader import BaseContentLoader
+from app.core.stores.content.filesystem_content_loader import FileSystemContentLoader
+from app.core.stores.content.minio_content_loader import MinioProvider
 from app.features.catalog.sphere_provider import SphereProvider
 from fred_core.store.duckdb_store import DuckDBTableStore
-from app.common.structures import Configuration, DuckdbMetadataStorage, InMemoryVectorStorage, MinioStorage, OpenSearchStorage, WeaviateVectorStorage
+from app.common.structures import Configuration, DuckdbMetadataStorage, InMemoryVectorStorage, FileSystemPullSource, MinioPullSource, MinioStorage, OpenSearchStorage, WeaviateVectorStorage
 from app.common.utils import validate_settings_or_exit
 from app.config.embedding_azure_apim_settings import EmbeddingAzureApimSettings
 from app.config.embedding_azure_openai_settings import EmbeddingAzureOpenAISettings
 from app.config.ollama_settings import OllamaSettings
 from app.config.embedding_openai_settings import EmbeddingOpenAISettings
 from app.core.stores.content.base_content_store import BaseContentStore
-from app.core.stores.content.local_content_store import LocalStorageBackend
+from app.core.stores.content.filesystem_content_store import FileSystemContentStore
 from app.core.stores.content.minio_content_store import MinioStorageBackend
 from app.core.stores.metadata.base_catalog_store import BaseCatalogStore
 from app.core.stores.metadata.duckdb_catalog_store import DuckdbCatalogStore
 from app.core.stores.metadata.duckdb_metadata_store import DuckdbMetadataStore
 from langchain_openai import OpenAIEmbeddings, AzureOpenAIEmbeddings
 from langchain_ollama import OllamaEmbeddings
+from app.core.stores.content.base_content_loader import BaseContentLoader
 
 from app.core.processors.input.common.base_input_processor import BaseInputProcessor, BaseMarkdownProcessor, BaseTabularProcessor
 from app.core.processors.output.base_output_processor import BaseOutputProcessor
@@ -285,7 +286,7 @@ class ApplicationContext:
         if isinstance(config, MinioStorage):
             return MinioStorageBackend(endpoint=config.endpoint, access_key=config.access_key, secret_key=config.secret_key, bucket_name=config.bucket_name, secure=config.secure)
         elif backend_type == "local":
-            return LocalStorageBackend(Path(config.root_path).expanduser())
+            return FileSystemContentStore(Path(config.root_path).expanduser())
         else:
             raise ValueError(f"Unsupported storage backend: {backend_type}")
 
@@ -476,6 +477,26 @@ class ApplicationContext:
         """
         # TODO: In future we can allow other backends, based on config.
         return LocalFileLoader()
+    
+    def get_documeget_content_loader_for_source(self, source: str) -> BaseContentLoader:
+        """
+        Factory method to create a document loader instance based on configuration.
+        this document loader is legacy it returns directly langchain documents
+        Currently supports LocalFileLoader.
+        """
+        # Get the singleton application context and configuration
+        config = self.get_config().document_sources
+        if not config or source not in config:
+            raise ValueError(f"Unknown document source tag: {source}")  
+        source_config = config[source]
+        if source_config.type != "pull":
+            raise ValueError(f"Source '{source}' is not a pull-mode source.")
+        if isinstance(source_config, FileSystemPullSource):
+            return FileSystemContentLoader(source_config, source)
+        elif isinstance(source_config, MinioPullSource):
+            return MinioProvider(source_config, source)
+        else:
+            raise NotImplementedError(f"No pull provider implemented for '{source_config.provider}'")
 
     def get_text_splitter(self) -> BaseTextSplitter:
         """
@@ -484,7 +505,7 @@ class ApplicationContext:
         """
         return SemanticSplitter()
 
-    def get_pull_provider(self, source_tag: str) -> BaseContentProvider:
+    def get_pull_provider(self, source_tag: str) -> BaseContentLoader:
         source_config = self.config.document_sources.get(source_tag)
 
         if not source_config:
@@ -493,7 +514,7 @@ class ApplicationContext:
             raise ValueError(f"Source '{source_tag}' is not a pull-mode source.")
 
         if source_config.provider == "local_path":
-            return LocalPathProvider(source_config, source_tag)
+            return FileSystemContentLoader(source_config, source_tag)
         elif source_config.provider == "minio":
              return MinioProvider(source_config, source_tag)
         else:

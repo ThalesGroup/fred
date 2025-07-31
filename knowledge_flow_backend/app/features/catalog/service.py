@@ -14,7 +14,7 @@ class CatalogService:
     def __init__(self):
         self.config = ApplicationContext.get_instance().get_config()
         self.store = ApplicationContext.get_instance().get_catalog_store()
-        self.loader = ApplicationContext.get_instance().get_langchain_document_loader()
+        
 
     def list_files(self, source_tag: str, offset: int = 0, limit: int = 100) -> List[PullFileEntry]:
         if not self.config.document_sources or source_tag not in self.config.document_sources:
@@ -24,7 +24,11 @@ class CatalogService:
     def rescan_source(self, source_tag: str) -> int:
         if not self.config.document_sources or source_tag not in self.config.document_sources:
             raise PullSourceNotFoundError(source_tag)
-        entries = self.loader.scan_pull_source(source_tag)
+        source_config = self.config.document_sources[source_tag]
+        if source_config.type != "pull":
+            raise NotImplementedError(f"Rescan not supported for source type: {source_config.type}")
+        self.loader = ApplicationContext.get_instance().get_documeget_content_loader_for_source(source_tag)
+        entries = self.loader.scan()
         self.store.save_entries(source_tag, entries)
         return len(entries)
 

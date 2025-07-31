@@ -4,14 +4,14 @@ import hmac
 import time
 from typing import List
 
-from app.features.catalog.base_pull_provider import BaseContentProvider
+from app.core.stores.content.base_content_loader import BaseContentLoader
 import requests
 
 from app.common.structures import DocumentSourceConfig
 from app.core.stores.metadata.base_catalog_store import PullFileEntry
 
 
-class SphereProvider(BaseContentProvider):
+class SphereProvider(BaseContentLoader):
     def __init__(self, source: DocumentSourceConfig, source_tag: str):
         super().__init__(source, source_tag)
 

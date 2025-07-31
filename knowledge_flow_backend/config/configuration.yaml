@@ -74,20 +74,20 @@ document_sources:
 
   minio-docs:
       type: pull
-      provider: s3
+      provider: minio
       description: "Documents available for pull from MinIO"
-      endpoint_url: http://localhost:9000
-      bucket_name: my-pull-bucket
+      endpoint_url: localhost:9000
+      bucket_name: my-pull-docs
       prefix: ""
       secure: false
-  sphere-prod:
-    type: pull
-    provider: sphere
-    description: "Files pulled from the internal Sphere document repository"
-    base_url: "https://api.corp.thales/corp/sphere-business/v2"
-    parent_node_id: "8399477"
-    username: "AN009263"
-    verify_ssl: false  # can be true if using valid HTTPS
+  # sphere-prod:
+  #   type: pull
+  #   provider: sphere
+  #   description: "Files pulled from the internal Sphere document repository"
+  #   base_url: "https://api.corp.thales/corp/sphere-business/v2"
+  #   parent_node_id: "8399477"
+  #   username: "AN009263"
+  #   verify_ssl: false  # can be true if using valid HTTPS
   github-docs:
     type: pull
     provider: github

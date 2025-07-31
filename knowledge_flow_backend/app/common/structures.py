@@ -208,22 +208,17 @@ class PullProvider(str, Enum):
     OTHER = "other"
 
 
-class BaseDocumentSourceConfig(BaseModel):
-    type: Literal["push", "pull"]
+class PushSourceConfig(BaseModel):
+    type: Literal["push"] = "push"
     description: Optional[str] = Field(default=None, description="Human-readable description of this source")
 
 
-class PushSourceConfig(BaseDocumentSourceConfig):
-    type: Literal["push"] = "push"
-    # No additional fields
-
-
 class BasePullSourceConfig(BaseModel):
-    type: Literal["pull"] = "pull"
-    description: Optional[str] = None
+    type: Literal["pull"]  = "pull"
+    description: Optional[str] = Field(default=None, description="Human-readable description of this source")
 
 
-class LocalPathPullSource(BasePullSourceConfig):
+class FileSystemPullSource(BasePullSourceConfig):
     provider: Literal["local_path"]
     base_path: str
 
@@ -253,23 +248,23 @@ class GitlabPullSource(BasePullSourceConfig):
     token: Optional[str] = Field(default_factory=lambda: os.getenv("GITLAB_TOKEN"), description="GitLab private token from environment")
     base_url: str = Field(default="https://gitlab.com/api/v4", description="GitLab API base URL")
 
-class S3PullSource(BasePullSourceConfig):
-    provider: Literal["s3"]
+class MinioPullSource(BasePullSourceConfig):
+    provider: Literal["minio"]
     endpoint_url: str = Field(..., description="S3-compatible endpoint (e.g., https://s3.amazonaws.com)")
     bucket_name: str = Field(..., description="Name of the S3 bucket to scan")
     prefix: Optional[str] = Field(default="", description="Optional prefix (folder path) to scan inside the bucket")
-    access_key: Optional[str] = Field(default_factory=lambda: os.getenv("S3_ACCESS_KEY"), description="Access key from env")
-    secret_key: Optional[str] = Field(default_factory=lambda: os.getenv("S3_SECRET_KEY"), description="Secret key from env")
+    access_key: str = Field(default_factory=lambda: os.environ["MINIO_ACCESS_KEY"], description="MinIO access key from env")
+    secret_key: str = Field(default_factory=lambda: os.environ["MINIO_SECRET_KEY"], description="MinIO secret key from env")
     region: Optional[str] = Field(default="us-east-1", description="AWS region (used by some clients)")
     secure: bool = Field(default=True, description="Use HTTPS (secure=True) or HTTP (secure=False)")
 
 PullSourceConfig = Annotated[
     Union[
-        LocalPathPullSource,
+        FileSystemPullSource,
         GitPullSource,
         SpherePullSource,
         GitlabPullSource,
-        S3PullSource,
+        MinioPullSource,
     ],
     Field(discriminator="provider"),
 ]

@@ -23,7 +23,7 @@ Covers:
 Uses real filesystem, no mocks. Fast and reliable.
 """
 
-from app.core.stores.content.local_content_store import LocalStorageBackend
+from app.core.stores.content.filesystem_content_store import FileSystemContentStore
 import pytest
 
 from app.common.document_structures import DocumentMetadata
@@ -44,7 +44,7 @@ def service(tmp_path) -> ContentService:
 
     service = ContentService()
     service.metadata_store = LocalMetadataStore(metadata_path)
-    service.content_store = LocalStorageBackend(content_dir)
+    service.content_store = FileSystemContentStore(content_dir)
 
     # Valid doc setup
     uid = "valid"

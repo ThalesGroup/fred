@@ -24,7 +24,7 @@ from app.core.stores.content.base_content_store import BaseContentStore
 logger = logging.getLogger(__name__)
 
 
-class LocalStorageBackend(BaseContentStore):
+class FileSystemContentStore(BaseContentStore):
     def __init__(self, destination_root: Path):
         self.destination_root = destination_root
 
@@ -139,3 +139,4 @@ class LocalStorageBackend(BaseContentStore):
         if not source_dir.exists():
             raise FileNotFoundError(f"No stored document for: {document_uid}")
         shutil.copytree(source_dir, destination_dir, dirs_exist_ok=True)
+        return destination_dir
