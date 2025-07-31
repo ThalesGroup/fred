@@ -1,0 +1,160 @@
+{{- if .Values.worker_mode.enabled -}}
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ .Values.applicationName }}-worker
+  namespace: {{ .Release.Namespace }}
+  labels:
+    name: "{{ .Values.applicationName }}"
+    app: {{ .Chart.Name }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: "{{ .Values.applicationName }}"
+    {{- if .Values.extraLabels }}
+{{ toYaml .Values.extraLabels.data | indent 4 }}
+    {{- end }}
+spec:
+  serviceName: {{ .Values.headlessServiceName | default (printf "%s-headless" .Values.applicationName) }}
+  replicas: {{ .Values.spec.replicaCount }}
+  selector:
+    matchLabels:
+      name: "{{ .Values.applicationName }}"
+      app: {{ .Chart.Name }}
+  template:
+    metadata:
+      annotations:
+        {{- if .Values.annotations }}
+{{ toYaml .Values.annotations.data | indent 8 }}
+        {{- end }}
+        {{- if .Values.ConfigMap }}
+          {{- if .Values.ConfigMap.enabled }}
+        configmap.default.checksum: "{{ .Values.ConfigMap.data | join "," | sha256sum }}"
+          {{- end }}
+        {{- end }}
+        {{- if .Values.application }}
+          {{- if .Values.application.enabled }}
+        configmap.application.checksum: "{{ .Values.application.data | join "," | sha256sum }}"
+          {{- end }}
+        {{- end }}
+        {{- if .Values.ConfigMapBinary }}
+          {{- if .Values.ConfigMapBinary }}
+        configmap.configmapbinary.checksum: "{{ .Values.ConfigMapBinary.data | join "," | sha256sum }}"
+          {{- end }}
+        {{- end }}
+      labels:
+        name: "{{ .Values.applicationName }}"
+        app: {{ .Chart.Name }}
+        chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+        env: {{ .Release.Namespace }}
+        {{- if .Values.extraLabels }}
+{{ toYaml .Values.extraLabels.data | indent 8 }}
+        {{- end }}
+    spec:
+      {{- if .Values.serviceAccount.enabled }}
+      serviceAccountName: {{ .Values.serviceAccount.name }}
+      {{- end }}
+      terminationGracePeriodSeconds: {{ .Values.spec.terminationGracePeriodSeconds }}
+      securityContext:
+        runAsUser: {{ .Values.spec.runAsUser }}
+      {{- if .Values.spec.PullSecrets }}
+      imagePullSecrets:
+        {{- if contains "SNAPSHOT" .Values.image.tag }}
+        - name: {{ .Values.spec.PullSecrets }}-dev
+        {{- else }}
+        - name: {{ .Values.spec.PullSecrets }}
+        {{- end }}
+      {{- end }}
+      {{- if .Values.spec.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          {{- if .Values.spec.topologySpreadConstraints.zone.whenUnsatisfiable }}
+          whenUnsatisfiable: {{ .Values.spec.topologySpreadConstraints.zone.whenUnsatisfiable }}
+          {{- else }}
+          whenUnsatisfiable: DoNotSchedule
+          {{- end }}
+          labelSelector:
+            matchLabels:
+              name: "{{ .Values.applicationName }}"
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          {{- if .Values.spec.topologySpreadConstraints.hostname.whenUnsatisfiable }}
+          whenUnsatisfiable: {{ .Values.spec.topologySpreadConstraints.hostname.whenUnsatisfiable }}
+          {{- else }}
+          whenUnsatisfiable: ScheduleAnyway
+          {{- end }}
+          labelSelector:
+            matchLabels:
+              name: "{{ .Values.applicationName }}"
+      {{- end }}
+      containers:
+        - name: {{ .Values.containers.name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ if contains "SNAPSHOT" .Values.image.tag }}Always{{ else }}IfNotPresent{{ end }}
+          {{- if .Values.lifecycle.enabled }}
+          lifecycle:
+{{ toYaml .Values.lifecycle.data | indent 12 }}
+          {{- end }}
+          securityContext:
+{{ toYaml .Values.containers.securityContext | indent 12 }}
+          resources:
+{{ toYaml .Values.spec.resources | indent 12 }}
+          {{- if .Values.spec.args }}
+          args:
+{{ toYaml .Values.spec.args | indent 12 }}
+          {{- end }}
+          {{- if .Values.livenessProbe.enabled }}
+          livenessProbe:
+{{ toYaml .Values.livenessProbe.data | indent 12 }}
+          {{- end }}
+          {{- if .Values.readinessProbe.enabled }}
+          readinessProbe:
+{{ toYaml .Values.readinessProbe.data | indent 12 }}
+          {{- end }}
+          {{- if and .Values.startupProbe .Values.startupProbe.enabled }}
+          startupProbe:
+{{ toYaml .Values.startupProbe.data | indent 12 }}
+          {{- end }}
+          {{- if .Values.worker_mode.volumeMounts.enabled }}
+          volumeMounts:
+{{ toYaml .Values.worker_mode.volumeMounts.data | indent 12 }}
+          {{- end }}
+          {{- if .Values.ports.enabled }}
+          ports:
+{{ toYaml .Values.ports.data | indent 12 }}
+          {{- end }}
+          {{- if .Values.env.enabled }}
+          env:
+            {{- if .Values.env.data }}
+{{ toYaml .Values.env.data | indent 12 }}
+            {{- end }}
+            {{- if .Values.env.databuild }}
+{{ toYaml .Values.env.databuild | indent 12 }}
+            {{- end }}
+          {{- end }}
+          {{- if .Values.envFrom.enabled }}
+          envFrom:
+{{ toYaml .Values.envFrom.data | indent 12 }}
+          {{- end }}
+          {{- if and .Values.command .Values.command.enabled }}
+          command:
+{{ toYaml .Values.command.data | indent 12 }}
+          {{- end }}
+          {{- if and .Values.args .Values.args.enabled }}
+          args:
+{{ toYaml .Values.args.data | indent 12 }}
+          {{- end }}
+      {{- if .Values.priorityClass }}
+      priorityClassName: {{ .Values.priorityClass.name }}
+      {{- end }}
+      {{- if .Values.worker_mode.volumes.enabled }}
+      volumes:
+{{ toYaml .Values.worker_mode.volumes.data | indent 8 }}
+      {{- end }}
+
+{{- if .Values.volumeClaimTemplates }}
+  volumeClaimTemplates:
+{{ toYaml .Values.volumeClaimTemplates | indent 4 }}
+{{- end }}
+
+{{- end -}}
