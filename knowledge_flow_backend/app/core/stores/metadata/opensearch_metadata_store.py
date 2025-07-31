@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import logging
-from typing import List
+from typing import List, Optional
 from opensearchpy import OpenSearch, RequestsHttpConnection, OpenSearchException
 from pydantic import ValidationError
 
@@ -113,8 +113,8 @@ class OpenSearchMetadataStore(BaseMetadataStore):
         self,
         host: str,
         index: str,
-        username: str = None,
-        password: str = None,
+        username: str,
+        password: str ,
         secure: bool = False,
         verify_certs: bool = False,
     ):
@@ -133,7 +133,7 @@ class OpenSearchMetadataStore(BaseMetadataStore):
         else:
             logger.warning(f"Opensearch index '{index}' already exists.")
 
-    def get_metadata_by_uid(self, document_uid: str) -> DocumentMetadata:
+    def get_metadata_by_uid(self, document_uid: str) -> Optional[DocumentMetadata]:
         """
         Retrieve metadata for a document by its unique identifier (UID).
         Returns None if the document does not exist.
@@ -141,7 +141,7 @@ class OpenSearchMetadataStore(BaseMetadataStore):
         if not document_uid:
             raise ValueError("Document UID must be provided.")
         try:
-            response = self.client.get(index=self.metadata_index_name, id=document_uid, ignore=[404])
+            response = self.client.get(index=self.metadata_index_name, id=document_uid)
             if not response.get("found"):
                 return None
             source = response["_source"]
@@ -155,25 +155,23 @@ class OpenSearchMetadataStore(BaseMetadataStore):
             logger.error(f"Deserialization failed for UID '{document_uid}': {e}")
             raise MetadataDeserializationError from e
 
-    def get_all_metadata(self, filters_dict: dict) -> List[DocumentMetadata]:
+    def get_all_metadata(self, filters: dict) -> List[DocumentMetadata]:
         """
         Retrieve all metadata documents that match the given filters.
         Filters should be a dictionary where keys are field names and values are the filter values.
         Example: {"source_tag": "local-docs", "category": "reports"}
         """
         try:
-            must_clauses = self._build_must_clauses(filters_dict)
+            must_clauses = self._build_must_clauses(filters)
             query = {"match_all": {}} if not must_clauses else {"bool": {"must": must_clauses}}
 
             response = self.client.search(
                 index=self.metadata_index_name,
                 body={"query": query},
-                size=1000,
-                _source=True,
             )
             hits = response["hits"]["hits"]
         except Exception as e:
-            logger.error(f"OpenSearch search failed with filters {filters_dict}: {e}")
+            logger.error(f"OpenSearch search failed with filters {filters}: {e}")
             raise
 
         results = []
@@ -205,7 +203,7 @@ class OpenSearchMetadataStore(BaseMetadataStore):
         """
         try:
             query = {"query": {"term": {"source_tag.keyword": source_tag}}}
-            response = self.client.search(index=self.metadata_index_name, body=query, size=1000)
+            response = self.client.search(index=self.metadata_index_name, body=query)
             hits = response["hits"]["hits"]
         except Exception as e:
             logger.error(f"OpenSearch query failed for source_tag='{source_tag}': {e}")
@@ -267,7 +265,6 @@ class OpenSearchMetadataStore(BaseMetadataStore):
                 index=self.metadata_index_name,
                 id=metadata.document_uid,
                 body=metadata.model_dump(),
-                refresh="wait_for",  # Optional: ensures immediate visibility
             )
             logger.info(f"[METADATA] Indexed document with UID '{metadata.document_uid}' into '{self.metadata_index_name}'.")
         except OpenSearchException as e:
@@ -301,7 +298,7 @@ class OpenSearchMetadataStore(BaseMetadataStore):
 
         try:
             query = {"query": {"term": {"tags.keyword": tag_id}}}
-            response = self.client.search(index=self.metadata_index_name, body=query, size=1000)
+            response = self.client.search(index=self.metadata_index_name, body=query)
             hits = response["hits"]["hits"]
         except Exception as e:
             logger.error(f"OpenSearch query failed for tag '{tag_id}': {e}")
@@ -316,7 +313,7 @@ class OpenSearchMetadataStore(BaseMetadataStore):
     def clear(self) -> None:
         try:
             self.client.delete_by_query(index=self.metadata_index_name, body={"query": {"match_all": {}}})
-            logger.info(f"Cleared all documents from '{self.metadata_index_name}' and '{self.vector_index_name}'.")
+            logger.info(f"Cleared all documents from '{self.metadata_index_name}'")
         except Exception as e:
             logger.error(f"❌ Failed to clear metadata store: {e}")
             raise

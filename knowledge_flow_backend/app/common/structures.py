@@ -66,8 +66,8 @@ class ProcessorConfig(BaseModel):
 class MinioStorage(BaseModel):
     type: Literal["minio"]
     endpoint: str = Field(default="localhost:9000", description="MinIO API URL")
-    access_key: Optional[str] = Field(default_factory=lambda: os.getenv("MINIO_ACCESS_KEY"), description="MinIO access key from env")
-    secret_key: Optional[str] = Field(default_factory=lambda: os.getenv("MINIO_SECRET_KEY"), description="MinIO secret key from env")
+    access_key: str = Field(default_factory=lambda: os.environ["MINIO_ACCESS_KEY"], description="MinIO access key from env")
+    secret_key: str = Field(default_factory=lambda: os.environ["MINIO_SECRET_KEY"], description="MinIO secret key from env")
     bucket_name: str = Field(default="app-bucket", description="Content store bucket name")
     secure: bool = Field(default=False, description="Use TLS (https)")
 

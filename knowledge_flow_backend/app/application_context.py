@@ -22,7 +22,7 @@ from app.features.catalog.local_file_provider import LocalPathProvider
 from app.features.catalog.minio_provider import MinioProvider
 from app.features.catalog.sphere_provider import SphereProvider
 from fred_core.store.duckdb_store import DuckDBTableStore
-from app.common.structures import Configuration
+from app.common.structures import Configuration, DuckdbMetadataStorage, InMemoryVectorStorage, MinioStorage, OpenSearchStorage, WeaviateVectorStorage
 from app.common.utils import validate_settings_or_exit
 from app.config.embedding_azure_apim_settings import EmbeddingAzureApimSettings
 from app.config.embedding_azure_openai_settings import EmbeddingAzureOpenAISettings
@@ -109,6 +109,7 @@ def validate_output_processor_config(config: Configuration):
 
 class ApplicationContext:
     _instance: Optional["ApplicationContext"] = None
+    _input_processor_instances: Dict[str, BaseInputProcessor] = {}
     _output_processor_instances: Dict[str, BaseOutputProcessor] = {}
     _vector_store_instance: Optional[BaseVectoreStore] = None
     _metadata_store_instance: Optional[BaseMetadataStore] = None
@@ -125,7 +126,7 @@ class ApplicationContext:
         validate_input_processor_config(config)
         validate_output_processor_config(config)
         self.input_processor_registry: Dict[str, Type[BaseInputProcessor]] = self._load_input_processor_registry()
-        self.output_processor_registry: Dict[str, Type[BaseInputProcessor]] = self._load_output_processor_registry()
+        self.output_processor_registry: Dict[str, Type[BaseOutputProcessor]] = self._load_output_processor_registry()
         ApplicationContext._instance = self
         self._log_config_summary()
 
@@ -183,18 +184,11 @@ class ApplicationContext:
 
         class_path = f"{processor_class.__module__}.{processor_class.__name__}"
 
-        if class_path not in self._output_processor_instances:
+        if class_path not in self._input_processor_instances:
             logger.debug(f"Creating new instance of input processor: {class_path}")
-            self._output_processor_instances[class_path] = processor_class()
+            self._input_processor_instances[class_path] = processor_class()
 
-        return self._output_processor_instances[class_path]
-
-    @classmethod
-    def close_connections(cls):
-        if cls._instance and cls._instance._vector_store_instance:
-            vector_store = cls._instance._vector_store_instance
-            if hasattr(vector_store, "close"):
-                vector_store.close()
+        return self._input_processor_instances[class_path]
 
     @classmethod
     def get_instance(cls) -> "ApplicationContext":
@@ -288,7 +282,7 @@ class ApplicationContext:
         config = ApplicationContext.get_instance().get_config().content_storage
         backend_type = config.type
 
-        if backend_type == "minio":
+        if isinstance(config, MinioStorage):
             return MinioStorageBackend(endpoint=config.endpoint, access_key=config.access_key, secret_key=config.secret_key, bucket_name=config.bucket_name, secure=config.secure)
         elif backend_type == "local":
             return LocalStorageBackend(Path(config.root_path).expanduser())
@@ -303,7 +297,8 @@ class ApplicationContext:
         backend_type = self.config.embedding.type
 
         if backend_type == "openai":
-            settings = EmbeddingOpenAISettings()
+          
+            settings = EmbeddingOpenAISettings() # type: ignore[call-arg]
             embedding_params = {
                 "model": settings.openai_model_name,
                 "openai_api_key": settings.openai_api_key,
@@ -370,7 +365,7 @@ class ApplicationContext:
         """
         backend_type = self.config.vector_storage.type
 
-        if backend_type == "opensearch":
+        if isinstance(self.config.vector_storage, OpenSearchStorage):
             s = self.config.vector_storage
             if not s.username or not s.password:
                 raise ValueError("Missing required environment variables: OPENSEARCH_USER and OPENSEARCH_PASSWORD")
@@ -386,14 +381,14 @@ class ApplicationContext:
                     verify_certs=s.verify_certs,
                 )
             return self._vector_store_instance
-        elif backend_type == "weaviate":
+        elif isinstance(self.config.vector_storage, WeaviateVectorStorage):
             s = self.config.vector_storage
             if self._vector_store_instance is None:
                 self._vector_store_instance = WeaviateVectorStore(embedding_model, s.host, s.index_name)
             return self._vector_store_instance
-        elif backend_type == "in_memory":
+        elif isinstance(self.config.vector_storage, InMemoryVectorStorage):
             if self._vector_store_instance is None:
-                self._vector_store_instance = InMemoryLangchainVectorStore(embedding_model)
+                self._vector_store_instance = InMemoryLangchainVectorStore(embedding_model=embedding_model)
             return self._vector_store_instance
         raise ValueError(f"Unsupported vector store backend: {backend_type}")
 
@@ -401,10 +396,10 @@ class ApplicationContext:
         if self._metadata_store_instance is not None:
             return self._metadata_store_instance
         config = self.config.metadata_storage
-        if config.type == "duckdb":
+        if isinstance(config, DuckdbMetadataStorage):
             db_path = Path(config.duckdb_path).expanduser()
             self._metadata_store_instance = DuckdbMetadataStore(db_path)
-        elif config.type == "opensearch":
+        elif isinstance(config, OpenSearchStorage):
             username = config.username
             password = config.password
 
@@ -541,27 +536,27 @@ class ApplicationContext:
 
         vector_type = self.config.vector_storage.type
         logger.info(f"  📚 Vector store backend: {vector_type}")
-        if vector_type == "opensearch":
-            try:
-                s = self.config.vector_storage
-                if vector_type == "opensearch":
-                    logger.info(f"     ↳ Host: {s.host}")
-                    logger.info(f"     ↳ Vector Index: {s.index}")
-                    logger.info(f"     ↳ Secure (TLS): {s.secure}")
-                    logger.info(f"     ↳ Verify Certs: {s.verify_certs}")
-                    self._log_sensitive("OPENSEARCH_USER", os.getenv("OPENSEARCH_USER"))
-                    self._log_sensitive("OPENSEARCH_PASSWORD", os.getenv("OPENSEARCH_PASSWORD"))
-                elif vector_type == "weaviate":
-                    logger.info(f"     ↳ Host: {s.host}")
-                    logger.info(f"     ↳ Index Name: {s.index_name}")
-                    logger.info(f"     ↳ Secure (TLS): {s.secure}")
-                    self._log_sensitive("WEAVIATE_API_KEY", os.getenv("WEAVIATE_API_KEY"))
-            except Exception:
-                logger.warning("⚠️ Failed to load vector store settings — some variables may be missing or misconfigured.")
+        try:
+            s = self.config.vector_storage
+            if isinstance(s, OpenSearchStorage):
+                logger.info(f"     ↳ Host: {s.host}")
+                logger.info(f"     ↳ Vector Index: {s.index}")
+                logger.info(f"     ↳ Secure (TLS): {s.secure}")
+                logger.info(f"     ↳ Verify Certs: {s.verify_certs}")
+                self._log_sensitive("OPENSEARCH_USER", os.getenv("OPENSEARCH_USER"))
+                self._log_sensitive("OPENSEARCH_PASSWORD", os.getenv("OPENSEARCH_PASSWORD"))
+            elif isinstance(s, WeaviateVectorStorage):
+                logger.info(f"     ↳ Host: {s.host}")
+                logger.info(f"     ↳ Index Name: {s.index_name}")
+                self._log_sensitive("WEAVIATE_API_KEY", os.getenv("WEAVIATE_API_KEY"))
+            elif vector_type == "in_memory":
+                logger.info("     ↳ In-memory vector store (no host/index)")
+        except Exception:
+            logger.warning("⚠️ Failed to load vector store settings — some variables may be missing or misconfigured.")
 
         metadata_type = self.config.metadata_storage.type
         logger.info(f"  🗃️ Metadata storage backend: {metadata_type}")
-        if metadata_type == "duckdb":
+        if isinstance(self.config.metadata_storage, DuckdbMetadataStorage):
             logger.info(f"     ↳ DB Path: {self.config.metadata_storage.duckdb_path}")
         catalog_type = self.config.catalog_storage.type
         logger.info(f"  📂 Catalog storage backend: {catalog_type}")
@@ -570,8 +565,8 @@ class ApplicationContext:
         content_type = self.config.content_storage.type
 
         logger.info(f"  📁 Content storage backend: {content_type}")
-        if content_type == "local":
-            logger.info(f"     ↳ Local Path: {self.config.content_storage.root_path}")
+        if isinstance(self.config.content_storage, MinioStorage):
+            logger.info(f"     ↳ Local Path: {self.config.content_storage.bucket_name}")
 
         logger.info("  🧩 Input Processor Mappings:")
         for ext, cls in self.input_processor_registry.items():
@@ -584,6 +579,8 @@ class ApplicationContext:
                 cls = self.output_processor_registry[ext]
             else:
                 category = EXTENSION_CATEGORY.get(ext)
+                if not category:
+                    continue
                 default_path = DEFAULT_OUTPUT_PROCESSORS.get(category)
                 if default_path:
                     cls = self._dynamic_import(default_path)
