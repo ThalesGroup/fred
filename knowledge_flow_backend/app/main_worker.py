@@ -47,7 +47,6 @@ This separation supports independent scaling and better resource management in K
 """
 
 import asyncio
-import atexit
 import logging
 import os
 from rich.logging import RichHandler
