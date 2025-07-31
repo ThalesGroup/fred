@@ -1,0 +1,14 @@
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Chart.Name }}-env-config
+data:
+{{- if .Values.oidc.enabled }}
+  env.js: |
+    window.__ENV__ = {
+      VITE_USE_AUTH: "true"
+    };
+{{- end }}
+  

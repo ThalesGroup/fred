@@ -25,6 +25,10 @@ FROM mirror.gcr.io/nginx:1.27.3-alpine AS runtime
 # Copy web app from builder to nginx html directory
 COPY --from=builder --chown=nginx:nginx /app/dist /usr/share/nginx/html
 
+# Make sure env.js can be mounted and served
+RUN touch /usr/share/nginx/html/env.js && \
+    chown nginx:nginx /usr/share/nginx/html/env.js
+
 # Expose default nginx port
 EXPOSE 80
 

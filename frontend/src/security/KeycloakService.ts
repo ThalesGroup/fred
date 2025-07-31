@@ -14,7 +14,7 @@
 
 import Keycloak from "keycloak-js";
 
-const USE_AUTH = (import.meta.env.VITE_USE_AUTH || "false") === "true";
+const USE_AUTH = window.__ENV__?.VITE_USE_AUTH === "true";
 const keycloakInstance = USE_AUTH ? new Keycloak() : null;
 
 /**
