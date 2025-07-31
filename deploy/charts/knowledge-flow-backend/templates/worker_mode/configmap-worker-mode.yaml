@@ -1,0 +1,22 @@
+{{- if .Values.worker_mode.enabled -}}
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: "{{ .Values.applicationName }}-worker-configmap"
+  namespace: {{ .Release.Namespace }}
+data:
+  configuration.yaml: |
+{{ .Values.worker_mode.configuration | toYaml | indent 4 }}
+
+  .env: |
+    {{- range $key, $value := .Values.dotenv }}
+    {{- if $value }}
+    {{ $key }}="{{ $value }}"
+    {{- else }}
+    {{ $key }}=""
+    {{- end }}
+    {{- end }}
+
+
+{{- end }}
