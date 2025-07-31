@@ -16,7 +16,6 @@ from abc import abstractmethod
 from typing import List, Optional
 
 from app.common.document_structures import DocumentMetadata, ProcessingStage
-from app.core.stores.metadata.base_catalog_store import BaseCatalogStore
 
 
 class MetadataDeserializationError(Exception):
@@ -25,7 +24,7 @@ class MetadataDeserializationError(Exception):
     pass
 
 
-class BaseMetadataStore(BaseCatalogStore):
+class BaseMetadataStore:
     """
     Abstract interface for reading and writing structured metadata records
     (typically associated with ingested documents).
