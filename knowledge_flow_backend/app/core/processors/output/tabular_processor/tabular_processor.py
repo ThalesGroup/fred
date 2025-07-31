@@ -42,7 +42,7 @@ class TabularProcessor(BaseOutputProcessor):
 
     def __init__(self):
         self.context = ApplicationContext.get_instance()
-        self.file_loader = self.context.get_document_loader()
+        self.file_loader = self.context.get_langchain_document_loader()
         logger.info(f"📄 Document loader initialized: {self.file_loader.__class__.__name__}")
 
         self.tabular_store = self.context.get_tabular_store()
@@ -53,7 +53,7 @@ class TabularProcessor(BaseOutputProcessor):
             logger.info(f"Processing file: {file_path} with metadata: {metadata}")
 
             # 1. Load the document
-            document: Document = self.file_loader.load(file_path, metadata)
+            document: Document = self.file_loader.load_langchain_doc_from_metadata(file_path, metadata)
             logger.debug(f"Document loaded: {document}")
             if not document:
                 raise ValueError("Document is empty or not loaded correctly.")

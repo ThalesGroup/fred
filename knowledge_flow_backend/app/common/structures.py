@@ -230,18 +230,49 @@ class LocalPathPullSource(BasePullSourceConfig):
 
 class GitPullSource(BasePullSourceConfig):
     provider: Literal["github"]
-    repo: str
+    repo: str = Field(..., description="GitHub repository in the format 'owner/repo'")
+    branch: Optional[str] = Field(default="main", description="Git branch to pull from")
+    subdir: Optional[str] = Field(default="", description="Subdirectory to extract files from")
+    username: Optional[str] = Field(default=None, description="Optional GitHub username (for logs)")
+    token: Optional[str] = Field(default_factory=lambda: os.getenv("GITHUB_TOKEN"), description="GitHub token from environment")
 
+class SpherePullSource(BasePullSourceConfig):
+    provider: Literal["sphere"]
+    base_url: str = Field(..., description="Base URL for the Sphere API")
+    parent_node_id: str = Field(..., description="ID of the parent folder or node to list/download")
+    username: str = Field(..., description="Username for Sphere Basic Auth")
+    password: Optional[str] = Field(default_factory=lambda: os.getenv("SPHERE_PASSWORD"), description="Password from environment")
+    apikey: Optional[str] = Field(default_factory=lambda: os.getenv("SPHERE_API_KEY"), description="API Key from environment")
+    verify_ssl: bool = Field(default=False, description="Set to True to verify SSL certs")
+
+class GitlabPullSource(BasePullSourceConfig):
+    provider: Literal["gitlab"]
+    repo: str = Field(..., description="GitLab repository in the format 'namespace/project'")
+    branch: Optional[str] = Field(default="main", description="Branch to pull from")
+    subdir: Optional[str] = Field(default="", description="Optional subdirectory to scan files from")
+    token: Optional[str] = Field(default_factory=lambda: os.getenv("GITLAB_TOKEN"), description="GitLab private token from environment")
+    base_url: str = Field(default="https://gitlab.com/api/v4", description="GitLab API base URL")
+
+class S3PullSource(BasePullSourceConfig):
+    provider: Literal["s3"]
+    endpoint_url: str = Field(..., description="S3-compatible endpoint (e.g., https://s3.amazonaws.com)")
+    bucket_name: str = Field(..., description="Name of the S3 bucket to scan")
+    prefix: Optional[str] = Field(default="", description="Optional prefix (folder path) to scan inside the bucket")
+    access_key: Optional[str] = Field(default_factory=lambda: os.getenv("S3_ACCESS_KEY"), description="Access key from env")
+    secret_key: Optional[str] = Field(default_factory=lambda: os.getenv("S3_SECRET_KEY"), description="Secret key from env")
+    region: Optional[str] = Field(default="us-east-1", description="AWS region (used by some clients)")
+    secure: bool = Field(default=True, description="Use HTTPS (secure=True) or HTTP (secure=False)")
 
 PullSourceConfig = Annotated[
     Union[
         LocalPathPullSource,
         GitPullSource,
-        # Add WebDAV, HTTP, etc. here
+        SpherePullSource,
+        GitlabPullSource,
+        S3PullSource,
     ],
     Field(discriminator="provider"),
 ]
-
 DocumentSourceConfig = Annotated[Union[PushSourceConfig, PullSourceConfig], Field(discriminator="type")]
 
 

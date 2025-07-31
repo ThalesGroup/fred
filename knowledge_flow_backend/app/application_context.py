@@ -17,6 +17,10 @@ import logging
 import os
 from pathlib import Path
 from typing import Dict, Type, Union, Optional
+from app.features.catalog.base_pull_provider import BaseContentProvider
+from app.features.catalog.local_file_provider import LocalPathProvider
+from app.features.catalog.minio_provider import MinioProvider
+from app.features.catalog.sphere_provider import SphereProvider
 from fred_core.store.duckdb_store import DuckDBTableStore
 from app.common.structures import Configuration
 from app.common.utils import validate_settings_or_exit
@@ -42,7 +46,7 @@ from app.core.stores.metadata.opensearch_metadata_store import OpenSearchMetadat
 from app.core.stores.tags.base_tag_store import BaseTagStore
 from app.core.stores.tags.local_tag_store import LocalTagStore
 from app.core.stores.vector.in_memory_langchain_vector_store import InMemoryLangchainVectorStore
-from app.core.stores.vector.base_vector_store import BaseDocumentLoader, BaseEmbeddingModel, BaseTextSplitter, BaseVectoreStore
+from app.core.stores.vector.base_vector_store import BaseLangchainDocumentLoader, BaseEmbeddingModel, BaseTextSplitter, BaseVectoreStore
 from app.core.processors.output.vectorization_processor.local_file_loader import LocalFileLoader
 from app.core.stores.vector.opensearch_vector_store import OpenSearchVectorStoreAdapter
 from app.core.processors.output.vectorization_processor.semantic_splitter import SemanticSplitter
@@ -453,7 +457,7 @@ class ApplicationContext:
 
     def get_catalog_store(self) -> BaseCatalogStore:
         """
-        Lazy-initialize and return the configured tabular store backend.
+        Return the store used to save a local view of pull files, i.e. files not yet processed.
         Currently supports only DuckDB.
         """
         if hasattr(self, "_catalog_store_instance") and self._catalog_store_instance is not None:
@@ -469,9 +473,10 @@ class ApplicationContext:
 
         return self._catalog_store_instance
 
-    def get_document_loader(self) -> BaseDocumentLoader:
+    def get_langchain_document_loader(self) -> BaseLangchainDocumentLoader:
         """
         Factory method to create a document loader instance based on configuration.
+        this document loader is legacy it returns directly langchain documents
         Currently supports LocalFileLoader.
         """
         # TODO: In future we can allow other backends, based on config.
@@ -483,6 +488,21 @@ class ApplicationContext:
         Currently returns RecursiveSplitter.
         """
         return SemanticSplitter()
+
+    def get_pull_provider(self, source_tag: str) -> BaseContentProvider:
+        source_config = self.config.document_sources.get(source_tag)
+
+        if not source_config:
+            raise ValueError(f"Unknown document source tag: {source_tag}")
+        if source_config.type != "pull":
+            raise ValueError(f"Source '{source_tag}' is not a pull-mode source.")
+
+        if source_config.provider == "local_path":
+            return LocalPathProvider(source_config, source_tag)
+        elif source_config.provider == "minio":
+             return MinioProvider(source_config, source_tag)
+        else:
+            raise NotImplementedError(f"No pull provider implemented for '{source_config.provider}'")
 
     def _log_sensitive(self, name: str, value: Optional[str]):
         logger.info(f"     ↳ {name} set: {'✅' if value else '❌'}")

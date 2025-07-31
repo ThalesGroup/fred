@@ -32,7 +32,7 @@ class VectorizationProcessor(BaseOutputProcessor):
 
     def __init__(self):
         self.context = ApplicationContext.get_instance()
-        self.file_loader = self.context.get_document_loader()
+        self.file_loader = self.context.get_langchain_document_loader()
         logger.info(f"📄 Document loader initialized: {self.file_loader.__class__.__name__}")
 
         self.splitter = self.context.get_text_splitter()
@@ -77,7 +77,7 @@ class VectorizationProcessor(BaseOutputProcessor):
             logger.info(f"Starting vectorization for {file_path}")
 
             # 1. Load the document
-            document: Document = self.file_loader.load(file_path, metadata)
+            document: Document = self.file_loader.load_langchain_doc_from_metadata(file_path, metadata)
             logger.debug(f"Document loaded: {document}")
             if not document:
                 raise ValueError("Document is empty or not loaded correctly.")

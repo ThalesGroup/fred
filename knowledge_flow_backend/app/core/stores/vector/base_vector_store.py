@@ -55,7 +55,7 @@ from app.common.document_structures import DocumentMetadata
 from langchain.schema.document import Document
 
 
-class BaseDocumentLoader(ABC):
+class BaseLangchainDocumentLoader(ABC):
     """
     Interface for loading documents from a given source and returning them as LangChain Documents.
     This interface is designed to be implemented by various concrete classes that handle
@@ -83,7 +83,7 @@ class BaseDocumentLoader(ABC):
     """
 
     @abstractmethod
-    def load(self, file_path: str, metadata: DocumentMetadata) -> Document:
+    def load_langchain_doc_from_metadata(self, file_path: str, metadata: DocumentMetadata) -> Document:
         """Load a document from a file."""
         pass
 

@@ -54,18 +54,49 @@ input_processors:
 # --- Content storage ---
 # type: one of [local, minio]
 content_storage:
-  type: "local"
-  root_path: ~/.fred/knowledge-flow/content-storage
+  #type: "local"
+  #root_path: ~/.fred/knowledge-flow/content-storage
+  type: minio
+  endpoint: http://localhost:9000
+  bucket_name: "my-bucket-1"
+  secure: false
 
 document_sources:
   uploads:
     type: push
     description: "Documents manually uploaded by users"
-  local:
+
+  local-docs:
     type: pull
     provider: local_path
     base_path: ~/Documents
     description: "Personal local documents available for pull-mode ingestion"
+
+  minio-docs:
+      type: pull
+      provider: s3
+      description: "Documents available for pull from MinIO"
+      endpoint_url: http://localhost:9000
+      bucket_name: my-pull-bucket
+      prefix: ""
+      secure: false
+  sphere-prod:
+    type: pull
+    provider: sphere
+    description: "Files pulled from the internal Sphere document repository"
+    base_url: "https://api.corp.thales/corp/sphere-business/v2"
+    parent_node_id: "8399477"
+    username: "AN009263"
+    verify_ssl: false  # can be true if using valid HTTPS
+  github-docs:
+    type: pull
+    provider: github
+    description: "Public or private documents pulled from a GitHub repository"
+    repo: "thalesgroup/fred"
+    branch: "main"
+    subdir: "docs"
+    username: "mygithubuser"  # optional, for logs or rate limits
+
 
 # --- Metadata storage ---
 # type: one of [duckdb, opensearch]
