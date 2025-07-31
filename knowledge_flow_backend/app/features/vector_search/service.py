@@ -28,5 +28,5 @@ class VectorSearchService:
         embedder = context.get_embedder()
         self.vector_store = context.get_vector_store(embedder)
 
-    def similarity_search_with_score(self, question: str, k: int = 10) -> List[tuple[Document, float]]:
-        return self.vector_store.similarity_search_with_score(question, k=k)
+    def similarity_search_with_score(self, question: str, k: int = 10, tags: list[str] | None = None) -> List[tuple[Document, float]]:
+        return self.vector_store.similarity_search_with_score(question, k=k, tags=tags)
