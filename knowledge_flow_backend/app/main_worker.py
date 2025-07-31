@@ -92,8 +92,6 @@ async def main():
     configuration: Configuration = parse_server_configuration(config_file)
     configure_logging(configuration.app.log_level)
     ApplicationContext(configuration)
-    # ✅ Register graceful shutdown
-    atexit.register(ApplicationContext.get_instance().close_connections)
 
     if configuration.scheduler.enabled:
         if configuration.scheduler.backend == "temporal":
