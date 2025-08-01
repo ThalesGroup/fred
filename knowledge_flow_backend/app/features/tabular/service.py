@@ -15,7 +15,7 @@
 import logging
 import re
 from datetime import datetime
-from typing import List
+from typing import List, cast
 
 from app.application_context import ApplicationContext
 from app.features.tabular.structures import (
@@ -105,18 +105,24 @@ class TabularService:
 
         return responses
 
+        
+
     def query(self, document_name: str, request: RawSQLRequest) -> TabularQueryResponse:
-        if not isinstance(request.query, str):
-            raise ValueError("Expected raw SQL string in request.query")
+        sql = request.query
 
-        sql = request.query.strip()
+        if not isinstance(sql, str):
+            raise TypeError("Expected request.query to be a string")
 
-        sql = extract_safe_sql_query(sql)
+        if not sql.strip():
+            raise ValueError("Empty SQL string provided")
 
-        # Vérifie s'il y a déjà un LIMIT dans la requête
+        sql = extract_safe_sql_query(sql.strip())
+
+        if not isinstance(sql, str):
+            raise TypeError("extract_safe_sql_query did not return a string")
+
         has_limit = re.search(r"\bLIMIT\b\s+\d+", sql, re.IGNORECASE) is not None
 
-        # Si aucun LIMIT, ajoute "LIMIT 20"
         if not has_limit:
             sql = sql.rstrip(";") + " LIMIT 20"
 
@@ -129,3 +135,5 @@ class TabularService:
         except Exception as e:
             logger.error(f"Error during query execution: {e}", exc_info=True)
             return TabularQueryResponse(sql_query=sql, rows=[], error=str(e))
+
+
