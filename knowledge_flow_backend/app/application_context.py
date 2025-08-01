@@ -35,7 +35,6 @@ from app.core.stores.metadata.duckdb_catalog_store import DuckdbCatalogStore
 from app.core.stores.metadata.duckdb_metadata_store import DuckdbMetadataStore
 from langchain_openai import OpenAIEmbeddings, AzureOpenAIEmbeddings
 from langchain_ollama import OllamaEmbeddings
-from app.core.stores.content.base_content_loader import BaseContentLoader
 
 from app.core.processors.input.common.base_input_processor import BaseInputProcessor, BaseMarkdownProcessor, BaseTabularProcessor
 from app.core.processors.output.base_output_processor import BaseOutputProcessor

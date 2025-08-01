@@ -54,12 +54,12 @@ input_processors:
 # --- Content storage ---
 # type: one of [local, minio]
 content_storage:
-  #type: "local"
-  #root_path: ~/.fred/knowledge-flow/content-storage
-  type: minio
-  endpoint: http://localhost:9000
-  bucket_name: "knowledge-flow-content"
-  secure: false
+  type: "local"
+  root_path: ~/.fred/knowledge-flow/content-storage
+  #type: minio
+  #endpoint: http://localhost:9000
+  #bucket_name: "knowledge-flow-content"
+  #secure: false
 
 document_sources:
   fred:
@@ -72,15 +72,15 @@ document_sources:
     base_path: ~/Documents/Fred
     description: "Personal local documents available for pull-mode ingestion"
 
-  sphere:
+  s3:
       type: pull
       provider: minio
-      description: "Documents available from the shared sphere entreprise repository"
+      description: "Documents available from the shared entreprise repository"
       endpoint_url: localhost:9000
-      bucket_name: "sphere"
+      bucket_name: "fred"
       prefix: ""
       secure: false
-  # sphere-prod:
+  # sphere:
   #   type: pull
   #   provider: sphere
   #   description: "Files pulled from the internal Sphere document repository"
@@ -101,13 +101,13 @@ document_sources:
 # --- Metadata storage ---
 # type: one of [duckdb, opensearch]
 metadata_storage:
-  #type: "duckdb"
-  #duckdb_path: "~/.fred/knowledge-flow/db.duckdb"
-  type: opensearch
-  host: https://localhost:9200              # Opensearch HTTP URL
-  secure: true                              # Use HTTPS (set to false for HTTP)
-  verify_certs: false                       # Whether to verify TLS certificates
-  index: metadata-index                     # Index name for vectors
+  type: "duckdb"
+  duckdb_path: "~/.fred/knowledge-flow/db.duckdb"
+  #type: opensearch
+  #host: https://localhost:9200              # Opensearch HTTP URL
+  #secure: true                              # Use HTTPS (set to false for HTTP)
+  #verify_certs: false                       # Whether to verify TLS certificates
+  #index: metadata-index                     # Index name for vectors
 
 # --- Tag storage ---
 # type: one of [local]
@@ -139,7 +139,7 @@ catalog_storage:
 embedding:
   type:
     "openai"
-    # -----------------------------------------------------------------------------
+  # -----------------------------------------------------------------------------
   # EMBEDDING BACKEND
   # -----------------------------------------------------------------------------
   # Set the embedding backend to use:
