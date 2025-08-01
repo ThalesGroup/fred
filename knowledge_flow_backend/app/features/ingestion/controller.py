@@ -174,6 +174,9 @@ class IngestionController:
             parsed_input = IngestionInput(**json.loads(metadata_json))
             tags = parsed_input.tags
             source_tag = parsed_input.source_tag
+            if source_tag is None:
+                logger.warning("No source_tag provided, defaulting to 'fred'.")
+                source_tag = "fred"
             # input_metadata = json.loads(metadata_json)
             # ✅ Preload: Call save_file_to_temp on all files before the generator runs
             # This is to ensure that the files are saved to temp storage before processing

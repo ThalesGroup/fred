@@ -75,6 +75,7 @@ export const DocumentUploadDrawer: React.FC<DocumentUploadDrawerProps> = ({
       let uploadCount = 0;
       for (const file of tempFiles) {
         try {
+          console.log(`MEMREDD Uploading file: ${file.name} with metadata `, metadata);
           await streamUploadOrProcessDocument(
             file,
             uploadMode,

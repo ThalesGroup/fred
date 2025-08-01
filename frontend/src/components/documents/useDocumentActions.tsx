@@ -130,7 +130,7 @@ export const useDocumentActions = (onRefreshData?: () => void) => {
         files: files.map((f) => {
           const isPull = f.source_type === "pull";
           return {
-            source_tag: f.source_tag || "uploads",
+            source_tag: f.source_tag,
             document_uid: isPull ? undefined : f.document_uid,
             external_path: isPull ? (f.pull_location ?? undefined) : undefined,
             tags: f.tags || [],
@@ -159,7 +159,7 @@ export const useDocumentActions = (onRefreshData?: () => void) => {
         files: files.map((f) => {
           const isPull = f.source_type === "pull";
           return {
-            source_tag: f.source_tag || "uploads",
+            source_tag: f.source_tag,
             document_uid: isPull ? undefined : f.document_uid,
             external_path: isPull ? (f.pull_location ?? undefined) : undefined,
             tags: f.tags || [],

@@ -284,4 +284,4 @@ class Configuration(BaseModel):
     catalog_storage: CatalogStorageConfig = Field(..., description="Catalog storage configuration")
     embedding: EmbeddingConfig = Field(..., description="Embedding configuration")
     scheduler: SchedulerConfig
-    document_sources: Optional[Dict[str, DocumentSourceConfig]] = Field(default_factory=dict, description="Mapping of source_tag identifiers to push/pull source configurations")
+    document_sources: Dict[str, DocumentSourceConfig] = Field(default_factory=dict, description="Mapping of source_tag identifiers to push/pull source configurations")

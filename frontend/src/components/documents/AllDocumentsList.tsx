@@ -405,6 +405,7 @@ export const AllDocumentsList = ({}: DocumentsViewProps) => {
           isOpen={openUploadDrawer}
           onClose={() => setOpenUploadDrawer(false)}
           onUploadComplete={handleUploadComplete}
+          metadata={{ source_tag: selectedSourceTag }}
         />
       )}
     </Container>

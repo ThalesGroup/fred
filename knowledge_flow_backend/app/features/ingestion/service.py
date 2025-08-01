@@ -15,8 +15,7 @@
 import logging
 import pathlib
 import shutil
-from app.common.document_structures import DocumentMetadata, ProcessingStage
-from app.common.structures import OutputProcessorResponse
+from app.common.document_structures import DocumentMetadata, ProcessingStage, SourceType
 from app.core.processors.input.common.base_input_processor import BaseMarkdownProcessor, BaseTabularProcessor
 from app.core.processors.input.duckdb_processor.duckdb_processor import DuckDBProcessor
 from app.features.metadata.service import MetadataNotFound, MetadataService
@@ -52,7 +51,7 @@ class IngestionService:
         logger.debug(f"Saving metadata {metadata}")
         return self.metadata_service.save_document_metadata(metadata)
 
-    def get_metadata(self, document_uid: str) -> DocumentMetadata:
+    def get_metadata(self, document_uid: str) -> DocumentMetadata | None:
         """
         Retrieve the metadata associated with the given document UID.
 
@@ -79,7 +78,7 @@ class IngestionService:
         """
         return self.content_store.get_local_copy(metadata.document_uid, target_dir)
 
-    def extract_metadata(self, file_path: pathlib.Path, tags: list[str], source_tag: str = "uploads") -> DocumentMetadata:
+    def extract_metadata(self, file_path: pathlib.Path, tags: list[str], source_tag: str) -> DocumentMetadata:
         """
         Extracts metadata from the input file.
         This method is responsible for determining the file type and using the appropriate processor
@@ -94,7 +93,7 @@ class IngestionService:
 
         # Step 2: enrich/clean metadata
         if source_config:
-            metadata.source_type = source_config.type
+            metadata.source_type = SourceType(source_config.type)
 
         # If this is a pull file, preserve the path
         if source_config and source_config.type == "pull":
