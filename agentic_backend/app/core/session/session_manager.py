@@ -17,7 +17,7 @@ import logging
 from pathlib import Path
 import secrets
 import tempfile
-from typing import List, Tuple, Dict, Any, Optional, Union, Callable, Awaitable
+from typing import List, Tuple, Dict, Any, Optional, Union, Callable, Awaitable, cast
 from uuid import uuid4
 
 from app.core.agents.agent_manager import AgentManager
@@ -254,9 +254,11 @@ class SessionManager:
             # Ensure correct ranks for assistant messages
             for i, m in enumerate(agent_messages):
                 m.rank = base_rank + 1 + i
-                if m.metadata is None:
-                    m.metadata = {}
-                m.metadata["agent_name"] = agent_name
+                m_cast = cast(Any, m)  # Pour autoriser l’accès dynamique
+                if not hasattr(m_cast, "metadata") or m_cast.metadata is None:
+                    m_cast.metadata = {}
+
+                m_cast.metadata["agent_name"] = agent_name
 
             all_payloads.extend(agent_messages)
 
