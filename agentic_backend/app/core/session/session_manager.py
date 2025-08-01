@@ -17,24 +17,18 @@ import logging
 from pathlib import Path
 import secrets
 import tempfile
-from typing import List, Tuple, Dict, Any, Optional, Union, Callable, Awaitable
+from typing import List, Tuple, Dict, Any, Optional, Union, Callable, Awaitable, cast
 from uuid import uuid4
 
 from app.core.agents.agent_manager import AgentManager
-from app.core.monitoring.logging_context import set_logging_context
 from fastapi import UploadFile
 from collections import defaultdict
 import requests
 
 from app.core.agents.flow import AgentFlow
 from app.core.session.attachement_processing import AttachementProcessing
-from app.core.chatbot.chat_schema import (
-    ChatMessagePayload,
-    SessionSchema,
-    SessionWithFiles,
-    clean_agent_metadata,
-    clean_token_usage,
-)
+from app.core.chatbot.chat_schema import ChatMessagePayload, SessionSchema, SessionWithFiles, clean_agent_metadata, clean_token_usage
+from app.core.chatbot.chatbot_utils import enrich_ChatMessagePayloads_with_latencies
 from app.core.session.stores.abstract_session_backend import AbstractSessionStorage
 
 from app.application_context import get_configuration, get_default_model
@@ -179,9 +173,6 @@ class SessionManager:
             agent_name=agent_name,
             argument=argument,
         )
-        set_logging_context(
-            user_id=user_id, session_id=session.id, agent_name=agent_name
-        )
         exchange_id = str(uuid4())
         base_rank = len(history)
 
@@ -263,12 +254,19 @@ class SessionManager:
             # Ensure correct ranks for assistant messages
             for i, m in enumerate(agent_messages):
                 m.rank = base_rank + 1 + i
+                m_cast = cast(Any, m)  # Pour autoriser l’accès dynamique
+                if not hasattr(m_cast, "metadata") or m_cast.metadata is None:
+                    m_cast.metadata = {}
+
+                m_cast.metadata["agent_name"] = agent_name
 
             all_payloads.extend(agent_messages)
 
         except Exception as e:
             logger.error(f"Error during agent execution: {e}")
             # No crash — we still return user message only
+
+        all_payloads = enrich_ChatMessagePayloads_with_latencies(all_payloads)
 
         # 💾 Save all messages in correct order
         session.updated_at = datetime.now()

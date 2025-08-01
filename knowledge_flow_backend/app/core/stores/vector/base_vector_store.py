@@ -53,6 +53,7 @@ from abc import ABC, abstractmethod
 from typing import List, Tuple
 from app.common.document_structures import DocumentMetadata
 from langchain.schema.document import Document
+from langchain.embeddings.base import Embeddings
 
 
 class BaseDocumentLoader(ABC):
@@ -103,7 +104,7 @@ class BaseTextSplitter(ABC):
 
 
 # 3. Embedding Model Interface
-class BaseEmbeddingModel(ABC):
+class BaseEmbeddingModel(Embeddings, ABC):
     """
     Interface for embedding models.
     This interface is designed to be implemented by various concrete classes that handle

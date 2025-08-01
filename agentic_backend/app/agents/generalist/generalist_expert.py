@@ -21,7 +21,6 @@ from langchain_core.messages import SystemMessage
 from app.common.structures import AgentSettings
 from app.core.model.model_factory import get_model
 from app.core.agents.flow import AgentFlow
-from app.core.monitoring.node_monitoring.monitor_node import monitor_node
 
 logger = logging.getLogger(__name__)
 
@@ -80,7 +79,7 @@ class GeneralistExpert(AgentFlow):
 
     def _build_graph(self) -> StateGraph:
         builder = StateGraph(MessagesState)
-        builder.add_node("expert", monitor_node(self.reasoner))
+        builder.add_node("expert", self.reasoner)
         builder.add_edge(START, "expert")
         builder.add_edge("expert", END)
         return builder
