@@ -11,7 +11,7 @@ from app.common.structures import SpherePullSource
 from app.core.stores.metadata.base_catalog_store import PullFileEntry
 
 
-class SphereProvider(BaseContentLoader):
+class SphereContentLoader(BaseContentLoader):
     def __init__(self, source: SpherePullSource, source_tag: str):
         super().__init__(source, source_tag)
 
