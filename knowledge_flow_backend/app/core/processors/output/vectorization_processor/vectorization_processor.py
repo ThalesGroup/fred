@@ -14,7 +14,6 @@
 
 import logging
 from typing import override
-from app.common.structures import OutputProcessorResponse, Status
 from fastapi import HTTPException
 from langchain.schema.document import Document
 

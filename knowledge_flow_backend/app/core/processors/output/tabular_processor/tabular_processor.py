@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import logging
-from app.common.structures import OutputProcessorResponse, Status
 import pandas as pd
 from langchain.schema.document import Document
 import io

@@ -20,7 +20,6 @@ from typing import Dict, Type, Union, Optional
 from app.core.stores.content.base_content_loader import BaseContentLoader
 from app.core.stores.content.filesystem_content_loader import FileSystemContentLoader
 from app.core.stores.content.minio_content_loader import MinioContentLoader
-from app.features.catalog.sphere_provider import SphereProvider
 from fred_core.store.duckdb_store import DuckDBTableStore
 from app.common.structures import Configuration, DuckdbMetadataStorage, InMemoryVectorStorage, FileSystemPullSource, MinioPullSource, MinioStorage, OpenSearchStorage, WeaviateVectorStorage
 from app.common.utils import validate_settings_or_exit
@@ -47,8 +46,7 @@ from app.core.stores.metadata.opensearch_metadata_store import OpenSearchMetadat
 from app.core.stores.tags.base_tag_store import BaseTagStore
 from app.core.stores.tags.local_tag_store import LocalTagStore
 from app.core.stores.vector.in_memory_langchain_vector_store import InMemoryLangchainVectorStore
-from app.core.stores.vector.base_vector_store import BaseLangchainDocumentLoader, BaseEmbeddingModel, BaseTextSplitter, BaseVectoreStore
-from app.core.processors.output.vectorization_processor.local_file_loader import LocalFileLoader
+from app.core.stores.vector.base_vector_store import BaseEmbeddingModel, BaseTextSplitter, BaseVectoreStore
 from app.core.stores.vector.opensearch_vector_store import OpenSearchVectorStoreAdapter
 from app.core.processors.output.vectorization_processor.semantic_splitter import SemanticSplitter
 from app.core.stores.vector.weaviate_vector_store import WeaviateVectorStore

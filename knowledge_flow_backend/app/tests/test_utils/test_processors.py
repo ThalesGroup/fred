@@ -16,7 +16,6 @@
 
 from pathlib import Path
 from app.common.document_structures import DocumentMetadata
-from app.common.structures import OutputProcessorResponse, Status
 from app.core.processors.output.base_output_processor import BaseOutputProcessor
 import pandas as pd
 
