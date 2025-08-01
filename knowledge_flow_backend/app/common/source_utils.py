@@ -10,7 +10,7 @@ def resolve_source_type(source_tag: str) -> SourceType:
     from app.application_context import ApplicationContext
 
     config = ApplicationContext.get_instance().get_config()
-    source_config: DocumentSourceConfig = config.document_sources.get(source_tag)
+    source_config: DocumentSourceConfig = config.document_sources[source_tag]
 
     if not source_config:
         logger.error(f"[MetadataStore] Unknown source tag encountered: {source_tag}")
@@ -28,7 +28,7 @@ def get_pull_base_path(source_tag: str) -> Path:
     from app.application_context import ApplicationContext
 
     config = ApplicationContext.get_instance().get_config()
-    source_config: DocumentSourceConfig = config.document_sources.get(source_tag)
+    source_config: DocumentSourceConfig = config.document_sources[source_tag]
 
     if not source_config:
         raise ValueError(f"Unknown source tag: {source_tag}")

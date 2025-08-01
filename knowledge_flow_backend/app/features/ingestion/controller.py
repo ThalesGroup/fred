@@ -23,7 +23,6 @@ from fastapi import APIRouter, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from app.common.document_structures import ProcessingStage
 from app.features.ingestion.service import IngestionService
 from app.features.scheduler.activities import input_process, output_process
 from app.features.scheduler.structure import FileToProcess
@@ -33,7 +32,7 @@ logger = logging.getLogger(__name__)
 
 class IngestionInput(BaseModel):
     tags: List[str] = []
-    source_tag: str = "uploads"
+    source_tag: str = "fred"
 
 
 class ProcessingProgress(BaseModel):
@@ -174,9 +173,6 @@ class IngestionController:
             parsed_input = IngestionInput(**json.loads(metadata_json))
             tags = parsed_input.tags
             source_tag = parsed_input.source_tag
-            if source_tag is None:
-                logger.warning("No source_tag provided, defaulting to 'fred'.")
-                source_tag = "fred"
             # input_metadata = json.loads(metadata_json)
             # ✅ Preload: Call save_file_to_temp on all files before the generator runs
             # This is to ensure that the files are saved to temp storage before processing
