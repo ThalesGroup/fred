@@ -132,9 +132,9 @@ def test_match_nested_with_value_mismatch(metadata_store):
 
 def test_load_returns_empty_if_file_missing(tmp_path):
     json_path = tmp_path / "missing.json"
-    store = LocalMetadataStore(json_path)
+    store = DuckdbMetadataStore(json_path)
 
     if json_path.exists():
         json_path.unlink()
 
-    assert store._load() == []
+    assert store.get_all_metadata({}) == []

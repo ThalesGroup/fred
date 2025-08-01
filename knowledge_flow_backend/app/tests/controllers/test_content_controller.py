@@ -29,7 +29,7 @@ from app.features.content.service import ContentService
 @pytest.mark.content_storage_type(type="local")
 @pytest.mark.metadata_storage_type(type="local")
 class TestContentController:
-    """End‑to‑end tests with LocalContentStore + LocalMetadataStore."""
+    """End‑to‑end tests with LocalContentStore."""
 
     # ─────────────────────────────── fixtures ──────────────────────────────
     @pytest.fixture

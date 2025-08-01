@@ -13,7 +13,7 @@
 # limitations under the License.
 
 """
-Integration tests for ContentService using real LocalMetadataStore and LocalStorageBackend.
+Integration tests for ContentService using real LocalStorageBackend.
 
 Covers:
 - Document metadata retrieval
