@@ -16,7 +16,7 @@
 import os
 from pathlib import Path
 from typing import Annotated, Dict, List, Literal, Union
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from typing import Optional
 from enum import Enum
 from fred_core import Security
@@ -66,11 +66,23 @@ class ProcessorConfig(BaseModel):
 class MinioStorage(BaseModel):
     type: Literal["minio"]
     endpoint: str = Field(default="localhost:9000", description="MinIO API URL")
-    access_key: str = Field(default_factory=lambda: os.environ["MINIO_ACCESS_KEY"], description="MinIO access key from env")
-    secret_key: str = Field(default_factory=lambda: os.environ["MINIO_SECRET_KEY"], description="MinIO secret key from env")
+    access_key: str = Field(..., description="MinIO access key (from MINIO_ACCESS_KEY env)")
+    secret_key: str = Field(..., description="MinIO secret key (from MINIO_SECRET_KEY env)")
     bucket_name: str = Field(default="app-bucket", description="Content store bucket name")
     secure: bool = Field(default=False, description="Use TLS (https)")
 
+    @model_validator(mode="before")
+    @classmethod
+    def load_env_if_missing(cls, values: dict) -> dict:
+        values.setdefault("access_key", os.getenv("MINIO_ACCESS_KEY"))
+        values.setdefault("secret_key", os.getenv("MINIO_SECRET_KEY"))
+
+        if not values.get("access_key"):
+            raise ValueError("Missing MINIO_ACCESS_KEY environment variable")
+        if not values.get("secret_key"):
+            raise ValueError("Missing MINIO_SECRET_KEY environment variable")
+
+        return values
 
 class LocalContentStorage(BaseModel):
     type: Literal["local"]
@@ -224,40 +236,85 @@ class FileSystemPullSource(BasePullSourceConfig):
 
 
 class GitPullSource(BasePullSourceConfig):
+    type: Literal["pull"] = "pull"
     provider: Literal["github"]
     repo: str = Field(..., description="GitHub repository in the format 'owner/repo'")
     branch: Optional[str] = Field(default="main", description="Git branch to pull from")
     subdir: Optional[str] = Field(default="", description="Subdirectory to extract files from")
     username: Optional[str] = Field(default=None, description="Optional GitHub username (for logs)")
-    token: Optional[str] = Field(default_factory=lambda: os.getenv("GITHUB_TOKEN"), description="GitHub token from environment")
+    token: str = Field(..., description="GitHub token (from GITHUB_TOKEN env variable)")
 
-class SpherePullSource(BasePullSourceConfig):
+    @model_validator(mode="before")
+    @classmethod
+    def load_env_token(cls, values: dict) -> dict:
+        values.setdefault("token", os.getenv("GITHUB_TOKEN"))
+        if not values.get("token"):
+            raise ValueError("Missing GITHUB_TOKEN environment variable")
+        return values
+class SpherePullSource(BaseModel):
+    type: Literal["pull"] = "pull"
     provider: Literal["sphere"]
     base_url: str = Field(..., description="Base URL for the Sphere API")
     parent_node_id: str = Field(..., description="ID of the parent folder or node to list/download")
     username: str = Field(..., description="Username for Sphere Basic Auth")
-    password: Optional[str] = Field(default_factory=lambda: os.getenv("SPHERE_PASSWORD"), description="Password from environment")
-    apikey: Optional[str] = Field(default_factory=lambda: os.getenv("SPHERE_API_KEY"), description="API Key from environment")
+    password: str = Field(..., description="Password (loaded from SPHERE_PASSWORD)")
+    apikey: str = Field(..., description="API key (loaded from SPHERE_API_KEY)")
     verify_ssl: bool = Field(default=False, description="Set to True to verify SSL certs")
 
+    @model_validator(mode="before")
+    @classmethod
+    def load_env_vars(cls, values: dict) -> dict:
+        values.setdefault("password", os.getenv("SPHERE_PASSWORD"))
+        values.setdefault("apikey", os.getenv("SPHERE_API_KEY"))
+
+        if not values.get("password"):
+            raise ValueError("Missing SPHERE_PASSWORD environment variable")
+
+        if not values.get("apikey"):
+            raise ValueError("Missing SPHERE_API_KEY environment variable")
+
+        return values
+
 class GitlabPullSource(BasePullSourceConfig):
+    type: Literal["pull"] = "pull"
     provider: Literal["gitlab"]
     repo: str = Field(..., description="GitLab repository in the format 'namespace/project'")
     branch: Optional[str] = Field(default="main", description="Branch to pull from")
     subdir: Optional[str] = Field(default="", description="Optional subdirectory to scan files from")
-    token: Optional[str] = Field(default_factory=lambda: os.getenv("GITLAB_TOKEN"), description="GitLab private token from environment")
+    token: str = Field(..., description="GitLab private token (from GITLAB_TOKEN env variable)")
     base_url: str = Field(default="https://gitlab.com/api/v4", description="GitLab API base URL")
 
+    @model_validator(mode="before")
+    @classmethod
+    def load_env_token(cls, values: dict) -> dict:
+        values.setdefault("token", os.getenv("GITLAB_TOKEN"))
+        if not values.get("token"):
+            raise ValueError("Missing GITLAB_TOKEN environment variable")
+        return values
 class MinioPullSource(BasePullSourceConfig):
+    type: Literal["pull"] = "pull"
     provider: Literal["minio"]
     endpoint_url: str = Field(..., description="S3-compatible endpoint (e.g., https://s3.amazonaws.com)")
     bucket_name: str = Field(..., description="Name of the S3 bucket to scan")
     prefix: Optional[str] = Field(default="", description="Optional prefix (folder path) to scan inside the bucket")
-    access_key: str = Field(default_factory=lambda: os.environ["MINIO_ACCESS_KEY"], description="MinIO access key from env")
-    secret_key: str = Field(default_factory=lambda: os.environ["MINIO_SECRET_KEY"], description="MinIO secret key from env")
+    access_key: str = Field(..., description="MinIO access key (from MINIO_ACCESS_KEY env variable)")
+    secret_key: str = Field(..., description="MinIO secret key (from MINIO_SECRET_KEY env variable)")
     region: Optional[str] = Field(default="us-east-1", description="AWS region (used by some clients)")
     secure: bool = Field(default=True, description="Use HTTPS (secure=True) or HTTP (secure=False)")
 
+    @model_validator(mode="before")
+    @classmethod
+    def load_env_secrets(cls, values: dict) -> dict:
+        values.setdefault("access_key", os.getenv("MINIO_ACCESS_KEY"))
+        values.setdefault("secret_key", os.getenv("MINIO_SECRET_KEY"))
+
+        if not values.get("access_key"):
+            raise ValueError("Missing MINIO_ACCESS_KEY environment variable")
+
+        if not values.get("secret_key"):
+            raise ValueError("Missing MINIO_SECRET_KEY environment variable")
+
+        return values
 PullSourceConfig = Annotated[
     Union[
         FileSystemPullSource,

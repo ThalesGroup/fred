@@ -7,12 +7,12 @@ from typing import List
 from app.core.stores.content.base_content_loader import BaseContentLoader
 import requests
 
-from app.common.structures import DocumentSourceConfig
+from app.common.structures import SpherePullSource
 from app.core.stores.metadata.base_catalog_store import PullFileEntry
 
 
 class SphereProvider(BaseContentLoader):
-    def __init__(self, source: DocumentSourceConfig, source_tag: str):
+    def __init__(self, source: SpherePullSource, source_tag: str):
         super().__init__(source, source_tag)
 
         # Extract required config values from source (validated Pydantic model)
@@ -24,7 +24,8 @@ class SphereProvider(BaseContentLoader):
         self.verify_ssl = source.verify_ssl
 
         self.session = requests.Session()
-        self.session.auth = (self.username, self.password)
+        if self.username is not None and self.password is not None:
+            self.session.auth = (self.username, self.password)
         self.session.verify = self.verify_ssl
 
     def _generate_signature(self, method: str, url: str, timestamp: str) -> str:
