@@ -38,7 +38,6 @@ import { Audit } from "../pages/Audit";
 import { FrugalIt } from "../pages/FrugalIt";
 import Inspect from "../frugalit/pages/Inspect";
 import { Monitoring } from "../pages/Monitoring";
-import { Workspaces } from "../pages/Workspaces";
 import { K8ApplicationContextProvider } from "./K8ApplicationContextProvider";
 import { DocumentLibraryViewPage } from "../pages/DocumentLibraryViewPage";
 
@@ -189,10 +188,6 @@ export const routes: RouteObject[] = [
       {
         path: "agentHub",
         element: <AgentHub />,
-      },
-      {
-        path: "workspaces",
-        element: <Workspaces />,
       },
     ].filter(Boolean),
   },

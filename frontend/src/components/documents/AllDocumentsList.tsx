@@ -68,7 +68,7 @@ export const AllDocumentsList = ({}: DocumentsViewProps) => {
   // API Hooks
   const [browseDocuments, { isLoading }] = useBrowseDocumentsKnowledgeFlowV1DocumentsBrowsePostMutation();
   const { data: allSources } = useGetDocumentSourcesQuery();
-  const [rescanCatalogSource, { isLoading: isRescanning }] = useRescanCatalogSourceMutation();
+  const [rescanCatalogSource] = useRescanCatalogSourceMutation();
 
   // UI States
   const [documentsPerPage, setDocumentsPerPage] = useState(10);

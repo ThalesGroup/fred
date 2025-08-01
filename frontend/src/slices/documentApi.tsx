@@ -108,16 +108,16 @@ const extendedDocumentApi = documentApiSlice.injectEndpoints({
         responseHandler: async (response) => await response.blob(),
       }),
     }),
-    processDocumentsSync: builder.mutation<ProcessDocumentsResponse, ProcessDocumentsRequest>({
+    processDocuments: builder.mutation<ProcessDocumentsResponse, ProcessDocumentsRequest>({
       query: (body) => ({
-        url: "/knowledge-flow/v1/pipelines/process-documents-sync",
+        url: "/knowledge-flow/v1/process-documents",
         method: "POST",
         body,
       }),
     }),
-    processDocumentsAsync: builder.mutation<ProcessDocumentsResponse, ProcessDocumentsRequest>({
+    scheduleDocuments: builder.mutation<ProcessDocumentsResponse, ProcessDocumentsRequest>({
       query: (body) => ({
-        url: "/knowledge-flow/v1/pipelines/process-documents-async",
+        url: "/knowledge-flow/v1/schedule-documents",
         method: "POST",
         body,
       }),
@@ -188,7 +188,7 @@ export const {
   useGetDocumentSourcesQuery,
   useGetCatalogFilesQuery,
   useBrowseDocumentsMutation,
-  useProcessDocumentsSyncMutation,
-  useProcessDocumentsAsyncMutation,
+  useProcessDocumentsMutation,
+  useScheduleDocumentsMutation,
   useRescanCatalogSourceMutation,
 } = extendedDocumentApi;

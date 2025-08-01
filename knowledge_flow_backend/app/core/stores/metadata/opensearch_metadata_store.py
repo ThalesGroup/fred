@@ -202,7 +202,7 @@ class OpenSearchMetadataStore(BaseMetadataStore):
         List all metadata documents that match a specific source tag.
         """
         try:
-            query = {"query": {"term": {"source_tag.keyword": source_tag}}}
+            query = {"query": {"term": {"source_tag": {"value": source_tag}}}}
             response = self.client.search(index=self.metadata_index_name, body=query)
             hits = response["hits"]["hits"]
         except Exception as e:

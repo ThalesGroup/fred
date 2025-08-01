@@ -36,7 +36,7 @@ class BaseOutputProcessor(ABC):
     """
 
     @abstractmethod
-    def process(self, file_path: str, metadata: DocumentMetadata) -> OutputProcessorResponse:
+    def process(self, file_path: str, metadata: DocumentMetadata) -> DocumentMetadata:
         """
         Process the file after it has been extracted.
         Args:
@@ -46,8 +46,7 @@ class BaseOutputProcessor(ABC):
                              If the processor is a database processor, this will be the path to the file to be inserted into the database.
             metadata (DocumentMetadata): Metadata associated with the input file.
         Returns:
-            OutputProcessorResponse: The response from the output processor, containing the status and any additional information
-                                     about the processing.
+            DocumentMetadata: The updated metadata to reflect the progress in processing stages.
         """
         logger.error(f"No implementation found for ouput processor: {file_path} with metadata {metadata}")
         raise NotImplementedError("Output processor not implemented for this file type.")

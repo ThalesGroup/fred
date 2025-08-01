@@ -135,7 +135,7 @@ class IngestionService:
         else:
             raise RuntimeError(f"Unknown processor type for: {input_path}")
 
-    def process_output(self, input_file_name: str, output_dir: pathlib.Path, input_file_metadata: DocumentMetadata) -> OutputProcessorResponse:
+    def process_output(self, input_file_name: str, output_dir: pathlib.Path, input_file_metadata: DocumentMetadata) -> DocumentMetadata:
         """
         Processes data resulting from the input processing.
         """

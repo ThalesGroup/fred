@@ -46,7 +46,7 @@ class TabularProcessor(BaseOutputProcessor):
         self.tabular_store = self.context.get_tabular_store()
         logger.info("Initializing TabularPipeline")
 
-    def process(self, file_path: str, metadata: DocumentMetadata) -> OutputProcessorResponse:
+    def process(self, file_path: str, metadata: DocumentMetadata) -> DocumentMetadata:
         try:
             logger.info(f"Processing file: {file_path} with metadata: {metadata}")
 
@@ -78,7 +78,7 @@ class TabularProcessor(BaseOutputProcessor):
                 logger.exception("Failed to add documents to Tabular Storage: %s", e)
                 raise HTTPException(status_code=500, detail="Failed to add documents to Tabular Storage") from e
             metadata.mark_stage_done(ProcessingStage.SQL_INDEXED)
-            return OutputProcessorResponse(status=Status.SUCCESS)
+            return metadata
 
         except Exception as e:
             logger.exception(f"Error during vectorization: {e}")

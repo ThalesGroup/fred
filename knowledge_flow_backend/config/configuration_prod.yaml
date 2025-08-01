@@ -62,20 +62,20 @@ content_storage:
   secure: false
 
 document_sources:
-  fred:
+  uploads:
     type: push
     description: "Documents manually uploaded by users"
 
   local:
     type: pull
     provider: local_path
-    base_path: ~/Documents/Fred
+    base_path: ~/Documents/Knowledge
     description: "Personal local documents available for pull-mode ingestion"
 
   sphere:
       type: pull
       provider: minio
-      description: "Documents available from the shared sphere entreprise repository"
+      description: "Documents available for pull from MinIO"
       endpoint_url: localhost:9000
       bucket_name: "sphere"
       prefix: ""

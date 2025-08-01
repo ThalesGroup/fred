@@ -15,6 +15,7 @@
 # app/tests/test_utils/fake_processors.py
 
 from pathlib import Path
+from app.common.document_structures import DocumentMetadata
 from app.common.structures import OutputProcessorResponse, Status
 from app.core.processors.output.base_output_processor import BaseOutputProcessor
 import pandas as pd
@@ -47,5 +48,5 @@ class TestTabularProcessor(BaseTabularProcessor):
 
 
 class TestOutputProcessor(BaseOutputProcessor):
-    def process(self, path, metadata):
-        return OutputProcessorResponse(status=Status.SUCCESS, chunks=1, vectors=[], metadata=metadata)
+    def process(self, file_path: str, metadata: DocumentMetadata) -> DocumentMetadata:
+        return metadata

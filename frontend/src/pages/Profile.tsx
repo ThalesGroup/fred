@@ -31,7 +31,6 @@ import ChatIcon from "@mui/icons-material/Chat";
 import { KeyCloakService } from "../security/KeycloakService";
 import { ProfileCard } from "../components/profile/ProfileCard";
 import { ProfileToken } from "../components/profile/ProfileToken";
-import { ChatProfiles } from "../components/profile/ChatProfile";
 import { TopBar } from "../common/TopBar";
 import { useSearchParams } from "react-router-dom";
 import InvisibleLink from "../components/InvisibleLink";
@@ -145,7 +144,6 @@ export function Profile() {
               )}
 
               {activeTab === 1 && <ProfileToken tokenParsed={tokenParsed} />}
-              {activeTab === 2 && <ChatProfiles />}
             </Box>
           </Box>
         ) : (

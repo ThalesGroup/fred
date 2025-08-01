@@ -93,12 +93,12 @@ export const createBulkProcessSyncAction = (
   name: t("documentTable.processSelected"),
   handler: onBulkProcess,
 });
-export const createBulkProcessAsyncAction = (
-  onBulkProcess: (files: DocumentMetadata[]) => Promise<void>,
+export const createBulkScheduleAction = (
+  onBulkSchedule: (files: DocumentMetadata[]) => Promise<void>,
   t: TFunction,
 ): CustomBulkAction => ({
   icon: <RocketLaunchIcon />,
   name: t("documentTable.scheduleSelected"),
-  handler: onBulkProcess,
+  handler: onBulkSchedule,
 });
 

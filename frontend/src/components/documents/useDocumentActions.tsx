@@ -17,9 +17,8 @@ import {
   ProcessDocumentsRequest,
   useDeleteDocumentMutation,
   useLazyGetDocumentRawContentQuery,
-  useProcessDocumentsAsyncMutation,
-  useProcessDocumentsSyncMutation,
-
+  useProcessDocumentsMutation,
+  useScheduleDocumentsMutation,
 } from "../../slices/documentApi";
 import { DocumentMetadata } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { downloadFile } from "../../utils/downloadUtils";
@@ -28,7 +27,7 @@ import {
   createBulkDeleteAction,
   createBulkDownloadAction,
   createBulkProcessSyncAction,
-  createBulkProcessAsyncAction,
+  createBulkScheduleAction,
   createDeleteAction,
   createDownloadAction,
   createPreviewAction,
@@ -45,8 +44,8 @@ export const useDocumentActions = (onRefreshData?: () => void) => {
   // API hooks
   const [deleteDocument] = useDeleteDocumentMutation();
   const [triggerDownload] = useLazyGetDocumentRawContentQuery();
-  const [processDocumentsSync] = useProcessDocumentsSyncMutation();
-  const [processDocumentsAsync] = useProcessDocumentsAsyncMutation();
+  const [processDocuments] = useProcessDocumentsMutation();
+  const [scheduleDocuments] = useScheduleDocumentsMutation();
 
   // Action handlers
   const handleDelete = async (file: DocumentMetadata) => {
@@ -124,57 +123,80 @@ export const useDocumentActions = (onRefreshData?: () => void) => {
       file_name: file.document_name,
     });
   };
-  type ProcessMode = "sync" | "async";
 
-const handleProcess = async (files: DocumentMetadata[], mode: ProcessMode) => {
-  try {
-    const payload: ProcessDocumentsRequest = {
-      files: files.map((f) => {
-        const isPull = f.source_type === "pull";
-        return {
-          source_tag: f.source_tag || "uploads",
-          document_uid: isPull ? undefined : f.document_uid,
-          external_path: isPull ? f.pull_location ?? undefined : undefined,
-          tags: f.tags || [],
-          display_name: f.document_name,
-        };
-      }),
-      pipeline_name: mode === "sync" ? "manual_ui_sync" : "manual_ui_async",
-    };
+  const handleSchedule = async (files: DocumentMetadata[]) => {
+    try {
+      const payload: ProcessDocumentsRequest = {
+        files: files.map((f) => {
+          const isPull = f.source_type === "pull";
+          return {
+            source_tag: f.source_tag || "uploads",
+            document_uid: isPull ? undefined : f.document_uid,
+            external_path: isPull ? (f.pull_location ?? undefined) : undefined,
+            tags: f.tags || [],
+            display_name: f.document_name,
+          };
+        }),
+        pipeline_name: "manual_ui_async",
+      };
 
-    const endpoint = mode === "sync"
-      ? processDocumentsSync
-      : processDocumentsAsync; 
-    const result = await endpoint(payload).unwrap();
+      const result = await scheduleDocuments(payload).unwrap();
 
-    showInfo({
-      summary: "Processing started",
-      detail: mode === "sync"
-        ? `Immediate ingestion triggered.`
-        : `Workflow ${result.workflow_id} submitted`,
-    });
-  } catch (error) {
-    showError({
-      summary: "Processing Failed",
-      detail: error?.data?.detail || error.message,
-    });
-  }
-};
+      showInfo({
+        summary: "Processing started",
+        detail: `Workflow ${result.workflow_id} submitted`,
+      });
+    } catch (error) {
+      showError({
+        summary: "Processing Failed",
+        detail: error?.data?.detail || error.message,
+      });
+    }
+  };
+  const handleProcess = async (files: DocumentMetadata[]) => {
+    try {
+      const payload: ProcessDocumentsRequest = {
+        files: files.map((f) => {
+          const isPull = f.source_type === "pull";
+          return {
+            source_tag: f.source_tag || "uploads",
+            document_uid: isPull ? undefined : f.document_uid,
+            external_path: isPull ? (f.pull_location ?? undefined) : undefined,
+            tags: f.tags || [],
+            display_name: f.document_name,
+          };
+        }),
+        pipeline_name: "manual_ui_async",
+      };
+
+      const result = await processDocuments(payload).unwrap();
+
+      showInfo({
+        summary: "Processing started",
+        detail: `Workflow ${result.workflow_id} submitted`,
+      });
+    } catch (error) {
+      showError({
+        summary: "Processing Failed",
+        detail: error?.data?.detail || error.message,
+      });
+    }
+  };
 
   // Create default actions
   const defaultRowActions = [
     createPreviewAction(handleDocumentPreview, t),
     createDownloadAction(handleDownload, t),
     createDeleteAction(handleDelete, t),
-    createProcessAction((file) => handleProcess([file], "sync"), t),
-    createScheduleAction((file) => handleProcess([file], "async"), t), 
+    createProcessAction((file) => handleProcess([file]), t),
+    createScheduleAction((file) => handleSchedule([file]), t),
   ];
 
   const defaultBulkActions = [
     createBulkDeleteAction(handleBulkDelete, t),
     createBulkDownloadAction(handleBulkDownload, t),
-    createBulkProcessSyncAction((files) => handleProcess(files, "sync"), t),
-    createBulkProcessAsyncAction((file) => handleProcess(file, "async"), t), // Optional if your library supports bulk createScheduleAction
+    createBulkProcessSyncAction((files) => handleProcess(files), t),
+    createBulkScheduleAction((file) => handleSchedule(file), t), // Optional if your library supports bulk createScheduleAction
   ];
 
   return {

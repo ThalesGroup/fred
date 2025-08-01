@@ -49,7 +49,7 @@ class VectorizationProcessor(BaseOutputProcessor):
         logger.info(f"📝 Metadata store initialized: {self.metadata_store.__class__.__name__}")
 
     @override
-    def process(self, file_path: str, metadata: DocumentMetadata) -> OutputProcessorResponse:
+    def process(self, file_path: str, metadata: DocumentMetadata) -> DocumentMetadata:
         try:
             logger.info(f"Starting vectorization for {file_path}")
             
@@ -80,7 +80,7 @@ class VectorizationProcessor(BaseOutputProcessor):
                 logger.exception("Failed to add documents to Vectore Store: %s", e)
                 raise HTTPException(status_code=500, detail="Failed to add documents to Vectore Store") from e
             metadata.mark_stage_done(ProcessingStage.VECTORIZED)
-            return OutputProcessorResponse(status=Status.SUCCESS)
+            return metadata
 
         except Exception as e:
             logger.exception(f"Error during vectorization: {e}")
