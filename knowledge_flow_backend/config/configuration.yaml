@@ -72,14 +72,14 @@ document_sources:
     base_path: ~/Documents/Fred
     description: "Personal local documents available for pull-mode ingestion"
 
-  s3:
-      type: pull
-      provider: minio
-      description: "Documents available from the shared entreprise repository"
-      endpoint_url: localhost:9000
-      bucket_name: "fred"
-      prefix: ""
-      secure: false
+  # minio:
+  #     type: pull
+  #     provider: minio
+  #     description: "Documents available from the shared entreprise repository"
+  #     endpoint_url: localhost:9000
+  #     bucket_name: "fred"
+  #     prefix: ""
+  #     secure: false
   # sphere:
   #   type: pull
   #   provider: sphere

@@ -308,10 +308,10 @@ class ApplicationContext:
             if settings.openai_api_version:
                 embedding_params["openai_api_version"] = settings.openai_api_version
 
-            return Embedder(OpenAIEmbeddings(**embedding_params))
+            return Embedder(OpenAIEmbeddings(**embedding_params)) # type: ignore[call-arg]
 
         elif backend_type == "azureopenai":
-            openai_settings = EmbeddingAzureOpenAISettings()
+            openai_settings = EmbeddingAzureOpenAISettings() # type: ignore[call-arg]
             return Embedder(
                 AzureOpenAIEmbeddings(
                     deployment=openai_settings.azure_deployment_embedding,
@@ -320,7 +320,7 @@ class ApplicationContext:
                     openai_api_version=openai_settings.azure_api_version,
                     openai_api_key=openai_settings.azure_openai_api_key,
                 )
-            )
+            ) # type: ignore[call-arg]
 
         elif backend_type == "azureapim":
             settings = validate_settings_or_exit(EmbeddingAzureApimSettings, "Azure APIM Embedding Settings")
