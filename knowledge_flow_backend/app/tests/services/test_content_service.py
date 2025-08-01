@@ -26,9 +26,9 @@ Uses real filesystem, no mocks. Fast and reliable.
 from app.core.stores.content.filesystem_content_store import FileSystemContentStore
 import pytest
 
-from app.common.document_structures import DocumentMetadata
+from app.common.document_structures import DocumentMetadata, SourceType
+from app.core.stores.metadata.duckdb_metadata_store import DuckdbMetadataStore
 from app.features.content.service import ContentService
-from app.core.stores.metadata.local_metadata_store import LocalMetadataStore
 
 
 # ----------------------------
@@ -43,12 +43,12 @@ def service(tmp_path) -> ContentService:
     content_dir = tmp_path / "content-store"
 
     service = ContentService()
-    service.metadata_store = LocalMetadataStore(metadata_path)
+    service.metadata_store = DuckdbMetadataStore(metadata_path)
     service.content_store = FileSystemContentStore(content_dir)
 
     # Valid doc setup
     uid = "valid"
-    metadata = DocumentMetadata(source_type="push", document_uid=uid, document_name="test.txt")
+    metadata = DocumentMetadata(source_type=SourceType("push"), document_uid=uid, document_name="test.txt")
     service.metadata_store.save_metadata(metadata)
 
     input_dir = content_dir / uid / "input"
