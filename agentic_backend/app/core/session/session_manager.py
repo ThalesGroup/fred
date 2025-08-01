@@ -21,7 +21,6 @@ from typing import List, Tuple, Dict, Any, Optional, Union, Callable, Awaitable
 from uuid import uuid4
 
 from app.core.agents.agent_manager import AgentManager
-from app.core.monitoring.logging_context import set_logging_context
 from fastapi import UploadFile
 from collections import defaultdict
 import requests
@@ -173,9 +172,6 @@ class SessionManager:
             message=message,
             agent_name=agent_name,
             argument=argument,
-        )
-        set_logging_context(
-            user_id=user_id, session_id=session.id, agent_name=agent_name
         )
         exchange_id = str(uuid4())
         base_rank = len(history)
