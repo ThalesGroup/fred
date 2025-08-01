@@ -468,7 +468,7 @@ class ApplicationContext:
 
         return self._catalog_store_instance
 
-    def get_documeget_content_loader_for_source(self, source: str) -> BaseContentLoader:
+    def get_content_loader(self, source: str) -> BaseContentLoader:
         """
         Factory method to create a document loader instance based on configuration.
         this document loader is legacy it returns directly langchain documents

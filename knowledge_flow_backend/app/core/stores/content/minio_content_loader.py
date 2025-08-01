@@ -1,3 +1,18 @@
+# Copyright Thales 2025
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+from io import BytesIO
 import logging
 from pathlib import Path
 from typing import List
@@ -82,3 +97,16 @@ class MinioContentLoader(BaseContentLoader):
         except S3Error as e:
             logger.error(f"Failed to list objects in bucket {self.bucket_name}: {e}")
             raise RuntimeError(f"Failed to list objects in bucket {self.bucket_name}: {e}")
+
+    def fetch_by_relative_path(self, relative_path: str, destination_dir: Path) -> Path:
+        destination_dir.mkdir(parents=True, exist_ok=True)
+        local_path = destination_dir / relative_path
+        local_path.parent.mkdir(parents=True, exist_ok=True)
+
+        remote_key = self.prefix + relative_path
+
+        try:
+            self.client.fget_object(self.bucket_name, remote_key, str(local_path))
+            return local_path
+        except S3Error as e:
+            raise RuntimeError(f"Failed to fetch {remote_key} from bucket {self.bucket_name}: {e}")

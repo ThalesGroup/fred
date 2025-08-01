@@ -52,47 +52,29 @@ input_processors:
     class_path: app.core.processors.input.pps_tabular_processor.pps_tabular_processor.PpsTabularProcessor
 
 content_storage:
-  type: minio
-  endpoint: http://localhost:9000
-  bucket_name: "knowledge-flow-content"
-  secure: false
+  type: "local"
+  root_path: ~/.fred/knowledge-flow/content-storage
 
 document_sources:
-  uploads:
+  fred:
     type: push
     description: "Documents manually uploaded by users"
 
   local:
     type: pull
     provider: local_path
-    base_path: ~/Documents/Knowledge
+    base_path: ~/Documents/Fred
     description: "Personal local documents available for pull-mode ingestion"
 
-  minio:
-      type: pull
-      provider: minio
-      description: "Documents available for pull from MinIO"
-      endpoint_url: localhost:9000
-      bucket_name: "shared-content"
-      prefix: ""
-      secure: false
-
 metadata_storage:
-  type: opensearch
-  host: https://localhost:9200              
-  secure: true                        
-  verify_certs: false                      
-  index: metadata-index
+  type: "duckdb"
+  duckdb_path: "~/.fred/knowledge-flow/db.duckdb"
 
 tag_storage:
   type: "local"
 
 vector_storage:
-  type: opensearch
-  host: https://localhost:9200
-  secure: true
-  verify_certs: false
-  index: vector-index-ada002
+  type: in_memory
 
 tabular_storage:
   type: "duckdb"

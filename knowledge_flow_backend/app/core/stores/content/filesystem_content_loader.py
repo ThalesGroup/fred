@@ -1,6 +1,20 @@
+# Copyright Thales 2025
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from pathlib import Path
 import hashlib
-from typing import List
+from typing import BinaryIO, List
 
 from app.core.stores.metadata.base_catalog_store import PullFileEntry
 from app.common.document_structures import DocumentMetadata
@@ -55,3 +69,9 @@ class FileSystemContentLoader(BaseContentLoader):
             hash="na",
         )
         return self.fetch_from_pull_entry(entry, destination_dir)
+
+    def fetch_by_relative_path(self, relative_path: str, destination_dir: Path) -> Path:
+        full_path = self.base_path / relative_path
+        if not full_path.exists() or not full_path.is_file():
+            raise FileNotFoundError(f"File not found: {full_path}")
+        return full_path

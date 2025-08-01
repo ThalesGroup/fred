@@ -41,8 +41,8 @@
   },
   "agentHub": {
     "title": "Agent Hub",
-    "confirmDeleteTitle": "Confirm deletion",   
-    "confirmDeleteMessage": "Delete this agent ? This action cannot be undone.",  
+    "confirmDeleteTitle": "Confirm deletion",
+    "confirmDeleteMessage": "Delete this agent ? This action cannot be undone.",
     "description": "Explore and manage available AI agents",
     "allAgents": "All Agents",
     "favoriteAgents": "Favorite Agents",
@@ -85,7 +85,6 @@
       "creationFailedDetailFallback": "An unexpected error occurred while creating the agent."
     }
   },
-
   "chatbot": {
     "startNew": "Start a new conversation with {{name}}",
     "changeAssistant": "You can select another assistant in the settings panel.",
@@ -164,54 +163,57 @@
       "errorSummary": "Creation failed",
       "errorDetail": "Could not create context: {{message}}"
     },
-    "documentTable": {
-      "selectedCount": "{{count}} selected",
-      "deleteSelected": "Delete",
-      "processSelected": "Process",
-      "scheduleSelected": "Schedule",
-      "downloadSelected": "Download",
-      "fileName": "File Name",
-      "dateAdded": "Date Added",
-      "dateAddedTooltip": "Date added to knowledge base",
-      "retrievableYes": "Searchable",
-      "retrievableNo": "Excluded",
-      "status": "Status",
-      "tags": "Tags",
-      "actions": "Actions",
-      "loadingMetadata": "Loading metadata...",
-      "noMetadata": "No metadata available.",
-      "yes": "Yes",
-      "no": "No"
+    "cancel": "Cancel",
+    "edit": {
+      "title": "Edit {{type}}",
+      "name": "Name",
+      "description": "Description",
+      "cancel": "Cancel",
+      "save": "Save",
+      "dropDefault": "Drop files here",
+      "dropActive": "Drop files here to replace",
+      "existingDocuments": "Existing documents",
+      "newDocuments": "New documents",
+      "documentDescription": "Document description (optional)"
+    }
+  },
+  "profile": {
+    "title": "Profile",
+    "description": "Manage your profile settings",
+    "menu": {
+      "account": "Account",
+      "token": "Token"
     },
     "noUser": "No user connected",
-    "login": "Log in",
+    "login": "Login",
     "notAvailable": "Not available",
     "email": "Email",
     "userId": "User ID",
-    "authTime": "Last Authentication",
-    "expTime": "Session Expiration",
-    "roles": "User Roles",
+    "authTime": "Last authentication",
+    "expTime": "Session expiration",
+    "roles": "User roles",
     "logout": "Logout",
     "token": {
-      "title": "Token Information",
-      "none": "No available token"
+      "title": "Token information",
+      "none": "No token available"
     },
     "language": "Interface language",
     "chat": {
-      "searchPlaceholder": "Search profiles...",
+      "searchPlaceholder": "Search chat profiles...",
       "noProfiles": "No profiles found.",
       "dialogTitle": "Chat profile",
       "drawerTitle": "Profile description",
-      "noDescription": "No description provided.",
-      "updateError": "Could not update profile",
-      "deleteError": "Could not delete profile",
-      "reloadError": "Could not reload profile"
+      "noDescription": "No description available.",
+      "updateError": "Unable to update profile",
+      "deleteError": "Unable to delete profile",
+      "reloadError": "Unable to reload profile"
     }
   },
   "documentLibrary": {
     "title": "Document Library",
     "description": "Access the knowledge base documents",
     "upload": "Upload a document",
+    "uploadAndProcess": "Upload and Process document",
     "refresh": "Refresh",
     "uploadInLibrary": "Add to library",
     "uploadDrawerTitle": "Upload a document",

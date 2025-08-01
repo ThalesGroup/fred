@@ -1,6 +1,21 @@
+# Copyright Thales 2025
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import base64
 import hashlib
 import hmac
+from pathlib import Path
 import time
 from typing import List
 
@@ -78,3 +93,20 @@ class SphereContentLoader(BaseContentLoader):
             ))
 
         return entries
+
+    def fetch_by_relative_path(self, relative_path: str, destination_dir: Path) -> Path:
+        destination_dir.mkdir(parents=True, exist_ok=True)
+        local_path = destination_dir / relative_path
+        local_path.parent.mkdir(parents=True, exist_ok=True)
+
+        download_url = f"{self.base_url}/nodes/{self.parent_node_id}/children/{relative_path}/content"
+        headers = self._get_headers("GET", download_url)
+
+        response = self.session.get(download_url, headers=headers, stream=True)
+        response.raise_for_status()
+
+        with open(local_path, "wb") as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                f.write(chunk)
+
+        return local_path

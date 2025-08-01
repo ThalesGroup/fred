@@ -27,7 +27,7 @@ class CatalogService:
         source_config = self.config.document_sources[source_tag]
         if source_config.type != "pull":
             raise NotImplementedError(f"Rescan not supported for source type: {source_config.type}")
-        self.loader = ApplicationContext.get_instance().get_documeget_content_loader_for_source(source_tag)
+        self.loader = ApplicationContext.get_instance().get_content_loader(source_tag)
         entries = self.loader.scan()
         self.store.save_entries(source_tag, entries)
         return len(entries)

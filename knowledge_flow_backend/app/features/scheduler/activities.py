@@ -15,8 +15,8 @@
 import logging
 import pathlib
 import tempfile
-from app.common.document_structures import DocumentMetadata, ProcessingStage
 
+from app.common.document_structures import DocumentMetadata, ProcessingStage
 
 from app.features.scheduler.structure import FileToProcess
 from temporalio import activity
@@ -34,33 +34,43 @@ def prepare_working_dir(document_uid: str) -> pathlib.Path:
 
 @activity.defn
 def create_pull_file_metadata(file: FileToProcess) -> DocumentMetadata:
+
+    assert file.external_path, "Pull files must have an external path"
+    assert file.source_tag, "Pull files must have a source tag"
     logger = activity.logger
     logger.info(f"[create_pull_file_metadata] Starting for: {file}")
     from app.features.ingestion.service import IngestionService
 
     ingestion_service = IngestionService()
-    from app.common.source_utils import get_pull_base_path
 
-    # Step 1: Resolve full path
-    base_path = get_pull_base_path(file.source_tag)
-    assert file.external_path, "Pull files must have an external path"
-    assert base_path, "Base path for pull files must be defined"
-    full_path = base_path / file.external_path
+    from app.application_context import ApplicationContext
+    context = ApplicationContext.get_instance()
+    loader = context.get_content_loader(file.source_tag)
 
-    if not full_path.exists() or not full_path.is_file():
-        raise FileNotFoundError(f"Pull file not found at: {full_path}")
+    # Step 2: Fetch local file path from loader (downloads if needed)
+    with tempfile.TemporaryDirectory() as tmpdir:
+        destination = pathlib.Path(tmpdir)
+        full_path = loader.fetch_by_relative_path(file.external_path, destination)
 
-    logger.info(f"[create_pull_file_metadata] Found file at: {full_path}")
+        if not full_path.exists() or not full_path.is_file():
+            raise FileNotFoundError(f"Pull file not found after fetch: {full_path}")
 
-    # Step 2: Extract metadata using input processor
-    metadata = ingestion_service.extract_metadata(full_path, tags=file.tags, source_tag=file.source_tag)
-    logger.info(f"[create_pull_file_metadata] generated : {metadata}")
+        logger.info(f"[create_pull_file_metadata] Fetched file at: {full_path}")
 
-    # Step 4: Save metadata
-    ingestion_service.save_metadata(metadata=metadata)
+        # Step 3: Extract and save metadata
+        ingestion_service = IngestionService()
+        metadata = ingestion_service.extract_metadata(
+            full_path,
+            tags=file.tags,
+            source_tag=file.source_tag
+        )
+        metadata.pull_location = file.external_path
+        logger.info(f"[create_pull_file_metadata] Generated metadata: {metadata}")
 
-    logger.info(f"[create_pull_file_metadata] Metadata extracted and saved for pull file: {metadata.document_uid}")
-    return metadata
+        ingestion_service.save_metadata(metadata=metadata)
+
+        logger.info(f"[create_pull_file_metadata] Metadata extracted and saved for pull file: {metadata.document_uid}")
+        return metadata
 
 
 @activity.defn
@@ -99,25 +109,27 @@ def load_push_file(file: FileToProcess, metadata: DocumentMetadata) -> pathlib.P
 @activity.defn
 def load_pull_file(file: FileToProcess, metadata: DocumentMetadata) -> pathlib.Path:
 
+    logger = activity.logger
+    logger.info(f"[load_pull_file] Fetching file for: {metadata.document_uid}")
+
+    assert metadata.source_tag, "Missing source_tag in metadata"
+    assert metadata.pull_location, "Missing pull_location in metadata"
+
     working_dir = prepare_working_dir(metadata.document_uid)
     input_dir = working_dir / "input"
     output_dir = working_dir / "output"
-    input_dir.mkdir(exist_ok=True)
-    output_dir.mkdir(exist_ok=True)
+    input_dir.mkdir(parents=True, exist_ok=True)
+    output_dir.mkdir(parents=True, exist_ok=True)
 
-    from app.common.source_utils import get_pull_base_path
-    assert file.external_path, "Pull files must have an external path"
-    logger.info(f"[process_document] Resolving pull file: source_tag={file.source_tag}, path={file.external_path}")
-    full_path = get_pull_base_path(file.source_tag) / file.external_path
+    from app.application_context import ApplicationContext
+    loader = ApplicationContext.get_instance().get_content_loader(metadata.source_tag)
+    full_path = loader.fetch_by_relative_path(metadata.pull_location, input_dir)
 
     if not full_path.exists() or not full_path.is_file():
-        raise FileNotFoundError(f"Pull file not found: {full_path}")
+        raise FileNotFoundError(f"File not found after fetch: {full_path}")
 
-    # 🗂️ Copy file into working directory
-    target_path = input_dir / full_path.name
-    target_path.write_bytes(full_path.read_bytes())
-    input_file = target_path
-    return input_file
+    logger.info(f"[load_pull_file] File copied to working dir: {full_path}")
+    return full_path
 
 @activity.defn
 def input_process(input_file: pathlib.Path, metadata: DocumentMetadata) -> DocumentMetadata:
