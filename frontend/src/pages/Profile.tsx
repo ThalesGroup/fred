@@ -27,7 +27,6 @@ import {
 } from "@mui/material";
 import AccountCircleIcon from "@mui/icons-material/AccountCircle";
 import KeyIcon from "@mui/icons-material/VpnKey";
-import ChatIcon from "@mui/icons-material/Chat";
 import { KeyCloakService } from "../security/KeycloakService";
 import { ProfileCard } from "../components/profile/ProfileCard";
 import { ProfileToken } from "../components/profile/ProfileToken";
@@ -80,7 +79,6 @@ export function Profile() {
   const menuItems = [
     { label: t("profile.menu.account"), icon: <AccountCircleIcon /> },
     { label: t("profile.menu.token"), icon: <KeyIcon /> },
-    { label: t("profile.menu.chat"), icon: <ChatIcon /> },
   ];
 
   return (
