@@ -25,6 +25,7 @@ from app.features.tabular.structures import (
     TabularQueryResponse,
     TabularSchemaResponse,
 )
+from app.features.tabular.utils import extract_safe_sql_query
 
 logger = logging.getLogger(__name__)
 
@@ -110,6 +111,8 @@ class TabularService:
 
         sql = request.query.strip()
 
+        sql = extract_safe_sql_query(sql)
+
         # Vérifie s'il y a déjà un LIMIT dans la requête
         has_limit = re.search(r"\bLIMIT\b\s+\d+", sql, re.IGNORECASE) is not None
 
@@ -122,7 +125,7 @@ class TabularService:
         try:
             df = self.tabular_store.execute_sql_query(sql)
             rows = df.to_dict(orient="records")
-            return TabularQueryResponse(document_name=document_name, rows=rows, error=None)
+            return TabularQueryResponse(sql_query=sql, rows=rows, error=None)
         except Exception as e:
             logger.error(f"Error during query execution: {e}", exc_info=True)
-            return TabularQueryResponse(document_name=document_name, rows=[], error=str(e))
+            return TabularQueryResponse(sql_query=sql, rows=[], error=str(e))

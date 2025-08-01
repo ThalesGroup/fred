@@ -28,13 +28,8 @@ import requests
 
 from app.core.agents.flow import AgentFlow
 from app.core.session.attachement_processing import AttachementProcessing
-from app.core.chatbot.chat_schema import (
-    ChatMessagePayload,
-    SessionSchema,
-    SessionWithFiles,
-    clean_agent_metadata,
-    clean_token_usage,
-)
+from app.core.chatbot.chat_schema import ChatMessagePayload, SessionSchema, SessionWithFiles, clean_agent_metadata, clean_token_usage
+from app.core.chatbot.chatbot_utils import enrich_ChatMessagePayloads_with_latencies
 from app.core.session.stores.abstract_session_backend import AbstractSessionStorage
 
 from app.application_context import get_configuration, get_default_model
@@ -263,12 +258,17 @@ class SessionManager:
             # Ensure correct ranks for assistant messages
             for i, m in enumerate(agent_messages):
                 m.rank = base_rank + 1 + i
+                if m.metadata is None:
+                    m.metadata = {}
+                m.metadata["agent_name"] = agent_name
 
             all_payloads.extend(agent_messages)
 
         except Exception as e:
             logger.error(f"Error during agent execution: {e}")
             # No crash — we still return user message only
+
+        all_payloads = enrich_ChatMessagePayloads_with_latencies(all_payloads)
 
         # 💾 Save all messages in correct order
         session.updated_at = datetime.now()

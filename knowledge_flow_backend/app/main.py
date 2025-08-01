@@ -126,7 +126,7 @@ def create_app() -> FastAPI:
         describe_all_responses=True,
         describe_full_response_schema=True,
     )
-    mcp_tabular.mount(mount_path="/mcp_tabular")
+    mcp_tabular.mount(mount_path="/knowledge-flow/v1/tabular")
     mcp_text = FastApiMCP(
         app,
         name="Knowledge Flow Text MCP",
@@ -135,7 +135,7 @@ def create_app() -> FastAPI:
         describe_all_responses=True,
         describe_full_response_schema=True,
     )
-    mcp_text.mount(mount_path="/mcp_text")
+    mcp_text.mount(mount_path="/knowledge-flow/v1/vector/search")
     mcp_code = FastApiMCP(
         app,
         name="Knowledge Flow Code MCP",

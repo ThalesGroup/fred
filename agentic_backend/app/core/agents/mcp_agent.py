@@ -3,7 +3,6 @@ from app.common.mcp_utils import get_mcp_client_for_agent
 from app.common.structures import AgentSettings
 from app.core.agents.mcp_agent_toolkit import McpAgentToolkit
 from app.core.agents.flow import AgentFlow
-from app.core.monitoring.node_monitoring.monitor_node import monitor_node
 from app.core.model.model_factory import get_model
 from langgraph.graph import StateGraph, MessagesState
 from langgraph.constants import START
@@ -80,7 +79,7 @@ class MCPAgent(AgentFlow):
 
     def get_graph(self):
         builder = StateGraph(MessagesState)
-        builder.add_node("reasoner", monitor_node(self.reasoner))
+        builder.add_node("reasoner", self.reasoner)
         builder.add_node("tools", ToolNode(self.toolkit.get_tools()))
         builder.add_edge(START, "reasoner")
         builder.add_conditional_edges("reasoner", tools_condition)
