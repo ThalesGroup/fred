@@ -2,7 +2,7 @@ import logging
 from pathlib import Path
 
 from app.common.document_structures import SourceType
-from app.common.structures import DocumentSourceConfig
+from app.common.structures import DocumentSourceConfig, FileSystemPullSource
 
 logger = logging.getLogger(__name__)
 
@@ -35,4 +35,6 @@ def get_pull_base_path(source_tag: str) -> Path:
     if source_config.type != "pull":
         raise ValueError(f"Source tag '{source_tag}' is not a pull source")
 
+    if not isinstance(source_config, FileSystemPullSource):
+        raise ValueError(f"Invalid base path for pull source '{source_tag}': {source_config.base_path}")
     return Path(source_config.base_path).expanduser().resolve()

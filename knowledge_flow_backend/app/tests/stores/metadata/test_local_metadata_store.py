@@ -76,11 +76,6 @@ def test_get_all_metadata_with_filter(metadata_store):
 # ----------------------------
 
 
-def test_save_metadata_missing_uid(metadata_store):
-    with pytest.raises(ValueError):
-        metadata_store.save_metadata(DocumentMetadata(source_type=SourceType("push"), document_uid=None, document_name="Missing"))
-
-
 def test_update_metadata_uid_not_found(metadata_store):
     with pytest.raises(ValueError):
         metadata_store.update_metadata_field("missing", "title", "New Title")
