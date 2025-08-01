@@ -435,7 +435,7 @@ export type TabularSchemaResponse = {
   row_count?: number | null;
 };
 export type TabularQueryResponse = {
-  document_name: string;
+  sql_query: string;
   rows?:
     | {
         [key: string]: any;

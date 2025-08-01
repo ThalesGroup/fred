@@ -57,6 +57,7 @@ BaseProcessorType = Union[BaseMarkdownProcessor, BaseTabularProcessor]
 DEFAULT_OUTPUT_PROCESSORS = {
     "markdown": "app.core.processors.output.vectorization_processor.vectorization_processor.VectorizationProcessor",
     "tabular": "app.core.processors.output.tabular_processor.tabular_processor.TabularProcessor",
+    "duckdb": "app.core.processors.output.duckdb_processor.duckdb_processor.DuckDBProcessor"
 }
 
 # Mapping file extensions to categories
@@ -70,6 +71,7 @@ EXTENSION_CATEGORY = {
     ".xlsx": "tabular",
     ".xls": "tabular",
     ".xlsm": "tabular",
+    ".duckdb": "duckdb"
 }
 
 logger = logging.getLogger(__name__)
