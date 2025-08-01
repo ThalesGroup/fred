@@ -15,7 +15,7 @@
 import logging
 import re
 from datetime import datetime
-from typing import List, cast
+from typing import List
 
 from app.application_context import ApplicationContext
 from app.features.tabular.structures import (
