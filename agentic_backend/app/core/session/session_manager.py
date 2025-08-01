@@ -246,13 +246,14 @@ class SessionManager:
             logger.error(f"Error during agent execution: {e}")
             # No crash — we still return user message only
 
+        all_payloads = enrich_ChatMessagePayloads_with_latencies(all_payloads)
+
         # 💾 Save all messages in correct order
         session.updated_at = datetime.now()
         self.storage.save_session(session)
         self.storage.save_messages(session.id, all_payloads, user_id)
 
-        return session, enrich_ChatMessagePayloads_with_latencies(all_payloads)
-
+        return session, all_payloads
 
     def _prepare_session_and_history(
         self, user_id: str, 

@@ -13,7 +13,6 @@ def enrich_ChatMessagePayloads_with_latencies(metrics: List[ChatMessagePayload])
     (by exchange_id and rank). Returns a new flat list of enriched messages.
     """
     by_exchange_id = defaultdict(list)
-    logger.info(metrics)
     
     for m in metrics:
         by_exchange_id[m.exchange_id].append(m)
