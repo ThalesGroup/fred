@@ -236,7 +236,6 @@ class FileSystemPullSource(BasePullSourceConfig):
 
 
 class GitPullSource(BasePullSourceConfig):
-    type: Literal["pull"] = "pull"
     provider: Literal["github"]
     repo: str = Field(..., description="GitHub repository in the format 'owner/repo'")
     branch: Optional[str] = Field(default="main", description="Git branch to pull from")
@@ -251,8 +250,7 @@ class GitPullSource(BasePullSourceConfig):
         if not values.get("token"):
             raise ValueError("Missing GITHUB_TOKEN environment variable")
         return values
-class SpherePullSource(BaseModel):
-    type: Literal["pull"] = "pull"
+class SpherePullSource(BasePullSourceConfig):
     provider: Literal["sphere"]
     base_url: str = Field(..., description="Base URL for the Sphere API")
     parent_node_id: str = Field(..., description="ID of the parent folder or node to list/download")
