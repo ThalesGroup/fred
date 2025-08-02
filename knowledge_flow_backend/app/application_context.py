@@ -57,7 +57,7 @@ BaseProcessorType = Union[BaseMarkdownProcessor, BaseTabularProcessor]
 DEFAULT_OUTPUT_PROCESSORS = {
     "markdown": "app.core.processors.output.vectorization_processor.vectorization_processor.VectorizationProcessor",
     "tabular": "app.core.processors.output.tabular_processor.tabular_processor.TabularProcessor",
-    "duckdb": "app.core.processors.output.duckdb_processor.duckdb_processor.DuckDBProcessor"
+    "duckdb": "app.core.processors.output.duckdb_processor.duckdb_processor.DuckDBProcessor",
 }
 
 # Mapping file extensions to categories
@@ -71,7 +71,7 @@ EXTENSION_CATEGORY = {
     ".xlsx": "tabular",
     ".xls": "tabular",
     ".xlsm": "tabular",
-    ".duckdb": "duckdb"
+    ".duckdb": "duckdb",
 }
 
 logger = logging.getLogger(__name__)
@@ -114,7 +114,7 @@ class ApplicationContext:
     _vector_store_instance: Optional[BaseVectoreStore] = None
     _metadata_store_instance: Optional[BaseMetadataStore] = None
     _tag_store_instance: Optional[BaseTagStore] = None
-    _tabular_store_instance: Optional[BaseTabularProcessor] = None
+    _tabular_store_instance: Optional[DuckDBTableStore] = None
 
     def __init__(self, config: Configuration):
         # Allow reuse if already initialized with same config
@@ -297,8 +297,7 @@ class ApplicationContext:
         backend_type = self.config.embedding.type
 
         if backend_type == "openai":
-          
-            settings = EmbeddingOpenAISettings() # type: ignore[call-arg]
+            settings = EmbeddingOpenAISettings()  # type: ignore[call-arg]
             embedding_params = {
                 "model": settings.openai_model_name,
                 "openai_api_key": settings.openai_api_key,
@@ -310,10 +309,10 @@ class ApplicationContext:
             if settings.openai_api_version:
                 embedding_params["openai_api_version"] = settings.openai_api_version
 
-            return Embedder(OpenAIEmbeddings(**embedding_params)) # type: ignore[call-arg]
+            return Embedder(OpenAIEmbeddings(**embedding_params))  # type: ignore[call-arg]
 
         elif backend_type == "azureopenai":
-            openai_settings = EmbeddingAzureOpenAISettings() # type: ignore[call-arg]
+            openai_settings = EmbeddingAzureOpenAISettings()  # type: ignore[call-arg]
             return Embedder(
                 AzureOpenAIEmbeddings(
                     deployment=openai_settings.azure_deployment_embedding,
@@ -322,7 +321,7 @@ class ApplicationContext:
                     openai_api_version=openai_settings.azure_api_version,
                     openai_api_key=openai_settings.azure_openai_api_key,
                 )
-            ) # type: ignore[call-arg]
+            )  # type: ignore[call-arg]
 
         elif backend_type == "azureapim":
             settings = validate_settings_or_exit(EmbeddingAzureApimSettings, "Azure APIM Embedding Settings")
@@ -477,7 +476,7 @@ class ApplicationContext:
         # Get the singleton application context and configuration
         config = self.get_config().document_sources
         if not config or source not in config:
-            raise ValueError(f"Unknown document source tag: {source}")  
+            raise ValueError(f"Unknown document source tag: {source}")
         source_config = config[source]
         if source_config.type != "pull":
             raise ValueError(f"Source '{source}' is not a pull-mode source.")
@@ -506,7 +505,7 @@ class ApplicationContext:
         if source_config.provider == "local_path":
             return FileSystemContentLoader(source_config, source_tag)
         elif source_config.provider == "minio":
-             return MinioContentLoader(source_config, source_tag)
+            return MinioContentLoader(source_config, source_tag)
         else:
             raise NotImplementedError(f"No pull provider implemented for '{source_config.provider}'")
 

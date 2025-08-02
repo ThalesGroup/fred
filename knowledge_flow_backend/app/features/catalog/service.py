@@ -14,7 +14,6 @@ class CatalogService:
     def __init__(self):
         self.config = ApplicationContext.get_instance().get_config()
         self.store = ApplicationContext.get_instance().get_catalog_store()
-        
 
     def list_files(self, source_tag: str, offset: int = 0, limit: int = 100) -> List[PullFileEntry]:
         if not self.config.document_sources or source_tag not in self.config.document_sources:

@@ -20,6 +20,14 @@ from app.common.document_structures import DocumentMetadata
 logger = logging.getLogger(__name__)
 
 
+class TabularProcessingError(Exception):
+    """Raised when a tabular document cannot be processed or saved."""
+
+
+class VectorProcessingError(Exception):
+    """Raised when a vectorization processing fails."""
+
+
 class BaseOutputProcessor(ABC):
     """
     Base output Processor
