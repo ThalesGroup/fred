@@ -14,13 +14,12 @@
 
 import logging
 from typing import override
-from fastapi import HTTPException
 from langchain.schema.document import Document
 
 from app.application_context import ApplicationContext
 from app.common.document_structures import DocumentMetadata, ProcessingStage
 from app.common.vectorization_utils import load_langchain_doc_from_metadata
-from app.core.processors.output.base_output_processor import BaseOutputProcessor
+from app.core.processors.output.base_output_processor import BaseOutputProcessor, VectorProcessingError
 
 logger = logging.getLogger(__name__)
 
@@ -76,11 +75,12 @@ class VectorizationProcessor(BaseOutputProcessor):
                 result = self.vector_store.add_documents(chunks)
                 logger.debug(f"Documents added to Vector Store: {result}")
             except Exception as e:
-                logger.exception("Failed to add documents to Vectore Store: %s", e)
-                raise HTTPException(status_code=500, detail="Failed to add documents to Vectore Store") from e
+                logger.exception("Failed to add documents to Vectore Store")
+                raise VectorProcessingError("Failed to add documents to Vectore Store") from e
             metadata.mark_stage_done(ProcessingStage.VECTORIZED)
             return metadata
 
         except Exception as e:
-            logger.exception(f"Error during vectorization: {e}")
-            raise HTTPException(status_code=500, detail=str(e))
+            logger.exception("Unexpected error during vectorization")
+            raise VectorProcessingError("vectorization processing failed") from e
+
