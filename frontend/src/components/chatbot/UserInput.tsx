@@ -23,6 +23,7 @@ import StopIcon from "@mui/icons-material/Stop";
 import AudioController from "./AudioController.tsx";
 import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
 import Chip from "@mui/material/Chip";
+import { ChatLibrariesSelection } from "./ChatLibrariesSelection";
 
 export interface UserInputContent {
   text?: string;
@@ -55,6 +56,7 @@ export default function UserInput({
   const [userInput, setUserInput] = useState<string>("");
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [filesBlob, setFilesBlob] = useState<File[] | null>(null);
+  const [selectedLibrariesIds, setSelectedLibrariesIds] = useState<string[]>([]);
 
   const handleKeyDown = (event: React.KeyboardEvent) => {
     if (event.key === "Enter") {
@@ -288,6 +290,12 @@ export default function UserInput({
                   </Badge>
                 </Tooltip>
               )}
+
+              {/* Chat Libraries Selection */}
+              <ChatLibrariesSelection
+                selectedLibrariesIds={selectedLibrariesIds}
+                setSelectedLibrariesIds={setSelectedLibrariesIds}
+              />
 
               {/* Audio Record Button */}
               {enableAudioAttachment && (

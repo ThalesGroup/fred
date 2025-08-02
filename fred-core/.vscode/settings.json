@@ -8,5 +8,7 @@
         "editor.wordBasedSuggestions": "off",
         "editor.defaultFormatter": "charliermarsh.ruff",
     },
-    "python.analysis.typeCheckingMode": "standard"
+    "editor.codeActionsOnSave": {
+        "source.organizeImports": "always"
+    },
 }
