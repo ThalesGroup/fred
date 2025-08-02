@@ -12,13 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from datetime import datetime, timezone
 import logging
+from datetime import datetime, timezone
 from typing import List, Tuple
-from langchain_core.vectorstores import InMemoryVectorStore
 
 from langchain.embeddings.base import Embeddings
 from langchain.schema.document import Document
+from langchain_core.vectorstores import InMemoryVectorStore
 
 from app.common.utils import get_embedding_model_name
 from app.core.stores.vector.base_vector_store import BaseVectoreStore
@@ -59,8 +59,19 @@ class InMemoryLangchainVectorStore(BaseVectoreStore):
             else:
                 break
 
-    def similarity_search_with_score(self, query: str, k: int = 5) -> List[Tuple[Document, float]]:
-        results = self.vectorstore.similarity_search_with_score(query, k=k)
+    def similarity_search_with_score(self, query: str, k: int = 5, tags: list[str] | None = None) -> List[Tuple[Document, float]]:
+        if tags:
+            # Create filter function for documents with at least one of the specified tags
+            def tag_filter(doc: Document) -> bool:
+                doc_tags = doc.metadata.get("tags", [])
+                if not doc_tags:
+                    return False
+                return any(tag in doc_tags for tag in tags)
+
+            results = self.vectorstore.similarity_search_with_score(query, k=k, filter=tag_filter)
+        else:
+            results = self.vectorstore.similarity_search_with_score(query, k=k)
+
         enriched = []
 
         for rank, (doc, score) in enumerate(results):

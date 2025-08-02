@@ -375,7 +375,7 @@ const lightTypography = {
     Object.entries(baseTypography.markdown).map(([k, v]) => [
       k,
       { ...v, color: lightPalette.text.primary, fontFamily: "Inter, sans-serif" },
-    ])
+    ]),
   ),
 };
 
@@ -390,7 +390,7 @@ const darkTypography = {
     Object.entries(baseTypography.markdown).map(([k, v]) => [
       k,
       { ...v, color: darkPalette.text.primary, fontFamily: "Inter, sans-serif" },
-    ])
+    ]),
   ),
 };
 
@@ -413,9 +413,6 @@ const lightTheme = createTheme({
           borderRadius: "8px", // Optional: rounded corners
           boxShadow: "0px 2px 4px rgba(0, 0, 0, 0.1)", // Optional: subtle shadow
         },
-        popper: {
-          backdropFilter: "blur(8px)", // Optional: subtle blur effect
-        },
       },
     },
     MuiTypography: {
@@ -425,19 +422,18 @@ const lightTheme = createTheme({
         },
       },
       variants: [
-      {
-        props: { variant: "sidebar" },
-        style: {
-          fontSize: "14px",
-          fontWeight: 300,
-          lineHeight: 1.5,
-          fontFamily: "Inter, sans-serif",
-          color: lightPalette.text.secondary,
+        {
+          props: { variant: "sidebar" },
+          style: {
+            fontSize: "14px",
+            fontWeight: 300,
+            lineHeight: 1.5,
+            fontFamily: "Inter, sans-serif",
+            color: lightPalette.text.secondary,
+          },
         },
-      },
-    ],
+      ],
     },
-    
   },
 });
 
@@ -471,17 +467,17 @@ const darkTheme = createTheme({
         },
       },
       variants: [
-      {
-        props: { variant: "sidebar" },
-        style: {
-          fontSize: "14px",
-          fontWeight: 300,
-          lineHeight: 1.5,
-          fontFamily: "Inter, sans-serif",
-          color: darkPalette.text.secondary,
+        {
+          props: { variant: "sidebar" },
+          style: {
+            fontSize: "14px",
+            fontWeight: 300,
+            lineHeight: 1.5,
+            fontFamily: "Inter, sans-serif",
+            color: darkPalette.text.secondary,
+          },
         },
-      },
-    ],
+      ],
     },
   },
 });

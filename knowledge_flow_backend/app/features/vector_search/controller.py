@@ -12,12 +12,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import logging
 from datetime import datetime, timezone
 from typing import List
-from fastapi import APIRouter
+
+from fastapi import APIRouter, HTTPException
+from fred_core import KeycloakUser
 from langchain.schema.document import Document
-from app.features.vector_search.structures import DocumentSource, SearchRequest
+
 from app.features.vector_search.service import VectorSearchService
+from app.features.vector_search.structures import DocumentSource, SearchRequest
+
+logger = logging.getLogger(__name__)
+
+
+def handle_exception(e: Exception) -> HTTPException:
+    return HTTPException(status_code=500, detail="Internal server error")
 
 
 class VectorSearchController:
@@ -64,27 +74,39 @@ class VectorSearchController:
             operation_id="search_documents_using_vectorization",
         )
         def vector_search(request: SearchRequest):
-            results = self.service.similarity_search_with_score(request.query, k=request.top_k)
-            return [self._to_document_source(doc, score, rank) for rank, (doc, score) in enumerate(results, start=1)]
+            # todo: get user from MCP controller
+            user = KeycloakUser(uid="admin", username="admin", roles=["admin"], email="dev@localhost")
+
+            try:
+                results = self.service.similarity_search_with_score(request.query, user, k=request.top_k, tags_ids=request.tags)
+                return [self._to_document_source(doc, score, rank) for rank, (doc, score) in enumerate(results, start=1)]
+            except Exception as e:
+                logger.error("Vector search failed:", e)
+                raise handle_exception(e)
 
     def _to_document_source(self, doc: Document, score: float, rank: int) -> DocumentSource:
         metadata = doc.metadata
-        return DocumentSource(
-            content=doc.page_content,
-            file_path=metadata.get("source", "Unknown"),
-            file_name=metadata.get("document_name", "Unknown"),
-            page=metadata.get("page", None),
-            uid=metadata.get("document_uid", "Unknown"),
-            modified=metadata.get("modified", "Unknown"),
-            title=metadata.get("title", "Unknown"),
-            author=metadata.get("author", "Unknown"),
-            created=metadata.get("created", "Unknown"),
-            type=metadata.get("category") or "document",
-            score=score,
-            rank=rank,
-            embedding_model=str(metadata.get("embedding_model", "unknown_model")),
-            vector_index=metadata.get("vector_index", "unknown_index"),
-            token_count=metadata.get("token_count", None),
-            retrieved_at=datetime.now(timezone.utc).isoformat(),
-            retrieval_session_id=metadata.get("retrieval_session_id"),
-        )
+        print("doc", doc.__dict__)
+        try:
+            return DocumentSource(
+                content=doc.page_content,
+                file_path=metadata.get("source") or "Unknown",
+                file_name=metadata.get("document_name") or "Unknown",
+                page=metadata.get("page"),
+                uid=metadata.get("document_uid") or "Unknown",
+                modified=metadata.get("modified") or "Unknown",
+                title=metadata.get("title") or "Unknown",
+                author=metadata.get("author") or "Unknown",
+                created=metadata.get("created") or "Unknown",
+                type=metadata.get("category") or "document",
+                score=score,
+                rank=rank,
+                embedding_model=str(metadata.get("embedding_model") or "unknown_model"),
+                vector_index=metadata.get("vector_index") or "unknown_index",
+                token_count=metadata.get("token_count") or None,
+                retrieved_at=datetime.now(timezone.utc).isoformat(),
+                retrieval_session_id=metadata.get("retrieval_session_id"),
+            )
+        except Exception as e:
+            logger.warning("Failed to convert Document to DocumentSource. Error:", e, "Document:", doc.__dict__)
+            raise e

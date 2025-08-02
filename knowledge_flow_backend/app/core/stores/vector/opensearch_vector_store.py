@@ -12,9 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from datetime import datetime, timezone
 import logging
-from typing import List, Tuple
+from datetime import datetime, timezone
+from typing import Iterable, List, Tuple
+
 from langchain.schema.document import Document
 from langchain_community.vectorstores import OpenSearchVectorSearch
 
@@ -92,8 +93,16 @@ class OpenSearchVectorStoreAdapter(BaseVectoreStore):
             logger.exception("❌ Failed to add documents to OpenSearch.")
             raise RuntimeError("Unexpected error during vector indexing.") from e
 
-    def similarity_search_with_score(self, query: str, k: int = 5) -> List[Tuple[Document, float]]:
-        results = self.opensearch_vector_search.similarity_search_with_score(query, k=k)
+    def similarity_search_with_score(self, query: str, k: int = 5, documents_ids: Iterable[str] | None = None) -> List[Tuple[Document, float]]:
+        if documents_ids:
+            # Create OpenSearch filter to only retrieve vectors with a `metadata.document_uid` in `documents_ids`
+            boolean_filter = {"terms": {"metadata.document_uid": list(documents_ids)}}
+            logger.debug("Using boolean_filter with vector search:", boolean_filter)
+            results = self.opensearch_vector_search.similarity_search_with_score(query, k=k, boolean_filter=boolean_filter)
+        else:
+            logger.debug("No boolean_filter with vector search")
+            results = self.opensearch_vector_search.similarity_search_with_score(query, k=k)
+
         enriched = []
 
         for rank, (doc, score) in enumerate(results):

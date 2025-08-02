@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field
 class SearchRequest(BaseModel):
     query: str
     top_k: int = 10
+    tags: Optional[list[str]] = Field(default=None, description="Optional list of tags to filter documents. Only chunks in a document with at least one of these tags will be returned.")
 
 
 class DocumentSource(BaseModel):

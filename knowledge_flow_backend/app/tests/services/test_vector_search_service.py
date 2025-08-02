@@ -33,9 +33,12 @@ class DummyVectorStore:
     Raises ValueError on empty question.
     """
 
-    def similarity_search_with_score(self, question, k=10):
+    def similarity_search_with_score(self, question, k=10, tags=None):
         if not question:
             raise ValueError("Question must not be empty")
+        if tags:
+            # Return documents that would match tag filtering
+            return [(Document(page_content="tagged answer", metadata={"tags": tags}), 0.8)] * min(k, 1)
         return [(Document(page_content="answer 1", metadata={}), 0.9)] * min(k, 2)
 
 
