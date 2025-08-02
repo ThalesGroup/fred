@@ -1,8 +1,7 @@
 import logging
-from pathlib import Path
 
 from app.common.document_structures import SourceType
-from app.common.structures import DocumentSourceConfig, FileSystemPullSource
+from app.common.structures import DocumentSourceConfig
 
 logger = logging.getLogger(__name__)
 

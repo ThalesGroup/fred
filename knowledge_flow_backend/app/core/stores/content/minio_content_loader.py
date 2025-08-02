@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from io import BytesIO
 import logging
 from pathlib import Path
 from typing import List
