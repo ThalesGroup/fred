@@ -56,10 +56,6 @@ input_processors:
 content_storage:
   type: "local"
   root_path: ~/.fred/knowledge-flow/content-storage
-  #type: minio
-  #endpoint: http://localhost:9000
-  #bucket_name: "knowledge-flow-content"
-  #secure: false
 
 document_sources:
   fred:
@@ -72,42 +68,10 @@ document_sources:
     base_path: ~/Documents/Fred
     description: "Personal local documents available for pull-mode ingestion"
 
-  # minio:
-  #     type: pull
-  #     provider: minio
-  #     description: "Documents available from the shared entreprise repository"
-  #     endpoint_url: localhost:9000
-  #     bucket_name: "fred"
-  #     prefix: ""
-  #     secure: false
-  # sphere:
-  #   type: pull
-  #   provider: sphere
-  #   description: "Files pulled from the internal Sphere document repository"
-  #   base_url: "https://api.corp.thales/corp/sphere-business/v2"
-  #   parent_node_id: "8399477"
-  #   username: "AN009263"
-  #   verify_ssl: false  # can be true if using valid HTTPS
-  # github-docs:
-  #   type: pull
-  #   provider: github
-  #   description: "Public or private documents pulled from a GitHub repository"
-  #   repo: "thalesgroup/fred"
-  #   branch: "main"
-  #   subdir: "docs"
-  #   username: "mygithubuser"  # optional, for logs or rate limits
-
-
-# --- Metadata storage ---
 # type: one of [duckdb, opensearch]
 metadata_storage:
   type: "duckdb"
   duckdb_path: "~/.fred/knowledge-flow/db.duckdb"
-  #type: opensearch
-  #host: https://localhost:9200              # Opensearch HTTP URL
-  #secure: true                              # Use HTTPS (set to false for HTTP)
-  #verify_certs: false                       # Whether to verify TLS certificates
-  #index: metadata-index                     # Index name for vectors
 
 # --- Tag storage ---
 # type: one of [local]
@@ -118,11 +82,6 @@ tag_storage:
 # type: one of [in_memory, opensearch, weaviate]
 vector_storage:
   type: in_memory
-  # type: opensearch
-  # host: https://localhost:9200              # Opensearch HTTP URL
-  # secure: true                              # Use HTTPS (set to false for HTTP)
-  # verify_certs: false                       # Whether to verify TLS certificates
-  # index: vector-index                       # Index name for vectors
 
 tabular_storage:
   type: "duckdb"

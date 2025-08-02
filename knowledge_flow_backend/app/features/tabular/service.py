@@ -105,8 +105,6 @@ class TabularService:
 
         return responses
 
-        
-
     def query(self, document_name: str, request: RawSQLRequest) -> TabularQueryResponse:
         sql = request.query
 
@@ -135,5 +133,3 @@ class TabularService:
         except Exception as e:
             logger.error(f"Error during query execution: {e}", exc_info=True)
             return TabularQueryResponse(sql_query=sql, rows=[], error=str(e))
-
-

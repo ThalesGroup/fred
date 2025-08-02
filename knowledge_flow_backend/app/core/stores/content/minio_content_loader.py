@@ -25,6 +25,7 @@ from app.core.stores.metadata.base_catalog_store import PullFileEntry
 
 logger = logging.getLogger(__name__)
 
+
 class MinioContentLoader(BaseContentLoader):
     def __init__(self, source: MinioPullSource, source_tag: str):
         super().__init__(source, source_tag)
@@ -63,7 +64,7 @@ class MinioContentLoader(BaseContentLoader):
             raise RuntimeError(f"Failed to fetch {remote_key} from bucket {self.bucket_name}: {e}")
 
         return local_path
-    
+
     def fetch_from_metadata(self, metadata: DocumentMetadata, destination_dir: Path) -> Path:
         if not metadata.source_tag or not metadata.pull_location:
             raise ValueError("Missing `source_tag` or `pull_location` in metadata.")
@@ -75,7 +76,7 @@ class MinioContentLoader(BaseContentLoader):
             hash="na",
         )
         return self.fetch_from_pull_entry(entry, destination_dir)
-    
+
     def scan(self) -> List[PullFileEntry]:
         try:
             objects = self.client.list_objects(self.bucket_name, prefix=self.prefix, recursive=True)
@@ -85,13 +86,15 @@ class MinioContentLoader(BaseContentLoader):
                 if obj.is_dir:
                     continue
                 if obj.object_name:
-                    relative_path = obj.object_name[len(self.prefix):]
-                    entries.append(PullFileEntry(
-                        path=relative_path,
-                        size=obj.size if obj.size else 0,
-                        modified_time=obj.last_modified.timestamp() if obj.last_modified else 0,
-                        hash=hashlib.sha256(obj.object_name.encode()).hexdigest()
-                    ))
+                    relative_path = obj.object_name[len(self.prefix) :]
+                    entries.append(
+                        PullFileEntry(
+                            path=relative_path,
+                            size=obj.size if obj.size else 0,
+                            modified_time=obj.last_modified.timestamp() if obj.last_modified else 0,
+                            hash=hashlib.sha256(obj.object_name.encode()).hexdigest(),
+                        )
+                    )
             return entries
         except S3Error as e:
             logger.error(f"Failed to list objects in bucket {self.bucket_name}: {e}")

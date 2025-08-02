@@ -45,11 +45,7 @@ class SphereContentLoader(BaseContentLoader):
 
     def _generate_signature(self, method: str, url: str, timestamp: str) -> str:
         string_to_sign = f"{method.upper()}{url}{timestamp}{self.api_key}"
-        signature = hmac.new(
-            self.password.encode("utf-8"),
-            string_to_sign.encode("utf-8"),
-            hashlib.sha256
-        ).digest()
+        signature = hmac.new(self.password.encode("utf-8"), string_to_sign.encode("utf-8"), hashlib.sha256).digest()
         return base64.b64encode(signature).decode("utf-8")
 
     def _get_headers(self, method: str, url: str) -> dict:
@@ -61,7 +57,7 @@ class SphereContentLoader(BaseContentLoader):
             "X-Apim-Hash-Algorithm": "HMAC-SH512",
             "X-Timestamp": timestamp,
             "X-Signature": self._generate_signature(method, url, timestamp),
-            "User-Agent": "FredSphereScanner"
+            "User-Agent": "FredSphereScanner",
         }
 
     def scan(self) -> List[PullFileEntry]:
@@ -85,12 +81,14 @@ class SphereContentLoader(BaseContentLoader):
             # Hash based on node ID and name (deterministic)
             hash_id = hashlib.sha256(f"{node_id}:{name}".encode()).hexdigest()
 
-            entries.append(PullFileEntry(
-                path=name,
-                size=size,
-                modified_time=modified,
-                hash=hash_id,
-            ))
+            entries.append(
+                PullFileEntry(
+                    path=name,
+                    size=size,
+                    modified_time=modified,
+                    hash=hash_id,
+                )
+            )
 
         return entries
 

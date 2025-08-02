@@ -34,4 +34,4 @@ class EmptyOutputProcessor(BaseOutputProcessor):
 
     def process(self, file_path: str, metadata: DocumentMetadata) -> DocumentMetadata:
         logger.info(f"Skipping output processing for document UID: {metadata.document_uid}")
-        return  metadata
+        return metadata

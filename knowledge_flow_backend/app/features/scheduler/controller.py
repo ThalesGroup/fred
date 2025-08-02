@@ -22,21 +22,24 @@ from app.application_context import ApplicationContext
 from app.features.scheduler.activities import create_pull_file_metadata, get_push_file_metadata, input_process, load_pull_file, load_push_file, output_process
 from app.features.scheduler.structure import PipelineDefinition, ProcessDocumentsRequest
 from app.features.scheduler.workflow import Process
+
 logger = logging.getLogger(__name__)
+
 
 async def run_ingestion_pipeline(definition: PipelineDefinition) -> str:
     for file in definition.files:
         if file.is_pull():
-            metadata =  create_pull_file_metadata(file)
-            local_file_path =  load_pull_file(file, metadata)
+            metadata = create_pull_file_metadata(file)
+            local_file_path = load_pull_file(file, metadata)
             metadata = input_process(input_file=local_file_path, metadata=metadata)
             metadata = output_process(file=file, metadata=metadata, accept_memory_storage=True)
         else:
-            metadata =  get_push_file_metadata(file)
-            local_file_path =  load_push_file(file, metadata)
+            metadata = get_push_file_metadata(file)
+            local_file_path = load_push_file(file, metadata)
             metadata = input_process(input_file=local_file_path, metadata=metadata)
             metadata = output_process(file=file, metadata=metadata, accept_memory_storage=True)
     return "success"
+
 
 class SchedulerController:
     """
@@ -62,7 +65,7 @@ class SchedulerController:
                     files=req.files,
                 )
                 result = await run_ingestion_pipeline(definition)
-                return { "status": result }
+                return {"status": result}
             except Exception as e:
                 raise_internal_error(logger, "Failed to submit process-documents workflow", e)
 
@@ -102,4 +105,3 @@ class SchedulerController:
             except Exception as e:
                 log_exception(e, "Failed to submit process-documents workflow")
                 raise HTTPException(status_code=500, detail="Workflow submission failed")
-
