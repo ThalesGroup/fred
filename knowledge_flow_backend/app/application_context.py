@@ -114,7 +114,7 @@ class ApplicationContext:
     _vector_store_instance: Optional[BaseVectoreStore] = None
     _metadata_store_instance: Optional[BaseMetadataStore] = None
     _tag_store_instance: Optional[BaseTagStore] = None
-    _tabular_store_instance: Optional[BaseTabularProcessor] = None
+    _tabular_store_instance: Optional[DuckDBTableStore] = None
 
     def __init__(self, config: Configuration):
         # Allow reuse if already initialized with same config
