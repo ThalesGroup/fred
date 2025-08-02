@@ -23,7 +23,6 @@ from app.core.stores.content.base_content_store import BaseContentStore
 
 logger = logging.getLogger(__name__)
 
-
 class FileSystemContentStore(BaseContentStore):
     def __init__(self, destination_root: Path):
         self.destination_root = destination_root
@@ -41,16 +40,16 @@ class FileSystemContentStore(BaseContentStore):
     def save_content(self, document_uid: str, document_dir: Path) -> None:
         destination = self.destination_root / document_uid
 
-        # 🧹 1. Clean old destination if it exists
+        # Clean old destination if it exists
         if destination.exists():
             shutil.rmtree(destination)
 
-        # 🏗️ 2. Create destination
+        # Create destination
         destination.mkdir(parents=True, exist_ok=True)
 
         logger.info(f"📂 Created destination folder: {destination}")
 
-        # 📦 3. Copy all contents
+        # Copy all contents
         for item in document_dir.iterdir():
             target = destination / item.name
             if item.is_dir():
@@ -121,7 +120,10 @@ class FileSystemContentStore(BaseContentStore):
                 df = pd.read_csv(csv_path)
                 if len(df) > 200:
                     df = df.head(200)
-                return df.to_markdown(index=False, tablefmt="github")
+                result = df.to_markdown(index=False, tablefmt="github")
+                if not result:
+                    raise ValueError(f"Markdown conversion resulted in empty content for {document_uid}")
+                return result
             except Exception as e:
                 logger.error(f"Error reading or converting CSV for {document_uid}: {e}")
                 raise

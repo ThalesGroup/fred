@@ -22,7 +22,6 @@ import { streamUploadOrProcessDocument } from "../../slices/streamDocumentUpload
 import { ProgressStep, ProgressStepper } from "../ProgressStepper";
 import { useToast } from "../ToastProvider";
 import { DocumentDrawerTable } from "./DocumentDrawerTable";
-import { DocumentLibrary } from "../../pages/DocumentLibrary";
 
 interface DocumentUploadDrawerProps {
   isOpen: boolean;
@@ -76,7 +75,6 @@ export const DocumentUploadDrawer: React.FC<DocumentUploadDrawerProps> = ({
       let uploadCount = 0;
       for (const file of tempFiles) {
         try {
-          console.log(`MEMREDD Uploading file: ${file.name} with metadata `, metadata);
           await streamUploadOrProcessDocument(
             file,
             uploadMode,
