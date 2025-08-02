@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import logging
-from app.common.structures import OutputProcessorResponse, Status
 import pandas as pd
 from langchain.schema.document import Document
 import io
@@ -23,6 +22,7 @@ import dateparser
 
 from app.application_context import ApplicationContext
 from app.common.document_structures import DocumentMetadata, ProcessingStage
+from app.common.vectorization_utils import load_langchain_doc_from_metadata
 from app.core.processors.output.base_output_processor import BaseOutputProcessor
 
 logger = logging.getLogger(__name__)
@@ -42,18 +42,15 @@ class TabularProcessor(BaseOutputProcessor):
 
     def __init__(self):
         self.context = ApplicationContext.get_instance()
-        self.file_loader = self.context.get_document_loader()
-        logger.info(f"📄 Document loader initialized: {self.file_loader.__class__.__name__}")
-
         self.tabular_store = self.context.get_tabular_store()
         logger.info("Initializing TabularPipeline")
 
-    def process(self, file_path: str, metadata: DocumentMetadata) -> OutputProcessorResponse:
+    def process(self, file_path: str, metadata: DocumentMetadata) -> DocumentMetadata:
         try:
             logger.info(f"Processing file: {file_path} with metadata: {metadata}")
 
             # 1. Load the document
-            document: Document = self.file_loader.load(file_path, metadata)
+            document: Document =  load_langchain_doc_from_metadata(file_path, metadata)
             logger.debug(f"Document loaded: {document}")
             if not document:
                 raise ValueError("Document is empty or not loaded correctly.")
@@ -80,7 +77,7 @@ class TabularProcessor(BaseOutputProcessor):
                 logger.exception("Failed to add documents to Tabular Storage: %s", e)
                 raise HTTPException(status_code=500, detail="Failed to add documents to Tabular Storage") from e
             metadata.mark_stage_done(ProcessingStage.SQL_INDEXED)
-            return OutputProcessorResponse(status=Status.SUCCESS)
+            return metadata
 
         except Exception as e:
             logger.exception(f"Error during vectorization: {e}")

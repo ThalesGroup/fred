@@ -148,8 +148,8 @@ export const DocumentUploadDrawer: React.FC<DocumentUploadDrawerProps> = ({
           size="small"
           sx={{ borderRadius: "8px" }}
         >
-          <MenuItem value="upload">Upload</MenuItem>
-          <MenuItem value="process">Upload and Process</MenuItem>
+          <MenuItem value="upload">{t("documentLibrary.upload")}</MenuItem>
+          <MenuItem value="process">{t("documentLibrary.uploadAndProcess")}</MenuItem>
         </Select>
       </FormControl>
 

@@ -26,7 +26,6 @@ import { getConfig } from "../../common/config.tsx";
 import { useGetChatBotMessagesMutation } from "../../slices/chatApi.tsx";
 import { KeyCloakService } from "../../security/KeycloakService.ts";
 import { StreamEvent, ChatMessagePayload, SessionSchema, FinalEvent } from "../../slices/chatApiStructures.ts";
-import { KnowledgeContext } from "../knowledgeContext/KnowledgeContextEditDialog.tsx";
 import { useTranslation } from "react-i18next";
 
 export interface ChatBotError {
@@ -54,7 +53,6 @@ const ChatBot = ({
   onUpdateOrAddSession,
   isCreatingNewConversation,
   argument,
-  selectedChatProfile,
 }: {
   currentChatBotSession: SessionSchema;
   currentAgenticFlow: AgenticFlow;
@@ -62,7 +60,6 @@ const ChatBot = ({
   onUpdateOrAddSession: (session: SessionSchema) => void;
   isCreatingNewConversation: boolean;
   argument?: string; // Optional argument for the agent
-  selectedChatProfile?: KnowledgeContext | null;
 }) => {
   const theme = useTheme();
   const { t } = useTranslation();
@@ -377,7 +374,6 @@ const ChatBot = ({
       agent_name: agent ? agent.name : currentAgenticFlow.name,
       session_id: currentChatBotSession?.id,
       argument,
-      chat_profile_id: selectedChatProfile?.id,
     };
 
     try {

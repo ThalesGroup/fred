@@ -27,11 +27,9 @@ import {
 } from "@mui/material";
 import AccountCircleIcon from "@mui/icons-material/AccountCircle";
 import KeyIcon from "@mui/icons-material/VpnKey";
-import ChatIcon from "@mui/icons-material/Chat";
 import { KeyCloakService } from "../security/KeycloakService";
 import { ProfileCard } from "../components/profile/ProfileCard";
 import { ProfileToken } from "../components/profile/ProfileToken";
-import { ChatProfiles } from "../components/profile/ChatProfile";
 import { TopBar } from "../common/TopBar";
 import { useSearchParams } from "react-router-dom";
 import InvisibleLink from "../components/InvisibleLink";
@@ -81,7 +79,6 @@ export function Profile() {
   const menuItems = [
     { label: t("profile.menu.account"), icon: <AccountCircleIcon /> },
     { label: t("profile.menu.token"), icon: <KeyIcon /> },
-    { label: t("profile.menu.chat"), icon: <ChatIcon /> },
   ];
 
   return (
@@ -145,7 +142,6 @@ export function Profile() {
               )}
 
               {activeTab === 1 && <ProfileToken tokenParsed={tokenParsed} />}
-              {activeTab === 2 && <ChatProfiles />}
             </Box>
           </Box>
         ) : (

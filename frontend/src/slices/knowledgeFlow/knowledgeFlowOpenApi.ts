@@ -105,24 +105,24 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/knowledge-flow/v1/raw_content/${queryArg.documentUid}` }),
     }),
-    streamProcessKnowledgeFlowV1ProcessFilesPost: build.mutation<
-      StreamProcessKnowledgeFlowV1ProcessFilesPostApiResponse,
-      StreamProcessKnowledgeFlowV1ProcessFilesPostApiArg
+    uploadDocumentsSyncKnowledgeFlowV1UploadDocumentsPost: build.mutation<
+      UploadDocumentsSyncKnowledgeFlowV1UploadDocumentsPostApiResponse,
+      UploadDocumentsSyncKnowledgeFlowV1UploadDocumentsPostApiArg
     >({
       query: (queryArg) => ({
-        url: `/knowledge-flow/v1/process-files`,
+        url: `/knowledge-flow/v1/upload-documents`,
         method: "POST",
-        body: queryArg.bodyStreamProcessKnowledgeFlowV1ProcessFilesPost,
+        body: queryArg.bodyUploadDocumentsSyncKnowledgeFlowV1UploadDocumentsPost,
       }),
     }),
-    streamLoadKnowledgeFlowV1UploadFilesPost: build.mutation<
-      StreamLoadKnowledgeFlowV1UploadFilesPostApiResponse,
-      StreamLoadKnowledgeFlowV1UploadFilesPostApiArg
+    processDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPost: build.mutation<
+      ProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPostApiResponse,
+      ProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPostApiArg
     >({
       query: (queryArg) => ({
-        url: `/knowledge-flow/v1/upload-files`,
+        url: `/knowledge-flow/v1/upload-process-documents`,
         method: "POST",
-        body: queryArg.bodyStreamLoadKnowledgeFlowV1UploadFilesPost,
+        body: queryArg.bodyProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPost,
       }),
     }),
     listTableNames: build.query<ListTableNamesApiResponse, ListTableNamesApiArg>({
@@ -174,22 +174,22 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/knowledge-flow/v1/vector/search`, method: "POST", body: queryArg.searchRequest }),
     }),
-    submitPipelineKnowledgeFlowV1PipelinesSubmitPost: build.mutation<
-      SubmitPipelineKnowledgeFlowV1PipelinesSubmitPostApiResponse,
-      SubmitPipelineKnowledgeFlowV1PipelinesSubmitPostApiArg
+    processDocumentsKnowledgeFlowV1ProcessDocumentsPost: build.mutation<
+      ProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostApiResponse,
+      ProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostApiArg
     >({
       query: (queryArg) => ({
-        url: `/knowledge-flow/v1/pipelines/submit`,
+        url: `/knowledge-flow/v1/process-documents`,
         method: "POST",
-        body: queryArg.pipelineDefinition,
+        body: queryArg.processDocumentsRequest,
       }),
     }),
-    processDocumentsKnowledgeFlowV1PipelinesProcessDocumentsPost: build.mutation<
-      ProcessDocumentsKnowledgeFlowV1PipelinesProcessDocumentsPostApiResponse,
-      ProcessDocumentsKnowledgeFlowV1PipelinesProcessDocumentsPostApiArg
+    scheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPost: build.mutation<
+      ScheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPostApiResponse,
+      ScheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPostApiArg
     >({
       query: (queryArg) => ({
-        url: `/knowledge-flow/v1/pipelines/process-documents`,
+        url: `/knowledge-flow/v1/schedule-documents`,
         method: "POST",
         body: queryArg.processDocumentsRequest,
       }),
@@ -276,13 +276,15 @@ export type DownloadDocumentKnowledgeFlowV1RawContentDocumentUidGetApiResponse =
 export type DownloadDocumentKnowledgeFlowV1RawContentDocumentUidGetApiArg = {
   documentUid: string;
 };
-export type StreamProcessKnowledgeFlowV1ProcessFilesPostApiResponse = /** status 200 Successful Response */ any;
-export type StreamProcessKnowledgeFlowV1ProcessFilesPostApiArg = {
-  bodyStreamProcessKnowledgeFlowV1ProcessFilesPost: BodyStreamProcessKnowledgeFlowV1ProcessFilesPost;
+export type UploadDocumentsSyncKnowledgeFlowV1UploadDocumentsPostApiResponse =
+  /** status 200 Successful Response */ any;
+export type UploadDocumentsSyncKnowledgeFlowV1UploadDocumentsPostApiArg = {
+  bodyUploadDocumentsSyncKnowledgeFlowV1UploadDocumentsPost: BodyUploadDocumentsSyncKnowledgeFlowV1UploadDocumentsPost;
 };
-export type StreamLoadKnowledgeFlowV1UploadFilesPostApiResponse = /** status 200 Successful Response */ any;
-export type StreamLoadKnowledgeFlowV1UploadFilesPostApiArg = {
-  bodyStreamLoadKnowledgeFlowV1UploadFilesPost: BodyStreamLoadKnowledgeFlowV1UploadFilesPost;
+export type ProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPostApiResponse =
+  /** status 200 Successful Response */ any;
+export type ProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPostApiArg = {
+  bodyProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPost: BodyProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPost;
 };
 export type ListTableNamesApiResponse = /** status 200 Successful Response */ string[];
 export type ListTableNamesApiArg = void;
@@ -315,14 +317,13 @@ export type SearchDocumentsUsingVectorizationApiResponse = /** status 200 Succes
 export type SearchDocumentsUsingVectorizationApiArg = {
   searchRequest: SearchRequest;
 };
-export type SubmitPipelineKnowledgeFlowV1PipelinesSubmitPostApiResponse =
-  /** status 200 Temporal workflow ID and run ID */ any;
-export type SubmitPipelineKnowledgeFlowV1PipelinesSubmitPostApiArg = {
-  pipelineDefinition: PipelineDefinition;
+export type ProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostApiResponse = /** status 200 Successful Response */ any;
+export type ProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostApiArg = {
+  processDocumentsRequest: ProcessDocumentsRequest;
 };
-export type ProcessDocumentsKnowledgeFlowV1PipelinesProcessDocumentsPostApiResponse =
+export type ScheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPostApiResponse =
   /** status 200 Successful Response */ any;
-export type ProcessDocumentsKnowledgeFlowV1PipelinesProcessDocumentsPostApiArg = {
+export type ScheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPostApiArg = {
   processDocumentsRequest: ProcessDocumentsRequest;
 };
 export type SourceType = "push" | "pull";
@@ -416,11 +417,11 @@ export type DocumentSourceInfo = {
 export type MarkdownContentResponse = {
   content: string;
 };
-export type BodyStreamProcessKnowledgeFlowV1ProcessFilesPost = {
+export type BodyUploadDocumentsSyncKnowledgeFlowV1UploadDocumentsPost = {
   files: Blob[];
   metadata_json: string;
 };
-export type BodyStreamLoadKnowledgeFlowV1UploadFilesPost = {
+export type BodyProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPost = {
   files: Blob[];
   metadata_json: string;
 };
@@ -508,13 +509,9 @@ export type FileToProcess = {
   modified_time?: number | null;
   hash?: string | null;
 };
-export type PipelineDefinition = {
-  name: string;
-  files: FileToProcess[];
-};
 export type ProcessDocumentsRequest = {
   files: FileToProcess[];
-  pipeline_name?: string | null;
+  pipeline_name: string;
 };
 export const {
   useGetDocumentsMetadataKnowledgeFlowV1DocumentsMetadataPostMutation,
@@ -537,8 +534,8 @@ export const {
   useLazyDownloadDocumentMediaKnowledgeFlowV1MarkdownDocumentUidMediaMediaIdGetQuery,
   useDownloadDocumentKnowledgeFlowV1RawContentDocumentUidGetQuery,
   useLazyDownloadDocumentKnowledgeFlowV1RawContentDocumentUidGetQuery,
-  useStreamProcessKnowledgeFlowV1ProcessFilesPostMutation,
-  useStreamLoadKnowledgeFlowV1UploadFilesPostMutation,
+  useUploadDocumentsSyncKnowledgeFlowV1UploadDocumentsPostMutation,
+  useProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPostMutation,
   useListTableNamesQuery,
   useLazyListTableNamesQuery,
   useGetAllSchemasQuery,
@@ -552,6 +549,6 @@ export const {
   useUpdateTagKnowledgeFlowV1TagsTagIdPutMutation,
   useDeleteTagKnowledgeFlowV1TagsTagIdDeleteMutation,
   useSearchDocumentsUsingVectorizationMutation,
-  useSubmitPipelineKnowledgeFlowV1PipelinesSubmitPostMutation,
-  useProcessDocumentsKnowledgeFlowV1PipelinesProcessDocumentsPostMutation,
+  useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation,
+  useScheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPostMutation,
 } = injectedRtkApi;

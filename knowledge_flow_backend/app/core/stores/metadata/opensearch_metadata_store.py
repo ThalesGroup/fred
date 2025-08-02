@@ -183,26 +183,33 @@ class OpenSearchMetadataStore(BaseMetadataStore):
         return results
 
     def _build_must_clauses(self, filters_dict: dict) -> List[dict]:
-        """
-        Build the 'must' clauses for the OpenSearch query based on the provided filters.
-        Each key in filters_dict corresponds to a field in the metadata.
-        Values can be single values or lists for 'terms' queries.
-        This executes an exact match it correspond to mapping type like  "source_tag": {"type": "keyword"}
-        """
         must = []
+
+        def flatten(prefix: str, val):
+            if isinstance(val, dict):
+                for k, v in val.items():
+                    yield from flatten(f"{prefix}.{k}", v)
+            else:
+                yield (prefix, val)
+
         for field, value in filters_dict.items():
-            if isinstance(value, list):
+            if isinstance(value, dict):
+                for flat_field, flat_value in flatten(field, value):
+                    must.append({"term": {flat_field: flat_value}})
+            elif isinstance(value, list):
                 must.append({"terms": {field: value}})
             else:
                 must.append({"term": {field: value}})
+
         return must
+
 
     def list_by_source_tag(self, source_tag: str) -> List[DocumentMetadata]:
         """
         List all metadata documents that match a specific source tag.
         """
         try:
-            query = {"query": {"term": {"source_tag.keyword": source_tag}}}
+            query = {"query": {"term": {"source_tag": {"value": source_tag}}}}
             response = self.client.search(index=self.metadata_index_name, body=query)
             hits = response["hits"]["hits"]
         except Exception as e:

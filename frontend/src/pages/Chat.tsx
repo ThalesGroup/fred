@@ -26,7 +26,6 @@ import {
 } from "../slices/chatApi.tsx";
 import { SessionSchema } from "../slices/chatApiStructures.ts";
 import { useSearchParams } from "react-router-dom";
-import { KnowledgeContext } from "../components/knowledgeContext/KnowledgeContextEditDialog.tsx";
 
 export interface AgenticFlow {
   name: string;
@@ -36,12 +35,6 @@ export interface AgenticFlow {
   icon?: string | null;
   experts?: string[];
   tags?: string;
-}
-
-export interface ChatProfileLight {
-  id: string;
-  title: string;
-  description: string;
 }
 
 export const Chat = () => {
@@ -57,8 +50,6 @@ export const Chat = () => {
   const [chatBotSessions, setChatBotSessions] = useState<SessionSchema[]>([]);
   const [currentChatBotSession, setCurrentChatBotSession] = useState<SessionSchema | null>(null);
   const [isCreatingNewConversation, setIsCreatingNewConversation] = useState(false);
-
-  const [selectedChatProfile, setSelectedChatProfile] = useState<KnowledgeContext | null>(null);
 
   const handleSelectAgenticFlow = (flow: AgenticFlow) => {
     setCurrentAgenticFlow(flow);
@@ -169,7 +160,6 @@ export const Chat = () => {
           onUpdateOrAddSession={handleUpdateOrAddSession}
           isCreatingNewConversation={isCreatingNewConversation}
           argument={cluster}
-          selectedChatProfile={selectedChatProfile}
         />
       </Grid2>
       <Grid2 size="auto">
@@ -182,7 +172,6 @@ export const Chat = () => {
           currentAgenticFlow={currentAgenticFlow}
           onSelectAgenticFlow={handleSelectAgenticFlow}
           onDeleteSession={handleDeleteSession}
-          onSelectChatProfile={(profile) => setSelectedChatProfile(profile)}
         />
       </Grid2>
     </Grid2>

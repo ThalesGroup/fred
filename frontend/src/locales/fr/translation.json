@@ -85,7 +85,6 @@
       "creationFailedDetailFallback": "Une erreur inattendue s’est produite lors de la création de l’agent."
     }
   },
-
   "chatbot": {
     "startNew": "Démarrer une nouvelle conversation avec {{name}}",
     "changeAssistant": "Vous pouvez choisir un autre assistant dans le panneau des paramètres.",
@@ -183,8 +182,7 @@
     "description": "Gérez vos préférences utilisateur et vos profils de chat",
     "menu": {
       "account": "Compte",
-      "token": "Jeton",
-      "chat": "Profils de chat"
+      "token": "Jeton"
     },
     "noUser": "Aucun utilisateur connecté",
     "login": "Se connecter",
@@ -215,6 +213,8 @@
     "title": "Bibliothèque de documents",
     "description": "Accédez aux documents de la base de connaissances",
     "upload": "Ajouter un document",
+    "uploadAndProcess": "Ajouter et traiter le document",
+    "refresh": "Rafraîchir",
     "uploadInLibrary": "Ajouter à la bibliothèque",
     "uploadDrawerTitle": "Ajouter un document",
     "dropFiles": "Déposez vos fichiers ici",
@@ -242,6 +242,7 @@
     "selectedCount": "{{count}} sélectionné(s)",
     "deleteSelected": "Supprimer",
     "processSelected": "Process",
+    "scheduleSelected": "Planifier",
     "downloadSelected": "Télécharger",
     "fileName": "Nom du fichier",
     "dateAdded": "Date d'ajout",
@@ -263,7 +264,8 @@
     "preview": "Aperçu",
     "download": "Télécharger",
     "delete": "Supprimer",
-    "process": "Process"
+    "process": "Process",
+    "schedule": "Planifier"
   },
   "documentLibrariesList": {
     "libraryName": "Nom de la bibliothèque",

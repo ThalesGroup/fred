@@ -18,6 +18,7 @@ import {
   useDeleteDocumentMutation,
   useLazyGetDocumentRawContentQuery,
   useProcessDocumentsMutation,
+  useScheduleDocumentsMutation,
 } from "../../slices/documentApi";
 import { DocumentMetadata } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { downloadFile } from "../../utils/downloadUtils";
@@ -25,11 +26,13 @@ import { useToast } from "../ToastProvider";
 import {
   createBulkDeleteAction,
   createBulkDownloadAction,
-  createBulkProcessAction,
+  createBulkProcessSyncAction,
+  createBulkScheduleAction,
   createDeleteAction,
   createDownloadAction,
   createPreviewAction,
   createProcessAction,
+  createScheduleAction,
 } from "./DocumentActions";
 import { useDocumentViewer } from "./useDocumentViewer";
 
@@ -42,6 +45,7 @@ export const useDocumentActions = (onRefreshData?: () => void) => {
   const [deleteDocument] = useDeleteDocumentMutation();
   const [triggerDownload] = useLazyGetDocumentRawContentQuery();
   const [processDocuments] = useProcessDocumentsMutation();
+  const [scheduleDocuments] = useScheduleDocumentsMutation();
 
   // Action handlers
   const handleDelete = async (file: DocumentMetadata) => {
@@ -120,24 +124,53 @@ export const useDocumentActions = (onRefreshData?: () => void) => {
     });
   };
 
-  const handleProcess = async (files: DocumentMetadata[]) => {
+  const handleSchedule = async (files: DocumentMetadata[]) => {
     try {
       const payload: ProcessDocumentsRequest = {
         files: files.map((f) => {
           const isPull = f.source_type === "pull";
-
           return {
-            source_tag: f.source_tag || "uploads",
+            source_tag: f.source_tag,
             document_uid: isPull ? undefined : f.document_uid,
             external_path: isPull ? (f.pull_location ?? undefined) : undefined,
             tags: f.tags || [],
             display_name: f.document_name,
           };
         }),
-        pipeline_name: "manual_ui_trigger",
+        pipeline_name: "manual_ui_async",
+      };
+
+      const result = await scheduleDocuments(payload).unwrap();
+
+      showInfo({
+        summary: "Processing started",
+        detail: `Workflow ${result.workflow_id} submitted`,
+      });
+    } catch (error) {
+      showError({
+        summary: "Processing Failed",
+        detail: error?.data?.detail || error.message,
+      });
+    }
+  };
+  const handleProcess = async (files: DocumentMetadata[]) => {
+    try {
+      const payload: ProcessDocumentsRequest = {
+        files: files.map((f) => {
+          const isPull = f.source_type === "pull";
+          return {
+            source_tag: f.source_tag,
+            document_uid: isPull ? undefined : f.document_uid,
+            external_path: isPull ? (f.pull_location ?? undefined) : undefined,
+            tags: f.tags || [],
+            display_name: f.document_name,
+          };
+        }),
+        pipeline_name: "manual_ui_async",
       };
 
       const result = await processDocuments(payload).unwrap();
+
       showInfo({
         summary: "Processing started",
         detail: `Workflow ${result.workflow_id} submitted`,
@@ -156,12 +189,14 @@ export const useDocumentActions = (onRefreshData?: () => void) => {
     createDownloadAction(handleDownload, t),
     createDeleteAction(handleDelete, t),
     createProcessAction((file) => handleProcess([file]), t),
+    createScheduleAction((file) => handleSchedule([file]), t),
   ];
 
   const defaultBulkActions = [
     createBulkDeleteAction(handleBulkDelete, t),
     createBulkDownloadAction(handleBulkDownload, t),
-    createBulkProcessAction(handleProcess, t),
+    createBulkProcessSyncAction((files) => handleProcess(files), t),
+    createBulkScheduleAction((file) => handleSchedule(file), t), // Optional if your library supports bulk createScheduleAction
   ];
 
   return {
