@@ -5,6 +5,12 @@
 # You may obtain a copy of the License at
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 """
 Temporal worker responsible for running ingestion pipelines.
@@ -22,11 +28,11 @@ from temporalio.worker import Worker
 
 from app.common.structures import TemporalSchedulerConfig
 from app.features.scheduler.activities import (
-    extract_metadata,
+    get_push_file_metadata,
     input_process,
     output_process,
 )
-from app.features.scheduler.workflow import Process, ExtractMetadata, InputProcess, OutputProcess
+from app.features.scheduler.workflow import GetPushFileMetadata, Process, InputProcess, OutputProcess
 
 # Use basic logging instead of rich within the Temporal worker
 logging.basicConfig(
@@ -57,12 +63,12 @@ async def run_worker(config: TemporalSchedulerConfig):
         task_queue=config.task_queue,
         workflows=[
             Process,
-            ExtractMetadata,
+            GetPushFileMetadata,
             InputProcess,
             OutputProcess,
         ],
         activities=[
-            extract_metadata,
+            get_push_file_metadata,
             input_process,
             output_process,
         ],

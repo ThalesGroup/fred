@@ -29,7 +29,7 @@ class TestInputProcessorService:
         test_file = tmp_path / "test.md"
         test_file.write_text("dummy content")
 
-        metadata = service.extract_metadata(test_file, [])
+        metadata = service.extract_metadata(test_file, [], "fred")
         assert metadata.document_uid
         assert metadata.title == "test-markdown"
         assert metadata.document_name == "test.md"
@@ -38,14 +38,15 @@ class TestInputProcessorService:
         # Should not raise because UID is now injected automatically by processor
         test_file = tmp_path / "test.md"
         test_file.write_text("dummy")
-        metadata = service.extract_metadata(test_file, [])
+        metadata = service.extract_metadata(test_file, [], "fred")
         assert metadata.document_uid
 
     def test_process_markdown(self, tmp_path, service: IngestionService):
         input_file = tmp_path / "test.md"
         input_file.write_text("dummy")
 
-        metadata = DocumentMetadata(source_type="push", document_name=input_file.name, document_uid="markdown-uid-001")
+        from app.common.document_structures import SourceType
+        metadata = DocumentMetadata(source_type=SourceType.PUSH, document_name=input_file.name, document_uid="markdown-uid-001")
 
         service.process_input(input_path=input_file, output_dir=tmp_path, metadata=metadata)
 
@@ -56,8 +57,9 @@ class TestInputProcessorService:
     def test_process_tabular(self, tmp_path, service: IngestionService):
         input_file = tmp_path / "table.xlsx"
         input_file.write_text("dummy")
-
-        metadata = DocumentMetadata(source_type="push", document_name=input_file.name, document_uid="tabular-uid-001")
+        from app.common.document_structures import SourceType
+        metadata = DocumentMetadata(source_type=SourceType.PUSH, document_name=input_file.name, document_uid="tabular-uid-001")
+        metadata = DocumentMetadata(source_type=SourceType("push"), document_name=input_file.name, document_uid="tabular-uid-001")
 
         service.process_input(input_path=input_file, output_dir=tmp_path, metadata=metadata)
 
@@ -75,9 +77,10 @@ class TestInputProcessorService:
         monkeypatch.setattr(service.context, "get_input_processor_instance", lambda ext: UnknownProcessor())
 
         input_file = tmp_path / "weird.bin"
-        input_file.write_text("data")
+        from app.common.document_structures import SourceType
+        metadata = DocumentMetadata(source_type=SourceType.PUSH, document_name=input_file.name, document_uid=str(uuid4()))
 
-        metadata = DocumentMetadata(source_type="push", document_name=input_file.name, document_uid=str(uuid4()))
+        metadata = DocumentMetadata(source_type=SourceType("push"), document_name=input_file.name, document_uid=str(uuid4()))
 
         with pytest.raises(RuntimeError, match="Unknown processor type"):
             service.process_input(input_path=input_file, output_dir=tmp_path, metadata=metadata)

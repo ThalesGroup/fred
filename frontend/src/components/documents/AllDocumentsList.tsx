@@ -38,10 +38,16 @@ import ClearIcon from "@mui/icons-material/Clear";
 import LibraryBooksRoundedIcon from "@mui/icons-material/LibraryBooksRounded";
 import SearchIcon from "@mui/icons-material/Search";
 import UploadIcon from "@mui/icons-material/Upload";
+import RefreshIcon from "@mui/icons-material/Refresh";
+
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { KeyCloakService } from "../../security/KeycloakService";
-import { DOCUMENT_PROCESSING_STAGES, useGetDocumentSourcesQuery } from "../../slices/documentApi";
+import {
+  DOCUMENT_PROCESSING_STAGES,
+  useGetDocumentSourcesQuery,
+  useRescanCatalogSourceMutation,
+} from "../../slices/documentApi";
 import {
   DocumentMetadata,
   useBrowseDocumentsKnowledgeFlowV1DocumentsBrowsePostMutation,
@@ -62,6 +68,7 @@ export const AllDocumentsList = ({}: DocumentsViewProps) => {
   // API Hooks
   const [browseDocuments, { isLoading }] = useBrowseDocumentsKnowledgeFlowV1DocumentsBrowsePostMutation();
   const { data: allSources } = useGetDocumentSourcesQuery();
+  const [rescanCatalogSource] = useRescanCatalogSourceMutation();
 
   // UI States
   const [documentsPerPage, setDocumentsPerPage] = useState(10);
@@ -92,7 +99,19 @@ export const AllDocumentsList = ({}: DocumentsViewProps) => {
     canManageDocuments: hasDocumentManagementPermission(),
     roles: KeyCloakService.GetUserRoles(),
   };
-
+  const handleRefreshPullSource = async () => {
+    if (!selectedSourceTag) return;
+    try {
+      await rescanCatalogSource(selectedSourceTag).unwrap();
+      await fetchFiles(); // Re-fetch after refresh
+    } catch (err) {
+      console.error("Refresh failed:", err);
+      showError({
+        summary: t("documentLibrary.refreshFailed"),
+        detail: err?.data?.detail || err.message || "Unknown error occurred while refreshing.",
+      });
+    }
+  };
   const fetchFiles = async () => {
     if (!selectedSourceTag) return;
     const filters = {
@@ -179,6 +198,17 @@ export const AllDocumentsList = ({}: DocumentsViewProps) => {
             sx={{ borderRadius: "8px" }}
           >
             {t("documentLibrary.upload")}
+          </Button>
+        )}
+        {userInfo.canManageDocuments && isPullMode && (
+          <Button
+            variant="contained"
+            startIcon={<RefreshIcon />}
+            onClick={() => handleRefreshPullSource()}
+            size="medium"
+            sx={{ borderRadius: "8px" }}
+          >
+            {t("documentLibrary.refresh")}
           </Button>
         )}
       </Box>
@@ -375,6 +405,7 @@ export const AllDocumentsList = ({}: DocumentsViewProps) => {
           isOpen={openUploadDrawer}
           onClose={() => setOpenUploadDrawer(false)}
           onUploadComplete={handleUploadComplete}
+          metadata={{ source_tag: selectedSourceTag }}
         />
       )}
     </Container>

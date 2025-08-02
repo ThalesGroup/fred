@@ -17,7 +17,7 @@
 # Licensed under the Apache License 2.0
 
 from datetime import datetime
-from app.common.document_structures import DocumentMetadata
+from app.common.document_structures import DocumentMetadata, SourceType
 from app.core.stores.metadata.base_metadata_store import BaseMetadataStore
 from fastapi.testclient import TestClient
 from fastapi import status
@@ -33,7 +33,7 @@ import pytest
 @pytest.fixture
 def document1():
     return DocumentMetadata(
-        source_type="push",
+        source_type=SourceType("push"),
         document_uid="doc-01",
         document_name="document.md",
         title="Example Document",
@@ -47,7 +47,7 @@ def document1():
 @pytest.fixture
 def document2():
     return DocumentMetadata(
-        source_type="push",
+        source_type=SourceType("push"),
         document_uid="doc-02",
         document_name="ai_revolution.pdf",
         title="AI Revolution",

@@ -41,7 +41,6 @@ import MenuIcon from "@mui/icons-material/Menu";
 import MenuBookIcon from "@mui/icons-material/MenuBook";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import TuneIcon from "@mui/icons-material/Tune";
-import WorkspacesIcon from "@mui/icons-material/Workspaces";
 import { useContext } from "react";
 import { useTranslation } from "react-i18next";
 import { FeatureFlagKey, getProperty, isFeatureEnabled } from "../common/config.tsx";
@@ -148,14 +147,6 @@ export default function SideBar({ darkMode, onThemeChange }) {
       url: `/agentHub`,
       canBeDisabled: false,
       tooltip: t("sidebar.tooltip.agent"),
-    },
-    {
-      key: "workspaces",
-      label: t("sidebar.workspaces"),
-      icon: <WorkspacesIcon />,
-      url: `/workspaces`,
-      canBeDisabled: false,
-      tooltip: t("sidebar.tooltip.workspaces"),
     },
     {
       key: "account",

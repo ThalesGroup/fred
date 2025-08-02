@@ -30,14 +30,14 @@ def test_extract_and_save_metadata(sample_docx, metadata_store):
     # 💾 Save metadata and reload it
     service.save_metadata(metadata)
     restored = service.get_metadata(metadata.document_uid)
-
+    assert restored is not None
     assert restored.document_uid == metadata.document_uid
     assert restored.tags == ["test"]
 
 
 def test_process_input(sample_docx, output_dir):
     service = IngestionService()
-    metadata = service.extract_metadata(sample_docx, tags=["test"])
+    metadata = service.extract_metadata(sample_docx, tags=["test"], source_tag="fred")
 
     # ⚙️ Process the file into output directory
     service.process_input(sample_docx, output_dir, metadata)
@@ -50,7 +50,7 @@ def test_process_input(sample_docx, output_dir):
 
 def test_process_input_then_output(sample_docx, output_dir):
     service = IngestionService()
-    metadata = service.extract_metadata(sample_docx, tags=["test"])
+    metadata = service.extract_metadata(sample_docx, tags=["test"], source_tag="fred")
 
     # First process input
     service.process_input(sample_docx, output_dir, metadata)
@@ -62,7 +62,7 @@ def test_process_input_then_output(sample_docx, output_dir):
 
 def test_get_preview_file_fallback(sample_docx, output_dir):
     service = IngestionService()
-    metadata = service.extract_metadata(sample_docx, tags=["test"])
+    metadata = service.extract_metadata(sample_docx, tags=["test"], source_tag="fred")
 
     # Write a dummy preview
     preview = output_dir / "table.csv"
