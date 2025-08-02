@@ -17,7 +17,6 @@ import { apiSlice } from "../frugalit/slices/api.tsx";
 import { agenticApi } from "../slices/agentic/agenticApi.ts";
 import { chatApiSlice } from "../slices/chatApi";
 import { documentApiSlice } from "../slices/documentApi.tsx";
-import { knowledgeContextApiSlice } from "../slices/knowledgeContextApi.tsx";
 import { knowledgeFlowApi } from "../slices/knowledgeFlow/knowledgeFlowApi.ts";
 import { monitoringApiMiddleware, monitoringApiReducer } from "../slices/monitoringApi.tsx";
 
@@ -51,7 +50,6 @@ const combinedReducer = combineReducers({
   documentApi: documentApiSlice.reducer,
   chatApi: chatApiSlice.reducer,
   monitoringApi: monitoringApiReducer,
-  knowledgeContextApi: knowledgeContextApiSlice.reducer,
 });
 
 // Configure store
@@ -66,7 +64,6 @@ export const store = configureStore({
       chatApiSlice.middleware,
       monitoringApiMiddleware,
       loggingMiddleware,
-      knowledgeContextApiSlice.middleware,
     ),
   devTools: true,
 });

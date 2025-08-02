@@ -53,11 +53,12 @@ from abc import ABC, abstractmethod
 from typing import Iterable, List, Tuple
 
 from langchain.schema.document import Document
+from langchain.embeddings.base import Embeddings
 
 from app.common.document_structures import DocumentMetadata
 
 
-class BaseDocumentLoader(ABC):
+class BaseLangchainDocumentLoader(ABC):
     """
     Interface for loading documents from a given source and returning them as LangChain Documents.
     This interface is designed to be implemented by various concrete classes that handle
@@ -85,7 +86,7 @@ class BaseDocumentLoader(ABC):
     """
 
     @abstractmethod
-    def load(self, file_path: str, metadata: DocumentMetadata) -> Document:
+    def load_langchain_doc_from_metadata(self, file_path: str, metadata: DocumentMetadata) -> Document:
         """Load a document from a file."""
         pass
 
@@ -105,7 +106,7 @@ class BaseTextSplitter(ABC):
 
 
 # 3. Embedding Model Interface
-class BaseEmbeddingModel(ABC):
+class BaseEmbeddingModel(Embeddings, ABC):
     """
     Interface for embedding models.
     This interface is designed to be implemented by various concrete classes that handle

@@ -17,6 +17,7 @@ import io
 import logging
 from pathlib import Path
 from typing import BinaryIO
+from urllib.parse import urlparse
 from minio import Minio
 from minio.error import S3Error
 import pandas as pd
@@ -36,7 +37,21 @@ class MinioStorageBackend(BaseContentStore):
         Initializes the MinIO client and ensures the bucket exists.
         """
         self.bucket_name = bucket_name
-        self.client = Minio(endpoint, access_key=access_key, secret_key=secret_key, secure=secure)
+        parsed = urlparse(endpoint)
+        if parsed.path and parsed.path != "/":
+            raise RuntimeError(
+                f"❌ Invalid MinIO endpoint: '{endpoint}'.\n"
+                "👉 The endpoint must not include a path. Use only scheme://host:port.\n"
+                "   Example: 'http://localhost:9000', NOT 'http://localhost:9000/minio'"
+            )
+
+        # Strip scheme if needed
+        clean_endpoint = endpoint.replace("https://", "").replace("http://", "")
+        try:
+            self.client = Minio(clean_endpoint, access_key=access_key, secret_key=secret_key, secure=secure)
+        except ValueError as e:
+            logger.error(f"❌ Failed to initialize MinIO client: {e}")
+            raise
 
         # Ensure bucket exists or create it
         if not self.client.bucket_exists(bucket_name):
@@ -103,6 +118,8 @@ class MinioStorageBackend(BaseContentStore):
             deleted_any = False
 
             for obj in objects_to_delete:
+                if obj.object_name is None:
+                    raise RuntimeError(f"MinIO object has no name: {obj}")
                 self.client.remove_object(self.bucket_name, obj.object_name)
                 logger.info(f"🗑️ Deleted '{obj.object_name}' from bucket '{self.bucket_name}'.")
                 deleted_any = True
@@ -125,6 +142,8 @@ class MinioStorageBackend(BaseContentStore):
                 raise FileNotFoundError(f"No input content found for document: {document_uid}")
 
             obj = objects[0]
+            if obj.object_name is None:
+                raise RuntimeError(f"MinIO object has no name: {obj}")
             response = self.client.get_object(self.bucket_name, obj.object_name)
             return BytesIO(response.read())
         except S3Error as e:
@@ -183,6 +202,8 @@ class MinioStorageBackend(BaseContentStore):
             deleted_any = False
 
             for obj in objects_to_delete:
+                if obj.object_name is None:
+                    raise RuntimeError(f"MinIO object has no name: {obj}")
                 self.client.remove_object(self.bucket_name, obj.object_name)
                 logger.info(f"🗑️ Deleted '{obj.object_name}' from bucket '{self.bucket_name}'.")
                 deleted_any = True
@@ -205,12 +226,15 @@ class MinioStorageBackend(BaseContentStore):
                 raise FileNotFoundError(f"No content found for document: {document_uid}")
 
             for obj in objects:
+                if obj.object_name is None:
+                    raise RuntimeError(f"MinIO object has no name: {obj}")
                 relative_path = Path(obj.object_name).relative_to(document_uid)
                 target_path = destination_dir / relative_path
                 target_path.parent.mkdir(parents=True, exist_ok=True)
                 self.client.fget_object(self.bucket_name, obj.object_name, str(target_path))
 
             logger.info(f"✅ Restored document {document_uid} to {destination_dir}")
+            return destination_dir
 
         except S3Error as e:
             logger.error(f"Failed to restore document {document_uid}: {e}")

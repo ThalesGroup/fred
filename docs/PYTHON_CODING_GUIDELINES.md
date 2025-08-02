@@ -246,6 +246,6 @@ app/core/processors/input/pdf_markdown_processor/tests/pdf_markdown_processor_te
 
 ## 🆘 Got questions?
 
-Start by reading an existing clean module like `ChatProfileService` or `PdfMarkdownProcessor`. Then ask a senior if you're unsure. **No copy-paste without understanding.**
+Start by reading an existing clean module like `PdfMarkdownProcessor`. Then ask a senior if you're unsure. **No copy-paste without understanding.**
 
 Let’s build a clean, robust backend together 💪

@@ -26,8 +26,6 @@ import {
   ListItem,
   ClickAwayListener,
   Fade,
-  FormControl,
-  Select,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
@@ -38,12 +36,6 @@ import { getAgentBadge } from "../../utils/avatar.tsx";
 import React from "react";
 import { StyledMenu } from "../../utils/styledMenu.tsx";
 import { SessionSchema } from "../../slices/chatApiStructures.ts";
-import BookmarkIcon from "@mui/icons-material/Bookmark";
-import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
-import InsertDriveFileIcon from "@mui/icons-material/InsertDriveFile";
-import { KnowledgeContext } from "../knowledgeContext/KnowledgeContextEditDialog.tsx";
-import { useLazyGetKnowledgeContextsQuery } from "../../slices/knowledgeContextApi.tsx";
-import InvisibleLink from "../InvisibleLink.tsx";
 import { useTranslation } from "react-i18next";
 
 export const Settings = ({
@@ -55,7 +47,6 @@ export const Settings = ({
   currentAgenticFlow,
   onSelectAgenticFlow,
   onDeleteSession,
-  onSelectChatProfile,
 }: {
   sessions: SessionSchema[];
   currentSession: SessionSchema | null;
@@ -65,7 +56,6 @@ export const Settings = ({
   currentAgenticFlow: AgenticFlow;
   onSelectAgenticFlow: (flow: AgenticFlow) => void;
   onDeleteSession: (session: SessionSchema) => void;
-  onSelectChatProfile?: (profile: KnowledgeContext | null) => void;
 }) => {
   // Récupération du thème pour l'adaptation des couleurs
   const theme = useTheme<Theme>();
@@ -88,42 +78,6 @@ export const Settings = ({
   const [editText, setEditText] = useState("");
   const [isEditing, setIsEditing] = useState(false);
   const [showElements, setShowElements] = useState(false);
-  const [getChatProfiles] = useLazyGetKnowledgeContextsQuery();
-  const [, setIsLoading] = useState(false);
-
-  // Snackbar states
-  const [, setSnackbarOpen] = useState(false);
-  const [, setSnackbarMessage] = useState("");
-  const [, setSnackbarSeverity] = useState<"success" | "error" | "info" | "warning">("success");
-
-  const [chatProfiles, setChatProfiles] = useState<KnowledgeContext[]>([])
-
-
-
-  // Fetch chatProfiles from API with mock data
-  const fetchChatProfiles = async () => {
-    setIsLoading(true);
-    try {
-      const response = await getChatProfiles({ tag: "chat_profile" }).unwrap();
-      setChatProfiles(response);
-    } catch (error) {
-      console.error("Error fetching chatProfiles:", error);
-      showSnackbar("Error fetching chat profiles", "error");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // État pour le chatProfilee sélectionné
-  const [selectedChatProfile, setSelectedChatProfile] = useState<KnowledgeContext | null>(null);
-
-
-  // Snackbar handlers
-  const showSnackbar = (message: string, severity: "success" | "error" | "info" | "warning" = "success") => {
-    setSnackbarMessage(message);
-    setSnackbarSeverity(severity);
-    setSnackbarOpen(true);
-  };
 
   // Gestion du menu chatProfileuel
   const openMenu = (event: React.MouseEvent<HTMLElement>, session: SessionSchema) => {
@@ -174,7 +128,6 @@ export const Settings = ({
 
   useEffect(() => {
     setShowElements(true);
-    fetchChatProfiles();
   }, []);
 
   return (
@@ -195,160 +148,6 @@ export const Settings = ({
         boxShadow: "None",
       }}
     >
-      {/* chat profile section */}
-      <Fade in={showElements} timeout={800}>
-        <Box
-          sx={{
-            py: 2.5,
-            px: 2,
-            borderBottom: `1px solid ${theme.palette.divider}`,
-          }}
-        >
-          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
-            <Box sx={{ display: "flex", alignItems: "center" }}>
-              <InvisibleLink
-                to={{
-                  pathname: "/account",
-                  search: "?tab=2",
-                }}
-              >
-                <Typography
-                  variant="subtitle1"
-                  sx={{
-                    fontWeight: 500,
-                  }}
-                >
-                  {t("settings.profile.title")}             </Typography>
-              </InvisibleLink>
-              <Tooltip
-                title={
-                  <React.Fragment>
-                    <Typography variant="body2" sx={{ mb: 1 }}>{t("settings.profile.tooltip.intro")}</Typography>
-                    <Typography variant="body2" sx={{ mb: 1 }}>{t("settings.profile.tooltip.uses")}</Typography>
-                    <Typography variant="body2" sx={{ mb: 1 }}>
-                      <ul style={{ margin: 0, paddingLeft: 16 }}>
-                        <li>{t("settings.profile.tooltip.example1")}</li>
-                        <li>{t("settings.profile.tooltip.example2")}</li>
-                        <li>{t("settings.profile.tooltip.example3")}</li>
-                      </ul>
-                    </Typography>
-                  </React.Fragment>
-                }
-                arrow
-                placement="bottom-start"
-                componentsProps={{
-                  tooltip: {
-                    sx: {
-                      maxWidth: 300,
-                      bgcolor: theme.palette.background.paper,
-                      color: theme.palette.text.primary,
-                      p: 2,
-                      borderRadius: 1,
-                      boxShadow: theme.shadows[3],
-                      "& .MuiTooltip-arrow": {
-                        color: theme.palette.background.paper,
-                      },
-                    },
-                  },
-                }}
-              >
-                <HelpOutlineIcon
-                  sx={{
-                    ml: 1,
-                    fontSize: "0.9rem",
-                    color: "text.secondary",
-                    cursor: "help",
-                  }}
-                />
-              </Tooltip>
-            </Box>
-
-            <Tooltip title={t("settings.profile.add")}>
-              <InvisibleLink
-                to={{
-                  pathname: "/account",
-                  search: "?tab=2&new=true",
-                }}
-              >
-                <IconButton size="small" sx={{ mr: -1 }}>
-                  <AddIcon fontSize="small" />
-                </IconButton>
-              </InvisibleLink>
-            </Tooltip>
-          </Box>
-
-          <FormControl fullWidth size="small">
-            <Select
-              value={selectedChatProfile?.id || ""}
-              onChange={(e) => {
-                const ctx = chatProfiles.find((c) => c.id === e.target.value);
-                setSelectedChatProfile(ctx || null);
-                if (onSelectChatProfile) {
-                  onSelectChatProfile(ctx || null);
-                }
-              }}
-              displayEmpty
-              sx={{ mb: 1 }}
-              renderValue={(selected) => {
-                if (!selected) {
-                  return (
-                    <Typography variant="body2" color="text.secondary">
-                      {t("settings.profile.select")}
-                    </Typography>
-                  );
-                }
-                const ctx = chatProfiles.find((c) => c.id === selected);
-                return (
-                  <Box sx={{ display: "flex", alignItems: "center" }}>
-                    <BookmarkIcon sx={{ color: theme.palette.warning.main, mr: 1, fontSize: "1.1rem" }} />
-                    <Typography noWrap variant="body2">
-                      {ctx?.title}
-                    </Typography>
-                  </Box>
-                );
-              }}
-            >
-              <MenuItem value="">
-                <em>{t("settings.profile.none")}</em>
-              </MenuItem>
-              {chatProfiles.map((chatProfile) => (
-                <MenuItem key={chatProfile.id} value={chatProfile.id}>
-                  <Box sx={{ display: "flex", flexDirection: "column", width: "100%" }}>
-                    <Box sx={{ display: "flex", alignItems: "center" }}>
-                      <BookmarkIcon sx={{ color: theme.palette.warning.main, mr: 1, fontSize: "1.1rem" }} />
-                      <Typography variant="body2">{chatProfile.title}</Typography>
-                    </Box>
-                    <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <Typography
-                        variant="caption"
-                        color="text.secondary"
-                        noWrap
-                        sx={{ display: "block", maxWidth: "190px" }}
-                      >
-                        {chatProfile.description}
-                      </Typography>
-                      {chatProfile.documents && (
-                        <Box sx={{ display: "flex", alignItems: "center", ml: 1 }}>
-                          <InsertDriveFileIcon fontSize="small" sx={{ mr: 0.5 }} />
-                          <Typography variant="caption">{chatProfile.documents.length}</Typography>
-                        </Box>
-                      )}
-                    </Box>
-                  </Box>
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-
-          {selectedChatProfile && (
-            <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1 }}>
-              {selectedChatProfile.description}
-            </Typography>
-          )}
-        </Box>
-      </Fade>
-
-      {/* En-tête: titre et sélecteur d'agent */}
       <Fade in={showElements} timeout={900}>
         <Box
           sx={{

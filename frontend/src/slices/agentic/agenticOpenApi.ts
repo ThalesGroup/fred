@@ -19,84 +19,6 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/agentic/v1/chatbot/feedback/${queryArg.feedbackId}`, method: "DELETE" }),
     }),
-    getMetricsAgenticV1MetricsToolsAllGet: build.query<
-      GetMetricsAgenticV1MetricsToolsAllGetApiResponse,
-      GetMetricsAgenticV1MetricsToolsAllGetApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/agentic/v1/metrics/tools/all`,
-        params: {
-          start: queryArg.start,
-          end: queryArg.end,
-        },
-      }),
-    }),
-    getNodeNumericalMetricsAgenticV1MetricsToolsNumericalGet: build.query<
-      GetNodeNumericalMetricsAgenticV1MetricsToolsNumericalGetApiResponse,
-      GetNodeNumericalMetricsAgenticV1MetricsToolsNumericalGetApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/agentic/v1/metrics/tools/numerical`,
-        params: {
-          start: queryArg.start,
-          end: queryArg.end,
-          precision: queryArg.precision,
-          agg: queryArg.agg,
-          groupby: queryArg.groupby,
-        },
-      }),
-    }),
-    getCategoricalAgenticV1MetricsToolsCategoricalGet: build.query<
-      GetCategoricalAgenticV1MetricsToolsCategoricalGetApiResponse,
-      GetCategoricalAgenticV1MetricsToolsCategoricalGetApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/agentic/v1/metrics/tools/categorical`,
-        params: {
-          start: queryArg.start,
-          end: queryArg.end,
-        },
-      }),
-    }),
-    getMetricsAgenticV1MetricsNodesAllGet: build.query<
-      GetMetricsAgenticV1MetricsNodesAllGetApiResponse,
-      GetMetricsAgenticV1MetricsNodesAllGetApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/agentic/v1/metrics/nodes/all`,
-        params: {
-          start: queryArg.start,
-          end: queryArg.end,
-        },
-      }),
-    }),
-    getNodeNumericalMetricsAgenticV1MetricsNodesNumericalGet: build.query<
-      GetNodeNumericalMetricsAgenticV1MetricsNodesNumericalGetApiResponse,
-      GetNodeNumericalMetricsAgenticV1MetricsNodesNumericalGetApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/agentic/v1/metrics/nodes/numerical`,
-        params: {
-          start: queryArg.start,
-          end: queryArg.end,
-          precision: queryArg.precision,
-          agg: queryArg.agg,
-          groupby: queryArg.groupby,
-        },
-      }),
-    }),
-    getCategoricalAgenticV1MetricsNodesCategoricalGet: build.query<
-      GetCategoricalAgenticV1MetricsNodesCategoricalGetApiResponse,
-      GetCategoricalAgenticV1MetricsNodesCategoricalGetApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/agentic/v1/metrics/nodes/categorical`,
-        params: {
-          start: queryArg.start,
-          end: queryArg.end,
-        },
-      }),
-    }),
     createAgentAgenticV1AgentsCreatePost: build.mutation<
       CreateAgentAgenticV1AgentsCreatePostApiResponse,
       CreateAgentAgenticV1AgentsCreatePostApiArg
@@ -182,46 +104,6 @@ export type DeleteFeedbackAgenticV1ChatbotFeedbackFeedbackIdDeleteApiResponse =
 export type DeleteFeedbackAgenticV1ChatbotFeedbackFeedbackIdDeleteApiArg = {
   feedbackId: string;
 };
-export type GetMetricsAgenticV1MetricsToolsAllGetApiResponse = /** status 200 Successful Response */ ToolMetric[];
-export type GetMetricsAgenticV1MetricsToolsAllGetApiArg = {
-  start: string;
-  end: string;
-};
-export type GetNodeNumericalMetricsAgenticV1MetricsToolsNumericalGetApiResponse =
-  /** status 200 Successful Response */ NumericalMetric[];
-export type GetNodeNumericalMetricsAgenticV1MetricsToolsNumericalGetApiArg = {
-  start: string;
-  end: string;
-  precision?: Precision;
-  agg?: string[];
-  groupby?: string[];
-};
-export type GetCategoricalAgenticV1MetricsToolsCategoricalGetApiResponse =
-  /** status 200 Successful Response */ CategoricalMetric[];
-export type GetCategoricalAgenticV1MetricsToolsCategoricalGetApiArg = {
-  start: string;
-  end: string;
-};
-export type GetMetricsAgenticV1MetricsNodesAllGetApiResponse = /** status 200 Successful Response */ NodeMetric[];
-export type GetMetricsAgenticV1MetricsNodesAllGetApiArg = {
-  start: string;
-  end: string;
-};
-export type GetNodeNumericalMetricsAgenticV1MetricsNodesNumericalGetApiResponse =
-  /** status 200 Successful Response */ NumericalMetric[];
-export type GetNodeNumericalMetricsAgenticV1MetricsNodesNumericalGetApiArg = {
-  start: string;
-  end: string;
-  precision?: Precision;
-  agg?: string[];
-  groupby?: string[];
-};
-export type GetCategoricalAgenticV1MetricsNodesCategoricalGetApiResponse =
-  /** status 200 Successful Response */ CategoricalMetric[];
-export type GetCategoricalAgenticV1MetricsNodesCategoricalGetApiArg = {
-  start: string;
-  end: string;
-};
 export type CreateAgentAgenticV1AgentsCreatePostApiResponse = /** status 200 Successful Response */ any;
 export type CreateAgentAgenticV1AgentsCreatePostApiArg = {
   req: {
@@ -285,49 +167,6 @@ export type FeedbackPayload = {
   messageId: string;
   sessionId: string;
   agentName: string;
-};
-export type ToolMetric = {
-  timestamp: number;
-  user_id: string | null;
-  session_id: string | null;
-  tool_name: string;
-  latency: number;
-};
-export type NumericalMetric = {
-  time_bucket: string;
-  values: {
-    [key: string]: number;
-  };
-  [key: string]: any;
-};
-export type Precision = "sec" | "min" | "hour" | "day";
-export type CategoricalMetric = {
-  timestamp: number;
-  user_id: string | null;
-  session_id: string | null;
-  agent_name: string | null;
-  model_name: string | null;
-  model_type: string | null;
-  finish_reason: string | null;
-  id: string | null;
-  system_fingerprint: string | null;
-  service_tier: string | null;
-};
-export type NodeMetric = {
-  timestamp: number;
-  node_name: string;
-  latency: number;
-  user_id: string;
-  session_id: string;
-  agent_name?: string | null;
-  model_name?: string | null;
-  input_tokens?: number | null;
-  output_tokens?: number | null;
-  total_tokens?: number | null;
-  result_summary?: string | null;
-  metadata?: {
-    [key: string]: any;
-  };
 };
 export type McpServerConfiguration = {
   /** Name of the MCP server */
@@ -437,18 +276,6 @@ export const {
   useLazyGetFeedbackAgenticV1ChatbotFeedbackGetQuery,
   usePostFeedbackAgenticV1ChatbotFeedbackPostMutation,
   useDeleteFeedbackAgenticV1ChatbotFeedbackFeedbackIdDeleteMutation,
-  useGetMetricsAgenticV1MetricsToolsAllGetQuery,
-  useLazyGetMetricsAgenticV1MetricsToolsAllGetQuery,
-  useGetNodeNumericalMetricsAgenticV1MetricsToolsNumericalGetQuery,
-  useLazyGetNodeNumericalMetricsAgenticV1MetricsToolsNumericalGetQuery,
-  useGetCategoricalAgenticV1MetricsToolsCategoricalGetQuery,
-  useLazyGetCategoricalAgenticV1MetricsToolsCategoricalGetQuery,
-  useGetMetricsAgenticV1MetricsNodesAllGetQuery,
-  useLazyGetMetricsAgenticV1MetricsNodesAllGetQuery,
-  useGetNodeNumericalMetricsAgenticV1MetricsNodesNumericalGetQuery,
-  useLazyGetNodeNumericalMetricsAgenticV1MetricsNodesNumericalGetQuery,
-  useGetCategoricalAgenticV1MetricsNodesCategoricalGetQuery,
-  useLazyGetCategoricalAgenticV1MetricsNodesCategoricalGetQuery,
   useCreateAgentAgenticV1AgentsCreatePostMutation,
   useUpdateAgentAgenticV1AgentsNamePutMutation,
   useDeleteAgentAgenticV1AgentsNameDeleteMutation,

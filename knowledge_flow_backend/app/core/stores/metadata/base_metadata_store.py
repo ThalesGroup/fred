@@ -73,7 +73,7 @@ class BaseMetadataStore:
         """
         Return all metadata entries originating from a specific pull source.
 
-        :param source_tag: source identifier used during ingestion (e.g., "github", "uploads").
+        :param source_tag: source identifier used during ingestion (e.g., "github", "fred").
         :return: list of metadata entries associated with that source.
         """
         pass

@@ -17,15 +17,18 @@ import logging
 import os
 from pathlib import Path
 from typing import Dict, Type, Union, Optional
+from app.core.stores.content.base_content_loader import BaseContentLoader
+from app.core.stores.content.filesystem_content_loader import FileSystemContentLoader
+from app.core.stores.content.minio_content_loader import MinioContentLoader
 from fred_core.store.duckdb_store import DuckDBTableStore
-from app.common.structures import Configuration, DuckdbMetadataStorage, InMemoryVectorStorage, MinioStorage, OpenSearchStorage, WeaviateVectorStorage
+from app.common.structures import Configuration, DuckdbMetadataStorage, InMemoryVectorStorage, FileSystemPullSource, MinioPullSource, MinioStorage, OpenSearchStorage, WeaviateVectorStorage
 from app.common.utils import validate_settings_or_exit
 from app.config.embedding_azure_apim_settings import EmbeddingAzureApimSettings
 from app.config.embedding_azure_openai_settings import EmbeddingAzureOpenAISettings
 from app.config.ollama_settings import OllamaSettings
 from app.config.embedding_openai_settings import EmbeddingOpenAISettings
 from app.core.stores.content.base_content_store import BaseContentStore
-from app.core.stores.content.local_content_store import LocalStorageBackend
+from app.core.stores.content.filesystem_content_store import FileSystemContentStore
 from app.core.stores.content.minio_content_store import MinioStorageBackend
 from app.core.stores.metadata.base_catalog_store import BaseCatalogStore
 from app.core.stores.metadata.duckdb_catalog_store import DuckdbCatalogStore
@@ -42,8 +45,7 @@ from app.core.stores.metadata.opensearch_metadata_store import OpenSearchMetadat
 from app.core.stores.tags.base_tag_store import BaseTagStore
 from app.core.stores.tags.local_tag_store import LocalTagStore
 from app.core.stores.vector.in_memory_langchain_vector_store import InMemoryLangchainVectorStore
-from app.core.stores.vector.base_vector_store import BaseDocumentLoader, BaseEmbeddingModel, BaseTextSplitter, BaseVectoreStore
-from app.core.processors.output.vectorization_processor.local_file_loader import LocalFileLoader
+from app.core.stores.vector.base_vector_store import BaseEmbeddingModel, BaseTextSplitter, BaseVectoreStore
 from app.core.stores.vector.opensearch_vector_store import OpenSearchVectorStoreAdapter
 from app.core.processors.output.vectorization_processor.semantic_splitter import SemanticSplitter
 from app.core.stores.vector.weaviate_vector_store import WeaviateVectorStore
@@ -55,6 +57,7 @@ BaseProcessorType = Union[BaseMarkdownProcessor, BaseTabularProcessor]
 DEFAULT_OUTPUT_PROCESSORS = {
     "markdown": "app.core.processors.output.vectorization_processor.vectorization_processor.VectorizationProcessor",
     "tabular": "app.core.processors.output.tabular_processor.tabular_processor.TabularProcessor",
+    "duckdb": "app.core.processors.output.duckdb_processor.duckdb_processor.DuckDBProcessor"
 }
 
 # Mapping file extensions to categories
@@ -68,6 +71,7 @@ EXTENSION_CATEGORY = {
     ".xlsx": "tabular",
     ".xls": "tabular",
     ".xlsm": "tabular",
+    ".duckdb": "duckdb"
 }
 
 logger = logging.getLogger(__name__)
@@ -281,7 +285,7 @@ class ApplicationContext:
         if isinstance(config, MinioStorage):
             return MinioStorageBackend(endpoint=config.endpoint, access_key=config.access_key, secret_key=config.secret_key, bucket_name=config.bucket_name, secure=config.secure)
         elif backend_type == "local":
-            return LocalStorageBackend(Path(config.root_path).expanduser())
+            return FileSystemContentStore(Path(config.root_path).expanduser())
         else:
             raise ValueError(f"Unsupported storage backend: {backend_type}")
 
@@ -306,10 +310,10 @@ class ApplicationContext:
             if settings.openai_api_version:
                 embedding_params["openai_api_version"] = settings.openai_api_version
 
-            return Embedder(OpenAIEmbeddings(**embedding_params))
+            return Embedder(OpenAIEmbeddings(**embedding_params)) # type: ignore[call-arg]
 
         elif backend_type == "azureopenai":
-            openai_settings = EmbeddingAzureOpenAISettings()
+            openai_settings = EmbeddingAzureOpenAISettings() # type: ignore[call-arg]
             return Embedder(
                 AzureOpenAIEmbeddings(
                     deployment=openai_settings.azure_deployment_embedding,
@@ -318,7 +322,7 @@ class ApplicationContext:
                     openai_api_version=openai_settings.azure_api_version,
                     openai_api_key=openai_settings.azure_openai_api_key,
                 )
-            )
+            ) # type: ignore[call-arg]
 
         elif backend_type == "azureapim":
             settings = validate_settings_or_exit(EmbeddingAzureApimSettings, "Azure APIM Embedding Settings")
@@ -448,7 +452,7 @@ class ApplicationContext:
 
     def get_catalog_store(self) -> BaseCatalogStore:
         """
-        Lazy-initialize and return the configured tabular store backend.
+        Return the store used to save a local view of pull files, i.e. files not yet processed.
         Currently supports only DuckDB.
         """
         if hasattr(self, "_catalog_store_instance") and self._catalog_store_instance is not None:
@@ -464,13 +468,25 @@ class ApplicationContext:
 
         return self._catalog_store_instance
 
-    def get_document_loader(self) -> BaseDocumentLoader:
+    def get_content_loader(self, source: str) -> BaseContentLoader:
         """
         Factory method to create a document loader instance based on configuration.
+        this document loader is legacy it returns directly langchain documents
         Currently supports LocalFileLoader.
         """
-        # TODO: In future we can allow other backends, based on config.
-        return LocalFileLoader()
+        # Get the singleton application context and configuration
+        config = self.get_config().document_sources
+        if not config or source not in config:
+            raise ValueError(f"Unknown document source tag: {source}")  
+        source_config = config[source]
+        if source_config.type != "pull":
+            raise ValueError(f"Source '{source}' is not a pull-mode source.")
+        if isinstance(source_config, FileSystemPullSource):
+            return FileSystemContentLoader(source_config, source)
+        elif isinstance(source_config, MinioPullSource):
+            return MinioContentLoader(source_config, source)
+        else:
+            raise NotImplementedError(f"No pull provider implemented for '{source_config.provider}'")
 
     def get_text_splitter(self) -> BaseTextSplitter:
         """
@@ -478,6 +494,21 @@ class ApplicationContext:
         Currently returns RecursiveSplitter.
         """
         return SemanticSplitter()
+
+    def get_pull_provider(self, source_tag: str) -> BaseContentLoader:
+        source_config = self.config.document_sources.get(source_tag)
+
+        if not source_config:
+            raise ValueError(f"Unknown document source tag: {source_tag}")
+        if source_config.type != "pull":
+            raise ValueError(f"Source '{source_tag}' is not a pull-mode source.")
+
+        if source_config.provider == "local_path":
+            return FileSystemContentLoader(source_config, source_tag)
+        elif source_config.provider == "minio":
+             return MinioContentLoader(source_config, source_tag)
+        else:
+            raise NotImplementedError(f"No pull provider implemented for '{source_config.provider}'")
 
     def _log_sensitive(self, name: str, value: Optional[str]):
         logger.info(f"     ↳ {name} set: {'✅' if value else '❌'}")

@@ -21,7 +21,6 @@ from app.common.mcp_utils import get_mcp_client_for_agent
 from app.common.structures import AgentSettings
 from app.core.agents.flow import AgentFlow
 from app.core.model.model_factory import get_model
-from app.core.monitoring.node_monitoring.monitor_node import monitor_node
 
 from langchain_core.messages import HumanMessage, ToolMessage, SystemMessage
 from langgraph.constants import START
@@ -97,11 +96,10 @@ class TabularExpert(AgentFlow):
 
     def _build_graph(self) -> StateGraph:
         builder = StateGraph(MessagesState)
-
-        builder.add_node("reasoner", monitor_node(self._run_reasoning_step))
-        builder.add_node(
-            "tools", ToolNode(self.toolkit.get_tools())
-        )  # 🧩 THIS LINE WAS MISSING
+        
+        builder.add_node("reasoner", self._run_reasoning_step)
+        assert self.toolkit is not None, "Toolkit must be initialized before building graph"
+        builder.add_node("tools", ToolNode(self.toolkit.get_tools()))  # 🧩 THIS LINE WAS MISSING
 
         builder.add_edge(START, "reasoner")
         builder.add_conditional_edges(
@@ -114,6 +112,7 @@ class TabularExpert(AgentFlow):
     async def _run_reasoning_step(self, state: MessagesState):
         try:
             prompt = SystemMessage(content=self.base_prompt)
+            assert self.model is not None, "Model must be initialized before building graph"
             response = await self.model.ainvoke([prompt] + state["messages"])
 
             for msg in state["messages"]:

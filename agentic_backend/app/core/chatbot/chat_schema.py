@@ -72,7 +72,9 @@ class ChatMessagePayload(BaseModel):
         model: Optional[str] = None,
         token_usage: Optional[ChatTokenUsage] = None,
         sources: Optional[List[ChatSource]] = None,
-        **extra,
+        latency_seconds: Optional[float] = None,
+        agent_name: Optional[str] = None,
+        **extra
     ) -> "ChatMessagePayload":
         if model:
             self.metadata["model"] = model
