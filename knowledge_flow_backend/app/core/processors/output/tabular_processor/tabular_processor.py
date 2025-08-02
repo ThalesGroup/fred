@@ -27,6 +27,7 @@ from app.core.processors.output.base_output_processor import BaseOutputProcessor
 
 logger = logging.getLogger(__name__)
 
+
 def _parse_date(value: str) -> pd.Timestamp | NaTType:
     dt = dateparser.parse(value, settings={"PREFER_DAY_OF_MONTH": "first", "RETURN_AS_TIMEZONE_AWARE": False})
     if dt:
@@ -50,7 +51,7 @@ class TabularProcessor(BaseOutputProcessor):
             logger.info(f"Processing file: {file_path} with metadata: {metadata}")
 
             # 1. Load the document
-            document: Document =  load_langchain_doc_from_metadata(file_path, metadata)
+            document: Document = load_langchain_doc_from_metadata(file_path, metadata)
             logger.debug(f"Document loaded: {document}")
             if not document:
                 raise ValueError("Document is empty or not loaded correctly.")
@@ -83,4 +84,3 @@ class TabularProcessor(BaseOutputProcessor):
         except Exception as e:
             logger.exception("Unexpected error during tabular processing")
             raise TabularProcessingError("Tabular processing failed") from e
-

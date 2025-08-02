@@ -24,9 +24,8 @@ class CreatePullFileMetadata:
     @workflow.run
     async def run(self, file):
         workflow.logger.info(f"📂 ExtractMetadataWorkflow: {file}")
-        return await workflow.execute_activity(create_pull_file_metadata, 
-                                               args=[file], 
-                                               schedule_to_close_timeout=timedelta(seconds=60))
+        return await workflow.execute_activity(create_pull_file_metadata, args=[file], schedule_to_close_timeout=timedelta(seconds=60))
+
 
 @workflow.defn
 class GetPushFileMetadata:
@@ -35,19 +34,26 @@ class GetPushFileMetadata:
         workflow.logger.info(f"📂 ExtractMetadataWorkflow: {file}")
         return await workflow.execute_activity(get_push_file_metadata, args=[file], schedule_to_close_timeout=timedelta(seconds=60))
 
+
 workflow.defn
+
+
 class LoadPullFile:
     @workflow.run
     async def run(self, file, metadata):
         workflow.logger.info(f"📂 LoadPullFile: {file}")
         return await workflow.execute_activity(load_pull_file, args=[file, metadata], schedule_to_close_timeout=timedelta(seconds=60))
 
+
 workflow.defn
+
+
 class LoadPushFile:
     @workflow.run
     async def run(self, file, metadata):
         workflow.logger.info(f"📂 LoadPushFile: {file}")
         return await workflow.execute_activity(load_push_file, args=[file, metadata], schedule_to_close_timeout=timedelta(seconds=60))
+
 
 @workflow.defn
 class InputProcess:
@@ -75,42 +81,33 @@ class Process:
             if file.is_pull():
                 workflow.logger.info(f"Processing pull file: {file.display_name or 'unknown'}")
                 metadata = await workflow.execute_child_workflow(
-                    CreatePullFileMetadata.run, args=[file], 
-                    id=f"CreatePullFileMetadata-{file.display_name or 'unknown'}", 
-                    retry_policy=RetryPolicy(maximum_attempts=2))
-                
+                    CreatePullFileMetadata.run, args=[file], id=f"CreatePullFileMetadata-{file.display_name or 'unknown'}", retry_policy=RetryPolicy(maximum_attempts=2)
+                )
+
                 workflow.logger.info(f"Loading pull file local copy: {file.display_name or 'unknown'}")
                 local_file_path = await workflow.execute_child_workflow(
-                    LoadPullFile.run, args=[file, metadata], 
-                    id=f"LoadPullFile-{file.display_name or 'unknown'}", 
-                    retry_policy=RetryPolicy(maximum_attempts=2))
-            
+                    LoadPullFile.run, args=[file, metadata], id=f"LoadPullFile-{file.display_name or 'unknown'}", retry_policy=RetryPolicy(maximum_attempts=2)
+                )
+
             else:
                 workflow.logger.info(f"Processing push file: {file.display_name or 'unknown'}")
                 metadata = await workflow.execute_child_workflow(
-                    GetPushFileMetadata.run, args=[file], 
-                    id=f"GetPushFileMetadata-{file.display_name or 'unknown'}", 
-                    retry_policy=RetryPolicy(maximum_attempts=2))
-                
+                    GetPushFileMetadata.run, args=[file], id=f"GetPushFileMetadata-{file.display_name or 'unknown'}", retry_policy=RetryPolicy(maximum_attempts=2)
+                )
+
                 workflow.logger.info(f"Loading push file local copy: {file.display_name or 'unknown'}")
                 local_file_path = await workflow.execute_child_workflow(
-                    LoadPushFile.run, args=[file, metadata], 
-                    id=f"LoadPushFile-{file.display_name or 'unknown'}", 
-                    retry_policy=RetryPolicy(maximum_attempts=2))
+                    LoadPushFile.run, args=[file, metadata], id=f"LoadPushFile-{file.display_name or 'unknown'}", retry_policy=RetryPolicy(maximum_attempts=2)
+                )
 
             workflow.logger.info(f"Input process local copy: {local_file_path or 'unknown'}")
-                
+
             metadata = await workflow.execute_child_workflow(
-                    InputProcess.run, args=[local_file_path, metadata], 
-                    id=f"InputProcess-{file.display_name or 'unknown'}", 
-                    retry_policy=RetryPolicy(maximum_attempts=2)
-            )   
-       
+                InputProcess.run, args=[local_file_path, metadata], id=f"InputProcess-{file.display_name or 'unknown'}", retry_policy=RetryPolicy(maximum_attempts=2)
+            )
+
             workflow.logger.info(f"Output process local copy: {local_file_path or 'unknown'}")
-            await workflow.execute_child_workflow(
-                OutputProcess.run, args=[file, metadata], 
-                id=f"OutputProcess-{file.display_name or 'unknown'}", 
-                retry_policy=RetryPolicy(maximum_attempts=2))
+            await workflow.execute_child_workflow(OutputProcess.run, args=[file, metadata], id=f"OutputProcess-{file.display_name or 'unknown'}", retry_policy=RetryPolicy(maximum_attempts=2))
 
             workflow.logger.info(f"✅ Completed file: {file.display_name}")
 

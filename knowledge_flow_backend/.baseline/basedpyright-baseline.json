@@ -184,30 +184,6 @@
                     "endColumn": 63,
                     "lineCount": 1
                 }
-            },
-            {
-                "code": "reportReturnType",
-                "range": {
-                    "startColumn": 19,
-                    "endColumn": 47,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportAttributeAccessIssue",
-                "range": {
-                    "startColumn": 43,
-                    "endColumn": 87,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportReturnType",
-                "range": {
-                    "startColumn": 15,
-                    "endColumn": 43,
-                    "lineCount": 1
-                }
             }
         ],
         "./app/common/document_structures.py": [
@@ -426,16 +402,6 @@
                 "range": {
                     "startColumn": 46,
                     "endColumn": 50,
-                    "lineCount": 1
-                }
-            }
-        ],
-        "./app/core/processors/output/tabular_processor/tabular_processor.py": [
-            {
-                "code": "reportReturnType",
-                "range": {
-                    "startColumn": 11,
-                    "endColumn": 17,
                     "lineCount": 1
                 }
             }

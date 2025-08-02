@@ -58,7 +58,7 @@ content_storage:
   secure: false
 
 document_sources:
-  uploads:
+  fred:
     type: push
     description: "Documents manually uploaded by users"
 

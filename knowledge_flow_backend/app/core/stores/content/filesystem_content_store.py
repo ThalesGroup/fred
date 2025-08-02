@@ -23,6 +23,7 @@ from app.core.stores.content.base_content_store import BaseContentStore
 
 logger = logging.getLogger(__name__)
 
+
 class FileSystemContentStore(BaseContentStore):
     def __init__(self, destination_root: Path):
         self.destination_root = destination_root
