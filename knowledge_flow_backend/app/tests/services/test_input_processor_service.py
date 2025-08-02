@@ -46,6 +46,7 @@ class TestInputProcessorService:
         input_file.write_text("dummy")
 
         from app.common.document_structures import SourceType
+
         metadata = DocumentMetadata(source_type=SourceType.PUSH, document_name=input_file.name, document_uid="markdown-uid-001")
 
         service.process_input(input_path=input_file, output_dir=tmp_path, metadata=metadata)
@@ -58,6 +59,7 @@ class TestInputProcessorService:
         input_file = tmp_path / "table.xlsx"
         input_file.write_text("dummy")
         from app.common.document_structures import SourceType
+
         metadata = DocumentMetadata(source_type=SourceType.PUSH, document_name=input_file.name, document_uid="tabular-uid-001")
         metadata = DocumentMetadata(source_type=SourceType("push"), document_name=input_file.name, document_uid="tabular-uid-001")
 
@@ -78,6 +80,7 @@ class TestInputProcessorService:
 
         input_file = tmp_path / "weird.bin"
         from app.common.document_structures import SourceType
+
         metadata = DocumentMetadata(source_type=SourceType.PUSH, document_name=input_file.name, document_uid=str(uuid4()))
 
         metadata = DocumentMetadata(source_type=SourceType("push"), document_name=input_file.name, document_uid=str(uuid4()))

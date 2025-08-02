@@ -114,7 +114,7 @@ class OpenSearchMetadataStore(BaseMetadataStore):
         host: str,
         index: str,
         username: str,
-        password: str ,
+        password: str,
         secure: bool = False,
         verify_certs: bool = False,
     ):
@@ -202,7 +202,6 @@ class OpenSearchMetadataStore(BaseMetadataStore):
                 must.append({"term": {field: value}})
 
         return must
-
 
     def list_by_source_tag(self, source_tag: str) -> List[DocumentMetadata]:
         """
@@ -304,7 +303,7 @@ class OpenSearchMetadataStore(BaseMetadataStore):
             raise ValueError("Tag ID must be provided.")
 
         try:
-            query = {"query": {"term": {"tags.keyword": tag_id}}}
+            query = {"query": {"term": {"tags": tag_id}}}
             response = self.client.search(index=self.metadata_index_name, body=query)
             hits = response["hits"]["hits"]
         except Exception as e:
