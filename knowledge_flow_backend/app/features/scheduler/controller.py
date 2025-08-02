@@ -17,12 +17,11 @@ from uuid import uuid4
 from app.common.utils import log_exception
 from fastapi import APIRouter, HTTPException
 from temporalio.client import Client
-
+from fred_core.utils import raise_internal_error
 from app.application_context import ApplicationContext
 from app.features.scheduler.activities import create_pull_file_metadata, get_push_file_metadata, input_process, load_pull_file, load_push_file, output_process
 from app.features.scheduler.structure import PipelineDefinition, ProcessDocumentsRequest
 from app.features.scheduler.workflow import Process
-
 logger = logging.getLogger(__name__)
 
 async def run_ingestion_pipeline(definition: PipelineDefinition) -> str:
@@ -65,8 +64,7 @@ class SchedulerController:
                 result = await run_ingestion_pipeline(definition)
                 return { "status": result }
             except Exception as e:
-                log_exception(e, "Failed to submit process-documents workflow")
-                raise HTTPException(status_code=500, detail="Workflow submission failed")
+                raise_internal_error(logger, "Failed to submit process-documents workflow", e)
 
         @router.post(
             "/schedule-documents",

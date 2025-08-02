@@ -14,24 +14,24 @@
 
 import logging
 import pandas as pd
+from pandas._libs.tslibs.nattype import NaTType
 from langchain.schema.document import Document
 import io
-from fastapi import HTTPException
 import dateparser
 
 
 from app.application_context import ApplicationContext
 from app.common.document_structures import DocumentMetadata, ProcessingStage
 from app.common.vectorization_utils import load_langchain_doc_from_metadata
-from app.core.processors.output.base_output_processor import BaseOutputProcessor
+from app.core.processors.output.base_output_processor import BaseOutputProcessor, TabularProcessingError
 
 logger = logging.getLogger(__name__)
 
-
-def parse_date(value: str) -> pd.Timestamp | None:
+def _parse_date(value: str) -> pd.Timestamp | NaTType:
     dt = dateparser.parse(value, settings={"PREFER_DAY_OF_MONTH": "first", "RETURN_AS_TIMEZONE_AWARE": False})
     if dt:
         return pd.to_datetime(dt)
+    return pd.NaT
     return pd.NaT
 
 
@@ -61,11 +61,11 @@ class TabularProcessor(BaseOutputProcessor):
             for col in df.columns:
                 if df[col].dtype == object:
                     sample_values = df[col].dropna().astype(str).head(10)
-                    parsed_samples = sample_values.map(parse_date)
+                    parsed_samples = sample_values.map(_parse_date)
                     success_ratio = parsed_samples.notna().mean()
                     if success_ratio > 0.6 and parsed_samples.nunique() > 1:
                         logger.info(f"🕒 Parsing column '{col}' as datetime (score: {success_ratio:.2f})")
-                        df[col] = df[col].astype(str).map(parse_date)
+                        df[col] = df[col].astype(str).map(_parse_date)
 
             logger.debug(f"document {document}")
 
@@ -74,11 +74,13 @@ class TabularProcessor(BaseOutputProcessor):
                 result = self.tabular_store.save_table(document_name, df)
                 logger.debug(f"Document added to Tabular Store: {result}")
             except Exception as e:
-                logger.exception("Failed to add documents to Tabular Storage: %s", e)
-                raise HTTPException(status_code=500, detail="Failed to add documents to Tabular Storage") from e
+                logger.exception("Failed to add documents to Tabular Storage")
+                raise TabularProcessingError("Failed to add documents to Tabular Storage") from e
+
             metadata.mark_stage_done(ProcessingStage.SQL_INDEXED)
             return metadata
 
         except Exception as e:
-            logger.exception(f"Error during vectorization: {e}")
-            raise HTTPException(status_code=500, detail=str(e))
+            logger.exception("Unexpected error during tabular processing")
+            raise TabularProcessingError("Tabular processing failed") from e
+
