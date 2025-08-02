@@ -82,4 +82,4 @@ class PipelineDefinition(BaseModel):
 
 class ProcessDocumentsRequest(BaseModel):
     files: List[FileToProcess]
-    pipeline_name: str 
+    pipeline_name: str

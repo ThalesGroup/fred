@@ -20,11 +20,11 @@ from app.common.structures import DocumentSourceConfig
 from app.core.stores.metadata.base_catalog_store import PullFileEntry
 from typing import BinaryIO, List
 
+
 class BaseContentLoader(ABC):
     def __init__(self, source: DocumentSourceConfig, source_tag: str):
         self.source = source
         self.source_tag = source_tag
-
 
     def get_file_stream(self, relative_path: str) -> BinaryIO:
         """

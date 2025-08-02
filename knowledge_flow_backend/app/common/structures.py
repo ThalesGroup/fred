@@ -84,6 +84,7 @@ class MinioStorage(BaseModel):
 
         return values
 
+
 class LocalContentStorage(BaseModel):
     type: Literal["local"]
     root_path: str = Field(default=str(Path("~/.fred/knowledge-flow/content-store")), description="Local storage directory")
@@ -226,7 +227,7 @@ class PushSourceConfig(BaseModel):
 
 
 class BasePullSourceConfig(BaseModel):
-    type: Literal["pull"]  = "pull"
+    type: Literal["pull"] = "pull"
     description: Optional[str] = Field(default=None, description="Human-readable description of this source")
 
 
@@ -250,6 +251,8 @@ class GitPullSource(BasePullSourceConfig):
         if not values.get("token"):
             raise ValueError("Missing GITHUB_TOKEN environment variable")
         return values
+
+
 class SpherePullSource(BasePullSourceConfig):
     provider: Literal["sphere"]
     base_url: str = Field(..., description="Base URL for the Sphere API")
@@ -273,6 +276,7 @@ class SpherePullSource(BasePullSourceConfig):
 
         return values
 
+
 class GitlabPullSource(BasePullSourceConfig):
     type: Literal["pull"] = "pull"
     provider: Literal["gitlab"]
@@ -289,6 +293,8 @@ class GitlabPullSource(BasePullSourceConfig):
         if not values.get("token"):
             raise ValueError("Missing GITLAB_TOKEN environment variable")
         return values
+
+
 class MinioPullSource(BasePullSourceConfig):
     type: Literal["pull"] = "pull"
     provider: Literal["minio"]
@@ -313,6 +319,8 @@ class MinioPullSource(BasePullSourceConfig):
             raise ValueError("Missing MINIO_SECRET_KEY environment variable")
 
         return values
+
+
 PullSourceConfig = Annotated[
     Union[
         FileSystemPullSource,

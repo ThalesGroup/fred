@@ -17,7 +17,7 @@ import logging
 import pathlib
 import shutil
 import tempfile
-from typing import Generator, List, Optional
+from typing import List, Optional
 from app.common.structures import Status
 from fastapi import APIRouter, Response, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
@@ -67,6 +67,7 @@ class StatusAwareStreamingResponse(StreamingResponse):
         super().__init__(content, status_code=status_code, **kwargs)
         self.success_count = success_count
         self.total_count = total_count
+
 
 def uploadfile_to_path(file: UploadFile) -> pathlib.Path:
     tmp_dir = tempfile.mkdtemp()

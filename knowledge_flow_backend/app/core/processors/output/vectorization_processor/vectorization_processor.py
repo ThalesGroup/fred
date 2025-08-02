@@ -50,7 +50,7 @@ class VectorizationProcessor(BaseOutputProcessor):
     def process(self, file_path: str, metadata: DocumentMetadata) -> DocumentMetadata:
         try:
             logger.info(f"Starting vectorization for {file_path}")
-            
+
             document: Document = load_langchain_doc_from_metadata(file_path, metadata)
             logger.debug(f"Document loaded: {document}")
             if not document:
@@ -83,4 +83,3 @@ class VectorizationProcessor(BaseOutputProcessor):
         except Exception as e:
             logger.exception("Unexpected error during vectorization")
             raise VectorProcessingError("vectorization processing failed") from e
-

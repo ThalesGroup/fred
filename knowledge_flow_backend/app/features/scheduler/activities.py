@@ -32,9 +32,9 @@ def prepare_working_dir(document_uid: str) -> pathlib.Path:
     (base / "output").mkdir(exist_ok=True)
     return base
 
+
 @activity.defn
 def create_pull_file_metadata(file: FileToProcess) -> DocumentMetadata:
-
     assert file.external_path, "Pull files must have an external path"
     assert file.source_tag, "Pull files must have a source tag"
     logger = activity.logger
@@ -44,6 +44,7 @@ def create_pull_file_metadata(file: FileToProcess) -> DocumentMetadata:
     ingestion_service = IngestionService()
 
     from app.application_context import ApplicationContext
+
     context = ApplicationContext.get_instance()
     loader = context.get_content_loader(file.source_tag)
 
@@ -59,11 +60,7 @@ def create_pull_file_metadata(file: FileToProcess) -> DocumentMetadata:
 
         # Step 3: Extract and save metadata
         ingestion_service = IngestionService()
-        metadata = ingestion_service.extract_metadata(
-            full_path,
-            tags=file.tags,
-            source_tag=file.source_tag
-        )
+        metadata = ingestion_service.extract_metadata(full_path, tags=file.tags, source_tag=file.source_tag)
         metadata.pull_location = file.external_path
         logger.info(f"[create_pull_file_metadata] Generated metadata: {metadata}")
 
@@ -90,6 +87,7 @@ def get_push_file_metadata(file: FileToProcess) -> DocumentMetadata:
     logger.info(f"[get_push_file_metadata] Metadata found for push file UID: {file.document_uid}, skipping extraction.")
     return metadata
 
+
 @activity.defn
 def load_push_file(file: FileToProcess, metadata: DocumentMetadata) -> pathlib.Path:
     from app.features.ingestion.service import IngestionService
@@ -106,9 +104,9 @@ def load_push_file(file: FileToProcess, metadata: DocumentMetadata) -> pathlib.P
     input_file = next(input_dir.glob("*"))
     return input_file
 
+
 @activity.defn
 def load_pull_file(file: FileToProcess, metadata: DocumentMetadata) -> pathlib.Path:
-
     logger = activity.logger
     logger.info(f"[load_pull_file] Fetching file for: {metadata.document_uid}")
 
@@ -122,6 +120,7 @@ def load_pull_file(file: FileToProcess, metadata: DocumentMetadata) -> pathlib.P
     output_dir.mkdir(parents=True, exist_ok=True)
 
     from app.application_context import ApplicationContext
+
     loader = ApplicationContext.get_instance().get_content_loader(metadata.source_tag)
     full_path = loader.fetch_by_relative_path(metadata.pull_location, input_dir)
 
@@ -131,13 +130,14 @@ def load_pull_file(file: FileToProcess, metadata: DocumentMetadata) -> pathlib.P
     logger.info(f"[load_pull_file] File copied to working dir: {full_path}")
     return full_path
 
+
 @activity.defn
 def input_process(input_file: pathlib.Path, metadata: DocumentMetadata) -> DocumentMetadata:
     """
     Processes the provided local input file and saves the metadata.
-    This method generates the output files (preview, markdown, CSV) and 
+    This method generates the output files (preview, markdown, CSV) and
     invokes the ingestion service to save all that to the content store.
-    """ 
+    """
     logger = activity.logger
     logger.info(f"[input_process] Starting for UID: {metadata.document_uid}")
 
@@ -153,10 +153,10 @@ def input_process(input_file: pathlib.Path, metadata: DocumentMetadata) -> Docum
     # Process the file
     ingestion_service.process_input(input_file, output_dir, metadata)
     ingestion_service.save_output(metadata=metadata, output_dir=output_dir)
-    
+
     metadata.mark_stage_done(ProcessingStage.PREVIEW_READY)
     ingestion_service.save_metadata(metadata=metadata)
-    
+
     logger.info(f"[input_process] Done for UID: {metadata.document_uid}")
     return metadata
 
@@ -194,4 +194,3 @@ def output_process(file: FileToProcess, metadata: DocumentMetadata, accept_memor
 
     logger.info(f"[output_process] Done for UID: {metadata.document_uid}")
     return metadata
-
