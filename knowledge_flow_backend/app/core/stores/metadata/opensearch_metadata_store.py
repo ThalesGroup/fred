@@ -304,7 +304,13 @@ class OpenSearchMetadataStore(BaseMetadataStore):
             raise ValueError("Tag ID must be provided.")
 
         try:
-            query = {"query": {"term": {"tags.keyword": tag_id}}}
+            query = {
+                "query": {
+                    "term": {
+                        "tags": tag_id
+                    }
+                }
+            }
             response = self.client.search(index=self.metadata_index_name, body=query)
             hits = response["hits"]["hits"]
         except Exception as e:

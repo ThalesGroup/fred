@@ -19,7 +19,7 @@ import shutil
 import tempfile
 from typing import Generator, List, Optional
 from app.common.structures import Status
-from fastapi import APIRouter, UploadFile, File, Form
+from fastapi import APIRouter, Response, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
@@ -61,15 +61,12 @@ class StatusAwareStreamingResponse(StreamingResponse):
     until the generator has completed.
     """
 
-    def __init__(self, content: Generator, all_success_flag: list, **kwargs):
-        super().__init__(content, media_type="application/x-ndjson", **kwargs)
-        self.all_success_flag = all_success_flag
-
-    async def listen_for_close(self):
-        # Set final HTTP status based on content
-        if not self.all_success_flag[0]:
-            self.status_code = 422  # or 207 if you prefer partial success
-
+    def __init__(self, content, success_count: int, total_count: int, **kwargs):
+        # Set status_code based on success_count before calling super().__init__
+        status_code = 200 if success_count == total_count else 422
+        super().__init__(content, status_code=status_code, **kwargs)
+        self.success_count = success_count
+        self.total_count = total_count
 
 def uploadfile_to_path(file: UploadFile) -> pathlib.Path:
     tmp_dir = tempfile.mkdtemp()
@@ -108,135 +105,108 @@ class IngestionController:
             "/upload-documents",
             tags=["Library Ingestion"],
             summary="Upload documents only — defer processing to backend (e.g., Temporal)",
-            description="""
-        """,
         )
         def upload_documents_sync(
             files: List[UploadFile] = File(...),
             metadata_json: str = Form(...),
-        ) -> StreamingResponse:
+        ) -> Response:
             parsed_input = IngestionInput(**json.loads(metadata_json))
             tags = parsed_input.tags
             source_tag = parsed_input.source_tag
-            # ✅ Preload: Call save_file_to_temp on all files before the generator runs
-            # This is to ensure that the files are saved to temp storage before processing
-            # and to avoid blocking the generator with file I/O operations.
+
             preloaded_files = []
             for file in files:
                 raw_path = uploadfile_to_path(file)
                 input_temp_file = save_file_to_temp(raw_path)
                 logger.info(f"File {file.filename} saved to temp storage at {input_temp_file}")
                 preloaded_files.append((file.filename, input_temp_file))
-            all_success_flag = [False]  # Track success across all files
 
-            def event_generator() -> Generator[str, None, None]:
-                for filename, input_temp_file in preloaded_files:
-                    current_step = "metadata extraction"
+            total = len(preloaded_files)
+            success = 0
+            events = []
 
-                    try:
-                        output_temp_dir = input_temp_file.parent.parent
+            for filename, input_temp_file in preloaded_files:
+                current_step = "metadata extraction"
+                try:
+                    output_temp_dir = input_temp_file.parent.parent
+                    metadata = self.service.extract_metadata(file_path=input_temp_file, tags=tags, source_tag=source_tag)
+                    logger.info(f"Metadata extracted for {filename}: {metadata}")
+                    events.append(ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n")
 
-                        # Step: Metadata extraction
-                        metadata = self.service.extract_metadata(file_path=input_temp_file, tags=tags, source_tag=source_tag)
-                        logger.info(f"Metadata extracted for {filename}: {metadata}")
-                        yield ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n"
-                        # Step: Uploading to backend storage
-                        current_step = "raw content saving"
-                        self.service.save_input(metadata=metadata, input_dir=output_temp_dir / "input")
-                        yield ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n"
-                        # Step: Metadata saving
-                        current_step = "metadata saving"
-                        self.service.save_metadata(metadata=metadata)
-                        logger.info(f"Metadata saved for {filename}: {metadata}")
-                        all_success_flag[0] = True
+                    current_step = "raw content saving"
+                    self.service.save_input(metadata=metadata, input_dir=output_temp_dir / "input")
+                    events.append(ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n")
 
-                    except Exception as e:
-                        logger.exception(f"Failed to process {filename}")
-                        # Send detailed error message (safe for frontend)
-                        error_message = f"{type(e).__name__}: {str(e).strip() or 'No error message'}"
-                        yield ProcessingProgress(step=current_step, status=Status.ERROR, error=error_message, filename=filename).model_dump_json() + "\n"
-                
-                yield json.dumps({"step": "done", "status": Status.SUCCESS if all_success_flag[0] else "error"}) + "\n"
+                    current_step = "metadata saving"
+                    self.service.save_metadata(metadata=metadata)
+                    success += 1
 
-            return StatusAwareStreamingResponse(event_generator(), all_success_flag=all_success_flag)
+                except Exception as e:
+                    logger.exception(f"Failed to process {filename}")
+                    error_message = f"{type(e).__name__}: {str(e).strip() or 'No error message'}"
+                    events.append(ProcessingProgress(step=current_step, status=Status.ERROR, error=error_message, filename=filename).model_dump_json() + "\n")
+
+            overall_status = Status.SUCCESS if success == total else Status.ERROR
+            events.append(json.dumps({"step": "done", "status": overall_status}) + "\n")
+            return Response("".join(events), status_code=(200 if success == total else 422), media_type="application/x-ndjson")
 
         @router.post(
             "/upload-process-documents",
             tags=["Library Ingestion"],
             summary="Upload and process documents immediately (end-to-end)",
-            description="""Ingest and process one or more documents synchronously in a single step.""",
+            description="Ingest and process one or more documents synchronously in a single step.",
         )
         def process_documents_sync(
             files: List[UploadFile] = File(...),
             metadata_json: str = Form(...),
-        ) -> StreamingResponse:
+        ) -> Response:
             parsed_input = IngestionInput(**json.loads(metadata_json))
             tags = parsed_input.tags
             source_tag = parsed_input.source_tag
-            # input_metadata = json.loads(metadata_json)
-            # ✅ Preload: Call save_file_to_temp on all files before the generator runs
-            # This is to ensure that the files are saved to temp storage before processing
-            # and to avoid blocking the generator with file I/O operations.
+
             preloaded_files = []
             for file in files:
                 raw_path = uploadfile_to_path(file)
                 input_temp_file = save_file_to_temp(raw_path)
                 logger.info(f"File {file.filename} saved to temp storage at {input_temp_file}")
                 preloaded_files.append((file.filename, input_temp_file))
-            all_success_flag = [False]  # Track success across all files
 
+            total = len(preloaded_files)
+            success = 0
+            events = []
 
-            def event_generator() -> Generator[str, None, None]:
-                for filename, input_temp_file in preloaded_files:
-                    current_step = "metadata extraction"
+            for filename, input_temp_file in preloaded_files:
+                current_step = "metadata extraction"
+                try:
+                    output_temp_dir = input_temp_file.parent.parent
+                    metadata = self.service.extract_metadata(file_path=input_temp_file, tags=tags, source_tag=source_tag)
 
-                    try:
-                        output_temp_dir = input_temp_file.parent.parent
-                        metadata = self.service.extract_metadata(file_path=input_temp_file, tags=tags, source_tag=source_tag)
-                        
-                        current_step = "input content saving"
-                        self.service.save_input(metadata, output_temp_dir / "input")
-                        yield ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n"
-                        
-                        current_step = "input processing"
-                        metadata = input_process(input_file=input_temp_file, metadata=metadata)
-                        yield ProcessingProgress(
-                            step=current_step,
-                            status=Status.SUCCESS,
-                            document_uid=metadata.document_uid,
-                            filename=filename
-                        ).model_dump_json() + "\n"
+                    current_step = "input content saving"
+                    self.service.save_input(metadata, output_temp_dir / "input")
+                    events.append(ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n")
 
-                        current_step = "output processing"
-                        # 👇 Create a mock FileToProcess object
-                        file_to_process = FileToProcess(
-                            document_uid=metadata.document_uid,
-                            external_path=None,
-                            source_tag=source_tag,
-                            tags=tags,
-                        )
-                        metadata = output_process(file=file_to_process, metadata=metadata, accept_memory_storage=True)
-                        yield ProcessingProgress(
-                            step=current_step,
-                            status=Status.SUCCESS,
-                            document_uid=metadata.document_uid,
-                            filename=filename
-                        ).model_dump_json() + "\n"
+                    current_step = "input processing"
+                    metadata = input_process(input_file=input_temp_file, metadata=metadata)
+                    events.append(ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n")
 
-                        current_step = "metadata saving (done)"
-                        all_success_flag[0] = True
+                    current_step = "output processing"
+                    file_to_process = FileToProcess(
+                        document_uid=metadata.document_uid,
+                        external_path=None,
+                        source_tag=source_tag,
+                        tags=tags,
+                    )
+                    metadata = output_process(file=file_to_process, metadata=metadata, accept_memory_storage=True)
+                    events.append(ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n")
 
-                    except Exception as e:
-                        logger.exception(f"Failed to process {filename}")
-                        error_message = f"{type(e).__name__}: {str(e).strip() or 'No error message'}"
-                        yield ProcessingProgress(
-                            step=current_step,
-                            status=Status.ERROR,
-                            error=error_message,
-                            filename=filename
-                        ).model_dump_json() + "\n"
+                    current_step = "metadata saving (done)"
+                    success += 1
 
-                yield json.dumps({"step": "done", "status": Status.SUCCESS if all_success_flag[0] else "error"}) + "\n"
-            
-            return StatusAwareStreamingResponse(event_generator(), all_success_flag=all_success_flag)
-        
+                except Exception as e:
+                    logger.exception(f"Failed to process {filename}")
+                    error_message = f"{type(e).__name__}: {str(e).strip() or 'No error message'}"
+                    events.append(ProcessingProgress(step=current_step, status=Status.ERROR, error=error_message, filename=filename).model_dump_json() + "\n")
+
+            overall_status = Status.SUCCESS if success == total else Status.ERROR
+            events.append(json.dumps({"step": "done", "status": overall_status}) + "\n")
+            return Response("".join(events), status_code=(200 if success == total else 422), media_type="application/x-ndjson")
