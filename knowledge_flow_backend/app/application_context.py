@@ -44,6 +44,7 @@ from app.core.stores.metadata.base_metadata_store import BaseMetadataStore
 from app.core.stores.metadata.opensearch_metadata_store import OpenSearchMetadataStore
 from app.core.stores.tags.base_tag_store import BaseTagStore
 from app.core.stores.tags.local_tag_store import LocalTagStore
+from app.core.stores.tags.opensearch_tags_store import OpenSearchTagStore
 from app.core.stores.vector.in_memory_langchain_vector_store import InMemoryLangchainVectorStore
 from app.core.stores.vector.base_vector_store import BaseEmbeddingModel, BaseTextSplitter, BaseVectoreStore
 from app.core.stores.vector.opensearch_vector_store import OpenSearchVectorStoreAdapter
@@ -428,6 +429,23 @@ class ApplicationContext:
             path = Path(config.root_path).expanduser()
             self._tag_store_instance = LocalTagStore(path)
             return self._tag_store_instance
+        elif config.type == "opensearch":
+            username = config.username
+            password = config.password
+
+            if not username or not password:
+                raise ValueError("Missing OpenSearch credentials: OPENSEARCH_USER and/or OPENSEARCH_PASSWORD")
+
+            self._tag_store_instance = OpenSearchTagStore(
+                host=config.host,
+                index=config.index,
+                username=username,
+                password=password,
+                secure=config.secure,
+                verify_certs=config.verify_certs,
+            )
+            return self._tag_store_instance
+
 
         raise ValueError(f"Unsupported tag storage backend: {config.type}")
 
