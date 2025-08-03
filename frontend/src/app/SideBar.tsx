@@ -133,7 +133,7 @@ export default function SideBar({ darkMode, onThemeChange }) {
       tooltip: t("sidebar.tooltip.monitoring"),
     },
     {
-      key: "documentLibrary",
+      key: "knowledge",
       label: t("sidebar.knowledge"),
       icon: <MenuBookIcon />,
       url: `/knowledge`,

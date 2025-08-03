@@ -209,6 +209,16 @@
       "reloadError": "Unable to reload profile"
     }
   },
+  "knowledge": {
+    "title": "Knowledge Hub",
+    "description": "Manage your document and prompt libraries",
+    "viewSelector": {
+      "libraries": "Libraries",
+      "prompts": "Prompts",
+      "documents": "Documents",
+      "operations": "Operations"
+    }
+  },
   "documentLibrary": {
     "title": "Document Library",
     "description": "Access the knowledge base documents",

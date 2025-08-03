@@ -209,6 +209,16 @@
       "reloadError": "Impossible de recharger le profil"
     }
   },
+  "knowledge": {
+    "title": "Centre de connaissances",
+    "description": "Gérez vos bibliothèques de documents et de prompts",
+    "viewSelector": {
+      "libraries": "Bibliothèques",
+      "prompts": "Prompts",
+      "documents": "Documents",
+      "operations": "Opérations"
+    }
+  },
   "documentLibrary": {
     "title": "Bibliothèque de documents",
     "description": "Accédez aux documents de la base de connaissances",

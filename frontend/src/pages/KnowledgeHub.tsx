@@ -21,9 +21,9 @@ import { AllDocumentsList } from "../components/documents/AllDocumentsList";
 import { AllLibrariesList } from "../components/documents/AllLibrariesList";
 import { AllPromptsList } from "../components/prompts/AllPromptsList";
 
-type KnowledgeHubView = "prompts" | "libraries" | "documents";
+type KnowledgeHubView = "prompts" | "operations" | "documents";
 
-const defaultView: KnowledgeHubView = "libraries";
+const defaultView: KnowledgeHubView = "documents";
 
 export const KnowledgeHub = () => {
   const { t } = useTranslation();
@@ -33,7 +33,7 @@ export const KnowledgeHub = () => {
   const viewParam = searchParams.get("view");
 
   const isValidView = (v: string | null): v is KnowledgeHubView =>
-    v === "prompts" || v === "libraries" || v === "documents";
+    v === "prompts" || v === "documents" || v === "operations";
 
   const selectedView: KnowledgeHubView = isValidView(viewParam) ? viewParam : defaultView;
 
@@ -47,33 +47,33 @@ export const KnowledgeHub = () => {
 
   return (
     <>
-      <TopBar title={t("documentLibrary.title")} description={t("documentLibrary.description")}>
+      <TopBar title={t("knowledge.title")} description={t("knowledge.description")}>
         <Box>
           <ButtonGroup variant="outlined" color="primary" size="small">
             <Button
               variant={selectedView === "prompts" ? "contained" : "outlined"}
               onClick={() => navigate("/knowledge?view=prompts")}
             >
-              {t("documentLibrary.promptView")}
-            </Button>
-            <Button
-              variant={selectedView === "libraries" ? "contained" : "outlined"}
-              onClick={() => navigate("/knowledge?view=libraries")}
-            >
-              {t("documentLibrary.librariesView")}
+              {t("knowledge.viewSelector.prompts")}
             </Button>
             <Button
               variant={selectedView === "documents" ? "contained" : "outlined"}
               onClick={() => navigate("/knowledge?view=documents")}
             >
-              {t("documentLibrary.documentsView")}
+              {t("knowledge.viewSelector.documents")}
+            </Button>
+            <Button
+              variant={selectedView === "operations" ? "contained" : "outlined"}
+              onClick={() => navigate("/knowledge?view=operations")}
+            >
+              {t("knowledge.viewSelector.operations")}
             </Button>
           </ButtonGroup>
         </Box>
       </TopBar>
 
       <Box sx={{ mb: 3 }}>
-        {selectedView === "libraries" && (
+        {selectedView === "documents" && (
           <Container maxWidth="xl">
             <AllLibrariesList />
           </Container>
@@ -83,7 +83,7 @@ export const KnowledgeHub = () => {
             <AllPromptsList />
           </Container>
         )}
-        {selectedView === "documents" && <AllDocumentsList />}
+        {selectedView === "operations" && <AllDocumentsList />}
       </Box>
     </>
   );
