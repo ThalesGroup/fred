@@ -134,11 +134,11 @@ export default function SideBar({ darkMode, onThemeChange }) {
     },
     {
       key: "documentLibrary",
-      label: t("sidebar.documentLibrary"),
+      label: t("sidebar.knowledge"),
       icon: <MenuBookIcon />,
-      url: `/documentLibrary`,
+      url: `/knowledge`,
       canBeDisabled: false,
-      tooltip: t("sidebar.tooltip.documentLibrary"),
+      tooltip: t("sidebar.tooltip.knowledge"),
     },
     {
       key: "agent",

@@ -45,10 +45,10 @@ export const DocumentLibraryViewPage = () => {
   };
 
   const fetchDocumentsMetadata = async () => {
-    if (!library?.document_ids) return;
+    if (!library?.item_ids) return;
 
     const promises: Promise<DocumentMetadata | undefined>[] = [];
-    for (const id of library.document_ids) {
+    for (const id of library.item_ids) {
       promises.push(
         getDocumentsMetadata({ filters: { document_uid: id } }).then((result) => {
           if (result.error) {
@@ -77,7 +77,7 @@ export const DocumentLibraryViewPage = () => {
 
     try {
       const documentIdsToRemove = documents.map((doc) => doc.document_uid);
-      const updatedDocumentIds = library.document_ids?.filter((id) => !documentIdsToRemove.includes(id)) || [];
+      const updatedDocumentIds = library.item_ids?.filter((id) => !documentIdsToRemove.includes(id)) || [];
 
       await updateTag({
         tagId: library.id,
@@ -85,7 +85,7 @@ export const DocumentLibraryViewPage = () => {
           name: library.name,
           description: library.description,
           type: library.type,
-          document_ids: updatedDocumentIds,
+          item_ids: updatedDocumentIds,
         },
       }).unwrap();
 
@@ -125,7 +125,7 @@ export const DocumentLibraryViewPage = () => {
 
   useEffect(() => {
     if (library) {
-      console.log("Fetching documents for library:", library.name, library.document_ids);
+      console.log("Fetching documents for library:", library.name, library.item_ids);
       fetchDocumentsMetadata();
     }
   }, [library]);
@@ -151,7 +151,7 @@ export const DocumentLibraryViewPage = () => {
 
   return (
     <>
-      <TopBar title={library.name} description={library.description || ""} backTo="/documentLibrary"></TopBar>
+      <TopBar title={library.name} description={library.description || ""} backTo="/knowledge?view=libraries"></TopBar>
 
       <Container maxWidth="xl" sx={{ mb: 3, display: "flex", flexDirection: "column", gap: 4 }}>
         {/* Library name and description */}

@@ -13,7 +13,7 @@
     "optimize": "Optimiser",
     "chat": "Discussion",
     "monitoring": "Supervision",
-    "documentLibrary": "Documents",
+    "knowledge": "Savoir",
     "agent": "Hub Agent",
     "workspaces": "Espaces de travail",
     "account": "Profil",
@@ -24,7 +24,7 @@
       "optimize": "Consulter les gains d’optimisation",
       "chat": "Discuter avec l'assistant IA",
       "monitoring": "Superviser les appels IA backend",
-      "documentLibrary": "Consulter la bibliothèque de documents",
+      "knowledge": "Consulter le vos bibliothèque de documents et de prompts",
       "agent": "Voir les agents",
       "workspaces": "Voir les espaces",
       "account": "Voir votre profil",
@@ -215,7 +215,7 @@
     "upload": "Ajouter un document",
     "uploadAndProcess": "Ajouter et traiter le document",
     "refresh": "Rafraîchir",
-    "uploadInLibrary": "Ajouter à la bibliothèque",
+    "uploadInLibrary": "Ajouter un document à la bibliothèque",
     "uploadDrawerTitle": "Ajouter un document",
     "dropFiles": "Déposez vos fichiers ici",
     "maxSize": "ou cliquez pour sélectionner (max 200Mo par fichier)",
@@ -229,6 +229,7 @@
     "save": "Enregistrer",
     "saving": "Enregistrement en cours...",
     "librariesView": "Bibliothèques",
+    "promptView": "Prompts",
     "documentsView": "Documents",
     "removeSuccess": "Documents supprimés",
     "removedDocuments": "{{count}} document(s) supprimé(s) de la bibliothèque",
@@ -237,6 +238,17 @@
     "emptyLibraryTitle": "Aucun document dans cette bibliothèque",
     "emptyLibraryDescription": "Cette bibliothèque est vide. Commencez par ajouter votre premier document pour le rendre consultable par vos assistants IA.",
     "uploadFirstDocument": "Ajouter votre premier document"
+  },
+  "promptLibrary": {
+    "title": "Bibliothèque de prompts",
+    "description": "Accédez à la bibliothèque de prompts",
+    "uploadInLibrary": "Ajouter un prompt à la bibliothèque",
+    "prompts": "{{count}} prompt(s)",
+    "noPrompt": "Aucun prompt trouvé",
+    "addPrompt": "Ajouter un prompt",
+    "emptyLibraryTitle": "Aucun prompt dans cette bibliothèque",
+    "emptyLibraryDescription": "Cette bibliothèque est vide. Ajoutez votre premier prompt pour le rendre disponible à vos assistants IA.",
+    "uploadFirstDocument": "Ajouter votre premier prompt"
   },
   "documentTable": {
     "selectedCount": "{{count}} sélectionné(s)",
@@ -277,7 +289,19 @@
     "noLibrariesFoundDescription": "Commencez par créer votre première bibliothèque pour organiser et gérer vos documents.",
     "documentCountSingular": "{{count}} document",
     "documentCountPlural": "{{count}} documents",
-    "createLibrary": "Créer une bibliothèque"
+    "createLibrary": "Créer une bibliothèque de documents"
+  },
+  "promptLibrariesList": {
+    "libraryName": "Nom de la bibliothèque",
+    "prompts": "Prompts",
+    "lastUpdate": "Dernière mise à jour",
+    "actions": "Actions",
+    "delete": "Supprimer",
+    "noLibrariesFound": "Aucune bibliothèque de prompts trouvée.",
+    "noLibrariesFoundDescription": "Commencez par créer votre première bibliothèque pour organiser et gérer vos prompts.",
+    "documentCountSingular": "{{count}} prompt",
+    "documentCountPlural": "{{count}} prompts",
+    "createLibrary": "Créer une bibliothèque de prompts"
   },
   "libraryCreateDrawer": {
     "title": "Créer une nouvelle bibliothèque",

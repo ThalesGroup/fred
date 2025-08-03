@@ -122,6 +122,22 @@ MetadataStorageConfig = Annotated[Union[DuckdbMetadataStorage, OpenSearchStorage
 #
 
 
+class LocalJsonStore(BaseModel):
+    type: Literal["local"]
+    root_path: str = Field(default=str(Path("~/.fred/knowledge-flow/tags-store.json")), description="Local storage json file")
+
+class OpensearchStore(BaseModel):
+    type: Literal["opensearch"]
+    host: str = Field(..., description="OpenSearch host URL")
+    username: Optional[str] = Field(default_factory=lambda: os.getenv("OPENSEARCH_USER"), description="Username from env")
+    password: Optional[str] = Field(default_factory=lambda: os.getenv("OPENSEARCH_PASSWORD"), description="Password from env")
+    secure: bool = Field(default=False, description="Use TLS (https)")
+    verify_certs: bool = Field(default=False, description="Verify TLS certs")
+    index: str = Field(..., description="OpenSearch index name")
+
+
+PromptStorageConfig = Annotated[Union[LocalJsonStore, OpensearchStore], Field(discriminator="type")]
+
 class LocalTagStore(BaseModel):
     type: Literal["local"]
     root_path: str = Field(default=str(Path("~/.fred/knowledge-flow/tags-store.json")), description="Local storage json file")
@@ -351,6 +367,7 @@ class Configuration(BaseModel):
     content_storage: ContentStorageConfig = Field(..., description="Content Storage configuration")
     metadata_storage: MetadataStorageConfig = Field(..., description="Metadata storage configuration")
     tag_storage: TagStorageConfig = Field(..., description="Tag storage configuration")
+    prompt_storage: TagStorageConfig = Field(..., description="Tag storage configuration")
     vector_storage: VectorStorageConfig = Field(..., description="Vector storage configuration")
     tabular_storage: TabularStorageConfig = Field(..., description="Tabular storage configuration")
     catalog_storage: CatalogStorageConfig = Field(..., description="Catalog storage configuration")

@@ -22,20 +22,20 @@ from app.common.document_structures import DocumentMetadata
 
 class TagType(Enum):
     LIBRARY = "library"
+    PROMPT = "prompt"
 
 
 class TagCreate(BaseModel):
     name: str
     description: str | None = None
     type: TagType
-    document_ids: list[str] = []
-
+    item_ids: list[str] = []
 
 class TagUpdate(BaseModel):
     name: str
     description: str | None = None
     type: TagType
-    document_ids: list[str] = []
+    item_ids: list[str] = []
 
 
 # Saved data to represent a tag
@@ -50,12 +50,12 @@ class Tag(BaseModelWithId):
 
 
 # Tag with associated document IDs coming from document metadata store
-class TagWithDocumentsId(Tag, BaseModel):
-    document_ids: list[str]
+class TagWithItemsId(Tag, BaseModel):
+    item_ids: list[str]
 
     @classmethod
-    def from_tag(cls, tag: Tag, document_ids: list[str]) -> "TagWithDocumentsId":
-        return cls(**tag.model_dump(), document_ids=document_ids)
+    def from_tag(cls, tag: Tag, item_ids: list[str]) -> "TagWithItemsId":
+        return cls(**tag.model_dump(), item_ids=item_ids)
 
 
 # Tag with associated full document coming from document metadata store

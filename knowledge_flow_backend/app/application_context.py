@@ -42,6 +42,8 @@ from app.core.processors.output.vectorization_processor.azure_apim_embedder impo
 from app.core.processors.output.vectorization_processor.embedder import Embedder
 from app.core.stores.metadata.base_metadata_store import BaseMetadataStore
 from app.core.stores.metadata.opensearch_metadata_store import OpenSearchMetadataStore
+from app.core.stores.prompts.base_prompt_store import BasePromptStore
+from app.core.stores.prompts.opensearch_prompt_store import OpenSearchPromptStore
 from app.core.stores.tags.base_tag_store import BaseTagStore
 from app.core.stores.tags.local_tag_store import LocalTagStore
 from app.core.stores.tags.opensearch_tags_store import OpenSearchTagStore
@@ -115,6 +117,7 @@ class ApplicationContext:
     _vector_store_instance: Optional[BaseVectoreStore] = None
     _metadata_store_instance: Optional[BaseMetadataStore] = None
     _tag_store_instance: Optional[BaseTagStore] = None
+    _prompt_store_instance: Optional[BasePromptStore] = None
     _tabular_store_instance: Optional[DuckDBTableStore] = None
 
     def __init__(self, config: Configuration):
@@ -445,10 +448,34 @@ class ApplicationContext:
                 verify_certs=config.verify_certs,
             )
             return self._tag_store_instance
+        else:
+            raise ValueError(f"Unsupported tag storage backend: {config.type}")
+        
+    def get_prompt_store(self) -> BasePromptStore:
+        if self._prompt_store_instance is not None:
+            return self._prompt_store_instance
 
+        config = self.config.prompt_storage
 
-        raise ValueError(f"Unsupported tag storage backend: {config.type}")
+        if config.type == "opensearch":
+            username = config.username
+            password = config.password
 
+            if not username or not password:
+                raise ValueError("Missing OpenSearch credentials: OPENSEARCH_USER and/or OPENSEARCH_PASSWORD")
+
+            self._prompt_store_instance = OpenSearchPromptStore(
+                host=config.host,
+                index=config.index,
+                username=username,
+                password=password,
+                secure=config.secure,
+                verify_certs=config.verify_certs,
+            )
+            return self._prompt_store_instance 
+        else:
+            raise ValueError(f"Unsupported tag storage backend: {config.type}")
+        
     def get_tabular_store(self) -> DuckDBTableStore:
         """
         Lazy-initialize and return the configured tabular store backend.

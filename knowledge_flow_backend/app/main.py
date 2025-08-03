@@ -25,6 +25,7 @@ from rich.logging import RichHandler
 from dotenv import load_dotenv
 
 from app.features.catalog.controller import CatalogController
+from app.features.prompts.controller import PromptController
 from app.features.pull.controller import PullDocumentController
 from app.features.pull.service import PullDocumentService
 from app.features.scheduler.controller import SchedulerController
@@ -109,6 +110,7 @@ def create_app() -> FastAPI:
     TabularController(router)
     # CodeSearchController(router)
     TagController(router)
+    PromptController(router)
     VectorSearchController(router)
 
     if configuration.scheduler.enabled:

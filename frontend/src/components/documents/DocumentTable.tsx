@@ -34,7 +34,7 @@ import { useTranslation } from "react-i18next";
 import { DOCUMENT_PROCESSING_STAGES, useUpdateDocumentRetrievableMutation } from "../../slices/documentApi";
 import {
   DocumentMetadata,
-  TagWithDocumentsId,
+  TagWithItemsId,
   useLazyGetTagKnowledgeFlowV1TagsTagIdGetQuery,
 } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { useToast } from "../ToastProvider";
@@ -93,7 +93,7 @@ export const DocumentTable: React.FC<FileTableProps> = ({
   const [selectedFiles, setSelectedFiles] = useState<DocumentMetadata[]>([]);
   const [sortBy, setSortBy] = useState<keyof DocumentMetadata>("date_added_to_kb");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
-  const [tagsById, setTagsById] = useState<Record<string, TagWithDocumentsId>>({});
+  const [tagsById, setTagsById] = useState<Record<string, TagWithItemsId>>({});
 
   // API hooks
   const [updateDocumentRetrievable] = useUpdateDocumentRetrievableMutation();
@@ -112,7 +112,7 @@ export const DocumentTable: React.FC<FileTableProps> = ({
 
     const fetchTags = async () => {
       const promises: Promise<void>[] = [];
-      const updatedTags: Record<string, TagWithDocumentsId> = {};
+      const updatedTags: Record<string, TagWithItemsId> = {};
 
       allTagIds.forEach((tagId) => {
         if (!tagsById[tagId]) {
@@ -132,7 +132,7 @@ export const DocumentTable: React.FC<FileTableProps> = ({
                   updated_at: "",
                   owner_id: "",
                   type: "library",
-                  document_ids: [],
+                  item_ids: [],
                 };
               }),
           );

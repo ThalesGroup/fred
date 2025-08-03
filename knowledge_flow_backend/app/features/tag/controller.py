@@ -20,7 +20,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from app.core.stores.tags.base_tag_store import TagAlreadyExistsError, TagNotFoundError
 from app.features.metadata.service import MetadataNotFound
 from app.features.tag.service import TagService
-from app.features.tag.structure import TagCreate, TagUpdate, TagWithDocumentsId
+from app.features.tag.structure import TagCreate, TagUpdate, TagWithItemsId
 from fred_core import KeycloakUser, get_current_user
 
 logger = logging.getLogger(__name__)
@@ -53,28 +53,28 @@ class TagController:
         self._register_routes(router, handle_exception)
 
     def _register_routes(self, router: APIRouter, handle_exception):
-        @router.get("/tags", response_model=List[TagWithDocumentsId], tags=["Tag"], summary="List all tags")
+        @router.get("/tags", response_model=List[TagWithItemsId], tags=["Tag"], summary="List all tags")
         async def list_tags(user: KeycloakUser = Depends(get_current_user)):
             try:
-                return self.service.list_tags_for_user(user)
+                return self.service.list_document_tags_for_user(user)
             except Exception as e:
                 raise handle_exception(e)
 
-        @router.get("/tags/{tag_id}", response_model=TagWithDocumentsId, tags=["Tag"], summary="Get a tag by ID")
+        @router.get("/tags/{tag_id}", response_model=TagWithItemsId, tags=["Tag"], summary="Get a tag by ID")
         async def get_tag(tag_id: str, user: KeycloakUser = Depends(get_current_user)):
             try:
                 return self.service.get_tag_for_user(tag_id, user)
             except Exception as e:
                 raise handle_exception(e)
 
-        @router.post("/tags", response_model=TagWithDocumentsId, tags=["Tag"], summary="Create a new tag")
+        @router.post("/tags", response_model=TagWithItemsId, tags=["Tag"], summary="Create a new tag")
         async def create_tag(tag: TagCreate, user: KeycloakUser = Depends(get_current_user)):
             try:
                 return self.service.create_tag_for_user(tag, user)
             except Exception as e:
                 raise handle_exception(e)
 
-        @router.put("/tags/{tag_id}", response_model=TagWithDocumentsId, tags=["Tag"], summary="Update a tag")
+        @router.put("/tags/{tag_id}", response_model=TagWithItemsId, tags=["Tag"], summary="Update a tag")
         async def update_tag(tag_id: str, tag: TagUpdate, user: KeycloakUser = Depends(get_current_user)):
             try:
                 return self.service.update_tag_for_user(tag_id, tag, user)

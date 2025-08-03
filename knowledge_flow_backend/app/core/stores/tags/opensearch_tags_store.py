@@ -17,7 +17,7 @@ from typing import List
 
 from opensearchpy import OpenSearch, NotFoundError, ConflictError, RequestsHttpConnection
 from app.core.stores.tags.base_tag_store import BaseTagStore, TagAlreadyExistsError, TagNotFoundError
-from app.features.tag.structure import Tag
+from app.features.tag.structure import Tag, TagType
 from fred_core import KeycloakUser
 
 logger = logging.getLogger(__name__)
@@ -85,10 +85,19 @@ class OpenSearchTagStore(BaseTagStore):
         else:
             logger.info(f"[TAGS] OpenSearch index '{self.index_name}' already exists.")
 
-    def list_tags_for_user(self, user: KeycloakUser) -> List[Tag]:
+    def list_tags_for_user(self, user: KeycloakUser, tag_type: TagType) -> List[Tag]:
         try:
-            query = {"query": {"term": {"owner_id": user.uid}}}
-            response = self.client.search(index=self.index_name, body=query, size=1000)
+            query = {
+                "query": {
+                    "bool": {
+                        "must": [
+                            {"term": {"owner_id": user.uid}},
+                            {"term": {"type": tag_type.value}},
+                        ]
+                    }
+                }
+            }
+            response = self.client.search(index=self.index_name, body=query)
             return [Tag(**hit["_source"]) for hit in response["hits"]["hits"]]
         except Exception as e:
             logger.error(f"[TAGS] Failed to list tags for user '{user.uid}': {e}")

@@ -18,7 +18,7 @@ from uuid import uuid4
 from app.application_context import ApplicationContext
 from app.common.document_structures import DocumentMetadata
 from app.features.metadata.service import MetadataService
-from app.features.tag.structure import Tag, TagCreate, TagUpdate, TagWithDocumentsId
+from app.features.tag.structure import Tag, TagCreate, TagType, TagUpdate, TagWithItemsId
 from fred_core import KeycloakUser
 
 
@@ -33,28 +33,28 @@ class TagService:
 
         self.document_metadata_service = MetadataService()
 
-    def list_tags_for_user(self, user: KeycloakUser) -> list[TagWithDocumentsId]:
+    def list_document_tags_for_user(self, user: KeycloakUser) -> list[TagWithItemsId]:
         # Todo: check if user is authorized
 
-        tags = self._tag_store.list_tags_for_user(user)
+        tags = self._tag_store.list_tags_for_user(user, TagType.LIBRARY)
         tag_with_documents = []
         for tag in tags:
             document_ids = self._retrieve_document_ids_for_tag(tag.id)
-            tag_with_documents.append(TagWithDocumentsId.from_tag(tag, document_ids))
+            tag_with_documents.append(TagWithItemsId.from_tag(tag, document_ids))
         return tag_with_documents
 
-    def get_tag_for_user(self, tag_id: str, user: KeycloakUser) -> TagWithDocumentsId:
+    def get_tag_for_user(self, tag_id: str, user: KeycloakUser) -> TagWithItemsId:
         # Todo: check if user is authorized
 
         tag = self._tag_store.get_tag_by_id(tag_id)
         document_ids = self._retrieve_document_ids_for_tag(tag_id)
-        return TagWithDocumentsId.from_tag(tag, document_ids)
+        return TagWithItemsId.from_tag(tag, document_ids)
 
-    def create_tag_for_user(self, tag_data: TagCreate, user: KeycloakUser) -> TagWithDocumentsId:
+    def create_tag_for_user(self, tag_data: TagCreate, user: KeycloakUser) -> TagWithItemsId:
         # Todo: check if user is authorized to create tags
 
         # Check that document ids are valid
-        documents = self._retrieve_documents_metadata(tag_data.document_ids)
+        documents = self._retrieve_documents_metadata(tag_data.item_ids)
 
         # Create tag from input data
         now = datetime.now()
@@ -77,16 +77,16 @@ class TagService:
         for doc in documents:
             self._add_tag_id_to_document(doc, tag.id)
 
-        return TagWithDocumentsId.from_tag(tag, tag_data.document_ids)
+        return TagWithItemsId.from_tag(tag, tag_data.item_ids)
 
-    def update_tag_for_user(self, tag_id: str, tag_data: TagUpdate, user: KeycloakUser) -> TagWithDocumentsId:
+    def update_tag_for_user(self, tag_id: str, tag_data: TagUpdate, user: KeycloakUser) -> TagWithItemsId:
         # Todo: check if user is authorized
 
         # Retrieve existing document IDs from the tag
         old_document_ids = self._retrieve_document_ids_for_tag(tag_id)
 
         # Compute the difference in document IDs
-        added, removed = self._compute_document_ids_diff(old_document_ids, tag_data.document_ids)
+        added, removed = self._compute_document_ids_diff(old_document_ids, tag_data.item_ids)
 
         # Retrieve docs that need change + Check that added document ids are valid
         added_documents = self._retrieve_documents_metadata(added)
@@ -110,7 +110,7 @@ class TagService:
         tag.updated_at = datetime.now()
 
         updated_tag = self._tag_store.update_tag_by_id(tag_id, tag)
-        return TagWithDocumentsId.from_tag(updated_tag, tag_data.document_ids)
+        return TagWithItemsId.from_tag(updated_tag, tag_data.item_ids)
 
     def delete_tag_for_user(self, tag_id: str, user: KeycloakUser) -> None:
         # Todo: check if user is authorized

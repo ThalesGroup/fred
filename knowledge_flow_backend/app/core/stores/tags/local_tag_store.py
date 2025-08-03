@@ -15,7 +15,7 @@
 from pathlib import Path
 from typing import List
 from app.core.stores.tags.base_tag_store import BaseTagStore, TagNotFoundError, TagAlreadyExistsError
-from app.features.tag.structure import Tag
+from app.features.tag.structure import Tag, TagType
 from fred_core import KeycloakUser
 from fred_core import LocalJsonStore, ResourceNotFoundError, ResourceAlreadyExistsError
 
@@ -30,8 +30,10 @@ class LocalTagStore(BaseTagStore):
     def __init__(self, json_path: Path):
         self._store = LocalJsonStore(json_path, id_field="id", model=Tag)
 
-    def list_tags_for_user(self, user: KeycloakUser) -> List[Tag]:
-        return self._store.list(filter_fn=lambda item: item.owner_id == user.uid)
+    def list_tags_for_user(self, user: KeycloakUser, tag_type: TagType) -> List[Tag]:
+        return self._store.list(
+            filter_fn=lambda item: item.owner_id == user.uid and (tag_type is None or item.type == tag_type)
+        )
 
     def get_tag_by_id(self, tag_id: str) -> Tag:
         try:
