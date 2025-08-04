@@ -16,17 +16,6 @@ import json
 import logging
 from typing import List
 
-from app.core.agents.agent_manager import AgentManager
-from app.core.agents.structures import AgenticFlow
-from app.core.session.session_manager import SessionManager
-from app.core.chatbot.chat_schema import (
-    ChatMessagePayload,
-    ErrorEvent,
-    FinalEvent,
-    SessionWithFiles,
-    StreamEvent,
-)
-from app.core.chatbot.chatbot_error import ChatBotError
 from fastapi import (
     APIRouter,
     Body,
@@ -37,18 +26,28 @@ from fastapi import (
     WebSocket,
     WebSocketDisconnect,
 )
-
 from fastapi.responses import JSONResponse, StreamingResponse
 from fred_core import KeycloakUser, get_current_user
 from starlette.websockets import WebSocketState
-from app.core.chatbot.chatbot_message import ChatAskInput
+
+from app.application_context import get_configuration
 from app.common.file_dao import FileDAO
 from app.common.structures import (
     DAOTypeEnum,
 )
-
-from app.application_context import get_configuration
 from app.common.utils import log_exception
+from app.core.agents.agent_manager import AgentManager
+from app.core.agents.structures import AgenticFlow
+from app.core.chatbot.chat_schema import (
+    ChatMessagePayload,
+    ErrorEvent,
+    FinalEvent,
+    SessionWithFiles,
+    StreamEvent,
+)
+from app.core.chatbot.chatbot_error import ChatBotError
+from app.core.chatbot.chatbot_message import ChatAskInput
+from app.core.session.session_manager import SessionManager
 
 logger = logging.getLogger(__name__)
 
@@ -119,8 +118,8 @@ class ChatbotController:
                     session_id=event.session_id,
                     message=event.message,
                     agent_name=event.agent_name,
-                    argument=event.argument,
                     chat_profile_id=event.chat_profile_id,
+                    runtime_context=event.runtime_context,
                 )
 
                 return FinalEvent(
@@ -166,8 +165,8 @@ class ChatbotController:
                         session_id=event.session_id,
                         message=event.message,
                         agent_name=event.agent_name,
-                        argument=event.argument,
                         chat_profile_id=event.chat_profile_id,
+                        runtime_context=event.runtime_context,
                     )
 
                     yield (
@@ -210,9 +209,6 @@ class ChatbotController:
                                 ).model_dump()
                             )
 
-                        if not client_event.argument:
-                            client_event.argument = ""  # Default cluster name
-
                         (
                             session,
                             messages,
@@ -222,8 +218,8 @@ class ChatbotController:
                             session_id=client_event.session_id,
                             message=client_event.message,
                             agent_name=client_event.agent_name,
-                            argument=client_event.argument,
                             chat_profile_id=client_event.chat_profile_id,
+                            runtime_context=client_event.runtime_context,
                         )
                         await websocket.send_text(
                             FinalEvent(

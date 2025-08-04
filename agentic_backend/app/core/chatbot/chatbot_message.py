@@ -13,8 +13,11 @@
 # limitations under the License.
 
 from typing import Optional
-from app.core.agents.structures import AgenticFlow
+
 from pydantic import BaseModel, Field
+
+from app.core.agents.runtime_context import RuntimeContext
+from app.core.agents.structures import AgenticFlow
 
 
 class ChatBotEventConfiguration(BaseModel):
@@ -36,8 +39,8 @@ class ChatAskInput(BaseModel):
     session_id: Optional[str] = None
     message: str
     agent_name: str
-    argument: Optional[str]
     chat_profile_id: Optional[str] = None
+    runtime_context: Optional[RuntimeContext] = None
 
 
 class ChatBotEvent(BaseModel):

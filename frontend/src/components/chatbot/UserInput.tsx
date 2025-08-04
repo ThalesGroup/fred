@@ -29,6 +29,7 @@ export interface UserInputContent {
   text?: string;
   audio?: Blob;
   files?: File[];
+  selectedLibrariesIds?: string[];
 }
 
 export default function UserInput({
@@ -78,10 +79,12 @@ export default function UserInput({
     console.log("Text user input : ", userInput);
     console.log("Audio blob : ", audioBlob);
     console.log("Files blob : ", filesBlob);
+    console.log("Selected libraries : ", selectedLibrariesIds);
     onSend({
       text: userInput,
       audio: audioBlob,
       files: filesBlob,
+      selectedLibrariesIds: selectedLibrariesIds,
     });
     setUserInput("");
     setAudioBlob(null);

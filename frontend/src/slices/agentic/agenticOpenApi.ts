@@ -250,13 +250,17 @@ export type FinalEvent = {
   messages: ChatMessagePayload[];
   session: SessionSchema;
 };
+export type RuntimeContext = {
+  selected_library_ids?: string[];
+};
 export type ChatAskInput = {
   user_id: string;
   session_id?: string | null;
   message: string;
   agent_name: string;
-  argument: string | null;
+  argument?: string | null;
   chat_profile_id?: string | null;
+  runtime_context?: RuntimeContext | null;
 };
 export type SessionWithFiles = {
   id: string;
