@@ -1,17 +1,17 @@
 {
   "errors": [],
-  "generated_at": "2025-07-30T11:37:50Z",
+  "generated_at": "2025-08-04T07:16:09Z",
   "metrics": {
     "_totals": {
       "CONFIDENCE.HIGH": 6,
       "CONFIDENCE.LOW": 3,
-      "CONFIDENCE.MEDIUM": 13,
+      "CONFIDENCE.MEDIUM": 24,
       "CONFIDENCE.UNDEFINED": 0,
       "SEVERITY.HIGH": 0,
       "SEVERITY.LOW": 6,
-      "SEVERITY.MEDIUM": 16,
+      "SEVERITY.MEDIUM": 27,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 6531,
+      "loc": 7652,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -37,7 +37,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 464,
+      "loc": 552,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -76,7 +76,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 24,
+      "loc": 20,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -89,7 +89,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 158,
+      "loc": 212,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -103,6 +103,19 @@
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
       "loc": 136,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "app/common/vectorization_utils.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 19,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -635,7 +648,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 28,
+      "loc": 35,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -674,7 +687,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 55,
+      "loc": 54,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -752,7 +765,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 73,
+      "loc": 50,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -782,6 +795,19 @@
       "nosec": 0,
       "skipped_tests": 0
     },
+    "app/core/stores/content/base_content_loader.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 40,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
     "app/core/stores/content/base_content_store.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
@@ -795,7 +821,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/stores/content/local_content_store.py": {
+    "app/core/stores/content/filesystem_content_loader.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -804,7 +830,33 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 99,
+      "loc": 45,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "app/core/stores/content/filesystem_content_store.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 103,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "app/core/stores/content/minio_content_loader.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 82,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -817,7 +869,20 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 169,
+      "loc": 191,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "app/core/stores/content/sphere_content_loader.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 74,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -856,7 +921,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 96,
+      "loc": 95,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -899,6 +964,45 @@
       "nosec": 0,
       "skipped_tests": 0
     },
+    "app/core/stores/prompts/base_prompt_store.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 42,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "app/core/stores/prompts/duckdb_prompt_store.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 6,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 6,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 115,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "app/core/stores/prompts/opensearch_prompt_store.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 124,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
     "app/core/stores/tags/__init__.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
@@ -921,7 +1025,20 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 35,
+      "loc": 40,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "app/core/stores/tags/duckdb_tag_store.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 5,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 5,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 94,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -935,6 +1052,19 @@
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
       "loc": 36,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "app/core/stores/tags/opensearch_tags_store.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 113,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -960,7 +1090,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 107,
+      "loc": 109,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -973,7 +1103,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 50,
+      "loc": 58,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -986,7 +1116,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 78,
+      "loc": 84,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -999,7 +1129,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 53,
+      "loc": 57,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1025,7 +1155,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 25,
+      "loc": 28,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1129,7 +1259,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 229,
+      "loc": 162,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1172,6 +1302,19 @@
       "nosec": 0,
       "skipped_tests": 0
     },
+    "app/features/metadata/metadata_utils.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 23,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
     "app/features/metadata/service.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
@@ -1198,7 +1341,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/features/metadata/utils.py": {
+    "app/features/prompts/controller.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -1207,7 +1350,33 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 44,
+      "loc": 41,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "app/features/prompts/service.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 115,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "app/features/prompts/structure.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 27,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1246,7 +1415,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 91,
+      "loc": 126,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1259,7 +1428,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 72,
+      "loc": 79,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1272,7 +1441,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 52,
+      "loc": 53,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1298,7 +1467,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 41,
+      "loc": 73,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1337,7 +1506,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 3,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 89,
+      "loc": 95,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1389,7 +1558,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 57,
+      "loc": 64,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1402,7 +1571,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 117,
+      "loc": 178,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1415,7 +1584,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 34,
+      "loc": 44,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1441,7 +1610,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 66,
+      "loc": 81,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1454,7 +1623,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 14,
+      "loc": 26,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1467,7 +1636,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 26,
+      "loc": 27,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1480,7 +1649,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 104,
+      "loc": 106,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1493,7 +1662,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 65,
+      "loc": 63,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1519,7 +1688,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 132,
+      "loc": 131,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1571,7 +1740,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 44,
+      "loc": 45,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1584,7 +1753,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 48,
+      "loc": 52,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1601,19 +1770,6 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/tests/services/test_output_processor_service.py": {
-      "CONFIDENCE.HIGH": 0,
-      "CONFIDENCE.LOW": 0,
-      "CONFIDENCE.MEDIUM": 0,
-      "CONFIDENCE.UNDEFINED": 0,
-      "SEVERITY.HIGH": 0,
-      "SEVERITY.LOW": 0,
-      "SEVERITY.MEDIUM": 0,
-      "SEVERITY.UNDEFINED": 0,
-      "loc": 86,
-      "nosec": 0,
-      "skipped_tests": 0
-    },
     "app/tests/services/test_vector_search_service.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
@@ -1623,7 +1779,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 50,
+      "loc": 52,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1649,7 +1805,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 72,
+      "loc": 69,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -2087,7 +2243,238 @@
       "test_name": "hardcoded_sql_expressions"
     },
     {
-      "code": "59             try:\n60                 count_df = self.tabular_store.execute_sql_query(f\"SELECT COUNT(*) AS count FROM {table_name}\")\n61                 row_count = count_df[\"count\"][0]\n",
+      "code": "81         with self.store._connect() as conn:\n82             rows = conn.execute(f\"SELECT * FROM {self._table()} WHERE owner_id = ?\", [user]).fetchall()\n83         return [self._deserialize(row) for row in rows]\n",
+      "col_offset": 34,
+      "end_col_offset": 48,
+      "filename": "app/core/stores/prompts/duckdb_prompt_store.py",
+      "issue_confidence": "MEDIUM",
+      "issue_cwe": {
+        "id": 89,
+        "link": "https://cwe.mitre.org/data/definitions/89.html"
+      },
+      "issue_severity": "MEDIUM",
+      "issue_text": "Possible SQL injection vector through string-based query construction.",
+      "line_number": 82,
+      "line_range": [
+        82
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.5/plugins/b608_hardcoded_sql_expressions.html",
+      "test_id": "B608",
+      "test_name": "hardcoded_sql_expressions"
+    },
+    {
+      "code": "86         with self.store._connect() as conn:\n87             row = conn.execute(f\"SELECT * FROM {self._table()} WHERE id = ?\", [prompt_id]).fetchone()\n88         if not row:\n",
+      "col_offset": 33,
+      "end_col_offset": 47,
+      "filename": "app/core/stores/prompts/duckdb_prompt_store.py",
+      "issue_confidence": "MEDIUM",
+      "issue_cwe": {
+        "id": 89,
+        "link": "https://cwe.mitre.org/data/definitions/89.html"
+      },
+      "issue_severity": "MEDIUM",
+      "issue_text": "Possible SQL injection vector through string-based query construction.",
+      "line_number": 87,
+      "line_range": [
+        87
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.5/plugins/b608_hardcoded_sql_expressions.html",
+      "test_id": "B608",
+      "test_name": "hardcoded_sql_expressions"
+    },
+    {
+      "code": "98         with self.store._connect() as conn:\n99             conn.execute(f\"INSERT INTO {self._table()} VALUES (?, ?, ?, ?, ?, ?, ?, ?)\", self._serialize(prompt))\n100         return prompt\n",
+      "col_offset": 27,
+      "end_col_offset": 39,
+      "filename": "app/core/stores/prompts/duckdb_prompt_store.py",
+      "issue_confidence": "MEDIUM",
+      "issue_cwe": {
+        "id": 89,
+        "link": "https://cwe.mitre.org/data/definitions/89.html"
+      },
+      "issue_severity": "MEDIUM",
+      "issue_text": "Possible SQL injection vector through string-based query construction.",
+      "line_number": 99,
+      "line_range": [
+        99
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.5/plugins/b608_hardcoded_sql_expressions.html",
+      "test_id": "B608",
+      "test_name": "hardcoded_sql_expressions"
+    },
+    {
+      "code": "105             conn.execute(\n106                 f\"\"\"\n107                 UPDATE {self._table()}\n108                 SET name = ?, content = ?, description = ?, tags = ?, owner_id = ?, created_at = ?, updated_at = ?\n109                 WHERE id = ?\n110                 \"\"\",\n111                 (\n",
+      "col_offset": 20,
+      "end_col_offset": 23,
+      "filename": "app/core/stores/prompts/duckdb_prompt_store.py",
+      "issue_confidence": "MEDIUM",
+      "issue_cwe": {
+        "id": 89,
+        "link": "https://cwe.mitre.org/data/definitions/89.html"
+      },
+      "issue_severity": "MEDIUM",
+      "issue_text": "Possible SQL injection vector through string-based query construction.",
+      "line_number": 106,
+      "line_range": [
+        106,
+        107,
+        108,
+        109,
+        110
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.5/plugins/b608_hardcoded_sql_expressions.html",
+      "test_id": "B608",
+      "test_name": "hardcoded_sql_expressions"
+    },
+    {
+      "code": "125         with self.store._connect() as conn:\n126             result = conn.execute(f\"DELETE FROM {self._table()} WHERE id = ?\", [prompt_id])\n127         if result.rowcount == 0:\n",
+      "col_offset": 36,
+      "end_col_offset": 48,
+      "filename": "app/core/stores/prompts/duckdb_prompt_store.py",
+      "issue_confidence": "MEDIUM",
+      "issue_cwe": {
+        "id": 89,
+        "link": "https://cwe.mitre.org/data/definitions/89.html"
+      },
+      "issue_severity": "MEDIUM",
+      "issue_text": "Possible SQL injection vector through string-based query construction.",
+      "line_number": 126,
+      "line_range": [
+        126
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.5/plugins/b608_hardcoded_sql_expressions.html",
+      "test_id": "B608",
+      "test_name": "hardcoded_sql_expressions"
+    },
+    {
+      "code": "132             rows = conn.execute(\n133                 f\"\"\"\n134                 SELECT * FROM {self._table()}\n135                 WHERE json_contains(tags, to_json(?))\n136                 \"\"\",\n137                 [tag_id],\n",
+      "col_offset": 20,
+      "end_col_offset": 30,
+      "filename": "app/core/stores/prompts/duckdb_prompt_store.py",
+      "issue_confidence": "MEDIUM",
+      "issue_cwe": {
+        "id": 89,
+        "link": "https://cwe.mitre.org/data/definitions/89.html"
+      },
+      "issue_severity": "MEDIUM",
+      "issue_text": "Possible SQL injection vector through string-based query construction.",
+      "line_number": 133,
+      "line_range": [
+        133,
+        134,
+        135,
+        136
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.5/plugins/b608_hardcoded_sql_expressions.html",
+      "test_id": "B608",
+      "test_name": "hardcoded_sql_expressions"
+    },
+    {
+      "code": "50             with self.store._connect() as conn:\n51                 rows = conn.execute(f\"SELECT * FROM {self._table()} WHERE owner_id = ?\", [user.uid]).fetchall()\n52             return [self._deserialize(row) for row in rows]\n",
+      "col_offset": 38,
+      "end_col_offset": 52,
+      "filename": "app/core/stores/tags/duckdb_tag_store.py",
+      "issue_confidence": "MEDIUM",
+      "issue_cwe": {
+        "id": 89,
+        "link": "https://cwe.mitre.org/data/definitions/89.html"
+      },
+      "issue_severity": "MEDIUM",
+      "issue_text": "Possible SQL injection vector through string-based query construction.",
+      "line_number": 51,
+      "line_range": [
+        51
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.5/plugins/b608_hardcoded_sql_expressions.html",
+      "test_id": "B608",
+      "test_name": "hardcoded_sql_expressions"
+    },
+    {
+      "code": "58         with self.store._connect() as conn:\n59             row = conn.execute(f\"SELECT * FROM {self._table()} WHERE id = ?\", [tag_id]).fetchone()\n60         if not row:\n",
+      "col_offset": 33,
+      "end_col_offset": 47,
+      "filename": "app/core/stores/tags/duckdb_tag_store.py",
+      "issue_confidence": "MEDIUM",
+      "issue_cwe": {
+        "id": 89,
+        "link": "https://cwe.mitre.org/data/definitions/89.html"
+      },
+      "issue_severity": "MEDIUM",
+      "issue_text": "Possible SQL injection vector through string-based query construction.",
+      "line_number": 59,
+      "line_range": [
+        59
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.5/plugins/b608_hardcoded_sql_expressions.html",
+      "test_id": "B608",
+      "test_name": "hardcoded_sql_expressions"
+    },
+    {
+      "code": "72             with self.store._connect() as conn:\n73                 conn.execute(f\"INSERT INTO {self._table()} VALUES (?, ?, ?, ?, ?, ?, ?)\", self._serialize(tag))\n74             logger.info(f\"[TAGS] Created tag '{tag.id}' for user '{tag.owner_id}'\")\n",
+      "col_offset": 31,
+      "end_col_offset": 43,
+      "filename": "app/core/stores/tags/duckdb_tag_store.py",
+      "issue_confidence": "MEDIUM",
+      "issue_cwe": {
+        "id": 89,
+        "link": "https://cwe.mitre.org/data/definitions/89.html"
+      },
+      "issue_severity": "MEDIUM",
+      "issue_text": "Possible SQL injection vector through string-based query construction.",
+      "line_number": 73,
+      "line_range": [
+        73
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.5/plugins/b608_hardcoded_sql_expressions.html",
+      "test_id": "B608",
+      "test_name": "hardcoded_sql_expressions"
+    },
+    {
+      "code": "84                 conn.execute(\n85                     f\"\"\"\n86                     UPDATE {self._table()}\n87                     SET created_at = ?, updated_at = ?, owner_id = ?, name = ?, description = ?, type = ?\n88                     WHERE id = ?\n89                     \"\"\",\n90                     (tag.created_at, tag.updated_at, tag.owner_id, tag.name, tag.description, tag.type.value, tag_id),\n",
+      "col_offset": 24,
+      "end_col_offset": 27,
+      "filename": "app/core/stores/tags/duckdb_tag_store.py",
+      "issue_confidence": "MEDIUM",
+      "issue_cwe": {
+        "id": 89,
+        "link": "https://cwe.mitre.org/data/definitions/89.html"
+      },
+      "issue_severity": "MEDIUM",
+      "issue_text": "Possible SQL injection vector through string-based query construction.",
+      "line_number": 85,
+      "line_range": [
+        85,
+        86,
+        87,
+        88,
+        89
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.5/plugins/b608_hardcoded_sql_expressions.html",
+      "test_id": "B608",
+      "test_name": "hardcoded_sql_expressions"
+    },
+    {
+      "code": "100             with self.store._connect() as conn:\n101                 result = conn.execute(f\"DELETE FROM {self._table()} WHERE id = ?\", [tag_id])\n102             if result.rowcount == 0:\n",
+      "col_offset": 40,
+      "end_col_offset": 52,
+      "filename": "app/core/stores/tags/duckdb_tag_store.py",
+      "issue_confidence": "MEDIUM",
+      "issue_cwe": {
+        "id": 89,
+        "link": "https://cwe.mitre.org/data/definitions/89.html"
+      },
+      "issue_severity": "MEDIUM",
+      "issue_text": "Possible SQL injection vector through string-based query construction.",
+      "line_number": 101,
+      "line_range": [
+        101
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.5/plugins/b608_hardcoded_sql_expressions.html",
+      "test_id": "B608",
+      "test_name": "hardcoded_sql_expressions"
+    },
+    {
+      "code": "60             try:\n61                 count_df = self.tabular_store.execute_sql_query(f\"SELECT COUNT(*) AS count FROM {table_name}\")\n62                 row_count = count_df[\"count\"][0]\n",
       "col_offset": 66,
       "end_col_offset": 96,
       "filename": "app/features/tabular/service.py",
@@ -2098,16 +2485,16 @@
       },
       "issue_severity": "MEDIUM",
       "issue_text": "Possible SQL injection vector through string-based query construction.",
-      "line_number": 60,
+      "line_number": 61,
       "line_range": [
-        60
+        61
       ],
       "more_info": "https://bandit.readthedocs.io/en/1.8.5/plugins/b608_hardcoded_sql_expressions.html",
       "test_id": "B608",
       "test_name": "hardcoded_sql_expressions"
     },
     {
-      "code": "83 \n84         count_df = self.tabular_store.execute_sql_query(f\"SELECT COUNT(*) AS count FROM {table_name}\")\n85         row_count = count_df[\"count\"][0]\n",
+      "code": "84 \n85         count_df = self.tabular_store.execute_sql_query(f\"SELECT COUNT(*) AS count FROM {table_name}\")\n86         row_count = count_df[\"count\"][0]\n",
       "col_offset": 58,
       "end_col_offset": 88,
       "filename": "app/features/tabular/service.py",
@@ -2118,16 +2505,16 @@
       },
       "issue_severity": "MEDIUM",
       "issue_text": "Possible SQL injection vector through string-based query construction.",
-      "line_number": 84,
+      "line_number": 85,
       "line_range": [
-        84
+        85
       ],
       "more_info": "https://bandit.readthedocs.io/en/1.8.5/plugins/b608_hardcoded_sql_expressions.html",
       "test_id": "B608",
       "test_name": "hardcoded_sql_expressions"
     },
     {
-      "code": "96                 columns = [TabularColumnSchema(name=col_name, dtype=self._map_duckdb_type_to_literal(col_type)) for col_name, col_type in schema_info]\n97                 count_df = self.tabular_store.execute_sql_query(f\"SELECT COUNT(*) AS count FROM {table}\")\n98                 row_count = count_df[\"count\"][0]\n",
+      "code": "97                 columns = [TabularColumnSchema(name=col_name, dtype=self._map_duckdb_type_to_literal(col_type)) for col_name, col_type in schema_info]\n98                 count_df = self.tabular_store.execute_sql_query(f\"SELECT COUNT(*) AS count FROM {table}\")\n99                 row_count = count_df[\"count\"][0]\n",
       "col_offset": 66,
       "end_col_offset": 96,
       "filename": "app/features/tabular/service.py",
@@ -2138,9 +2525,9 @@
       },
       "issue_severity": "MEDIUM",
       "issue_text": "Possible SQL injection vector through string-based query construction.",
-      "line_number": 97,
+      "line_number": 98,
       "line_range": [
-        97
+        98
       ],
       "more_info": "https://bandit.readthedocs.io/en/1.8.5/plugins/b608_hardcoded_sql_expressions.html",
       "test_id": "B608",
