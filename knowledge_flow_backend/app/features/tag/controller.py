@@ -26,11 +26,12 @@ from fred_core import KeycloakUser, get_current_user
 
 logger = logging.getLogger(__name__)
 
+
 class TagController:
     """
     Controller for CRUD operations on Tag resource.
-    Tags are used to group various items like documents and prompts. 
-    The TagController provides endpoints to 
+    Tags are used to group various items like documents and prompts.
+    The TagController provides endpoints to
     easily retrieve all tags together with the contained items.
     """
 
@@ -56,10 +57,7 @@ class TagController:
         self._register_routes(router, handle_exception)
 
     def _register_routes(self, router: APIRouter, handle_exception):
-
-        @router.get("/tags", response_model=List[TagWithItemsId], 
-                    tags=["Tag"], 
-                    summary="List all tags with item identifiers, you can filter by type to return only prompts or documents tags")
+        @router.get("/tags", response_model=List[TagWithItemsId], tags=["Tag"], summary="List all tags with item identifiers, you can filter by type to return only prompts or documents tags")
         async def list_all_tags(
             type: Annotated[TagType | None, Query(description="Filter by tag type")] = None,
             user: KeycloakUser = Depends(get_current_user),

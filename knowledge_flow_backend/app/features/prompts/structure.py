@@ -42,10 +42,10 @@ class Prompt(BaseModelWithId):
     created_at: datetime
     updated_at: datetime
 
+
 class TagWithPrompts(Tag, BaseModel):
     prompts: list[Prompt]
 
     @classmethod
     def from_tag(cls, tag: Tag, prompts: list[Prompt]) -> "TagWithPrompts":
         return cls(**tag.model_dump(), prompts=prompts)
-    

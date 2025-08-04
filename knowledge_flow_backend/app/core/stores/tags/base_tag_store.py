@@ -14,7 +14,7 @@
 
 from abc import ABC, abstractmethod
 from typing import List
-from app.features.tag.structure import Tag, TagType
+from app.features.tag.structure import Tag
 from fred_core import KeycloakUser
 
 

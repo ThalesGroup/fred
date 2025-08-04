@@ -29,6 +29,8 @@ export interface UserInputContent {
   text?: string;
   audio?: Blob;
   files?: File[];
+  documentLibraryIds?: string[];
+  promptLibraryIds?: string[];
 }
 
 export default function UserInput({

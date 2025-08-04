@@ -21,10 +21,10 @@ from app.common.document_structures import DocumentMetadata
 
 
 class TagType(Enum):
-    """Enum representing the type of tag.
-    """
-    DOCUMENT = "document" # For tags associated with documents
-    PROMPT = "prompt" # For tags associated with prompts
+    """Enum representing the type of tag."""
+
+    DOCUMENT = "document"  # For tags associated with documents
+    PROMPT = "prompt"  # For tags associated with prompts
 
 
 class TagCreate(BaseModel):
@@ -36,10 +36,12 @@ class TagCreate(BaseModel):
         type (TagType): The type of the tag, e.g., DOCUMENT or PROMPT.
         item_ids (list[str]): List of item IDs associated with the tag. These are prompt or metata IDs.
     """
+
     name: str
     description: str | None = None
     type: TagType
     item_ids: list[str] = []
+
 
 class TagUpdate(BaseModel):
     name: str

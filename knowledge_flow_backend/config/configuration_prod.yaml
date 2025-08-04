@@ -82,10 +82,21 @@ metadata_storage:
   host: https://localhost:9200              
   secure: true                        
   verify_certs: false                      
-  index: metadata-index
+  index: document-index
 
 tag_storage:
-  type: "local"
+  type: opensearch
+  host: https://localhost:9200
+  secure: true
+  verify_certs: false
+  index: tag-index
+
+prompt_storage:
+  type: opensearch
+  host: https://localhost:9200
+  secure: true
+  verify_certs: false
+  index: prompt-index
 
 vector_storage:
   type: opensearch
@@ -96,11 +107,14 @@ vector_storage:
 
 tabular_storage:
   type: "duckdb"
-  duckdb_path: "~/.fred/knowledge-flow/db.duckdb"
+  duckdb_path: "~/.fred/knowledge-flow/tabular.duckdb"
 
 catalog_storage:
-  type: "duckdb"
-  duckdb_path: "~/.fred/knowledge-flow/db.duckdb"
+  type: opensearch
+  host: https://localhost:9200
+  secure: true
+  verify_certs: false
+  index: catalog-index
 
 embedding:
   type:

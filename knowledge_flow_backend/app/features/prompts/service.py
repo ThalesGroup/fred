@@ -15,7 +15,6 @@
 from datetime import datetime
 import logging
 from uuid import uuid4
-from typing import List
 
 from app.application_context import ApplicationContext
 from app.core.stores.prompts.base_prompt_store import PromptNotFoundError
@@ -26,6 +25,7 @@ from fred_core import KeycloakUser
 from app.features.tag.structure import TagWithItemsId
 
 logger = logging.getLogger(__name__)
+
 
 class PromptService:
     """
@@ -43,14 +43,14 @@ class PromptService:
         """
         try:
             return self._prompt_store.get_prompt_in_tag(tag_id)
-        
+
         except PromptNotFoundError:
             return []
-        
+
         except Exception as e:
             logger.error(f"Error retrieving metadata for tag {tag_id}: {e}")
             raise
-    
+
     # def list_all_prompt_tags(self, user: KeycloakUser) -> List[TagWithItemsId]:
     #     tags = self._tag_store.list_tags_for_user(user)
     #     prompt_list = self._prompt_store.list_prompts_for_user(user.uid)
@@ -88,16 +88,14 @@ class PromptService:
         self._prompt_store.create_prompt(prompt)
 
         # For simplicity, associate with the first tag (should be of type "prompt")
-        tag_id = prompt.tags[0] 
+        tag_id = prompt.tags[0]
         try:
-            tag = self._tag_store.get_tag_by_id(tag_id) 
-            return TagWithItemsId.from_tag(tag, [prompt.id]) 
+            tag = self._tag_store.get_tag_by_id(tag_id)
+            return TagWithItemsId.from_tag(tag, [prompt.id])
         except TagNotFoundError:
             raise ValueError(f"Tag with id '{tag_id}' not found for prompt '{prompt.id}'")
 
-    def update_prompt_for_user(self, prompt_id: str, 
-                               prompt_data: Prompt, 
-                               user: KeycloakUser) -> Prompt:
+    def update_prompt_for_user(self, prompt_id: str, prompt_data: Prompt, user: KeycloakUser) -> Prompt:
         try:
             existing_prompt = self._prompt_store.get_prompt_by_id(prompt_id)
             if existing_prompt.owner_id != user.uid:
@@ -144,7 +142,7 @@ class PromptService:
             raise
         except Exception as e:
             logger.error(f"Failed to remove tag '{tag_id}' from prompt '{prompt_id}': {e}")
-            raise   
+            raise
 
     def add_tag_to_prompt(self, prompt_id: str, tag_id: str) -> None:
         """
@@ -169,4 +167,4 @@ class PromptService:
             raise
         except Exception as e:
             logger.error(f"Failed to remove tag '{tag_id}' from prompt '{prompt_id}': {e}")
-            raise  
+            raise

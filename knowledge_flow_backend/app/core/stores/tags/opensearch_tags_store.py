@@ -17,7 +17,7 @@ from typing import List
 
 from opensearchpy import OpenSearch, NotFoundError, ConflictError, RequestsHttpConnection
 from app.core.stores.tags.base_tag_store import BaseTagStore, TagAlreadyExistsError, TagNotFoundError
-from app.features.tag.structure import Tag, TagType
+from app.features.tag.structure import Tag
 from fred_core import KeycloakUser
 
 logger = logging.getLogger(__name__)
@@ -48,7 +48,7 @@ TAGS_INDEX_MAPPING = {
                 "type": "text",
                 "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
             },
-            "type": {"type": "keyword"}  # TagType enum (e.g., "library")
+            "type": {"type": "keyword"},  # TagType enum (e.g., "library")
         }
     }
 }

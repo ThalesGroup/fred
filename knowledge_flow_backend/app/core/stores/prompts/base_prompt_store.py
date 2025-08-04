@@ -20,11 +20,13 @@ from app.features.prompts.structure import Prompt
 
 class PromptNotFoundError(Exception):
     """Raised when a prompt is not found."""
+
     pass
 
 
 class PromptAlreadyExistsError(Exception):
     """Raised when trying to create a prompt that already exists."""
+
     pass
 
 

@@ -14,10 +14,7 @@ import {
 } from "@mui/material";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  useListAllTagsKnowledgeFlowV1TagsGetQuery,
-  TagType,
-} from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { useListAllTagsKnowledgeFlowV1TagsGetQuery, TagType } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 
 export interface ChatLibrariesSelectionProps {
   selectedLibrariesIds: string[];
@@ -46,10 +43,7 @@ export function ChatLibrariesSelection({
   return (
     <>
       <Tooltip title={tooltipText} placement="top">
-        <Badge
-          badgeContent={selectedLibrariesIds.length > 0 ? selectedLibrariesIds.length : undefined}
-          color="primary"
-        >
+        <Badge badgeContent={selectedLibrariesIds.length > 0 ? selectedLibrariesIds.length : undefined} color="primary">
           <IconButton sx={{ fontSize: "1.6rem", padding: "8px" }} onClick={handleClick}>
             <Icon fontSize="inherit" />
           </IconButton>
@@ -92,20 +86,17 @@ export function LibrariesSelectionCard({
       libraries
         .filter((lib) => lib.name.toLowerCase().includes(search.toLowerCase()))
         .sort((a, b) => a.name.localeCompare(b.name)),
-    [libraries, search]
+    [libraries, search],
   );
 
   const toggleLibrary = (id: string) => {
     setSelectedLibrariesIds(
       selectedLibrariesIds.includes(id)
         ? selectedLibrariesIds.filter((libId) => libId !== id)
-        : [...selectedLibrariesIds, id]
+        : [...selectedLibrariesIds, id],
     );
   };
-  const label =
-    libraryType === "document"
-      ? t("chatbot.searchDocumentLibraries")
-      : t("chatbot.searchPromptLibraries");
+  const label = libraryType === "document" ? t("chatbot.searchDocumentLibraries") : t("chatbot.searchPromptLibraries");
   return (
     <Box sx={{ width: "380px", height: "406px", display: "flex", flexDirection: "column" }}>
       <Box sx={{ mx: 2, mt: 2, mb: 1 }}>
@@ -156,7 +147,10 @@ export function LibrariesSelectionCard({
               tabIndex={-1}
               disableRipple
               sx={{ mr: 1 }}
-              onClick={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleLibrary(lib.id); // <-- this is the missing piece
+              }}
             />
             <Typography
               variant="body1"
@@ -176,12 +170,7 @@ export function LibrariesSelectionCard({
                   <>
                     <Typography color="inherit">{lib.name}</Typography>
                     {lib.description && (
-                      <Typography
-                        color="inherit"
-                        fontWeight="light"
-                        fontSize=".95rem"
-                        fontStyle="italic"
-                      >
+                      <Typography color="inherit" fontWeight="light" fontSize=".95rem" fontStyle="italic">
                         {lib.description}
                       </Typography>
                     )}

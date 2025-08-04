@@ -61,13 +61,13 @@ class TagService:
                 tag_with_ids.append(TagWithItemsId.from_tag(tag, item_ids))
 
         return tag_with_ids
-    
+
     def get_tag_for_user(self, tag_id: str, user: KeycloakUser) -> TagWithItemsId:
         """
         Get a specific tag by ID for a user.
         Args:
             tag_id (str): The ID of the tag to retrieve.
-            user (KeycloakUser): The user for whom to retrieve the tag. 
+            user (KeycloakUser): The user for whom to retrieve the tag.
         Returns:
             TagWithItemsId: The tag with associated item IDs.
         Raises:
@@ -131,7 +131,6 @@ class TagService:
             for doc in removed_documents:
                 self._remove_tag_id_from_document(doc, tag_id)
 
-
         elif tag.type == TagType.PROMPT:
             old_item_ids = self._retrieve_prompt_ids_for_tag(tag_id)
             added, removed = self._compute_document_ids_diff(old_item_ids, tag_data.item_ids)
@@ -162,7 +161,7 @@ class TagService:
             # Remove the tag from all prompts that have this tag
             prompts = self._retrieve_prompts_for_tag(tag_id)
             for prompt in prompts:
-                self.prompt_service.remove_tag_from_prompt(prompt.id, tag_id)   
+                self.prompt_service.remove_tag_from_prompt(prompt.id, tag_id)
         else:
             raise ValueError(f"Unsupported tag type: {tag.type}")
         # Finally, delete the tag itself
@@ -193,7 +192,7 @@ class TagService:
         Retrieve the prompts associated with a tag.
         """
         return self.prompt_service.get_prompt_in_tag(tag_id)
-       
+
     def _retrieve_document_ids_for_tag(self, tag_id: str) -> list[str]:
         """
         Retrieve the document IDs associated with a tag.

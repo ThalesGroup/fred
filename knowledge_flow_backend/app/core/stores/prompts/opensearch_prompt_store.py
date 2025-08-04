@@ -32,16 +32,12 @@ PROMPTS_INDEX_MAPPING = {
             "id": {"type": "keyword"},
             "name": {
                 "type": "text",
-                "fields": {
-                    "keyword": {"type": "keyword", "ignore_above": 256}
-                },
+                "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
             },
             "content": {"type": "text"},
             "description": {
                 "type": "text",
-                "fields": {
-                    "keyword": {"type": "keyword", "ignore_above": 256}
-                },
+                "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
             },
             "tags": {"type": "keyword"},
             "owner_id": {"type": "keyword"},
@@ -79,15 +75,7 @@ class OpenSearchPromptStore(BasePromptStore):
 
     def list_prompts_for_user(self, user: str) -> List[Prompt]:
         try:
-            response = self.client.search(
-                index=self.index_name,
-                body={
-                    "query": {
-                        "term": {"owner_id": user}
-                    },
-                    "size": 1000
-                }
-            )
+            response = self.client.search(index=self.index_name, body={"query": {"term": {"owner_id": user}}, "size": 1000})
             return [Prompt(**hit["_source"]) for hit in response["hits"]["hits"]]
         except Exception as e:
             logger.error(f"[PROMPTS] Failed to list prompts for user '{user}': {e}")
@@ -151,22 +139,16 @@ class OpenSearchPromptStore(BasePromptStore):
             PromptNotFoundError: If no prompts are found for the tag.
         """
         try:
-            query = {
-                "query": {
-                    "bool": {
-                        "filter": {"term": {"tags": tag_id}}
-                    }
-                }
-            }
+            query = {"query": {"bool": {"filter": {"term": {"tags": tag_id}}}}}
             response = self.client.search(index=self.index_name, body=query)
             if not response["hits"]["hits"]:
                 raise PromptNotFoundError(f"No prompts found for tag '{tag_id}'")
             return [Prompt(**hit["_source"]) for hit in response["hits"]["hits"]]
-        
+
         except PromptNotFoundError:
             # Rethrow silently without logging
             raise
-        
+
         except Exception as e:
             logger.error(f"[PROMPTS] Failed to get prompts for tag '{tag_id}': {e}")
             raise

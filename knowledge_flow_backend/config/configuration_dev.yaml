@@ -72,6 +72,11 @@ metadata_storage:
 
 tag_storage:
   type: "local"
+  root_path: ~/.fred/knowledge-flow/tag-storage
+
+prompt_storage:
+  type: "local"
+  root_path: ~/.fred/knowledge-flow/prompt-storage
 
 vector_storage:
   type: in_memory

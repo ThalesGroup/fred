@@ -59,11 +59,37 @@ class ProcessorConfig(BaseModel):
 
 ###########################################################
 #
+#  --- Generic Storage Configuration
+#
+
+
+class DuckdbStorageConfig(BaseModel):
+    type: Literal["duckdb"]
+    duckdb_path: str = Field(default="~/.fred/knowledge-flow/db.duckdb", description="Path to the DuckDB database file.")
+
+
+class LocalJsonStorageConfig(BaseModel):
+    type: Literal["local"]
+    root_path: str = Field(default=str(Path("~/.fred/knowledge-flow/json-store.json")), description="Local storage json file")
+
+
+class OpenSearchStorageConfig(BaseModel):
+    type: Literal["opensearch"]
+    host: str = Field(..., description="OpenSearch host URL")
+    username: Optional[str] = Field(default_factory=lambda: os.getenv("OPENSEARCH_USER"), description="Username from env")
+    password: Optional[str] = Field(default_factory=lambda: os.getenv("OPENSEARCH_PASSWORD"), description="Password from env")
+    secure: bool = Field(default=False, description="Use TLS (https)")
+    verify_certs: bool = Field(default=False, description="Verify TLS certs")
+    index: str = Field(..., description="OpenSearch index name")
+
+
+###########################################################
+#
 #  --- Content Storage Configuration
 #
 
 
-class MinioStorage(BaseModel):
+class MinioStorageConfig(BaseModel):
     type: Literal["minio"]
     endpoint: str = Field(default="localhost:9000", description="MinIO API URL")
     access_key: str = Field(..., description="MinIO access key (from MINIO_ACCESS_KEY env)")
@@ -85,74 +111,32 @@ class MinioStorage(BaseModel):
         return values
 
 
-class LocalContentStorage(BaseModel):
+class LocalContentStorageConfig(BaseModel):
     type: Literal["local"]
     root_path: str = Field(default=str(Path("~/.fred/knowledge-flow/content-store")), description="Local storage directory")
 
 
-ContentStorageConfig = Annotated[Union[LocalContentStorage, MinioStorage], Field(discriminator="type")]
+ContentStorageConfig = Annotated[Union[LocalContentStorageConfig, MinioStorageConfig], Field(discriminator="type")]
 
 ###########################################################
 #
-#  --- Metadata Storage Configuration
+#  --- Internal Storage Configuration
 #
 
+MetadataStorageConfig = Annotated[Union[DuckdbStorageConfig, OpenSearchStorageConfig], Field(discriminator="type")]
 
-class DuckdbMetadataStorage(BaseModel):
-    type: Literal["duckdb"]
-    duckdb_path: str = Field(default="~/.fred/knowledge-flow/db.duckdb", description="Path to the DuckDB database file.")
+PromptStorageConfig = Annotated[Union[DuckdbStorageConfig, OpenSearchStorageConfig], Field(discriminator="type")]
 
+TagStorageConfig = Annotated[Union[DuckdbStorageConfig, OpenSearchStorageConfig], Field(discriminator="type")]
 
-class OpenSearchStorage(BaseModel):
-    type: Literal["opensearch"]
-    host: str = Field(..., description="OpenSearch host URL")
-    username: Optional[str] = Field(default_factory=lambda: os.getenv("OPENSEARCH_USER"), description="Username from env")
-    password: Optional[str] = Field(default_factory=lambda: os.getenv("OPENSEARCH_PASSWORD"), description="Password from env")
-    secure: bool = Field(default=False, description="Use TLS (https)")
-    verify_certs: bool = Field(default=False, description="Verify TLS certs")
-    index: str = Field(..., description="OpenSearch index name")
+CatalogStorageConfig = Annotated[Union[DuckdbStorageConfig,], Field(discriminator="type")]
 
-
-# --- Final union config (with discriminator)
-MetadataStorageConfig = Annotated[Union[DuckdbMetadataStorage, OpenSearchStorage], Field(discriminator="type")]
+TabularStorageConfig = Annotated[Union[DuckdbStorageConfig,], Field(discriminator="type")]
 
 ###########################################################
 #
-# --- Tag Storage Configuration
+#  --- Vector storage configuration
 #
-
-
-class LocalJsonStore(BaseModel):
-    type: Literal["local"]
-    root_path: str = Field(default=str(Path("~/.fred/knowledge-flow/tags-store.json")), description="Local storage json file")
-
-class OpensearchStore(BaseModel):
-    type: Literal["opensearch"]
-    host: str = Field(..., description="OpenSearch host URL")
-    username: Optional[str] = Field(default_factory=lambda: os.getenv("OPENSEARCH_USER"), description="Username from env")
-    password: Optional[str] = Field(default_factory=lambda: os.getenv("OPENSEARCH_PASSWORD"), description="Password from env")
-    secure: bool = Field(default=False, description="Use TLS (https)")
-    verify_certs: bool = Field(default=False, description="Verify TLS certs")
-    index: str = Field(..., description="OpenSearch index name")
-
-
-PromptStorageConfig = Annotated[Union[LocalJsonStore, OpensearchStore], Field(discriminator="type")]
-
-class LocalTagStore(BaseModel):
-    type: Literal["local"]
-    root_path: str = Field(default=str(Path("~/.fred/knowledge-flow/tags-store.json")), description="Local storage json file")
-
-class OpensearchTagStore(BaseModel):
-    type: Literal["opensearch"]
-    host: str = Field(..., description="OpenSearch host URL")
-    username: Optional[str] = Field(default_factory=lambda: os.getenv("OPENSEARCH_USER"), description="Username from env")
-    password: Optional[str] = Field(default_factory=lambda: os.getenv("OPENSEARCH_PASSWORD"), description="Password from env")
-    secure: bool = Field(default=False, description="Use TLS (https)")
-    verify_certs: bool = Field(default=False, description="Verify TLS certs")
-    index: str = Field(..., description="OpenSearch index name")
-
-
-TagStorageConfig = Annotated[Union[LocalTagStore, OpensearchTagStore], Field(discriminator="type")]
 
 
 class InMemoryVectorStorage(BaseModel):
@@ -165,52 +149,16 @@ class WeaviateVectorStorage(BaseModel):
     index_name: str = Field(default="CodeDocuments", description="Weaviate class (collection) name")
 
 
-VectorStorageConfig = Annotated[Union[InMemoryVectorStorage, OpenSearchStorage, WeaviateVectorStorage], Field(discriminator="type")]
-
-
-class DuckDBTabularStorage(BaseModel):
-    type: Literal["duckdb"]
-    duckdb_path: str = Field(default="~/.fred/knowledge-flow/db.duckdb", description="Path to the DuckDB database file.")
-
-
-TabularStorageConfig = Annotated[Union[DuckDBTabularStorage,], Field(discriminator="type")]
-
-CatalogStorageConfig = Annotated[Union[DuckDBTabularStorage,], Field(discriminator="type")]
+VectorStorageConfig = Annotated[Union[InMemoryVectorStorage, OpenSearchStorageConfig, WeaviateVectorStorage], Field(discriminator="type")]
 
 
 class EmbeddingConfig(BaseModel):
     type: str = Field(..., description="The embedding backend to use (e.g., 'openai', 'azureopenai')")
 
 
-class KnowledgeContextStorageConfig(BaseModel):
-    type: str = Field(..., description="The storage backend to use (e.g., 'local', 'minio')")
-    local_path: str = Field(default="~/.fred/knowledge-flow/knowledge-context", description="The path of the local metrics store")
-
-
 class AppSecurity(Security):
     client_id: str = "knowledge-flow"
     keycloak_url: str = "http://localhost:9080/realms/knowledge-flow"
-
-
-class KnowledgeContextDocument(BaseModel):
-    id: str
-    document_name: str
-    document_type: str
-    size: Optional[int] = None
-    tokens: Optional[int] = Field(default=0)
-    description: Optional[str] = ""
-
-
-class KnowledgeContext(BaseModel):
-    id: str
-    title: str
-    description: str
-    created_at: str
-    updated_at: str
-    documents: List[KnowledgeContextDocument]
-    creator: str
-    tokens: Optional[int] = Field(default=0)
-    tag: Optional[str] = Field(default="workspace")
 
 
 class TemporalSchedulerConfig(BaseModel):
@@ -367,7 +315,7 @@ class Configuration(BaseModel):
     content_storage: ContentStorageConfig = Field(..., description="Content Storage configuration")
     metadata_storage: MetadataStorageConfig = Field(..., description="Metadata storage configuration")
     tag_storage: TagStorageConfig = Field(..., description="Tag storage configuration")
-    prompt_storage: TagStorageConfig = Field(..., description="Tag storage configuration")
+    prompt_storage: PromptStorageConfig = Field(..., description="Tag storage configuration")
     vector_storage: VectorStorageConfig = Field(..., description="Vector storage configuration")
     tabular_storage: TabularStorageConfig = Field(..., description="Tabular storage configuration")
     catalog_storage: CatalogStorageConfig = Field(..., description="Catalog storage configuration")
