@@ -18,8 +18,20 @@ app:
   log_level: "info"
   reload: false
   reload_dir: "."
+  security:
+    enabled: false
+    client_id: "app"
+    keycloak_url: "http://app-keycloak:8080/realms/app"
+    authorized_origins:
+    -  "http://localhost:5173"
 
 frontend_settings:
+  security:
+    enabled: false
+    client_id: "app"
+    keycloak_url: "http://app-keycloak:8080/realms/app"
+    authorized_origins:
+    -  "http://localhost:5173"
   feature_flags:
     # If true activate the backend and frontend modules in charge of K8
     # and frugality monitoring
@@ -183,13 +195,6 @@ ai:
       model: {}
 
 
-# Security. As of today only keycloak is supported.
-security:
-  enabled: false
-  client_id: "fred"
-  keycloak_url: "http://keycloak:8080/realms/app"
-  authorized_origins:
-  - "http://localhost:5173"
 
 node_metrics_storage:
   type: "local"

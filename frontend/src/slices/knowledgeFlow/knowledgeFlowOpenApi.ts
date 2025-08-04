@@ -174,26 +174,6 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/knowledge-flow/v1/vector/search`, method: "POST", body: queryArg.searchRequest }),
     }),
-    processDocumentsKnowledgeFlowV1ProcessDocumentsPost: build.mutation<
-      ProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostApiResponse,
-      ProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/knowledge-flow/v1/process-documents`,
-        method: "POST",
-        body: queryArg.processDocumentsRequest,
-      }),
-    }),
-    scheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPost: build.mutation<
-      ScheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPostApiResponse,
-      ScheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPostApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/knowledge-flow/v1/schedule-documents`,
-        method: "POST",
-        body: queryArg.processDocumentsRequest,
-      }),
-    }),
   }),
   overrideExisting: false,
 });
@@ -316,15 +296,6 @@ export type DeleteTagKnowledgeFlowV1TagsTagIdDeleteApiArg = {
 export type SearchDocumentsUsingVectorizationApiResponse = /** status 200 Successful Response */ DocumentSource[];
 export type SearchDocumentsUsingVectorizationApiArg = {
   searchRequest: SearchRequest;
-};
-export type ProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostApiResponse = /** status 200 Successful Response */ any;
-export type ProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostApiArg = {
-  processDocumentsRequest: ProcessDocumentsRequest;
-};
-export type ScheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPostApiResponse =
-  /** status 200 Successful Response */ any;
-export type ScheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPostApiArg = {
-  processDocumentsRequest: ProcessDocumentsRequest;
 };
 export type SourceType = "push" | "pull";
 export type DocumentMetadata = {
@@ -499,20 +470,6 @@ export type SearchRequest = {
   query: string;
   top_k?: number;
 };
-export type FileToProcess = {
-  source_tag: string;
-  tags?: string[];
-  display_name?: string | null;
-  document_uid?: string | null;
-  external_path?: string | null;
-  size?: number | null;
-  modified_time?: number | null;
-  hash?: string | null;
-};
-export type ProcessDocumentsRequest = {
-  files: FileToProcess[];
-  pipeline_name: string;
-};
 export const {
   useGetDocumentsMetadataKnowledgeFlowV1DocumentsMetadataPostMutation,
   useGetDocumentMetadataKnowledgeFlowV1DocumentDocumentUidGetQuery,
@@ -549,6 +506,4 @@ export const {
   useUpdateTagKnowledgeFlowV1TagsTagIdPutMutation,
   useDeleteTagKnowledgeFlowV1TagsTagIdDeleteMutation,
   useSearchDocumentsUsingVectorizationMutation,
-  useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation,
-  useScheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPostMutation,
 } = injectedRtkApi;

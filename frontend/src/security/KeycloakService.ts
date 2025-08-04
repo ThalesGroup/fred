@@ -14,8 +14,46 @@
 
 import Keycloak from "keycloak-js";
 
-const USE_AUTH = (import.meta.env.VITE_USE_AUTH || "false") === "true";
-const keycloakInstance = USE_AUTH ? new Keycloak() : null;
+let keycloakInstance = null;
+let isSecurityEnabled = false
+
+/**
+ * Parses a full Keycloak realm URL like:
+ *    http://app-keycloak:8080/realms/app
+ * Into:
+ *    url:   http://app-keycloak:8080/
+ *    realm: app
+ */
+function parseKeycloakUrl(fullUrl: string): { url: string; realm: string } {
+  const match = fullUrl.match(/^(https?:\/\/[^/]+)\/realms\/([^/]+)\/?$/);
+  if (!match) {
+    throw new Error(`Invalid keycloak_url format: ${fullUrl}`);
+  }
+  return {
+    url: match[1] + "/",    // ensure trailing slash
+    realm: match[2],
+  };
+}
+export function createKeycloakInstance(keycloak_url: string, keycloak_client_id: string) {
+  if (!keycloakInstance) {
+    isSecurityEnabled = true
+    const { url, realm } = parseKeycloakUrl(keycloak_url);
+    console.log("[Keycloak] Creating Keycloak instance with:");
+    console.log("  ↳ keycloak_url:     ", keycloak_url);
+    console.log("  ↳ client_id:        ", keycloak_client_id);
+    try {
+        keycloakInstance = new Keycloak({
+        url: url,
+        realm: realm,
+        clientId: keycloak_client_id,
+      });
+    } catch (err) {
+      console.error("[Keycloak] Failed to create Keycloak instance:", err);
+      throw err;
+    }
+  }
+  return keycloakInstance;
+}
 
 /**
  * Initializes Keycloak instance and calls the provided callback function if successfully authenticated.
@@ -23,9 +61,9 @@ const keycloakInstance = USE_AUTH ? new Keycloak() : null;
  * @param onAuthenticatedCallback
  */
 const Login = (onAuthenticatedCallback: Function) => {
-  console.log("Login called", USE_AUTH);
+  console.log("Login called", isSecurityEnabled);
 
-  if (USE_AUTH) {
+  if (isSecurityEnabled) {
     keycloakInstance
       .init({
         onLoad: "login-required",
@@ -51,7 +89,7 @@ const Login = (onAuthenticatedCallback: Function) => {
 };
 
 const Logout = () => {
-  if (USE_AUTH) {
+  if (isSecurityEnabled) {
     sessionStorage.clear();
     keycloakInstance.logout({
       redirectUri: window.location.origin + "/", // Ensure this matches Keycloak's allowed URIs
@@ -60,7 +98,7 @@ const Logout = () => {
 };
 
 const refreshToken = () => {
-  if (USE_AUTH) {
+  if (isSecurityEnabled) {
     if (keycloakInstance.isTokenExpired()) {
       console.log("Token expired, refreshing...");
       keycloakInstance
@@ -85,14 +123,14 @@ const refreshToken = () => {
 setInterval(refreshToken, 300000); // Every 30s
 
 const GetRealmRoles = (): string[] => {
-  if (USE_AUTH) {
+  if (isSecurityEnabled) {
     const resourceAccess = keycloakInstance.tokenParsed?.realm_access;
     return resourceAccess?.roles || [];
   }
   return ["admin"];
 };
 const GetUserRoles = (): string[] => {
-  if (!USE_AUTH) {
+  if (!isSecurityEnabled) {
     return ["admin"];
   }
   const clientRoles = keycloakInstance.tokenParsed?.resource_access?.[keycloakInstance.clientId]?.roles || [];
@@ -100,21 +138,21 @@ const GetUserRoles = (): string[] => {
 };
 
 const GetUserName = (): string | null => {
-  if (USE_AUTH) {
+  if (isSecurityEnabled) {
     return keycloakInstance.tokenParsed.preferred_username;
   }
   return "admin"; // Default to "admin" if no authentication is used
 };
 
 const GetUserFullName = (): string | null => {
-  if (USE_AUTH) {
+  if (isSecurityEnabled) {
     return keycloakInstance.tokenParsed.name;
   }
   return "Administrator"; // Default to "Administrator" if no authentication is used
 };
 
 const GetUserMail = (): string | null => {
-  if (USE_AUTH && keycloakInstance?.tokenParsed) {
+  if (isSecurityEnabled && keycloakInstance?.tokenParsed) {
     // Au choix, "name", "preferred_username", "email", ...
     return keycloakInstance.tokenParsed.email;
   }
@@ -122,7 +160,7 @@ const GetUserMail = (): string | null => {
 };
 
 const GetUserId = (): string | null => {
-  if (USE_AUTH && keycloakInstance?.tokenParsed) {
+  if (isSecurityEnabled && keycloakInstance?.tokenParsed) {
     return keycloakInstance.tokenParsed.sub;
   }
   return "admin";
@@ -131,7 +169,7 @@ const GetUserId = (): string | null => {
  * Renvoie le token brut pour l'ajouter dans Authorization: Bearer <token>.
  */
 const GetToken = (): string | null => {
-  if (USE_AUTH && keycloakInstance?.token) {
+  if (isSecurityEnabled && keycloakInstance?.token) {
     return keycloakInstance.token;
   }
   return null;
@@ -141,7 +179,7 @@ const GetToken = (): string | null => {
  * Renvoie tout le token décodé (claims) si dispo, sinon null.
  */
 const GetTokenParsed = (): any => {
-  if (USE_AUTH && keycloakInstance?.tokenParsed) {
+  if (isSecurityEnabled && keycloakInstance?.tokenParsed) {
     return keycloakInstance.tokenParsed;
   }
   return null;
