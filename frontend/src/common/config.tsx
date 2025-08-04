@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { createKeycloakInstance } from "../security/KeycloakService";
+
 /**
  * Interface representing the expected structure of the application configuration.
  * This defines the required backend API URLs and WebSocket URL for the frontend to work properly.
@@ -22,6 +24,10 @@ export interface AppConfig {
   websocket_url: string; // WebSocket server URL
   feature_flags?: Record<string, boolean>;
   properties?: Record<string, string>;
+  security: boolean
+  keycloak_url?: string;          
+  keycloak_realm?: string;       
+  keycloak_client_id?: string;  
 }
 
 export interface FeatureFlags {
@@ -56,7 +62,14 @@ export const loadConfig = async () => {
     ...baseConfig,
     feature_flags: frontendSettings.feature_flags,
     properties: frontendSettings.properties,
+    security: frontendSettings.security,
+    keycloak_url: frontendSettings.keycloak_url,    
+    keycloak_realm: frontendSettings.keycloak_realm,       
+    keycloak_client_id: frontendSettings.keycloak_client_id
   };
+  if (config.security) {
+    createKeycloakInstance(config.keycloak_url, config.keycloak_realm, config.keycloak_client_id)
+  }
 };
 
 /**
@@ -82,3 +95,7 @@ export const isFeatureEnabled = (flag: FeatureFlagKeyType): boolean => {
 export const getProperty = (propertyKey: string): string => {
   return getConfig().properties?.[propertyKey];
 };
+
+export const isSecurityEnabled = (): boolean => {
+  return getConfig().security;
+}

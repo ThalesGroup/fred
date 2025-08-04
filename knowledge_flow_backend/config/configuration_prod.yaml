@@ -18,6 +18,12 @@ app:
   log_level: "info"
   reload: false
   reload_dir: "."
+  security:
+    enabled: false
+    keycloak_url: "http://fred-keycloak:8080/realms/fred"
+    client_id: "fred"
+    authorized_origins:
+      - "http://localhost:5173"
 
 security:
   enabled: false
