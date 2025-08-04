@@ -17,6 +17,7 @@ import logging
 import os
 from pathlib import Path
 from typing import Dict, Type, Union, Optional
+from app.core.stores.catalog.opensearch_catalog_store import OpenSearchCatalogStore
 from app.core.stores.content.base_content_loader import BaseContentLoader
 from app.core.stores.content.filesystem_content_loader import FileSystemContentLoader
 from app.core.stores.content.minio_content_loader import MinioContentLoader
@@ -40,8 +41,8 @@ from app.config.embedding_openai_settings import EmbeddingOpenAISettings
 from app.core.stores.content.base_content_store import BaseContentStore
 from app.core.stores.content.filesystem_content_store import FileSystemContentStore
 from app.core.stores.content.minio_content_store import MinioStorageBackend
-from app.core.stores.metadata.base_catalog_store import BaseCatalogStore
-from app.core.stores.metadata.duckdb_catalog_store import DuckdbCatalogStore
+from app.core.stores.catalog.base_catalog_store import BaseCatalogStore
+from app.core.stores.catalog.duckdb_catalog_store import DuckdbCatalogStore
 from app.core.stores.metadata.duckdb_metadata_store import DuckdbMetadataStore
 from langchain_openai import OpenAIEmbeddings, AzureOpenAIEmbeddings
 from langchain_ollama import OllamaEmbeddings
@@ -527,6 +528,23 @@ class ApplicationContext:
         if isinstance(config, DuckdbStorageConfig):
             db_path = Path(config.duckdb_path).expanduser()
             self._catalog_store_instance = DuckdbCatalogStore(db_path)
+        elif isinstance(config, OpenSearchStorageConfig):
+            username = config.username
+            password = config.password
+
+            if not username or not password:
+                raise ValueError("Missing OpenSearch credentials: OPENSEARCH_USER and/or OPENSEARCH_PASSWORD")
+
+            self._catalog_store_instance = OpenSearchCatalogStore(
+                host=config.host,
+                index=config.index,
+                username=username,
+                password=password,
+                secure=config.secure,
+                verify_certs=config.verify_certs,
+            )
+            return self._catalog_store_instance
+        
         else:
             raise ValueError(f"Unsupported catalog storage backend: {config.type}")
 

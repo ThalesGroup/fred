@@ -25,8 +25,14 @@ app:
     authorized_origins:
       - "http://localhost:5173"
 
-scheduler:
+security:
   enabled: false
+  keycloak_url: "http://fred-keycloak:8080/realms/fred"
+  authorized_origins:
+    - "http://localhost:5173"
+
+scheduler:
+  enabled: true
   backend: "temporal"
   temporal:
     host: "localhost:7233"
@@ -52,8 +58,10 @@ input_processors:
     class_path: app.core.processors.input.pps_tabular_processor.pps_tabular_processor.PpsTabularProcessor
 
 content_storage:
-  type: "local"
-  root_path: ~/.fred/knowledge-flow/content-storage
+  type: minio
+  endpoint: http://localhost:9000
+  bucket_name: "knowledge-flow-content"
+  secure: false
 
 document_sources:
   fred:
@@ -63,31 +71,56 @@ document_sources:
   local:
     type: pull
     provider: local_path
-    base_path: ~/Documents/Fred
+    base_path: ~/Documents/Knowledge
     description: "Personal local documents available for pull-mode ingestion"
 
+  minio:
+      type: pull
+      provider: minio
+      description: "Documents available for pull from MinIO"
+      endpoint_url: localhost:9000
+      bucket_name: "shared-content"
+      prefix: ""
+      secure: false
+
 metadata_storage:
-  type: "duckdb"
-  duckdb_path: "~/.fred/knowledge-flow/document.duckdb"
+  type: opensearch
+  host: https://localhost:9200              
+  secure: true                        
+  verify_certs: false                      
+  index: document-index
 
 tag_storage:
-  type: "duckdb"
-  duckdb_path: ~/.fred/knowledge-flow/tag.duckdb
+  type: opensearch
+  host: https://localhost:9200
+  secure: true
+  verify_certs: false
+  index: tag-index
 
 prompt_storage:
-  type: "duckdb"
-  duckdb_path: ~/.fred/knowledge-flow/prompt.duckdb
+  type: opensearch
+  host: https://localhost:9200
+  secure: true
+  verify_certs: false
+  index: prompt-index
 
 vector_storage:
-  type: in_memory
+  type: opensearch
+  host: https://localhost:9200
+  secure: true
+  verify_certs: false
+  index: vector-index-ada002
 
 tabular_storage:
   type: "duckdb"
   duckdb_path: "~/.fred/knowledge-flow/tabular.duckdb"
 
 catalog_storage:
-  type: "duckdb"
-  duckdb_path: "~/.fred/knowledge-flow/catalog.duckdb"
+  type: opensearch
+  host: https://localhost:9200
+  secure: true
+  verify_certs: false
+  index: catalog-index
 
 embedding:
   type:

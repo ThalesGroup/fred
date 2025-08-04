@@ -1,6 +1,6 @@
 from app.application_context import ApplicationContext
 from app.common.structures import DocumentSourceConfig
-from app.core.stores.metadata.base_catalog_store import PullFileEntry
+from app.core.stores.catalog.base_catalog_store import PullFileEntry
 from typing import List
 
 

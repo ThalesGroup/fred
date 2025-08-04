@@ -1,7 +1,7 @@
 from app.common.structures import DocumentSourceConfig
 from fastapi import APIRouter, HTTPException, Query
 from typing import List, Literal, Optional
-from app.core.stores.metadata.base_catalog_store import PullFileEntry
+from app.core.stores.catalog.base_catalog_store import PullFileEntry
 from app.features.catalog.service import CatalogService, PullSourceNotFoundError
 from pydantic import BaseModel
 

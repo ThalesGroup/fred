@@ -129,9 +129,9 @@ PromptStorageConfig = Annotated[Union[DuckdbStorageConfig, OpenSearchStorageConf
 
 TagStorageConfig = Annotated[Union[DuckdbStorageConfig, OpenSearchStorageConfig], Field(discriminator="type")]
 
-CatalogStorageConfig = Annotated[Union[DuckdbStorageConfig,], Field(discriminator="type")]
+CatalogStorageConfig = Annotated[Union[DuckdbStorageConfig,OpenSearchStorageConfig], Field(discriminator="type")]
 
-TabularStorageConfig = Annotated[Union[DuckdbStorageConfig,], Field(discriminator="type")]
+TabularStorageConfig = Annotated[Union[DuckdbStorageConfig], Field(discriminator="type")]
 
 ###########################################################
 #
