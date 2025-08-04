@@ -23,7 +23,7 @@ class KeycloakUser(BaseModel):
     email: str | None = None
 
 class SecurityConfiguration(BaseModel):
-    enabled: bool = True
+    enabled: bool = False
     keycloak_url: str
     client_id: str
     authorized_origins: list[str] = ["http://localhost:5173"]

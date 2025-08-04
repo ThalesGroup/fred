@@ -20,17 +20,16 @@ app:
   reload_dir: "."
   security:
     enabled: false
-    client_id: "fred"
-    keycloak_url: "http://keycloak:8080/realms/app"
+    client_id: "app"
+    keycloak_url: "http://app-keycloak:8080/realms/app"
     authorized_origins:
     -  "http://localhost:5173"
-
 
 frontend_settings:
   security:
     enabled: false
-    client_id: "fred"
-    keycloak_url: "http://keycloak:8080/realms/app"
+    client_id: "app"
+    keycloak_url: "http://app-keycloak:8080/realms/app"
     authorized_origins:
     -  "http://localhost:5173"
   feature_flags:

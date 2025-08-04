@@ -16,13 +16,41 @@ import Keycloak from "keycloak-js";
 
 let keycloakInstance = null;
 let isSecurityEnabled = false
-export function createKeycloakInstance(keycloak_url: string, keycloak_realm: string, keycloak_client_id: string) {
+
+/**
+ * Parses a full Keycloak realm URL like:
+ *    http://app-keycloak:8080/realms/app
+ * Into:
+ *    url:   http://app-keycloak:8080/
+ *    realm: app
+ */
+function parseKeycloakUrl(fullUrl: string): { url: string; realm: string } {
+  const match = fullUrl.match(/^(https?:\/\/[^/]+)\/realms\/([^/]+)\/?$/);
+  if (!match) {
+    throw new Error(`Invalid keycloak_url format: ${fullUrl}`);
+  }
+  return {
+    url: match[1] + "/",    // ensure trailing slash
+    realm: match[2],
+  };
+}
+export function createKeycloakInstance(keycloak_url: string, keycloak_client_id: string) {
   if (!keycloakInstance) {
-    keycloakInstance = new Keycloak({
-      url: keycloak_url,
-      realm: keycloak_realm,
-      clientId: keycloak_client_id,
-    });
+    isSecurityEnabled = true
+    const { url, realm } = parseKeycloakUrl(keycloak_url);
+    console.log("[Keycloak] Creating Keycloak instance with:");
+    console.log("  ↳ keycloak_url:     ", keycloak_url);
+    console.log("  ↳ client_id:        ", keycloak_client_id);
+    try {
+        keycloakInstance = new Keycloak({
+        url: url,
+        realm: realm,
+        clientId: keycloak_client_id,
+      });
+    } catch (err) {
+      console.error("[Keycloak] Failed to create Keycloak instance:", err);
+      throw err;
+    }
   }
   return keycloakInstance;
 }
