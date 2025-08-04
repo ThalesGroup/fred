@@ -90,7 +90,7 @@ def create_app() -> FastAPI:
 
     ApplicationContext(configuration)
 
-    initialize_keycloak(configuration)
+    initialize_keycloak(configuration.app.security)
     agent_manager = AgentManager(configuration, get_agent_store())
     session_manager = SessionManager(
         session_storage=get_sessions_store(), agent_manager=agent_manager
@@ -111,7 +111,7 @@ def create_app() -> FastAPI:
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=configuration.security.authorized_origins,
+        allow_origins=configuration.app.security.authorized_origins,
         allow_methods=["GET", "POST", "PUT", "DELETE"],
         allow_headers=["Content-Type", "Authorization"],
     )
