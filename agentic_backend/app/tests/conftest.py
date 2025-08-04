@@ -44,7 +44,6 @@ def minimal_generalist_config() -> Configuration:
             properties=Properties(logoName="fred"),
             security=SecurityConfiguration(enabled=False, keycloak_url="", client_id="app", authorized_origins=[])
          ),
-
         database={
             "type": "csv",
             "csv_files": PathOrIndexPrefix(
