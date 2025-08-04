@@ -19,10 +19,11 @@ import pytest
 from fastapi.testclient import TestClient
 from fastapi import FastAPI, APIRouter
 
-from app.common.structures import AppConfig, Configuration
+from app.common.structures import AppConfig, Configuration, FrontendFlags, FrontendSettings, Properties
 from app.application_context import ApplicationContext
 from app.common.structures import PathOrIndexPrefix
 from app.core.chatbot.chatbot_controller import ChatbotController
+from fred_core import SecurityConfiguration
 
 
 @pytest.fixture(scope="session")
@@ -35,11 +36,15 @@ def minimal_generalist_config() -> Configuration:
             log_level="info",
             reload=False,
             reload_dir=".",
+             security=SecurityConfiguration(enabled=False, keycloak_url="", client_id="app", authorized_origins=[])
         ),
-        frontend_settings={
-            "feature_flags": {"enableK8Features": False, "enableElecWarfare": False},
-            "properties": {"logoName": "fred"},
-        },
+         
+        frontend_settings=FrontendSettings(
+            feature_flags=FrontendFlags(enableK8Features=False, enableElecWarfare=False),
+            properties=Properties(logoName="fred"),
+            security=SecurityConfiguration(enabled=False, keycloak_url="", client_id="app", authorized_origins=[])
+         ),
+
         database={
             "type": "csv",
             "csv_files": PathOrIndexPrefix(

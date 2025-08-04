@@ -382,11 +382,6 @@ class FrontendFlags(BaseModel):
 class Properties(BaseModel):
     logoName: str = "fred"
 
-class FrontendSecuritySettings:
-    enabled: bool
-    keycloack_client_id: str = "fred"
-    keycloak_url: str = "http://localhost:9080/realms/fred"
-    keycloak_realm = "fred"      
 class FrontendSettings(BaseModel):
     feature_flags: FrontendFlags
     properties: Properties
