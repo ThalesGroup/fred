@@ -12,7 +12,7 @@ import {
   useTheme,
 } from "@mui/material";
 import { useState } from "react";
-import { Tag, useListTagsKnowledgeFlowV1TagsGetQuery } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { useListTagsKnowledgeFlowV1TagsGetQuery } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 
 export interface ChatLibrariesSelectionProps {
   selectedLibrariesIds: string[];
@@ -98,7 +98,7 @@ export function LibrariesSelectionCard({ selectedLibrariesIds, setSelectedLibrar
   };
 
   const filteredLibraries = libraries
-    ?.filter((lib: Tag) => lib.name.toLowerCase().includes(search.toLowerCase()))
+    ?.filter((lib) => lib.name.toLowerCase().includes(search.toLowerCase()))
     .sort((a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name));
 
   return (
@@ -125,7 +125,7 @@ export function LibrariesSelectionCard({ selectedLibrariesIds, setSelectedLibrar
           px: 1,
         }}
       >
-        {filteredLibraries?.map((lib: Tag) => (
+        {filteredLibraries?.map((lib) => (
           <Box
             sx={{
               width: "100%",

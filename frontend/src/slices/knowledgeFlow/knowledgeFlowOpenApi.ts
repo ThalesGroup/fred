@@ -498,6 +498,8 @@ export type DocumentSource = {
 export type SearchRequest = {
   query: string;
   top_k?: number;
+  /** Optional list of tags to filter documents. Only chunks in a document with at least one of these tags will be returned. */
+  tags?: string[] | null;
 };
 export type FileToProcess = {
   source_tag: string;
