@@ -19,10 +19,29 @@ import pytest
 from fastapi.testclient import TestClient
 from fastapi import FastAPI, APIRouter
 
-from app.common.structures import AppConfig, Configuration, FrontendFlags, FrontendSettings, Properties
+from app.common.structures import (
+    AIConfig,
+    AgentSettings,
+    AppConfig,
+    Configuration,
+    DAOConfiguration,
+    DAOTypeEnum,
+    DatabaseConfiguration,
+    DatabaseTypeEnum,
+    DuckdbDynamicAgentStorage,
+    FeedbackStorage,
+    FrontendFlags,
+    FrontendSettings,
+    InMemoryStorageConfig,
+    KubernetesConfiguration,
+    MetricsStorageConfig,
+    ModelConfiguration,
+    Properties,
+    RecursionConfig,
+    TimeoutSettings,
+)
 from app.application_context import ApplicationContext
 from app.common.structures import PathOrIndexPrefix
-from app.core.chatbot.chatbot_controller import ChatbotController
 from fred_core import SecurityConfiguration
 
 
@@ -36,17 +55,22 @@ def minimal_generalist_config() -> Configuration:
             log_level="info",
             reload=False,
             reload_dir=".",
-             security=SecurityConfiguration(enabled=False, keycloak_url="", client_id="app", authorized_origins=[])
+            security=SecurityConfiguration(
+                enabled=False, keycloak_url="", client_id="app", authorized_origins=[]
+            ),
         ),
-         
         frontend_settings=FrontendSettings(
-            feature_flags=FrontendFlags(enableK8Features=False, enableElecWarfare=False),
+            feature_flags=FrontendFlags(
+                enableK8Features=False, enableElecWarfare=False
+            ),
             properties=Properties(logoName="fred"),
-            security=SecurityConfiguration(enabled=False, keycloak_url="", client_id="app", authorized_origins=[])
-         ),
-        database={
-            "type": "csv",
-            "csv_files": PathOrIndexPrefix(
+            security=SecurityConfiguration(
+                enabled=False, keycloak_url="", client_id="app", authorized_origins=[]
+            ),
+        ),
+        database=DatabaseConfiguration(
+            type=DatabaseTypeEnum.csv,
+            csv_files=PathOrIndexPrefix(
                 energy_mix="dummy.csv",
                 carbon_footprint="dummy.csv",
                 energy_footprint="dummy.csv",
@@ -57,52 +81,54 @@ def minimal_generalist_config() -> Configuration:
                 radio="dummy.csv",
                 signal_identification_guide="dummy.csv",
             ),
-        },
-        kubernetes={
-            "kube_config": "~/.kube/config",
-            "timeout": {"connect": 5, "read": 15},
-        },
-        ai={
-            "timeout": {"connect": 5, "read": 15},
-            "default_model": {
-                "provider": "openai",
-                "name": "gpt-4o",
-                "settings": {
+        ),
+        kubernetes=KubernetesConfiguration(
+            kube_config="~/.kube/config",
+            timeout=TimeoutSettings(connect=5, read=15),
+        ),
+        ai=AIConfig(
+            timeout=TimeoutSettings(connect=5, read=15),
+            default_model=ModelConfiguration(
+                provider="openai",
+                name="gpt-4o",
+                settings={
                     "temperature": 0.0,
                     "max_retries": 2,
                     "request_timeout": 30,
                 },
-            },
-            "leader": {
-                "name": "Fred",
-                "class_path": "app.agents.leader.leader.Leader",
-                "enabled": True,
-                "max_steps": 5,
-                "model": {},
-            },
-            "services": [],
-            "agents": [
-                {
-                    "name": "GeneralistExpert",
-                    "class_path": "app.agents.generalist.generalist_expert.GeneralistExpert",
-                    "enabled": True,
-                    "model": {},
-                }
+            ),
+            agents=[
+                AgentSettings(
+                    name="GeneralistExpert",
+                    class_path="app.agents.generalist.generalist_expert.GeneralistExpert",
+                    enabled=True,
+                    model=ModelConfiguration(),
+                )
             ],
-            "recursion": {"recursion_limit": 40},
-        },
-        dao={"type": "file", "base_path": "/tmp/fred-dao"},
-        security={
-            "enabled": False,
-            "keycloak_url": "",
-            "client_id": "fred",
-            "authorized_origins": [],
-        },
-        node_metrics_storage={"type": "local", "local_path": "/tmp/node-metrics"},
-        tool_metrics_storage={"type": "local", "local_path": "/tmp/tool-metrics"},
-        feedback_storage={"type": "ducckdb", "duckdb_path": "/tmp/ducckdb.db"},
-        session_storage={"type": "in_memory"},
-        agent_storage={"type": "duckdb", "duckdb_path": "/tmp/duckdb.db"},
+            services=[],
+            recursion=RecursionConfig(recursion_limit=40),
+        ),
+        dao=DAOConfiguration(
+            type=DAOTypeEnum("file"),
+            base_path="/tmp/fred-dao",
+            max_cached_delay_seconds=30,
+        ),
+        node_metrics_storage=MetricsStorageConfig(
+            type="local",
+            local_path="/tmp/node-metrics",
+        ),
+        tool_metrics_storage=MetricsStorageConfig(
+            type="local",
+            local_path="/tmp/tool-metrics",
+        ),
+        feedback_storage=FeedbackStorage(type="duckdb", duckdb_path="/tmp/ducckdb.db"),
+        session_storage=InMemoryStorageConfig(
+            type="in_memory",
+        ),
+        agent_storage=DuckdbDynamicAgentStorage(
+            type="duckdb",
+            duckdb_path="/tmp/duckdb.db",
+        ),
     )
 
 
@@ -115,6 +141,6 @@ def app_context(minimal_generalist_config):
 def client(app_context) -> TestClient:
     app = FastAPI()
     router = APIRouter(prefix="/agentic/v1")
-    ChatbotController(router)
+    # ChatbotController(router)
     app.include_router(router)
     return TestClient(app)

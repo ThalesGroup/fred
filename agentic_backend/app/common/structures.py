@@ -360,7 +360,7 @@ class FeedbackStorage(BaseModel):
 
 
 FeedbackStorageConfig = Annotated[
-    Union[DuckdbDynamicAgentStorage], Field(discriminator="type")
+    Union[FeedbackStorage], Field(discriminator="type")
 ]
 
 # ----------------------------------------------------------------------
