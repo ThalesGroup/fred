@@ -13,6 +13,7 @@
 # limitations under the License.
 
 
+from typing import Optional, Callable
 from pydantic import BaseModel, ConfigDict
 
 
@@ -25,6 +26,10 @@ class RuntimeContext(BaseModel):
 
     # Known context properties with proper typing
     selected_library_ids: list[str] | None = None
+
+
+# Type alias for context provider functions
+RuntimeContextProvider = Callable[[], Optional[RuntimeContext]]
 
 
 def get_library_ids(context: RuntimeContext | None) -> list[str] | None:
