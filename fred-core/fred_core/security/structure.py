@@ -12,9 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Protocol
 from pydantic import BaseModel
-
 
 class KeycloakUser(BaseModel):
     """Represents an authenticated Keycloak user."""
@@ -24,13 +22,9 @@ class KeycloakUser(BaseModel):
     roles: list[str]
     email: str | None = None
 
-
-class Security(BaseModel):
-    enabled: bool = True
+class SecurityConfiguration(BaseModel):
+    enabled: bool = False
     keycloak_url: str
     client_id: str
     authorized_origins: list[str] = ["http://localhost:5173"]
 
-
-class ConfigurationWithSecurity(Protocol):
-    security: Security

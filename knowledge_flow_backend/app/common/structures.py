@@ -19,7 +19,7 @@ from typing import Annotated, Dict, List, Literal, Union
 from pydantic import BaseModel, Field, model_validator
 from typing import Optional
 from enum import Enum
-from fred_core import Security
+from fred_core import SecurityConfiguration
 
 """
 This module defines the top level data structures used by controllers, processors
@@ -155,12 +155,6 @@ VectorStorageConfig = Annotated[Union[InMemoryVectorStorage, OpenSearchStorageCo
 class EmbeddingConfig(BaseModel):
     type: str = Field(..., description="The embedding backend to use (e.g., 'openai', 'azureopenai')")
 
-
-class AppSecurity(Security):
-    client_id: str = "knowledge-flow"
-    keycloak_url: str = "http://localhost:9080/realms/knowledge-flow"
-
-
 class TemporalSchedulerConfig(BaseModel):
     host: str = "localhost:7233"
     namespace: str = "default"
@@ -183,7 +177,7 @@ class AppConfig(BaseModel):
     log_level: str = "info"
     reload: bool = False
     reload_dir: str = "."
-
+    security: SecurityConfiguration
 
 class PullProvider(str, Enum):
     LOCAL_PATH = "local_path"
@@ -216,7 +210,6 @@ class GitPullSource(BasePullSourceConfig):
     subdir: Optional[str] = Field(default="", description="Subdirectory to extract files from")
     username: Optional[str] = Field(default=None, description="Optional GitHub username (for logs)")
     token: str = Field(..., description="GitHub token (from GITHUB_TOKEN env variable)")
-
     @model_validator(mode="before")
     @classmethod
     def load_env_token(cls, values: dict) -> dict:
@@ -309,7 +302,7 @@ DocumentSourceConfig = Annotated[Union[PushSourceConfig, PullSourceConfig], Fiel
 
 class Configuration(BaseModel):
     app: AppConfig
-    security: AppSecurity
+    
     input_processors: List[ProcessorConfig]
     output_processors: Optional[List[ProcessorConfig]] = None
     content_storage: ContentStorageConfig = Field(..., description="Content Storage configuration")

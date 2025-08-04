@@ -83,7 +83,7 @@ def create_app() -> FastAPI:
 
     ApplicationContext(configuration)
 
-    initialize_keycloak(configuration)
+    initialize_keycloak(configuration.app.security)
 
     app = FastAPI(
         docs_url=f"{configuration.app.base_url}/docs",
@@ -93,7 +93,7 @@ def create_app() -> FastAPI:
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=configuration.security.authorized_origins,
+        allow_origins=configuration.app.security.authorized_origins,
         allow_methods=["GET", "POST", "PUT", "DELETE"],
         allow_headers=["Content-Type", "Authorization"],
     )

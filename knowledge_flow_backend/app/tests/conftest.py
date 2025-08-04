@@ -32,6 +32,7 @@ from app.common.structures import (
 from app.main import create_app
 from app.core.processors.output.vectorization_processor.embedder import Embedder
 from app.tests.test_utils.test_processors import TestOutputProcessor, TestMarkdownProcessor, TestTabularProcessor
+from fred_core import SecurityConfiguration
 
 
 @pytest.fixture(scope="function", autouse=True)
@@ -63,13 +64,10 @@ def app_context(monkeypatch, fake_embedder):
             log_level="info",
             reload=False,
             reload_dir=".",
+            security=SecurityConfiguration(
+                enabled=False, keycloak_url="", client_id="app", authorized_origins=[]
+            ),
         ),
-        security={
-            "enabled": False,
-            "keycloak_url": "http://fake",
-            "client_id": "test-client",
-            "authorized_origins": [],
-        },
         scheduler=SchedulerConfig(
             backend="temporal",
             enabled=False,
