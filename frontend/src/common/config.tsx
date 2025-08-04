@@ -94,7 +94,3 @@ export const isFeatureEnabled = (flag: FeatureFlagKeyType): boolean => {
 export const getProperty = (propertyKey: string): string => {
   return getConfig().properties?.[propertyKey];
 };
-
-export const isSecurityEnabled = (): boolean => {
-  return getConfig().security;
-}
