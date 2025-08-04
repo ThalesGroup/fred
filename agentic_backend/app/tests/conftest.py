@@ -102,7 +102,15 @@ def minimal_generalist_config() -> Configuration:
                     name="GeneralistExpert",
                     class_path="app.agents.generalist.generalist_expert.GeneralistExpert",
                     enabled=True,
-                    model=ModelConfiguration(),
+                    model=ModelConfiguration(
+                        provider="openai",
+                        name="gpt-4o",
+                        settings={
+                            "temperature": 0.0,
+                            "max_retries": 2,
+                            "request_timeout": 30,
+                        },
+                    ),
                 )
             ],
             services=[],
