@@ -13,23 +13,22 @@
 # limitations under the License.
 
 
-from typing_extensions import NotRequired, TypedDict
+from pydantic import BaseModel, ConfigDict
 
 
-class RuntimeContext(TypedDict, total=False):
+class RuntimeContext(BaseModel):
     """
     Semi-typed runtime context that defines known properties while allowing arbitrary additional ones.
     """
+    
+    model_config = ConfigDict(extra="allow")
 
     # Known context properties with proper typing
-    selected_library_ids: NotRequired[list[str]]
-
-    # This allows any other keys - Python's TypedDict with __extra__ behavior
-    # Note: In practice, mypy will allow extra keys in TypedDict even without explicit declaration
+    selected_library_ids: list[str] | None = None
 
 
 def get_library_ids(context: RuntimeContext | None) -> list[str] | None:
     """Helper to extract library IDs from context."""
     if not context:
         return None
-    return context.get("selected_library_ids")
+    return context.selected_library_ids
