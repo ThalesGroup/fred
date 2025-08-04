@@ -46,19 +46,11 @@ class PromptController:
         self._register_routes(router, handle_exception)
 
     def _register_routes(self, router: APIRouter, handle_exception):
-        @router.get("/prompts", response_model=List[TagWithItemsId], 
-                    tags=["Prompt"], 
-                    summary="List all prompts")
-        async def list_prompts(user: KeycloakUser = Depends(get_current_user)) -> List[TagWithItemsId]:
-            try:
-                return self.service.list_all_prompts(user)
-            except Exception as e:
-                raise handle_exception(e)
 
-        @router.get("/prompts/{prompt_id}", response_model=TagWithItemsId, tags=["Prompt"], summary="Get a prompt by ID") 
-        async def get_prompt(prompt_id: str, user: KeycloakUser = Depends(get_current_user)) -> TagWithItemsId:
+        @router.get("/prompts/{prompt_id}", response_model=Prompt, tags=["Prompt"], summary="Get a prompt by ID") 
+        async def get_prompt(prompt_id: str, user: KeycloakUser = Depends(get_current_user)) -> Prompt:
             try:
-                return self.service.get_prompt_for_user(prompt_id, user)
+                    return self.service.get_prompt_for_user(prompt_id, user)
             except Exception as e:
                 raise handle_exception(e)
             
@@ -69,17 +61,10 @@ class PromptController:
             except Exception as e:
                 raise handle_exception(e)
             
-        @router.put("/prompts/{prompt_id}", response_model=TagWithItemsId, tags=["Prompt"], summary="Update an existing prompt")
-        async def update_prompt(prompt_id: str, prompt_data: Prompt, user: KeycloakUser = Depends(get_current_user)) -> TagWithItemsId:
+        @router.put("/prompts/{prompt_id}", response_model=Prompt, tags=["Prompt"], summary="Update an existing prompt")
+        async def update_prompt(prompt_id: str, prompt_data: Prompt, user: KeycloakUser = Depends(get_current_user)) -> Prompt:
             try:
                 return self.service.update_prompt_for_user(prompt_id, prompt_data, user)
             except Exception as e:
                 raise handle_exception(e)
             
-        @router.delete("/prompts/{prompt_id}", tags=["Prompt"], status_code=status.HTTP_204_NO_CONTENT, summary="Delete a tag")
-        async def delete_prompt(prompt_id: str, user: KeycloakUser = Depends(get_current_user)):
-            try:
-                self.service.delete_prompt_for_user(prompt_id, user)
-                return
-            except Exception as e:
-                raise handle_exception(e)

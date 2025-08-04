@@ -43,11 +43,16 @@ class BaseTagStore(ABC):
     """
 
     @abstractmethod
-    def list_tags_for_user(self, user: KeycloakUser, tag_type: TagType) -> List[Tag]:
+    def list_tags_for_user(self, user: KeycloakUser) -> List[Tag]:
         pass
 
     @abstractmethod
     def get_tag_by_id(self, tag_id: str) -> Tag:
+        """
+        Retrieve a tag by its ID.
+        Raises:
+            TagNotFoundError: If the tag does not exist.
+        """
         pass
 
     @abstractmethod

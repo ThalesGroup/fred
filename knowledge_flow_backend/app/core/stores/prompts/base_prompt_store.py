@@ -59,3 +59,12 @@ class BasePromptStore(ABC):
     @abstractmethod
     def delete_prompt(self, prompt_id: str) -> None:
         pass
+
+    @abstractmethod
+    def get_prompt_in_tag(self, tag_id: str) -> List[Prompt]:
+        """
+        Retrieve all prompts associated with a specific tag.
+        Raises:
+            PromptNotFoundError: If no prompts are found for the tag.
+        """
+        pass

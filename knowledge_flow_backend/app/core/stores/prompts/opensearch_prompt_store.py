@@ -143,3 +143,30 @@ class OpenSearchPromptStore(BasePromptStore):
         except Exception as e:
             logger.error(f"[PROMPTS] Failed to delete prompt '{prompt_id}': {e}")
             raise
+
+    def get_prompt_in_tag(self, tag_id: str) -> List[Prompt]:
+        """
+        Retrieve all prompts associated with a specific tag.
+        Raises:
+            PromptNotFoundError: If no prompts are found for the tag.
+        """
+        try:
+            query = {
+                "query": {
+                    "bool": {
+                        "filter": {"term": {"tags": tag_id}}
+                    }
+                }
+            }
+            response = self.client.search(index=self.index_name, body=query)
+            if not response["hits"]["hits"]:
+                raise PromptNotFoundError(f"No prompts found for tag '{tag_id}'")
+            return [Prompt(**hit["_source"]) for hit in response["hits"]["hits"]]
+        
+        except PromptNotFoundError:
+            # Rethrow silently without logging
+            raise
+        
+        except Exception as e:
+            logger.error(f"[PROMPTS] Failed to get prompts for tag '{tag_id}': {e}")
+            raise

@@ -39,6 +39,7 @@ export const PromptTable: React.FC<PromptTableProps> = ({
   actions = [],
   showSelection = false,
 }) => {
+  console.log("PromptTable props:", { prompts, onEditPrompt, onDeletePrompt, actions, showSelection });
   const { t } = useTranslation();
   const [selected, setSelected] = useState<string[]>([]);
   const [sortBy, setSortBy] = useState<keyof Prompt>("name");

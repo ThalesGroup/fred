@@ -18,8 +18,8 @@ import { useTranslation } from "react-i18next";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { TopBar } from "../common/TopBar";
 import { AllDocumentsList } from "../components/documents/AllDocumentsList";
-import { AllLibrariesList } from "../components/documents/AllLibrariesList";
-import { AllPromptsList } from "../components/prompts/AllPromptsList";
+import { AllDocumentLibrariesList } from "../components/documents/AllDocumentLibrariesList";
+import { AllPromptLibrariesList } from "../components/prompts/AllPromptLibrariesList";
 
 type KnowledgeHubView = "prompts" | "operations" | "documents";
 
@@ -75,12 +75,12 @@ export const KnowledgeHub = () => {
       <Box sx={{ mb: 3 }}>
         {selectedView === "documents" && (
           <Container maxWidth="xl">
-            <AllLibrariesList />
+            <AllDocumentLibrariesList />
           </Container>
         )}
         {selectedView === "prompts" && (
           <Container maxWidth="xl">
-            <AllPromptsList />
+            <AllPromptLibrariesList />
           </Container>
         )}
         {selectedView === "operations" && <AllDocumentsList />}

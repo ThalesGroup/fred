@@ -27,24 +27,25 @@ import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   TagWithItemsId,
-  useDeletePromptKnowledgeFlowV1PromptsPromptIdDeleteMutation,
-  useListPromptsKnowledgeFlowV1PromptsGetQuery,
+  useListAllTagsKnowledgeFlowV1TagsGetQuery,
+  useDeleteTagKnowledgeFlowV1TagsTagIdDeleteMutation,
+  TagType,
 } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { EmptyState } from "../EmptyState";
 import InvisibleLink from "../InvisibleLink";
 import { TableSkeleton } from "../TableSkeleton";
-import { LibraryCreateDrawer } from "../documents/LibraryCreateDrawer";
+import { LibraryCreateDrawer } from "./LibraryCreateDrawer";
 
-export function AllPromptsList() {
+export function AllDocumentLibrariesList() {
   const { t } = useTranslation();
   const {
     data: libraries,
     refetch: refetchLibraries,
     isLoading,
-  } = useListPromptsKnowledgeFlowV1PromptsGetQuery(undefined, {
+  } = useListAllTagsKnowledgeFlowV1TagsGetQuery({ type: "document" as TagType}, {
     refetchOnMountOrArgChange: true,
   });
-  const [deletePrompt] = useDeletePromptKnowledgeFlowV1PromptsPromptIdDeleteMutation();
+  const [deleteTag] = useDeleteTagKnowledgeFlowV1TagsTagIdDeleteMutation();
 
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
@@ -116,7 +117,7 @@ export function AllPromptsList() {
 
   const handleDelete = async (id: string) => {
     handleMenuClose();
-    await deletePrompt({ promptId: id });
+    await deleteTag({ tagId: id });
     await refetchLibraries();
   };
 
@@ -129,7 +130,7 @@ export function AllPromptsList() {
           onClick={() => setIsCreateDrawerOpen(true)}
           sx={{ borderRadius: "8px" }}
         >
-          {t("promptLibrariesList.createLibrary")}
+          {t("documentLibrariesList.createLibrary")}
         </Button>
       </Box>
 
@@ -158,7 +159,7 @@ export function AllPromptsList() {
                       direction={sortBy === "name" ? sortDirection : "asc"}
                       onClick={() => handleSortChange("name")}
                     >
-                      {t("promptLibrariesList.libraryName")}
+                      {t("documentLibrariesList.libraryName")}
                     </TableSortLabel>
                   </TableCell>
                   <TableCell sx={{ fontWeight: 600 }}>
@@ -167,7 +168,7 @@ export function AllPromptsList() {
                       direction={sortBy === "documents" ? sortDirection : "asc"}
                       onClick={() => handleSortChange("documents")}
                     >
-                      {t("promptLibrariesList.prompts")}
+                      {t("documentLibrariesList.documents")}
                     </TableSortLabel>
                   </TableCell>
                   <TableCell sx={{ fontWeight: 600 }}>
@@ -176,17 +177,17 @@ export function AllPromptsList() {
                       direction={sortBy === "lastUpdate" ? sortDirection : "desc"}
                       onClick={() => handleSortChange("lastUpdate")}
                     >
-                      {t("promptLibrariesList.lastUpdate")}
+                      {t("documentLibrariesList.lastUpdate")}
                     </TableSortLabel>
                   </TableCell>
                   <TableCell sx={{ fontWeight: 600 }} align="right">
-                    {t("promptLibrariesList.actions")}
+                    {t("documentLibrariesList.actions")}
                   </TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {sortedLibraries.map((library) => (
-                  <PromptLibraryRow
+                  <DocumentLibraryRow
                     key={library.id}
                     library={library}
                     selected={selectedIds.includes(library.id)}
@@ -207,17 +208,17 @@ export function AllPromptsList() {
                 <ListItemIcon>
                   <DeleteIcon fontSize="small" />
                 </ListItemIcon>
-                <ListItemText>{t("promptLibrariesList.delete")}</ListItemText>
+                <ListItemText>{t("documentLibrariesList.delete")}</ListItemText>
               </MenuItem>
             </Menu>
           </TableContainer>
         ) : (
           <EmptyState
             icon={<FolderOpenIcon />}
-            title={t("promptLibrariesList.noLibrariesFound")}
-            description={t("promptLibrariesList.noLibrariesFoundDescription")}
+            title={t("documentLibrariesList.noLibrariesFound")}
+            description={t("documentLibrariesList.noLibrariesFoundDescription")}
             actionButton={{
-              label: t("promptLibrariesList.createLibrary"),
+              label: t("documentLibrariesList.createLibrary"),
               onClick: () => setIsCreateDrawerOpen(true),
               startIcon: <AddIcon />,
             }}
@@ -229,7 +230,7 @@ export function AllPromptsList() {
         isOpen={isCreateDrawerOpen}
         onClose={() => setIsCreateDrawerOpen(false)}
         onLibraryCreated={refetchLibraries}
-        mode="prompts"
+        mode="documents"
       />
     </>
   );
@@ -252,7 +253,7 @@ function formatLastUpdate(dateString: string): string {
   }
 }
 
-function PromptLibraryRow({
+function DocumentLibraryRow({
   library,
   selected,
   onToggleSelect,
@@ -293,8 +294,8 @@ function PromptLibraryRow({
       </TableCell>
       <TableCell>
         {documentCount < 2
-          ? t("promptLibrariesList.documentCountSingular", { count: documentCount })
-          : t("promptLibrariesList.documentCountPlural", { count: documentCount })}
+          ? t("documentLibrariesList.documentCountSingular", { count: documentCount })
+          : t("documentLibrariesList.documentCountPlural", { count: documentCount })}
       </TableCell>
       <TableCell>
         <Tooltip title={lastUpdateTooltip} arrow>

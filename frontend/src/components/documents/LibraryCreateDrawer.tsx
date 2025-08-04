@@ -19,7 +19,7 @@ import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import {
   useCreateTagKnowledgeFlowV1TagsPostMutation,
-  useCreatePromptKnowledgeFlowV1PromptsPostMutation,
+  TagType,
 } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { useToast } from "../ToastProvider";
 
@@ -35,7 +35,6 @@ export const LibraryCreateDrawer: React.FC<LibraryCreateDrawerProps> = ({ isOpen
   const { showError, showSuccess } = useToast();
   const navigate = useNavigate();
   const [createTag, { isLoading }] = useCreateTagKnowledgeFlowV1TagsPostMutation();
-  const [createPrompt, { isLoading: isPromptLoading }] = useCreatePromptKnowledgeFlowV1PromptsPostMutation();
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -65,7 +64,7 @@ export const LibraryCreateDrawer: React.FC<LibraryCreateDrawerProps> = ({ isOpen
         tagCreate: {
           name: name.trim(),
           description: description.trim() || null,
-          type: "library",
+          type: "document" as TagType,
           item_ids: [],
         },
       }).unwrap();
@@ -74,7 +73,7 @@ export const LibraryCreateDrawer: React.FC<LibraryCreateDrawerProps> = ({ isOpen
         tagCreate: {
           name: name.trim(),
           description: description.trim() || null,
-          type: "prompt",
+          type: "prompt" as TagType,
           item_ids: [],
         },
       }).unwrap();

@@ -134,11 +134,16 @@ const injectedRtkApi = api.injectEndpoints({
     rawSqlQuery: build.mutation<RawSqlQueryApiResponse, RawSqlQueryApiArg>({
       query: (queryArg) => ({ url: `/knowledge-flow/v1/tabular/sql`, method: "POST", body: queryArg.rawSqlRequest }),
     }),
-    listTagsKnowledgeFlowV1TagsGet: build.query<
-      ListTagsKnowledgeFlowV1TagsGetApiResponse,
-      ListTagsKnowledgeFlowV1TagsGetApiArg
+    listAllTagsKnowledgeFlowV1TagsGet: build.query<
+      ListAllTagsKnowledgeFlowV1TagsGetApiResponse,
+      ListAllTagsKnowledgeFlowV1TagsGetApiArg
     >({
-      query: () => ({ url: `/knowledge-flow/v1/tags` }),
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/tags`,
+        params: {
+          type: queryArg["type"],
+        },
+      }),
     }),
     createTagKnowledgeFlowV1TagsPost: build.mutation<
       CreateTagKnowledgeFlowV1TagsPostApiResponse,
@@ -168,18 +173,6 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/knowledge-flow/v1/tags/${queryArg.tagId}`, method: "DELETE" }),
     }),
-    listPromptsKnowledgeFlowV1PromptsGet: build.query<
-      ListPromptsKnowledgeFlowV1PromptsGetApiResponse,
-      ListPromptsKnowledgeFlowV1PromptsGetApiArg
-    >({
-      query: () => ({ url: `/knowledge-flow/v1/prompts` }),
-    }),
-    createPromptKnowledgeFlowV1PromptsPost: build.mutation<
-      CreatePromptKnowledgeFlowV1PromptsPostApiResponse,
-      CreatePromptKnowledgeFlowV1PromptsPostApiArg
-    >({
-      query: (queryArg) => ({ url: `/knowledge-flow/v1/prompts`, method: "POST", body: queryArg.prompt }),
-    }),
     getPromptKnowledgeFlowV1PromptsPromptIdGet: build.query<
       GetPromptKnowledgeFlowV1PromptsPromptIdGetApiResponse,
       GetPromptKnowledgeFlowV1PromptsPromptIdGetApiArg
@@ -196,11 +189,11 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.prompt,
       }),
     }),
-    deletePromptKnowledgeFlowV1PromptsPromptIdDelete: build.mutation<
-      DeletePromptKnowledgeFlowV1PromptsPromptIdDeleteApiResponse,
-      DeletePromptKnowledgeFlowV1PromptsPromptIdDeleteApiArg
+    createPromptKnowledgeFlowV1PromptsPost: build.mutation<
+      CreatePromptKnowledgeFlowV1PromptsPostApiResponse,
+      CreatePromptKnowledgeFlowV1PromptsPostApiArg
     >({
-      query: (queryArg) => ({ url: `/knowledge-flow/v1/prompts/${queryArg.promptId}`, method: "DELETE" }),
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/prompts`, method: "POST", body: queryArg.prompt }),
     }),
     searchDocumentsUsingVectorization: build.mutation<
       SearchDocumentsUsingVectorizationApiResponse,
@@ -328,8 +321,11 @@ export type RawSqlQueryApiResponse = /** status 200 Successful Response */ Tabul
 export type RawSqlQueryApiArg = {
   rawSqlRequest: RawSqlRequest;
 };
-export type ListTagsKnowledgeFlowV1TagsGetApiResponse = /** status 200 Successful Response */ TagWithItemsId[];
-export type ListTagsKnowledgeFlowV1TagsGetApiArg = void;
+export type ListAllTagsKnowledgeFlowV1TagsGetApiResponse = /** status 200 Successful Response */ TagWithItemsId[];
+export type ListAllTagsKnowledgeFlowV1TagsGetApiArg = {
+  /** Filter by tag type */
+  type?: TagType | null;
+};
 export type CreateTagKnowledgeFlowV1TagsPostApiResponse = /** status 200 Successful Response */ TagWithItemsId;
 export type CreateTagKnowledgeFlowV1TagsPostApiArg = {
   tagCreate: TagCreate;
@@ -347,26 +343,18 @@ export type DeleteTagKnowledgeFlowV1TagsTagIdDeleteApiResponse = unknown;
 export type DeleteTagKnowledgeFlowV1TagsTagIdDeleteApiArg = {
   tagId: string;
 };
-export type ListPromptsKnowledgeFlowV1PromptsGetApiResponse = /** status 200 Successful Response */ TagWithItemsId[];
-export type ListPromptsKnowledgeFlowV1PromptsGetApiArg = void;
-export type CreatePromptKnowledgeFlowV1PromptsPostApiResponse = /** status 200 Successful Response */ TagWithItemsId;
-export type CreatePromptKnowledgeFlowV1PromptsPostApiArg = {
-  prompt: Prompt;
-};
-export type GetPromptKnowledgeFlowV1PromptsPromptIdGetApiResponse =
-  /** status 200 Successful Response */ TagWithItemsId;
+export type GetPromptKnowledgeFlowV1PromptsPromptIdGetApiResponse = /** status 200 Successful Response */ Prompt;
 export type GetPromptKnowledgeFlowV1PromptsPromptIdGetApiArg = {
   promptId: string;
 };
-export type UpdatePromptKnowledgeFlowV1PromptsPromptIdPutApiResponse =
-  /** status 200 Successful Response */ TagWithItemsId;
+export type UpdatePromptKnowledgeFlowV1PromptsPromptIdPutApiResponse = /** status 200 Successful Response */ Prompt;
 export type UpdatePromptKnowledgeFlowV1PromptsPromptIdPutApiArg = {
   promptId: string;
   prompt: Prompt;
 };
-export type DeletePromptKnowledgeFlowV1PromptsPromptIdDeleteApiResponse = unknown;
-export type DeletePromptKnowledgeFlowV1PromptsPromptIdDeleteApiArg = {
-  promptId: string;
+export type CreatePromptKnowledgeFlowV1PromptsPostApiResponse = /** status 200 Successful Response */ TagWithItemsId;
+export type CreatePromptKnowledgeFlowV1PromptsPostApiArg = {
+  prompt: Prompt;
 };
 export type SearchDocumentsUsingVectorizationApiResponse = /** status 200 Successful Response */ DocumentSource[];
 export type SearchDocumentsUsingVectorizationApiArg = {
@@ -501,7 +489,7 @@ export type TabularQueryResponse = {
 export type RawSqlRequest = {
   query: string;
 };
-export type TagType = "library" | "prompt";
+export type TagType = "document" | "prompt";
 export type TagWithItemsId = {
   id: string;
   created_at: string;
@@ -608,20 +596,17 @@ export const {
   useGetAllSchemasQuery,
   useLazyGetAllSchemasQuery,
   useRawSqlQueryMutation,
-  useListTagsKnowledgeFlowV1TagsGetQuery,
-  useLazyListTagsKnowledgeFlowV1TagsGetQuery,
+  useListAllTagsKnowledgeFlowV1TagsGetQuery,
+  useLazyListAllTagsKnowledgeFlowV1TagsGetQuery,
   useCreateTagKnowledgeFlowV1TagsPostMutation,
   useGetTagKnowledgeFlowV1TagsTagIdGetQuery,
   useLazyGetTagKnowledgeFlowV1TagsTagIdGetQuery,
   useUpdateTagKnowledgeFlowV1TagsTagIdPutMutation,
   useDeleteTagKnowledgeFlowV1TagsTagIdDeleteMutation,
-  useListPromptsKnowledgeFlowV1PromptsGetQuery,
-  useLazyListPromptsKnowledgeFlowV1PromptsGetQuery,
-  useCreatePromptKnowledgeFlowV1PromptsPostMutation,
   useGetPromptKnowledgeFlowV1PromptsPromptIdGetQuery,
   useLazyGetPromptKnowledgeFlowV1PromptsPromptIdGetQuery,
   useUpdatePromptKnowledgeFlowV1PromptsPromptIdPutMutation,
-  useDeletePromptKnowledgeFlowV1PromptsPromptIdDeleteMutation,
+  useCreatePromptKnowledgeFlowV1PromptsPostMutation,
   useSearchDocumentsUsingVectorizationMutation,
   useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation,
   useScheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPostMutation,

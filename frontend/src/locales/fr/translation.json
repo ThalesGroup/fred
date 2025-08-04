@@ -278,6 +278,10 @@
     "no": "Non",
     "librairies": "Bibliothèques"
   },
+  "promptTable": {
+    "name": "nom",
+    "content": "contenu"
+  },
   "documentDrawerTable": {
     "deleteFile": "Supprimer le fichier"
   },

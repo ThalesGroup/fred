@@ -86,11 +86,15 @@
     }
   },
   "chatbot": {
+    "searchDocumentLibraries": "Search document libraries...",
+    "searchPromptLibraries": "Search prompt libraries...",
     "startNew": "Start a new conversation with {{name}}",
     "changeAssistant": "You can select another assistant in the settings panel.",
     "tooltip": {
       "tokenUsage": "This conversation has used {{input}} prompt tokens and {{output}} response tokens",
-      "tokenCount": "This conversation has used {{total}} tokens"
+      "tokenCount": "This conversation has used {{total}} tokens",
+      "selectDocumentLibraries": "Select the documents libraries to use in this conversation",
+      "selectPromptLibraries": "Select the prompt libraries to use in this conversation"
     }
   },
   "settings": {
@@ -277,6 +281,10 @@
     "yes": "Yes",
     "no": "No",
     "librairies": "Librairies"
+  },
+  "promptTable": {
+    "name": "name",
+    "content": "content"
   },
   "documentDrawerTable": {
     "deleteFile": "Delete file"

@@ -34,6 +34,7 @@ import { useTranslation } from "react-i18next";
 import { DOCUMENT_PROCESSING_STAGES, useUpdateDocumentRetrievableMutation } from "../../slices/documentApi";
 import {
   DocumentMetadata,
+  TagType,
   TagWithItemsId,
   useLazyGetTagKnowledgeFlowV1TagsTagIdGetQuery,
 } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
@@ -131,7 +132,7 @@ export const DocumentTable: React.FC<FileTableProps> = ({
                   created_at: "",
                   updated_at: "",
                   owner_id: "",
-                  type: "library",
+                  type: "document" as TagType, // Default to document type
                   item_ids: [],
                 };
               }),

@@ -187,13 +187,13 @@ export const useDocumentActions = (onRefreshData?: () => void) => {
   const defaultRowActions = [
     createPreviewAction(handleDocumentPreview, t),
     createDownloadAction(handleDownload, t),
-    createDeleteAction(handleDelete, t),
+    //createDeleteAction(handleDelete, t),
     createProcessAction((file) => handleProcess([file]), t),
     createScheduleAction((file) => handleSchedule([file]), t),
   ];
 
   const defaultBulkActions = [
-    createBulkDeleteAction(handleBulkDelete, t),
+    //createBulkDeleteAction(handleBulkDelete, t),
     createBulkDownloadAction(handleBulkDownload, t),
     createBulkProcessSyncAction((files) => handleProcess(files), t),
     createBulkScheduleAction((file) => handleSchedule(file), t), // Optional if your library supports bulk createScheduleAction
@@ -201,8 +201,8 @@ export const useDocumentActions = (onRefreshData?: () => void) => {
 
   return {
     // Individual handlers
-    handleDelete,
-    handleBulkDelete,
+    //handleDelete,
+    //handleBulkDelete,
     handleDownload,
     handleBulkDownload,
     handleDocumentPreview,

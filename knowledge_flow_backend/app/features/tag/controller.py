@@ -12,23 +12,26 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List
+from typing import Annotated, List
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.params import Query
 
 from app.core.stores.tags.base_tag_store import TagAlreadyExistsError, TagNotFoundError
 from app.features.metadata.service import MetadataNotFound
 from app.features.tag.service import TagService
-from app.features.tag.structure import TagCreate, TagUpdate, TagWithItemsId
+from app.features.tag.structure import TagCreate, TagUpdate, TagWithItemsId, TagType
 from fred_core import KeycloakUser, get_current_user
 
 logger = logging.getLogger(__name__)
 
-
 class TagController:
     """
     Controller for CRUD operations on Tag resource.
+    Tags are used to group various items like documents and prompts. 
+    The TagController provides endpoints to 
+    easily retrieve all tags together with the contained items.
     """
 
     def __init__(self, router: APIRouter):
@@ -53,10 +56,16 @@ class TagController:
         self._register_routes(router, handle_exception)
 
     def _register_routes(self, router: APIRouter, handle_exception):
-        @router.get("/tags", response_model=List[TagWithItemsId], tags=["Tag"], summary="List all tags")
-        async def list_tags(user: KeycloakUser = Depends(get_current_user)):
+
+        @router.get("/tags", response_model=List[TagWithItemsId], 
+                    tags=["Tag"], 
+                    summary="List all tags with item identifiers, you can filter by type to return only prompts or documents tags")
+        async def list_all_tags(
+            type: Annotated[TagType | None, Query(description="Filter by tag type")] = None,
+            user: KeycloakUser = Depends(get_current_user),
+        ) -> List[TagWithItemsId]:
             try:
-                return self.service.list_document_tags_for_user(user)
+                return self.service.list_all_tags_for_user(user, tag_type=type)
             except Exception as e:
                 raise handle_exception(e)
 

@@ -56,7 +56,8 @@ export default function UserInput({
   const [userInput, setUserInput] = useState<string>("");
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [filesBlob, setFilesBlob] = useState<File[] | null>(null);
-  const [selectedLibrariesIds, setSelectedLibrariesIds] = useState<string[]>([]);
+  const [selectedDocumentLibrariesIds, setSelectedDocumentLibrariesIds] = useState<string[]>([]);
+  const [selectedPromptLibrariesIds, setSelectedPromptLibrariesIds] = useState<string[]>([]);
 
   const handleKeyDown = (event: React.KeyboardEvent) => {
     if (event.key === "Enter") {
@@ -293,8 +294,15 @@ export default function UserInput({
 
               {/* Chat Libraries Selection */}
               <ChatLibrariesSelection
-                selectedLibrariesIds={selectedLibrariesIds}
-                setSelectedLibrariesIds={setSelectedLibrariesIds}
+                selectedLibrariesIds={selectedDocumentLibrariesIds}
+                setSelectedLibrariesIds={setSelectedDocumentLibrariesIds}
+                libraryType="document" 
+              />
+              {/* Chat Libraries Selection */}
+              <ChatLibrariesSelection
+                selectedLibrariesIds={selectedPromptLibrariesIds}
+                setSelectedLibrariesIds={setSelectedPromptLibrariesIds}
+                libraryType="prompt" 
               />
 
               {/* Audio Record Button */}

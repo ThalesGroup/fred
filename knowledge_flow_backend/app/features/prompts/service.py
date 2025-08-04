@@ -13,16 +13,19 @@
 # limitations under the License.
 
 from datetime import datetime
+import logging
 from uuid import uuid4
 from typing import List
 
 from app.application_context import ApplicationContext
+from app.core.stores.prompts.base_prompt_store import PromptNotFoundError
 from app.core.stores.tags.base_tag_store import TagNotFoundError
 from app.features.prompts.structure import Prompt
 from fred_core import KeycloakUser
 
-from app.features.tag.structure import TagType, TagWithItemsId
+from app.features.tag.structure import TagWithItemsId
 
+logger = logging.getLogger(__name__)
 
 class PromptService:
     """
@@ -34,35 +37,40 @@ class PromptService:
         self._prompt_store = context.get_prompt_store()
         self._tag_store = context.get_tag_store()
 
-    def list_all_prompts(self, user: KeycloakUser) -> List[TagWithItemsId]:
-        tags = self._tag_store.list_tags_for_user(user, TagType.PROMPT)
-        prompt_list = self._prompt_store.list_prompts_for_user(user.uid)
+    def get_prompt_in_tag(self, tag_id: str) -> list[Prompt]:
+        """
+        Return all prompt entries associated with a specific tag.
+        """
+        try:
+            return self._prompt_store.get_prompt_in_tag(tag_id)
+        
+        except PromptNotFoundError:
+            return []
+        
+        except Exception as e:
+            logger.error(f"Error retrieving metadata for tag {tag_id}: {e}")
+            raise
+    
+    # def list_all_prompt_tags(self, user: KeycloakUser) -> List[TagWithItemsId]:
+    #     tags = self._tag_store.list_tags_for_user(user)
+    #     prompt_list = self._prompt_store.list_prompts_for_user(user.uid)
 
-        prompts_by_tag = {}
-        for prompt in prompt_list:
-            for tag_id in prompt.tags:
-                prompts_by_tag.setdefault(tag_id, []).append(prompt)
+    #     prompts_by_tag = {}
+    #     for prompt in prompt_list:
+    #         for tag_id in prompt.tags:
+    #             prompts_by_tag.setdefault(tag_id, []).append(prompt)
 
-        result = []
-        for tag in tags:
-            if tag.type.value != "prompt":
-                continue
-            prompts = prompts_by_tag.get(tag.id, [])
-            prompt_ids = [p.id for p in prompts]
-            result.append(TagWithItemsId.from_tag(tag, prompt_ids))
-        return result
+    #     result = []
+    #     for tag in tags:
+    #         if tag.type.value != "prompt":
+    #             continue
+    #         prompts = prompts_by_tag.get(tag.id, [])
+    #         prompt_ids = [p.id for p in prompts]
+    #         result.append(TagWithItemsId.from_tag(tag, prompt_ids))
+    #     return result
 
-    def get_prompt_for_user(self, prompt_id: str, user: KeycloakUser) -> TagWithItemsId:
-        prompt = self._prompt_store.get_prompt_by_id(prompt_id)
-        # Optional: assert ownership / access control
-        tag_ids = prompt.tags
-        tags = [self._tag_store.get_tag_by_id(tid) for tid in tag_ids if self._tag_store.get_tag_by_id(tid).type.value == "prompt"]
-
-        if not tags:
-            raise ValueError(f"No associated prompt library tag found for prompt '{prompt_id}'")
-
-        tag = tags[0]  # Assuming one prompt library
-        return TagWithItemsId.from_tag(tag, [prompt_id])
+    def get_prompt_for_user(self, prompt_id: str, user: KeycloakUser) -> Prompt:
+        return self._prompt_store.get_prompt_by_id(prompt_id)
 
     def create_prompt_for_user(self, prompt_data: Prompt, user: KeycloakUser) -> TagWithItemsId:
         now = datetime.now()
@@ -89,11 +97,76 @@ class PromptService:
 
     def update_prompt_for_user(self, prompt_id: str, 
                                prompt_data: Prompt, 
-                               user: KeycloakUser) -> TagWithItemsId:
-       raise ValueError("Not Implemented: Update operation for prompts is not supported yet.")
+                               user: KeycloakUser) -> Prompt:
+        try:
+            existing_prompt = self._prompt_store.get_prompt_by_id(prompt_id)
+            if existing_prompt.owner_id != user.uid:
+                raise PermissionError("User does not have permission to update this prompt.")
 
-    def delete_prompt_for_user(self, tag_id: str, user: KeycloakUser) -> None:
-        # Todo: check if user is authorized
+            updated_prompt = Prompt(
+                id=prompt_id,
+                name=prompt_data.name,
+                content=prompt_data.content,
+                description=prompt_data.description,
+                tags=prompt_data.tags,
+                owner_id=user.uid,
+                created_at=existing_prompt.created_at,
+                updated_at=datetime.now(),
+            )
 
-        # Remove the tag ID from all documents that have this tag
-        raise ValueError("Not Implemented: Delete operation for prompts is not supported yet.")
+            return self._prompt_store.update_prompt(prompt_id, updated_prompt)
+        except PromptNotFoundError:
+            raise PromptNotFoundError(f"Prompt with id '{prompt_id}' not found.")
+        except Exception as e:
+            logger.error(f"Failed to update prompt '{prompt_id}': {e}")
+            raise
+
+    def remove_tag_from_prompt(self, prompt_id: str, tag_id: str) -> None:
+        """
+        Remove a tag from a prompt.
+        """
+        try:
+            prompt = self._prompt_store.get_prompt_by_id(prompt_id)
+            if tag_id in prompt.tags:
+                prompt.tags.remove(tag_id)
+                # if there is no more tags, we can remove the prompt
+                if not prompt.tags:
+                    self._prompt_store.delete_prompt(prompt_id)
+                    logger.info(f"Prompt '{prompt_id}' deleted as it has no tags left.")
+                else:
+                    # Update the prompt with the remaining tags
+                    prompt.updated_at = datetime.now()
+                    self._prompt_store.update_prompt(prompt_id, prompt)
+                    logger.info(f"Removed tag '{tag_id}' from prompt '{prompt_id}'")
+            else:
+                logger.error(f"Tag '{tag_id}' not found in prompt '{prompt_id}'")
+        except PromptNotFoundError:
+            raise
+        except Exception as e:
+            logger.error(f"Failed to remove tag '{tag_id}' from prompt '{prompt_id}': {e}")
+            raise   
+
+    def add_tag_to_prompt(self, prompt_id: str, tag_id: str) -> None:
+        """
+        Add a tag to a prompt.
+        """
+        try:
+            prompt = self._prompt_store.get_prompt_by_id(prompt_id)
+            if tag_id in prompt.tags:
+                prompt.tags.remove(tag_id)
+                # if there is no more tags, we can remove the prompt
+                if not prompt.tags:
+                    self._prompt_store.delete_prompt(prompt_id)
+                    logger.info(f"Prompt '{prompt_id}' deleted as it has no tags left.")
+                else:
+                    # Update the prompt with the remaining tags
+                    prompt.updated_at = datetime.now()
+                    self._prompt_store.update_prompt(prompt_id, prompt)
+                    logger.info(f"Removed tag '{tag_id}' from prompt '{prompt_id}'")
+            else:
+                logger.error(f"Tag '{tag_id}' not found in prompt '{prompt_id}'")
+        except PromptNotFoundError:
+            raise
+        except Exception as e:
+            logger.error(f"Failed to remove tag '{tag_id}' from prompt '{prompt_id}': {e}")
+            raise  

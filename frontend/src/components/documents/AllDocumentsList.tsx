@@ -54,7 +54,7 @@ import { useToast } from "../ToastProvider";
 import { DocumentTable } from "./DocumentTable";
 import { DocumentUploadDrawer } from "./DocumentUploadDrawer";
 import { useDocumentSources } from "../../hooks/useDocumentSources";
-import { useLibraries } from "../../hooks/useLibraries";
+import { useDocumentTags } from "../../hooks/useDocumentTags";
 
 interface DocumentsViewProps {}
 
@@ -66,8 +66,8 @@ export const AllDocumentsList = ({}: DocumentsViewProps) => {
   // API Hooks
   const [browseDocuments, { isLoading }] = useBrowseDocumentsKnowledgeFlowV1DocumentsBrowsePostMutation();
   const { sources: allSources } = useDocumentSources();
-  const { tags: allLibraries } = useLibraries();
-  const tagMap = new Map(allLibraries.map((tag) => [tag.id, tag.name]));
+  const { tags: allDocumentLibraries } = useDocumentTags();
+  const tagMap = new Map(allDocumentLibraries.map((tag) => [tag.id, tag.name]));
 
   const [rescanCatalogSource] = useRescanCatalogSourceMutation();
 
@@ -239,7 +239,7 @@ export const AllDocumentsList = ({}: DocumentsViewProps) => {
                     input={<OutlinedInput label="Library" />}
                     renderValue={(selected) => selected.map((id) => tagMap.get(id) ?? id).join(", ")}
                   >
-                    {allLibraries.map((tag) => (
+                    {allDocumentLibraries.map((tag) => (
                       <MenuItem key={tag.id} value={tag.id}>
                         <Checkbox checked={selectedLibrary.includes(tag.id)} />
                         <ListItemText primary={tag.name} />

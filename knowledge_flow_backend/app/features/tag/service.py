@@ -18,6 +18,8 @@ from uuid import uuid4
 from app.application_context import ApplicationContext
 from app.common.document_structures import DocumentMetadata
 from app.features.metadata.service import MetadataService
+from app.features.prompts.service import PromptService
+from app.features.prompts.structure import Prompt
 from app.features.tag.structure import Tag, TagCreate, TagType, TagUpdate, TagWithItemsId
 from fred_core import KeycloakUser
 
@@ -32,23 +34,55 @@ class TagService:
         self._tag_store = context.get_tag_store()
 
         self.document_metadata_service = MetadataService()
+        self.prompt_service = PromptService()
 
-    def list_document_tags_for_user(self, user: KeycloakUser) -> list[TagWithItemsId]:
+    def list_all_tags_for_user(self, user: KeycloakUser, tag_type: TagType | None) -> list[TagWithItemsId]:
+        """
+        List all tags for a user, optionally filtered by tag type.
+        Args:
+            user (KeycloakUser): The user for whom to list tags.
+            tag_type (TagType | None): Optional filter for tag type (e.g., DOCUMENT, PROMPT).
+        Returns:
+            List[TagWithItemsId]: A list of tags with associated item IDs.
+        """
         # Todo: check if user is authorized
 
-        tags = self._tag_store.list_tags_for_user(user, TagType.LIBRARY)
-        tag_with_documents = []
-        for tag in tags:
-            document_ids = self._retrieve_document_ids_for_tag(tag.id)
-            tag_with_documents.append(TagWithItemsId.from_tag(tag, document_ids))
-        return tag_with_documents
+        tags = self._tag_store.list_tags_for_user(user)
+        tag_with_ids = []
 
+        for tag in tags:
+            if tag_type is None or tag.type == tag_type:
+                if tag.type == TagType.DOCUMENT:
+                    item_ids = self._retrieve_document_ids_for_tag(tag.id)
+                elif tag.type == TagType.PROMPT:
+                    item_ids = self._retrieve_prompt_ids_for_tag(tag.id)
+                else:
+                    raise ValueError(f"Unsupported tag type: {tag.type}")
+                tag_with_ids.append(TagWithItemsId.from_tag(tag, item_ids))
+
+        return tag_with_ids
+    
     def get_tag_for_user(self, tag_id: str, user: KeycloakUser) -> TagWithItemsId:
+        """
+        Get a specific tag by ID for a user.
+        Args:
+            tag_id (str): The ID of the tag to retrieve.
+            user (KeycloakUser): The user for whom to retrieve the tag. 
+        Returns:
+            TagWithItemsId: The tag with associated item IDs.
+        Raises:
+            TagNotFoundError: If the tag does not exist.
+        """
         # Todo: check if user is authorized
 
         tag = self._tag_store.get_tag_by_id(tag_id)
-        document_ids = self._retrieve_document_ids_for_tag(tag_id)
-        return TagWithItemsId.from_tag(tag, document_ids)
+        if tag.type == TagType.DOCUMENT:
+            item_ids = self._retrieve_document_ids_for_tag(tag_id)
+        elif tag.type == TagType.PROMPT:
+            item_ids = self._retrieve_prompt_ids_for_tag(tag_id)
+        else:
+            raise ValueError(f"Unsupported tag type: {tag.type}")
+        return TagWithItemsId.from_tag(tag, item_ids)
 
     def create_tag_for_user(self, tag_data: TagCreate, user: KeycloakUser) -> TagWithItemsId:
         # Todo: check if user is authorized to create tags
@@ -82,45 +116,60 @@ class TagService:
     def update_tag_for_user(self, tag_id: str, tag_data: TagUpdate, user: KeycloakUser) -> TagWithItemsId:
         # Todo: check if user is authorized
 
-        # Retrieve existing document IDs from the tag
-        old_document_ids = self._retrieve_document_ids_for_tag(tag_id)
-
-        # Compute the difference in document IDs
-        added, removed = self._compute_document_ids_diff(old_document_ids, tag_data.item_ids)
-
-        # Retrieve docs that need change + Check that added document ids are valid
-        added_documents = self._retrieve_documents_metadata(added)
-        removed_documents = self._retrieve_documents_metadata(removed)
-
-        for doc in added_documents:
-            self._add_tag_id_to_document(doc, tag_id)
-
-        for doc in removed_documents:
-            self._remove_tag_id_from_document(doc, tag_id)
-
-        # Retrieve the existing tag
         tag = self._tag_store.get_tag_by_id(tag_id)
 
-        # Update tag with input data
+        if tag.type == TagType.DOCUMENT:
+            old_item_ids = self._retrieve_document_ids_for_tag(tag_id)
+            added, removed = self._compute_document_ids_diff(old_item_ids, tag_data.item_ids)
+
+            added_documents = self._retrieve_documents_metadata(added)
+            removed_documents = self._retrieve_documents_metadata(removed)
+
+            for doc in added_documents:
+                self._add_tag_id_to_document(doc, tag_id)
+
+            for doc in removed_documents:
+                self._remove_tag_id_from_document(doc, tag_id)
+
+
+        elif tag.type == TagType.PROMPT:
+            old_item_ids = self._retrieve_prompt_ids_for_tag(tag_id)
+            added, removed = self._compute_document_ids_diff(old_item_ids, tag_data.item_ids)
+
+            for prompt_id in added:
+                self.prompt_service.add_tag_to_prompt(prompt_id, tag_id)
+
+            for prompt_id in removed:
+                self.prompt_service.remove_tag_from_prompt(prompt_id, tag_id)
+
+        # Update the tag metadata
         tag.name = tag_data.name
         tag.description = tag_data.description
-        tag.type = tag_data.type
-        # tag.document_ids = tag_data.document_ids
-        # Update the updated_at timestamp
         tag.updated_at = datetime.now()
-
         updated_tag = self._tag_store.update_tag_by_id(tag_id, tag)
         return TagWithItemsId.from_tag(updated_tag, tag_data.item_ids)
 
     def delete_tag_for_user(self, tag_id: str, user: KeycloakUser) -> None:
         # Todo: check if user is authorized
+        tag = self._tag_store.get_tag_by_id(tag_id)
 
-        # Remove the tag ID from all documents that have this tag
-        documents = self._retrieve_documents_for_tag(tag_id)
-        for doc in documents:
-            self._remove_tag_id_from_document(doc, tag_id)
-
-        return self._tag_store.delete_tag_by_id(tag_id)
+        if tag.type == TagType.DOCUMENT:
+            # Remove the tag ID from all documents that have this tag
+            documents = self._retrieve_documents_for_tag(tag_id)
+            for doc in documents:
+                self._remove_tag_id_from_document(doc, tag_id)
+        elif tag.type == TagType.PROMPT:
+            # Remove the tag from all prompts that have this tag
+            prompts = self._retrieve_prompts_for_tag(tag_id)
+            for prompt in prompts:
+                self.prompt_service.remove_tag_from_prompt(prompt.id, tag_id)   
+        else:
+            raise ValueError(f"Unsupported tag type: {tag.type}")
+        # Finally, delete the tag itself
+        try:
+            self._tag_store.delete_tag_by_id(tag_id)
+        except Exception as e:
+            raise ValueError(f"Failed to delete tag '{tag_id}': {e}")
 
     def update_tag_timestamp(self, tag_id: str) -> None:
         """
@@ -139,12 +188,25 @@ class TagService:
         """
         return self.document_metadata_service.get_document_metadata_in_tag(tag_id)
 
+    def _retrieve_prompts_for_tag(self, tag_id: str) -> list[Prompt]:
+        """
+        Retrieve the prompts associated with a tag.
+        """
+        return self.prompt_service.get_prompt_in_tag(tag_id)
+       
     def _retrieve_document_ids_for_tag(self, tag_id: str) -> list[str]:
         """
         Retrieve the document IDs associated with a tag.
         """
         documents = self._retrieve_documents_for_tag(tag_id)
         return [doc.document_uid for doc in documents]
+
+    def _retrieve_prompt_ids_for_tag(self, tag_id: str) -> list[str]:
+        """
+        Retrieve the document IDs associated with a tag.
+        """
+        prompts = self._retrieve_prompts_for_tag(tag_id)
+        return [prompt.id for prompt in prompts]
 
     def _retrieve_documents_metadata(self, document_ids: list[str]) -> list[DocumentMetadata]:
         """
@@ -155,6 +217,9 @@ class TagService:
             # If document id doesn't exist, a `MetadataNotFound` exception will be raised
             metadata.append(self.document_metadata_service.get_document_metadata(doc_id))
         return metadata
+
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    # Helper methods for tag ID management in documents
 
     @staticmethod
     def _compute_document_ids_diff(before: list[str], after: list[str]) -> tuple[list[str], list[str]]:

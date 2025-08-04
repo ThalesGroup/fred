@@ -85,14 +85,14 @@ class OpenSearchTagStore(BaseTagStore):
         else:
             logger.info(f"[TAGS] OpenSearch index '{self.index_name}' already exists.")
 
-    def list_tags_for_user(self, user: KeycloakUser, tag_type: TagType) -> List[Tag]:
+    def list_tags_for_user(self, user: KeycloakUser) -> List[Tag]:
         try:
             query = {
                 "query": {
                     "bool": {
                         "must": [
-                            {"term": {"owner_id": user.uid}},
-                            {"term": {"type": tag_type.value}},
+                            {"term": {"owner_id": user.uid}}
+                            # {"term": {"type": tag_type.value}},
                         ]
                     }
                 }
