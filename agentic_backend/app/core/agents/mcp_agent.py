@@ -80,7 +80,9 @@ class MCPAgent(AgentFlow):
     def get_graph(self):
         builder = StateGraph(MessagesState)
         builder.add_node("reasoner", self.reasoner)
-        assert self.toolkit is not None, "Toolkit must be initialized before building graph"
+        assert self.toolkit is not None, (
+            "Toolkit must be initialized before building graph"
+        )
         builder.add_node("tools", ToolNode(self.toolkit.get_tools()))
         builder.add_edge(START, "reasoner")
         builder.add_conditional_edges("reasoner", tools_condition)

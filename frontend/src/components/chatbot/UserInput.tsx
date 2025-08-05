@@ -23,11 +23,14 @@ import StopIcon from "@mui/icons-material/Stop";
 import AudioController from "./AudioController.tsx";
 import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
 import Chip from "@mui/material/Chip";
+import { ChatLibrariesSelection } from "./ChatLibrariesSelection";
 
 export interface UserInputContent {
   text?: string;
   audio?: Blob;
   files?: File[];
+  documentLibraryIds?: string[];
+  promptLibraryIds?: string[];
 }
 
 export default function UserInput({
@@ -55,6 +58,8 @@ export default function UserInput({
   const [userInput, setUserInput] = useState<string>("");
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [filesBlob, setFilesBlob] = useState<File[] | null>(null);
+  const [selectedDocumentLibrariesIds, setSelectedDocumentLibrariesIds] = useState<string[]>([]);
+  const [selectedPromptLibrariesIds, setSelectedPromptLibrariesIds] = useState<string[]>([]);
 
   const handleKeyDown = (event: React.KeyboardEvent) => {
     if (event.key === "Enter") {
@@ -288,6 +293,19 @@ export default function UserInput({
                   </Badge>
                 </Tooltip>
               )}
+
+              {/* Chat Libraries Selection */}
+              <ChatLibrariesSelection
+                selectedLibrariesIds={selectedDocumentLibrariesIds}
+                setSelectedLibrariesIds={setSelectedDocumentLibrariesIds}
+                libraryType="document" 
+              />
+              {/* Chat Libraries Selection */}
+              <ChatLibrariesSelection
+                selectedLibrariesIds={selectedPromptLibrariesIds}
+                setSelectedLibrariesIds={setSelectedPromptLibrariesIds}
+                libraryType="prompt" 
+              />
 
               {/* Audio Record Button */}
               {enableAudioAttachment && (

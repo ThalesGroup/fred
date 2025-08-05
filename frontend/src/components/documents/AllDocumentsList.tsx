@@ -43,11 +43,7 @@ import RefreshIcon from "@mui/icons-material/Refresh";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { KeyCloakService } from "../../security/KeycloakService";
-import {
-  DOCUMENT_PROCESSING_STAGES,
-  useGetDocumentSourcesQuery,
-  useRescanCatalogSourceMutation,
-} from "../../slices/documentApi";
+import { DOCUMENT_PROCESSING_STAGES, useRescanCatalogSourceMutation } from "../../slices/documentApi";
 import {
   DocumentMetadata,
   useBrowseDocumentsKnowledgeFlowV1DocumentsBrowsePostMutation,
@@ -57,6 +53,8 @@ import { TableSkeleton } from "../TableSkeleton";
 import { useToast } from "../ToastProvider";
 import { DocumentTable } from "./DocumentTable";
 import { DocumentUploadDrawer } from "./DocumentUploadDrawer";
+import { useDocumentSources } from "../../hooks/useDocumentSources";
+import { useDocumentTags } from "../../hooks/useDocumentTags";
 
 interface DocumentsViewProps {}
 
@@ -67,17 +65,20 @@ export const AllDocumentsList = ({}: DocumentsViewProps) => {
 
   // API Hooks
   const [browseDocuments, { isLoading }] = useBrowseDocumentsKnowledgeFlowV1DocumentsBrowsePostMutation();
-  const { data: allSources } = useGetDocumentSourcesQuery();
+  const { sources: allSources } = useDocumentSources();
+  const { tags: allDocumentLibraries } = useDocumentTags();
+  const tagMap = new Map(allDocumentLibraries.map((tag) => [tag.id, tag.name]));
+
   const [rescanCatalogSource] = useRescanCatalogSourceMutation();
 
   // UI States
-  const [documentsPerPage, setDocumentsPerPage] = useState(10);
+  const [documentsPerPage, setDocumentsPerPage] = useState(20);
   const [currentPage, setCurrentPage] = useState(1);
   const [openUploadDrawer, setOpenUploadDrawer] = useState(false);
   const [selectedSourceTag, setSelectedSourceTag] = useState<string | null>(null);
 
   // Filter states (moved from DocumentLibrary)
-  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [selectedLibrary, setSelectLibraries] = useState<string[]>([]);
   const [selectedStages, setSelectedStages] = useState<string[]>([]);
   const [searchableFilter, setSearchableFilter] = useState<"all" | "true" | "false">("all");
   const [searchQuery, setSearchQuery] = useState("");
@@ -116,7 +117,7 @@ export const AllDocumentsList = ({}: DocumentsViewProps) => {
     if (!selectedSourceTag) return;
     const filters = {
       ...(searchQuery ? { document_name: searchQuery } : {}),
-      ...(selectedTags.length > 0 ? { tags: selectedTags } : {}),
+      ...(selectedLibrary.length > 0 ? { tags: selectedLibrary } : {}),
       ...(selectedStages.length > 0
         ? {
             processing_stages: Object.fromEntries(selectedStages.map((stage) => [stage, "done"])),
@@ -131,12 +132,14 @@ export const AllDocumentsList = ({}: DocumentsViewProps) => {
           filters,
           offset: (currentPage - 1) * documentsPerPage,
           limit: documentsPerPage,
+          sort_by: [
+            { field: "document_name", direction: "asc" }
+          ],
         },
       }).unwrap();
 
-      const docs = response.documents;
       setTotalDocCount(response.total);
-      setAllDocuments(docs);
+      setAllDocuments(response.documents);
     } catch (error) {
       console.error("Error fetching documents:", error);
       showError({
@@ -157,7 +160,7 @@ export const AllDocumentsList = ({}: DocumentsViewProps) => {
 
   useEffect(() => {
     fetchFiles();
-  }, [selectedSourceTag, searchQuery, selectedTags, selectedStages, searchableFilter, currentPage, documentsPerPage]);
+  }, [selectedSourceTag, searchQuery, selectedLibrary, selectedStages, searchableFilter, currentPage, documentsPerPage]);
 
   const handleUploadComplete = async () => {
     await fetchFiles();
@@ -230,18 +233,18 @@ export const AllDocumentsList = ({}: DocumentsViewProps) => {
               {/* Tags filter */}
               <Grid2 size={{ xs: 4 }}>
                 <FormControl fullWidth size="small">
-                  <InputLabel>Tags</InputLabel>
+                  <InputLabel>Library</InputLabel>
                   <Select
                     multiple
-                    value={selectedTags}
-                    onChange={(e) => setSelectedTags(e.target.value as string[])}
-                    input={<OutlinedInput label="Tags" />}
-                    renderValue={(selected) => selected.join(", ")}
+                    value={selectedLibrary}
+                    onChange={(e) => setSelectLibraries(e.target.value as string[])}
+                    input={<OutlinedInput label="Library" />}
+                    renderValue={(selected) => selected.map((id) => tagMap.get(id) ?? id).join(", ")}
                   >
-                    {Array.from(new Set(allDocuments.flatMap((doc) => doc.tags || []))).map((tag) => (
-                      <MenuItem key={tag} value={tag}>
-                        <Checkbox checked={selectedTags.includes(tag)} />
-                        <ListItemText primary={tag} />
+                    {allDocumentLibraries.map((tag) => (
+                      <MenuItem key={tag.id} value={tag.id}>
+                        <Checkbox checked={selectedLibrary.includes(tag.id)} />
+                        <ListItemText primary={tag.name} />
                       </MenuItem>
                     ))}
                   </Select>
@@ -355,7 +358,7 @@ export const AllDocumentsList = ({}: DocumentsViewProps) => {
             />
             <Box display="flex" alignItems="center" mt={3} justifyContent="space-between">
               <Pagination
-                count={Math.ceil(allDocuments.length / documentsPerPage)}
+                count={Math.ceil((totalDocCount ?? 0) / documentsPerPage)}
                 page={currentPage}
                 onChange={(_, value) => setCurrentPage(value)}
                 color="primary"

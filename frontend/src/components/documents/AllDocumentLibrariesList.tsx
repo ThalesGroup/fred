@@ -26,22 +26,23 @@ import dayjs from "dayjs";
 import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
-  TagWithDocumentsId,
+  TagWithItemsId,
+  useListAllTagsKnowledgeFlowV1TagsGetQuery,
   useDeleteTagKnowledgeFlowV1TagsTagIdDeleteMutation,
-  useListTagsKnowledgeFlowV1TagsGetQuery,
+  TagType,
 } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { EmptyState } from "../EmptyState";
 import InvisibleLink from "../InvisibleLink";
 import { TableSkeleton } from "../TableSkeleton";
 import { LibraryCreateDrawer } from "./LibraryCreateDrawer";
 
-export function AllLibrariesList() {
+export function AllDocumentLibrariesList() {
   const { t } = useTranslation();
   const {
     data: libraries,
     refetch: refetchLibraries,
     isLoading,
-  } = useListTagsKnowledgeFlowV1TagsGetQuery(undefined, {
+  } = useListAllTagsKnowledgeFlowV1TagsGetQuery({ type: "document" as TagType}, {
     refetchOnMountOrArgChange: true,
   });
   const [deleteTag] = useDeleteTagKnowledgeFlowV1TagsTagIdDeleteMutation();
@@ -75,8 +76,8 @@ export function AllLibrariesList() {
           bVal = b.name.toLowerCase();
           break;
         case "documents":
-          aVal = a.document_ids ? a.document_ids.length : 0;
-          bVal = b.document_ids ? b.document_ids.length : 0;
+          aVal = a.item_ids ? a.item_ids.length : 0;
+          bVal = b.item_ids ? b.item_ids.length : 0;
           break;
         case "lastUpdate":
         default:
@@ -229,6 +230,7 @@ export function AllLibrariesList() {
         isOpen={isCreateDrawerOpen}
         onClose={() => setIsCreateDrawerOpen(false)}
         onLibraryCreated={refetchLibraries}
+        mode="documents"
       />
     </>
   );
@@ -257,13 +259,13 @@ function DocumentLibraryRow({
   onToggleSelect,
   onMenuOpen,
 }: {
-  library: TagWithDocumentsId;
+  library: TagWithItemsId;
   selected: boolean;
   onToggleSelect: () => void;
   onMenuOpen: (event: React.MouseEvent<HTMLElement>, id: string) => void;
 }) {
   const { t } = useTranslation();
-  const documentCount = library.document_ids ? library.document_ids.length : 0;
+  const documentCount = library.item_ids ? library.item_ids.length : 0;
   const lastUpdateLabel = formatLastUpdate(library.updated_at);
   const lastUpdateTooltip = new Date(library.updated_at).toLocaleString();
 
@@ -276,7 +278,7 @@ function DocumentLibraryRow({
         <Tooltip title={library.description || ""}>
           <span>
             <InvisibleLink
-              to={`/documentLibrary/${library.id}`}
+              to={library.type === "prompt" ? `/promptLibrary/${library.id}` : `/documentLibrary/${library.id}`}
               style={{
                 display: "inline-flex",
                 alignItems: "center",

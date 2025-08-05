@@ -27,7 +27,13 @@ import requests
 
 from app.core.agents.flow import AgentFlow
 from app.core.session.attachement_processing import AttachementProcessing
-from app.core.chatbot.chat_schema import ChatMessagePayload, SessionSchema, SessionWithFiles, clean_agent_metadata, clean_token_usage
+from app.core.chatbot.chat_schema import (
+    ChatMessagePayload,
+    SessionSchema,
+    SessionWithFiles,
+    clean_agent_metadata,
+    clean_token_usage,
+)
 from app.core.chatbot.chatbot_utils import enrich_ChatMessagePayloads_with_latencies
 from app.core.session.stores.abstract_session_backend import AbstractSessionStorage
 

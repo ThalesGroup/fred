@@ -34,7 +34,7 @@ class InMemorySessionStorage(AbstractSessionStorage, AbstractSecuredResourceAcce
 
     def get_authorized_user_id(
         self, session_id: str
-    ) -> str | None | AuthorizationSentinel:
+    ) -> str | AuthorizationSentinel:
         session = self.sessions.get(session_id)
         if session is None:
             return SESSION_NOT_INITIALIZED
@@ -57,7 +57,7 @@ class InMemorySessionStorage(AbstractSessionStorage, AbstractSecuredResourceAcce
         return [s for s in self.sessions.values() if s.user_id == user_id]
 
     @authorization_required
-    def get_session(self, session_id: str, user_id: str) -> SessionSchema:
+    def get_session(self, session_id: str, user_id: str) -> SessionSchema | None:
         if session_id not in self.sessions:
             return None
         return self.sessions[session_id]

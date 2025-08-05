@@ -37,7 +37,7 @@ class PullDocumentController:
     def _register_routes(self, router: APIRouter):
         @router.get(
             "/pull/documents",
-            tags=["Library Pull"],
+            tags=["Documents"],
             response_model=PullDocumentsResponse,
             summary="List documents available from a pull-mode source",
             description=(

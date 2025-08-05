@@ -4,13 +4,13 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   TagUpdate,
-  TagWithDocumentsId,
+  TagWithItemsId,
   useUpdateTagKnowledgeFlowV1TagsTagIdPutMutation,
 } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { useToast } from "../ToastProvider";
 
 interface LibraryInfoCardProps {
-  library: TagWithDocumentsId;
+  library: TagWithItemsId;
   hasEditPermission: boolean;
   onLibraryUpdated: () => void;
 }
@@ -39,7 +39,7 @@ export const LibraryInfoCard = ({ library, hasEditPermission, onLibraryUpdated }
         name: editForm.name,
         description: editForm.description || null,
         type: library.type,
-        document_ids: library.document_ids,
+        item_ids: library.item_ids,
       };
 
       await updateTag({ tagId: library.id, tagUpdate }).unwrap();

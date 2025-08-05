@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import logging
-from typing import List, Optional
+from typing import List
 from opensearchpy import OpenSearch, RequestsHttpConnection
 from app.core.session.stores.abstract_session_backend import AbstractSessionStorage
 from app.core.session.stores.abstract_user_authentication_backend import (
@@ -33,8 +33,8 @@ class OpensearchSessionStorage(AbstractSessionStorage, AbstractSecuredResourceAc
         host: str,
         sessions_index: str,
         history_index: str,
-        username: str = None,
-        password: str = None,
+        username: str,
+        password: str,
         secure: bool = False,
         verify_certs: bool = False,
     ):
@@ -58,7 +58,7 @@ class OpensearchSessionStorage(AbstractSessionStorage, AbstractSecuredResourceAc
 
     def get_authorized_user_id(
         self, session_id: str
-    ) -> str | None | AuthorizationSentinel:
+    ) -> str | AuthorizationSentinel:
         try:
             session = self.client.get(index=self.sessions_index, id=session_id)
             return session["_source"].get("user_id")
@@ -78,7 +78,7 @@ class OpensearchSessionStorage(AbstractSessionStorage, AbstractSecuredResourceAc
             raise
 
     @authorization_required
-    def get_session(self, session_id: str, user_id: str) -> Optional[SessionSchema]:
+    def get_session(self, session_id: str, user_id: str) -> SessionSchema | None:
         try:
             response = self.client.get(index=self.sessions_index, id=session_id)
             session_data = response["_source"]
@@ -103,7 +103,8 @@ class OpensearchSessionStorage(AbstractSessionStorage, AbstractSecuredResourceAc
         try:
             query = {"query": {"term": {"user_id.keyword": {"value": user_id}}}}
             response = self.client.search(
-                index=self.sessions_index, body=query, size=1000
+                params={"size": 10000},
+                index=self.sessions_index, body=query
             )
             sessions = [
                 SessionSchema(**hit["_source"]) for hit in response["hits"]["hits"]
@@ -151,7 +152,7 @@ class OpensearchSessionStorage(AbstractSessionStorage, AbstractSecuredResourceAc
                 "sort": [{"rank": {"order": "asc", "unmapped_type": "integer"}}],
                 "size": 1000,
             }
-            response = self.client.search(index=self.history_index, body=query)
+            response = self.client.search(index=self.history_index, body=query,  params={"size": 10000})
             return [
                 ChatMessagePayload(**hit["_source"]) for hit in response["hits"]["hits"]
             ]

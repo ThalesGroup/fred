@@ -40,14 +40,6 @@
                     "endColumn": 52,
                     "lineCount": 1
                 }
-            },
-            {
-                "code": "reportOptionalMemberAccess",
-                "range": {
-                    "startColumn": 56,
-                    "endColumn": 65,
-                    "lineCount": 1
-                }
             }
         ],
         "./app/agents/generalist/generalist_expert.py": [
@@ -384,22 +376,6 @@
                 "range": {
                     "startColumn": 31,
                     "endColumn": 56,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportOptionalMemberAccess",
-                "range": {
-                    "startColumn": 43,
-                    "endColumn": 52,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportOptionalMemberAccess",
-                "range": {
-                    "startColumn": 40,
-                    "endColumn": 47,
                     "lineCount": 1
                 }
             },
@@ -1168,14 +1144,6 @@
                     "endColumn": 47,
                     "lineCount": 1
                 }
-            },
-            {
-                "code": "reportOptionalMemberAccess",
-                "range": {
-                    "startColumn": 56,
-                    "endColumn": 65,
-                    "lineCount": 1
-                }
             }
         ],
         "./app/core/chatbot/chat_schema.py": [
@@ -1438,76 +1406,6 @@
                 "range": {
                     "startColumn": 46,
                     "endColumn": 58,
-                    "lineCount": 1
-                }
-            }
-        ],
-        "./app/core/monitoring/base_hybrid_store.py": [
-            {
-                "code": "reportAttributeAccessIssue",
-                "range": {
-                    "startColumn": 18,
-                    "endColumn": 27,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportAttributeAccessIssue",
-                "range": {
-                    "startColumn": 39,
-                    "endColumn": 48,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportAttributeAccessIssue",
-                "range": {
-                    "startColumn": 17,
-                    "endColumn": 26,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportAttributeAccessIssue",
-                "range": {
-                    "startColumn": 47,
-                    "endColumn": 56,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportArgumentType",
-                "range": {
-                    "startColumn": 12,
-                    "endColumn": 28,
-                    "lineCount": 1
-                }
-            }
-        ],
-        "./app/core/monitoring/metric_controller_factory.py": [
-            {
-                "code": "reportInvalidTypeForm",
-                "range": {
-                    "startColumn": 45,
-                    "endColumn": 65,
-                    "lineCount": 1
-                }
-            }
-        ],
-        "./app/core/monitoring/tool_monitoring/tool_metric_store.py": [
-            {
-                "code": "reportCallIssue",
-                "range": {
-                    "startColumn": 12,
-                    "endColumn": 13,
-                    "lineCount": 6
-                }
-            },
-            {
-                "code": "reportCallIssue",
-                "range": {
-                    "startColumn": 16,
-                    "endColumn": 25,
                     "lineCount": 1
                 }
             }

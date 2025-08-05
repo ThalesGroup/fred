@@ -104,7 +104,7 @@ class IngestionController:
 
         @router.post(
             "/upload-documents",
-            tags=["Library Ingestion"],
+            tags=["Processing"],
             summary="Upload documents only — defer processing to backend (e.g., Temporal)",
         )
         def upload_documents_sync(
@@ -153,7 +153,7 @@ class IngestionController:
 
         @router.post(
             "/upload-process-documents",
-            tags=["Library Ingestion"],
+            tags=["Processing"],
             summary="Upload and process documents immediately (end-to-end)",
             description="Ingest and process one or more documents synchronously in a single step.",
         )
