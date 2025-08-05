@@ -1,6 +1,7 @@
 from app.core.chatbot.chat_schema import ChatMessagePayload
 from datetime import datetime
 
+
 def truncate_datetime(dt: datetime, precision: str) -> datetime:
     if precision == "minute":
         return dt.replace(second=0, microsecond=0)

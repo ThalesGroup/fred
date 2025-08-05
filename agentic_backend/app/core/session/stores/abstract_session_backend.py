@@ -14,9 +14,12 @@
 
 from typing import List, Dict
 from abc import ABC, abstractmethod
-from datetime import datetime
 
-from app.core.chatbot.chat_schema import ChatMessagePayload, SessionSchema, MetricsResponse
+from app.core.chatbot.chat_schema import (
+    ChatMessagePayload,
+    SessionSchema,
+    MetricsResponse,
+)
 
 
 class AbstractSessionStorage(ABC):

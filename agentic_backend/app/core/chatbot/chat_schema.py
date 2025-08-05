@@ -86,7 +86,7 @@ class ChatMessagePayload(BaseModel):
             ]
         self.metadata.update(extra)
         return self
-    
+
 
 class MetricsBucket(BaseModel):
     timestamp: str  # truncated timestamp (per precision)

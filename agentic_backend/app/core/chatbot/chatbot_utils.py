@@ -77,11 +77,12 @@ def enrich_ChatMessagePayloads_with_latencies(
 
     return enriched_list
 
+
 def parse_date(date_str: str) -> datetime:
     try:
         return datetime.fromisoformat(date_str)
     except ValueError:
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid date format: '{date_str}'. Expected ISO 8601 format (e.g., '2025-08-04T15:00:00')."
+            detail=f"Invalid date format: '{date_str}'. Expected ISO 8601 format (e.g., '2025-08-04T15:00:00').",
         )

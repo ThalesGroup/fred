@@ -545,7 +545,7 @@ class SessionManager:
         except Exception as e:
             logger.exception(e)
             raise RuntimeError("Failed to store uploaded file.")
-        
+
     def get_metrics(
         self,
         start: str,
@@ -561,6 +561,5 @@ class SessionManager:
             precision=precision,
             groupby=groupby,
             agg_mapping=agg_mapping,
-            user_id=user_id)
-
-
+            user_id=user_id,
+        )

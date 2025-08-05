@@ -359,9 +359,7 @@ class FeedbackStorage(BaseModel):
     )
 
 
-FeedbackStorageConfig = Annotated[
-    Union[FeedbackStorage], Field(discriminator="type")
-]
+FeedbackStorageConfig = Annotated[Union[FeedbackStorage], Field(discriminator="type")]
 
 # ----------------------------------------------------------------------
 # Other configurations
@@ -382,10 +380,12 @@ class FrontendFlags(BaseModel):
 class Properties(BaseModel):
     logoName: str = "fred"
 
+
 class FrontendSettings(BaseModel):
     feature_flags: FrontendFlags
     properties: Properties
     security: SecurityConfiguration
+
 
 class AppConfig(BaseModel):
     name: Optional[str] = "Agentic Backend"

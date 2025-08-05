@@ -23,7 +23,11 @@ from app.core.session.stores.abstract_user_authentication_backend import (
     AbstractSecuredResourceAccess,
 )
 from app.core.session.session_manager import SessionSchema
-from app.core.chatbot.chat_schema import ChatMessagePayload, MetricsBucket, MetricsResponse
+from app.core.chatbot.chat_schema import (
+    ChatMessagePayload,
+    MetricsBucket,
+    MetricsResponse,
+)
 from app.core.session.stores.utils import flatten_message, truncate_datetime
 from app.common.error import AuthorizationSentinel, SESSION_NOT_INITIALIZED
 from app.common.utils import authorization_required
@@ -36,9 +40,7 @@ class InMemorySessionStorage(AbstractSessionStorage, AbstractSecuredResourceAcce
         self.sessions: Dict[str, SessionSchema] = {}
         self.history: Dict[str, List[ChatMessagePayload]] = {}
 
-    def get_authorized_user_id(
-        self, session_id: str
-    ) -> str | AuthorizationSentinel:
+    def get_authorized_user_id(self, session_id: str) -> str | AuthorizationSentinel:
         session = self.sessions.get(session_id)
         if session is None:
             return SESSION_NOT_INITIALIZED
@@ -129,25 +131,26 @@ class InMemorySessionStorage(AbstractSessionStorage, AbstractSecuredResourceAcce
             for field, ops in agg_mapping.items():
                 values = [row.get(field) for row in group if row.get(field) is not None]
                 if not values:
-                        continue
+                    continue
                 for op in ops:
                     match op:
                         case "sum":
-                            aggs[field+"_sum"] = sum(values)
+                            aggs[field + "_sum"] = sum(values)
                         case "min":
-                            aggs[field+"_min"] = min(values)
+                            aggs[field + "_min"] = min(values)
                         case "max":
-                            aggs[field+"_max"] = max(values)
+                            aggs[field + "_max"] = max(values)
                         case "mean":
-                            aggs[field+"_mean"] = mean(values)
+                            aggs[field + "_mean"] = mean(values)
                         case "values":
-                            aggs[field+"_values"] = values
+                            aggs[field + "_values"] = values
                         case _:
                             raise ValueError(f"Unsupported aggregation op: {op}")
 
-            buckets.append(MetricsBucket(timestamp=timestamp, group=group_values, aggregations=aggs))
+            buckets.append(
+                MetricsBucket(
+                    timestamp=timestamp, group=group_values, aggregations=aggs
+                )
+            )
 
         return MetricsResponse(precision=precision, buckets=buckets)
-
-
-

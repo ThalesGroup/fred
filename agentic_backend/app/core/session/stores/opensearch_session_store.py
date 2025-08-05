@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import logging
-from typing import List, Optional, Dict
+from typing import List, Dict
 from dateutil.parser import isoparse
 from collections import defaultdict
 from statistics import mean
@@ -23,7 +23,11 @@ from app.core.session.stores.abstract_user_authentication_backend import (
     AbstractSecuredResourceAccess,
 )
 from app.core.session.session_manager import SessionSchema
-from app.core.chatbot.chat_schema import ChatMessagePayload, MetricsResponse, MetricsBucket
+from app.core.chatbot.chat_schema import (
+    ChatMessagePayload,
+    MetricsResponse,
+    MetricsBucket,
+)
 from app.core.session.stores.utils import flatten_message, truncate_datetime
 from app.common.utils import authorization_required
 from app.common.error import AuthorizationSentinel, SESSION_NOT_INITIALIZED
@@ -60,9 +64,7 @@ class OpensearchSessionStorage(AbstractSessionStorage, AbstractSecuredResourceAc
             else:
                 logger.debug(f"Opensearch index '{index}' already exists.")
 
-    def get_authorized_user_id(
-        self, session_id: str
-    ) -> str | AuthorizationSentinel:
+    def get_authorized_user_id(self, session_id: str) -> str | AuthorizationSentinel:
         try:
             session = self.client.get(index=self.sessions_index, id=session_id)
             return session["_source"].get("user_id")
@@ -107,8 +109,7 @@ class OpensearchSessionStorage(AbstractSessionStorage, AbstractSecuredResourceAc
         try:
             query = {"query": {"term": {"user_id.keyword": {"value": user_id}}}}
             response = self.client.search(
-                params={"size": 10000},
-                index=self.sessions_index, body=query
+                params={"size": 10000}, index=self.sessions_index, body=query
             )
             sessions = [
                 SessionSchema(**hit["_source"]) for hit in response["hits"]["hits"]
@@ -156,14 +157,15 @@ class OpensearchSessionStorage(AbstractSessionStorage, AbstractSecuredResourceAc
                 "sort": [{"rank": {"order": "asc", "unmapped_type": "integer"}}],
                 "size": 1000,
             }
-            response = self.client.search(index=self.history_index, body=query,  params={"size": 10000})
+            response = self.client.search(
+                index=self.history_index, body=query, params={"size": 10000}
+            )
             return [
                 ChatMessagePayload(**hit["_source"]) for hit in response["hits"]["hits"]
             ]
         except Exception as e:
             logger.error(f"Failed to retrieve messages for session {session_id}: {e}")
             return []
-        
 
     def get_metrics(
         self,
@@ -174,7 +176,6 @@ class OpensearchSessionStorage(AbstractSessionStorage, AbstractSecuredResourceAc
         agg_mapping: Dict[str, List[str]],
         precision: str,
     ) -> MetricsResponse:
-
         try:
             # 1. Search messages in date range
             query = {
@@ -183,7 +184,7 @@ class OpensearchSessionStorage(AbstractSessionStorage, AbstractSecuredResourceAc
                         "timestamp": {
                             "gte": start,
                             "lte": end,
-                            "format": "strict_date_optional_time"
+                            "format": "strict_date_optional_time",
                         }
                     }
                 },
@@ -213,36 +214,40 @@ class OpensearchSessionStorage(AbstractSessionStorage, AbstractSecuredResourceAc
 
             # 4. Aggregate
             buckets = []
-            
+
             for key, group in grouped.items():
                 bucket_time = key[0]
                 group_fields = {field: value for field, value in zip(groupby, key[1:])}
                 aggs = {}
 
                 for field, ops in agg_mapping.items():
-                    values = [row.get(field) for row in group if row.get(field) is not None]
+                    values = [
+                        row.get(field) for row in group if row.get(field) is not None
+                    ]
                     if not values:
-                            continue
+                        continue
                     for op in ops:
                         match op:
                             case "sum":
-                                aggs[field+"_sum"] = sum(values)
+                                aggs[field + "_sum"] = sum(values)
                             case "min":
-                                aggs[field+"_min"] = min(values)
+                                aggs[field + "_min"] = min(values)
                             case "max":
-                                aggs[field+"_max"] = max(values)
+                                aggs[field + "_max"] = max(values)
                             case "mean":
-                                aggs[field+"_mean"] = mean(values)
+                                aggs[field + "_mean"] = mean(values)
                             case "values":
-                                aggs[field+"_values"] = values
+                                aggs[field + "_values"] = values
                             case _:
                                 raise ValueError(f"Unsupported aggregation op: {op}")
 
                 buckets.append(
                     MetricsBucket(
-                        timestamp=bucket_time if isinstance(bucket_time, str) else bucket_time.isoformat(),
+                        timestamp=bucket_time
+                        if isinstance(bucket_time, str)
+                        else bucket_time.isoformat(),
                         group=group_fields,
-                        aggregations=aggs
+                        aggregations=aggs,
                     )
                 )
 
@@ -251,4 +256,3 @@ class OpensearchSessionStorage(AbstractSessionStorage, AbstractSecuredResourceAc
         except Exception as e:
             logger.error(f"Failed to compute metrics: {e}")
             return MetricsResponse(precision=precision, buckets=[])
-
