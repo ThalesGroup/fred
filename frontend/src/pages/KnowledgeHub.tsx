@@ -15,59 +15,56 @@
 import { Box, Button, ButtonGroup, Container } from "@mui/material";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { TopBar } from "../common/TopBar";
-import { AllDocumentsList } from "../components/documents/AllDocumentsList";
 import { AllDocumentLibrariesList } from "../components/documents/AllDocumentLibrariesList";
+import { AllDocumentsList } from "../components/documents/AllDocumentsList";
+import InvisibleLink from "../components/InvisibleLink";
 import { AllPromptLibrariesList } from "../components/prompts/AllPromptLibrariesList";
 
-type KnowledgeHubView = "prompts" | "operations" | "documents";
+const knowledgeHubViews = ["prompts", "operations", "documents"] as const;
+type KnowledgeHubView = (typeof knowledgeHubViews)[number];
+
+function isKnowledgeHubView(value: string): value is KnowledgeHubView {
+  return (knowledgeHubViews as readonly string[]).includes(value);
+}
 
 const defaultView: KnowledgeHubView = "documents";
 
 export const KnowledgeHub = () => {
   const { t } = useTranslation();
-  const navigate = useNavigate();
+
   const [searchParams, setSearchParams] = useSearchParams();
-
   const viewParam = searchParams.get("view");
-
-  const isValidView = (v: string | null): v is KnowledgeHubView =>
-    v === "prompts" || v === "documents" || v === "operations";
-
-  const selectedView: KnowledgeHubView = isValidView(viewParam) ? viewParam : defaultView;
+  const selectedView: KnowledgeHubView = isKnowledgeHubView(viewParam) ? viewParam : defaultView;
 
   // Ensure a default view in URL if missing
   useEffect(() => {
-  if (!isValidView(viewParam)) {
-    setSearchParams({ view: String(defaultView) }, { replace: true });
-  }
-}, [viewParam, setSearchParams]);
-
+    if (!isKnowledgeHubView(viewParam)) {
+      setSearchParams({ view: String(defaultView) }, { replace: true });
+    }
+  }, [viewParam, setSearchParams]);
 
   return (
     <>
       <TopBar title={t("knowledge.title")} description={t("knowledge.description")}>
         <Box>
           <ButtonGroup variant="outlined" color="primary" size="small">
-            <Button
-              variant={selectedView === "prompts" ? "contained" : "outlined"}
-              onClick={() => navigate("/knowledge?view=prompts")}
-            >
-              {t("knowledge.viewSelector.prompts")}
-            </Button>
-            <Button
-              variant={selectedView === "documents" ? "contained" : "outlined"}
-              onClick={() => navigate("/knowledge?view=documents")}
-            >
-              {t("knowledge.viewSelector.documents")}
-            </Button>
-            <Button
-              variant={selectedView === "operations" ? "contained" : "outlined"}
-              onClick={() => navigate("/knowledge?view=operations")}
-            >
-              {t("knowledge.viewSelector.operations")}
-            </Button>
+            <InvisibleLink to="/knowledge?view=prompts">
+              <Button variant={selectedView === "prompts" ? "contained" : "outlined"}>
+                {t("knowledge.viewSelector.prompts")}
+              </Button>
+            </InvisibleLink>
+            <InvisibleLink to="/knowledge?view=documents">
+              <Button variant={selectedView === "documents" ? "contained" : "outlined"}>
+                {t("knowledge.viewSelector.documents")}
+              </Button>
+            </InvisibleLink>
+            <InvisibleLink to="/knowledge?view=operations">
+              <Button variant={selectedView === "operations" ? "contained" : "outlined"}>
+                {t("knowledge.viewSelector.operations")}
+              </Button>
+            </InvisibleLink>
           </ButtonGroup>
         </Box>
       </TopBar>

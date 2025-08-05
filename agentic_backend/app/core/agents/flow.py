@@ -12,12 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional
-from IPython.display import Image
 import logging
-from langgraph.graph.state import CompiledStateGraph, StateGraph
-from langgraph.checkpoint.memory import MemorySaver
+from typing import Optional
+
+from IPython.display import Image
 from langchain_core.tools import BaseToolkit
+from langgraph.checkpoint.memory import MemorySaver
+from langgraph.graph.state import CompiledStateGraph, StateGraph
+
+from app.core.agents.runtime_context import RuntimeContext
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +39,7 @@ class Flow:
         self.graph: StateGraph | None = graph
         self.streaming_memory: MemorySaver = MemorySaver()
         self.compiled_graph: CompiledStateGraph | None = None
+        self.runtime_context: Optional[RuntimeContext] = None
 
     def get_compiled_graph(self) -> CompiledStateGraph:
         """
@@ -55,6 +59,14 @@ class Flow:
         graph = Image(compiled_graph.get_graph().draw_mermaid_png())
         with open(f"{path}/{self.name}.png", "wb") as f:
             f.write(graph.data)
+
+    def set_runtime_context(self, context: RuntimeContext) -> None:
+        """Set the runtime context for this flow."""
+        self.runtime_context = context
+
+    def get_runtime_context(self) -> Optional[RuntimeContext]:
+        """Get the current runtime context."""
+        return self.runtime_context
 
     def __str__(self) -> str:
         return f"{self.name}: {self.description}"
@@ -125,6 +137,7 @@ class AgentFlow:
         self.streaming_memory = MemorySaver()
         self.compiled_graph: Optional[CompiledStateGraph] = None
         self.toolkit = toolkit
+        self.runtime_context: Optional[RuntimeContext] = None
 
     def get_compiled_graph(self) -> CompiledStateGraph:
         """
@@ -148,6 +161,14 @@ class AgentFlow:
         graph = Image(compiled_graph.get_graph().draw_mermaid_png())
         with open(f"{path}/{self.name}.png", "wb") as f:
             f.write(graph.data)
+
+    def set_runtime_context(self, context: RuntimeContext) -> None:
+        """Set the runtime context for this agent."""
+        self.runtime_context = context
+
+    def get_runtime_context(self) -> Optional[RuntimeContext]:
+        """Get the current runtime context."""
+        return self.runtime_context
 
     def __str__(self) -> str:
         """String representation of the agent."""

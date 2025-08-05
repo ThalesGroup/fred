@@ -27,9 +27,8 @@ import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   TagWithItemsId,
-  useListAllTagsKnowledgeFlowV1TagsGetQuery,
   useDeleteTagKnowledgeFlowV1TagsTagIdDeleteMutation,
-  TagType,
+  useListAllTagsKnowledgeFlowV1TagsGetQuery,
 } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { EmptyState } from "../EmptyState";
 import InvisibleLink from "../InvisibleLink";
@@ -42,9 +41,12 @@ export function AllDocumentLibrariesList() {
     data: libraries,
     refetch: refetchLibraries,
     isLoading,
-  } = useListAllTagsKnowledgeFlowV1TagsGetQuery({ type: "document" as TagType}, {
-    refetchOnMountOrArgChange: true,
-  });
+  } = useListAllTagsKnowledgeFlowV1TagsGetQuery(
+    { type: "document" },
+    {
+      refetchOnMountOrArgChange: true,
+    },
+  );
   const [deleteTag] = useDeleteTagKnowledgeFlowV1TagsTagIdDeleteMutation();
 
   const [selectedIds, setSelectedIds] = useState<string[]>([]);

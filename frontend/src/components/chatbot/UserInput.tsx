@@ -13,16 +13,16 @@
 // limitations under the License.
 
 // User input component for the chatbot
-import { Badge, Grid2, IconButton, InputBase, Tooltip, useTheme } from "@mui/material";
 import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
 import AttachFileIcon from "@mui/icons-material/AttachFile";
 import MicIcon from "@mui/icons-material/Mic";
-import React, { useRef, useState } from "react";
-import AudioRecorder from "./AudioRecorder.tsx";
 import StopIcon from "@mui/icons-material/Stop";
-import AudioController from "./AudioController.tsx";
 import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
+import { Badge, Grid2, IconButton, InputBase, Tooltip, useTheme } from "@mui/material";
 import Chip from "@mui/material/Chip";
+import React, { useRef, useState } from "react";
+import AudioController from "./AudioController.tsx";
+import AudioRecorder from "./AudioRecorder.tsx";
 import { ChatLibrariesSelection } from "./ChatLibrariesSelection";
 
 export interface UserInputContent {
@@ -81,10 +81,14 @@ export default function UserInput({
     console.log("Text user input : ", userInput);
     console.log("Audio blob : ", audioBlob);
     console.log("Files blob : ", filesBlob);
+    console.log("Selected document libraries : ", selectedDocumentLibrariesIds);
+    console.log("Selected prompt libraries : ", selectedPromptLibrariesIds);
     onSend({
       text: userInput,
       audio: audioBlob,
       files: filesBlob,
+      documentLibraryIds: selectedDocumentLibrariesIds,
+      promptLibraryIds: selectedPromptLibrariesIds,
     });
     setUserInput("");
     setAudioBlob(null);
@@ -298,13 +302,13 @@ export default function UserInput({
               <ChatLibrariesSelection
                 selectedLibrariesIds={selectedDocumentLibrariesIds}
                 setSelectedLibrariesIds={setSelectedDocumentLibrariesIds}
-                libraryType="document" 
+                libraryType="document"
               />
               {/* Chat Libraries Selection */}
               <ChatLibrariesSelection
                 selectedLibrariesIds={selectedPromptLibrariesIds}
                 setSelectedLibrariesIds={setSelectedPromptLibrariesIds}
-                libraryType="prompt" 
+                libraryType="prompt"
               />
 
               {/* Audio Record Button */}

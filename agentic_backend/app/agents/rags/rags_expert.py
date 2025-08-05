@@ -12,20 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from datetime import datetime
 import logging
 from typing import List, Dict, Any, Optional
+from datetime import datetime
 
-from app.common.structures import AgentSettings
-from app.core.model.model_factory import get_model
 import requests
 from requests import Response
 from langchain_core.messages import SystemMessage, AIMessage
 from langgraph.graph import END, StateGraph
 from langchain.prompts import ChatPromptTemplate
 
-from app.core.agents.flow import AgentFlow
 from app.common.document_source import DocumentSource
+from app.common.structures import AgentSettings
+from app.core.agents.flow import AgentFlow
+from app.core.agents.runtime_context import get_document_libraries_ids
 from app.core.chatbot.chat_schema import ChatSource
 from app.agents.rags.structures import (
     GradeDocumentsOutput,
@@ -34,6 +34,7 @@ from app.agents.rags.structures import (
     RagGraphState
 )
 
+from app.core.model.model_factory import get_model
 
 logger = logging.getLogger(__name__)
 
@@ -165,12 +166,19 @@ class RagsExpert(AgentFlow):
             top_k = self.TOP_K + 3 * retry_count
 
         try:
-            logger.info(f"📥 Retrieving with question: {question} | top_k: {top_k}")
+            # Build the request payload
+            request_data = {"query": question, "top_k": 3}
 
-            response: Response = requests.post(
+            # Add tags from runtime context if available
+            library_ids = get_document_libraries_ids(self.get_runtime_context())
+            if library_ids:
+                request_data["tags"] = library_ids
+                logger.info(f"RagsExpert filtering by libraries: {library_ids}")
+
+            response = requests.post(
                 f"{self.knowledge_flow_url}/vector/search",
-                json={"query": question, "top_k": top_k},
-                timeout=30,
+                json=request_data,
+                timeout=10,
             )
             response.raise_for_status()
             documents_data = response.json()

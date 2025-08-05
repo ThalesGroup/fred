@@ -12,10 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { Grid2 } from "@mui/material";
 import "dayjs/locale/en-gb";
 import { useEffect, useState } from "react";
-import { Grid2 } from "@mui/material";
 
+import { useSearchParams } from "react-router-dom";
 import LoadingWithProgress from "../components/LoadingWithProgress.tsx";
 import ChatBot from "../components/chatbot/ChatBot.tsx";
 import { Settings } from "../components/chatbot/Settings.tsx";
@@ -25,7 +26,6 @@ import {
   useGetChatbotSessionsMutation,
 } from "../slices/chatApi.tsx";
 import { SessionSchema } from "../slices/chatApiStructures.ts";
-import { useSearchParams } from "react-router-dom";
 
 export interface AgenticFlow {
   name: string;
@@ -159,7 +159,9 @@ export const Chat = () => {
           agenticFlows={agenticFlows}
           onUpdateOrAddSession={handleUpdateOrAddSession}
           isCreatingNewConversation={isCreatingNewConversation}
-          argument={cluster}
+          runtimeContext={{
+            cluster,
+          }}
         />
       </Grid2>
       <Grid2 size="auto">

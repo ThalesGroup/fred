@@ -95,10 +95,9 @@ class OpenSearchVectorStoreAdapter(BaseVectoreStore):
             logger.exception("❌ Failed to add documents to OpenSearch.")
             raise RuntimeError("Unexpected error during vector indexing.") from e
 
-    def similarity_search_with_score(
-        self, query: str, k: int = 5, documents_ids: Iterable[str] | None = None
-    ) -> List[Tuple[Document, float]]:
+    def similarity_search_with_score(self, query: str, k: int = 5, documents_ids: Iterable[str] | None = None) -> List[Tuple[Document, float]]:
         if documents_ids:
+            # Create OpenSearch filter to only retrieve vectors with a `metadata.document_uid` in `documents_ids`
             boolean_filter = {"terms": {"metadata.document_uid": list(documents_ids)}}
             logger.debug("Using boolean_filter with vector search: %s", boolean_filter)
             results = self.opensearch_vector_search.similarity_search_with_score(query, k=k, boolean_filter=boolean_filter)
