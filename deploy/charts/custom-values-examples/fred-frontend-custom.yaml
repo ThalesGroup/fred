@@ -15,15 +15,15 @@ ingress:
         - fred.dev.fred.thalesgroup.com
 
 config:
-  backendUrlApi: "http://fred-backend.dev.fred.thalesgroup.com"
-  backendUrlKnowledge: "http://knowledge-flow-backend.dev.fred.thalesgroup.com"
-  websocketUrl: "ws://fred-backend.dev.fred.thalesgroup.com/fred/chatbot/query"
+  backendUrlApi: "https://agentic-backend.dev.fred.thalesgroup.com"
+  backendUrlKnowledge: "https://knowledge-flow-backend.dev.fred.thalesgroup.com"
+  websocketUrl: "ws://agentic-backend.dev.fred.thalesgroup.com/fred/chatbot/query"
 
 env:
   - name: VITE_ALLOWED_HOSTS
     value: "fred.dev.fred.thalesgroup.com"
   - name: VITE_BACKEND_URL_KNOWLEDGE
-    value: "http://knowledge-flow-backend.dev.fred.thalesgroup.com"
+    value: "https://knowledge-flow-backend.dev.fred.thalesgroup.com"
   - name: VITE_USE_AUTH
     value: "true"
 

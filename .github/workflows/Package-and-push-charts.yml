@@ -36,6 +36,11 @@ jobs:
       - name: Check out the repo
         uses: actions/checkout@v4
 
+      - name: Install yq
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y yq
+
       - name: Setup Helm
         uses: azure/setup-helm@v3
 
@@ -55,7 +60,23 @@ jobs:
           images: dummy                   # We do not care about the image, we just want the version
           tags: |
             type=match,pattern=chart/(v.*),group=1
-      
+
+      - name: Extract image.tag from values.yaml
+        id: image_tag
+        run: |
+          IMAGE_TAG=$(yq eval '.image.tag' ${{ matrix.chart_path }}/values.yaml)
+          echo "Extracted image tag: $IMAGE_TAG"
+          echo "image_tag=$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+      - name: Inject version and appVersion into Chart.yaml
+        run: |
+          CHART_FILE="${{ matrix.chart_path }}/Chart.yaml"
+          RAW_VERSION="${{ steps.meta.outputs.version }}"
+          VERSION="${RAW_VERSION#v}"                                      # get rid of "v" in the beginning of tag
+          APP_VERSION="${{ steps.image_tag.outputs.image_tag }}"
+          echo "Injecting version=$VERSION and appVersion=$APP_VERSION into $CHART_FILE"
+          yq eval ".version = \"$VERSION\" | .appVersion = \"$APP_VERSION\"" -i "$CHART_FILE"
+
       - name: Package chart ${{ matrix.name }}
         run: |
           echo "Packaging ${{ matrix.name }} chart with version ${{steps.meta.outputs.version}}"

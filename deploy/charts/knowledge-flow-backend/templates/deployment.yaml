@@ -155,15 +155,28 @@ spec:
           {{- end }}
 
 # Configure ports if ".Values.env.enabled" egal "true"  
-          {{- if .Values.env.enabled }}  
+
+
+        {{- if .Values.env.enabled }}
           env:
-              {{- if .Values.env.data }}
-{{ toYaml .Values.env.data | indent 12 }}              
-              {{- end }}
-              {{- if .Values.env.databuild }}
-{{ toYaml .Values.env.databuild | indent 12 }}              
-              {{- end }}
+            # Base
+            {{- range .Values.env.data }}
+          - name: {{ .name }}
+            value: {{ .value | quote }}
+           {{- end }}
+  # Additional variables
+          {{- if .Values.env.extraEnvVars }}
+            {{- range .Values.env.extraEnvVars }}
+          - name: {{ .name }}
+            value: {{ .value | quote }}
+            {{- end }}
           {{- end }}
+        {{- end }}
+
+
+
+
+          
 
 {{- if .Values.envFrom }}
  {{- if .Values.envFrom.enabled }}
