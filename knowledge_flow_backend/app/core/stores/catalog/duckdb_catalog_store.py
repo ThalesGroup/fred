@@ -15,7 +15,7 @@
 from pathlib import Path
 from typing import List
 from fred_core.store.duckdb_store import DuckDBTableStore
-from app.core.stores.metadata.base_catalog_store import PullFileEntry
+from app.core.stores.catalog.base_catalog_store import PullFileEntry
 
 
 class DuckdbCatalogStore:

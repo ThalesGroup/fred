@@ -15,7 +15,7 @@
 import { useTranslation } from "react-i18next";
 import {
   ProcessDocumentsRequest,
-  useDeleteDocumentMutation,
+  // useDeleteDocumentMutation,
   useLazyGetDocumentRawContentQuery,
   useProcessDocumentsMutation,
   useScheduleDocumentsMutation,
@@ -24,11 +24,11 @@ import { DocumentMetadata } from "../../slices/knowledgeFlow/knowledgeFlowOpenAp
 import { downloadFile } from "../../utils/downloadUtils";
 import { useToast } from "../ToastProvider";
 import {
-  createBulkDeleteAction,
+  //createBulkDeleteAction,
   createBulkDownloadAction,
   createBulkProcessSyncAction,
   createBulkScheduleAction,
-  createDeleteAction,
+  //createDeleteAction,
   createDownloadAction,
   createPreviewAction,
   createProcessAction,
@@ -40,62 +40,61 @@ export const useDocumentActions = (onRefreshData?: () => void) => {
   const { t } = useTranslation();
   const { showInfo, showError } = useToast();
   const { openDocument } = useDocumentViewer();
-
+  console.log("useDocumentActions with to review", onRefreshData)
   // API hooks
-  const [deleteDocument] = useDeleteDocumentMutation();
+  // const [deleteDocument] = useDeleteDocumentMutation();
   const [triggerDownload] = useLazyGetDocumentRawContentQuery();
   const [processDocuments] = useProcessDocumentsMutation();
   const [scheduleDocuments] = useScheduleDocumentsMutation();
 
-  // Action handlers
-  const handleDelete = async (file: DocumentMetadata) => {
-    try {
-      await deleteDocument(file.document_uid).unwrap();
-      showInfo({
-        summary: "Delete Success",
-        detail: `${file.document_name} deleted`,
-        duration: 3000,
-      });
-      onRefreshData?.();
-    } catch (error) {
-      showError({
-        summary: "Delete Failed",
-        detail: `Could not delete document: ${error?.data?.detail || error.message}`,
-      });
-      throw error;
-    }
-  };
+  // const handleDelete = async (file: DocumentMetadata) => {
+  //   try {
+  //     await deleteDocument(file.document_uid).unwrap();
+  //     showInfo({
+  //       summary: "Delete Success",
+  //       detail: `${file.document_name} deleted`,
+  //       duration: 3000,
+  //     });
+  //     onRefreshData?.();
+  //   } catch (error) {
+  //     showError({
+  //       summary: "Delete Failed",
+  //       detail: `Could not delete document: ${error?.data?.detail || error.message}`,
+  //     });
+  //     throw error;
+  //   }
+  // };
 
-  const handleBulkDelete = async (files: DocumentMetadata[]) => {
-    let successCount = 0;
-    let failedFiles: string[] = [];
+  // const handleBulkDelete = async (files: DocumentMetadata[]) => {
+  //   let successCount = 0;
+  //   let failedFiles: string[] = [];
 
-    for (const file of files) {
-      try {
-        await deleteDocument(file.document_uid).unwrap();
-        successCount++;
-      } catch (error) {
-        failedFiles.push(file.document_name);
-      }
-    }
+  //   for (const file of files) {
+  //     try {
+  //       await deleteDocument(file.document_uid).unwrap();
+  //       successCount++;
+  //     } catch (error) {
+  //       failedFiles.push(file.document_name);
+  //     }
+  //   }
 
-    if (successCount > 0) {
-      showInfo({
-        summary: "Delete Success",
-        detail: `${successCount} document${successCount > 1 ? "s" : ""} deleted`,
-        duration: 3000,
-      });
-    }
+  //   if (successCount > 0) {
+  //     showInfo({
+  //       summary: "Delete Success",
+  //       detail: `${successCount} document${successCount > 1 ? "s" : ""} deleted`,
+  //       duration: 3000,
+  //     });
+  //   }
 
-    if (failedFiles.length > 0) {
-      showError({
-        summary: "Delete Failed",
-        detail: `Failed to delete: ${failedFiles.join(", ")}`,
-      });
-    }
+  //   if (failedFiles.length > 0) {
+  //     showError({
+  //       summary: "Delete Failed",
+  //       detail: `Failed to delete: ${failedFiles.join(", ")}`,
+  //     });
+  //   }
 
-    onRefreshData?.();
-  };
+  //   onRefreshData?.();
+  // };
 
   const handleDownload = async (file: DocumentMetadata) => {
     try {
@@ -187,13 +186,13 @@ export const useDocumentActions = (onRefreshData?: () => void) => {
   const defaultRowActions = [
     createPreviewAction(handleDocumentPreview, t),
     createDownloadAction(handleDownload, t),
-    createDeleteAction(handleDelete, t),
+    //createDeleteAction(handleDelete, t),
     createProcessAction((file) => handleProcess([file]), t),
     createScheduleAction((file) => handleSchedule([file]), t),
   ];
 
   const defaultBulkActions = [
-    createBulkDeleteAction(handleBulkDelete, t),
+    //createBulkDeleteAction(handleBulkDelete, t),
     createBulkDownloadAction(handleBulkDownload, t),
     createBulkProcessSyncAction((files) => handleProcess(files), t),
     createBulkScheduleAction((file) => handleSchedule(file), t), // Optional if your library supports bulk createScheduleAction
@@ -201,8 +200,8 @@ export const useDocumentActions = (onRefreshData?: () => void) => {
 
   return {
     // Individual handlers
-    handleDelete,
-    handleBulkDelete,
+    //handleDelete,
+    //handleBulkDelete,
     handleDownload,
     handleBulkDownload,
     handleDocumentPreview,

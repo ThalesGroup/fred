@@ -206,11 +206,11 @@ tool_metrics_storage:
 
 feedback_storage:
   type: duckdb
-  duckdb_path: "~/.fred/agentic/db.duckdb"
+  duckdb_path: "~/.fred/agentic/feedback.duckdb"
 
 agent_storage:
   type: "duckdb"
-  duckdb_path: "~/.fred/agentic/db.duckdb"
+  duckdb_path: "~/.fred/agentic/agent.duckdb"
 
 # Where to save fred produced resources like Essentials or Scores
 # and external resources like Kubernetes Workload descriptions

@@ -21,7 +21,7 @@ from minio import Minio
 from minio.error import S3Error
 import hashlib
 from app.common.structures import MinioPullSource
-from app.core.stores.metadata.base_catalog_store import PullFileEntry
+from app.core.stores.catalog.base_catalog_store import PullFileEntry
 
 logger = logging.getLogger(__name__)
 

@@ -1,7 +1,7 @@
 from app.common.structures import DocumentSourceConfig
 from fastapi import APIRouter, HTTPException, Query
 from typing import List, Literal, Optional
-from app.core.stores.metadata.base_catalog_store import PullFileEntry
+from app.core.stores.catalog.base_catalog_store import PullFileEntry
 from app.features.catalog.service import CatalogService, PullSourceNotFoundError
 from pydantic import BaseModel
 
@@ -24,7 +24,7 @@ class CatalogController:
 
         @router.get(
             "/pull/catalog/files",
-            tags=["Library Pull"],
+            tags=["Documents"],
             response_model=List[PullFileEntry],
             summary="List cataloged files (pull sources only)",
             description="Only works for sources of type `pull`. Use `/documents/sources` to discover available tags.",
@@ -41,7 +41,7 @@ class CatalogController:
 
         @router.post(
             "/pull/catalog/rescan/{source_tag}",
-            tags=["Library Pull"],
+            tags=["Documents"],
             summary="Rescan a pull-mode source and update its catalog",
             description="Only supported for sources with `type: pull` and a compatible `provider`. Returns 404 if the source tag is unknown or not a pull-mode source.",
         )
@@ -58,7 +58,7 @@ class CatalogController:
 
         @router.get(
             "/documents/sources",
-            tags=["Library Sources"],
+            tags=["Documents"],
             response_model=List[DocumentSourceInfo],
             summary="List the configured document sources",
             description=("Returns all configured document sources (push or pull).\nPull-mode sources may support catalog operations depending on the provider."),

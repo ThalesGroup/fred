@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from app.common.document_structures import DocumentMetadata, SourceType
-from app.core.stores.metadata.base_catalog_store import PullFileEntry
+from app.core.stores.catalog.base_catalog_store import PullFileEntry
 
 
 def file_entry_to_metadata(entry: PullFileEntry, source_tag: str) -> DocumentMetadata:

@@ -50,10 +50,12 @@ This design allows easy switching of backends (e.g., OpenSearch ➔ ChromaDB, Az
 """
 
 from abc import ABC, abstractmethod
-from typing import List, Tuple
-from app.common.document_structures import DocumentMetadata
+from typing import Iterable, List, Tuple
+
 from langchain.schema.document import Document
 from langchain.embeddings.base import Embeddings
+
+from app.common.document_structures import DocumentMetadata
 
 
 class BaseLangchainDocumentLoader(ABC):
@@ -137,13 +139,14 @@ class BaseVectoreStore(ABC):
         pass
 
     @abstractmethod
-    def similarity_search_with_score(self, query: str, k: int = 5) -> List[Tuple[Document, float]]:
+    def similarity_search_with_score(self, query: str, k: int = 5, documents_ids: Iterable[str] | None = None) -> List[Tuple[Document, float]]:
         """
         Perform a similarity search on the vector store.
 
         Args:
             query (str): The query string.
             k (int): Number of top documents to return.
+            tags (list[str] | None): Optional list of tags to filter documents. Only documents with at least one of these tags will be returned.
 
         Returns:
             List[Tuple[Document, float]]: A list of tuples containing the document and its similarity score.

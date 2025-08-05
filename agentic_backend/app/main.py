@@ -130,8 +130,10 @@ def create_app() -> FastAPI:
 
     # Register controllers
     FeedbackController(router, configuration.feedback_storage)
-    AgentController(router,agent_manager=agent_manager)
-    ChatbotController(router, session_manager=session_manager, agent_manager=agent_manager)
+    AgentController(router, agent_manager=agent_manager)
+    ChatbotController(
+        router, session_manager=session_manager, agent_manager=agent_manager
+    )
 
     app.include_router(router)
     logger.info("🧩 All controllers registered.")

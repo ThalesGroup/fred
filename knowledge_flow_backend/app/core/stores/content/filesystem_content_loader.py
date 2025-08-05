@@ -16,7 +16,7 @@ from pathlib import Path
 import hashlib
 from typing import List
 
-from app.core.stores.metadata.base_catalog_store import PullFileEntry
+from app.core.stores.catalog.base_catalog_store import PullFileEntry
 from app.common.document_structures import DocumentMetadata
 from app.common.structures import FileSystemPullSource
 from app.core.stores.content.base_content_loader import BaseContentLoader

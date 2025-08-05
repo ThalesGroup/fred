@@ -13,26 +13,31 @@
 # limitations under the License.
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Literal, Optional
+
+from fred_core import KeycloakUser, get_current_user
 from app.common.utils import log_exception
 from app.features.pull.controller import PullDocumentsResponse
 from app.features.pull.service import PullDocumentService
-from fastapi import APIRouter, Body, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException
 
 from app.common.structures import Status
 from app.application_context import ApplicationContext
 from app.features.metadata.service import InvalidMetadataRequest, MetadataNotFound, MetadataService, MetadataUpdateError
 from app.features.metadata.structures import (
-    DeleteDocumentMetadataResponse,
     GetDocumentMetadataResponse,
     GetDocumentsMetadataResponse,
-    UpdateDocumentMetadataRequest,
-    UpdateDocumentMetadataResponse,
     UpdateRetrievableRequest,
 )
 from threading import Lock
 
 from pydantic import BaseModel, Field
+
+
+class SortOption(BaseModel):
+    field: str
+    direction: Literal["asc", "desc"]
+
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +49,7 @@ class BrowseDocumentsRequest(BaseModel):
     filters: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Optional metadata filters")
     offset: int = Field(0, ge=0)
     limit: int = Field(50, gt=0, le=500)
+    sort_by: Optional[List[SortOption]] = None
 
 
 def handle_exception(e: Exception) -> HTTPException:
@@ -100,7 +106,7 @@ class MetadataController:
 
         @router.post(
             "/documents/metadata",
-            tags=["Library Metadata"],
+            tags=["Documents"],
             response_model=GetDocumentsMetadataResponse,
             summary="List metadata for all ingested documents (optional filters)",
             description=(
@@ -120,7 +126,7 @@ class MetadataController:
 
         @router.get(
             "/document/{document_uid}",
-            tags=["Library Metadata"],
+            tags=["Documents"],
             response_model=GetDocumentMetadataResponse,
             summary="Fetch metadata for an ingested document",
             description=(
@@ -138,8 +144,8 @@ class MetadataController:
 
         @router.put(
             "/document/{document_uid}",
-            tags=["Library Metadata"],
-            response_model=UpdateDocumentMetadataResponse,
+            tags=["Documents"],
+            response_model=None,
             summary="Toggle document retrievability (indexed for search)",
             description=(
                 "Updates the `retrievable` flag for an ingested document. "
@@ -148,56 +154,19 @@ class MetadataController:
                 "the flag has no effect."
             ),
         )
-        def update_document_retrievable(document_uid: str, update: UpdateRetrievableRequest):
+        def update_document_retrievable(
+            document_uid: str,
+            update: UpdateRetrievableRequest,
+            user: KeycloakUser = Depends(get_current_user),
+        ):
             try:
-                return self.service.update_document_retrievable(document_uid, update)
+                self.service.update_document_retrievable(document_uid, update.retrievable, user.username)
             except Exception as e:
-                raise handle_exception(e)
-
-        @router.delete(
-            "/document/{document_uid}",
-            tags=["Library Metadata"],
-            response_model=DeleteDocumentMetadataResponse,
-            summary="Delete metadata and optionally raw content for an ingested document",
-            description=(
-                "Deletes the stored metadata and associated raw content for a document. "
-                "This is a destructive operation and only applies to documents that have been ingested. "
-                "Discovered-only (non-ingested) files are unaffected."
-            ),
-        )
-        def delete_document_metadata(document_uid: str):
-            try:
-                self.service.delete_document_metadata(document_uid)
-                self.content_store.delete_content(document_uid)
-                return DeleteDocumentMetadataResponse(status=Status.SUCCESS, message=f"Metadata for document {document_uid} has been deleted.")
-            except Exception as e:
-                logger.exception(f"Failed to delete document metadata: {e}")
-                raise handle_exception(e)
-
-        @router.post(
-            "/document/{document_uid}/update_metadata",
-            tags=["Library Metadata"],
-            response_model=UpdateDocumentMetadataResponse,
-            summary="Update multiple metadata fields for a document",
-            description=(
-                "Allows partial updates of metadata fields (e.g., title, description, tags, category) "
-                "for an already ingested document. Fields not included in the request body will remain unchanged.\n\n"
-                "This endpoint is used for managing user-defined annotations or descriptive updates."
-            ),
-        )
-        def update_document_metadata(document_uid: str, update: UpdateDocumentMetadataRequest):
-            try:
-                return self.service.update_document_metadata(
-                    document_uid,
-                    update.model_dump(exclude_none=True),
-                )
-            except Exception as e:
-                logger.error(f"Failed to update metadata for {document_uid}: {e}")
                 raise handle_exception(e)
 
         @router.post(
             "/documents/browse",
-            tags=["Library"],
+            tags=["Documents"],
             summary="Unified endpoint to browse documents from any source (push or pull)",
             response_model=PullDocumentsResponse,
             description="""
@@ -220,6 +189,14 @@ class MetadataController:
                     filters = req.filters or {}
                     filters["source_tag"] = req.source_tag
                     docs = self.service.get_documents_metadata(filters)
+                    sort_by = req.sort_by or [SortOption(field="document_name", direction="asc")]
+
+                    for sort in reversed(sort_by):  # Apply last sort first for correct multi-field sorting
+                        docs.sort(
+                            key=lambda d: getattr(d, sort.field, "") or "",  # fallback to empty string
+                            reverse=(sort.direction == "desc"),
+                        )
+
                     paginated = docs[req.offset : req.offset + req.limit]
                     return PullDocumentsResponse(documents=paginated, total=len(docs))
 

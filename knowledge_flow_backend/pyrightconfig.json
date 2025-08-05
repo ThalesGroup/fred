@@ -3,5 +3,7 @@
 {
   "typeCheckingMode": "basic",
   "include": ["app"],
-  "reportMissingTypeStubs": false
+  "reportMissingTypeStubs": false,
+  "reportIncompatibleMethodOverride": "error",
+  "reportIncompatibleVariableOverride": "error"
 }

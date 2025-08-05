@@ -17,11 +17,22 @@ import logging
 import os
 from pathlib import Path
 from typing import Dict, Type, Union, Optional
+from app.core.stores.catalog.opensearch_catalog_store import OpenSearchCatalogStore
 from app.core.stores.content.base_content_loader import BaseContentLoader
 from app.core.stores.content.filesystem_content_loader import FileSystemContentLoader
 from app.core.stores.content.minio_content_loader import MinioContentLoader
 from fred_core.store.duckdb_store import DuckDBTableStore
-from app.common.structures import Configuration, DuckdbMetadataStorage, InMemoryVectorStorage, FileSystemPullSource, MinioPullSource, MinioStorage, OpenSearchStorage, WeaviateVectorStorage
+from app.common.structures import (
+    Configuration,
+    DuckdbStorageConfig,
+    InMemoryVectorStorage,
+    FileSystemPullSource,
+    LocalJsonStorageConfig,
+    MinioPullSource,
+    MinioStorageConfig,
+    OpenSearchStorageConfig,
+    WeaviateVectorStorage,
+)
 from app.common.utils import validate_settings_or_exit
 from app.config.embedding_azure_apim_settings import EmbeddingAzureApimSettings
 from app.config.embedding_azure_openai_settings import EmbeddingAzureOpenAISettings
@@ -30,8 +41,8 @@ from app.config.embedding_openai_settings import EmbeddingOpenAISettings
 from app.core.stores.content.base_content_store import BaseContentStore
 from app.core.stores.content.filesystem_content_store import FileSystemContentStore
 from app.core.stores.content.minio_content_store import MinioStorageBackend
-from app.core.stores.metadata.base_catalog_store import BaseCatalogStore
-from app.core.stores.metadata.duckdb_catalog_store import DuckdbCatalogStore
+from app.core.stores.catalog.base_catalog_store import BaseCatalogStore
+from app.core.stores.catalog.duckdb_catalog_store import DuckdbCatalogStore
 from app.core.stores.metadata.duckdb_metadata_store import DuckdbMetadataStore
 from langchain_openai import OpenAIEmbeddings, AzureOpenAIEmbeddings
 from langchain_ollama import OllamaEmbeddings
@@ -42,8 +53,13 @@ from app.core.processors.output.vectorization_processor.azure_apim_embedder impo
 from app.core.processors.output.vectorization_processor.embedder import Embedder
 from app.core.stores.metadata.base_metadata_store import BaseMetadataStore
 from app.core.stores.metadata.opensearch_metadata_store import OpenSearchMetadataStore
+from app.core.stores.prompts.base_prompt_store import BasePromptStore
+from app.core.stores.prompts.duckdb_prompt_store import DuckdbPromptStore
+from app.core.stores.prompts.opensearch_prompt_store import OpenSearchPromptStore
 from app.core.stores.tags.base_tag_store import BaseTagStore
+from app.core.stores.tags.duckdb_tag_store import DuckdbTagStore
 from app.core.stores.tags.local_tag_store import LocalTagStore
+from app.core.stores.tags.opensearch_tags_store import OpenSearchTagStore
 from app.core.stores.vector.in_memory_langchain_vector_store import InMemoryLangchainVectorStore
 from app.core.stores.vector.base_vector_store import BaseEmbeddingModel, BaseTextSplitter, BaseVectoreStore
 from app.core.stores.vector.opensearch_vector_store import OpenSearchVectorStoreAdapter
@@ -114,6 +130,7 @@ class ApplicationContext:
     _vector_store_instance: Optional[BaseVectoreStore] = None
     _metadata_store_instance: Optional[BaseMetadataStore] = None
     _tag_store_instance: Optional[BaseTagStore] = None
+    _prompt_store_instance: Optional[BasePromptStore] = None
     _tabular_store_instance: Optional[DuckDBTableStore] = None
 
     def __init__(self, config: Configuration):
@@ -282,7 +299,7 @@ class ApplicationContext:
         config = ApplicationContext.get_instance().get_config().content_storage
         backend_type = config.type
 
-        if isinstance(config, MinioStorage):
+        if isinstance(config, MinioStorageConfig):
             return MinioStorageBackend(endpoint=config.endpoint, access_key=config.access_key, secret_key=config.secret_key, bucket_name=config.bucket_name, secure=config.secure)
         elif backend_type == "local":
             return FileSystemContentStore(Path(config.root_path).expanduser())
@@ -364,7 +381,7 @@ class ApplicationContext:
         """
         backend_type = self.config.vector_storage.type
 
-        if isinstance(self.config.vector_storage, OpenSearchStorage):
+        if isinstance(self.config.vector_storage, OpenSearchStorageConfig):
             s = self.config.vector_storage
             if not s.username or not s.password:
                 raise ValueError("Missing required environment variables: OPENSEARCH_USER and OPENSEARCH_PASSWORD")
@@ -395,10 +412,10 @@ class ApplicationContext:
         if self._metadata_store_instance is not None:
             return self._metadata_store_instance
         config = self.config.metadata_storage
-        if isinstance(config, DuckdbMetadataStorage):
+        if isinstance(config, DuckdbStorageConfig):
             db_path = Path(config.duckdb_path).expanduser()
             self._metadata_store_instance = DuckdbMetadataStore(db_path)
-        elif isinstance(config, OpenSearchStorage):
+        elif isinstance(config, OpenSearchStorageConfig):
             username = config.username
             password = config.password
 
@@ -424,12 +441,61 @@ class ApplicationContext:
 
         config = self.config.tag_storage
 
-        if config.type == "local":
+        if isinstance(config, LocalJsonStorageConfig):
             path = Path(config.root_path).expanduser()
             self._tag_store_instance = LocalTagStore(path)
             return self._tag_store_instance
+        elif isinstance(config, DuckdbStorageConfig):
+            path = Path(config.duckdb_path).expanduser()
+            self._tag_store_instance = DuckdbTagStore(path)
+            return self._tag_store_instance
+        elif isinstance(config, OpenSearchStorageConfig):
+            username = config.username
+            password = config.password
 
-        raise ValueError(f"Unsupported tag storage backend: {config.type}")
+            if not username or not password:
+                raise ValueError("Missing OpenSearch credentials: OPENSEARCH_USER and/or OPENSEARCH_PASSWORD")
+
+            self._tag_store_instance = OpenSearchTagStore(
+                host=config.host,
+                index=config.index,
+                username=username,
+                password=password,
+                secure=config.secure,
+                verify_certs=config.verify_certs,
+            )
+            return self._tag_store_instance
+        else:
+            raise ValueError(f"Unsupported tag storage backend: {config.type}")
+
+    def get_prompt_store(self) -> BasePromptStore:
+        if self._prompt_store_instance is not None:
+            return self._prompt_store_instance
+
+        config = self.config.prompt_storage
+
+        if isinstance(config, DuckdbStorageConfig):
+            path = Path(config.duckdb_path).expanduser()
+            self._prompt_store_instance = DuckdbPromptStore(path)
+            return self._prompt_store_instance
+        elif isinstance(config, OpenSearchStorageConfig):
+            username = config.username
+            password = config.password
+
+            if not username or not password:
+                raise ValueError("Missing OpenSearch credentials: OPENSEARCH_USER and/or OPENSEARCH_PASSWORD")
+
+            self._prompt_store_instance = OpenSearchPromptStore(
+                host=config.host,
+                index=config.index,
+                username=username,
+                password=password,
+                secure=config.secure,
+                verify_certs=config.verify_certs,
+            )
+            return self._prompt_store_instance
+        else:
+            raise ValueError(f"Unsupported tag storage backend: {config.type}")
 
     def get_tabular_store(self) -> DuckDBTableStore:
         """
@@ -441,7 +507,7 @@ class ApplicationContext:
 
         config = self.config.tabular_storage
 
-        if config.type == "duckdb":
+        if isinstance(config, DuckdbStorageConfig):
             db_path = Path(config.duckdb_path).expanduser()
             self._tabular_store_instance = DuckDBTableStore(db_path, prefix="tabular_")
         else:
@@ -459,9 +525,26 @@ class ApplicationContext:
 
         config = self.config.catalog_storage
 
-        if config.type == "duckdb":
+        if isinstance(config, DuckdbStorageConfig):
             db_path = Path(config.duckdb_path).expanduser()
             self._catalog_store_instance = DuckdbCatalogStore(db_path)
+        elif isinstance(config, OpenSearchStorageConfig):
+            username = config.username
+            password = config.password
+
+            if not username or not password:
+                raise ValueError("Missing OpenSearch credentials: OPENSEARCH_USER and/or OPENSEARCH_PASSWORD")
+
+            self._catalog_store_instance = OpenSearchCatalogStore(
+                host=config.host,
+                index=config.index,
+                username=username,
+                password=password,
+                secure=config.secure,
+                verify_certs=config.verify_certs,
+            )
+            return self._catalog_store_instance
+
         else:
             raise ValueError(f"Unsupported catalog storage backend: {config.type}")
 
@@ -548,7 +631,7 @@ class ApplicationContext:
         logger.info(f"  📚 Vector store backend: {vector_type}")
         try:
             s = self.config.vector_storage
-            if isinstance(s, OpenSearchStorage):
+            if isinstance(s, OpenSearchStorageConfig):
                 logger.info(f"     ↳ Host: {s.host}")
                 logger.info(f"     ↳ Vector Index: {s.index}")
                 logger.info(f"     ↳ Secure (TLS): {s.secure}")
@@ -565,17 +648,25 @@ class ApplicationContext:
             logger.warning("⚠️ Failed to load vector store settings — some variables may be missing or misconfigured.")
 
         metadata_type = self.config.metadata_storage.type
-        logger.info(f"  🗃️ Metadata storage backend: {metadata_type}")
-        if isinstance(self.config.metadata_storage, DuckdbMetadataStorage):
-            logger.info(f"     ↳ DB Path: {self.config.metadata_storage.duckdb_path}")
-        catalog_type = self.config.catalog_storage.type
-        logger.info(f"  📂 Catalog storage backend: {catalog_type}")
-        if catalog_type == "duckdb":
-            logger.info(f"     ↳ DB Path: {self.config.catalog_storage.duckdb_path}")
-        content_type = self.config.content_storage.type
 
-        logger.info(f"  📁 Content storage backend: {content_type}")
-        if isinstance(self.config.content_storage, MinioStorage):
+        logger.info(f"  🗃️ Metadata storage backend: {metadata_type}")
+        if isinstance(self.config.metadata_storage, DuckdbStorageConfig):
+            logger.info(f"     ↳ DB Path: {self.config.metadata_storage.duckdb_path}")
+
+        logger.info(f"  📂 Catalog storage backend: {self.config.catalog_storage.type}")
+        if isinstance(self.config.catalog_storage, DuckdbStorageConfig):
+            logger.info(f"     ↳ DB Path: {self.config.catalog_storage.duckdb_path}")
+
+        logger.info(f"  📂 Prompt storage backend: {self.config.prompt_storage.type}")
+        if isinstance(self.config.prompt_storage, DuckdbStorageConfig):
+            logger.info(f"     ↳ DB Path: {self.config.prompt_storage.duckdb_path}")
+
+        logger.info(f"  📂 Tag storage backend: {self.config.tag_storage.type}")
+        if isinstance(self.config.tag_storage, DuckdbStorageConfig):
+            logger.info(f"     ↳ DB Path: {self.config.tag_storage.duckdb_path}")
+
+        logger.info(f"  📁 Content storage backend: {self.config.content_storage.type}")
+        if isinstance(self.config.content_storage, MinioStorageConfig):
             logger.info(f"     ↳ Local Path: {self.config.content_storage.bucket_name}")
 
         logger.info("  🧩 Input Processor Mappings:")

@@ -21,13 +21,15 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def enrich_ChatMessagePayloads_with_latencies(metrics: List[ChatMessagePayload]) -> List[ChatMessagePayload]:
+def enrich_ChatMessagePayloads_with_latencies(
+    metrics: List[ChatMessagePayload],
+) -> List[ChatMessagePayload]:
     """
     Enrich metrics in memory by adding latency_seconds between sequential steps
     (by exchange_id and rank). Returns a new flat list of enriched messages.
     """
     by_exchange_id = defaultdict(list)
-    
+
     for m in metrics:
         by_exchange_id[m.exchange_id].append(m)
 
