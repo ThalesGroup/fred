@@ -14,13 +14,14 @@
 
 from datetime import datetime
 import logging
-from typing import List
+from typing import List, Dict, Any, Optional
 
 from app.common.structures import AgentSettings
 from app.core.monitoring.node_monitoring.monitor_node import monitor_node
 from app.model_factory import get_model
 import requests
-from langchain_core.messages import HumanMessage
+from requests import Response
+from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.graph import END, START, MessagesState, StateGraph
 
 from app.core.agents.flow import AgentFlow
@@ -35,6 +36,9 @@ class RagsExpert(AgentFlow):
     This agent uses a vector search service using the knowledge-flow search REST API to find relevant documents and generates
     responses based on the document content. This design is simple and straightworward.
     """
+    
+    TOP_K = 4
+    
     name: str = "RagsExpert"
     role: str = "Rags Expert"
     nickname: str = "Rico"
@@ -88,4 +92,60 @@ class RagsExpert(AgentFlow):
     def _build_graph(self) -> StateGraph:
         builder = StateGraph(MessagesState)
         return builder
+
+    # Nodes
+    async def _retrieve(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Retrieve documents from vector search API based on the question in the state.
+
+        Args:
+            state (Dict[str, Any]): Current graph state
+
+        Returns:
+            Dict[str, Any]: Updated state
+        """
+        question: Optional[str] = state.get("question")
+        if not question and state.get("messages"):
+            question = state["messages"][-1].content
+
+        top_k: Optional[int] = state.get("top_k", self.TOP_K)
+        retry_count: Optional[int] = state.get("retry_count", 0)
+        if retry_count and retry_count > 0:
+            top_k = self.TOP_K + 3 * retry_count
+
+        try:
+            logger.info(f"📥 Retrieving with question: {question} | top_k: {top_k}")
+
+            response: Response = requests.post(
+                f"{self.knowledge_flow_url}/vector/search",
+                json={"query": question, "top_k": top_k},
+                timeout=30,
+            )
+            response.raise_for_status()
+            documents_data = response.json()
+
+            documents: List = []
+            for document in documents_data:
+                if "uid" in document and "document_uid" not in document:
+                    document["document_uid"] = document["uid"]
+                doc_source = DocumentSource(**document)
+                documents.append(doc_source)
+
+            logger.info(f"✅ Retrieved {len(documents)} documents.")
+
+            return {
+                "messages": [],
+                "documents": documents,
+                "question": question,
+                "top_k": top_k,
+            }
+        except Exception as e:
+            logger.exception(f"Failed to retrieve documents: {e}")
+            return {
+                "messages": [
+                    SystemMessage(
+                        content="An error occurred while retrieving documents. Please try again later."
+                    )
+                ]
+            }
 
