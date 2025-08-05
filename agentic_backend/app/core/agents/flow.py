@@ -15,14 +15,12 @@
 from typing import Optional
 from IPython.display import Image
 import logging
-from langgraph.graph import MessagesState
 from langgraph.graph.state import CompiledStateGraph, StateGraph
 from langgraph.checkpoint.memory import MemorySaver
 from langchain_core.tools import BaseToolkit
-from langchain_core.messages import SystemMessage
-from app.common.error import NoToolkitProvidedError
 
 logger = logging.getLogger(__name__)
+
 
 class Flow:
     """
@@ -46,7 +44,7 @@ class Flow:
         if not self.graph:
             raise ValueError("Graph is not defined.")
         return self.graph.compile(checkpointer=self.streaming_memory)
-    
+
     def save_graph_image(self, path: str):
         """
         Save the graph of agentic flow to an image.
@@ -60,6 +58,7 @@ class Flow:
 
     def __str__(self) -> str:
         return f"{self.name}: {self.description}"
+
 
 class AgentFlow:
     """
@@ -77,7 +76,7 @@ class AgentFlow:
     Subclasses are responsible for defining any reasoning nodes (e.g. `reasoner`)
     and for calling `get_compiled_graph()` when they are ready to execute the agent.
     """
-    
+
     # Class attributes for documentation/metadata
     name: str
     role: str
@@ -85,7 +84,7 @@ class AgentFlow:
     description: str
     icon: str
     tag: str
-    
+
     def __init__(
         self,
         name: str,
@@ -102,7 +101,7 @@ class AgentFlow:
         """
         Initialize the agent with its core properties. This method creates the model,
         binds the toolkit if any.
-        
+
         Args:
             name: The name of the agent.
             role: The role of the agent.
@@ -126,7 +125,7 @@ class AgentFlow:
         self.streaming_memory = MemorySaver()
         self.compiled_graph: Optional[CompiledStateGraph] = None
         self.toolkit = toolkit
-    
+
     def get_compiled_graph(self) -> CompiledStateGraph:
         """
         Compile and return the agent's graph.
@@ -135,11 +134,11 @@ class AgentFlow:
         if self.compiled_graph is None:
             self.compiled_graph = self.graph.compile(checkpointer=self.streaming_memory)
         return self.compiled_graph
-    
+
     def save_graph_image(self, path: str):
         """
         Save the graph of the agent to an image.
-        
+
         Args:
             path: Directory path where to save the image.
         """
@@ -153,6 +152,3 @@ class AgentFlow:
     def __str__(self) -> str:
         """String representation of the agent."""
         return f"{self.name} ({self.nickname}): {self.description}"
-    
-
-

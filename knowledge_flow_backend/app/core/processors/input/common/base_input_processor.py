@@ -22,6 +22,7 @@ import pandas
 
 logger = logging.getLogger(__name__)
 
+
 class BaseInputProcessor(ABC):
     """
     Base class for all processors that handle file metadata extraction and processing.
@@ -35,24 +36,14 @@ class BaseInputProcessor(ABC):
         """
         return hashlib.sha256(document_name.encode("utf-8")).hexdigest()
 
-    def _add_common_metadata(self, file_path: Path, 
-                             tags: list[str],
-                             source_tag: str) -> DocumentMetadata:
+    def _add_common_metadata(self, file_path: Path, tags: list[str], source_tag: str) -> DocumentMetadata:
         document_uid = self._generate_file_unique_id(file_path.name)
         source_type = resolve_source_type(source_tag)
-        return DocumentMetadata(
-            document_name=file_path.name,
-            document_uid=document_uid,
-            tags=tags,
-            source_tag=source_tag,
-            source_type=source_type
-        )
+        return DocumentMetadata(document_name=file_path.name, document_uid=document_uid, tags=tags, source_tag=source_tag, source_type=source_type)
 
-    def process_metadata(self, file_path: Path, 
-                         tags: list[str],
-                         source_tag: str = "uploads") -> DocumentMetadata:
+    def process_metadata(self, file_path: Path, tags: list[str], source_tag: str) -> DocumentMetadata:
         if not self.check_file_validity(file_path):
-            return {"document_name": file_path.name, "error": "Invalid file structure"}
+            raise ValueError(f"File {file_path} is not valid for processing.")
 
         # Step 1: Create initial metadata
         base_metadata = self._add_common_metadata(file_path, tags, source_tag)

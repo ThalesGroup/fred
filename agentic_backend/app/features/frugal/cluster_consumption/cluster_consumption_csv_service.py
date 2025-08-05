@@ -18,6 +18,7 @@
 """
 Services to extract and transform the power kepler metrics data
 """
+
 import csv
 import logging
 import os
@@ -26,12 +27,19 @@ import sys
 from datetime import datetime
 
 from app.application_context import get_configuration
-from app.features.frugal.cluster_consumption.cluster_consumption_abstract_service import AbstractClusterConsumptionService
-from app.features.frugal.cluster_consumption.cluster_consumption_structures import ClusterConsumptionSeries, DetailSeries
-from app.common.structures import PrecisionEnum, Configuration, Series
+from app.features.frugal.cluster_consumption.cluster_consumption_abstract_service import (
+    AbstractClusterConsumptionService,
+)
+from app.features.frugal.cluster_consumption.cluster_consumption_structures import (
+    ClusterConsumptionSeries,
+    DetailSeries,
+)
+from app.common.structures import PrecisionEnum, Series
 from app.common.utils import sample_data, SampleDataType
 from app.features.frugal.frontend_structures import Observation
+
 logger = logging.getLogger(__name__)
+
 
 class ClusterConsumptionCsvService(AbstractClusterConsumptionService):
     """
@@ -41,17 +49,31 @@ class ClusterConsumptionCsvService(AbstractClusterConsumptionService):
 
     def __init__(self):
         configuration = get_configuration()
-        if hasattr(sys.modules['__main__'], '__file__'):
-            main_path_dir = pathlib.Path(os.path.abspath(sys.modules['__main__'].__file__)).parent
+        if hasattr(sys.modules["__main__"], "__file__"):
+            main_path_dir = pathlib.Path(
+                os.path.abspath(sys.modules["__main__"].__file__)
+            ).parent
         else:
-            raise RuntimeError("This code must be run as part of a main script with a file path.")
+            raise RuntimeError(
+                "This code must be run as part of a main script with a file path."
+            )
 
-        self.wh_data_file = main_path_dir / configuration.database.csv_files.energy_footprint
-        self.gco2_data_file = main_path_dir / configuration.database.csv_files.carbon_footprint
-        self.energy_mix_data_file = main_path_dir / configuration.database.csv_files.energy_mix
-        self.finops_data_file = main_path_dir / configuration.database.csv_files.financial_footprint
+        self.wh_data_file = (
+            main_path_dir / configuration.database.csv_files.energy_footprint
+        )
+        self.gco2_data_file = (
+            main_path_dir / configuration.database.csv_files.carbon_footprint
+        )
+        self.energy_mix_data_file = (
+            main_path_dir / configuration.database.csv_files.energy_mix
+        )
+        self.finops_data_file = (
+            main_path_dir / configuration.database.csv_files.financial_footprint
+        )
 
-    def consumption_finops(self, start: datetime, end: datetime, cluster: str, precision: PrecisionEnum) -> Series:
+    def consumption_finops(
+        self, start: datetime, end: datetime, cluster: str, precision: PrecisionEnum
+    ) -> Series:
         """
         Generate a CSV file with simulated FinOps data based on Wh and GCo2 consumption values.
 
@@ -62,60 +84,93 @@ class ClusterConsumptionCsvService(AbstractClusterConsumptionService):
             precision (PrecisionEnum): Precision level for data sampling.
         """
         factor = 1.0 if "aws" in cluster or "rift" in cluster else 0.23
-        result = self._process_csv(self.finops_data_file, start, end, precision, SampleDataType.SUM, "USD")
+        result = self._process_csv(
+            self.finops_data_file, start, end, precision, SampleDataType.SUM, "USD"
+        )
         result.values = [value * factor for value in result.values]
         for detail in result.details:
             detail.values = [value * factor for value in detail.values]
         result.auc = result.auc * factor
         return result
 
-    def compute_observation(self, start: datetime, end: datetime,
-                            cluster: str, precision: PrecisionEnum, unit_type: str) -> Observation:
+    def compute_observation(
+        self,
+        start: datetime,
+        end: datetime,
+        cluster: str,
+        precision: PrecisionEnum,
+        unit_type: str,
+    ) -> Observation:
         """
         Compute a single Observation based on aggregated consumption data.
         """
-        consumption_series = self.consumption_wh(start, end, cluster, precision) if unit_type == "wh" else \
-            self.consumption_gco2(start, end, cluster, precision) if unit_type == "gco2" else \
-                self.consumption_mix(start, end, precision)
+        consumption_series = (
+            self.consumption_wh(start, end, cluster, precision)
+            if unit_type == "wh"
+            else self.consumption_gco2(start, end, cluster, precision)
+            if unit_type == "gco2"
+            else self.consumption_mix(start, end, precision)
+        )
 
         total_value = sum(detail.values for detail in consumption_series.details)
         return Observation(value=total_value, unit=consumption_series.unit)
 
-    def consumption_gco2(self, start: datetime, end: datetime, cluster: str,
-                         precision: PrecisionEnum) -> ClusterConsumptionSeries:
+    def consumption_gco2(
+        self, start: datetime, end: datetime, cluster: str, precision: PrecisionEnum
+    ) -> ClusterConsumptionSeries:
         """
         Process the GCO2 data from the CSV file and return the ClusterConsumptionSeries.
         """
         factor = 1.0 if "aws" in cluster or "rift" in cluster else 0.17
-        result = self._process_csv(self.gco2_data_file, start, end, precision, SampleDataType.SUM, "gco2")
+        result = self._process_csv(
+            self.gco2_data_file, start, end, precision, SampleDataType.SUM, "gco2"
+        )
         result.values = [value * factor for value in result.values]
         for detail in result.details:
             detail.values = [value * factor for value in detail.values]
         result.auc = result.auc * factor
         return result
 
-    def consumption_wh(self, start: datetime, end: datetime, cluster: str,
-                       precision: PrecisionEnum) -> ClusterConsumptionSeries:
+    def consumption_wh(
+        self, start: datetime, end: datetime, cluster: str, precision: PrecisionEnum
+    ) -> ClusterConsumptionSeries:
         """
         Process the Wh data from the CSV file and return the ClusterConsumptionSeries.
         """
         factor = 1.0 if "aws" in cluster or "rift" in cluster else 0.21
-        result = self._process_csv(self.wh_data_file, start, end, precision, SampleDataType.SUM, "wh")
+        result = self._process_csv(
+            self.wh_data_file, start, end, precision, SampleDataType.SUM, "wh"
+        )
         result.values = [value * factor for value in result.values]
         for detail in result.details:
             detail.values = [value * factor for value in detail.values]
         result.auc = result.auc * factor
         return result
 
-    def consumption_mix(self, start: datetime, end: datetime, precision: PrecisionEnum) -> ClusterConsumptionSeries:
+    def consumption_mix(
+        self, start: datetime, end: datetime, precision: PrecisionEnum
+    ) -> ClusterConsumptionSeries:
         """
         Process the energy mix data from the CSV file and return the ClusterConsumptionSeries.
         """
-        return self._process_csv(self.energy_mix_data_file, start, end, precision, SampleDataType.AVERAGE, "mix")
+        return self._process_csv(
+            self.energy_mix_data_file,
+            start,
+            end,
+            precision,
+            SampleDataType.AVERAGE,
+            "mix",
+        )
 
     @staticmethod
-    def _process_csv(file_path: pathlib.Path, start: datetime, end: datetime,
-                     precision: PrecisionEnum, method: SampleDataType, unit: str) -> ClusterConsumptionSeries:
+    def _process_csv(
+        file_path: pathlib.Path,
+        start: datetime,
+        end: datetime,
+        precision: PrecisionEnum,
+        method: SampleDataType,
+        unit: str,
+    ) -> ClusterConsumptionSeries:
         """
         Helper method to process the CSV file and return ClusterConsumptionSeries.
         """
@@ -123,14 +178,14 @@ class ClusterConsumptionCsvService(AbstractClusterConsumptionService):
         original_timestamps = []
         numeric_columns = set()
 
-        with open(file_path, newline='') as csvfile:
+        with open(file_path, newline="") as csvfile:
             reader = csv.DictReader(csvfile)
             headers = reader.fieldnames
-            details = {name: [] for name in headers if name != 'timestamp'}
+            details = {name: [] for name in headers if name != "timestamp"}
 
             for row in reader:
                 try:
-                    ts = datetime.fromisoformat(row['timestamp']).replace(tzinfo=None)
+                    ts = datetime.fromisoformat(row["timestamp"]).replace(tzinfo=None)
                 except ValueError:
                     logger.debug(f"Skipping invalid timestamp: {row['timestamp']}")
                     continue
@@ -142,9 +197,9 @@ class ClusterConsumptionCsvService(AbstractClusterConsumptionService):
                     row_detail_values = {}
 
                     for key in headers:
-                        if key == 'timestamp':
+                        if key == "timestamp":
                             continue
-                        if key == 'total':
+                        if key == "total":
                             try:
                                 total_values.append(float(row[key]))
                                 total_is_present = True
@@ -164,7 +219,9 @@ class ClusterConsumptionCsvService(AbstractClusterConsumptionService):
                         for key, value in row_detail_values.items():
                             details[key].append(value)
                             acc += value
-                        if not total_is_present:  # There was not an explicit "total" column
+                        if (
+                            not total_is_present
+                        ):  # There was not an explicit "total" column
                             total_values.append(acc)
 
         downsampled_timestamps, downsampled_total_values = sample_data(
@@ -186,5 +243,5 @@ class ClusterConsumptionCsvService(AbstractClusterConsumptionService):
             values=downsampled_total_values,
             auc=sum(downsampled_total_values),
             details=detail_series,
-            unit=unit  # use 'wh' or 'gco2' based on the method
+            unit=unit,  # use 'wh' or 'gco2' based on the method
         )

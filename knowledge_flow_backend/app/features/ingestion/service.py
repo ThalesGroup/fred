@@ -15,8 +15,7 @@
 import logging
 import pathlib
 import shutil
-from app.common.document_structures import DocumentMetadata, ProcessingStage
-from app.common.structures import OutputProcessorResponse
+from app.common.document_structures import DocumentMetadata, ProcessingStage, SourceType
 from app.core.processors.input.common.base_input_processor import BaseMarkdownProcessor, BaseTabularProcessor
 from app.core.processors.input.duckdb_processor.duckdb_processor import DuckDBProcessor
 from app.features.metadata.service import MetadataNotFound, MetadataService
@@ -52,7 +51,7 @@ class IngestionService:
         logger.debug(f"Saving metadata {metadata}")
         return self.metadata_service.save_document_metadata(metadata)
 
-    def get_metadata(self, document_uid: str) -> DocumentMetadata:
+    def get_metadata(self, document_uid: str) -> DocumentMetadata | None:
         """
         Retrieve the metadata associated with the given document UID.
 
@@ -79,9 +78,7 @@ class IngestionService:
         """
         return self.content_store.get_local_copy(metadata.document_uid, target_dir)
 
-    def extract_metadata(self, file_path: pathlib.Path,
-                         tags: list[str],
-                         source_tag: str = "uploads") -> DocumentMetadata:
+    def extract_metadata(self, file_path: pathlib.Path, tags: list[str], source_tag: str) -> DocumentMetadata:
         """
         Extracts metadata from the input file.
         This method is responsible for determining the file type and using the appropriate processor
@@ -96,7 +93,7 @@ class IngestionService:
 
         # Step 2: enrich/clean metadata
         if source_config:
-            metadata.source_type = source_config.type
+            metadata.source_type = SourceType(source_config.type)
 
         # If this is a pull file, preserve the path
         if source_config and source_config.type == "pull":
@@ -110,12 +107,7 @@ class IngestionService:
 
         return metadata
 
-    def process_input(
-        self,
-        input_path: pathlib.Path,
-        output_dir: pathlib.Path,
-        metadata: DocumentMetadata
-    ) -> None:
+    def process_input(self, input_path: pathlib.Path, output_dir: pathlib.Path, metadata: DocumentMetadata) -> None:
         """
         Processes an input document from input_path and writes outputs to output_dir.
         Saves metadata.json alongside.
@@ -124,8 +116,8 @@ class IngestionService:
         processor = self.context.get_input_processor_instance(suffix)
 
         # 📝 Save metadata.json
-        #metadata_path = output_dir / "metadata.json"
-        #with open(metadata_path, "w", encoding="utf-8") as meta_file:
+        # metadata_path = output_dir / "metadata.json"
+        # with open(metadata_path, "w", encoding="utf-8") as meta_file:
         #    json.dump(metadata.model_dump(mode="json"), meta_file, indent=4, ensure_ascii=False)
 
         # 🗂️ Ensure output directory exists
@@ -142,10 +134,7 @@ class IngestionService:
         else:
             raise RuntimeError(f"Unknown processor type for: {input_path}")
 
-    def process_output(self,
-                       input_file_name: str,
-                       output_dir: pathlib.Path,
-                       input_file_metadata: DocumentMetadata) -> OutputProcessorResponse:
+    def process_output(self, input_file_name: str, output_dir: pathlib.Path, input_file_metadata: DocumentMetadata) -> DocumentMetadata:
         """
         Processes data resulting from the input processing.
         """
@@ -161,15 +150,16 @@ class IngestionService:
         if not any(output_dir.glob("*.*")):
             raise ValueError(f"Output directory {output_dir} does not contain output files")
         # get the first file in the output_dir
-        output_file = next(output_dir.glob("*.*"))
+        file_to_process = next(output_dir.glob("*.*"))
         # check if the file is a markdown, csv or duckdb file
-        if output_file.suffix.lower() not in [".md", ".csv",".duckdb"]:
-            raise ValueError(f"Output file {output_file} is not a markdown or csv file")
+        if file_to_process.suffix.lower() not in [".md", ".csv", ".duckdb"]:
+            raise ValueError(f"Output file {file_to_process} is not a markdown or csv file")
         # check if the file is empty
-        if output_file.stat().st_size == 0:
-            raise ValueError(f"Output file {output_file} is empty")
+        if file_to_process.stat().st_size == 0:
+            raise ValueError(f"Output file {file_to_process} is empty")
         # check if the file is a markdown or csv file
-        return processor.process(output_file, input_file_metadata)
+        file_to_process_abs_str = str(file_to_process.resolve())
+        return processor.process(file_path=file_to_process_abs_str, metadata=input_file_metadata)
 
     def get_markdown(self, metadata: DocumentMetadata, target_dir: pathlib.Path) -> pathlib.Path:
         """

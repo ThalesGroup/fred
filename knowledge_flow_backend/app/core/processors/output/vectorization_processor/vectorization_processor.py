@@ -13,15 +13,16 @@
 # limitations under the License.
 
 import logging
-from app.common.structures import OutputProcessorResponse, Status
-from fastapi import HTTPException
+from typing import override
 from langchain.schema.document import Document
 
 from app.application_context import ApplicationContext
 from app.common.document_structures import DocumentMetadata, ProcessingStage
-from app.core.processors.output.base_output_processor import BaseOutputProcessor
+from app.common.vectorization_utils import load_langchain_doc_from_metadata
+from app.core.processors.output.base_output_processor import BaseOutputProcessor, VectorProcessingError
 
 logger = logging.getLogger(__name__)
+
 
 class VectorizationProcessor(BaseOutputProcessor):
     """
@@ -31,8 +32,7 @@ class VectorizationProcessor(BaseOutputProcessor):
 
     def __init__(self):
         self.context = ApplicationContext.get_instance()
-        self.file_loader = self.context.get_document_loader()
-        logger.info(f"📄 Document loader initialized: {self.file_loader.__class__.__name__}")
+        self.content_loader = self.context.get_content_store()
 
         self.splitter = self.context.get_text_splitter()
         logger.info(f"✂️ Text splitter initialized: {self.splitter.__class__.__name__}")
@@ -46,37 +46,12 @@ class VectorizationProcessor(BaseOutputProcessor):
         self.metadata_store = ApplicationContext.get_instance().get_metadata_store()
         logger.info(f"📝 Metadata store initialized: {self.metadata_store.__class__.__name__}")
 
-    def process(self, file_path: str, metadata: DocumentMetadata) -> OutputProcessorResponse:
-        """
-        Process a document for vectorization.
-        This method orchestrates the entire vectorization process:
-        1. Load the document using the loader.
-        2. Split the document into smaller chunks.
-        3. Embed the chunks using the embedder.
-        4. Store the embeddings in the vector store.
-        5. Save the metadata in the metadata store.
-        """
-        return self._vectorize_document(file_path, metadata)
-
-    def _vectorize_document(
-        self,
-        file_path: str,
-        metadata: DocumentMetadata,
-    ) -> OutputProcessorResponse:
-        """
-        Orchestrates the document vectorization process:
-        - Loads a document
-        - Splits it into chunks
-        - Embeds the chunks
-        - Stores vectors in the vector store
-        - Saves metadata in metadata store
-        """
-
+    @override
+    def process(self, file_path: str, metadata: DocumentMetadata) -> DocumentMetadata:
         try:
             logger.info(f"Starting vectorization for {file_path}")
 
-            # 1. Load the document
-            document: Document = self.file_loader.load(file_path, metadata)
+            document: Document = load_langchain_doc_from_metadata(file_path, metadata)
             logger.debug(f"Document loaded: {document}")
             if not document:
                 raise ValueError("Document is empty or not loaded correctly.")
@@ -100,11 +75,11 @@ class VectorizationProcessor(BaseOutputProcessor):
                 result = self.vector_store.add_documents(chunks)
                 logger.debug(f"Documents added to Vector Store: {result}")
             except Exception as e:
-                logger.exception("Failed to add documents to Vectore Store: %s", e)
-                raise HTTPException(status_code=500, detail="Failed to add documents to Vectore Store") from e
+                logger.exception("Failed to add documents to Vectore Store")
+                raise VectorProcessingError("Failed to add documents to Vectore Store") from e
             metadata.mark_stage_done(ProcessingStage.VECTORIZED)
-            return OutputProcessorResponse(status=Status.SUCCESS, chunks=len(chunks))
+            return metadata
 
         except Exception as e:
-            logger.exception(f"Error during vectorization: {e}")
-            raise HTTPException(status_code=500, detail=str(e))
+            logger.exception("Unexpected error during vectorization")
+            raise VectorProcessingError("vectorization processing failed") from e

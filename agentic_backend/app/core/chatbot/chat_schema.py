@@ -12,15 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Literal, Optional, List, Dict, Union
+from typing import Literal, Optional, List, Dict, Union, Any
 from datetime import datetime
 from pydantic import BaseModel, Field
+
 
 # --- Base Token Usage ---
 class ChatTokenUsage(BaseModel):
     input_tokens: int
     output_tokens: int
     total_tokens: int
+
 
 # --- Source document info ---
 class ChatSource(BaseModel):
@@ -34,25 +36,45 @@ class ChatSource(BaseModel):
     modified: str
     score: float
 
+
 # --- Unified message structure ---
 class ChatMessagePayload(BaseModel):
-    exchange_id: str = Field(..., description="Unique ID for the current question repsonse(s) exchange")
+    exchange_id: str = Field(
+        ..., description="Unique ID for the current question repsonse(s) exchange"
+    )
     type: Literal["human", "ai", "system", "tool"]
     sender: Literal["user", "assistant", "system"]
     content: str
     timestamp: str
     session_id: str = Field(..., description="Unique ID for the conversation")
-    rank: int = Field(..., description="Monotonically increasing index of the message within the session")
-    metadata: Optional[Dict[str, Union[str, int, float, dict, list]]] = Field(default_factory=dict)
-    subtype: Optional[Literal[
-        "final", "thought", "tool_result", "plan", "execution", "observation", "error", "injected_context"
-    ]] = None
+    rank: int = Field(
+        ...,
+        description="Monotonically increasing index of the message within the session",
+    )
+    metadata: Optional[Dict[str, Union[str, int, float, dict, list]]] = Field(
+        default_factory=dict
+    )
+    subtype: Optional[
+        Literal[
+            "final",
+            "thought",
+            "tool_result",
+            "plan",
+            "execution",
+            "observation",
+            "error",
+            "injected_context",
+        ]
+    ] = None
+
     def with_metadata(
         self,
         model: Optional[str] = None,
         token_usage: Optional[ChatTokenUsage] = None,
         sources: Optional[List[ChatSource]] = None,
-        **extra
+        latency_seconds: Optional[float] = None,
+        agent_name: Optional[str] = None,
+        **extra,
     ) -> "ChatMessagePayload":
         if model:
             self.metadata["model"] = model
@@ -65,6 +87,18 @@ class ChatMessagePayload(BaseModel):
         self.metadata.update(extra)
         return self
 
+
+class MetricsBucket(BaseModel):
+    timestamp: str  # truncated timestamp (per precision)
+    group: Dict[str, Any]
+    aggregations: Dict[str, Union[float, List[float]]]
+
+
+class MetricsResponse(BaseModel):
+    precision: str
+    buckets: List[MetricsBucket]
+
+
 # --- Session structure ---
 class SessionSchema(BaseModel):
     id: str
@@ -72,25 +106,31 @@ class SessionSchema(BaseModel):
     title: str
     updated_at: datetime
 
+
 class SessionWithFiles(SessionSchema):
     file_names: list[str] = []
-    
+
+
 # --- Event wrappers ---
 class StreamEvent(BaseModel):
     type: Literal["stream"]
     message: ChatMessagePayload
+
 
 class FinalEvent(BaseModel):
     type: Literal["final"]
     messages: List[ChatMessagePayload]
     session: SessionSchema
 
+
 class ErrorEvent(BaseModel):
     type: Literal["error"]
     content: str
 
+
 # --- Union for WebSocket response ---
 ChatEvent = Union[StreamEvent, FinalEvent, ErrorEvent]
+
 
 def clean_token_usage(raw: dict) -> dict:
     """
@@ -141,4 +181,3 @@ def clean_agent_metadata(raw: dict) -> dict:
         cleaned["thought"] = raw["thought"]
 
     return cleaned
-

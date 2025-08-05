@@ -40,7 +40,7 @@ class DuckdbMetadataStore(BaseMetadataStore):
                     source_tag TEXT,
                     pull_location TEXT,
                     source_type TEXT,
-                    tags TEXT,
+                    tags JSON,
                     title TEXT,
                     author TEXT,
                     created TIMESTAMP,
@@ -49,7 +49,7 @@ class DuckdbMetadataStore(BaseMetadataStore):
                     category TEXT,
                     subject TEXT,
                     keywords TEXT,
-                    processing_stages TEXT
+                    processing_stages JSON
                 )
             """)
 
@@ -62,7 +62,7 @@ class DuckdbMetadataStore(BaseMetadataStore):
             metadata.source_tag,
             metadata.pull_location,
             metadata.source_type,
-            json.dumps(metadata.tags) if metadata.tags else None,
+            json.dumps(metadata.tags) if metadata.tags else "[]",
             metadata.title,
             metadata.author,
             metadata.created,
@@ -71,7 +71,7 @@ class DuckdbMetadataStore(BaseMetadataStore):
             metadata.category,
             metadata.subject,
             metadata.keywords,
-            json.dumps(metadata.processing_stages)
+            json.dumps(metadata.processing_stages) if metadata.processing_stages else "{}",
         )
 
     def _deserialize(self, row: tuple) -> DocumentMetadata:
@@ -93,7 +93,7 @@ class DuckdbMetadataStore(BaseMetadataStore):
                 category=row[13],
                 subject=row[14],
                 keywords=row[15],
-                processing_stages=json.loads(row[16]) if row[16] else {}
+                processing_stages=json.loads(row[16]) if row[16] else {},
             )
         except ValidationError as e:
             raise MetadataDeserializationError(f"Invalid metadata structure for document {row[0]}: {e}")
@@ -114,15 +114,17 @@ class DuckdbMetadataStore(BaseMetadataStore):
     def get_metadata_in_tag(self, tag_id: str) -> List[DocumentMetadata]:
         with self.store._connect() as conn:
             rows = conn.execute(
-                f"SELECT * FROM {self._table()} WHERE tags LIKE ?", [f"%{tag_id}%"]
+                f"""
+                SELECT * FROM {self._table()}
+                WHERE json_contains(tags, to_json(?))
+                """,
+                [tag_id],
             ).fetchall()
         return [self._deserialize(row) for row in rows]
 
-    def get_metadata_by_uid(self, document_uid: str) -> DocumentMetadata:
+    def get_metadata_by_uid(self, document_uid: str) -> DocumentMetadata | None:
         with self.store._connect() as conn:
-            row = conn.execute(
-                f"SELECT * FROM {self._table()} WHERE document_uid = ?", [document_uid]
-            ).fetchone()
+            row = conn.execute(f"SELECT * FROM {self._table()} WHERE document_uid = ?", [document_uid]).fetchone()
         return self._deserialize(row) if row else None
 
     def list_by_source_tag(self, source_tag: str) -> List[DocumentMetadata]:
@@ -132,7 +134,7 @@ class DuckdbMetadataStore(BaseMetadataStore):
                 SELECT * FROM {self._table()}
                 WHERE source_tag = ?
                 """,
-                [source_tag]
+                [source_tag],
             ).fetchall()
         return [self._deserialize(row) for row in rows]
 
@@ -140,22 +142,22 @@ class DuckdbMetadataStore(BaseMetadataStore):
         if not metadata.document_uid:
             raise ValueError("Metadata must contain a 'document_uid'")
         with self.store._connect() as conn:
-            conn.execute(f"""
-                INSERT OR REPLACE INTO {self._table()} VALUES (
-                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-                )
-            """, self._serialize(metadata))
-
-    def delete_metadata(self, metadata: DocumentMetadata) -> None:
-        with self.store._connect() as conn:
-            result = conn.execute(
-                f"DELETE FROM {self._table()} WHERE document_uid = ?",
-                [metadata.document_uid]
+            conn.execute(
+                f"""
+                    INSERT OR REPLACE INTO {self._table()} VALUES (
+                        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                    )
+            """,
+                self._serialize(metadata),
             )
-        if result.rowcount == 0:
-            raise ValueError(f"No document found with UID {metadata.document_uid}")
 
-    def update_metadata_field(self, document_uid: str, field: str, value: Any) -> DocumentMetadata:
+    def delete_metadata(self, document_uid: str) -> None:
+        with self.store._connect() as conn:
+            result = conn.execute(f"DELETE FROM {self._table()} WHERE document_uid = ?", [document_uid])
+        if result.rowcount == 0:
+            raise ValueError(f"No document found with UID {document_uid}")
+
+    def _update_metadata_field(self, document_uid: str, field: str, value: Any) -> DocumentMetadata:
         existing = self.get_metadata_by_uid(document_uid)
         if not existing:
             raise ValueError(f"No document found with UID {document_uid}")

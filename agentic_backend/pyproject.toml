@@ -9,7 +9,7 @@ authors = [
 requires-python = ">=3.12,<3.13"
 
 dependencies = [
-  "fastapi==0.115.6",
+  "fastapi==0.115.7",
   "PyYAML==6.0.1",
   "uvicorn[standard]>=0.30.6,<0.31.0",
   "croniter==2.0.2",
@@ -36,6 +36,7 @@ dependencies = [
   "rich>=14.0.0",
   "cryptography>=45.0.4",
   "fred-core",
+  "azure-identity>=1.23.1",
 ]
 
 [project.optional-dependencies]
@@ -58,6 +59,14 @@ include = ["fred*"]
 
 [tool.uv.sources]
 fred-core = { path = "../fred-core", editable = true }
+
+[dependency-groups]
+dev = [
+    "bandit>=1.8.6",
+    "basedpyright>=1.31.0",
+    "detect-secrets>=1.5.0",
+    "ruff>=0.12.5",
+]
 
 [tool.uv]
 # Using `editable_mode = "compat"` when installing fred-core to make editable install work with Pylance (vscode):

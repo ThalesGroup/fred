@@ -31,6 +31,7 @@ class FinopsConsumptionInput(BaseModel):
         cluster (str): The full name of the cluster for which cost data is being retrieved.
         precision (PrecisionEnum): Specifies the granularity of the data. Options include daily, hourly, or finer resolutions.
     """
+
     start_date: datetime = Field(
         description="The start date and time for the cost data retrieval period (e.g., '2024-01-01T00:00:00')."
     )
@@ -46,7 +47,6 @@ class FinopsConsumptionInput(BaseModel):
             "Options may include daily, hourly, or minute-level granularity."
         )
     )
-
 
 
 def get_finops_consumption(

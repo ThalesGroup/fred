@@ -6,7 +6,6 @@ A makefile is available to help you compile package and run, with or without doc
 Note that the package-lock.json is generated from a dockerfile to avoid macos/linux issues with natives packages. It is then
 committed to ensure all developers share the same configuration.
 
-
 ## Run the Dev Server
 
 ```bash
@@ -100,3 +99,22 @@ export default {
 - Replace `plugin:@typescript-eslint/recommended` to `plugin:@typescript-eslint/recommended-type-checked` or `plugin:@typescript-eslint/strict-type-checked`
 - Optionally add `plugin:@typescript-eslint/stylistic-type-checked`
 - Install [eslint-plugin-react](https://github.com/jsx-eslint/eslint-plugin-react) and add `plugin:react/recommended` & `plugin:react/jsx-runtime` to the `extends` list
+
+## API slices generations
+
+To query our backends, we use [RTK Query](https://redux-toolkit.js.org/rtk-query/overview).
+RTK Query hooks (and slices, types...) are generated automaticaly base on our OpenApi specs using [RTK Query code gen](https://redux-toolkit.js.org/rtk-query/usage/code-generation#openapi).
+
+If you need to update one of them, just run one of the command while the corresponding backends is running
+
+- Agentic backend:
+
+  ```sh
+  make update-agentic-api
+  ```
+
+- Knowledge Flow backend:
+
+  ```sh
+  make update-knowledge-flow-api
+  ```

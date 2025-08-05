@@ -29,12 +29,15 @@ from app.core.agents.store.base_agent_store import BaseAgentStore
 from app.core.feedback.store.base_feedback_store import BaseFeedbackStore
 
 from pydantic import BaseModel
-from app.model_factory import get_structured_chain
-from app.common.structures import AgentSettings, Configuration, ModelConfiguration, ServicesSettings
-from app.model_factory import get_model
+from app.core.model.model_factory import get_structured_chain
+from app.common.structures import (
+    AgentSettings,
+    Configuration,
+    ModelConfiguration,
+    ServicesSettings,
+)
+from app.core.model.model_factory import get_model
 from langchain_core.language_models.base import BaseLanguageModel
-from langchain_mcp_adapters.client import MultiServerMCPClient
-from langchain_core.tools import BaseTool
 from app.core.session.stores.abstract_session_backend import AbstractSessionStorage
 from pathlib import Path
 
@@ -43,16 +46,16 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-
 # -------------------------------
 # Public access helper functions
 # -------------------------------
 
+
 def get_structured_chain_for_service(service_name: str, schema: Type[BaseModel]):
     """
     Returns a structured output chain for a given service and schema.
-    This method provides fallback for unsupported providers. Only OpenAI and Azure 
-    support the function_calling features. If not, like Ollama, it will use a default 
+    This method provides fallback for unsupported providers. Only OpenAI and Azure
+    support the function_calling features. If not, like Ollama, it will use a default
     prompt as a fallback.
 
     Args:
@@ -66,6 +69,7 @@ def get_structured_chain_for_service(service_name: str, schema: Type[BaseModel])
     model_config = app_context.get_service_settings(service_name).model
     return get_structured_chain(schema, model_config)
 
+
 def get_configuration() -> Configuration:
     """
     Retrieves the global application configuration.
@@ -75,11 +79,14 @@ def get_configuration() -> Configuration:
     """
     return get_app_context().configuration
 
+
 def get_sessions_store() -> AbstractSessionStorage:
     return get_app_context().get_sessions_store()
 
+
 def get_agent_store() -> BaseAgentStore:
     return get_app_context().get_agent_store()
+
 
 def get_feedback_store() -> BaseFeedbackStore:
     return get_app_context().get_feedback_store()
@@ -92,7 +99,8 @@ def get_enabled_agent_names() -> List[str]:
     Returns:
         List[str]: List of enabled agent names.
     """
-    return get_app_context().get_enabled_agent_names()  
+    return get_app_context().get_enabled_agent_names()
+
 
 def get_app_context() -> "ApplicationContext":
     """
@@ -147,9 +155,11 @@ def get_model_for_service(service_name: str) -> BaseLanguageModel:
     """
     return get_app_context().get_model_for_service(service_name)
 
+
 # -------------------------------
 # Runtime status class
 # -------------------------------
+
 
 class RuntimeStatus:
     """
@@ -174,9 +184,11 @@ class RuntimeStatus:
         with self._lock:
             self._offline = False
 
+
 # -------------------------------
 # Application context singleton
 # -------------------------------
+
 
 class ApplicationContext:
     """
@@ -192,11 +204,12 @@ class ApplicationContext:
     _lock = Lock()
 
     def __new__(cls, configuration: Configuration = None):
-        
         with cls._lock:
             if cls._instance is None:
                 if configuration is None:
-                    raise ValueError("ApplicationContext must be initialized with a configuration first.")
+                    raise ValueError(
+                        "ApplicationContext must be initialized with a configuration first."
+                    )
                 cls._instance = super().__new__(cls)
 
                 # Store configuration and runtime status
@@ -222,8 +235,11 @@ class ApplicationContext:
         Apply the default model configuration to all agents and services if not explicitly set.
         This merges the default settings into each component's model config.
         """
+
         def merge(target: BaseModel) -> BaseModel:
-            defaults = self.configuration.ai.default_model.model_dump(exclude_unset=True)
+            defaults = self.configuration.ai.default_model.model_dump(
+                exclude_unset=True
+            )
             target_dict = target.model_dump(exclude_unset=True)
             merged_dict = {**defaults, **target_dict}
             return type(target)(**merged_dict)
@@ -236,19 +252,25 @@ class ApplicationContext:
         for agent in self.configuration.ai.agents:
             agent.model = self._merge_with_default_model(agent.model)
 
-    def _merge_with_default_model(self, model: Optional[ModelConfiguration]) -> ModelConfiguration:
-        default_model = self.configuration.ai.default_model.model_dump(exclude_unset=True)
+    def _merge_with_default_model(
+        self, model: Optional[ModelConfiguration]
+    ) -> ModelConfiguration:
+        default_model = self.configuration.ai.default_model.model_dump(
+            exclude_unset=True
+        )
         model_dict = model.model_dump(exclude_unset=True) if model else {}
         merged = {**default_model, **model_dict}
         return ModelConfiguration(**merged)
-    
-    def apply_default_model_to_agent(self, agent_settings: AgentSettings) -> AgentSettings:
+
+    def apply_default_model_to_agent(
+        self, agent_settings: AgentSettings
+    ) -> AgentSettings:
         """
         Returns a new AgentSettings with the default model merged in, unless already fully specified.
         """
         merged_model = self._merge_with_default_model(agent_settings.model)
         return agent_settings.model_copy(update={"model": merged_model})
-    
+
     # --- AI Models ---
 
     def get_agent_settings(self, agent_name: str) -> AgentSettings:
@@ -260,7 +282,9 @@ class ApplicationContext:
     def get_service_settings(self, service_name: str) -> ServicesSettings:
         service_settings = self._service_index.get(service_name)
         if service_settings is None or not service_settings.enabled:
-            raise ValueError(f"AI service '{service_name}' is not configured or enabled.")
+            raise ValueError(
+                f"AI service '{service_name}' is not configured or enabled."
+            )
         return service_settings
 
     def get_model_for_service(self, service_name: str) -> BaseLanguageModel:
@@ -272,7 +296,7 @@ class ApplicationContext:
         Retrieves the default AI model instance.
         """
         return get_model(self.configuration.ai.default_model)
-    
+
     # --- Agent classes ---
 
     def get_enabled_agent_names(self) -> List[str]:
@@ -288,13 +312,18 @@ class ApplicationContext:
         """
         Factory function to create a sessions store instance based on the configuration.
         As of now, it supports in_memory and OpenSearch sessions storage.
-        
+
         Returns:
             AbstractSessionStorage: An instance of the sessions store.
         """
         # Import here to avoid avoid circular dependencies:
-        from app.core.session.stores.in_memory_session_store import InMemorySessionStorage
-        from app.core.session.stores.opensearch_session_store import OpensearchSessionStorage
+        from app.core.session.stores.in_memory_session_store import (
+            InMemorySessionStorage,
+        )
+        from app.core.session.stores.opensearch_session_store import (
+            OpensearchSessionStorage,
+        )
+
         config = get_configuration().session_storage
         if config.type == "in_memory":
             return InMemorySessionStorage()
@@ -306,42 +335,43 @@ class ApplicationContext:
                 secure=config.secure,
                 verify_certs=config.verify_certs,
                 sessions_index=config.sessions_index,
-                history_index=config.history_index
+                history_index=config.history_index,
             )
         else:
             raise ValueError(f"Unsupported sessions storage backend: {config.type}")
-        
+
     def get_agent_store(self) -> BaseAgentStore:
         """
         Retrieve the configured agent store. It is used to save all the configured or
         dynamically created agents
-        
+
         Returns:
             BaseDynamicAgentStore: An instance of the dynamic agents store.
         """
         config = get_configuration().agent_storage
         if config.type == "duckdb":
             from app.core.agents.store.duckdb_agent_store import DuckdbAgentStorage
+
             db_path = Path(config.duckdb_path).expanduser()
             return DuckdbAgentStorage(db_path)
         else:
             raise ValueError(f"Unsupported sessions storage backend: {config.type}")
 
-
     def get_feedback_store(self) -> BaseFeedbackStore:
         """
         Retrieve the configured agent store. It is used to save all the configured or
         dynamically created agents
-        
+
         Returns:
             BaseDynamicAgentStore: An instance of the dynamic agents store.
         """
         config = get_configuration().feedback_storage
         if config.type == "duckdb":
-            from app.core.feedback.store.duckdb_feedback_store import DuckdbFeedbackStore
+            from app.core.feedback.store.duckdb_feedback_store import (
+                DuckdbFeedbackStore,
+            )
+
             db_path = Path(config.duckdb_path).expanduser()
             return DuckdbFeedbackStore(db_path)
         else:
             raise ValueError(f"Unsupported sessions storage backend: {config.type}")
-
-

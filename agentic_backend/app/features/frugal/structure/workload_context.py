@@ -26,9 +26,7 @@ class WorkloadContext(BaseModel):
     Represents the YAML context of a workload.
     """
 
-    workload_yaml: str = Field(
-        description="The YAML definition of the workload"
-    )
+    workload_yaml: str = Field(description="The YAML definition of the workload")
     configmaps_yaml: Optional[str] = Field(
         default=None, description="The YAML definition of the configmaps"
     )

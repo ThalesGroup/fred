@@ -17,16 +17,20 @@ import { Box, Button, Drawer, TextField, Typography } from "@mui/material";
 import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
-import { useCreateTagKnowledgeFlowV1TagsPostMutation } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import {
+  useCreateTagKnowledgeFlowV1TagsPostMutation,
+  TagType,
+} from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { useToast } from "../ToastProvider";
 
 interface LibraryCreateDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   onLibraryCreated?: () => void;
+   mode: "documents" | "prompts";
 }
 
-export const LibraryCreateDrawer: React.FC<LibraryCreateDrawerProps> = ({ isOpen, onClose, onLibraryCreated }) => {
+export const LibraryCreateDrawer: React.FC<LibraryCreateDrawerProps> = ({ isOpen, onClose, onLibraryCreated, mode }) => {
   const { t } = useTranslation();
   const { showError, showSuccess } = useToast();
   const navigate = useNavigate();
@@ -42,42 +46,61 @@ export const LibraryCreateDrawer: React.FC<LibraryCreateDrawerProps> = ({ isOpen
   };
 
   const handleCreate = async (e?: React.FormEvent) => {
-    e?.preventDefault();
-    
-    if (!name.trim()) {
-      showError({
-        summary: t("libraryCreateDrawer.validationError"),
-        detail: t("libraryCreateDrawer.nameRequired"),
-      });
-      return;
-    }
+  e?.preventDefault();
 
-    try {
-      const result = await createTag({
+  if (!name.trim()) {
+    showError({
+      summary: t("libraryCreateDrawer.validationError"),
+      detail: t("libraryCreateDrawer.nameRequired"),
+    });
+    return;
+  }
+
+  try {
+    let result;
+
+    if (mode === "documents") {
+      result = await createTag({
         tagCreate: {
           name: name.trim(),
           description: description.trim() || null,
-          type: "library",
-          document_ids: [],
+          type: "document" as TagType,
+          item_ids: [],
         },
       }).unwrap();
-
-      showSuccess({
-        summary: t("libraryCreateDrawer.libraryCreated"),
-        detail: t("libraryCreateDrawer.libraryCreatedDetail", { name }),
-      });
-
-      onLibraryCreated?.();
-      handleClose();
-      navigate(`/documentLibrary/${result.id}`);
-    } catch (error) {
-      console.error("Error creating library:", error);
-      showError({
-        summary: t("libraryCreateDrawer.creationFailed"),
-        detail: t("libraryCreateDrawer.creationFailedDetail", { error: error.message || error }),
-      });
+    } else {
+      result = await createTag({
+        tagCreate: {
+          name: name.trim(),
+          description: description.trim() || null,
+          type: "prompt" as TagType,
+          item_ids: [],
+        },
+      }).unwrap();
     }
-  };
+
+    showSuccess({
+      summary: t("libraryCreateDrawer.libraryCreated"),
+      detail: t("libraryCreateDrawer.libraryCreatedDetail", { name }),
+    });
+
+    onLibraryCreated?.();
+    handleClose();
+
+    if (mode === "documents") {
+      navigate(`/documentLibrary/${result.id}`);
+    } else {
+      navigate(`/promptLibrary/${result.id}`); 
+    }
+  } catch (error) {
+    console.error("Error creating library:", error);
+    showError({
+      summary: t("libraryCreateDrawer.creationFailed"),
+      detail: t("libraryCreateDrawer.creationFailedDetail", { error: error.message || error }),
+    });
+  }
+};
+
 
   return (
     <Drawer
@@ -97,14 +120,13 @@ export const LibraryCreateDrawer: React.FC<LibraryCreateDrawerProps> = ({ isOpen
         {t("libraryCreateDrawer.title")}
       </Typography>
 
-      <Box component="form" onSubmit={handleCreate} sx={{ mt: 3 }}>
+      <Box component="form" onSubmit={handleCreate} sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
         <TextField
           fullWidth
           label={t("libraryCreateDrawer.libraryName")}
           value={name}
           onChange={(e) => setName(e.target.value)}
           required
-          sx={{ mb: 2 }}
           autoFocus
         />
 
@@ -115,25 +137,24 @@ export const LibraryCreateDrawer: React.FC<LibraryCreateDrawerProps> = ({ isOpen
           onChange={(e) => setDescription(e.target.value)}
           multiline
           rows={3}
-          sx={{ mb: 3 }}
         />
-      </Box>
 
-      <Box sx={{ mt: 3, display: "flex", justifyContent: "space-between" }}>
-        <Button variant="outlined" onClick={handleClose} sx={{ borderRadius: "8px" }}>
-          {t("libraryCreateDrawer.cancel")}
-        </Button>
+        <Box sx={{ display: "flex", justifyContent: "space-between" }}>
+          <Button variant="outlined" onClick={handleClose} sx={{ borderRadius: "8px" }}>
+            {t("libraryCreateDrawer.cancel")}
+          </Button>
 
-        <Button
-          variant="contained"
-          color="success"
-          startIcon={<SaveIcon />}
-          type="submit"
-          disabled={isLoading || !name.trim()}
-          sx={{ borderRadius: "8px" }}
-        >
-          {isLoading ? t("libraryCreateDrawer.saving") : t("libraryCreateDrawer.save")}
-        </Button>
+          <Button
+            variant="contained"
+            color="success"
+            startIcon={<SaveIcon />}
+            type="submit"
+            disabled={isLoading || !name.trim()}
+            sx={{ borderRadius: "8px" }}
+          >
+            {isLoading ? t("libraryCreateDrawer.saving") : t("libraryCreateDrawer.save")}
+          </Button>
+        </Box>
       </Box>
     </Drawer>
   );

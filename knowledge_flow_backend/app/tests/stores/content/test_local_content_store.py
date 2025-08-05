@@ -29,7 +29,7 @@ All tests are isolated using pytest's tmp_path and monkeypatch fixtures.
 from pathlib import Path
 import pytest
 
-from app.core.stores.content.local_content_store import LocalStorageBackend
+from app.core.stores.content.filesystem_content_store import FileSystemContentStore
 
 
 # ----------------------------
@@ -40,7 +40,7 @@ from app.core.stores.content.local_content_store import LocalStorageBackend
 @pytest.fixture
 def tmp_store(tmp_path):
     """Provide a temporary local storage backend."""
-    return LocalStorageBackend(destination_root=tmp_path)
+    return FileSystemContentStore(destination_root=tmp_path)
 
 
 # ----------------------------

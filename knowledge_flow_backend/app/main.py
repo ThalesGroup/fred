@@ -18,12 +18,14 @@
 """
 Entrypoint for the Knowledge Flow Backend App.
 """
+
 import logging
 import os
 from rich.logging import RichHandler
 from dotenv import load_dotenv
 
 from app.features.catalog.controller import CatalogController
+from app.features.prompts.controller import PromptController
 from app.features.pull.controller import PullDocumentController
 from app.features.pull.service import PullDocumentService
 from app.features.scheduler.controller import SchedulerController
@@ -56,9 +58,7 @@ def configure_logging(log_level: str):
         datefmt="%Y-%m-%d %H:%M:%S",
         handlers=[RichHandler(rich_tracebacks=False, show_time=False, show_path=False)],
     )
-    logging.getLogger(__name__).info(
-        f"Logging configured at {log_level.upper()} level."
-    )
+    logging.getLogger(__name__).info(f"Logging configured at {log_level.upper()} level.")
 
 
 def load_environment(dotenv_path: str = "./config/.env"):
@@ -68,11 +68,10 @@ def load_environment(dotenv_path: str = "./config/.env"):
         logging.getLogger().warning(f"⚠️ No .env file found at: {dotenv_path}")
 
 
-
-
 # -----------------------
 # APP CREATION
 # -----------------------
+
 
 def create_app() -> FastAPI:
     load_environment()
@@ -83,9 +82,9 @@ def create_app() -> FastAPI:
     logger.info(f"🛠️ create_app() called with base_url={base_url}")
 
     ApplicationContext(configuration)
-    
-    initialize_keycloak(configuration)
-    
+
+    initialize_keycloak(configuration.app.security)
+
     app = FastAPI(
         docs_url=f"{configuration.app.base_url}/docs",
         redoc_url=f"{configuration.app.base_url}/redoc",
@@ -94,7 +93,7 @@ def create_app() -> FastAPI:
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=configuration.security.authorized_origins,
+        allow_origins=configuration.app.security.authorized_origins,
         allow_methods=["GET", "POST", "PUT", "DELETE"],
         allow_headers=["Content-Type", "Authorization"],
     )
@@ -109,8 +108,9 @@ def create_app() -> FastAPI:
     ContentController(router)
     IngestionController(router)
     TabularController(router)
-    #CodeSearchController(router)
+    # CodeSearchController(router)
     TagController(router)
+    PromptController(router)
     VectorSearchController(router)
 
     if configuration.scheduler.enabled:
@@ -149,6 +149,7 @@ def create_app() -> FastAPI:
     mcp_code.mount(mount_path="/mcp_code")
 
     return app
+
 
 # -----------------------
 # MAIN ENTRYPOINT

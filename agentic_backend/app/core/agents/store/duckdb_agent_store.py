@@ -43,7 +43,9 @@ class DuckdbAgentStorage(BaseAgentStore):
         try:
             json_str = settings.model_dump_json()
         except Exception as e:
-            raise ValueError(f"Failed to serialize AgentSettings for {settings.name}: {e}")
+            raise ValueError(
+                f"Failed to serialize AgentSettings for {settings.name}: {e}"
+            )
 
         with self.store._connect() as conn:
             conn.execute(

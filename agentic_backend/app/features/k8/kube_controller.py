@@ -27,11 +27,23 @@ from kubernetes.client.exceptions import ApiException
 
 from fred_core import KeycloakUser, get_current_user
 from app.features.k8.kube_service import KubeService
-from app.features.k8.structure import Cluster, Workload, WorkloadKind, WorkloadNameList, IngressesList
-from app.features.k8.structure import NamespacesList, Namespace, ConfigMapsList, ServicesList
-from app.common.structures import Configuration
+from app.features.k8.structure import (
+    Cluster,
+    Workload,
+    WorkloadKind,
+    WorkloadNameList,
+    IngressesList,
+)
+from app.features.k8.structure import (
+    NamespacesList,
+    Namespace,
+    ConfigMapsList,
+    ServicesList,
+)
+
 # 🔹 Create a module-level logger
 logger = logging.getLogger(__name__)
+
 
 class KubeController:
     """
@@ -63,7 +75,7 @@ class KubeController:
             summary="Get the list of Clusters",
         )
         async def get_clusters_list(
-            user: KeycloakUser = Depends(get_current_user)
+            user: KeycloakUser = Depends(get_current_user),
         ) -> list[Cluster]:
             """
             Retrieve the list of Kubernetes Clusters.
@@ -94,7 +106,9 @@ class KubeController:
             tags=fastapi_tags,
             summary="Get the list of Namespaces for the given Cluster.",
         )
-        async def get_namespaces_list(cluster_name: str, user: KeycloakUser = Depends(get_current_user)) -> NamespacesList:
+        async def get_namespaces_list(
+            cluster_name: str, user: KeycloakUser = Depends(get_current_user)
+        ) -> NamespacesList:
             """
             Retrieve the list of Namespaces for a specific Cluster.
 
@@ -120,9 +134,7 @@ class KubeController:
             except FileNotFoundError as e:
                 logger.error(f"Resource not found: {e}")
                 traceback.print_exc()
-                raise HTTPException(
-                    status_code=404, detail=f"Resource not found: {e}"
-                )
+                raise HTTPException(status_code=404, detail=f"Resource not found: {e}")
             except Exception as e:
                 traceback.print_exc()
                 raise HTTPException(
@@ -134,12 +146,14 @@ class KubeController:
             "/kube/namespace",
             tags=fastapi_tags,
             summary=(
-                    "Get the description the given Namespace for the specified Cluster. This includes "
-                    "labels, annotations, status, resource quota, and limit range."
+                "Get the description the given Namespace for the specified Cluster. This includes "
+                "labels, annotations, status, resource quota, and limit range."
             ),
         )
         async def get_namespace_description(
-                cluster_name: str, namespace: str, user: KeycloakUser = Depends(get_current_user)
+            cluster_name: str,
+            namespace: str,
+            user: KeycloakUser = Depends(get_current_user),
         ) -> Namespace:
             """
             Describe a specific Namespace in a Cluster.
@@ -169,9 +183,7 @@ class KubeController:
             except FileNotFoundError as e:
                 logger.error(f"Resource not found: {e}")
                 traceback.print_exc()
-                raise HTTPException(
-                    status_code=404, detail=f"Resource not found: {e}"
-                )
+                raise HTTPException(status_code=404, detail=f"Resource not found: {e}")
             except Exception as e:
                 traceback.print_exc()
                 raise HTTPException(
@@ -184,116 +196,162 @@ class KubeController:
             tags=fastapi_tags,
             summary="Get the list of workloads of the given namespace for the specified cluster",
         )
-        async def get_workload_names_list(cluster_name: str, namespace: str,
-                                          kind: WorkloadKind,
-                                          user: KeycloakUser = Depends(get_current_user)
-                                          ) -> WorkloadNameList:
+        async def get_workload_names_list(
+            cluster_name: str,
+            namespace: str,
+            kind: WorkloadKind,
+            user: KeycloakUser = Depends(get_current_user),
+        ) -> WorkloadNameList:
             try:
-                return kube_service.get_workload_names_list(cluster_name, namespace, kind)
+                return kube_service.get_workload_names_list(
+                    cluster_name, namespace, kind
+                )
             except ApiException as e:
-                raise HTTPException(status_code=e.status,
-                                    detail=f"Failed to list workloads, cluster={cluster_name}, "
-                                           f"namespace={namespace}, kind={kind}: {e.reason}")
+                raise HTTPException(
+                    status_code=e.status,
+                    detail=f"Failed to list workloads, cluster={cluster_name}, "
+                    f"namespace={namespace}, kind={kind}: {e.reason}",
+                )
             except FileNotFoundError as e:
                 logger.error(str(e))
                 traceback.print_exc()
                 raise HTTPException(status_code=404, detail="List of workload names")
             except Exception as e:
                 traceback.print_exc()
-                raise HTTPException(status_code=500, detail="An unexpected error occurred: " + str(e))
+                raise HTTPException(
+                    status_code=500, detail="An unexpected error occurred: " + str(e)
+                )
 
         @app.get(
             "/kube/workload",
             tags=fastapi_tags,
             summary="Get the description of the given workload in the given namespace for the specified cluster",
         )
-        async def get_workload_description(cluster_name: str, namespace: str, workload_name: str,
-                                           kind: WorkloadKind,
-                                           user: KeycloakUser = Depends(get_current_user)
-                                           ) -> Workload:
+        async def get_workload_description(
+            cluster_name: str,
+            namespace: str,
+            workload_name: str,
+            kind: WorkloadKind,
+            user: KeycloakUser = Depends(get_current_user),
+        ) -> Workload:
             try:
-                return kube_service.get_workload_description(cluster_name, namespace, workload_name, kind)
+                return kube_service.get_workload_description(
+                    cluster_name, namespace, workload_name, kind
+                )
             except ApiException as e:
-                raise HTTPException(status_code=e.status,
-                                    detail=f"Failed to describe the workload, cluster={cluster_name}, "
-                                           f"namespace={namespace}, workload={workload_name}, kind{kind}: {e.reason}")
+                raise HTTPException(
+                    status_code=e.status,
+                    detail=f"Failed to describe the workload, cluster={cluster_name}, "
+                    f"namespace={namespace}, workload={workload_name}, kind{kind}: {e.reason}",
+                )
             except FileNotFoundError as e:
                 logger.error(f"Resource not found: {e}")
                 traceback.print_exc()
                 raise HTTPException(status_code=404, detail=f"Resource not found: {e}")
             except Exception as e:
                 traceback.print_exc()
-                raise HTTPException(status_code=500, detail="An unexpected error occurred: " + str(e))
+                raise HTTPException(
+                    status_code=500, detail="An unexpected error occurred: " + str(e)
+                )
 
         @app.get(
             "/kube/configmaps",
             tags=fastapi_tags,
             summary="Get the list of ConfigMaps the given workload in the given namespace for the specified cluster",
         )
-        async def get_workload_configmaps(cluster_name: str, namespace: str, workload_name: str,
-                                          kind: WorkloadKind,
-                                            user: KeycloakUser = Depends(get_current_user)
-                                          ) -> ConfigMapsList:
+        async def get_workload_configmaps(
+            cluster_name: str,
+            namespace: str,
+            workload_name: str,
+            kind: WorkloadKind,
+            user: KeycloakUser = Depends(get_current_user),
+        ) -> ConfigMapsList:
             try:
-                return kube_service.get_workload_configmaps(cluster_name, namespace, workload_name, kind)
+                return kube_service.get_workload_configmaps(
+                    cluster_name, namespace, workload_name, kind
+                )
             except ApiException as e:
                 traceback.print_exc()
-                raise HTTPException(status_code=e.status,
-                                    detail=f"Failed to get the list of ConfigMaps the given workload={workload_name} "
-                                           f"of kind={kind} in the given namespace={namespace} "
-                                           f"for the specified cluster={cluster_name}: {e.reason}")
+                raise HTTPException(
+                    status_code=e.status,
+                    detail=f"Failed to get the list of ConfigMaps the given workload={workload_name} "
+                    f"of kind={kind} in the given namespace={namespace} "
+                    f"for the specified cluster={cluster_name}: {e.reason}",
+                )
             except FileNotFoundError as e:
                 logger.error(f"Resource not found: {e}")
                 traceback.print_exc()
                 raise HTTPException(status_code=404, detail=f"Resource not found: {e}")
             except Exception as e:
                 traceback.print_exc()
-                raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {e}")
+                raise HTTPException(
+                    status_code=500, detail=f"An unexpected error occurred: {e}"
+                )
 
         @app.get(
             "/kube/services",
             tags=fastapi_tags,
             summary="Get the list of Services the given workload in the given namespace for the specified cluster",
         )
-        async def get_workload_services(cluster_name: str, namespace: str, workload_name: str, kind: WorkloadKind,
-                                          user: KeycloakUser = Depends(get_current_user)) \
-                -> ServicesList:
+        async def get_workload_services(
+            cluster_name: str,
+            namespace: str,
+            workload_name: str,
+            kind: WorkloadKind,
+            user: KeycloakUser = Depends(get_current_user),
+        ) -> ServicesList:
             try:
-                return kube_service.get_workload_services(cluster_name, namespace, workload_name, kind)
+                return kube_service.get_workload_services(
+                    cluster_name, namespace, workload_name, kind
+                )
             except ApiException as e:
                 traceback.print_exc()
-                raise HTTPException(status_code=e.status,
-                                    detail=f"Failed to get the list of Services the given workload={workload_name} "
-                                           f"of kind={kind} in the given namespace={namespace} "
-                                           f"for the specified cluster={cluster_name}: {e.reason}")
+                raise HTTPException(
+                    status_code=e.status,
+                    detail=f"Failed to get the list of Services the given workload={workload_name} "
+                    f"of kind={kind} in the given namespace={namespace} "
+                    f"for the specified cluster={cluster_name}: {e.reason}",
+                )
             except FileNotFoundError as e:
                 logger.error(f"Resource not found: {e}")
                 traceback.print_exc()
                 raise HTTPException(status_code=404, detail=f"Resource not found: {e}")
             except Exception as e:
                 traceback.print_exc()
-                raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {e}")
+                raise HTTPException(
+                    status_code=500, detail=f"An unexpected error occurred: {e}"
+                )
 
         @app.get(
             "/kube/ingresses",
             tags=fastapi_tags,
             summary="Get the list of Ingresses the given workload in the given namespace for the specified cluster",
         )
-        async def get_workload_ingresses(cluster_name: str, namespace: str, workload_name: str, kind: WorkloadKind,
-                                          user: KeycloakUser = Depends(get_current_user)) \
-                -> IngressesList:
+        async def get_workload_ingresses(
+            cluster_name: str,
+            namespace: str,
+            workload_name: str,
+            kind: WorkloadKind,
+            user: KeycloakUser = Depends(get_current_user),
+        ) -> IngressesList:
             try:
-                return kube_service.get_workload_ingresses(cluster_name, namespace, workload_name, kind)
+                return kube_service.get_workload_ingresses(
+                    cluster_name, namespace, workload_name, kind
+                )
             except ApiException as e:
                 traceback.print_exc()
-                raise HTTPException(status_code=e.status,
-                                    detail=f"Failed to get the list of Ingresses the given workload={workload_name} "
-                                           f"of kind={kind} in the given namespace={namespace} "
-                                           f"for the specified cluster={cluster_name}: {e.reason}")
+                raise HTTPException(
+                    status_code=e.status,
+                    detail=f"Failed to get the list of Ingresses the given workload={workload_name} "
+                    f"of kind={kind} in the given namespace={namespace} "
+                    f"for the specified cluster={cluster_name}: {e.reason}",
+                )
             except FileNotFoundError as e:
                 logger.error(f"Resource not found: {e}")
                 traceback.print_exc()
                 raise HTTPException(status_code=404, detail=f"Resource not found: {e}")
             except Exception as e:
                 traceback.print_exc()
-                raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {e}")
+                raise HTTPException(
+                    status_code=500, detail=f"An unexpected error occurred: {e}"
+                )

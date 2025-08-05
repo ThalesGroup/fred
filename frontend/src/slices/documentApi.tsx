@@ -16,13 +16,7 @@ import { createApi } from "@reduxjs/toolkit/query/react";
 import { createDynamicBaseQuery } from "../common/dynamicBaseQuery.tsx";
 import { Metadata } from "../components/documents/DocumentTable.tsx";
 
-export const DOCUMENT_PROCESSING_STAGES = [
-  "raw",
-  "preview",
-  "vector",
-  "sql",
-  "mcp",
-] as const;
+export const DOCUMENT_PROCESSING_STAGES = ["raw", "preview", "vector", "sql", "mcp"] as const;
 export interface KnowledgeDocument {
   document_name: string;
   document_uid: string;
@@ -58,7 +52,7 @@ export interface PullFileEntry {
   modified: string;
   metadata: KnowledgeDocument | null;
 }
-export type DocumentProcessingStage = typeof DOCUMENT_PROCESSING_STAGES[number];
+export type DocumentProcessingStage = (typeof DOCUMENT_PROCESSING_STAGES)[number];
 
 export interface MarkdownDocumentPreview {
   content: string;
@@ -68,7 +62,7 @@ export interface FileToProcess {
   document_uid?: string;
   external_path?: string;
   tags?: string[];
-  display_name: string
+  display_name: string;
 }
 
 export interface ProcessDocumentsRequest {
@@ -116,7 +110,14 @@ const extendedDocumentApi = documentApiSlice.injectEndpoints({
     }),
     processDocuments: builder.mutation<ProcessDocumentsResponse, ProcessDocumentsRequest>({
       query: (body) => ({
-        url: "/knowledge-flow/v1/pipelines/process-documents",
+        url: "/knowledge-flow/v1/process-documents",
+        method: "POST",
+        body,
+      }),
+    }),
+    scheduleDocuments: builder.mutation<ProcessDocumentsResponse, ProcessDocumentsRequest>({
+      query: (body) => ({
+        url: "/knowledge-flow/v1/schedule-documents",
         method: "POST",
         body,
       }),
@@ -127,23 +128,33 @@ const extendedDocumentApi = documentApiSlice.injectEndpoints({
         method: "GET",
       }),
     }),
-    browseDocuments: builder.mutation<{ documents: KnowledgeDocument[]; total: number }, {
-  source_tag: string;
-  filters?: Record<string, any>;
-  offset?: number;
-  limit?: number;
-}>({
-  query: ({ source_tag, filters = {}, offset = 0, limit = 100 }) => ({
-    url: "/knowledge-flow/v1/documents/browse",
-    method: "POST",
-    body: {
-      source_tag,
-      filters,
-      offset,
-      limit,
-    },
-  }),
-}),
+    browseDocuments: builder.mutation<
+      { documents: KnowledgeDocument[]; total: number },
+      {
+        source_tag: string;
+        filters?: Record<string, any>;
+        offset?: number;
+        limit?: number;
+      }
+    >({
+      query: ({ source_tag, filters = {}, offset = 0, limit = 100 }) => ({
+        url: "/knowledge-flow/v1/documents/browse",
+        method: "POST",
+        body: {
+          source_tag,
+          filters,
+          offset,
+          limit,
+        },
+      }),
+    }),
+    rescanCatalogSource: builder.mutation<void, string>({
+      query: (sourceTag) => ({
+        url: `/knowledge-flow/v1/pull/catalog/rescan/${sourceTag}`,
+        method: "POST",
+        headers: { accept: "application/json" },
+      }),
+    }),
     getDocumentsWithFilter: builder.mutation<{ documents: KnowledgeDocument[] }, Record<string, any>>({
       query: (filters) => ({
         url: `/knowledge-flow/v1/documents/metadata`, // Single endpoint
@@ -157,25 +168,20 @@ const extendedDocumentApi = documentApiSlice.injectEndpoints({
         method: "PUT",
         body: { retrievable },
       }),
-    }),
-    deleteDocument: builder.mutation<void, string>({
-      query: (documentUid) => ({
-        url: `/knowledge-flow/v1/document/${documentUid}`,
-        method: "DELETE",
-      }),
-    }),
+    })
   }),
 });
 
 export const {
-  useGetDocumentMetadataMutation,
+  useGetDocumentMetadataMutation, // unused
   useUpdateDocumentRetrievableMutation,
   useGetDocumentsWithFilterMutation,
-  useDeleteDocumentMutation,
   useGetDocumentMarkdownPreviewMutation,
   useLazyGetDocumentRawContentQuery,
   useGetDocumentSourcesQuery,
   useGetCatalogFilesQuery,
   useBrowseDocumentsMutation,
-  useProcessDocumentsMutation
+  useProcessDocumentsMutation,
+  useScheduleDocumentsMutation,
+  useRescanCatalogSourceMutation,
 } = extendedDocumentApi;

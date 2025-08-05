@@ -19,23 +19,25 @@ from langgraph.graph import START, END, MessagesState, StateGraph
 from langchain_core.messages import SystemMessage
 
 from app.common.structures import AgentSettings
-from app.model_factory import get_model
+from app.core.model.model_factory import get_model
 from app.core.agents.flow import AgentFlow
-from app.core.monitoring.node_monitoring.monitor_node import monitor_node
 
 logger = logging.getLogger(__name__)
 
+
 class GeneralistExpert(AgentFlow):
     """
-    Generalist Expert provides guidance on a wide range of topics 
-    without deep specialization. 
+    Generalist Expert provides guidance on a wide range of topics
+    without deep specialization.
     """
 
     # Class-level metadata
     name: str = "GeneralistExpert"
     role: str = "Generalist Expert"
     nickname: str = "Georges"
-    description: str = "Provides guidance on a wide range of topics without deep specialization."
+    description: str = (
+        "Provides guidance on a wide range of topics without deep specialization."
+    )
     icon: str = "generalist_agent"
     tag: str = "Generalist"
 
@@ -44,7 +46,7 @@ class GeneralistExpert(AgentFlow):
         self.categories = agent_settings.categories or ["General"]
         self.model = None  # Will be set in async_init
         self.base_prompt = ""  # Will be set in async_init
-        self._graph = None     # Will be built in async_init
+        self._graph = None  # Will be built in async_init
 
     async def async_init(self):
         self.model = get_model(self.agent_settings.model)
@@ -64,18 +66,20 @@ class GeneralistExpert(AgentFlow):
         )
 
     def _generate_prompt(self) -> str:
-        today = datetime.now().strftime('%Y-%m-%d')
-        return "\n".join([
-            "You are a friendly generalist expert, skilled at providing guidance on a wide range of topics without deep specialization.",
-            "Your role is to respond with clarity, providing accurate and reliable information.",
-            "When appropriate, highlight elements that could be particularly relevant.",
-            f"The current date is {today}.",
-            "In case of graphical representation, render mermaid diagrams code.",
-        ])
+        today = datetime.now().strftime("%Y-%m-%d")
+        return "\n".join(
+            [
+                "You are a friendly generalist expert, skilled at providing guidance on a wide range of topics without deep specialization.",
+                "Your role is to respond with clarity, providing accurate and reliable information.",
+                "When appropriate, highlight elements that could be particularly relevant.",
+                f"The current date is {today}.",
+                "In case of graphical representation, render mermaid diagrams code.",
+            ]
+        )
 
     def _build_graph(self) -> StateGraph:
         builder = StateGraph(MessagesState)
-        builder.add_node("expert", monitor_node(self.reasoner))
+        builder.add_node("expert", self.reasoner)
         builder.add_edge(START, "expert")
         builder.add_edge("expert", END)
         return builder

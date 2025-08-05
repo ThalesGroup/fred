@@ -16,7 +16,6 @@ from typing import override, List
 from langchain_core.tools import BaseTool, BaseToolkit
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from pydantic import Field
-from app.core.monitoring.tool_monitoring.monitor_tool import monitor_tool
 
 
 class McpAgentToolkit(BaseToolkit):
@@ -25,18 +24,21 @@ class McpAgentToolkit(BaseToolkit):
     Suitable for dynamically created agents that use arbitrary MCP URLs.
     """
 
-    tools: List[BaseTool] = Field(default_factory=list, description="List of the tools.")
+    tools: List[BaseTool] = Field(
+        default_factory=list, description="List of the tools."
+    )
 
     def __init__(self, mcp_client: MultiServerMCPClient):
         super().__init__()
-        raw_tools = self._fetch_and_wrap_tools(mcp_client)
-        self.tools = [monitor_tool(tool) for tool in raw_tools]
+        self.tools = self._fetch_tools(mcp_client)
 
-    def _fetch_and_wrap_tools(self, mcp_client: MultiServerMCPClient) -> List[BaseTool]:
+    def _fetch_tools(self, mcp_client: MultiServerMCPClient) -> List[BaseTool]:
         raw_tools = mcp_client.get_tools()
         if not raw_tools:
-            raise ValueError("❌ MCP server returned no tools. Check server config or availability.")
-        return [monitor_tool(tool) for tool in raw_tools]
+            raise ValueError(
+                "❌ MCP server returned no tools. Check server config or availability."
+            )
+        return raw_tools
 
     @override
     def get_tools(self) -> List[BaseTool]:

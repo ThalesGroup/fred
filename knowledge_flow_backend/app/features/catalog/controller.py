@@ -1,9 +1,10 @@
 from app.common.structures import DocumentSourceConfig
 from fastapi import APIRouter, HTTPException, Query
 from typing import List, Literal, Optional
-from app.core.stores.metadata.base_catalog_store import PullFileEntry
+from app.core.stores.catalog.base_catalog_store import PullFileEntry
 from app.features.catalog.service import CatalogService, PullSourceNotFoundError
 from pydantic import BaseModel
+
 
 class DocumentSourceInfo(BaseModel):
     tag: str
@@ -12,20 +13,22 @@ class DocumentSourceInfo(BaseModel):
     description: str
     catalog_supported: Optional[bool] = False
 
+
 def provider_supports_catalog(provider: Optional[str]) -> bool:
     return provider in {"local_path"}
 
+
 class CatalogController:
-    
-    
     def __init__(self, router: APIRouter):
         self.service = CatalogService()
 
-        @router.get("/pull/catalog/files",
-            tags=["Library Pull"],
+        @router.get(
+            "/pull/catalog/files",
+            tags=["Documents"],
             response_model=List[PullFileEntry],
             summary="List cataloged files (pull sources only)",
-            description="Only works for sources of type `pull`. Use `/documents/sources` to discover available tags.")
+            description="Only works for sources of type `pull`. Use `/documents/sources` to discover available tags.",
+        )
         def list_catalog_files(
             source_tag: str = Query(..., description="The source tag for the cataloged files"),
             offset: int = Query(0, ge=0, description="Number of entries to skip"),
@@ -36,11 +39,12 @@ class CatalogController:
             except PullSourceNotFoundError as e:
                 raise HTTPException(status_code=404, detail=str(e))
 
-        @router.post("/pull/catalog/rescan/{source_tag}",
-             tags=["Library Pull"],
-             summary="Rescan a pull-mode source and update its catalog",
-             description="Only supported for sources with `type: pull` and a compatible `provider`. Returns 404 if the source tag is unknown or not a pull-mode source.")
-
+        @router.post(
+            "/pull/catalog/rescan/{source_tag}",
+            tags=["Documents"],
+            summary="Rescan a pull-mode source and update its catalog",
+            description="Only supported for sources with `type: pull` and a compatible `provider`. Returns 404 if the source tag is unknown or not a pull-mode source.",
+        )
         def rescan_catalog_source(source_tag: str):
             try:
                 files_found = self.service.rescan_source(source_tag)
@@ -52,14 +56,13 @@ class CatalogController:
             except Exception as e:
                 raise HTTPException(status_code=500, detail=f"Scan failed: {e}")
 
-        @router.get("/documents/sources", 
-                    tags=["Library Sources"], 
-                    response_model=List[DocumentSourceInfo],
-                    summary="List the configured document sources",
-                    description=(
-                        "Returns all configured document sources (push or pull).\n"
-                        "Pull-mode sources may support catalog operations depending on the provider."
-                    ))
+        @router.get(
+            "/documents/sources",
+            tags=["Documents"],
+            response_model=List[DocumentSourceInfo],
+            summary="List the configured document sources",
+            description=("Returns all configured document sources (push or pull).\nPull-mode sources may support catalog operations depending on the provider."),
+        )
         def list_document_sources():
             sources: dict[str, DocumentSourceConfig] = self.service.get_document_sources()
 

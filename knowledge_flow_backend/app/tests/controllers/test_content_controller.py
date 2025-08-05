@@ -16,7 +16,7 @@ storage back‑ends** (no MinIO, no OpenSearch).
 """
 
 from datetime import datetime
-from app.common.document_structures import DocumentMetadata
+from app.common.document_structures import DocumentMetadata, SourceType
 from app.core.stores.content.base_content_store import BaseContentStore
 from fastapi.testclient import TestClient
 from fastapi import status
@@ -29,7 +29,7 @@ from app.features.content.service import ContentService
 @pytest.mark.content_storage_type(type="local")
 @pytest.mark.metadata_storage_type(type="local")
 class TestContentController:
-    """End‑to‑end tests with LocalContentStore + LocalMetadataStore."""
+    """End‑to‑end tests with LocalContentStore."""
 
     # ─────────────────────────────── fixtures ──────────────────────────────
     @pytest.fixture
@@ -66,19 +66,18 @@ class TestContentController:
     def document1(self):
         """Sample metadata matching *markdown_file*."""
         return DocumentMetadata(
-            source_type="push",
+            source_type=SourceType("push"),
             document_uid="doc-01",
             document_name="document.md",
             title="Example Document",
             author="Jane Doe",
             created=datetime.fromisoformat("2024-06-01T12:00:00+00:00"),
             modified=datetime.fromisoformat("2024-06-02T15:30:00+00:00"),
-            retrievable=True
+            retrievable=True,
         )
 
     # ─────────────────────────────── tests ────────────────────────────────
-    def test_get_markdown_preview(self, client_fixture: TestClient, markdown_file, 
-                                  content_store: BaseContentStore):
+    def test_get_markdown_preview(self, client_fixture: TestClient, markdown_file, content_store: BaseContentStore):
         """The `/markdown/{uid}` endpoint should return the rendered markdown."""
         content_store.save_content(markdown_file["document_uid"], markdown_file["document_dir"])
 

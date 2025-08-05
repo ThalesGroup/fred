@@ -17,19 +17,20 @@ from typing import override, List
 from langchain_core.tools import BaseToolkit, BaseTool
 from pydantic import Field
 from langchain_mcp_adapters.client import MultiServerMCPClient
-from app.core.monitoring.tool_monitoring.monitor_tool import monitor_tool
+
 
 class DocumentsToolkit(BaseToolkit):
     """
     Toolkit for MCP documents expert tools
     """
 
-    tools: List[BaseTool] = Field(default_factory=list, description="List of the tools.")
+    tools: List[BaseTool] = Field(
+        default_factory=list, description="List of the tools."
+    )
 
     def __init__(self, mcp_client: MultiServerMCPClient):
         super().__init__()
-        raw_tools = mcp_client.get_tools()
-        self.tools = [monitor_tool(tool) for tool in raw_tools]
+        self.tools = mcp_client.get_tools()
 
     @override
     def get_tools(self) -> list[BaseTool]:

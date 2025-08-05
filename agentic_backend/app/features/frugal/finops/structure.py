@@ -29,6 +29,7 @@
 """
 Pydantic structure definitions to use in the finops microservice
 """
+
 from datetime import datetime
 
 from pydantic import BaseModel, Field

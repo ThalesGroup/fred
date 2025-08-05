@@ -12,6 +12,7 @@ WORKDIR /app
 
 # Copy project files
 COPY frontend/ /app/
+COPY scripts/ /scripts/
 
 # Build web app
 RUN make build
@@ -23,9 +24,6 @@ FROM mirror.gcr.io/nginx:1.27.3-alpine AS runtime
 
 # Copy web app from builder to nginx html directory
 COPY --from=builder --chown=nginx:nginx /app/dist /usr/share/nginx/html
-
-# Set permissions to nginx html directory
-RUN chown -R nginx: /usr/share/nginx/html
 
 # Expose default nginx port
 EXPOSE 80

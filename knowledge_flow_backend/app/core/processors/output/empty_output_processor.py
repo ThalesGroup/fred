@@ -32,6 +32,6 @@ class EmptyOutputProcessor(BaseOutputProcessor):
     def __init__(self):
         super().__init__()
 
-    def process(self, document_uid: str, document_content: str, metadata: DocumentMetadata) -> None:
-        logger.info(f"Skipping output processing for document UID: {document_uid}")
-        return  # Do nothing
+    def process(self, file_path: str, metadata: DocumentMetadata) -> DocumentMetadata:
+        logger.info(f"Skipping output processing for document UID: {metadata.document_uid}")
+        return metadata

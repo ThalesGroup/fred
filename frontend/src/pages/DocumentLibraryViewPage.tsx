@@ -1,3 +1,17 @@
+// Copyright Thales 2025
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 import FolderOpenIcon from "@mui/icons-material/FolderOpen";
 import RemoveCircleOutlineIcon from "@mui/icons-material/RemoveCircleOutline";
 import UploadIcon from "@mui/icons-material/Upload";
@@ -6,15 +20,12 @@ import {
   Button,
   CircularProgress,
   Container,
+  FormControl,
+  MenuItem,
+  Pagination,
   Paper,
-  Skeleton,
+  Select,
   Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
   Typography,
 } from "@mui/material";
 import { useEffect, useState } from "react";
@@ -27,6 +38,8 @@ import { CustomBulkAction } from "../components/documents/DocumentTableSelection
 import { DocumentUploadDrawer } from "../components/documents/DocumentUploadDrawer";
 import { LibraryInfoCard } from "../components/documents/LibraryInfoCard";
 import { useDocumentActions } from "../components/documents/useDocumentActions";
+import { EmptyState } from "../components/EmptyState";
+import { TableSkeleton } from "../components/TableSkeleton";
 import { useToast } from "../components/ToastProvider";
 import { KeyCloakService } from "../security/KeycloakService";
 import {
@@ -51,6 +64,9 @@ export const DocumentLibraryViewPage = () => {
 
   const [documents, setDocuments] = useState<DocumentMetadata[]>([]);
   const [openUploadDrawer, setOpenUploadDrawer] = useState(false);
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const [documentsPerPage, setDocumentsPerPage] = useState(20);
 
   const hasDocumentManagementPermission = () => {
     const userRoles = KeyCloakService.GetUserRoles();
@@ -58,22 +74,22 @@ export const DocumentLibraryViewPage = () => {
   };
 
   const fetchDocumentsMetadata = async () => {
-    if (!library?.document_ids) return;
+    if (!library?.item_ids?.length) return;
 
-    const promises: Promise<DocumentMetadata | undefined>[] = [];
-    for (const id of library.document_ids) {
-      promises.push(
-        getDocumentsMetadata({ filters: { document_uid: id } }).then((result) => {
-          if (result.error) {
-            console.error(`Error fetching metadata for document ${id}:`, result.error);
-            return undefined;
-          }
-          return result.data.documents && result.data.documents[0];
-        }),
+    try {
+      const result = await getDocumentsMetadata({
+        filters: {
+          document_uid: library.item_ids,
+        },
+      }).unwrap();
+
+      setDocuments(
+        [...(result.documents ?? [])].sort((a, b) => (a.document_name || "").localeCompare(b.document_name || "")),
       );
+    } catch (err) {
+      console.error("Batch metadata fetch failed", err);
+      setDocuments([]); // fallback to empty
     }
-    const docs = (await Promise.all(promises)).filter((doc): doc is DocumentMetadata => !!doc);
-    setDocuments(docs);
   };
 
   const handleRefreshData = async () => {
@@ -90,7 +106,7 @@ export const DocumentLibraryViewPage = () => {
 
     try {
       const documentIdsToRemove = documents.map((doc) => doc.document_uid);
-      const updatedDocumentIds = library.document_ids?.filter((id) => !documentIdsToRemove.includes(id)) || [];
+      const updatedDocumentIds = library.item_ids?.filter((id) => !documentIdsToRemove.includes(id)) || [];
 
       await updateTag({
         tagId: library.id,
@@ -98,7 +114,7 @@ export const DocumentLibraryViewPage = () => {
           name: library.name,
           description: library.description,
           type: library.type,
-          document_ids: updatedDocumentIds,
+          item_ids: updatedDocumentIds,
         },
       }).unwrap();
 
@@ -138,7 +154,7 @@ export const DocumentLibraryViewPage = () => {
 
   useEffect(() => {
     if (library) {
-      console.log("Fetching documents for library:", library.name, library.document_ids);
+      console.log("Fetching documents for library:", library.name, library.item_ids);
       fetchDocumentsMetadata();
     }
   }, [library]);
@@ -162,9 +178,11 @@ export const DocumentLibraryViewPage = () => {
     );
   }
 
+  const paginatedDocuments = documents.slice((currentPage - 1) * documentsPerPage, currentPage * documentsPerPage);
+
   return (
     <>
-      <TopBar title={library.name} description={library.description || ""} backTo="/documentLibrary"></TopBar>
+      <TopBar title={library.name} description={library.description || ""} backTo="/knowledge?view=libraries"></TopBar>
 
       <Container maxWidth="xl" sx={{ mb: 3, display: "flex", flexDirection: "column", gap: 4 }}>
         {/* Library name and description */}
@@ -200,30 +218,73 @@ export const DocumentLibraryViewPage = () => {
             }}
           >
             {isLoadingDocumentsMetadata ? (
-              <DocumentTableSkeleton />
+              <TableSkeleton
+                columns={[
+                  { padding: "checkbox" },
+                  { width: 200, hasIcon: true },
+                  { width: 100 },
+                  { width: 80 },
+                  { width: 80 },
+                  { width: 60 },
+                ]}
+              />
             ) : documents.length === 0 ? (
-              <EmptyLibraryState
-                hasUploadPermission={hasDocumentManagementPermission()}
-                onUploadClick={() => setOpenUploadDrawer(true)}
+              <EmptyState
+                icon={<FolderOpenIcon />}
+                title={t("documentLibrary.emptyLibraryTitle")}
+                description={t("documentLibrary.emptyLibraryDescription")}
+                actionButton={
+                  hasDocumentManagementPermission()
+                    ? {
+                        label: t("documentLibrary.uploadFirstDocument"),
+                        onClick: () => setOpenUploadDrawer(true),
+                        startIcon: <UploadIcon />,
+                        variant: "outlined",
+                      }
+                    : undefined
+                }
               />
             ) : (
-              <DocumentTable
-                files={documents}
-                isAdmin={hasDocumentManagementPermission()}
-                onRefreshData={handleRefreshData}
-                showSelectionActions={true}
-                rowActions={hasDocumentManagementPermission() ? rowActions : []} // todo: add a permission check for each action, enforced by DocumentTable
-                bulkActions={hasDocumentManagementPermission() ? bulkActions : []}
-                nameClickAction={handleDocumentPreview}
-                columns={{
-                  fileName: true,
-                  dateAdded: true,
-                  librairies: false, // Hide column in library view
-                  status: true,
-                  retrievable: true,
-                  actions: true,
-                }}
-              />
+              <>
+                <DocumentTable
+                  files={paginatedDocuments}
+                  isAdmin={hasDocumentManagementPermission()}
+                  onRefreshData={handleRefreshData}
+                  showSelectionActions={true}
+                  rowActions={hasDocumentManagementPermission() ? rowActions : []} // todo: add a permission check for each action, enforced by DocumentTable
+                  bulkActions={hasDocumentManagementPermission() ? bulkActions : []}
+                  nameClickAction={handleDocumentPreview}
+                  columns={{
+                    fileName: true,
+                    dateAdded: true,
+                    librairies: false, // Hide column in library view
+                    status: true,
+                    retrievable: true,
+                    actions: true,
+                  }}
+                />
+                <Box display="flex" justifyContent="space-between" alignItems="center" mt={2}>
+                  <Pagination
+                    count={Math.ceil(documents.length / documentsPerPage)}
+                    page={currentPage}
+                    onChange={(_, page) => setCurrentPage(page)}
+                    color="primary"
+                  />
+                  <FormControl size="small" sx={{ minWidth: 100 }}>
+                    <Select
+                      value={documentsPerPage.toString()}
+                      onChange={(e) => {
+                        setDocumentsPerPage(parseInt(e.target.value, 10));
+                        setCurrentPage(1);
+                      }}
+                    >
+                      <MenuItem value="10">20</MenuItem>
+                      <MenuItem value="20">100</MenuItem>
+                      <MenuItem value="50">1000</MenuItem>
+                    </Select>
+                  </FormControl>
+                </Box>
+              </>
             )}
           </Paper>
         </Stack>
@@ -239,89 +300,5 @@ export const DocumentLibraryViewPage = () => {
         />
       )}
     </>
-  );
-};
-
-const DocumentTableSkeleton = () => {
-  return (
-    <TableContainer>
-      <Table>
-        <TableHead>
-          <TableRow>
-            <TableCell padding="checkbox">
-              <Skeleton variant="rectangular" width={20} height={20} />
-            </TableCell>
-            <TableCell>
-              <Skeleton variant="text" width={100} />
-            </TableCell>
-            <TableCell>
-              <Skeleton variant="text" width={80} />
-            </TableCell>
-            <TableCell>
-              <Skeleton variant="text" width={60} />
-            </TableCell>
-            <TableCell>
-              <Skeleton variant="text" width={80} />
-            </TableCell>
-            <TableCell align="right">
-              <Skeleton variant="text" width={60} />
-            </TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {[...Array(5)].map((_, index) => (
-            <TableRow key={index}>
-              <TableCell padding="checkbox">
-                <Skeleton variant="rectangular" width={20} height={20} />
-              </TableCell>
-              <TableCell>
-                <Box display="flex" alignItems="center" gap={1}>
-                  <Skeleton variant="rectangular" width={24} height={24} />
-                  <Skeleton variant="text" width={200} />
-                </Box>
-              </TableCell>
-              <TableCell>
-                <Skeleton variant="text" width={100} />
-              </TableCell>
-              <TableCell>
-                <Skeleton variant="text" width={80} />
-              </TableCell>
-              <TableCell>
-                <Skeleton variant="text" width={60} />
-              </TableCell>
-              <TableCell align="right">
-                <Skeleton variant="rectangular" width={32} height={32} />
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </TableContainer>
-  );
-};
-
-interface EmptyLibraryStateProps {
-  hasUploadPermission: boolean;
-  onUploadClick: () => void;
-}
-
-const EmptyLibraryState = ({ hasUploadPermission, onUploadClick }: EmptyLibraryStateProps) => {
-  const { t } = useTranslation();
-
-  return (
-    <Box display="flex" flexDirection="column" alignItems="center" justifyContent="center" py={8} gap={1}>
-      <FolderOpenIcon sx={{ fontSize: 64, color: "text.secondary" }} />
-      <Typography variant="h6" color="text.secondary">
-        {t("documentLibrary.emptyLibraryTitle")}
-      </Typography>
-      <Typography variant="body2" color="text.secondary" textAlign="center" maxWidth={400}>
-        {t("documentLibrary.emptyLibraryDescription")}
-      </Typography>
-      {hasUploadPermission && (
-        <Button variant="outlined" startIcon={<UploadIcon />} onClick={onUploadClick} sx={{ mt: 1 }}>
-          {t("documentLibrary.uploadFirstDocument")}
-        </Button>
-      )}
-    </Box>
   );
 };

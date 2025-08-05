@@ -13,8 +13,8 @@
     "optimize": "Optimize",
     "chat": "Chat",
     "monitoring": "Monitoring",
-    "documentLibrary": "Documents",
-    "agent": "Agent Hub",
+    "knowledge": "Knowledge",
+    "agent": "Agents",
     "workspaces": "Workspaces",
     "account": "Profile",
     "tooltip": {
@@ -24,7 +24,7 @@
       "optimize": "Check the optimization gains on the selected cluster",
       "chat": "Chat with the AI assistant team",
       "monitoring": "Monitor the backend AI calls",
-      "documentLibrary": "Consult document library",
+      "knowledge": "Consult the content of your libraries",
       "agent": "View agents",
       "workspaces": "View Workspace",
       "account": "View your account",
@@ -41,8 +41,8 @@
   },
   "agentHub": {
     "title": "Agent Hub",
-    "confirmDeleteTitle": "Confirm deletion",   
-    "confirmDeleteMessage": "Delete this agent ? This action cannot be undone.",  
+    "confirmDeleteTitle": "Confirm deletion",
+    "confirmDeleteMessage": "Delete this agent ? This action cannot be undone.",
     "description": "Explore and manage available AI agents",
     "allAgents": "All Agents",
     "favoriteAgents": "Favorite Agents",
@@ -85,13 +85,16 @@
       "creationFailedDetailFallback": "An unexpected error occurred while creating the agent."
     }
   },
-
   "chatbot": {
+    "searchDocumentLibraries": "Search document libraries...",
+    "searchPromptLibraries": "Search prompt libraries...",
     "startNew": "Start a new conversation with {{name}}",
     "changeAssistant": "You can select another assistant in the settings panel.",
     "tooltip": {
       "tokenUsage": "This conversation has used {{input}} prompt tokens and {{output}} response tokens",
-      "tokenCount": "This conversation has used {{total}} tokens"
+      "tokenCount": "This conversation has used {{total}} tokens",
+      "selectDocumentLibraries": "Select the documents libraries to use in this conversation",
+      "selectPromptLibraries": "Select the prompt libraries to use in this conversation"
     }
   },
   "settings": {
@@ -164,54 +167,69 @@
       "errorSummary": "Creation failed",
       "errorDetail": "Could not create context: {{message}}"
     },
-    "documentTable": {
-      "selectedCount": "{{count}} selected",
-      "deleteSelected": "Delete",
-      "processSelected": "Process",
-      "downloadSelected": "Download",
-      "fileName": "File Name",
-      "dateAdded": "Date Added",
-      "dateAddedTooltip": "Date added to knowledge base",
-      "retrievableYes": "Searchable",
-      "retrievableNo": "Excluded",
-      "status": "Status",
-      "tags": "Tags",
-      "actions": "Actions",
-      "loadingMetadata": "Loading metadata...",
-      "noMetadata": "No metadata available.",
-      "yes": "Yes",
-      "no": "No"
+    "cancel": "Cancel",
+    "edit": {
+      "title": "Edit {{type}}",
+      "name": "Name",
+      "description": "Description",
+      "cancel": "Cancel",
+      "save": "Save",
+      "dropDefault": "Drop files here",
+      "dropActive": "Drop files here to replace",
+      "existingDocuments": "Existing documents",
+      "newDocuments": "New documents",
+      "documentDescription": "Document description (optional)"
+    }
+  },
+  "profile": {
+    "title": "Profile",
+    "description": "Manage your profile settings",
+    "menu": {
+      "account": "Account",
+      "token": "Token"
     },
     "noUser": "No user connected",
-    "login": "Log in",
+    "login": "Login",
     "notAvailable": "Not available",
     "email": "Email",
     "userId": "User ID",
-    "authTime": "Last Authentication",
-    "expTime": "Session Expiration",
-    "roles": "User Roles",
+    "authTime": "Last authentication",
+    "expTime": "Session expiration",
+    "roles": "User roles",
     "logout": "Logout",
     "token": {
-      "title": "Token Information",
-      "none": "No available token"
+      "title": "Token information",
+      "none": "No token available"
     },
     "language": "Interface language",
     "chat": {
-      "searchPlaceholder": "Search profiles...",
+      "searchPlaceholder": "Search chat profiles...",
       "noProfiles": "No profiles found.",
       "dialogTitle": "Chat profile",
       "drawerTitle": "Profile description",
-      "noDescription": "No description provided.",
-      "updateError": "Could not update profile",
-      "deleteError": "Could not delete profile",
-      "reloadError": "Could not reload profile"
+      "noDescription": "No description available.",
+      "updateError": "Unable to update profile",
+      "deleteError": "Unable to delete profile",
+      "reloadError": "Unable to reload profile"
+    }
+  },
+  "knowledge": {
+    "title": "Knowledge Hub",
+    "description": "Manage your document and prompt libraries",
+    "viewSelector": {
+      "libraries": "Libraries",
+      "prompts": "Prompts",
+      "documents": "Documents",
+      "operations": "Operations"
     }
   },
   "documentLibrary": {
     "title": "Document Library",
     "description": "Access the knowledge base documents",
     "upload": "Upload a document",
-    "uploadInLibrary": "Add to library",
+    "uploadAndProcess": "Upload and Process document",
+    "refresh": "Refresh",
+    "uploadInLibrary": "Add document to library",
     "uploadDrawerTitle": "Upload a document",
     "dropFiles": "Drop your files here",
     "maxSize": "or click to select (max 200Mb per file)",
@@ -225,6 +243,7 @@
     "save": "Save",
     "saving": "Saving...",
     "librariesView": "Libraries",
+    "promptView": "Prompts",
     "documentsView": "Documents",
     "removeSuccess": "Documents Removed",
     "removedDocuments": "{{count}} document(s) removed from library",
@@ -234,10 +253,22 @@
     "emptyLibraryDescription": "This library is empty. Add your first documents to make them available to your AI assistants.",
     "uploadFirstDocument": "Add your first document"
   },
+  "promptLibrary": {
+    "title": "Prompt Library",
+    "description": "Access the prompt library",
+    "uploadInLibrary": "Add prompt to library",
+    "prompts": "{{count}} prompt(s)",
+    "noPrompt": "No prompt found",
+    "addPrompt": "Add prompt",
+    "emptyLibraryTitle": "No prompt in this library",
+    "emptyLibraryDescription": "This library is empty. Add your first prompt to make it available to your AI assistants.",
+    "uploadFirstDocument": "Add your first prompt"
+  },
   "documentTable": {
     "selectedCount": "{{count}} selected",
     "deleteSelected": "Delete",
     "processSelected": "Process",
+    "scheduleSelected": "Schedule",
     "downloadSelected": "Download",
     "fileName": "File Name",
     "dateAdded": "Date Added",
@@ -251,6 +282,11 @@
     "no": "No",
     "librairies": "Librairies"
   },
+  "promptTable": {
+    "name": "name",
+    "content": "content",
+    "actions": "Actions"
+  },
   "documentDrawerTable": {
     "deleteFile": "Delete file"
   },
@@ -259,7 +295,8 @@
     "preview": "Preview",
     "download": "Download",
     "delete": "Delete",
-    "process": "Process"
+    "process": "Process",
+    "schedule": "Schedule"
   },
   "documentLibrariesList": {
     "libraryName": "Library Name",
@@ -268,9 +305,22 @@
     "actions": "Actions",
     "delete": "Delete",
     "noLibrariesFound": "No document libraries found.",
+    "noLibrariesFoundDescription": "Get started by creating your first document library to organize and manage your documents.",
     "documentCountSingular": "{{count}} document",
     "documentCountPlural": "{{count}} documents",
-    "createLibrary": "Create Library"
+    "createLibrary": "Create Document Library"
+  },
+  "promptLibrariesList": {
+    "libraryName": "Library Name",
+    "prompts": "Prompts",
+    "lastUpdate": "Last Update",
+    "actions": "Actions",
+    "delete": "Delete",
+    "noLibrariesFound": "No prompt libraries found.",
+    "noLibrariesFoundDescription": "Get started by creating your first prompt library to organize and manage your prompts.",
+    "documentCountSingular": "{{count}} prompts",
+    "documentCountPlural": "{{count}} prompts",
+    "createLibrary": "Create Prompt Library"
   },
   "libraryCreateDrawer": {
     "title": "Create New Library",

@@ -20,16 +20,11 @@ from app.application_context import ApplicationContext
 from app.common.structures import (
     AppConfig,
     Configuration,
-    DuckdbMetadataStorage,
+    DuckdbStorageConfig,
     EmbeddingConfig,
     InMemoryVectorStorage,
-    KnowledgeContextStorageConfig,
-    LocalContentStorage,
-    LocalMetadataStorage,
-    LocalTagStore,
-    MetadataStorageConfig,
+    LocalContentStorageConfig,
     ProcessorConfig,
-    DuckDBTabularStorage,
     PushSourceConfig,
     SchedulerConfig,
     TemporalSchedulerConfig,
@@ -37,6 +32,7 @@ from app.common.structures import (
 from app.main import create_app
 from app.core.processors.output.vectorization_processor.embedder import Embedder
 from app.tests.test_utils.test_processors import TestOutputProcessor, TestMarkdownProcessor, TestTabularProcessor
+from fred_core import SecurityConfiguration
 
 
 @pytest.fixture(scope="function", autouse=True)
@@ -68,13 +64,8 @@ def app_context(monkeypatch, fake_embedder):
             log_level="info",
             reload=False,
             reload_dir=".",
+            security=SecurityConfiguration(enabled=False, keycloak_url="", client_id="app", authorized_origins=[]),
         ),
-        security={
-            "enabled": False,
-            "keycloak_url": "http://fake",
-            "client_id": "test-client",
-            "authorized_origins": [],
-        },
         scheduler=SchedulerConfig(
             backend="temporal",
             enabled=False,
@@ -89,17 +80,14 @@ def app_context(monkeypatch, fake_embedder):
         document_sources={
             "uploads": PushSourceConfig(type="push", description="User uploaded files"),
         },
-        metadata_storage=DuckdbMetadataStorage(type="duckdb", duckdb_path="/tmp/testdb.duckdb"),
+        metadata_storage=DuckdbStorageConfig(type="duckdb", duckdb_path="/tmp/testdb.duckdb"),
         vector_storage=InMemoryVectorStorage(type="in_memory"),
-        content_storage=LocalContentStorage(type="local", root_path="/tmp/content"),
-        tabular_storage=DuckDBTabularStorage(type="duckdb", duckdb_path="/tmp/testdb.duckdb"),
-        catalog_storage=DuckDBTabularStorage(type="duckdb", duckdb_path="/tmp/testdb.duckdb"),
+        content_storage=LocalContentStorageConfig(type="local", root_path="/tmp/content"),
+        tabular_storage=DuckdbStorageConfig(type="duckdb", duckdb_path="/tmp/testdb.duckdb"),
+        catalog_storage=DuckdbStorageConfig(type="duckdb", duckdb_path="/tmp/testdb.duckdb"),
+        prompt_storage=DuckdbStorageConfig(type="duckdb", duckdb_path="/tmp/testdb.duckdb"),
         embedding=EmbeddingConfig(type="openai"),
-        tag_storage=LocalTagStore(type="local"),
-        knowledge_context_storage=KnowledgeContextStorageConfig(
-            type="local",
-            local_path="/tmp",
-        ),
+        tag_storage=DuckdbStorageConfig(type="duckdb", duckdb_path="/tmp/testdb.duckdb"),
         input_processors=[
             ProcessorConfig(
                 prefix=".docx",
@@ -132,7 +120,6 @@ def app_context(monkeypatch, fake_embedder):
                 class_path=f"{TestOutputProcessor.__module__}.{TestOutputProcessor.__qualname__}",
             ),
         ],
-        knowledge_context_max_tokens=50000,
     )
 
     return ApplicationContext(config)

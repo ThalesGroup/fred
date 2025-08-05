@@ -20,8 +20,7 @@ from app.agents.tabular.tabular_toolkit import TabularToolkit
 from app.common.mcp_utils import get_mcp_client_for_agent
 from app.common.structures import AgentSettings
 from app.core.agents.flow import AgentFlow
-from app.model_factory import get_model
-from app.core.monitoring.node_monitoring.monitor_node import monitor_node
+from app.core.model.model_factory import get_model
 
 from langchain_core.messages import HumanMessage, ToolMessage, SystemMessage
 from langgraph.constants import START
@@ -40,7 +39,9 @@ class TabularExpert(AgentFlow):
     name: str = "TabularExpert"
     role: str = "Tabular Data Expert"
     nickname: str = "Tessa"
-    description: str = "An agent specialized in analyzing structured tabular data (e.g., CSV, XLSX)."
+    description: str = (
+        "An agent specialized in analyzing structured tabular data (e.g., CSV, XLSX)."
+    )
     icon: str = "tabulat_agent"
     categories: list[str] = ["tabular", "sql"]
     tag: str = "data"
@@ -62,7 +63,7 @@ class TabularExpert(AgentFlow):
         self.toolkit = TabularToolkit(self.mcp_client)
         self.model = self.model.bind_tools(self.toolkit.get_tools())
         self._graph = self._build_graph()
-       
+
         super().__init__(
             name=self.name,
             role=self.role,
@@ -95,12 +96,19 @@ class TabularExpert(AgentFlow):
 
     def _build_graph(self) -> StateGraph:
         builder = StateGraph(MessagesState)
-        
-        builder.add_node("reasoner", monitor_node(self._run_reasoning_step))
-        builder.add_node("tools", ToolNode(self.toolkit.get_tools()))  # 🧩 THIS LINE WAS MISSING
+
+        builder.add_node("reasoner", self._run_reasoning_step)
+        assert self.toolkit is not None, (
+            "Toolkit must be initialized before building graph"
+        )
+        builder.add_node(
+            "tools", ToolNode(self.toolkit.get_tools())
+        )  # 🧩 THIS LINE WAS MISSING
 
         builder.add_edge(START, "reasoner")
-        builder.add_conditional_edges("reasoner", tools_condition)  # conditional → "tools"
+        builder.add_conditional_edges(
+            "reasoner", tools_condition
+        )  # conditional → "tools"
         builder.add_edge("tools", "reasoner")
 
         return builder
@@ -108,6 +116,9 @@ class TabularExpert(AgentFlow):
     async def _run_reasoning_step(self, state: MessagesState):
         try:
             prompt = SystemMessage(content=self.base_prompt)
+            assert self.model is not None, (
+                "Model must be initialized before building graph"
+            )
             response = await self.model.ainvoke([prompt] + state["messages"])
 
             for msg in state["messages"]:
@@ -116,17 +127,23 @@ class TabularExpert(AgentFlow):
                         datasets = json.loads(msg.content)
                         summaries = self._extract_dataset_summaries(datasets)
                         if summaries:
-                            response.content += "\n\n### Available Datasets:\n" + "\n".join(summaries)
+                            response.content += (
+                                "\n\n### Available Datasets:\n" + "\n".join(summaries)
+                            )
                     except Exception as e:
                         logger.warning(f"Failed to parse tool response: {e}")
 
             return {"messages": [response]}
 
-        except Exception as e:
+        except Exception:
             logger.exception("TabularExpert failed during reasoning.")
-            fallback = await self.model.ainvoke([
-                HumanMessage(content="An error occurred while analyzing tabular data.")
-            ])
+            fallback = await self.model.ainvoke(
+                [
+                    HumanMessage(
+                        content="An error occurred while analyzing tabular data."
+                    )
+                ]
+            )
             return {"messages": [fallback]}
 
     def _extract_dataset_summaries(self, data: list[dict]) -> list[str]:

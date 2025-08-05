@@ -16,16 +16,17 @@
 import os
 from pathlib import Path
 from typing import Annotated, Dict, List, Literal, Union
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from typing import Optional
 from enum import Enum
-from fred_core import Security
+from fred_core import SecurityConfiguration
 
 """
 This module defines the top level data structures used by controllers, processors
 unit tests. It helps to decouple the different components of the application and allows
 to define clear workflows and data structures.
 """
+
 
 class Status(str, Enum):
     SUCCESS = "success"
@@ -56,124 +57,104 @@ class ProcessorConfig(BaseModel):
     class_path: str = Field(..., description="Dotted import path of the processor class")
 
 
-
 ###########################################################
 #
-#  --- Content Storage Configuration
-#
-
-class MinioStorage(BaseModel):
-    type: Literal["minio"]
-    endpoint: str = Field(default="localhost:9000", description="MinIO API URL")
-    access_key: Optional[str] = Field(default_factory=lambda: os.getenv("MINIO_ACCESS_KEY"), description="MinIO access key from env")
-    secret_key: Optional[str] = Field(default_factory=lambda: os.getenv("MINIO_SECRET_KEY"), description="MinIO secret key from env")
-    bucket_name: str = Field(default="app-bucket", description="Content store bucket name")
-    secure: bool = Field(default=False, description="Use TLS (https)")
-
-class LocalContentStorage(BaseModel):
-    type: Literal["local"]
-    root_path: str = Field(default=str(Path("~/.fred/knowledge-flow/content-store")), description="Local storage directory")
-
-ContentStorageConfig = Annotated[
-    Union[LocalContentStorage, MinioStorage],
-    Field(discriminator="type")
-]
-
-###########################################################
-#
-#  --- Metadata Storage Configuration
+#  --- Generic Storage Configuration
 #
 
 
-class LocalMetadataStorage(BaseModel):
-    type: Literal["local"]
-    root_path: str = Field(default=str(Path("~/.fred/knowledge-flow/metadata-store.json")), description="Local storage json file")
-
-class DuckdbMetadataStorage(BaseModel):
+class DuckdbStorageConfig(BaseModel):
     type: Literal["duckdb"]
-    duckdb_path: str = Field(default="~/.fred/knowledge-flow/db.duckdb", 
-                             description="Path to the DuckDB database file.")
+    duckdb_path: str = Field(default="~/.fred/knowledge-flow/db.duckdb", description="Path to the DuckDB database file.")
 
-class OpenSearchStorage(BaseModel):
+
+class LocalJsonStorageConfig(BaseModel):
+    type: Literal["local"]
+    root_path: str = Field(default=str(Path("~/.fred/knowledge-flow/json-store.json")), description="Local storage json file")
+
+
+class OpenSearchStorageConfig(BaseModel):
     type: Literal["opensearch"]
     host: str = Field(..., description="OpenSearch host URL")
     username: Optional[str] = Field(default_factory=lambda: os.getenv("OPENSEARCH_USER"), description="Username from env")
     password: Optional[str] = Field(default_factory=lambda: os.getenv("OPENSEARCH_PASSWORD"), description="Password from env")
     secure: bool = Field(default=False, description="Use TLS (https)")
     verify_certs: bool = Field(default=False, description="Verify TLS certs")
-    metadata_index: str = Field(..., description="OpenSearch index name for metadata")
-    vector_index: str = Field(..., description="OpenSearch index name for vectors")
+    index: str = Field(..., description="OpenSearch index name")
 
-
-# --- Final union config (with discriminator)
-MetadataStorageConfig = Annotated[Union[LocalMetadataStorage, DuckdbMetadataStorage, OpenSearchStorage], Field(discriminator="type")]
 
 ###########################################################
 #
-# --- Tag Storage Configuration
+#  --- Content Storage Configuration
 #
 
-class LocalTagStore(BaseModel):
-    type: Literal["local"]
-    root_path: str = Field(default=str(Path("~/.fred/knowledge-flow/tags-store.json")), description="Local storage json file")
 
-TagStorageConfig = Annotated[Union[LocalTagStore], Field(discriminator="type")]
+class MinioStorageConfig(BaseModel):
+    type: Literal["minio"]
+    endpoint: str = Field(default="localhost:9000", description="MinIO API URL")
+    access_key: str = Field(..., description="MinIO access key (from MINIO_ACCESS_KEY env)")
+    secret_key: str = Field(..., description="MinIO secret key (from MINIO_SECRET_KEY env)")
+    bucket_name: str = Field(default="app-bucket", description="Content store bucket name")
+    secure: bool = Field(default=False, description="Use TLS (https)")
+
+    @model_validator(mode="before")
+    @classmethod
+    def load_env_if_missing(cls, values: dict) -> dict:
+        values.setdefault("access_key", os.getenv("MINIO_ACCESS_KEY"))
+        values.setdefault("secret_key", os.getenv("MINIO_SECRET_KEY"))
+
+        if not values.get("access_key"):
+            raise ValueError("Missing MINIO_ACCESS_KEY environment variable")
+        if not values.get("secret_key"):
+            raise ValueError("Missing MINIO_SECRET_KEY environment variable")
+
+        return values
+
+
+class LocalContentStorageConfig(BaseModel):
+    type: Literal["local"]
+    root_path: str = Field(default=str(Path("~/.fred/knowledge-flow/content-store")), description="Local storage directory")
+
+
+ContentStorageConfig = Annotated[Union[LocalContentStorageConfig, MinioStorageConfig], Field(discriminator="type")]
+
+###########################################################
+#
+#  --- Internal Storage Configuration
+#
+
+MetadataStorageConfig = Annotated[Union[DuckdbStorageConfig, OpenSearchStorageConfig], Field(discriminator="type")]
+
+PromptStorageConfig = Annotated[Union[DuckdbStorageConfig, OpenSearchStorageConfig], Field(discriminator="type")]
+
+TagStorageConfig = Annotated[Union[DuckdbStorageConfig, OpenSearchStorageConfig], Field(discriminator="type")]
+
+CatalogStorageConfig = Annotated[Union[DuckdbStorageConfig, OpenSearchStorageConfig], Field(discriminator="type")]
+
+TabularStorageConfig = Annotated[Union[DuckdbStorageConfig], Field(discriminator="type")]
+
+###########################################################
+#
+#  --- Vector storage configuration
+#
+
 
 class InMemoryVectorStorage(BaseModel):
     type: Literal["in_memory"]
+
 
 class WeaviateVectorStorage(BaseModel):
     type: Literal["weaviate"]
     host: str = Field(default="https://localhost:8080", description="Weaviate host")
     index_name: str = Field(default="CodeDocuments", description="Weaviate class (collection) name")
 
-VectorStorageConfig = Annotated[Union[InMemoryVectorStorage, OpenSearchStorage, WeaviateVectorStorage], Field(discriminator="type")]
 
-class DuckDBTabularStorage(BaseModel):
-    type: Literal["duckdb"]
-    duckdb_path: str = Field(default="~/.fred/knowledge-flow/db.duckdb", 
-                             description="Path to the DuckDB database file.")
+VectorStorageConfig = Annotated[Union[InMemoryVectorStorage, OpenSearchStorageConfig, WeaviateVectorStorage], Field(discriminator="type")]
 
-TabularStorageConfig = Annotated[
-    Union[DuckDBTabularStorage,],
-    Field(discriminator="type")
-]
-
-CatalogStorageConfig = Annotated[
-    Union[DuckDBTabularStorage,],
-    Field(discriminator="type")
-]
 
 class EmbeddingConfig(BaseModel):
     type: str = Field(..., description="The embedding backend to use (e.g., 'openai', 'azureopenai')")
 
-class KnowledgeContextStorageConfig(BaseModel):
-    type: str = Field(..., description="The storage backend to use (e.g., 'local', 'minio')")
-    local_path: str = Field(default="~/.fred/knowledge-flow/knowledge-context", description="The path of the local metrics store")
-
-class AppSecurity(Security):
-    client_id: str = "knowledge-flow"
-    keycloak_url: str = "http://localhost:9080/realms/knowledge-flow"
-
-class KnowledgeContextDocument(BaseModel):
-    id: str
-    document_name: str
-    document_type: str
-    size: Optional[int] = None
-    tokens: Optional[int] = Field(default=0)
-    description: Optional[str] = ""
-
-
-class KnowledgeContext(BaseModel):
-    id: str
-    title: str
-    description: str
-    created_at: str
-    updated_at: str
-    documents: List[KnowledgeContextDocument]
-    creator: str
-    tokens: Optional[int] = Field(default=0)
-    tag: Optional[str] = Field(default="workspace")
 
 class TemporalSchedulerConfig(BaseModel):
     host: str = "localhost:7233"
@@ -182,11 +163,13 @@ class TemporalSchedulerConfig(BaseModel):
     workflow_prefix: str = "pipeline"
     connect_timeout_seconds: Optional[int] = 5
 
+
 class SchedulerConfig(BaseModel):
     enabled: bool = False
     backend: str = "temporal"
     temporal: TemporalSchedulerConfig
-   
+
+
 class AppConfig(BaseModel):
     name: Optional[str] = "Knowledge Flow Backend"
     base_url: str = "/knowledge-flow/v1"
@@ -195,6 +178,8 @@ class AppConfig(BaseModel):
     log_level: str = "info"
     reload: bool = False
     reload_dir: str = "."
+    security: SecurityConfiguration
+
 
 class PullProvider(str, Enum):
     LOCAL_PATH = "local_path"
@@ -204,58 +189,132 @@ class PullProvider(str, Enum):
     HTTP = "http"
     OTHER = "other"
 
-class BaseDocumentSourceConfig(BaseModel):
-    type: Literal["push", "pull"]
+
+class PushSourceConfig(BaseModel):
+    type: Literal["push"] = "push"
     description: Optional[str] = Field(default=None, description="Human-readable description of this source")
 
-class PushSourceConfig(BaseDocumentSourceConfig):
-    type: Literal["push"] = "push"
-    # No additional fields
 
 class BasePullSourceConfig(BaseModel):
     type: Literal["pull"] = "pull"
-    description: Optional[str] = None
+    description: Optional[str] = Field(default=None, description="Human-readable description of this source")
 
-class LocalPathPullSource(BasePullSourceConfig):
+
+class FileSystemPullSource(BasePullSourceConfig):
     provider: Literal["local_path"]
     base_path: str
 
+
 class GitPullSource(BasePullSourceConfig):
     provider: Literal["github"]
-    repo: str
+    repo: str = Field(..., description="GitHub repository in the format 'owner/repo'")
+    branch: Optional[str] = Field(default="main", description="Git branch to pull from")
+    subdir: Optional[str] = Field(default="", description="Subdirectory to extract files from")
+    username: Optional[str] = Field(default=None, description="Optional GitHub username (for logs)")
+    token: str = Field(..., description="GitHub token (from GITHUB_TOKEN env variable)")
+
+    @model_validator(mode="before")
+    @classmethod
+    def load_env_token(cls, values: dict) -> dict:
+        values.setdefault("token", os.getenv("GITHUB_TOKEN"))
+        if not values.get("token"):
+            raise ValueError("Missing GITHUB_TOKEN environment variable")
+        return values
+
+
+class SpherePullSource(BasePullSourceConfig):
+    provider: Literal["sphere"]
+    base_url: str = Field(..., description="Base URL for the Sphere API")
+    parent_node_id: str = Field(..., description="ID of the parent folder or node to list/download")
+    username: str = Field(..., description="Username for Sphere Basic Auth")
+    password: str = Field(..., description="Password (loaded from SPHERE_PASSWORD)")
+    apikey: str = Field(..., description="API key (loaded from SPHERE_API_KEY)")
+    verify_ssl: bool = Field(default=False, description="Set to True to verify SSL certs")
+
+    @model_validator(mode="before")
+    @classmethod
+    def load_env_vars(cls, values: dict) -> dict:
+        values.setdefault("password", os.getenv("SPHERE_PASSWORD"))
+        values.setdefault("apikey", os.getenv("SPHERE_API_KEY"))
+
+        if not values.get("password"):
+            raise ValueError("Missing SPHERE_PASSWORD environment variable")
+
+        if not values.get("apikey"):
+            raise ValueError("Missing SPHERE_API_KEY environment variable")
+
+        return values
+
+
+class GitlabPullSource(BasePullSourceConfig):
+    type: Literal["pull"] = "pull"
+    provider: Literal["gitlab"]
+    repo: str = Field(..., description="GitLab repository in the format 'namespace/project'")
+    branch: Optional[str] = Field(default="main", description="Branch to pull from")
+    subdir: Optional[str] = Field(default="", description="Optional subdirectory to scan files from")
+    token: str = Field(..., description="GitLab private token (from GITLAB_TOKEN env variable)")
+    base_url: str = Field(default="https://gitlab.com/api/v4", description="GitLab API base URL")
+
+    @model_validator(mode="before")
+    @classmethod
+    def load_env_token(cls, values: dict) -> dict:
+        values.setdefault("token", os.getenv("GITLAB_TOKEN"))
+        if not values.get("token"):
+            raise ValueError("Missing GITLAB_TOKEN environment variable")
+        return values
+
+
+class MinioPullSource(BasePullSourceConfig):
+    type: Literal["pull"] = "pull"
+    provider: Literal["minio"]
+    endpoint_url: str = Field(..., description="S3-compatible endpoint (e.g., https://s3.amazonaws.com)")
+    bucket_name: str = Field(..., description="Name of the S3 bucket to scan")
+    prefix: Optional[str] = Field(default="", description="Optional prefix (folder path) to scan inside the bucket")
+    access_key: str = Field(..., description="MinIO access key (from MINIO_ACCESS_KEY env variable)")
+    secret_key: str = Field(..., description="MinIO secret key (from MINIO_SECRET_KEY env variable)")
+    region: Optional[str] = Field(default="us-east-1", description="AWS region (used by some clients)")
+    secure: bool = Field(default=True, description="Use HTTPS (secure=True) or HTTP (secure=False)")
+
+    @model_validator(mode="before")
+    @classmethod
+    def load_env_secrets(cls, values: dict) -> dict:
+        values.setdefault("access_key", os.getenv("MINIO_ACCESS_KEY"))
+        values.setdefault("secret_key", os.getenv("MINIO_SECRET_KEY"))
+
+        if not values.get("access_key"):
+            raise ValueError("Missing MINIO_ACCESS_KEY environment variable")
+
+        if not values.get("secret_key"):
+            raise ValueError("Missing MINIO_SECRET_KEY environment variable")
+
+        return values
+
 
 PullSourceConfig = Annotated[
     Union[
-        LocalPathPullSource,
+        FileSystemPullSource,
         GitPullSource,
-        # Add WebDAV, HTTP, etc. here
+        SpherePullSource,
+        GitlabPullSource,
+        MinioPullSource,
     ],
-    Field(discriminator="provider")
+    Field(discriminator="provider"),
 ]
+DocumentSourceConfig = Annotated[Union[PushSourceConfig, PullSourceConfig], Field(discriminator="type")]
 
-DocumentSourceConfig = Annotated[
-    Union[PushSourceConfig, PullSourceConfig],
-    Field(discriminator="type")
-]
+
 class Configuration(BaseModel):
     app: AppConfig
-    security: AppSecurity
+
     input_processors: List[ProcessorConfig]
     output_processors: Optional[List[ProcessorConfig]] = None
     content_storage: ContentStorageConfig = Field(..., description="Content Storage configuration")
     metadata_storage: MetadataStorageConfig = Field(..., description="Metadata storage configuration")
     tag_storage: TagStorageConfig = Field(..., description="Tag storage configuration")
+    prompt_storage: PromptStorageConfig = Field(..., description="Tag storage configuration")
     vector_storage: VectorStorageConfig = Field(..., description="Vector storage configuration")
     tabular_storage: TabularStorageConfig = Field(..., description="Tabular storage configuration")
     catalog_storage: CatalogStorageConfig = Field(..., description="Catalog storage configuration")
     embedding: EmbeddingConfig = Field(..., description="Embedding configuration")
-    knowledge_context_storage: KnowledgeContextStorageConfig = Field(..., description="Knowledge context storage configuration")
-    knowledge_context_max_tokens: int = 50000
     scheduler: SchedulerConfig
-    document_sources: Optional[Dict[str, DocumentSourceConfig]] = Field(
-        default_factory=dict,
-        description="Mapping of source_tag identifiers to push/pull source configurations"
-    )
-
-
-
+    document_sources: Dict[str, DocumentSourceConfig] = Field(default_factory=dict, description="Mapping of source_tag identifiers to push/pull source configurations")

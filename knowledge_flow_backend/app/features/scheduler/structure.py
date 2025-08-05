@@ -20,7 +20,7 @@ from pathlib import Path
 import hashlib
 
 from app.common.document_structures import DocumentMetadata, SourceType
-from app.core.stores.metadata.base_catalog_store import PullFileEntry
+from app.core.stores.catalog.base_catalog_store import PullFileEntry
 
 
 class FileToProcess(BaseModel):
@@ -28,7 +28,7 @@ class FileToProcess(BaseModel):
     source_tag: str
     tags: List[str] = []
     display_name: Optional[str] = None
-    
+
     # Push-specific
     document_uid: Optional[str] = None  # Present for push files
 
@@ -58,10 +58,8 @@ class FileToProcess(BaseModel):
     def to_virtual_metadata(self) -> DocumentMetadata:
         if not self.is_pull():
             raise ValueError("Virtual metadata can only be generated for pull files")
-
-        modified_dt = datetime.fromtimestamp(
-            self.modified_time or 0, tz=timezone.utc
-        )
+        assert self.external_path, "Pull files must have an external path"
+        modified_dt = datetime.fromtimestamp(self.modified_time or 0, tz=timezone.utc)
 
         return DocumentMetadata(
             document_name=Path(self.external_path).name,
@@ -81,6 +79,7 @@ class PipelineDefinition(BaseModel):
     name: str
     files: List[FileToProcess]
 
+
 class ProcessDocumentsRequest(BaseModel):
     files: List[FileToProcess]
-    pipeline_name: Optional[str] = "manual_ui_trigger"
+    pipeline_name: str

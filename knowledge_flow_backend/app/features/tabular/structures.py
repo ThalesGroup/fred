@@ -12,15 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List, Literal, Optional, Union, Any, Dict
+from typing import List, Literal, Optional, Any, Dict
 from enum import Enum
-from datetime import datetime
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, model_validator
 
 # -- Constants for consistent types --
 DTypes = Literal["string", "integer", "float", "boolean", "datetime", "unknown"]
 
 # -- Schema models --
+
 
 class TabularColumnSchema(BaseModel):
     name: str
@@ -32,13 +32,14 @@ class TabularSchemaResponse(BaseModel):
     columns: List[TabularColumnSchema]
     row_count: Optional[int] = None
 
+
 class RawSQLRequest(BaseModel):
     query: str
 
 
 class TabularQueryResponse(BaseModel):
-    document_name: str
-    rows:  Optional[List[dict]] = []
+    sql_query: str
+    rows: Optional[List[dict]] = []
     error: Optional[str] = None
 
 
@@ -54,7 +55,9 @@ class TabularDatasetMetadata(BaseModel):
     domain: Optional[str] = ""
     row_count: Optional[int] = None
 
+
 # -- Aggregation Models --
+
 
 class Precision(str, Enum):
     sec = "sec"

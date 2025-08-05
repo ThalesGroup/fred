@@ -16,11 +16,10 @@ from pathlib import Path
 from app.common.document_structures import DocumentMetadata
 from langchain.schema.document import Document
 
-from app.core.stores.vector.base_vector_store import BaseDocumentLoader
+from app.core.stores.vector.base_vector_store import BaseLangchainDocumentLoader
 
 
-
-class LocalFileLoader(BaseDocumentLoader):
+class LocalFileLoader(BaseLangchainDocumentLoader):
     """
     Local File Loader
     -------------------
@@ -33,7 +32,7 @@ class LocalFileLoader(BaseDocumentLoader):
     It is a simple implementation that does not require any external dependencies.
     """
 
-    def load(self, file_path: str, metadata: DocumentMetadata) -> Document:
+    def load_langchain_doc_from_metadata(self, file_path: str, metadata: DocumentMetadata) -> Document:
         """
         Load a document from a local file and wrap it as a LangChain Document.
         """
@@ -45,4 +44,3 @@ class LocalFileLoader(BaseDocumentLoader):
         content = path.read_text(encoding="utf-8")
 
         return Document(page_content=content, metadata=metadata.model_dump(mode="json"))
-

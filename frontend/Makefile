@@ -1,6 +1,3 @@
-
-
-
 .DEFAULT_GOAL := help
 
 VERSION ?= 0.1-dev
@@ -74,9 +71,18 @@ docker-run: ## Docker run
 format: ## Use prettier to format all codebase
 	npx prettier . --write
 
+.PHONY: update-agentic-api
+update-agentic-api: ## update the generated hooks used in UI based on agentic backend openApi spec
+	@echo "🔧 Generating agentic backend OpenAPI specification..."
+	cd ../agentic_backend && make generate-openapi
+	@echo "🎯 Generating RTK Query hooks for agentic backend..."
+	npx -y @rtk-query/codegen-openapi src/slices/agentic/agenticOpenApiConfig.json
+
 .PHONY: update-knowledge-flow-api
 update-knowledge-flow-api: ## update the generated hooks used in UI based on knowledge-flow backend openApi spec
-	@curl -sSf http://localhost:8111/knowledge-flow/v1/openapi.json >/dev/null || (echo "Warning: to generate the sdk, you need to start the knowledge-flow backend on localhost:8111" && exit 1)
+	@echo "🔧 Generating knowledge-flow backend OpenAPI specification..."
+	cd ../knowledge_flow_backend && make generate-openapi
+	@echo "🎯 Generating RTK Query hooks for knowledge-flow backend..."
 	npx -y @rtk-query/codegen-openapi src/slices/knowledgeFlow/knowledgeFlowOpenApiConfig.json
 
 ##@ Clean
@@ -111,9 +117,4 @@ helm-push: ## Push the Helm chart to the project registry
          https://gitlab.thalesdigital.io/api/v4/projects/${PROJECT_ID}/packages/helm/api/release/charts
 
 
-
-##@ Help
-
-.PHONY: help
-help: ## Print help
-	@awk 'BEGIN {FS = ":.*##"; printf "\033[36m\033[0m\n"} /^[ 0-9a-zA-Z_-]+:.*?##/ { printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
+include ../scripts/makefiles/help.mk

@@ -26,7 +26,6 @@ import { getConfig } from "../../common/config.tsx";
 import { useGetChatBotMessagesMutation } from "../../slices/chatApi.tsx";
 import { KeyCloakService } from "../../security/KeycloakService.ts";
 import { StreamEvent, ChatMessagePayload, SessionSchema, FinalEvent } from "../../slices/chatApiStructures.ts";
-import { KnowledgeContext } from "../knowledgeContext/KnowledgeContextEditDialog.tsx";
 import { useTranslation } from "react-i18next";
 
 export interface ChatBotError {
@@ -41,6 +40,8 @@ export interface ChatBotEventSend {
   agent_name: string;
   argument?: string; // Optional arguments for the agent
   chat_profile_id?: string; //Optional argument for chat profile usage
+  document_library_ids?: string[];
+  prompt_library_ids?: string[];
 }
 
 interface TranscriptionResponse {
@@ -54,7 +55,6 @@ const ChatBot = ({
   onUpdateOrAddSession,
   isCreatingNewConversation,
   argument,
-  selectedChatProfile,
 }: {
   currentChatBotSession: SessionSchema;
   currentAgenticFlow: AgenticFlow;
@@ -62,7 +62,6 @@ const ChatBot = ({
   onUpdateOrAddSession: (session: SessionSchema) => void;
   isCreatingNewConversation: boolean;
   argument?: string; // Optional argument for the agent
-  selectedChatProfile?: KnowledgeContext | null;
 }) => {
   const theme = useTheme();
   const { t } = useTranslation();
@@ -251,6 +250,8 @@ const ChatBot = ({
     const userId = KeyCloakService.GetUserId();
     const sessionId = currentChatBotSession?.id;
     const agentName = currentAgenticFlow.name;
+    const documentLibraryIds = content.documentLibraryIds || [];
+    const promptLibraryIds = content.promptLibraryIds || [];
     if (content.files && content.files.length > 0) {
       for (const file of content.files) {
         const formData = new FormData();
@@ -290,7 +291,11 @@ const ChatBot = ({
     }
 
     if (content.text) {
+      console.log(`[📤 ChatBot] Sending document libraries: ${documentLibraryIds}`);
+      console.log(`[📤 ChatBot] Sending prompt libraries: ${promptLibraryIds}`);
       queryChatBot(content.text.trim());
+      // queryChatBot(content.text.trim(), currentAgenticFlow, documentLibraryIds, promptLibraryIds);
+      
     } else if (content.audio) {
       setWaitResponse(true);
       const audioFile: File = new File([content.audio], "audio.mp3", {
@@ -322,7 +327,11 @@ const ChatBot = ({
    * - Handles file uploads and voice input separately (not covered here).
    * - Provides a smooth chat experience with real-time streaming via WebSocket.
    */
-  const queryChatBot = async (input: string, agent?: AgenticFlow) => {
+  const queryChatBot = async (input: string, 
+    agent?: AgenticFlow,
+    documentLibraryIds: string[] = [],
+    promptLibraryIds: string[] = []
+    ) => {
     console.log(`[📤 ChatBot] Sending message: ${input}`);
     const timestamp = new Date().toISOString();
 
@@ -377,7 +386,8 @@ const ChatBot = ({
       agent_name: agent ? agent.name : currentAgenticFlow.name,
       session_id: currentChatBotSession?.id,
       argument,
-      chat_profile_id: selectedChatProfile?.id,
+      document_library_ids: documentLibraryIds,
+      prompt_library_ids: promptLibraryIds,
     };
 
     try {

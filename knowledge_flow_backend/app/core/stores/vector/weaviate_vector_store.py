@@ -49,7 +49,7 @@ class WeaviateVectorStore(BaseVectoreStore):
             index_name=self.index_name,
             text_key=self.text_key,
             embedding=self.embedding_model,
-            by_text=False  # We handle embedding ourselves
+            by_text=False,  # We handle embedding ourselves
         )
 
         logger.info(f"✅ Weaviate vector store initialized on {host} (index: {index_name})")
@@ -58,8 +58,14 @@ class WeaviateVectorStore(BaseVectoreStore):
         self.vectorstore.add_documents(documents)
         logger.info(f"✅ Added {len(documents)} documents to Weaviate.")
 
-    def similarity_search_with_score(self, query: str, k: int = 5) -> List[Tuple[Document, float]]:
-        results = self.vectorstore.similarity_search_with_score(query, k=k)
+    def similarity_search_with_score(self, query: str, k: int = 5, tags: list[str] | None = None) -> List[Tuple[Document, float]]:
+        if tags:
+            # Create Weaviate where filter for documents with at least one of the specified tags
+            where_filter = {"operator": "Or", "operands": [{"path": ["metadata", "tags"], "operator": "ContainsAny", "valueText": tags}]}
+            results = self.vectorstore.similarity_search_with_score(query, k=k, where_filter=where_filter)
+        else:
+            results = self.vectorstore.similarity_search_with_score(query, k=k)
+
         enriched = []
 
         for rank, (doc, score) in enumerate(results):

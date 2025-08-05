@@ -34,6 +34,9 @@ To learn how to:
 
 ## Quick Start
 
+If you start it s follows the default configuration is developper friendly and only uses local stores, checkout the [configuration page](./config/README.md)
+to use another setup.   
+
 ```bash
 git clone https://github.com/ThalesGroup/knowledge-flow.git
 cd knowledge-flow

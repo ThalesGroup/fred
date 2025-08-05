@@ -16,57 +16,103 @@ from abc import abstractmethod
 from typing import List
 
 from app.common.document_structures import DocumentMetadata
-from app.core.stores.metadata.base_catalog_store import BaseCatalogStore
+
 
 class MetadataDeserializationError(Exception):
-    """Raised when document metadata cannot be parsed correctly due to invalid enum or structure."""
+    """Raised when document metadata cannot be parsed correctly due to invalid fields or enum mismatches."""
+
     pass
 
-class BaseMetadataStore(BaseCatalogStore):
+
+class BaseMetadataStore:
+    """
+    Abstract interface for reading and writing structured metadata records
+    (typically associated with ingested documents).
+
+    Concrete implementations may rely on OpenSearch, a local store, or other backends.
+    """
+
     @abstractmethod
     def get_all_metadata(self, filters: dict) -> List[DocumentMetadata]:
+        """
+        Return all metadata documents matching the given filters.
+
+        Filters should be a dictionary where:
+        - Keys are metadata field names (e.g., "source_tag", "tags")
+        - Values are filter values (exact match). Lists are interpreted as 'terms'.
+
+        :param filters: dict of metadata field filters.
+        :return: list of metadata documents matching the query.
+        """
+        pass
+
+    @abstractmethod
+    def get_metadata_by_uid(self, document_uid: str) -> DocumentMetadata | None:
+        """
+        Retrieve a metadata document by its UID.
+
+        :param document_uid: the unique identifier of the document.
+        :return: the metadata if found, or None.
+        :raises MetadataDeserializationError: if stored data is malformed.
+        """
         pass
 
     @abstractmethod
     def get_metadata_in_tag(self, tag_id: str) -> List[DocumentMetadata]:
         """
-        Return all metadata entries associated with a specific tag.
+        Return all metadata entries that are tagged with a specific tag ID.
+
+        :param tag_id: tag to filter by (exact match).
+        :return: list of matching metadata documents.
+        :raises MetadataDeserializationError: if any document is malformed.
         """
         pass
 
     @abstractmethod
     def list_by_source_tag(self, source_tag: str) -> List[DocumentMetadata]:
         """
-        Return all metadata entries ingested from a specific pull source.
+        Return all metadata entries originating from a specific pull source.
+
+        :param source_tag: source identifier used during ingestion (e.g., "github", "fred").
+        :return: list of metadata entries associated with that source.
         """
-        pass
-
-    @abstractmethod
-    def get_metadata_by_uid(self, document_uid: str) -> DocumentMetadata:
-        pass
-
-    @abstractmethod
-    def update_metadata_field(self, document_uid: str, field: str, value) -> DocumentMetadata:
         pass
 
     @abstractmethod
     def save_metadata(self, metadata: DocumentMetadata) -> None:
         """
-        Add or replace a full metadata entry in the store.
+        Create or update a metadata entry.
 
-        - If an entry with the same UID exists, it is overwritten.
-        - If not, the metadata is added as a new entry.
+        - Overwrites existing metadata if the same UID already exists.
+        - Adds a new entry otherwise.
 
-        :param metadata: The full metadata instance.
-        :raises ValueError: If 'document_uid' is missing.
+        :param metadata: metadata to save.
+        :raises ValueError: if 'document_uid' is missing.
+        :raises RuntimeError: if the save operation fails.
         """
         pass
 
     @abstractmethod
-    def delete_metadata(self, metadata: DocumentMetadata) -> None:
+    def delete_metadata(self, document_uid: str) -> None:
+        """
+        Create or update a metadata entry.
+
+        - Overwrites existing metadata if the same UID already exists.
+        - Adds a new entry otherwise.
+
+        :param metadata: metadata to save.
+        :raises ValueError: if 'document_uid' is missing.
+        :raises RuntimeError: if the save operation fails.
+        """
         pass
 
     @abstractmethod
     def clear(self) -> None:
-        """Remove every record in the store (test-only helper)."""
+        """
+        Delete all metadata records from the store.
+
+        ⚠️ This operation is destructive and typically only used in test or dev mode.
+
+        :raises Exception: if the operation fails.
+        """
         pass

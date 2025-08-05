@@ -23,7 +23,7 @@ import { ExplainCluster } from "../frugalit/pages/ExplainCluster";
 import { FactsWorkload } from "../frugalit/pages/FactsWorkload";
 import { FactsCluster } from "../frugalit/pages/FactsCluster";
 import { FactsNamespace } from "../frugalit/pages/FactsNamespace";
-import { DocumentLibrary } from "../pages/DocumentLibrary";
+import { KnowledgeHub } from "../pages/KnowledgeHub";
 import { AgentHub } from "../pages/AgentHub";
 import { Optimize } from "../frugalit/pages/Optimize";
 import { Geomap } from "../warfare/pages/TheaterOfOperations";
@@ -38,9 +38,9 @@ import { Audit } from "../pages/Audit";
 import { FrugalIt } from "../pages/FrugalIt";
 import Inspect from "../frugalit/pages/Inspect";
 import { Monitoring } from "../pages/Monitoring";
-import { Workspaces } from "../pages/Workspaces";
 import { K8ApplicationContextProvider } from "./K8ApplicationContextProvider";
 import { DocumentLibraryViewPage } from "../pages/DocumentLibraryViewPage";
+import { PromptLibraryViewPage } from "../pages/PromptLibraryViewPage";
 
 const RootLayout = ({ children }: React.PropsWithChildren<{}>) => (
   <ProtectedRoute permission="viewer">
@@ -183,18 +183,23 @@ export const routes: RouteObject[] = [
         element: <Profile />,
       },
       {
-        path: "documentLibrary",
-        element: <DocumentLibrary />,
+        path: "knowledge",
+        element: <KnowledgeHub />,
       },
       {
         path: "agentHub",
         element: <AgentHub />,
       },
-      {
-        path: "workspaces",
-        element: <Workspaces />,
-      },
     ].filter(Boolean),
+  },
+
+  {
+    path: "/knowledge",
+    element: (
+      <RootLayout>
+        <KnowledgeHub />
+      </RootLayout>
+    ),
   },
   {
     path: "/documentLibrary/:libraryId",
@@ -204,6 +209,15 @@ export const routes: RouteObject[] = [
       </RootLayout>
     ),
   },
+  {
+    path: "/promptLibrary/:libraryId",
+    element: (
+      <RootLayout>
+        <PromptLibraryViewPage />
+      </RootLayout>
+    ),
+  },
+
   {
     path: "*",
     element: (

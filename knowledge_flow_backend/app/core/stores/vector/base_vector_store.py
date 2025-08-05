@@ -50,12 +50,15 @@ This design allows easy switching of backends (e.g., OpenSearch ➔ ChromaDB, Az
 """
 
 from abc import ABC, abstractmethod
-from typing import List, Tuple
-from app.common.document_structures import DocumentMetadata
+from typing import Iterable, List, Tuple
+
 from langchain.schema.document import Document
+from langchain.embeddings.base import Embeddings
+
+from app.common.document_structures import DocumentMetadata
 
 
-class BaseDocumentLoader(ABC):
+class BaseLangchainDocumentLoader(ABC):
     """
     Interface for loading documents from a given source and returning them as LangChain Documents.
     This interface is designed to be implemented by various concrete classes that handle
@@ -83,7 +86,7 @@ class BaseDocumentLoader(ABC):
     """
 
     @abstractmethod
-    def load(self, file_path: str, metadata: DocumentMetadata) -> Document:
+    def load_langchain_doc_from_metadata(self, file_path: str, metadata: DocumentMetadata) -> Document:
         """Load a document from a file."""
         pass
 
@@ -103,7 +106,7 @@ class BaseTextSplitter(ABC):
 
 
 # 3. Embedding Model Interface
-class BaseEmbeddingModel(ABC):
+class BaseEmbeddingModel(Embeddings, ABC):
     """
     Interface for embedding models.
     This interface is designed to be implemented by various concrete classes that handle
@@ -136,13 +139,14 @@ class BaseVectoreStore(ABC):
         pass
 
     @abstractmethod
-    def similarity_search_with_score(self, query: str, k: int = 5) -> List[Tuple[Document, float]]:
+    def similarity_search_with_score(self, query: str, k: int = 5, documents_ids: Iterable[str] | None = None) -> List[Tuple[Document, float]]:
         """
         Perform a similarity search on the vector store.
 
         Args:
             query (str): The query string.
             k (int): Number of top documents to return.
+            tags (list[str] | None): Optional list of tags to filter documents. Only documents with at least one of these tags will be returned.
 
         Returns:
             List[Tuple[Document, float]]: A list of tuples containing the document and its similarity score.

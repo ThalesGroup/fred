@@ -28,15 +28,14 @@ class NamespaceTopology(BaseModel):
     """
     Represents the overall topology of a namespace.
     """
+
     namespace_context: NamespaceContext = Field(
         description="The context of the namespace"
     )
     namespace_summary: NamespaceSummary = Field(
         description="The summary of the namespace"
     )
-    facts: Facts = Field(
-        description="The facts about the namespace"
-    )
+    facts: Facts = Field(description="The facts about the namespace")
 
     def __str__(self) -> str:
         """
@@ -49,17 +48,18 @@ class NamespaceTopology(BaseModel):
 
         representation += "namespace summary: |\n"
         representation += textwrap.indent(
-            textwrap.fill(self.namespace_summary.__str__().replace('\n', ' '), width=80),
-            prefix='  '
+            textwrap.fill(
+                self.namespace_summary.__str__().replace("\n", " "), width=80
+            ),
+            prefix="  ",
         )
 
         if self.facts.facts:
-            representation += f"namespace facts:\n"
-            for fact in self.facts.facts: # pylint: disable=E1101
+            representation += "namespace facts:\n"
+            for fact in self.facts.facts:  # pylint: disable=E1101
                 representation += f"  - {fact.user}, {fact.date}: |\n"
                 representation += textwrap.indent(
-                    textwrap.fill(fact.content, width=76),
-                    prefix='      '
+                    textwrap.fill(fact.content, width=76), prefix="      "
                 )
 
         return representation

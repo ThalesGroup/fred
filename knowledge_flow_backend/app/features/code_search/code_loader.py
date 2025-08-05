@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 
 VALID_EXTENSIONS = {".java", ".xml", ".properties", ".md", ".txt", ".yaml"}
 
+
 def load_code_documents(root_dir: str) -> list[Document]:
     documents = []
     splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
@@ -45,18 +46,20 @@ def load_code_documents(root_dir: str) -> list[Document]:
 
                 splits = splitter.split_text(content)
                 for i, chunk in enumerate(splits):
-                    documents.append(Document(
-                        page_content=chunk,
-                        metadata={
-                            "source": full_path,
-                            "file_name": fname,
-                            "language": guess_language(fname),
-                            "symbol": None,  # optional improvement
-                            "document_uid": f"{full_path}#{i}",
-                            "embedding_model": "code",  # optional
-                            "vector_index": "codebase",
-                        }
-                    ))
+                    documents.append(
+                        Document(
+                            page_content=chunk,
+                            metadata={
+                                "source": full_path,
+                                "file_name": fname,
+                                "language": guess_language(fname),
+                                "symbol": None,  # optional improvement
+                                "document_uid": f"{full_path}#{i}",
+                                "embedding_model": "code",  # optional
+                                "vector_index": "codebase",
+                            },
+                        )
+                    )
 
             except Exception as e:
                 logger.info(f"⚠️ Skipped file: {full_path} due to {e}")

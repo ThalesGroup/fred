@@ -15,21 +15,24 @@
 import { useTranslation } from "react-i18next";
 import {
   ProcessDocumentsRequest,
-  useDeleteDocumentMutation,
+  // useDeleteDocumentMutation,
   useLazyGetDocumentRawContentQuery,
   useProcessDocumentsMutation,
+  useScheduleDocumentsMutation,
 } from "../../slices/documentApi";
 import { DocumentMetadata } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { downloadFile } from "../../utils/downloadUtils";
 import { useToast } from "../ToastProvider";
 import {
-  createBulkDeleteAction,
+  //createBulkDeleteAction,
   createBulkDownloadAction,
-  createBulkProcessAction,
-  createDeleteAction,
+  createBulkProcessSyncAction,
+  createBulkScheduleAction,
+  //createDeleteAction,
   createDownloadAction,
   createPreviewAction,
   createProcessAction,
+  createScheduleAction,
 } from "./DocumentActions";
 import { useDocumentViewer } from "./useDocumentViewer";
 
@@ -37,61 +40,61 @@ export const useDocumentActions = (onRefreshData?: () => void) => {
   const { t } = useTranslation();
   const { showInfo, showError } = useToast();
   const { openDocument } = useDocumentViewer();
-
+  console.log("useDocumentActions with to review", onRefreshData)
   // API hooks
-  const [deleteDocument] = useDeleteDocumentMutation();
+  // const [deleteDocument] = useDeleteDocumentMutation();
   const [triggerDownload] = useLazyGetDocumentRawContentQuery();
   const [processDocuments] = useProcessDocumentsMutation();
+  const [scheduleDocuments] = useScheduleDocumentsMutation();
 
-  // Action handlers
-  const handleDelete = async (file: DocumentMetadata) => {
-    try {
-      await deleteDocument(file.document_uid).unwrap();
-      showInfo({
-        summary: "Delete Success",
-        detail: `${file.document_name} deleted`,
-        duration: 3000,
-      });
-      onRefreshData?.();
-    } catch (error) {
-      showError({
-        summary: "Delete Failed",
-        detail: `Could not delete document: ${error?.data?.detail || error.message}`,
-      });
-      throw error;
-    }
-  };
+  // const handleDelete = async (file: DocumentMetadata) => {
+  //   try {
+  //     await deleteDocument(file.document_uid).unwrap();
+  //     showInfo({
+  //       summary: "Delete Success",
+  //       detail: `${file.document_name} deleted`,
+  //       duration: 3000,
+  //     });
+  //     onRefreshData?.();
+  //   } catch (error) {
+  //     showError({
+  //       summary: "Delete Failed",
+  //       detail: `Could not delete document: ${error?.data?.detail || error.message}`,
+  //     });
+  //     throw error;
+  //   }
+  // };
 
-  const handleBulkDelete = async (files: DocumentMetadata[]) => {
-    let successCount = 0;
-    let failedFiles: string[] = [];
+  // const handleBulkDelete = async (files: DocumentMetadata[]) => {
+  //   let successCount = 0;
+  //   let failedFiles: string[] = [];
 
-    for (const file of files) {
-      try {
-        await deleteDocument(file.document_uid).unwrap();
-        successCount++;
-      } catch (error) {
-        failedFiles.push(file.document_name);
-      }
-    }
+  //   for (const file of files) {
+  //     try {
+  //       await deleteDocument(file.document_uid).unwrap();
+  //       successCount++;
+  //     } catch (error) {
+  //       failedFiles.push(file.document_name);
+  //     }
+  //   }
 
-    if (successCount > 0) {
-      showInfo({
-        summary: "Delete Success",
-        detail: `${successCount} document${successCount > 1 ? "s" : ""} deleted`,
-        duration: 3000,
-      });
-    }
+  //   if (successCount > 0) {
+  //     showInfo({
+  //       summary: "Delete Success",
+  //       detail: `${successCount} document${successCount > 1 ? "s" : ""} deleted`,
+  //       duration: 3000,
+  //     });
+  //   }
 
-    if (failedFiles.length > 0) {
-      showError({
-        summary: "Delete Failed",
-        detail: `Failed to delete: ${failedFiles.join(", ")}`,
-      });
-    }
+  //   if (failedFiles.length > 0) {
+  //     showError({
+  //       summary: "Delete Failed",
+  //       detail: `Failed to delete: ${failedFiles.join(", ")}`,
+  //     });
+  //   }
 
-    onRefreshData?.();
-  };
+  //   onRefreshData?.();
+  // };
 
   const handleDownload = async (file: DocumentMetadata) => {
     try {
@@ -120,35 +123,53 @@ export const useDocumentActions = (onRefreshData?: () => void) => {
     });
   };
 
+  const handleSchedule = async (files: DocumentMetadata[]) => {
+    try {
+      const payload: ProcessDocumentsRequest = {
+        files: files.map((f) => {
+          const isPull = f.source_type === "pull";
+          return {
+            source_tag: f.source_tag,
+            document_uid: isPull ? undefined : f.document_uid,
+            external_path: isPull ? (f.pull_location ?? undefined) : undefined,
+            tags: f.tags || [],
+            display_name: f.document_name,
+          };
+        }),
+        pipeline_name: "manual_ui_async",
+      };
+
+      const result = await scheduleDocuments(payload).unwrap();
+
+      showInfo({
+        summary: "Processing started",
+        detail: `Workflow ${result.workflow_id} submitted`,
+      });
+    } catch (error) {
+      showError({
+        summary: "Processing Failed",
+        detail: error?.data?.detail || error.message,
+      });
+    }
+  };
   const handleProcess = async (files: DocumentMetadata[]) => {
     try {
       const payload: ProcessDocumentsRequest = {
         files: files.map((f) => {
           const isPull = f.source_type === "pull";
-
           return {
-            source_tag: f.source_tag || "uploads",
+            source_tag: f.source_tag,
             document_uid: isPull ? undefined : f.document_uid,
-            external_path: isPull ? f.pull_location : undefined,
+            external_path: isPull ? (f.pull_location ?? undefined) : undefined,
             tags: f.tags || [],
             display_name: f.document_name,
-
-            // Using `ts-ignore` because `hash`, `size` and `modified_time` should not
-            // exist in DocumentMetadata, but this code was added so I don't want to remove
-            // it. This should be removed or the Open API spec should be fixed to add this
-            // fields in DocumentMetadata (if they are really set by the backend).
-            // @ts-ignore
-            hash: isPull ? f.hash : undefined,
-            // @ts-ignore
-            size: isPull ? f.size : undefined,
-            // @ts-ignore
-            modified_time: isPull ? f.modified_time : undefined,
           };
         }),
-        pipeline_name: "manual_ui_trigger",
+        pipeline_name: "manual_ui_async",
       };
 
       const result = await processDocuments(payload).unwrap();
+
       showInfo({
         summary: "Processing started",
         detail: `Workflow ${result.workflow_id} submitted`,
@@ -165,20 +186,22 @@ export const useDocumentActions = (onRefreshData?: () => void) => {
   const defaultRowActions = [
     createPreviewAction(handleDocumentPreview, t),
     createDownloadAction(handleDownload, t),
-    createDeleteAction(handleDelete, t),
+    //createDeleteAction(handleDelete, t),
     createProcessAction((file) => handleProcess([file]), t),
+    createScheduleAction((file) => handleSchedule([file]), t),
   ];
 
   const defaultBulkActions = [
-    createBulkDeleteAction(handleBulkDelete, t),
+    //createBulkDeleteAction(handleBulkDelete, t),
     createBulkDownloadAction(handleBulkDownload, t),
-    createBulkProcessAction(handleProcess, t),
+    createBulkProcessSyncAction((files) => handleProcess(files), t),
+    createBulkScheduleAction((file) => handleSchedule(file), t), // Optional if your library supports bulk createScheduleAction
   ];
 
   return {
     // Individual handlers
-    handleDelete,
-    handleBulkDelete,
+    //handleDelete,
+    //handleBulkDelete,
     handleDownload,
     handleBulkDownload,
     handleDocumentPreview,

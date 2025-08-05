@@ -19,7 +19,7 @@ from fastapi import HTTPException, Security
 from fastapi.security import OAuth2PasswordBearer
 from jwt import PyJWKClient
 
-from fred_core.security.structure import ConfigurationWithSecurity, KeycloakUser
+from fred_core.security.structure import SecurityConfiguration, KeycloakUser
 
 # 🔹 Create a module-level logger
 logger = logging.getLogger(__name__)
@@ -31,15 +31,15 @@ KEYCLOAK_JWKS_URL = ""
 KEYCLOAK_CLIENT_ID = ""
 
 
-def initialize_keycloak(config: ConfigurationWithSecurity):
+def initialize_keycloak(config: SecurityConfiguration):
     """
     Initialize the Keycloak authentication settings from the given configuration.
     """
     global KEYCLOAK_ENABLED, KEYCLOAK_URL, KEYCLOAK_JWKS_URL, KEYCLOAK_CLIENT_ID
 
-    KEYCLOAK_ENABLED = config.security.enabled
-    KEYCLOAK_URL = config.security.keycloak_url
-    KEYCLOAK_CLIENT_ID = config.security.client_id
+    KEYCLOAK_ENABLED = config.enabled
+    KEYCLOAK_URL = config.keycloak_url
+    KEYCLOAK_CLIENT_ID = config.client_id
     KEYCLOAK_JWKS_URL = f"{KEYCLOAK_URL}/protocol/openid-connect/certs"
 
     logger.info(

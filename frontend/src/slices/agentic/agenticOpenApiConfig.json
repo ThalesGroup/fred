@@ -1,0 +1,8 @@
+{
+  "schemaFile": "../../../../agentic_backend/openapi.json",
+  "apiFile": "./agenticApi.ts",
+  "apiImport": "agenticApi",
+  "outputFile": "agenticOpenApi.ts",
+  "exportName": "agenticApi",
+  "hooks": { "queries": true, "lazyQueries": true, "mutations": true }
+}

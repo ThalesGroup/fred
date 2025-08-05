@@ -18,8 +18,20 @@ app:
   log_level: "info"
   reload: false
   reload_dir: "."
+  security:
+    enabled: false
+    client_id: "app"
+    keycloak_url: "http://app-keycloak:8080/realms/app"
+    authorized_origins:
+    -  "http://localhost:5173"
 
 frontend_settings:
+  security:
+    enabled: false
+    client_id: "app"
+    keycloak_url: "http://app-keycloak:8080/realms/app"
+    authorized_origins:
+    -  "http://localhost:5173"
   feature_flags:
     # If true activate the backend and frontend modules in charge of K8
     # and frugality monitoring
@@ -83,6 +95,15 @@ ai:
     #  max_retries: 2
     #  request_timeout: 30
     #  azure_endpoint: "https://tehopenai.openai.azure.com/"
+
+    # --- OR uncomment for AzureAPim ---
+    # provider: "azureapim"
+    # name: "gpt-4o"
+    # settings:
+    #   api_version: "2024-06-01"
+    #   temperature: 0.0
+    #   max_retries: 2
+    #   request_timeout: 30
 
     # --- OR uncomment for Ollama ---
     # provider: "ollama"
@@ -174,13 +195,6 @@ ai:
       model: {}
 
 
-# Security. As of today only keycloak is supported.
-security:
-  enabled: false
-  client_id: "fred"
-  keycloak_url: "http://keycloak:8080/realms/app"
-  authorized_origins:
-  - "http://localhost:5173"
 
 node_metrics_storage:
   type: "local"
@@ -192,11 +206,11 @@ tool_metrics_storage:
 
 feedback_storage:
   type: duckdb
-  duckdb_path: "~/.fred/agentic/db.duckdb"
+  duckdb_path: "~/.fred/agentic/feedback.duckdb"
 
 agent_storage:
   type: "duckdb"
-  duckdb_path: "~/.fred/agentic/db.duckdb"
+  duckdb_path: "~/.fred/agentic/agent.duckdb"
 
 # Where to save fred produced resources like Essentials or Scores
 # and external resources like Kubernetes Workload descriptions

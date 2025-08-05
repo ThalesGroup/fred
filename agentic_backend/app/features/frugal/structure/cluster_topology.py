@@ -28,15 +28,10 @@ class ClusterTopology(BaseModel):
     """
     Represents the overall topology of a cluster.
     """
-    cluster_context: ClusterContext = Field(
-        description="The context of the cluster"
-    )
-    cluster_summary: ClusterSummary = Field(
-        description="The summary of the cluster"
-    )
-    facts: Facts = Field(
-        description="The facts about the cluster"
-    )
+
+    cluster_context: ClusterContext = Field(description="The context of the cluster")
+    cluster_summary: ClusterSummary = Field(description="The summary of the cluster")
+    facts: Facts = Field(description="The facts about the cluster")
 
     def __str__(self) -> str:
         """
@@ -46,21 +41,20 @@ class ClusterTopology(BaseModel):
             str: A formatted string containing the cluster topology.
         """
         representation = f"{self.cluster_context.__str__()}\n"
-        
+
         representation += "cluster summary: |\n"
         representation += textwrap.indent(
-            textwrap.fill(self.cluster_summary.__str__().replace('\n', ' '), width=80),
-            prefix='  '
+            textwrap.fill(self.cluster_summary.__str__().replace("\n", " "), width=80),
+            prefix="  ",
         )
         representation += "\n\n"
 
         if self.facts.facts:
-            representation += f"cluster facts:\n"
-            for fact in self.facts.facts: # pylint: disable=E1101
+            representation += "cluster facts:\n"
+            for fact in self.facts.facts:  # pylint: disable=E1101
                 representation += f"  - {fact.user}, {fact.date}: |\n"
                 representation += textwrap.indent(
-                    textwrap.fill(fact.content, width=76),
-                    prefix='      '
+                    textwrap.fill(fact.content, width=76), prefix="      "
                 )
 
         return representation

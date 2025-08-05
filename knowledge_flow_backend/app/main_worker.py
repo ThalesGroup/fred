@@ -46,9 +46,7 @@ In a production environment, it is recommended to split this into two separate p
 This separation supports independent scaling and better resource management in Kubernetes or other orchestration platforms.
 """
 
-
 import asyncio
-import atexit
 import logging
 import os
 from rich.logging import RichHandler
@@ -64,6 +62,7 @@ from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
 
+
 def configure_logging(log_level: str):
     logging.basicConfig(
         level=log_level.upper(),
@@ -71,9 +70,8 @@ def configure_logging(log_level: str):
         datefmt="%Y-%m-%d %H:%M:%S",
         handlers=[RichHandler(rich_tracebacks=False, show_time=False, show_path=False)],
     )
-    logging.getLogger(__name__).info(
-        f"Logging configured at {log_level.upper()} level."
-    )
+    logging.getLogger(__name__).info(f"Logging configured at {log_level.upper()} level.")
+
 
 def load_environment(dotenv_path: str = "./config/.env"):
     if load_dotenv(dotenv_path):
@@ -86,24 +84,20 @@ def load_environment(dotenv_path: str = "./config/.env"):
 # MAIN ENTRYPOINT
 # -----------------------
 
+
 async def main():
     load_environment()
     config_file = os.environ["CONFIG_FILE"]
     configuration: Configuration = parse_server_configuration(config_file)
     configure_logging(configuration.app.log_level)
     ApplicationContext(configuration)
-    # ✅ Register graceful shutdown
-    atexit.register(ApplicationContext.get_instance().close_connections)
 
     if configuration.scheduler.enabled:
         if configuration.scheduler.backend == "temporal":
             logger.info("🛠️ Launching Temporal ingestion scheduler (backend: temporal)")
             await run_worker(configuration.scheduler.temporal)
         else:
-            raise ValueError(
-                f"Scheduler is enabled but unsupported backend '{configuration.scheduler.backend}' was provided. "
-                "Expected: 'temporal'. Please check your configuration.yaml."
-            )
+            raise ValueError(f"Scheduler is enabled but unsupported backend '{configuration.scheduler.backend}' was provided. Expected: 'temporal'. Please check your configuration.yaml.")
 
 
 if __name__ == "__main__":

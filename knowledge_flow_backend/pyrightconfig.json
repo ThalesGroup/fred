@@ -1,0 +1,9 @@
+// Pyright config used when opening project with workspace
+// in vscode and by the pyright CLI
+{
+  "typeCheckingMode": "basic",
+  "include": ["app"],
+  "reportMissingTypeStubs": false,
+  "reportIncompatibleMethodOverride": "error",
+  "reportIncompatibleVariableOverride": "error"
+}

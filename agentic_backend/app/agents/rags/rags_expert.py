@@ -17,8 +17,7 @@ import logging
 from typing import List, Dict, Any, Optional
 
 from app.common.structures import AgentSettings
-from app.core.monitoring.node_monitoring.monitor_node import monitor_node
-from app.model_factory import get_model
+from app.core.model.model_factory import get_model
 import requests
 from requests import Response
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -29,6 +28,7 @@ from app.common.document_source import DocumentSource
 from app.core.chatbot.chat_schema import ChatSource
 
 logger = logging.getLogger(__name__)
+
 
 class RagsExpert(AgentFlow):
     """
@@ -49,7 +49,9 @@ class RagsExpert(AgentFlow):
 
     def __init__(self, agent_settings: AgentSettings):
         self.agent_settings = agent_settings
-        self.knowledge_flow_url = agent_settings.settings.get("knowledge_flow_url", "http://localhost:8111/knowledge-flow/v1")
+        self.knowledge_flow_url = agent_settings.settings.get(
+            "knowledge_flow_url", "http://localhost:8111/knowledge-flow/v1"
+        )
         self.current_date = datetime.now().strftime("%Y-%m-%d")
         self.model = None
         self.base_prompt = ""

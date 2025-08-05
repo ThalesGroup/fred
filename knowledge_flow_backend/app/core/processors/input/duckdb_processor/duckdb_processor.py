@@ -13,14 +13,13 @@
 # limitations under the License.
 
 from pathlib import Path
-from typing import Optional
 import duckdb
-import pandas as pd
 import logging
 
 from app.core.processors.input.common.base_input_processor import BaseTabularProcessor
 
 logger = logging.getLogger(__name__)
+
 
 class DuckDBProcessor(BaseTabularProcessor):
     """
@@ -71,4 +70,3 @@ class DuckDBProcessor(BaseTabularProcessor):
                 continue
 
         return result
-
