@@ -87,8 +87,5 @@ class RagsExpert(AgentFlow):
     
     def _build_graph(self) -> StateGraph:
         builder = StateGraph(MessagesState)
-        builder.add_node("reasoner", self._run_reasoning_step)
-        builder.add_edge(START, "reasoner")
-        builder.add_edge("reasoner", END)
         return builder
 
