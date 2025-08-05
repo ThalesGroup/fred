@@ -22,10 +22,15 @@ import requests
 from requests import Response
 from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.graph import END, START, MessagesState, StateGraph
+from langchain.prompts import ChatPromptTemplate
 
 from app.core.agents.flow import AgentFlow
 from app.common.document_source import DocumentSource
 from app.core.chatbot.chat_schema import ChatSource
+from app.agents.rags.structures import (
+    GradeDocumentsOutput,
+)
+
 
 logger = logging.getLogger(__name__)
 
@@ -151,3 +156,51 @@ class RagsExpert(AgentFlow):
                 ]
             }
 
+    async def _grade_documents(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Grades the relevance of retrieved documents against the user question,
+        filtering out irrelevant documents based on a binary 'yes' or 'no' score
+        from a grader model.
+
+        Args:
+            state (Dict[str, Any]): Current graph state
+
+        Returns:
+            Dict[str, Any]: Updated state
+        """
+        question: str = state["question"]
+        documents: Optional[List[DocumentSource]] = state["documents"]
+
+        system = """
+        You are a grader assessing relevance of a retrieved document to a user question.
+        It does not need to be a stringent test. The goal is to filter out erroneous retrievals.
+        If the document contains keyword(s) or semantic meaning related to the user question, grade it as relevant.
+        Give a binary score 'yes' or 'no' score to indicate whether the document is relevant to the question.
+        """
+
+        filtered_docs: List[DocumentSource] = []
+
+        for document in documents or []:
+            grade_prompt: ChatPromptTemplate = ChatPromptTemplate.from_messages(
+                [
+                    ("system", system),
+                    (
+                        "human",
+                        "Retrieved document: \n\n {document} \n\n User question: {question}",
+                    ),
+                ]
+            )
+            chain = grade_prompt | self.model.with_structured_output(
+                GradeDocumentsOutput
+            )
+
+            score = await chain.ainvoke(
+                {"question": question, "document": document.content}
+            )
+
+            if score.binary_score == "yes":
+                filtered_docs.append(document)
+
+        logger.info(f"✅ {len(filtered_docs)} documents are relevant.")
+
+        return {"messages": [], "documents": filtered_docs}
