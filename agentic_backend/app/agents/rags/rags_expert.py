@@ -23,9 +23,9 @@ from langgraph.graph import END, START, MessagesState, StateGraph
 from app.common.document_source import DocumentSource
 from app.common.structures import AgentSettings
 from app.core.agents.flow import AgentFlow
+from app.core.agents.runtime_context import get_document_libraries_ids
 from app.core.chatbot.chat_schema import ChatSource
 from app.core.model.model_factory import get_model
-from app.core.agents.runtime_context import get_library_ids
 
 logger = logging.getLogger(__name__)
 
@@ -99,13 +99,13 @@ class RagsExpert(AgentFlow):
         try:
             # Build the request payload
             request_data = {"query": question, "top_k": 3}
-            
+
             # Add tags from runtime context if available
-            library_ids = get_library_ids(self.get_runtime_context())
+            library_ids = get_document_libraries_ids(self.get_runtime_context())
             if library_ids:
                 request_data["tags"] = library_ids
                 logger.info(f"RagsExpert filtering by libraries: {library_ids}")
-            
+
             response = requests.post(
                 f"{self.knowledge_flow_url}/vector/search",
                 json=request_data,

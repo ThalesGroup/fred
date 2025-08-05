@@ -251,7 +251,8 @@ export type FinalEvent = {
   session: SessionSchema;
 };
 export type RuntimeContext = {
-  selected_library_ids?: string[] | null;
+  selected_document_libraries_ids?: string[] | null;
+  selected_prompt_libraries_ids?: string[] | null;
   [key: string]: any;
 };
 export type ChatAskInput = {

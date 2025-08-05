@@ -18,7 +18,10 @@ from typing import Any
 from langchain_core.tools import BaseTool
 from pydantic import Field
 
-from app.core.agents.runtime_context import RuntimeContextProvider, get_library_ids
+from app.core.agents.runtime_context import (
+    RuntimeContextProvider,
+    get_document_libraries_ids,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +88,7 @@ class ContextAwareTool(BaseTool):
                 tool_properties = {}
 
         # Inject library IDs as tags for filtering
-        library_ids = get_library_ids(context)
+        library_ids = get_document_libraries_ids(context)
         if (
             library_ids
             and "tags" in tool_properties

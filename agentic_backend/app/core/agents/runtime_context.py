@@ -13,7 +13,8 @@
 # limitations under the License.
 
 
-from typing import Optional, Callable
+from typing import Callable, Optional
+
 from pydantic import BaseModel, ConfigDict
 
 
@@ -21,19 +22,19 @@ class RuntimeContext(BaseModel):
     """
     Semi-typed runtime context that defines known properties while allowing arbitrary additional ones.
     """
-    
+
     model_config = ConfigDict(extra="allow")
 
-    # Known context properties with proper typing
-    selected_library_ids: list[str] | None = None
+    selected_document_libraries_ids: list[str] | None = None
+    selected_prompt_libraries_ids: list[str] | None = None
 
 
 # Type alias for context provider functions
 RuntimeContextProvider = Callable[[], Optional[RuntimeContext]]
 
 
-def get_library_ids(context: RuntimeContext | None) -> list[str] | None:
-    """Helper to extract library IDs from context."""
+def get_document_libraries_ids(context: RuntimeContext | None) -> list[str] | None:
+    """Helper to extract document library IDs from context."""
     if not context:
         return None
-    return context.selected_library_ids
+    return context.selected_document_libraries_ids
