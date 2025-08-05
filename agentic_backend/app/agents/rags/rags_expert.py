@@ -77,11 +77,13 @@ class RagsExpert(AgentFlow):
         Returns:
             str: The base prompt for the agent.
         """
-        return (
-            "You are responsible for analyzing document parts and answering questions based on them.\n"
-            "Whenever you reference a document part, provide citations.\n"
-            f"The current date is {self.current_date}.\n"
-        )
+
+        return f"""
+        You are responsible for analyzing document parts and answering questions based on them.
+        Whenever you reference a document part, provide citations.
+        The current date is {self.current_date}.
+        """
+
     
     def _build_graph(self) -> StateGraph:
         builder = StateGraph(MessagesState)
