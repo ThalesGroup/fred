@@ -280,7 +280,8 @@
   },
   "promptTable": {
     "name": "nom",
-    "content": "contenu"
+    "content": "contenu",
+    "actions": "Actions"
   },
   "documentDrawerTable": {
     "deleteFile": "Supprimer le fichier"
