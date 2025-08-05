@@ -281,3 +281,27 @@ class RagsExpert(AgentFlow):
             "retry_count": 0,
             "generation": None,
         }
+
+    async def _finalize_failure(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Reset state after failure with an error message.
+
+        Args:
+            state (Dict[str, Any]): Current graph state
+
+        Returns:
+            Dict[str, Any]: Updated state
+        """
+        return {
+            "messages": [
+                SystemMessage(
+                    content="The agent was unable to generate a satisfactory response to your question."
+                )
+            ],
+            "question": "",
+            "documents": [],
+            "top_k": self.TOP_K,
+            "sources": [],
+            "retry_count": 0,
+            "generation": None,
+        }
