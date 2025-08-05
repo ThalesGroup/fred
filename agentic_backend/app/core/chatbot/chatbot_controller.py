@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from enum import Enum
 import json
 import logging
 from typing import List
@@ -73,7 +74,7 @@ class ChatbotController:
             case dao_type:
                 raise NotImplementedError(f"DAO type {dao_type}")
 
-        fastapi_tags = ["Chatbot"]
+        fastapi_tags: list[str | Enum] = ["Frontend"]
 
         @app.get(
             "/config/frontend_settings",

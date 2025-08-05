@@ -27,7 +27,7 @@ class AbstractSessionStorage(ABC):
         pass
 
     @abstractmethod
-    def get_session(self, session_id: str, user_id: str) -> SessionSchema:
+    def get_session(self, session_id: str, user_id: str) -> SessionSchema | None:
         """
         Retrieve a session by its ID.
         """

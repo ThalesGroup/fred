@@ -51,7 +51,7 @@ class SchedulerController:
 
         @router.post(
             "/process-documents",
-            tags=["Library Ingestion"],
+            tags=["Processing"],
             summary="Submit processing for push/pull files via Temporal",
             description="Accepts a list of files (document_uid or external_path) and launches the appropriate ingestion workflow",
         )
@@ -71,7 +71,7 @@ class SchedulerController:
 
         @router.post(
             "/schedule-documents",
-            tags=["Library Ingestion"],
+            tags=["Processing"],
             summary="Submit processing for push/pull files via Temporal",
             description="Accepts a list of files (document_uid or external_path) and launches the appropriate ingestion workflow",
         )

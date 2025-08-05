@@ -48,6 +48,11 @@ class BaseTagStore(ABC):
 
     @abstractmethod
     def get_tag_by_id(self, tag_id: str) -> Tag:
+        """
+        Retrieve a tag by its ID.
+        Raises:
+            TagNotFoundError: If the tag does not exist.
+        """
         pass
 
     @abstractmethod

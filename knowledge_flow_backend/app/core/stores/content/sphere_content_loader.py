@@ -23,7 +23,7 @@ from app.core.stores.content.base_content_loader import BaseContentLoader
 import requests
 
 from app.common.structures import SpherePullSource
-from app.core.stores.metadata.base_catalog_store import PullFileEntry
+from app.core.stores.catalog.base_catalog_store import PullFileEntry
 
 
 class SphereContentLoader(BaseContentLoader):

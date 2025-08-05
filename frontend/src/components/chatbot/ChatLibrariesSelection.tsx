@@ -1,4 +1,5 @@
 import LibraryBooksIcon from "@mui/icons-material/LibraryBooks";
+import TextsmsIcon from "@mui/icons-material/Textsms";
 import {
   Badge,
   Box,
@@ -11,36 +12,40 @@ import {
   Typography,
   useTheme,
 } from "@mui/material";
-import { useState } from "react";
-import { useListTagsKnowledgeFlowV1TagsGetQuery } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { TagType, useListAllTagsKnowledgeFlowV1TagsGetQuery } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 
 export interface ChatLibrariesSelectionProps {
   selectedLibrariesIds: string[];
   setSelectedLibrariesIds: (ids: string[]) => void;
+  libraryType: TagType;
 }
 
-// Icon that open / close the libraries selection
-export function ChatLibrariesSelection({ selectedLibrariesIds, setSelectedLibrariesIds }: ChatLibrariesSelectionProps) {
+export function ChatLibrariesSelection({
+  selectedLibrariesIds,
+  setSelectedLibrariesIds,
+  libraryType,
+}: ChatLibrariesSelectionProps) {
+  const { t } = useTranslation();
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const Icon = libraryType === "prompt" ? TextsmsIcon : LibraryBooksIcon;
+  const tooltipText =
+    libraryType === "prompt"
+      ? t("chatbot.tooltip.selectPromptLibraries")
+      : t("chatbot.tooltip.selectDocumentLibraries");
 
-  const handleClick = (event: React.MouseEvent<HTMLElement>) => {
-    setAnchorEl(event.currentTarget);
-  };
-
-  const handleClose = () => {
-    setAnchorEl(null);
-  };
-
+  const handleClick = (event: React.MouseEvent<HTMLElement>) => setAnchorEl(event.currentTarget);
+  const handleClose = () => setAnchorEl(null);
   const open = Boolean(anchorEl);
   const id = open ? "chat-libraries-popover" : undefined;
 
   return (
     <>
-      {/* Icon button to open the popover */}
-      <Tooltip title="Select Libraries that will be available to the agent">
+      <Tooltip title={tooltipText} placement="top">
         <Badge badgeContent={selectedLibrariesIds.length > 0 ? selectedLibrariesIds.length : undefined} color="primary">
           <IconButton sx={{ fontSize: "1.6rem", padding: "8px" }} onClick={handleClick}>
-            <LibraryBooksIcon fontSize="inherit" />
+            <Icon fontSize="inherit" />
           </IconButton>
         </Badge>
       </Tooltip>
@@ -70,26 +75,34 @@ export function ChatLibrariesSelection({ selectedLibrariesIds, setSelectedLibrar
         <LibrariesSelectionCard
           selectedLibrariesIds={selectedLibrariesIds}
           setSelectedLibrariesIds={setSelectedLibrariesIds}
+          libraryType={libraryType}
         />
       </Popover>
     </>
   );
 }
 
-export interface LibrariesSelectionCardProps {
-  selectedLibrariesIds: string[];
-  setSelectedLibrariesIds: (ids: string[]) => void;
-}
-
-// List of libraries with search and selection
-export function LibrariesSelectionCard({ selectedLibrariesIds, setSelectedLibrariesIds }: LibrariesSelectionCardProps) {
+export function LibrariesSelectionCard({
+  selectedLibrariesIds,
+  setSelectedLibrariesIds,
+  libraryType,
+}: ChatLibrariesSelectionProps) {
   const theme = useTheme();
-  const { data: libraries } = useListTagsKnowledgeFlowV1TagsGetQuery();
+  const { t } = useTranslation();
+  const { data: libraries = [] } = useListAllTagsKnowledgeFlowV1TagsGetQuery({ type: libraryType });
   const [search, setSearch] = useState("");
-  const [hoveredLibrary, setHoveredLibrary] = useState<string | null>(null);
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
 
-  const handleLibraryToggle = (id: string) => {
+  const filteredLibraries = useMemo(
+    () =>
+      libraries
+        .filter((lib) => lib.name.toLowerCase().includes(search.toLowerCase()))
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    [libraries, search],
+  );
+
+  const toggleLibrary = (id: string) => {
     setSelectedLibrariesIds(
       selectedLibrariesIds.includes(id)
         ? selectedLibrariesIds.filter((libId) => libId !== id)
@@ -97,17 +110,14 @@ export function LibrariesSelectionCard({ selectedLibrariesIds, setSelectedLibrar
     );
   };
 
-  const filteredLibraries = libraries
-    ?.filter((lib) => lib.name.toLowerCase().includes(search.toLowerCase()))
-    .sort((a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name));
+  const label = libraryType === "document" ? t("chatbot.searchDocumentLibraries") : t("chatbot.searchPromptLibraries");
 
   return (
     <Box sx={{ width: "380px", height: "406px", display: "flex", flexDirection: "column" }}>
-      {/* Searchbar */}
       <Box sx={{ mx: 2, mt: 2, mb: 1 }}>
         <TextField
           autoFocus
-          label="Search libraries"
+          label={label}
           variant="outlined"
           size="small"
           value={search}
@@ -125,8 +135,9 @@ export function LibrariesSelectionCard({ selectedLibrariesIds, setSelectedLibrar
           px: 1,
         }}
       >
-        {filteredLibraries?.map((lib) => (
+        {filteredLibraries.map((lib) => (
           <Box
+            key={lib.id}
             sx={{
               width: "100%",
               display: "flex",
@@ -134,29 +145,28 @@ export function LibrariesSelectionCard({ selectedLibrariesIds, setSelectedLibrar
               borderRadius: 2,
               transition: "background 0.2s",
               cursor: "pointer",
-              "&:hover": {
-                background: theme.palette.action.hover,
-              },
-              // Ensure minHeight for better click/hover area
               minHeight: 40,
+              "&:hover": { background: theme.palette.action.hover },
             }}
-            key={lib.id}
             onMouseEnter={(e) => {
-              setHoveredLibrary(lib.id);
+              setHoveredId(lib.id);
               setAnchorEl(e.currentTarget);
             }}
             onMouseLeave={() => {
-              setHoveredLibrary(null);
+              setHoveredId(null);
               setAnchorEl(null);
             }}
-            onClick={() => handleLibraryToggle(lib.id)}
+            onClick={() => toggleLibrary(lib.id)}
           >
             <Checkbox
               checked={selectedLibrariesIds.includes(lib.id)}
               tabIndex={-1}
               disableRipple
               sx={{ mr: 1 }}
-              onClick={(e) => e.stopPropagation()} // Prevent double toggle when clicking checkbox
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleLibrary(lib.id);
+              }}
             />
             <Typography
               variant="body1"
@@ -170,7 +180,7 @@ export function LibrariesSelectionCard({ selectedLibrariesIds, setSelectedLibrar
             </Typography>
 
             {/* Tooltip */}
-            {hoveredLibrary === lib.id && anchorEl && (
+            {hoveredId === lib.id && anchorEl && (
               <Tooltip
                 open
                 title={
@@ -187,6 +197,7 @@ export function LibrariesSelectionCard({ selectedLibrariesIds, setSelectedLibrar
                 disableInteractive
                 slotProps={{
                   popper: {
+                    anchorEl,
                     modifiers: [
                       {
                         name: "eventListeners",
@@ -195,7 +206,6 @@ export function LibrariesSelectionCard({ selectedLibrariesIds, setSelectedLibrar
                     ],
                   },
                 }}
-                PopperProps={{ anchorEl }}
               >
                 <span />
               </Tooltip>

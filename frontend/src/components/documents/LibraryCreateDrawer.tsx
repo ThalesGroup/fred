@@ -17,16 +17,20 @@ import { Box, Button, Drawer, TextField, Typography } from "@mui/material";
 import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
-import { useCreateTagKnowledgeFlowV1TagsPostMutation } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import {
+  useCreateTagKnowledgeFlowV1TagsPostMutation,
+  TagType,
+} from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { useToast } from "../ToastProvider";
 
 interface LibraryCreateDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   onLibraryCreated?: () => void;
+   mode: "documents" | "prompts";
 }
 
-export const LibraryCreateDrawer: React.FC<LibraryCreateDrawerProps> = ({ isOpen, onClose, onLibraryCreated }) => {
+export const LibraryCreateDrawer: React.FC<LibraryCreateDrawerProps> = ({ isOpen, onClose, onLibraryCreated, mode }) => {
   const { t } = useTranslation();
   const { showError, showSuccess } = useToast();
   const navigate = useNavigate();
@@ -42,42 +46,61 @@ export const LibraryCreateDrawer: React.FC<LibraryCreateDrawerProps> = ({ isOpen
   };
 
   const handleCreate = async (e?: React.FormEvent) => {
-    e?.preventDefault();
+  e?.preventDefault();
 
-    if (!name.trim()) {
-      showError({
-        summary: t("libraryCreateDrawer.validationError"),
-        detail: t("libraryCreateDrawer.nameRequired"),
-      });
-      return;
-    }
+  if (!name.trim()) {
+    showError({
+      summary: t("libraryCreateDrawer.validationError"),
+      detail: t("libraryCreateDrawer.nameRequired"),
+    });
+    return;
+  }
 
-    try {
-      const result = await createTag({
+  try {
+    let result;
+
+    if (mode === "documents") {
+      result = await createTag({
         tagCreate: {
           name: name.trim(),
           description: description.trim() || null,
-          type: "library",
-          document_ids: [],
+          type: "document" as TagType,
+          item_ids: [],
         },
       }).unwrap();
-
-      showSuccess({
-        summary: t("libraryCreateDrawer.libraryCreated"),
-        detail: t("libraryCreateDrawer.libraryCreatedDetail", { name }),
-      });
-
-      onLibraryCreated?.();
-      handleClose();
-      navigate(`/documentLibrary/${result.id}`);
-    } catch (error) {
-      console.error("Error creating library:", error);
-      showError({
-        summary: t("libraryCreateDrawer.creationFailed"),
-        detail: t("libraryCreateDrawer.creationFailedDetail", { error: error.message || error }),
-      });
+    } else {
+      result = await createTag({
+        tagCreate: {
+          name: name.trim(),
+          description: description.trim() || null,
+          type: "prompt" as TagType,
+          item_ids: [],
+        },
+      }).unwrap();
     }
-  };
+
+    showSuccess({
+      summary: t("libraryCreateDrawer.libraryCreated"),
+      detail: t("libraryCreateDrawer.libraryCreatedDetail", { name }),
+    });
+
+    onLibraryCreated?.();
+    handleClose();
+
+    if (mode === "documents") {
+      navigate(`/documentLibrary/${result.id}`);
+    } else {
+      navigate(`/promptLibrary/${result.id}`); 
+    }
+  } catch (error) {
+    console.error("Error creating library:", error);
+    showError({
+      summary: t("libraryCreateDrawer.creationFailed"),
+      detail: t("libraryCreateDrawer.creationFailedDetail", { error: error.message || error }),
+    });
+  }
+};
+
 
   return (
     <Drawer

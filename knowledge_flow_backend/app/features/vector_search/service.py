@@ -45,7 +45,7 @@ class VectorSearchService:
             documents_ids = set()
             for tag_id in tags_ids:
                 tag = self.tag_service.get_tag_for_user(tag_id, user)
-                documents_ids.update(tag.document_ids)
+                documents_ids.update(tag.item_ids)
 
         logger.debug("doing similartiy search on following document uids:", documents_ids)
         return self.vector_store.similarity_search_with_score(question, k=k, documents_ids=documents_ids)

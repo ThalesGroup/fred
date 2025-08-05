@@ -47,8 +47,11 @@ $(TARGET)/.built:
 .PHONY: docker-build
 
 docker-build: ## Build the Docker image
-	docker build -t $(IMG) .
-
+	docker build \
+		-f ../knowledge_flow_backend/dockerfiles/Dockerfile-prod \
+		-t $(IMG) \
+		../
+		
 .PHONY: helm-package
 
 helm-package: ## Package the Helm chart

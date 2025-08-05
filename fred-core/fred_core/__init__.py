@@ -16,8 +16,7 @@ from fred_core.utils import raise_internal_error
 from fred_core.security.keycloak import get_current_user, initialize_keycloak
 from fred_core.security.structure import (
     KeycloakUser,
-    Security,
-    ConfigurationWithSecurity,
+    SecurityConfiguration,
 )
 from fred_core.store.local_json_store import (
     LocalJsonStore,
@@ -32,7 +31,7 @@ __all__ = [
     "initialize_keycloak",
     "KeycloakUser",
     "Security",
-    "ConfigurationWithSecurity",
+    "SecurityConfiguration",
     "LocalJsonStore",
     "BaseModelWithId",
     "ResourceNotFoundError",

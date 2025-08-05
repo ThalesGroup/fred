@@ -26,17 +26,6 @@ logger = logging.getLogger(__name__)
 
 
 class OpenSearchVectorStoreAdapter(BaseVectoreStore):
-    """
-    Opensearch Vector Store.
-
-    -------------------
-    1. This class is an adapter for OpenSearch vector store.
-    2. It implements the VectorStoreInterface.
-    3. It uses the langchain_community OpenSearchVectorSearch class.
-
-    It accepts documents + embeddings and stores them into the configured OpenSearch vector index.
-    """
-
     def __init__(
         self,
         embedding_model: BaseEmbeddingModel,
@@ -48,22 +37,42 @@ class OpenSearchVectorStoreAdapter(BaseVectoreStore):
         verify_certs: bool = False,
     ):
         self.vector_index = index
-        self.opensearch_vector_search = OpenSearchVectorSearch(
-            opensearch_url=host,
-            index_name=index,
-            embedding_function=embedding_model,
-            use_ssl=secure,
-            verify_certs=verify_certs,
-            http_auth=(username, password),
-        )
-        expected_dim = self._get_embedding_dimension()
-        self._check_vector_index_dimension(expected_dim)
+        self.embedding_model = embedding_model
+        self.host = host
+        self.username = username
+        self.password = password
+        self.secure = secure
+        self.verify_certs = verify_certs
+
+        self._opensearch_vector_search: OpenSearchVectorSearch | None = None
+        self._expected_dim: int | None = None
+
+    @property
+    def opensearch_vector_search(self) -> OpenSearchVectorSearch:
+        if self._opensearch_vector_search is None:
+            self._opensearch_vector_search = OpenSearchVectorSearch(
+                opensearch_url=self.host,
+                index_name=self.vector_index,
+                embedding_function=self.embedding_model,
+                use_ssl=self.secure,
+                verify_certs=self.verify_certs,
+                http_auth=(self.username, self.password),
+            )
+
+            self._expected_dim = self._get_embedding_dimension()
+            self._check_vector_index_dimension(self._expected_dim)
+
+        return self._opensearch_vector_search
 
     def _check_vector_index_dimension(self, expected_dim: int):
-        mapping = self.opensearch_vector_search.client.indices.get_mapping(index=self.vector_index)
-        actual_dim = mapping[self.vector_index]["mappings"]["properties"]["vector_field"]["dimension"]
+        try:
+            mapping = self.opensearch_vector_search.client.indices.get_mapping(index=self.vector_index)
+            actual_dim = mapping[self.vector_index]["mappings"]["properties"]["vector_field"]["dimension"]
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to check vector dimension: {e}")
+            return
 
-        model_name = get_embedding_model_name(self.opensearch_vector_search.embedding_function)
+        model_name = get_embedding_model_name(self.embedding_model)
 
         if actual_dim != expected_dim:
             raise ValueError(
@@ -75,17 +84,10 @@ class OpenSearchVectorStoreAdapter(BaseVectoreStore):
         logger.info(f"✅ Vector dimension check passed: model '{model_name}' outputs {expected_dim}")
 
     def _get_embedding_dimension(self) -> int:
-        dummy_vector = self.opensearch_vector_search.embedding_function.embed_query("dummy")
+        dummy_vector = self.embedding_model.embed_query("dummy")
         return len(dummy_vector)
 
     def add_documents(self, documents: List[Document]) -> None:
-        """
-        Add raw documents to OpenSearch.
-        Embeddings will be computed internally by LangChain using the configured embedding model.
-
-        Args:
-            documents (List[Document]): List of documents to embed and store.
-        """
         try:
             self.opensearch_vector_search.add_documents(documents)
             logger.info("✅ Documents added successfully.")
@@ -97,7 +99,7 @@ class OpenSearchVectorStoreAdapter(BaseVectoreStore):
         if documents_ids:
             # Create OpenSearch filter to only retrieve vectors with a `metadata.document_uid` in `documents_ids`
             boolean_filter = {"terms": {"metadata.document_uid": list(documents_ids)}}
-            logger.debug("Using boolean_filter with vector search:", boolean_filter)
+            logger.debug("Using boolean_filter with vector search: %s", boolean_filter)
             results = self.opensearch_vector_search.similarity_search_with_score(query, k=k, boolean_filter=boolean_filter)
         else:
             logger.debug("No boolean_filter with vector search")
@@ -109,9 +111,9 @@ class OpenSearchVectorStoreAdapter(BaseVectoreStore):
             doc.metadata["score"] = score
             doc.metadata["rank"] = rank
             doc.metadata["retrieved_at"] = datetime.now(timezone.utc).isoformat()
-            doc.metadata["embedding_model"] = get_embedding_model_name(self.opensearch_vector_search.embedding_function)
+            doc.metadata["embedding_model"] = get_embedding_model_name(self.embedding_model)
             doc.metadata["vector_index"] = self.vector_index
-            doc.metadata["token_count"] = len(doc.page_content.split())  # simple estimation
+            doc.metadata["token_count"] = len(doc.page_content.split())
             enriched.append((doc, score))
 
         return enriched

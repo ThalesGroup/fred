@@ -74,12 +74,9 @@ class VectorSearchController:
             operation_id="search_documents_using_vectorization",
         )
         def vector_search(request: SearchRequest):
-            # todo: get user from JWT
+            # todo: get user from MCP controller
             user = KeycloakUser(uid="admin", username="admin", roles=["admin"], email="dev@localhost")
 
-            logger.info(
-                f"Doing vector search with: query='{request.query}' tags='{request.tags}'",
-            )
             try:
                 results = self.service.similarity_search_with_score(request.query, user, k=request.top_k, tags_ids=request.tags)
                 return [self._to_document_source(doc, score, rank) for rank, (doc, score) in enumerate(results, start=1)]

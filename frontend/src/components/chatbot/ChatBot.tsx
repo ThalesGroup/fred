@@ -243,9 +243,13 @@ const ChatBot = ({
 
     const runtimeContext: RuntimeContext = {};
     // Add selected librairies to runtime context (passed to agents)
-    if (content.selectedLibrariesIds && content.selectedLibrariesIds.length) {
-      runtimeContext.selected_library_ids = content.selectedLibrariesIds;
+    if (content.documentLibraryIds && content.documentLibraryIds.length) {
+      runtimeContext.selected_library_ids = content.documentLibraryIds;
     }
+    // if (content.promptLibraryIds && content.promptLibraryIds.length) {
+    //   runtimeContext.document_libraries_ids = content.promptLibraryIds;
+    // }
+
     if (content.files && content.files.length > 0) {
       for (const file of content.files) {
         const formData = new FormData();

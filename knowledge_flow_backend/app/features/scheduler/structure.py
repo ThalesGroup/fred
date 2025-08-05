@@ -20,7 +20,7 @@ from pathlib import Path
 import hashlib
 
 from app.common.document_structures import DocumentMetadata, SourceType
-from app.core.stores.metadata.base_catalog_store import PullFileEntry
+from app.core.stores.catalog.base_catalog_store import PullFileEntry
 
 
 class FileToProcess(BaseModel):

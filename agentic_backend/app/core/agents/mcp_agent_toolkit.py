@@ -35,7 +35,9 @@ class McpAgentToolkit(BaseToolkit):
     def _fetch_tools(self, mcp_client: MultiServerMCPClient) -> List[BaseTool]:
         raw_tools = mcp_client.get_tools()
         if not raw_tools:
-            raise ValueError("❌ MCP server returned no tools. Check server config or availability.")
+            raise ValueError(
+                "❌ MCP server returned no tools. Check server config or availability."
+            )
         return raw_tools
 
     @override

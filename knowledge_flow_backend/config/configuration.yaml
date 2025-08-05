@@ -18,12 +18,12 @@ app:
   log_level: "info"
   reload: false
   reload_dir: "."
-
-security:
-  enabled: false
-  keycloak_url: "http://fred-keycloak:8080/realms/fred"
-  authorized_origins:
-    - "http://localhost:5173"
+  security:
+    enabled: false
+    keycloak_url: "http://app-keycloak:8080/realms/app"
+    client_id: "app"
+    authorized_origins:
+      - "http://localhost:5173"
 
 scheduler:
   enabled: true
@@ -51,8 +51,6 @@ input_processors:
   - prefix: ".xlsm"
     class_path: app.core.processors.input.pps_tabular_processor.pps_tabular_processor.PpsTabularProcessor
 
-# --- Content storage ---
-# type: one of [local, minio]
 content_storage:
   type: "local"
   root_path: ~/.fred/knowledge-flow/content-storage
@@ -68,78 +66,29 @@ document_sources:
     base_path: ~/Documents/Fred
     description: "Personal local documents available for pull-mode ingestion"
 
-# type: one of [duckdb, opensearch]
 metadata_storage:
   type: "duckdb"
-  duckdb_path: "~/.fred/knowledge-flow/db.duckdb"
+  duckdb_path: "~/.fred/knowledge-flow/metadata.duckdb"
 
-# --- Tag storage ---
-# type: one of [local]
 tag_storage:
-  type: "local"
+  type: "duckdb"
+  root_path: ~/.fred/knowledge-flow/tag.duckdb
 
-# --- Vector storage ---
-# type: one of [in_memory, opensearch, weaviate]
+prompt_storage:
+  type: "duckdb"
+  root_path: ~/.fred/knowledge-flow/prompt-storage
+
 vector_storage:
   type: in_memory
 
 tabular_storage:
   type: "duckdb"
-  duckdb_path: "~/.fred/knowledge-flow/db.duckdb"
+  duckdb_path: "~/.fred/knowledge-flow/tabular.duckdb"
 
-# --- Catalog storage ---
-# type: one of [duckdb]
 catalog_storage:
   type: "duckdb"
   duckdb_path: "~/.fred/knowledge-flow/db.duckdb"
 
-# --- Embedding backend ---
-# type: string (e.g., openai, azureopenai, ollama, etc.)
 embedding:
   type:
     "openai"
-  # -----------------------------------------------------------------------------
-  # EMBEDDING BACKEND
-  # -----------------------------------------------------------------------------
-  # Set the embedding backend to use:
-  #   - "openai"      → Use OpenAI's public API
-  #   - "azureopenai" → Use Azure OpenAI service directly
-  #   - "azureapim"   → Use Azure OpenAI via Azure APIM Gateway (OAuth2 + subscription key)
-  #   - "ollama"      → Use Ollama's API
-  #
-  # Required environment variables based on the selected backend:
-  #
-  # BACKEND: "openai"
-  # -------------------------------------
-  # - OPENAI_API_KEY
-  # - OPENAI_API_BASE (optional if using default)
-  # - OPENAI_API_VERSION (optional)
-  #
-  # BACKEND: "azureopenai"
-  # -------------------------------------
-  # - AZURE_OPENAI_API_KEY
-  # - AZURE_OPENAI_BASE_URL
-  # - AZURE_API_VERSION
-  # - AZURE_DEPLOYMENT_EMBEDDING
-  #
-  # BACKEND: "azureapim"
-  # -------------------------------------
-  # - AZURE_TENANT_ID
-  # - AZURE_CLIENT_ID
-  # - AZURE_CLIENT_SECRET
-  # - AZURE_CLIENT_SCOPE
-  # - AZURE_APIM_BASE_URL
-  # - AZURE_APIM_KEY
-  # - AZURE_API_VERSION
-  # - AZURE_RESOURCE_PATH_EMBEDDINGS
-  # - AZURE_DEPLOYMENT_EMBEDDING
-  #
-  # BACKEND: "ollama"
-  # -------------------------------------
-  # - OLLAMA_API_URL (optional)
-  # - OLLAMA_EMBEDDING_MODEL_NAME
-  # - OLLAMA_VISION_MODEL_NAME (optional, for vision tasks)
-  #
-  # All environment variables are expected to be present in the .env file
-  # pointed to by the ENV_FILE variable in your Makefile.
-  #

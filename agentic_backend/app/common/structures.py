@@ -17,7 +17,7 @@ from datetime import datetime
 from enum import Enum
 import os
 from pydantic import BaseModel, model_validator, Field
-from fred_core import Security
+from fred_core import SecurityConfiguration
 
 
 # ----------------------------------------------------------------------
@@ -360,7 +360,7 @@ class FeedbackStorage(BaseModel):
 
 
 FeedbackStorageConfig = Annotated[
-    Union[DuckdbDynamicAgentStorage], Field(discriminator="type")
+    Union[FeedbackStorage], Field(discriminator="type")
 ]
 
 # ----------------------------------------------------------------------
@@ -382,16 +382,10 @@ class FrontendFlags(BaseModel):
 class Properties(BaseModel):
     logoName: str = "fred"
 
-
 class FrontendSettings(BaseModel):
     feature_flags: FrontendFlags
     properties: Properties
-
-
-class AppSecurity(Security):
-    client_id: str = "fred"
-    keycloak_url: str = "http://localhost:9080/realms/fred"
-
+    security: SecurityConfiguration
 
 class AppConfig(BaseModel):
     name: Optional[str] = "Agentic Backend"
@@ -401,6 +395,7 @@ class AppConfig(BaseModel):
     log_level: str = "info"
     reload: bool = False
     reload_dir: str = "."
+    security: SecurityConfiguration
 
 
 class Configuration(BaseModel):
@@ -410,7 +405,6 @@ class Configuration(BaseModel):
     kubernetes: KubernetesConfiguration
     ai: AIConfig
     dao: DAOConfiguration
-    security: AppSecurity
     feedback_storage: FeedbackStorageConfig = Field(
         ..., description="Feedback Storage configuration"
     )

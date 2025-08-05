@@ -64,7 +64,7 @@ class InMemoryLangchainVectorStore(BaseVectoreStore):
             # Check if a document uid is in valid documents_ids list
             def tag_filter(doc: Document) -> bool:
                 doc_uid = doc.metadata.get("document_uid")
-                if not doc_uid:
+                if doc_uid is None:
                     return False
                 return doc_uid in documents_ids
 

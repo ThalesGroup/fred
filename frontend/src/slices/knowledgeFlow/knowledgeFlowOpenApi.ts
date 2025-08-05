@@ -23,22 +23,6 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.updateRetrievableRequest,
       }),
     }),
-    deleteDocumentMetadataKnowledgeFlowV1DocumentDocumentUidDelete: build.mutation<
-      DeleteDocumentMetadataKnowledgeFlowV1DocumentDocumentUidDeleteApiResponse,
-      DeleteDocumentMetadataKnowledgeFlowV1DocumentDocumentUidDeleteApiArg
-    >({
-      query: (queryArg) => ({ url: `/knowledge-flow/v1/document/${queryArg.documentUid}`, method: "DELETE" }),
-    }),
-    updateDocumentMetadataKnowledgeFlowV1DocumentDocumentUidUpdateMetadataPost: build.mutation<
-      UpdateDocumentMetadataKnowledgeFlowV1DocumentDocumentUidUpdateMetadataPostApiResponse,
-      UpdateDocumentMetadataKnowledgeFlowV1DocumentDocumentUidUpdateMetadataPostApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/knowledge-flow/v1/document/${queryArg.documentUid}/update_metadata`,
-        method: "POST",
-        body: queryArg.updateDocumentMetadataRequest,
-      }),
-    }),
     browseDocumentsKnowledgeFlowV1DocumentsBrowsePost: build.mutation<
       BrowseDocumentsKnowledgeFlowV1DocumentsBrowsePostApiResponse,
       BrowseDocumentsKnowledgeFlowV1DocumentsBrowsePostApiArg
@@ -134,11 +118,16 @@ const injectedRtkApi = api.injectEndpoints({
     rawSqlQuery: build.mutation<RawSqlQueryApiResponse, RawSqlQueryApiArg>({
       query: (queryArg) => ({ url: `/knowledge-flow/v1/tabular/sql`, method: "POST", body: queryArg.rawSqlRequest }),
     }),
-    listTagsKnowledgeFlowV1TagsGet: build.query<
-      ListTagsKnowledgeFlowV1TagsGetApiResponse,
-      ListTagsKnowledgeFlowV1TagsGetApiArg
+    listAllTagsKnowledgeFlowV1TagsGet: build.query<
+      ListAllTagsKnowledgeFlowV1TagsGetApiResponse,
+      ListAllTagsKnowledgeFlowV1TagsGetApiArg
     >({
-      query: () => ({ url: `/knowledge-flow/v1/tags` }),
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/tags`,
+        params: {
+          type: queryArg["type"],
+        },
+      }),
     }),
     createTagKnowledgeFlowV1TagsPost: build.mutation<
       CreateTagKnowledgeFlowV1TagsPostApiResponse,
@@ -167,6 +156,28 @@ const injectedRtkApi = api.injectEndpoints({
       DeleteTagKnowledgeFlowV1TagsTagIdDeleteApiArg
     >({
       query: (queryArg) => ({ url: `/knowledge-flow/v1/tags/${queryArg.tagId}`, method: "DELETE" }),
+    }),
+    getPromptKnowledgeFlowV1PromptsPromptIdGet: build.query<
+      GetPromptKnowledgeFlowV1PromptsPromptIdGetApiResponse,
+      GetPromptKnowledgeFlowV1PromptsPromptIdGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/prompts/${queryArg.promptId}` }),
+    }),
+    updatePromptKnowledgeFlowV1PromptsPromptIdPut: build.mutation<
+      UpdatePromptKnowledgeFlowV1PromptsPromptIdPutApiResponse,
+      UpdatePromptKnowledgeFlowV1PromptsPromptIdPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/prompts/${queryArg.promptId}`,
+        method: "PUT",
+        body: queryArg.prompt,
+      }),
+    }),
+    createPromptKnowledgeFlowV1PromptsPost: build.mutation<
+      CreatePromptKnowledgeFlowV1PromptsPostApiResponse,
+      CreatePromptKnowledgeFlowV1PromptsPostApiArg
+    >({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/prompts`, method: "POST", body: queryArg.prompt }),
     }),
     searchDocumentsUsingVectorization: build.mutation<
       SearchDocumentsUsingVectorizationApiResponse,
@@ -211,21 +222,10 @@ export type GetDocumentMetadataKnowledgeFlowV1DocumentDocumentUidGetApiArg = {
   documentUid: string;
 };
 export type UpdateDocumentRetrievableKnowledgeFlowV1DocumentDocumentUidPutApiResponse =
-  /** status 200 Successful Response */ UpdateDocumentMetadataResponse;
+  /** status 200 Successful Response */ any;
 export type UpdateDocumentRetrievableKnowledgeFlowV1DocumentDocumentUidPutApiArg = {
   documentUid: string;
   updateRetrievableRequest: UpdateRetrievableRequest;
-};
-export type DeleteDocumentMetadataKnowledgeFlowV1DocumentDocumentUidDeleteApiResponse =
-  /** status 200 Successful Response */ DeleteDocumentMetadataResponse;
-export type DeleteDocumentMetadataKnowledgeFlowV1DocumentDocumentUidDeleteApiArg = {
-  documentUid: string;
-};
-export type UpdateDocumentMetadataKnowledgeFlowV1DocumentDocumentUidUpdateMetadataPostApiResponse =
-  /** status 200 Successful Response */ UpdateDocumentMetadataResponse;
-export type UpdateDocumentMetadataKnowledgeFlowV1DocumentDocumentUidUpdateMetadataPostApiArg = {
-  documentUid: string;
-  updateDocumentMetadataRequest: UpdateDocumentMetadataRequest;
 };
 export type BrowseDocumentsKnowledgeFlowV1DocumentsBrowsePostApiResponse =
   /** status 200 Successful Response */ PullDocumentsResponse;
@@ -294,17 +294,20 @@ export type RawSqlQueryApiResponse = /** status 200 Successful Response */ Tabul
 export type RawSqlQueryApiArg = {
   rawSqlRequest: RawSqlRequest;
 };
-export type ListTagsKnowledgeFlowV1TagsGetApiResponse = /** status 200 Successful Response */ TagWithDocumentsId[];
-export type ListTagsKnowledgeFlowV1TagsGetApiArg = void;
-export type CreateTagKnowledgeFlowV1TagsPostApiResponse = /** status 200 Successful Response */ TagWithDocumentsId;
+export type ListAllTagsKnowledgeFlowV1TagsGetApiResponse = /** status 200 Successful Response */ TagWithItemsId[];
+export type ListAllTagsKnowledgeFlowV1TagsGetApiArg = {
+  /** Filter by tag type */
+  type?: TagType | null;
+};
+export type CreateTagKnowledgeFlowV1TagsPostApiResponse = /** status 200 Successful Response */ TagWithItemsId;
 export type CreateTagKnowledgeFlowV1TagsPostApiArg = {
   tagCreate: TagCreate;
 };
-export type GetTagKnowledgeFlowV1TagsTagIdGetApiResponse = /** status 200 Successful Response */ TagWithDocumentsId;
+export type GetTagKnowledgeFlowV1TagsTagIdGetApiResponse = /** status 200 Successful Response */ TagWithItemsId;
 export type GetTagKnowledgeFlowV1TagsTagIdGetApiArg = {
   tagId: string;
 };
-export type UpdateTagKnowledgeFlowV1TagsTagIdPutApiResponse = /** status 200 Successful Response */ TagWithDocumentsId;
+export type UpdateTagKnowledgeFlowV1TagsTagIdPutApiResponse = /** status 200 Successful Response */ TagWithItemsId;
 export type UpdateTagKnowledgeFlowV1TagsTagIdPutApiArg = {
   tagId: string;
   tagUpdate: TagUpdate;
@@ -312,6 +315,19 @@ export type UpdateTagKnowledgeFlowV1TagsTagIdPutApiArg = {
 export type DeleteTagKnowledgeFlowV1TagsTagIdDeleteApiResponse = unknown;
 export type DeleteTagKnowledgeFlowV1TagsTagIdDeleteApiArg = {
   tagId: string;
+};
+export type GetPromptKnowledgeFlowV1PromptsPromptIdGetApiResponse = /** status 200 Successful Response */ Prompt;
+export type GetPromptKnowledgeFlowV1PromptsPromptIdGetApiArg = {
+  promptId: string;
+};
+export type UpdatePromptKnowledgeFlowV1PromptsPromptIdPutApiResponse = /** status 200 Successful Response */ Prompt;
+export type UpdatePromptKnowledgeFlowV1PromptsPromptIdPutApiArg = {
+  promptId: string;
+  prompt: Prompt;
+};
+export type CreatePromptKnowledgeFlowV1PromptsPostApiResponse = /** status 200 Successful Response */ TagWithItemsId;
+export type CreatePromptKnowledgeFlowV1PromptsPostApiArg = {
+  prompt: Prompt;
 };
 export type SearchDocumentsUsingVectorizationApiResponse = /** status 200 Successful Response */ DocumentSource[];
 export type SearchDocumentsUsingVectorizationApiArg = {
@@ -370,26 +386,16 @@ export type GetDocumentMetadataResponse = {
   status: string;
   metadata: DocumentMetadata;
 };
-export type UpdateDocumentMetadataResponse = {
-  status: string;
-  metadata: DocumentMetadata;
-};
 export type UpdateRetrievableRequest = {
   retrievable: boolean;
-};
-export type DeleteDocumentMetadataResponse = {
-  status: string;
-  message: string;
-};
-export type UpdateDocumentMetadataRequest = {
-  description?: string | null;
-  title?: string | null;
-  domain?: string | null;
-  tags?: string[] | null;
 };
 export type PullDocumentsResponse = {
   total: number;
   documents: DocumentMetadata[];
+};
+export type SortOption = {
+  field: string;
+  direction: "asc" | "desc";
 };
 export type BrowseDocumentsRequest = {
   /** Tag of the document source to browse (pull or push) */
@@ -400,6 +406,7 @@ export type BrowseDocumentsRequest = {
   } | null;
   offset?: number;
   limit?: number;
+  sort_by?: SortOption[] | null;
 };
 export type PullFileEntry = {
   path: string;
@@ -446,8 +453,8 @@ export type TabularQueryResponse = {
 export type RawSqlRequest = {
   query: string;
 };
-export type TagType = "library";
-export type TagWithDocumentsId = {
+export type TagType = "document" | "prompt";
+export type TagWithItemsId = {
   id: string;
   created_at: string;
   updated_at: string;
@@ -455,19 +462,29 @@ export type TagWithDocumentsId = {
   name: string;
   description?: string | null;
   type: TagType;
-  document_ids: string[];
+  item_ids: string[];
 };
 export type TagCreate = {
   name: string;
   description?: string | null;
   type: TagType;
-  document_ids?: string[];
+  item_ids?: string[];
 };
 export type TagUpdate = {
   name: string;
   description?: string | null;
   type: TagType;
-  document_ids?: string[];
+  item_ids?: string[];
+};
+export type Prompt = {
+  id: string;
+  name: string;
+  content: string;
+  description?: string | null;
+  tags: string[];
+  owner_id: string;
+  created_at: string;
+  updated_at: string;
 };
 export type DocumentSource = {
   content: string;
@@ -520,8 +537,6 @@ export const {
   useGetDocumentMetadataKnowledgeFlowV1DocumentDocumentUidGetQuery,
   useLazyGetDocumentMetadataKnowledgeFlowV1DocumentDocumentUidGetQuery,
   useUpdateDocumentRetrievableKnowledgeFlowV1DocumentDocumentUidPutMutation,
-  useDeleteDocumentMetadataKnowledgeFlowV1DocumentDocumentUidDeleteMutation,
-  useUpdateDocumentMetadataKnowledgeFlowV1DocumentDocumentUidUpdateMetadataPostMutation,
   useBrowseDocumentsKnowledgeFlowV1DocumentsBrowsePostMutation,
   useListCatalogFilesKnowledgeFlowV1PullCatalogFilesGetQuery,
   useLazyListCatalogFilesKnowledgeFlowV1PullCatalogFilesGetQuery,
@@ -543,13 +558,17 @@ export const {
   useGetAllSchemasQuery,
   useLazyGetAllSchemasQuery,
   useRawSqlQueryMutation,
-  useListTagsKnowledgeFlowV1TagsGetQuery,
-  useLazyListTagsKnowledgeFlowV1TagsGetQuery,
+  useListAllTagsKnowledgeFlowV1TagsGetQuery,
+  useLazyListAllTagsKnowledgeFlowV1TagsGetQuery,
   useCreateTagKnowledgeFlowV1TagsPostMutation,
   useGetTagKnowledgeFlowV1TagsTagIdGetQuery,
   useLazyGetTagKnowledgeFlowV1TagsTagIdGetQuery,
   useUpdateTagKnowledgeFlowV1TagsTagIdPutMutation,
   useDeleteTagKnowledgeFlowV1TagsTagIdDeleteMutation,
+  useGetPromptKnowledgeFlowV1PromptsPromptIdGetQuery,
+  useLazyGetPromptKnowledgeFlowV1PromptsPromptIdGetQuery,
+  useUpdatePromptKnowledgeFlowV1PromptsPromptIdPutMutation,
+  useCreatePromptKnowledgeFlowV1PromptsPostMutation,
   useSearchDocumentsUsingVectorizationMutation,
   useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation,
   useScheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPostMutation,
