@@ -57,7 +57,7 @@ class TagController:
         self._register_routes(router, handle_exception)
 
     def _register_routes(self, router: APIRouter, handle_exception):
-        @router.get("/tags", response_model=List[TagWithItemsId], tags=["Tag"], summary="List all tags with item identifiers, you can filter by type to return only prompts or documents tags")
+        @router.get("/tags", response_model=List[TagWithItemsId], tags=["Tags"], summary="List all tags with item identifiers, you can filter by type to return only prompts or documents tags")
         async def list_all_tags(
             type: Annotated[TagType | None, Query(description="Filter by tag type")] = None,
             user: KeycloakUser = Depends(get_current_user),
@@ -67,28 +67,28 @@ class TagController:
             except Exception as e:
                 raise handle_exception(e)
 
-        @router.get("/tags/{tag_id}", response_model=TagWithItemsId, tags=["Tag"], summary="Get a tag by ID")
+        @router.get("/tags/{tag_id}", response_model=TagWithItemsId, tags=["Tags"], summary="Get a tag by ID")
         async def get_tag(tag_id: str, user: KeycloakUser = Depends(get_current_user)):
             try:
                 return self.service.get_tag_for_user(tag_id, user)
             except Exception as e:
                 raise handle_exception(e)
 
-        @router.post("/tags", response_model=TagWithItemsId, tags=["Tag"], summary="Create a new tag")
+        @router.post("/tags", response_model=TagWithItemsId, tags=["Tags"], summary="Create a new tag")
         async def create_tag(tag: TagCreate, user: KeycloakUser = Depends(get_current_user)):
             try:
                 return self.service.create_tag_for_user(tag, user)
             except Exception as e:
                 raise handle_exception(e)
 
-        @router.put("/tags/{tag_id}", response_model=TagWithItemsId, tags=["Tag"], summary="Update a tag")
+        @router.put("/tags/{tag_id}", response_model=TagWithItemsId, tags=["Tags"], summary="Update a tag")
         async def update_tag(tag_id: str, tag: TagUpdate, user: KeycloakUser = Depends(get_current_user)):
             try:
                 return self.service.update_tag_for_user(tag_id, tag, user)
             except Exception as e:
                 raise handle_exception(e)
 
-        @router.delete("/tags/{tag_id}", tags=["Tag"], status_code=status.HTTP_204_NO_CONTENT, summary="Delete a tag")
+        @router.delete("/tags/{tag_id}", tags=["Tags"], status_code=status.HTTP_204_NO_CONTENT, summary="Delete a tag")
         async def delete_tag(tag_id: str, user: KeycloakUser = Depends(get_current_user)):
             try:
                 self.service.delete_tag_for_user(tag_id, user)

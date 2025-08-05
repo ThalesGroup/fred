@@ -222,7 +222,7 @@ export type GetDocumentMetadataKnowledgeFlowV1DocumentDocumentUidGetApiArg = {
   documentUid: string;
 };
 export type UpdateDocumentRetrievableKnowledgeFlowV1DocumentDocumentUidPutApiResponse =
-  /** status 200 Successful Response */ UpdateDocumentMetadataResponse;
+  /** status 200 Successful Response */ any;
 export type UpdateDocumentRetrievableKnowledgeFlowV1DocumentDocumentUidPutApiArg = {
   documentUid: string;
   updateRetrievableRequest: UpdateRetrievableRequest;
@@ -383,10 +383,6 @@ export type HttpValidationError = {
   detail?: ValidationError[];
 };
 export type GetDocumentMetadataResponse = {
-  status: string;
-  metadata: DocumentMetadata;
-};
-export type UpdateDocumentMetadataResponse = {
   status: string;
   metadata: DocumentMetadata;
 };

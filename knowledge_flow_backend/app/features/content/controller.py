@@ -95,7 +95,7 @@ class ContentController:
 
         @router.get(
             "/markdown/{document_uid}",
-            tags=["Library Content"],
+            tags=["Content"],
             summary="Get markdown preview of a processed document",
             description="""
         Returns the full Markdown preview of a document that has been successfully ingested and processed (either via push or pull mode).
@@ -131,7 +131,7 @@ class ContentController:
 
         @router.get(
             "/markdown/{document_uid}/media/{media_id}",
-            tags=["Library Content"],
+            tags=["Content"],
             summary="Download an embedded media asset from a processed document",
             description="""
         Fetches an embedded media resource (e.g., image or attachment) that was extracted during the ingestion of a processed document.
@@ -155,7 +155,7 @@ class ContentController:
 
         @router.get(
             "/raw_content/{document_uid}",
-            tags=["Library Content"],
+            tags=["Content"],
             summary="Download the original raw document content",
             description="""
         Streams the original uploaded or pulled document content associated with the given UID.

@@ -100,7 +100,7 @@ class MetadataController:
 
         @router.post(
             "/documents/metadata",
-            tags=["Library Metadata"],
+            tags=["Documents"],
             response_model=GetDocumentsMetadataResponse,
             summary="List metadata for all ingested documents (optional filters)",
             description=(
@@ -120,7 +120,7 @@ class MetadataController:
 
         @router.get(
             "/document/{document_uid}",
-            tags=["Library Metadata"],
+            tags=["Documents"],
             response_model=GetDocumentMetadataResponse,
             summary="Fetch metadata for an ingested document",
             description=(
@@ -138,7 +138,7 @@ class MetadataController:
 
         @router.put(
             "/document/{document_uid}",
-            tags=["Library Metadata"],
+            tags=["Documents"],
             response_model=None,
             summary="Toggle document retrievability (indexed for search)",
             description=(
@@ -156,7 +156,7 @@ class MetadataController:
 
         @router.post(
             "/documents/browse",
-            tags=["Library"],
+            tags=["Documents"],
             summary="Unified endpoint to browse documents from any source (push or pull)",
             response_model=PullDocumentsResponse,
             description="""
