@@ -273,7 +273,7 @@
     "fileName": "File Name",
     "dateAdded": "Date Added",
     "retrievableYes": "Searchable",
-    "retrievableNo": "Exluded",
+    "retrievableNo": "Excluded",
     "status": "Status",
     "actions": "Actions",
     "loadingMetadata": "Loading metadata...",
