@@ -86,7 +86,6 @@ class VectorSearchController:
 
     def _to_document_source(self, doc: Document, score: float, rank: int) -> DocumentSource:
         metadata = doc.metadata
-        print("doc", doc.__dict__)
         try:
             return DocumentSource(
                 content=doc.page_content,
