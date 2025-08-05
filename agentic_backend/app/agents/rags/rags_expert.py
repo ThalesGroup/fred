@@ -21,7 +21,7 @@ from app.core.model.model_factory import get_model
 import requests
 from requests import Response
 from langchain_core.messages import SystemMessage, AIMessage
-from langgraph.graph import END, MessagesState, StateGraph
+from langgraph.graph import END, StateGraph
 from langchain.prompts import ChatPromptTemplate
 
 from app.core.agents.flow import AgentFlow
@@ -30,7 +30,8 @@ from app.core.chatbot.chat_schema import ChatSource
 from app.agents.rags.structures import (
     GradeDocumentsOutput,
     GradeAnswerOutput,
-    RephraseQueryOutput
+    RephraseQueryOutput,
+    RagGraphState
 )
 
 
@@ -98,7 +99,49 @@ class RagsExpert(AgentFlow):
         """
 
     def _build_graph(self) -> StateGraph:
-        builder = StateGraph(MessagesState)
+        """
+        Build and configure the state graph for the agent's workflow.
+
+        Defines nodes for retrieval, document grading, generation, query rephrasing,
+        and success/failure finalization, along with conditional transitions
+        controlling the flow between these steps.
+
+        Returns:
+            StateGraph: The configured state graph instance.
+        """
+        builder = StateGraph(RagGraphState)
+
+        builder.add_node("retrieve", self._retrieve)
+        builder.add_node("grade_documents", self._grade_documents)
+        builder.add_node("generate", self._generate)
+        builder.add_node("rephrase_query", self._rephrase_query)
+        builder.add_node("finalize_success", self._finalize_success)
+        builder.add_node("finalize_failure", self._finalize_failure)
+
+        builder.set_entry_point("retrieve")
+        builder.add_edge("retrieve", "grade_documents")
+        builder.add_conditional_edges(
+            "grade_documents",
+            self._decide_to_generate,
+            {
+                "rephrase_query": "rephrase_query",
+                "generate": "generate",
+                "abort": "finalize_failure",
+            },
+        )
+        builder.add_edge("rephrase_query", "retrieve")
+        builder.add_conditional_edges(
+            "generate",
+            self._grade_generation,
+            {
+                "useful": "finalize_success",
+                "not useful": "rephrase_query",
+                "abort": "finalize_failure",
+            },
+        )
+        builder.add_edge("finalize_success", END)
+        builder.add_edge("finalize_failure", END)
+
         return builder
 
     # Nodes
@@ -263,7 +306,7 @@ class RagsExpert(AgentFlow):
         )
 
         return {"messages": [], "generation": response}
-    
+
     async def _rephrase_query(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """
         Rephrase the input question to improve retrieval effectiveness.
@@ -304,7 +347,6 @@ class RagsExpert(AgentFlow):
             "question": better_question,
             "retry_count": retry_count,
         }
-
 
     async def _finalize_success(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """
