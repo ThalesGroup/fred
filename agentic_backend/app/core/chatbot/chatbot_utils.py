@@ -12,11 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import logging
 from typing import List
 from app.core.chatbot.chat_schema import ChatMessagePayload
 from collections import defaultdict
 from datetime import datetime
-import logging
+from fastapi import HTTPException
 
 logger = logging.getLogger(__name__)
 
@@ -75,3 +76,12 @@ def enrich_ChatMessagePayloads_with_latencies(
         enriched_list.extend(msgs)
 
     return enriched_list
+
+def parse_date(date_str: str) -> datetime:
+    try:
+        return datetime.fromisoformat(date_str)
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid date format: '{date_str}'. Expected ISO 8601 format (e.g., '2025-08-04T15:00:00')."
+        )
