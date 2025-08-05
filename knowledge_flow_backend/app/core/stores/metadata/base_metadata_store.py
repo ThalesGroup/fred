@@ -47,7 +47,7 @@ class BaseMetadataStore:
         pass
 
     @abstractmethod
-    def get_metadata_by_uid(self, document_uid: str) -> Optional[DocumentMetadata]:
+    def get_metadata_by_uid(self, document_uid: str) -> DocumentMetadata | None:
         """
         Retrieve a metadata document by its UID.
 
@@ -93,35 +93,16 @@ class BaseMetadataStore:
         pass
 
     @abstractmethod
-    def delete_metadata(self, metadata: DocumentMetadata) -> bool:
+    def delete_metadata(self, document_uid: str) -> None:
         """
-        Remove a metadata entry by UID.
+        Create or update a metadata entry.
 
-        :param metadata: metadata containing the UID to delete.
-        :return: True if deletion succeeded, False otherwise.
-        """
-        pass
+        - Overwrites existing metadata if the same UID already exists.
+        - Adds a new entry otherwise.
 
-    @abstractmethod
-    def update_processing_stage(self, document_uid: str, stage: ProcessingStage, status: str) -> None:
-        """
-        Update the processing stage status for a specific document.
-
-        :param document_uid: the document to update.
-        :param stage: a predefined processing stage (enum).
-        :param status: new value for the stage (e.g., "done", "failed").
-        :raises Exception: if the update fails.
-        """
-        pass
-
-    @abstractmethod
-    def set_retrievable_flag(self, document_uid: str, value: bool) -> None:
-        """
-        Set whether this document should be exposed to retrieval (e.g., in AI chat).
-
-        :param document_uid: the document to update.
-        :param value: True to mark as retrievable, False to exclude from search.
-        :raises Exception: if update fails.
+        :param metadata: metadata to save.
+        :raises ValueError: if 'document_uid' is missing.
+        :raises RuntimeError: if the save operation fails.
         """
         pass
 

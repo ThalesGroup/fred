@@ -14,19 +14,19 @@
 
 import logging
 from typing import Any, Dict, Optional
+
+from fred_core import KeycloakUser, get_current_user
 from app.common.utils import log_exception
 from app.features.pull.controller import PullDocumentsResponse
 from app.features.pull.service import PullDocumentService
-from fastapi import APIRouter, Body, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException
 
 from app.common.structures import Status
 from app.application_context import ApplicationContext
 from app.features.metadata.service import InvalidMetadataRequest, MetadataNotFound, MetadataService, MetadataUpdateError
 from app.features.metadata.structures import (
-    DeleteDocumentMetadataResponse,
     GetDocumentMetadataResponse,
     GetDocumentsMetadataResponse,
-    UpdateDocumentMetadataRequest,
     UpdateDocumentMetadataResponse,
     UpdateRetrievableRequest,
 )
@@ -139,7 +139,7 @@ class MetadataController:
         @router.put(
             "/document/{document_uid}",
             tags=["Library Metadata"],
-            response_model=UpdateDocumentMetadataResponse,
+            response_model=None,
             summary="Toggle document retrievability (indexed for search)",
             description=(
                 "Updates the `retrievable` flag for an ingested document. "
@@ -148,51 +148,10 @@ class MetadataController:
                 "the flag has no effect."
             ),
         )
-        def update_document_retrievable(document_uid: str, update: UpdateRetrievableRequest):
+        def update_document_retrievable(document_uid: str, update: UpdateRetrievableRequest, user: KeycloakUser = Depends(get_current_user),):
             try:
-                return self.service.update_document_retrievable(document_uid, update)
+                self.service.update_document_retrievable(document_uid, update.retrievable, user.username)
             except Exception as e:
-                raise handle_exception(e)
-
-        @router.delete(
-            "/document/{document_uid}",
-            tags=["Library Metadata"],
-            response_model=DeleteDocumentMetadataResponse,
-            summary="Delete metadata and optionally raw content for an ingested document",
-            description=(
-                "Deletes the stored metadata and associated raw content for a document. "
-                "This is a destructive operation and only applies to documents that have been ingested. "
-                "Discovered-only (non-ingested) files are unaffected."
-            ),
-        )
-        def delete_document_metadata(document_uid: str):
-            try:
-                self.service.delete_document_metadata(document_uid)
-                self.content_store.delete_content(document_uid)
-                return DeleteDocumentMetadataResponse(status=Status.SUCCESS, message=f"Metadata for document {document_uid} has been deleted.")
-            except Exception as e:
-                logger.exception(f"Failed to delete document metadata: {e}")
-                raise handle_exception(e)
-
-        @router.post(
-            "/document/{document_uid}/update_metadata",
-            tags=["Library Metadata"],
-            response_model=UpdateDocumentMetadataResponse,
-            summary="Update multiple metadata fields for a document",
-            description=(
-                "Allows partial updates of metadata fields (e.g., title, description, tags, category) "
-                "for an already ingested document. Fields not included in the request body will remain unchanged.\n\n"
-                "This endpoint is used for managing user-defined annotations or descriptive updates."
-            ),
-        )
-        def update_document_metadata(document_uid: str, update: UpdateDocumentMetadataRequest):
-            try:
-                return self.service.update_document_metadata(
-                    document_uid,
-                    update.model_dump(exclude_none=True),
-                )
-            except Exception as e:
-                logger.error(f"Failed to update metadata for {document_uid}: {e}")
                 raise handle_exception(e)
 
         @router.post(

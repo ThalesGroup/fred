@@ -47,7 +47,6 @@ export const useDocumentActions = (onRefreshData?: () => void) => {
   const [processDocuments] = useProcessDocumentsMutation();
   const [scheduleDocuments] = useScheduleDocumentsMutation();
 
-  // Action handlers
   // const handleDelete = async (file: DocumentMetadata) => {
   //   try {
   //     await deleteDocument(file.document_uid).unwrap();

@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from datetime import datetime, timezone
 import logging
 
 from app.common.document_structures import DocumentMetadata
@@ -68,16 +69,6 @@ class MetadataService:
             logger.error(f"Error retrieving metadata for tag {tag_id}: {e}")
             raise MetadataUpdateError(f"Failed to retrieve metadata for tag {tag_id}: {e}")
 
-    def delete_document_metadata(self, document_uid: str) -> None:
-        metadata = self.metadata_store.get_metadata_by_uid(document_uid)
-        if not metadata:
-            raise MetadataNotFound(f"No document found with UID {document_uid}")
-        try:
-            self.metadata_store.delete_metadata(metadata)
-        except Exception as e:
-            logger.error(f"Error deleting metadata: {e}")
-            raise MetadataUpdateError(f"Failed to delete metadata for {document_uid}: {e}")
-
     def get_document_metadata(self, document_uid: str) -> DocumentMetadata:
         if not document_uid:
             raise InvalidMetadataRequest("Document UID cannot be empty")
@@ -92,39 +83,76 @@ class MetadataService:
 
         return metadata
 
-    def update_document_retrievable(self, document_uid: str, update) -> UpdateDocumentMetadataResponse:
+    def add_tag_id_to_document(self, metadata: DocumentMetadata, new_tag_id: str, modified_by: str) -> None:
+        try:
+            if metadata.tags is None:
+                metadata.tags = []
+
+            # Avoid duplicate tags
+            if new_tag_id not in metadata.tags:
+                metadata.tags.append(new_tag_id)
+                metadata.modified = datetime.now(timezone.utc)
+                metadata.last_modified_by = modified_by
+                self.metadata_store.save_metadata(metadata)
+                logger.info(f"[METADATA] Added tag '{new_tag_id}' to document '{metadata.document_name}' by '{modified_by}'")
+            else:
+                logger.info(f"[METADATA] Tag '{new_tag_id}' already present on document '{metadata.document_name}' — no change.")
+
+
+        except Exception as e:
+            logger.error(f"Error updating retrievable flag for {metadata.document_name}: {e}")
+            raise MetadataUpdateError(f"Failed to update retrievable flag: {e}")
+        
+
+    def remove_tag_id_from_document(self, metadata: DocumentMetadata, tag_id_to_remove: str, modified_by: str) -> None:
+
+        try:
+
+            if not metadata.tags or tag_id_to_remove not in metadata.tags:
+                logger.info(f"[METADATA] Tag '{tag_id_to_remove}' not found on document '{metadata.document_name}' — nothing to remove.")
+                return
+
+            # Remove tag
+            metadata.tags.remove(tag_id_to_remove)
+
+            if not metadata.tags:
+                self.metadata_store.delete_metadata(metadata.document_uid)
+                logger.info(f"[METADATA] Deleted document '{metadata.document_name}' because no tags remain (last removed by '{modified_by}')")
+            else:
+                metadata.modified = datetime.now(timezone.utc)
+                metadata.last_modified_by = modified_by
+                self.metadata_store.save_metadata(metadata)
+                logger.info(f"[METADATA] Removed tag '{tag_id_to_remove}' from document '{metadata.document_name}' by '{modified_by}'")
+
+        except Exception as e:
+            logger.error(f"Failed to remove tag '{tag_id_to_remove}' from document '{metadata.document_name}': {e}")
+            raise MetadataUpdateError(f"Failed to remove tag: {e}")
+
+
+    def update_document_retrievable(self, document_uid: str, value: bool, modified_by: str) -> None:
         if not document_uid:
             raise InvalidMetadataRequest("Document UID cannot be empty")
+
         try:
-            result = self.metadata_store.update_metadata_field(document_uid=document_uid, field="retrievable", value=update.retrievable)
-            return UpdateDocumentMetadataResponse(status=Status.SUCCESS, metadata=result)
+            metadata = self.metadata_store.get_metadata_by_uid(document_uid)
+            if not metadata:
+                raise MetadataNotFound(f"Document '{document_uid}' not found.")
+
+            metadata.retrievable = value
+            metadata.modified = datetime.now(timezone.utc)
+            metadata.last_modified_by = modified_by
+
+            self.metadata_store.save_metadata(metadata)
+            logger.info(f"[METADATA] Set retrievable={value} for document '{document_uid}' by '{modified_by}'")
+
         except Exception as e:
             logger.error(f"Error updating retrievable flag for {document_uid}: {e}")
             raise MetadataUpdateError(f"Failed to update retrievable flag: {e}")
-
-    def update_document_metadata(self, document_uid: str, update_fields: dict) -> UpdateDocumentMetadataResponse:
-        if not document_uid:
-            raise InvalidMetadataRequest("Document UID cannot be empty")
-        if not update_fields:
-            raise InvalidMetadataRequest("No metadata fields provided for update")
-        try:
-            logger.info(f"Updating metadata for {document_uid} with {update_fields}")
-
-            # if tags are changed, update `updated_at` timestamp for each tag
-            if "tags" in update_fields:
-                self._handle_tag_timestamp_updates(document_uid, update_fields["tags"])
-
-            result = None
-            for field, value in update_fields.items():
-                result = self.metadata_store.update_metadata_field(document_uid=document_uid, field=field, value=value)
-            return UpdateDocumentMetadataResponse(status=Status.SUCCESS, metadata=result)
-        except Exception as e:
-            logger.error(f"Error updating metadata for {document_uid}: {e}")
-            raise MetadataUpdateError(f"Failed to update metadata: {e}")
-
+        
     def save_document_metadata(self, metadata: DocumentMetadata) -> None:
         """
         Save document metadata and update tag timestamps for any assigned tags.
+        This is an internal method only called by other services
         """
         try:
             # Save the metadata first

@@ -109,7 +109,7 @@ class TagService:
 
         # Add new tag id to each document metadata
         for doc in documents:
-            self._add_tag_id_to_document(doc, tag.id)
+            self.document_metadata_service.add_tag_id_to_document(metadata=doc, new_tag_id=tag.id, modified_by=user.username)
 
         return TagWithItemsId.from_tag(tag, tag_data.item_ids)
 
@@ -126,10 +126,10 @@ class TagService:
             removed_documents = self._retrieve_documents_metadata(removed)
 
             for doc in added_documents:
-                self._add_tag_id_to_document(doc, tag_id)
+                self.document_metadata_service.add_tag_id_to_document(metadata=doc, new_tag_id=tag.id, modified_by=user.username)
 
             for doc in removed_documents:
-                self._remove_tag_id_from_document(doc, tag_id)
+                self.document_metadata_service.remove_tag_id_from_document(metadata=doc, tag_id_to_remove=tag.id, modified_by=user.username)
 
         elif tag.type == TagType.PROMPT:
             old_item_ids = self._retrieve_prompt_ids_for_tag(tag_id)
@@ -156,7 +156,8 @@ class TagService:
             # Remove the tag ID from all documents that have this tag
             documents = self._retrieve_documents_for_tag(tag_id)
             for doc in documents:
-                self._remove_tag_id_from_document(doc, tag_id)
+                self.document_metadata_service.remove_tag_id_from_document(metadata=doc, tag_id_to_remove=tag_id, modified_by=user.username)
+
         elif tag.type == TagType.PROMPT:
             # Remove the tag from all prompts that have this tag
             prompts = self._retrieve_prompts_for_tag(tag_id)
@@ -234,20 +235,3 @@ class TagService:
 
         return added, removed
 
-    def _add_tag_id_to_document(self, document: DocumentMetadata, new_tag_id: str) -> None:
-        """
-        Add a tag ID to a document's metadata.
-        """
-        existing_tags = document.tags or []
-        self.document_metadata_service.update_document_metadata(document.document_uid, {"tags": existing_tags + [new_tag_id]})
-
-    def _remove_tag_id_from_document(self, document: DocumentMetadata, tag_id: str) -> None:
-        """
-        Remove a tag ID from a document's metadata.
-        """
-        existing_tags = document.tags or []
-        if tag_id in existing_tags:
-            existing_tags.remove(tag_id)
-            self.document_metadata_service.update_document_metadata(document.document_uid, {"tags": existing_tags})
-        else:
-            raise ValueError(f"Tag ID {tag_id} not found in document {document.document_uid} tags.")

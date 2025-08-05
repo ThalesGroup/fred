@@ -23,22 +23,6 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.updateRetrievableRequest,
       }),
     }),
-    deleteDocumentMetadataKnowledgeFlowV1DocumentDocumentUidDelete: build.mutation<
-      DeleteDocumentMetadataKnowledgeFlowV1DocumentDocumentUidDeleteApiResponse,
-      DeleteDocumentMetadataKnowledgeFlowV1DocumentDocumentUidDeleteApiArg
-    >({
-      query: (queryArg) => ({ url: `/knowledge-flow/v1/document/${queryArg.documentUid}`, method: "DELETE" }),
-    }),
-    updateDocumentMetadataKnowledgeFlowV1DocumentDocumentUidUpdateMetadataPost: build.mutation<
-      UpdateDocumentMetadataKnowledgeFlowV1DocumentDocumentUidUpdateMetadataPostApiResponse,
-      UpdateDocumentMetadataKnowledgeFlowV1DocumentDocumentUidUpdateMetadataPostApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/knowledge-flow/v1/document/${queryArg.documentUid}/update_metadata`,
-        method: "POST",
-        body: queryArg.updateDocumentMetadataRequest,
-      }),
-    }),
     browseDocumentsKnowledgeFlowV1DocumentsBrowsePost: build.mutation<
       BrowseDocumentsKnowledgeFlowV1DocumentsBrowsePostApiResponse,
       BrowseDocumentsKnowledgeFlowV1DocumentsBrowsePostApiArg
@@ -201,6 +185,26 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/knowledge-flow/v1/vector/search`, method: "POST", body: queryArg.searchRequest }),
     }),
+    processDocumentsKnowledgeFlowV1ProcessDocumentsPost: build.mutation<
+      ProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostApiResponse,
+      ProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/process-documents`,
+        method: "POST",
+        body: queryArg.processDocumentsRequest,
+      }),
+    }),
+    scheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPost: build.mutation<
+      ScheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPostApiResponse,
+      ScheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/schedule-documents`,
+        method: "POST",
+        body: queryArg.processDocumentsRequest,
+      }),
+    }),
   }),
   overrideExisting: false,
 });
@@ -222,17 +226,6 @@ export type UpdateDocumentRetrievableKnowledgeFlowV1DocumentDocumentUidPutApiRes
 export type UpdateDocumentRetrievableKnowledgeFlowV1DocumentDocumentUidPutApiArg = {
   documentUid: string;
   updateRetrievableRequest: UpdateRetrievableRequest;
-};
-export type DeleteDocumentMetadataKnowledgeFlowV1DocumentDocumentUidDeleteApiResponse =
-  /** status 200 Successful Response */ DeleteDocumentMetadataResponse;
-export type DeleteDocumentMetadataKnowledgeFlowV1DocumentDocumentUidDeleteApiArg = {
-  documentUid: string;
-};
-export type UpdateDocumentMetadataKnowledgeFlowV1DocumentDocumentUidUpdateMetadataPostApiResponse =
-  /** status 200 Successful Response */ UpdateDocumentMetadataResponse;
-export type UpdateDocumentMetadataKnowledgeFlowV1DocumentDocumentUidUpdateMetadataPostApiArg = {
-  documentUid: string;
-  updateDocumentMetadataRequest: UpdateDocumentMetadataRequest;
 };
 export type BrowseDocumentsKnowledgeFlowV1DocumentsBrowsePostApiResponse =
   /** status 200 Successful Response */ PullDocumentsResponse;
@@ -340,6 +333,15 @@ export type SearchDocumentsUsingVectorizationApiResponse = /** status 200 Succes
 export type SearchDocumentsUsingVectorizationApiArg = {
   searchRequest: SearchRequest;
 };
+export type ProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostApiResponse = /** status 200 Successful Response */ any;
+export type ProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostApiArg = {
+  processDocumentsRequest: ProcessDocumentsRequest;
+};
+export type ScheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPostApiResponse =
+  /** status 200 Successful Response */ any;
+export type ScheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPostApiArg = {
+  processDocumentsRequest: ProcessDocumentsRequest;
+};
 export type SourceType = "push" | "pull";
 export type DocumentMetadata = {
   document_name: string;
@@ -390,16 +392,6 @@ export type UpdateDocumentMetadataResponse = {
 };
 export type UpdateRetrievableRequest = {
   retrievable: boolean;
-};
-export type DeleteDocumentMetadataResponse = {
-  status: string;
-  message: string;
-};
-export type UpdateDocumentMetadataRequest = {
-  description?: string | null;
-  title?: string | null;
-  domain?: string | null;
-  tags?: string[] | null;
 };
 export type PullDocumentsResponse = {
   total: number;
@@ -525,13 +517,25 @@ export type SearchRequest = {
   /** Optional list of tags to filter documents. Only chunks in a document with at least one of these tags will be returned. */
   tags?: string[] | null;
 };
+export type FileToProcess = {
+  source_tag: string;
+  tags?: string[];
+  display_name?: string | null;
+  document_uid?: string | null;
+  external_path?: string | null;
+  size?: number | null;
+  modified_time?: number | null;
+  hash?: string | null;
+};
+export type ProcessDocumentsRequest = {
+  files: FileToProcess[];
+  pipeline_name: string;
+};
 export const {
   useGetDocumentsMetadataKnowledgeFlowV1DocumentsMetadataPostMutation,
   useGetDocumentMetadataKnowledgeFlowV1DocumentDocumentUidGetQuery,
   useLazyGetDocumentMetadataKnowledgeFlowV1DocumentDocumentUidGetQuery,
   useUpdateDocumentRetrievableKnowledgeFlowV1DocumentDocumentUidPutMutation,
-  useDeleteDocumentMetadataKnowledgeFlowV1DocumentDocumentUidDeleteMutation,
-  useUpdateDocumentMetadataKnowledgeFlowV1DocumentDocumentUidUpdateMetadataPostMutation,
   useBrowseDocumentsKnowledgeFlowV1DocumentsBrowsePostMutation,
   useListCatalogFilesKnowledgeFlowV1PullCatalogFilesGetQuery,
   useLazyListCatalogFilesKnowledgeFlowV1PullCatalogFilesGetQuery,
@@ -565,4 +569,6 @@ export const {
   useUpdatePromptKnowledgeFlowV1PromptsPromptIdPutMutation,
   useCreatePromptKnowledgeFlowV1PromptsPostMutation,
   useSearchDocumentsUsingVectorizationMutation,
+  useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation,
+  useScheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPostMutation,
 } = injectedRtkApi;

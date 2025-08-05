@@ -168,21 +168,14 @@ const extendedDocumentApi = documentApiSlice.injectEndpoints({
         method: "PUT",
         body: { retrievable },
       }),
-    }),
-    deleteDocument: builder.mutation<void, string>({
-      query: (documentUid) => ({
-        url: `/knowledge-flow/v1/document/${documentUid}`,
-        method: "DELETE",
-      }),
-    }),
+    })
   }),
 });
 
 export const {
-  useGetDocumentMetadataMutation,
+  useGetDocumentMetadataMutation, // unused
   useUpdateDocumentRetrievableMutation,
   useGetDocumentsWithFilterMutation,
-  useDeleteDocumentMutation,
   useGetDocumentMarkdownPreviewMutation,
   useLazyGetDocumentRawContentQuery,
   useGetDocumentSourcesQuery,

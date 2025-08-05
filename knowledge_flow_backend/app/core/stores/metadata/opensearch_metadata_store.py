@@ -230,34 +230,6 @@ class OpenSearchMetadataStore(BaseMetadataStore):
 
         return results
 
-    def update_processing_stage(self, document_uid: str, stage: ProcessingStage, status: str) -> None:
-        try:
-            field_path = f"processing_stages.{stage}"
-            self.client.update(
-                index=self.metadata_index_name,
-                id=document_uid,
-                body={"doc": {field_path: status}},
-            )
-            logger.info(f"[METADATA] Updated processing stage '{stage}' for UID '{document_uid}' => {status}")
-        except Exception as e:
-            logger.error(f"Failed to update processing stage '{stage}' for UID '{document_uid}': {e}")
-            raise
-
-    def set_retrievable_flag(self, document_uid: str, value: bool) -> None:
-        """Set the 'retrievable' flag for a document in the metadata index.
-        This flag indicates whether the document will be searchable from AI services.
-        """
-        try:
-            self.client.update(
-                index=self.metadata_index_name,
-                id=document_uid,
-                body={"doc": {"retrievable": value}},
-            )
-            logger.info(f"[METADATA] Set 'retrievable' for UID '{document_uid}' => {value}")
-        except Exception as e:
-            logger.error(f"Failed to update 'retrievable' for UID '{document_uid}': {e}")
-            raise
-
     def save_metadata(self, metadata: DocumentMetadata) -> None:
         """
         Index the metadata into OpenSearch by document UID.
@@ -277,23 +249,17 @@ class OpenSearchMetadataStore(BaseMetadataStore):
             logger.error(f"❌ Failed to index metadata for UID '{metadata.document_uid}': {e}")
             raise RuntimeError(f"Failed to index metadata: {e}") from e
 
-    def delete_metadata(self, metadata: DocumentMetadata) -> bool:
+    def delete_metadata(self, document_uid: str) -> None:
         """
         Delete the metadata document identified by its UID.
         Returns True if deletion succeeded, False otherwise.
         """
-        document_uid = metadata.document_uid
-        if not document_uid:
-            logger.warning("Attempted to delete metadata without a document UID.")
-            return False
-
         try:
             self.client.delete(index=self.metadata_index_name, id=document_uid)
             logger.info(f"✅ Deleted metadata UID '{document_uid}' from index '{self.metadata_index_name}'.")
-            return True
         except Exception as e:
             logger.error(f"❌ Failed to delete metadata UID '{document_uid}': {e}")
-            return False
+            raise
 
     def get_metadata_in_tag(self, tag_id: str) -> List[DocumentMetadata]:
         """

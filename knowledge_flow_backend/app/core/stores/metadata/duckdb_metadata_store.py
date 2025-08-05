@@ -122,7 +122,7 @@ class DuckdbMetadataStore(BaseMetadataStore):
             ).fetchall()
         return [self._deserialize(row) for row in rows]
 
-    def get_metadata_by_uid(self, document_uid: str) -> DocumentMetadata:
+    def get_metadata_by_uid(self, document_uid: str) -> DocumentMetadata | None:
         with self.store._connect() as conn:
             row = conn.execute(f"SELECT * FROM {self._table()} WHERE document_uid = ?", [document_uid]).fetchone()
         return self._deserialize(row) if row else None
@@ -138,16 +138,6 @@ class DuckdbMetadataStore(BaseMetadataStore):
             ).fetchall()
         return [self._deserialize(row) for row in rows]
 
-    def update_processing_stage(self, document_uid: str, stage: ProcessingStage, status: str) -> None:
-        existing = self.get_metadata_by_uid(document_uid)
-        if not existing:
-            raise ValueError(f"No document found with UID {document_uid}")
-        existing.processing_stages[stage] = status
-        self.save_metadata(existing)
-
-    def set_retrievable_flag(self, document_uid: str, value: bool) -> None:
-        self._update_metadata_field(document_uid, "retrievable", value)
-
     def save_metadata(self, metadata: DocumentMetadata) -> None:
         if not metadata.document_uid:
             raise ValueError("Metadata must contain a 'document_uid'")
@@ -161,11 +151,11 @@ class DuckdbMetadataStore(BaseMetadataStore):
                 self._serialize(metadata),
             )
 
-    def delete_metadata(self, metadata: DocumentMetadata) -> None:
+    def delete_metadata(self, document_uid: str) -> None:
         with self.store._connect() as conn:
-            result = conn.execute(f"DELETE FROM {self._table()} WHERE document_uid = ?", [metadata.document_uid])
+            result = conn.execute(f"DELETE FROM {self._table()} WHERE document_uid = ?", [document_uid])
         if result.rowcount == 0:
-            raise ValueError(f"No document found with UID {metadata.document_uid}")
+            raise ValueError(f"No document found with UID {document_uid}")
 
     def _update_metadata_field(self, document_uid: str, field: str, value: Any) -> DocumentMetadata:
         existing = self.get_metadata_by_uid(document_uid)

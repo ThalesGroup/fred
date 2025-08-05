@@ -71,23 +71,23 @@ document_sources:
   local:
     type: pull
     provider: local_path
-    base_path: ~/Documents/Knowledge
+    base_path: ~/Documents/Fred
     description: "Personal local documents available for pull-mode ingestion"
 
   minio:
-      type: pull
-      provider: minio
-      description: "Documents available for pull from MinIO"
-      endpoint_url: localhost:9000
-      bucket_name: "shared-content"
-      prefix: ""
-      secure: false
+    type: pull
+    provider: minio
+    description: "Documents available for pull from MinIO"
+    endpoint_url: localhost:9000
+    bucket_name: "shared-content"
+    prefix: ""
+    secure: false
 
 metadata_storage:
   type: opensearch
-  host: https://localhost:9200              
-  secure: true                        
-  verify_certs: false                      
+  host: https://localhost:9200
+  secure: true
+  verify_certs: false
   index: document-index
 
 tag_storage:
@@ -123,5 +123,4 @@ catalog_storage:
   index: catalog-index
 
 embedding:
-  type:
-    "openai"
+  type: "openai"
