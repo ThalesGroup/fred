@@ -89,6 +89,21 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.bodyUploadFileAgenticV1ChatbotUploadPost,
       }),
     }),
+    getNodeNumericalMetricsAgenticV1MetricsChatbotNumericalGet: build.query<
+      GetNodeNumericalMetricsAgenticV1MetricsChatbotNumericalGetApiResponse,
+      GetNodeNumericalMetricsAgenticV1MetricsChatbotNumericalGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/agentic/v1/metrics/chatbot/numerical`,
+        params: {
+          start: queryArg.start,
+          end: queryArg.end,
+          precision: queryArg.precision,
+          agg: queryArg.agg,
+          groupby: queryArg.groupby,
+        },
+      }),
+    }),
   }),
   overrideExisting: false,
 });
@@ -152,6 +167,15 @@ export type UploadFileAgenticV1ChatbotUploadPostApiResponse = /** status 200 Suc
 };
 export type UploadFileAgenticV1ChatbotUploadPostApiArg = {
   bodyUploadFileAgenticV1ChatbotUploadPost: BodyUploadFileAgenticV1ChatbotUploadPost;
+};
+export type GetNodeNumericalMetricsAgenticV1MetricsChatbotNumericalGetApiResponse =
+  /** status 200 Successful Response */ MetricsResponse;
+export type GetNodeNumericalMetricsAgenticV1MetricsChatbotNumericalGetApiArg = {
+  start: string;
+  end: string;
+  precision?: string;
+  agg?: string[];
+  groupby?: string[];
 };
 export type ValidationError = {
   loc: (string | number)[];
@@ -271,6 +295,19 @@ export type BodyUploadFileAgenticV1ChatbotUploadPost = {
   agent_name: string;
   file: Blob;
 };
+export type MetricsBucket = {
+  timestamp: string;
+  group: {
+    [key: string]: any;
+  };
+  aggregations: {
+    [key: string]: number | number[];
+  };
+};
+export type MetricsResponse = {
+  precision: string;
+  buckets: MetricsBucket[];
+};
 export const {
   useGetFeedbackAgenticV1ChatbotFeedbackGetQuery,
   useLazyGetFeedbackAgenticV1ChatbotFeedbackGetQuery,
@@ -291,4 +328,6 @@ export const {
   useLazyGetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetQuery,
   useDeleteSessionAgenticV1ChatbotSessionSessionIdDeleteMutation,
   useUploadFileAgenticV1ChatbotUploadPostMutation,
+  useGetNodeNumericalMetricsAgenticV1MetricsChatbotNumericalGetQuery,
+  useLazyGetNodeNumericalMetricsAgenticV1MetricsChatbotNumericalGetQuery,
 } = injectedRtkApi;
