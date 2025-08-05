@@ -38,21 +38,23 @@ interface TranscriptionResponse {
   text?: string; // 'text' might be optional
 }
 
+export interface ChatBotProps {
+  currentChatBotSession: SessionSchema;
+  currentAgenticFlow: AgenticFlow;
+  agenticFlows: AgenticFlow[];
+  onUpdateOrAddSession: (session: SessionSchema) => void;
+  isCreatingNewConversation: boolean;
+  runtimeContext?: RuntimeContext;
+}
+
 const ChatBot = ({
   currentChatBotSession,
   currentAgenticFlow,
   agenticFlows,
   onUpdateOrAddSession,
   isCreatingNewConversation,
-  argument,
-}: {
-  currentChatBotSession: SessionSchema;
-  currentAgenticFlow: AgenticFlow;
-  agenticFlows: AgenticFlow[];
-  onUpdateOrAddSession: (session: SessionSchema) => void;
-  isCreatingNewConversation: boolean;
-  argument?: string; // Optional argument for the agent
-}) => {
+  runtimeContext: baseRuntimeContext,
+}: ChatBotProps) => {
   const theme = useTheme();
   const { t } = useTranslation();
 
@@ -241,11 +243,15 @@ const ChatBot = ({
     const sessionId = currentChatBotSession?.id;
     const agentName = currentAgenticFlow.name;
 
-    const runtimeContext: RuntimeContext = {};
-    // Add selected librairies to runtime context (passed to agents)
+    // Init runtime context (arguments passed to agents)
+    const runtimeContext: RuntimeContext = { ...baseRuntimeContext };
+
+    // Add selected document libraries to runtime context
     if (content.documentLibraryIds && content.documentLibraryIds.length) {
       runtimeContext.selected_library_ids = content.documentLibraryIds;
     }
+
+    // Add selected prompt libraries to runtime context
     // if (content.promptLibraryIds && content.promptLibraryIds.length) {
     //   runtimeContext.document_libraries_ids = content.promptLibraryIds;
     // }
@@ -372,11 +378,10 @@ const ChatBot = ({
     console.log("[📤 ChatBot] About to send, session_id =", currentChatBotSession?.id);
     console.log("[📤 ChatBot] Runtime context:", runtimeContext);
     const event: ChatAskInput = {
-      user_id: KeyCloakService.GetUserId(), // todo: front should not send used id, this is a security problem. Backend should infer it from the token
+      user_id: KeyCloakService.GetUserId(), // todo: front should not send used id, this is a security problem. Backend should infer it from the JTW token
       message: input,
       agent_name: agent ? agent.name : currentAgenticFlow.name,
       session_id: currentChatBotSession?.id,
-      argument,
       runtime_context: runtimeContext,
     };
 
