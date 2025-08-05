@@ -29,7 +29,8 @@ from app.common.document_source import DocumentSource
 from app.core.chatbot.chat_schema import ChatSource
 from app.agents.rags.structures import (
     GradeDocumentsOutput,
-    GradeAnswerOutput
+    GradeAnswerOutput,
+    RephraseQueryOutput
 )
 
 
@@ -262,6 +263,48 @@ class RagsExpert(AgentFlow):
         )
 
         return {"messages": [], "generation": response}
+    
+    async def _rephrase_query(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Rephrase the input question to improve retrieval effectiveness.
+
+        Args:
+            state (Dict[str, Any]): Current graph state
+
+        Returns:
+            Dict[str, Any]: Updated state
+        """
+        question: str = state["question"]
+        retry_count: int = state.get("retry_count", 0) + 1
+
+        system = """
+        You are a question re-writer that converts an input question to a better version that is optimized for vectorstore retrieval. 
+        Look at the input and try to reason about the underlying semantic intent / meaning.
+        """
+        rewrite_prompt: ChatPromptTemplate = ChatPromptTemplate.from_messages(
+            [
+                ("system", system),
+                (
+                    "human",
+                    "Here is the initial question: \n\n {question} \n\n Formulate an improved question. Use the same language as the question to answer.",
+                ),
+            ]
+        )
+        chain = rewrite_prompt | self.model.with_structured_output(RephraseQueryOutput)
+
+        response = await chain.ainvoke({"question": question})
+        better_question = response.rephrase_query
+
+        logger.info(f"The question has been rephrased : {question}")
+        logger.info(f"The new question : {better_question}")
+        logger.info(f"Retry count : {retry_count}")
+
+        return {
+            "messages": [],
+            "question": better_question,
+            "retry_count": retry_count,
+        }
+
 
     async def _finalize_success(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """

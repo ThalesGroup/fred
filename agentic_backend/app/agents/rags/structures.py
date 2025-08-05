@@ -37,3 +37,12 @@ class GradeAnswerOutput(GradeDocumentsOutput):
 
     pass
 
+class RephraseQueryOutput(BaseModel):
+    """
+    Output model representing the result of a query rephrasing operation.
+
+    Attributes:
+        rephrase_query (str): The rephrased version of the original query.
+    """
+
+    rephrase_query: str
