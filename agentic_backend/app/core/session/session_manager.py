@@ -37,6 +37,7 @@ from app.core.chatbot.chat_schema import (
     SessionWithFiles,
     clean_agent_metadata,
     clean_token_usage,
+    MetricsResponse,
 )
 from app.core.chatbot.chatbot_utils import enrich_ChatMessagePayloads_with_latencies
 from app.core.session.attachement_processing import AttachementProcessing
@@ -542,3 +543,21 @@ class SessionManager:
         except Exception as e:
             logger.exception(e)
             raise RuntimeError("Failed to store uploaded file.")
+
+    def get_metrics(
+        self,
+        start: str,
+        end: str,
+        user_id: str,
+        precision: str,
+        groupby: List[str],
+        agg_mapping: Dict[str, List[str]],
+    ) -> List[MetricsResponse]:
+        return self.storage.get_metrics(
+            start=start,
+            end=end,
+            precision=precision,
+            groupby=groupby,
+            agg_mapping=agg_mapping,
+            user_id=user_id,
+        )

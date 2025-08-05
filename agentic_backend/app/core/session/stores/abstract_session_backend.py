@@ -12,10 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List
+from typing import List, Dict
 from abc import ABC, abstractmethod
 
-from app.core.chatbot.chat_schema import ChatMessagePayload, SessionSchema
+from app.core.chatbot.chat_schema import (
+    ChatMessagePayload,
+    SessionSchema,
+    MetricsResponse,
+)
 
 
 class AbstractSessionStorage(ABC):
@@ -58,5 +62,18 @@ class AbstractSessionStorage(ABC):
     def get_message_history(
         self, session_id: str, user_id: str
     ) -> List[ChatMessagePayload]:
+        """Retrieve messages for a given session."""
+        pass
+
+    @abstractmethod
+    def get_metrics(
+        self,
+        start: str,
+        end: str,
+        user_id: str,
+        precision: str,
+        groupby: List[str],
+        agg_mapping: Dict[str, List[str]],
+    ) -> List[MetricsResponse]:
         """Retrieve messages for a given session."""
         pass
