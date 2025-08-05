@@ -15,7 +15,7 @@
 from enum import Enum
 import json
 import logging
-from typing import List
+from typing import List, Dict
 
 from app.core.agents.agent_manager import AgentManager
 from app.core.agents.structures import AgenticFlow
@@ -27,6 +27,7 @@ from app.core.chatbot.chat_schema import (
     SessionWithFiles,
     StreamEvent,
 )
+from app.core.chatbot.chat_schema import MetricsResponse
 from app.core.chatbot.chatbot_error import ChatBotError
 from fastapi import (
     APIRouter,
@@ -37,6 +38,8 @@ from fastapi import (
     UploadFile,
     WebSocket,
     WebSocketDisconnect,
+    Query,
+    HTTPException,
 )
 
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -327,4 +330,44 @@ class ChatbotController:
             """
             return await self.session_manager.upload_file(
                 user_id, session_id, agent_name, file
+            )
+
+        @app.get(
+            "/metrics/chatbot/numerical",
+            summary="Get aggregated numerical chatbot metrics",
+            tags=fastapi_tags,
+            response_model=MetricsResponse,
+        )
+        def get_node_numerical_metrics(
+            start: str,
+            end: str,
+            precision: str = "hour",
+            agg: List[str] = Query(default=[]),
+            groupby: List[str] = Query(default=[]),
+            user: KeycloakUser = Depends(get_current_user),
+        ):
+            SUPPORTED_OPS = {"mean", "sum", "min", "max", "values"}
+            agg_mapping: Dict[str, List[str]] = {}
+
+            for item in agg:
+                if ":" not in item:
+                    raise HTTPException(
+                        400, detail=f"Invalid agg parameter format: {item}"
+                    )
+                field, op = item.split(":")
+                if op not in SUPPORTED_OPS:
+                    raise HTTPException(400, detail=f"Unsupported aggregation op: {op}")
+                if field not in agg_mapping:
+                    agg_mapping[field] = []
+                agg_mapping[field].append(op)
+
+            logger.info(agg_mapping)
+
+            return self.session_manager.get_metrics(
+                start=start,
+                end=end,
+                precision=precision,
+                groupby=groupby,
+                agg_mapping=agg_mapping,
+                user_id=user.uid,
             )
