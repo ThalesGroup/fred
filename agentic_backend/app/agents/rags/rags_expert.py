@@ -41,9 +41,9 @@ class RagsExpert(AgentFlow):
     This agent uses a vector search service using the knowledge-flow search REST API to find relevant documents and generates
     responses based on the document content. This design is simple and straightworward.
     """
-    
+
     TOP_K = 4
-    
+
     name: str = "RagsExpert"
     role: str = "Rags Expert"
     nickname: str = "Rico"
@@ -95,7 +95,6 @@ class RagsExpert(AgentFlow):
         The current date is {self.current_date}.
         """
 
-    
     def _build_graph(self) -> StateGraph:
         builder = StateGraph(MessagesState)
         return builder
@@ -204,3 +203,61 @@ class RagsExpert(AgentFlow):
         logger.info(f"✅ {len(filtered_docs)} documents are relevant.")
 
         return {"messages": [], "documents": filtered_docs}
+
+    async def _generate(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Generate an answer to the question using retrieved documents.
+
+        Args:
+            state (Dict[str, Any]): Current graph state
+
+        Returns:
+            Dict[str, Any]: Updated state
+        """
+        question: str = state["question"]
+        documents: List[DocumentSource] = state["documents"]
+
+        documents_str: str = "\n".join(
+            f"Source file: {document.file_name}\nPage: {document.page}\nContent: {document.content}\n"
+            for document in documents
+        )
+
+        prompt: ChatPromptTemplate = ChatPromptTemplate.from_template(
+            """
+            You are an assistant that answers questions based on retrieved documents. 
+            Use the following documents to support your response with citations :
+             
+            {context}
+            
+            Question: {question}
+            """
+        )
+        chain = prompt | self.model
+
+        response = await chain.ainvoke({"context": documents_str, "question": question})
+
+        sources: List[ChatSource] = []
+        for document in documents:
+            sources.append(
+                ChatSource(
+                    document_uid=getattr(
+                        document,
+                        "document_uid",
+                        getattr(document, "uid", "unknown"),
+                    ),
+                    file_name=document.file_name,
+                    title=document.title,
+                    author=document.author,
+                    content=document.content,
+                    created=document.created,
+                    modified=document.modified or "",
+                    type=document.type,
+                    score=document.score,
+                )
+            )
+
+        response.response_metadata.update(
+            {"sources": [s.model_dump() for s in sources]}
+        )
+
+        return {"messages": [], "generation": response}
