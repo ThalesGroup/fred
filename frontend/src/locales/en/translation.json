@@ -284,7 +284,8 @@
   },
   "promptTable": {
     "name": "name",
-    "content": "content"
+    "content": "content",
+    "actions": "Actions"
   },
   "documentDrawerTable": {
     "deleteFile": "Delete file"
