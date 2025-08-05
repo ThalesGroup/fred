@@ -261,3 +261,23 @@ class RagsExpert(AgentFlow):
         )
 
         return {"messages": [], "generation": response}
+
+    async def _finalize_success(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Reset state after successful completion.
+
+        Args:
+            state (Dict[str, Any]): Current graph state
+
+        Returns:
+            Dict[str, Any]: Updated state
+        """
+        return {
+            "messages": [state["generation"]],
+            "question": "",
+            "documents": [],
+            "top_k": self.TOP_K,
+            "sources": [],
+            "retry_count": 0,
+            "generation": None,
+        }
