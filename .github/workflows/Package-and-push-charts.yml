@@ -57,9 +57,9 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           #images: ${{ env.REGISTRY }}/fred-agent/helm/${{ matrix.registry_name }}
-          images: dummy                   # We do not care about the image, we just want the version
+          images: dummy                   # We do not care about the image, we just want the version, NOTE : we exclure initial "v" from the version
           tags: |
-            type=match,pattern=chart/(v.*),group=1
+              type=match,pattern=chart/v?(.*),group=1
 
       - name: Extract image.tag from values.yaml
         id: image_tag
@@ -74,26 +74,19 @@ jobs:
           # Get Chart.yaml path
           CHART_FILE="${{ matrix.chart_path }}/Chart.yaml"
 
-          # Extract tag version and remove the initial "v" to be semver2 compatible
-          RAW_VERSION="${{ steps.meta.outputs.version }}"
-          VERSION="${RAW_VERSION#v}"                                      # get rid of "v" in the beginning of tag
-
           # Define appVersion, it doesn't have to be semver2
           APP_VERSION="${{ steps.image_tag.outputs.image_tag }}"
 
           # Inject both Version and appversion in Chart.yaml
           echo "Injecting version=$VERSION and appVersion=$APP_VERSION into $CHART_FILE"
-          yq -y --arg version "$VERSION" --arg appVersion "$APP_VERSION" \
+          yq -y --arg version "${{ steps.meta.outputs.version }}" --arg appVersion "$APP_VERSION" \
             '.version = $version | .appVersion = $appVersion' "$CHART_FILE" > tmp.yaml && mv tmp.yaml "$CHART_FILE"
-
-          # Pass it to the next step
-          echo "version=$VERSION" >> $GITHUB_OUTPUT  # export VERSION as steps.inject_version.outputs.version
 
       - name: Package chart ${{ matrix.name }}
         run: |
-          echo "Packaging ${{ matrix.name }} chart with version ${{ steps.inject_version.outputs.version }}"
+          echo "Packaging ${{ matrix.name }} chart with version ${{ steps.meta.outputs.version }}"
           helm package ${{ matrix.chart_path }} \
-            --version ${{ steps.inject_version.outputs.version }} \
+            --version ${{ steps.meta.outputs.version }} \
             --destination ./packages
 
       # - name: Debug - List packages directory
@@ -118,7 +111,7 @@ jobs:
 
       - name: Push ${{ matrix.name }} to registry
         run: |
-          PACKAGE_FILE=$(ls ./packages/${{ matrix.registry_name }}-${{ steps.inject_version.outputs.version }}.tgz)
+          PACKAGE_FILE=$(ls ./packages/${{ matrix.registry_name }}-${{ steps.meta.outputs.version }}.tgz)
           echo "Pushing $PACKAGE_FILE"
           REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
           helm push "$PACKAGE_FILE" oci://${{ env.REGISTRY }}/${REPO_OWNER}/fred-helm
@@ -136,7 +129,7 @@ jobs:
         with:
           images: dummy  # We do not care the image name, we just want to extract the version
           tags: |
-            type=match,pattern=chart/(v.*),group=1
+              type=match,pattern=chart/v?(.*),group=1
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
