@@ -234,4 +234,3 @@ class TagService:
         removed = list(before_set - after_set)
 
         return added, removed
-

@@ -17,7 +17,7 @@ from typing import List, Optional
 from opensearchpy import OpenSearch, RequestsHttpConnection, OpenSearchException
 from pydantic import ValidationError
 
-from app.common.document_structures import DocumentMetadata, ProcessingStage
+from app.common.document_structures import DocumentMetadata
 from app.core.stores.metadata.base_metadata_store import (
     BaseMetadataStore,
     MetadataDeserializationError,
@@ -210,7 +210,7 @@ class OpenSearchMetadataStore(BaseMetadataStore):
         """
         try:
             query = {"query": {"term": {"source_tag": {"value": source_tag}}}}
-                    
+
             response = self.client.search(index=self.metadata_index_name, body=query, params={"size": 10000})
             hits = response["hits"]["hits"]
         except Exception as e:

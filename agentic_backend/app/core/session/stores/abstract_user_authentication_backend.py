@@ -14,10 +14,12 @@
 
 from abc import ABC, abstractmethod
 
+from app.common.error import AuthorizationSentinel
+
 
 class AbstractSecuredResourceAccess(ABC):
     @abstractmethod
-    def get_authorized_user_id(session_id: str) -> str | None:
+    def get_authorized_user_id(self, session_id: str) -> str | AuthorizationSentinel:
         """
         Get the authorized user_id that can access a session
         """

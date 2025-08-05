@@ -13,9 +13,9 @@
 # limitations under the License.
 
 from abc import abstractmethod
-from typing import List, Optional
+from typing import List
 
-from app.common.document_structures import DocumentMetadata, ProcessingStage
+from app.common.document_structures import DocumentMetadata
 
 
 class MetadataDeserializationError(Exception):

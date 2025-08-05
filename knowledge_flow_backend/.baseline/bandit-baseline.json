@@ -1,6 +1,6 @@
 {
   "errors": [],
-  "generated_at": "2025-08-04T07:16:09Z",
+  "generated_at": "2025-08-05T05:45:37Z",
   "metrics": {
     "_totals": {
       "CONFIDENCE.HIGH": 6,
@@ -11,7 +11,7 @@
       "SEVERITY.LOW": 6,
       "SEVERITY.MEDIUM": 27,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 7652,
+      "loc": 7641,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -37,7 +37,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 552,
+      "loc": 567,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -89,7 +89,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 212,
+      "loc": 209,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -782,6 +782,45 @@
       "nosec": 0,
       "skipped_tests": 0
     },
+    "app/core/stores/catalog/base_catalog_store.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 10,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "app/core/stores/catalog/duckdb_catalog_store.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 3,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 3,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 51,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "app/core/stores/catalog/opensearch_catalog_store.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 90,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
     "app/core/stores/content/__init__.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
@@ -899,19 +938,6 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/stores/metadata/base_catalog_store.py": {
-      "CONFIDENCE.HIGH": 0,
-      "CONFIDENCE.LOW": 0,
-      "CONFIDENCE.MEDIUM": 0,
-      "CONFIDENCE.UNDEFINED": 0,
-      "SEVERITY.HIGH": 0,
-      "SEVERITY.LOW": 0,
-      "SEVERITY.MEDIUM": 0,
-      "SEVERITY.UNDEFINED": 0,
-      "loc": 10,
-      "nosec": 0,
-      "skipped_tests": 0
-    },
     "app/core/stores/metadata/base_metadata_store.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
@@ -921,20 +947,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 95,
-      "nosec": 0,
-      "skipped_tests": 0
-    },
-    "app/core/stores/metadata/duckdb_catalog_store.py": {
-      "CONFIDENCE.HIGH": 0,
-      "CONFIDENCE.LOW": 0,
-      "CONFIDENCE.MEDIUM": 3,
-      "CONFIDENCE.UNDEFINED": 0,
-      "SEVERITY.HIGH": 0,
-      "SEVERITY.LOW": 0,
-      "SEVERITY.MEDIUM": 3,
-      "SEVERITY.UNDEFINED": 0,
-      "loc": 51,
+      "loc": 79,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -947,7 +960,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 6,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 157,
+      "loc": 149,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -960,7 +973,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 247,
+      "loc": 217,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1298,7 +1311,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 193,
+      "loc": 166,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1324,7 +1337,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 123,
+      "loc": 136,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1571,7 +1584,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 178,
+      "loc": 162,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1688,7 +1701,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 131,
+      "loc": 127,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1766,7 +1779,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 67,
+      "loc": 42,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -2053,7 +2066,7 @@
       "code": "49         with self.store._connect() as conn:\n50             conn.execute(f\"DELETE FROM {full_table} WHERE source_tag = ?\", [source_tag])\n51             for entry in entries:\n",
       "col_offset": 27,
       "end_col_offset": 39,
-      "filename": "app/core/stores/metadata/duckdb_catalog_store.py",
+      "filename": "app/core/stores/catalog/duckdb_catalog_store.py",
       "issue_confidence": "MEDIUM",
       "issue_cwe": {
         "id": 89,
@@ -2073,7 +2086,7 @@
       "code": "52                 conn.execute(\n53                     f\"\"\"\n54                     INSERT INTO {full_table} (source_tag, path, size, modified_time, hash)\n55                     VALUES (?, ?, ?, ?, ?)\n56                     \"\"\",\n57                     [source_tag, entry.path, entry.size, entry.modified_time, entry.hash],\n",
       "col_offset": 24,
       "end_col_offset": 32,
-      "filename": "app/core/stores/metadata/duckdb_catalog_store.py",
+      "filename": "app/core/stores/catalog/duckdb_catalog_store.py",
       "issue_confidence": "MEDIUM",
       "issue_cwe": {
         "id": 89,
@@ -2096,7 +2109,7 @@
       "code": "63             result = conn.execute(\n64                 f\"\"\"\n65                 SELECT path, size, modified_time, hash\n66                 FROM {full_table}\n67                 WHERE source_tag = ?\n68                 \"\"\",\n69                 [source_tag],\n",
       "col_offset": 20,
       "end_col_offset": 21,
-      "filename": "app/core/stores/metadata/duckdb_catalog_store.py",
+      "filename": "app/core/stores/catalog/duckdb_catalog_store.py",
       "issue_confidence": "MEDIUM",
       "issue_cwe": {
         "id": 89,
@@ -2203,7 +2216,7 @@
       "test_name": "hardcoded_sql_expressions"
     },
     {
-      "code": "165         with self.store._connect() as conn:\n166             result = conn.execute(f\"DELETE FROM {self._table()} WHERE document_uid = ?\", [metadata.document_uid])\n167         if result.rowcount == 0:\n",
+      "code": "155         with self.store._connect() as conn:\n156             result = conn.execute(f\"DELETE FROM {self._table()} WHERE document_uid = ?\", [document_uid])\n157         if result.rowcount == 0:\n",
       "col_offset": 36,
       "end_col_offset": 48,
       "filename": "app/core/stores/metadata/duckdb_metadata_store.py",
@@ -2214,16 +2227,16 @@
       },
       "issue_severity": "MEDIUM",
       "issue_text": "Possible SQL injection vector through string-based query construction.",
-      "line_number": 166,
+      "line_number": 156,
       "line_range": [
-        166
+        156
       ],
       "more_info": "https://bandit.readthedocs.io/en/1.8.5/plugins/b608_hardcoded_sql_expressions.html",
       "test_id": "B608",
       "test_name": "hardcoded_sql_expressions"
     },
     {
-      "code": "179         with self.store._connect() as conn:\n180             conn.execute(f\"DELETE FROM {self._table()}\")\n181 \n",
+      "code": "169         with self.store._connect() as conn:\n170             conn.execute(f\"DELETE FROM {self._table()}\")\n171 \n",
       "col_offset": 27,
       "end_col_offset": 39,
       "filename": "app/core/stores/metadata/duckdb_metadata_store.py",
@@ -2234,9 +2247,9 @@
       },
       "issue_severity": "MEDIUM",
       "issue_text": "Possible SQL injection vector through string-based query construction.",
-      "line_number": 180,
+      "line_number": 170,
       "line_range": [
-        180
+        170
       ],
       "more_info": "https://bandit.readthedocs.io/en/1.8.5/plugins/b608_hardcoded_sql_expressions.html",
       "test_id": "B608",

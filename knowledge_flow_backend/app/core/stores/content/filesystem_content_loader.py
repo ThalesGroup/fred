@@ -35,7 +35,7 @@ class FileSystemContentLoader(BaseContentLoader):
                 relative = str(path.relative_to(self.base_path))
                 stat = path.stat()
                 entries.append(PullFileEntry(path=relative, size=stat.st_size, modified_time=stat.st_mtime, hash=hashlib.sha256(str(path).encode()).hexdigest()))
-        
+
         return entries
 
     def fetch_from_pull_entry(self, entry: PullFileEntry, destination_dir: Path) -> Path:

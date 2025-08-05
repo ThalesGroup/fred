@@ -83,6 +83,7 @@ class OpenSearchCatalogStore:
 
             if actions:
                 from opensearchpy.helpers import bulk
+
                 success, _ = bulk(self.client, actions, refresh=True)
                 logger.info(f"[CATALOG] Indexed {success} entries for '{source_tag}'")
             else:
@@ -95,9 +96,7 @@ class OpenSearchCatalogStore:
         try:
             results = self.client.search(
                 index=self.index_name,
-                body={
-                    "query": {"term": {"source_tag": source_tag}}
-                },
+                body={"query": {"term": {"source_tag": source_tag}}},
                 params={"size": 10000},
             )
             hits = results["hits"]["hits"]

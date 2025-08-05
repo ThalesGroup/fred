@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from fred_core import KeycloakUser, get_current_user
 from app.common.utils import log_exception
@@ -27,12 +27,17 @@ from app.features.metadata.service import InvalidMetadataRequest, MetadataNotFou
 from app.features.metadata.structures import (
     GetDocumentMetadataResponse,
     GetDocumentsMetadataResponse,
-    UpdateDocumentMetadataResponse,
     UpdateRetrievableRequest,
 )
 from threading import Lock
 
 from pydantic import BaseModel, Field
+
+
+class SortOption(BaseModel):
+    field: str
+    direction: Literal["asc", "desc"]
+
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +49,7 @@ class BrowseDocumentsRequest(BaseModel):
     filters: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Optional metadata filters")
     offset: int = Field(0, ge=0)
     limit: int = Field(50, gt=0, le=500)
+    sort_by: Optional[List[SortOption]] = None
 
 
 def handle_exception(e: Exception) -> HTTPException:
@@ -148,7 +154,11 @@ class MetadataController:
                 "the flag has no effect."
             ),
         )
-        def update_document_retrievable(document_uid: str, update: UpdateRetrievableRequest, user: KeycloakUser = Depends(get_current_user),):
+        def update_document_retrievable(
+            document_uid: str,
+            update: UpdateRetrievableRequest,
+            user: KeycloakUser = Depends(get_current_user),
+        ):
             try:
                 self.service.update_document_retrievable(document_uid, update.retrievable, user.username)
             except Exception as e:
@@ -179,6 +189,14 @@ class MetadataController:
                     filters = req.filters or {}
                     filters["source_tag"] = req.source_tag
                     docs = self.service.get_documents_metadata(filters)
+                    sort_by = req.sort_by or [SortOption(field="document_name", direction="asc")]
+
+                    for sort in reversed(sort_by):  # Apply last sort first for correct multi-field sorting
+                        docs.sort(
+                            key=lambda d: getattr(d, sort.field, "") or "",  # fallback to empty string
+                            reverse=(sort.direction == "desc"),
+                        )
+
                     paginated = docs[req.offset : req.offset + req.limit]
                     return PullDocumentsResponse(documents=paginated, total=len(docs))
 

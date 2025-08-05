@@ -64,9 +64,7 @@ def app_context(monkeypatch, fake_embedder):
             log_level="info",
             reload=False,
             reload_dir=".",
-            security=SecurityConfiguration(
-                enabled=False, keycloak_url="", client_id="app", authorized_origins=[]
-            ),
+            security=SecurityConfiguration(enabled=False, keycloak_url="", client_id="app", authorized_origins=[]),
         ),
         scheduler=SchedulerConfig(
             backend="temporal",

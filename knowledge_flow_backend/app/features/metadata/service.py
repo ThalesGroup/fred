@@ -16,9 +16,7 @@ from datetime import datetime, timezone
 import logging
 
 from app.common.document_structures import DocumentMetadata
-from app.common.structures import Status
 from app.core.stores.metadata.base_metadata_store import MetadataDeserializationError
-from app.features.metadata.structures import UpdateDocumentMetadataResponse
 from app.application_context import ApplicationContext
 
 logger = logging.getLogger(__name__)
@@ -98,16 +96,12 @@ class MetadataService:
             else:
                 logger.info(f"[METADATA] Tag '{new_tag_id}' already present on document '{metadata.document_name}' — no change.")
 
-
         except Exception as e:
             logger.error(f"Error updating retrievable flag for {metadata.document_name}: {e}")
             raise MetadataUpdateError(f"Failed to update retrievable flag: {e}")
-        
 
     def remove_tag_id_from_document(self, metadata: DocumentMetadata, tag_id_to_remove: str, modified_by: str) -> None:
-
         try:
-
             if not metadata.tags or tag_id_to_remove not in metadata.tags:
                 logger.info(f"[METADATA] Tag '{tag_id_to_remove}' not found on document '{metadata.document_name}' — nothing to remove.")
                 return
@@ -128,7 +122,6 @@ class MetadataService:
             logger.error(f"Failed to remove tag '{tag_id_to_remove}' from document '{metadata.document_name}': {e}")
             raise MetadataUpdateError(f"Failed to remove tag: {e}")
 
-
     def update_document_retrievable(self, document_uid: str, value: bool, modified_by: str) -> None:
         if not document_uid:
             raise InvalidMetadataRequest("Document UID cannot be empty")
@@ -148,7 +141,7 @@ class MetadataService:
         except Exception as e:
             logger.error(f"Error updating retrievable flag for {document_uid}: {e}")
             raise MetadataUpdateError(f"Failed to update retrievable flag: {e}")
-        
+
     def save_document_metadata(self, metadata: DocumentMetadata) -> None:
         """
         Save document metadata and update tag timestamps for any assigned tags.

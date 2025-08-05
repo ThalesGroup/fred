@@ -393,6 +393,10 @@ export type PullDocumentsResponse = {
   total: number;
   documents: DocumentMetadata[];
 };
+export type SortOption = {
+  field: string;
+  direction: "asc" | "desc";
+};
 export type BrowseDocumentsRequest = {
   /** Tag of the document source to browse (pull or push) */
   source_tag: string;
@@ -402,6 +406,7 @@ export type BrowseDocumentsRequest = {
   } | null;
   offset?: number;
   limit?: number;
+  sort_by?: SortOption[] | null;
 };
 export type PullFileEntry = {
   path: string;

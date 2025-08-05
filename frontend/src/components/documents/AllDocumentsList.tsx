@@ -72,7 +72,7 @@ export const AllDocumentsList = ({}: DocumentsViewProps) => {
   const [rescanCatalogSource] = useRescanCatalogSourceMutation();
 
   // UI States
-  const [documentsPerPage, setDocumentsPerPage] = useState(10);
+  const [documentsPerPage, setDocumentsPerPage] = useState(20);
   const [currentPage, setCurrentPage] = useState(1);
   const [openUploadDrawer, setOpenUploadDrawer] = useState(false);
   const [selectedSourceTag, setSelectedSourceTag] = useState<string | null>(null);
@@ -132,12 +132,14 @@ export const AllDocumentsList = ({}: DocumentsViewProps) => {
           filters,
           offset: (currentPage - 1) * documentsPerPage,
           limit: documentsPerPage,
+          sort_by: [
+            { field: "document_name", direction: "asc" }
+          ],
         },
       }).unwrap();
 
-      const docs = response.documents;
       setTotalDocCount(response.total);
-      setAllDocuments(docs);
+      setAllDocuments(response.documents);
     } catch (error) {
       console.error("Error fetching documents:", error);
       showError({

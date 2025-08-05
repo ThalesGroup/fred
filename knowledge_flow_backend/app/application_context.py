@@ -544,7 +544,7 @@ class ApplicationContext:
                 verify_certs=config.verify_certs,
             )
             return self._catalog_store_instance
-        
+
         else:
             raise ValueError(f"Unsupported catalog storage backend: {config.type}")
 
