@@ -14,6 +14,7 @@
 
 from pydantic.v1 import BaseModel
 
+
 class GradeDocumentsOutput(BaseModel):
     """
     Output schema representing the binary relevance score of retrieved documents.
@@ -24,3 +25,15 @@ class GradeDocumentsOutput(BaseModel):
     """
 
     binary_score: str
+
+
+class GradeAnswerOutput(GradeDocumentsOutput):
+    """
+    Output schema representing the binary assessment of the generated answer.
+
+    Inherits:
+        binary_score (str): Whether the answer provided is relevant/correct ("yes"/"no").
+    """
+
+    pass
+

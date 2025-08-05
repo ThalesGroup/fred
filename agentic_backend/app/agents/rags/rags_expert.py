@@ -20,8 +20,8 @@ from app.common.structures import AgentSettings
 from app.core.model.model_factory import get_model
 import requests
 from requests import Response
-from langchain_core.messages import HumanMessage, SystemMessage
-from langgraph.graph import END, START, MessagesState, StateGraph
+from langchain_core.messages import SystemMessage, AIMessage
+from langgraph.graph import END, MessagesState, StateGraph
 from langchain.prompts import ChatPromptTemplate
 
 from app.core.agents.flow import AgentFlow
@@ -29,6 +29,7 @@ from app.common.document_source import DocumentSource
 from app.core.chatbot.chat_schema import ChatSource
 from app.agents.rags.structures import (
     GradeDocumentsOutput,
+    GradeAnswerOutput
 )
 
 
@@ -328,3 +329,51 @@ class RagsExpert(AgentFlow):
             return "abort"
         else:
             return "generate"
+
+    async def _grade_generation(self, state: Dict[str, Any]) -> str:
+        """
+        Assess whether the generated answer satisfactorily addresses the user's question.
+
+        Uses a grading prompt to classify the answer as either 'yes' (resolves the question)
+        or 'no' (does not resolve). Based on the grade and retry count, returns a decision
+        string for the graph flow.
+
+        Args:
+            state (Dict[str, Any]): Current graph state
+
+        Returns:
+            - "useful" if the answer resolves the question,
+            - "not useful" if it doesn't but retry limit not reached,
+            - "abort" if it doesn't and retry limit (>= 2) is reached.
+        """
+        question: str = state["question"]
+        generation: AIMessage = state["generation"]
+        retry_count: int = state.get("retry_count", 0)
+
+        system = """
+        You are a grader assessing whether an answer addresses / resolves a question.
+        Give a binary score 'yes' or 'no'. 'yes' means that the answer resolves the question.
+        """
+        answer_prompt: ChatPromptTemplate = ChatPromptTemplate.from_messages(
+            [
+                ("system", system),
+                (
+                    "human",
+                    "User question: \n\n {question} \n\n LLM generation: {generation}",
+                ),
+            ]
+        )
+
+        answer_grader = answer_prompt | self.model.with_structured_output(
+            GradeAnswerOutput
+        )
+        grader_response = await answer_grader.ainvoke(
+            {"question": question, "generation": generation.content}
+        )
+        grade = grader_response.binary_score
+        if grade == "yes":
+            return "useful"
+        elif retry_count >= 2:
+            return "abort"
+        else:
+            return "not useful"
