@@ -1,7 +1,19 @@
 import FolderOpenIcon from "@mui/icons-material/FolderOpen";
 import RemoveCircleOutlineIcon from "@mui/icons-material/RemoveCircleOutline";
 import UploadIcon from "@mui/icons-material/Upload";
-import { Box, Button, CircularProgress, Container, Paper, Stack, Typography } from "@mui/material";
+import {
+  Box,
+  Button,
+  CircularProgress,
+  Container,
+  FormControl,
+  MenuItem,
+  Pagination,
+  Paper,
+  Select,
+  Stack,
+  Typography,
+} from "@mui/material";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
@@ -36,9 +48,11 @@ export const DocumentLibraryViewPage = () => {
     useGetDocumentsMetadataKnowledgeFlowV1DocumentsMetadataPostMutation();
   const [updateTag] = useUpdateTagKnowledgeFlowV1TagsTagIdPutMutation();
 
-  
   const [documents, setDocuments] = useState<DocumentMetadata[]>([]);
   const [openUploadDrawer, setOpenUploadDrawer] = useState(false);
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const [documentsPerPage, setDocumentsPerPage] = useState(20);
 
   const hasDocumentManagementPermission = () => {
     const userRoles = KeyCloakService.GetUserRoles();
@@ -46,23 +60,22 @@ export const DocumentLibraryViewPage = () => {
   };
 
   const fetchDocumentsMetadata = async () => {
-    if (!library?.item_ids) return;
+  if (!library?.item_ids?.length) return;
 
-    const promises: Promise<DocumentMetadata | undefined>[] = [];
-    for (const id of library.item_ids) {
-      promises.push(
-        getDocumentsMetadata({ filters: { document_uid: id } }).then((result) => {
-          if (result.error) {
-            console.error(`Error fetching metadata for document ${id}:`, result.error);
-            return undefined;
-          }
-          return result.data.documents && result.data.documents[0];
-        }),
-      );
-    }
-    const docs = (await Promise.all(promises)).filter((doc): doc is DocumentMetadata => !!doc);
-    setDocuments(docs);
-  };
+  try {
+    const result = await getDocumentsMetadata({
+      filters: {
+        document_uid: library.item_ids,
+      },
+    }).unwrap();
+
+    setDocuments(result.documents ?? []);
+  } catch (err) {
+    console.error("Batch metadata fetch failed", err);
+    setDocuments([]); // fallback to empty
+  }
+};
+
 
   const handleRefreshData = async () => {
     await refetchLibrary();
@@ -150,6 +163,8 @@ export const DocumentLibraryViewPage = () => {
     );
   }
 
+  const paginatedDocuments = documents.slice((currentPage - 1) * documentsPerPage, currentPage * documentsPerPage);
+
   return (
     <>
       <TopBar title={library.name} description={library.description || ""} backTo="/knowledge?view=libraries"></TopBar>
@@ -215,23 +230,46 @@ export const DocumentLibraryViewPage = () => {
                 }
               />
             ) : (
-              <DocumentTable
-                files={documents}
-                isAdmin={hasDocumentManagementPermission()}
-                onRefreshData={handleRefreshData}
-                showSelectionActions={true}
-                rowActions={hasDocumentManagementPermission() ? rowActions : []} // todo: add a permission check for each action, enforced by DocumentTable
-                bulkActions={hasDocumentManagementPermission() ? bulkActions : []}
-                nameClickAction={handleDocumentPreview}
-                columns={{
-                  fileName: true,
-                  dateAdded: true,
-                  librairies: false, // Hide column in library view
-                  status: true,
-                  retrievable: true,
-                  actions: true,
-                }}
-              />
+              <>
+                <DocumentTable
+                  files={paginatedDocuments}
+                  isAdmin={hasDocumentManagementPermission()}
+                  onRefreshData={handleRefreshData}
+                  showSelectionActions={true}
+                  rowActions={hasDocumentManagementPermission() ? rowActions : []} // todo: add a permission check for each action, enforced by DocumentTable
+                  bulkActions={hasDocumentManagementPermission() ? bulkActions : []}
+                  nameClickAction={handleDocumentPreview}
+                  columns={{
+                    fileName: true,
+                    dateAdded: true,
+                    librairies: false, // Hide column in library view
+                    status: true,
+                    retrievable: true,
+                    actions: true,
+                  }}
+                />
+                <Box display="flex" justifyContent="space-between" alignItems="center" mt={2}>
+                  <Pagination
+                    count={Math.ceil(documents.length / documentsPerPage)}
+                    page={currentPage}
+                    onChange={(_, page) => setCurrentPage(page)}
+                    color="primary"
+                  />
+                  <FormControl size="small" sx={{ minWidth: 100 }}>
+                    <Select
+                      value={documentsPerPage.toString()}
+                      onChange={(e) => {
+                        setDocumentsPerPage(parseInt(e.target.value, 10));
+                        setCurrentPage(1);
+                      }}
+                    >
+                      <MenuItem value="10">20</MenuItem>
+                      <MenuItem value="20">100</MenuItem>
+                      <MenuItem value="50">1000</MenuItem>
+                    </Select>
+                  </FormControl>
+                </Box>
+              </>
             )}
           </Paper>
         </Stack>

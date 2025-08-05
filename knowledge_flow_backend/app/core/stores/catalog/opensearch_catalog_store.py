@@ -96,9 +96,9 @@ class OpenSearchCatalogStore:
             results = self.client.search(
                 index=self.index_name,
                 body={
-                    "query": {"term": {"source_tag": source_tag}},
-                    "size": 10000,  # adjust based on expected volume
+                    "query": {"term": {"source_tag": source_tag}}
                 },
+                params={"size": 10000},
             )
             hits = results["hits"]["hits"]
             return [

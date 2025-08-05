@@ -356,7 +356,7 @@ export const AllDocumentsList = ({}: DocumentsViewProps) => {
             />
             <Box display="flex" alignItems="center" mt={3} justifyContent="space-between">
               <Pagination
-                count={Math.ceil(allDocuments.length / documentsPerPage)}
+                count={Math.ceil((totalDocCount ?? 0) / documentsPerPage)}
                 page={currentPage}
                 onChange={(_, value) => setCurrentPage(value)}
                 color="primary"

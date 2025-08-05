@@ -166,6 +166,7 @@ class OpenSearchMetadataStore(BaseMetadataStore):
             query = {"match_all": {}} if not must_clauses else {"bool": {"must": must_clauses}}
 
             response = self.client.search(
+                params={"size": 10000},
                 index=self.metadata_index_name,
                 body={"query": query},
             )
@@ -209,7 +210,8 @@ class OpenSearchMetadataStore(BaseMetadataStore):
         """
         try:
             query = {"query": {"term": {"source_tag": {"value": source_tag}}}}
-            response = self.client.search(index=self.metadata_index_name, body=query)
+                    
+            response = self.client.search(index=self.metadata_index_name, body=query, params={"size": 10000})
             hits = response["hits"]["hits"]
         except Exception as e:
             logger.error(f"OpenSearch query failed for source_tag='{source_tag}': {e}")
@@ -270,7 +272,7 @@ class OpenSearchMetadataStore(BaseMetadataStore):
 
         try:
             query = {"query": {"term": {"tags": tag_id}}}
-            response = self.client.search(index=self.metadata_index_name, body=query)
+            response = self.client.search(index=self.metadata_index_name, body=query, params={"size": 10000})
             hits = response["hits"]["hits"]
         except Exception as e:
             logger.error(f"OpenSearch query failed for tag '{tag_id}': {e}")

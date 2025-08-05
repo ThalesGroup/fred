@@ -97,7 +97,7 @@ class OpenSearchTagStore(BaseTagStore):
                     }
                 }
             }
-            response = self.client.search(index=self.index_name, body=query)
+            response = self.client.search(index=self.index_name, body=query, params={"size": 10000})
             return [Tag(**hit["_source"]) for hit in response["hits"]["hits"]]
         except Exception as e:
             logger.error(f"[TAGS] Failed to list tags for user '{user.uid}': {e}")
