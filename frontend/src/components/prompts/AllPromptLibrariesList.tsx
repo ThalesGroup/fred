@@ -26,10 +26,9 @@ import dayjs from "dayjs";
 import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
-  TagType,
   TagWithItemsId,
-  useListAllTagsKnowledgeFlowV1TagsGetQuery,
   useDeleteTagKnowledgeFlowV1TagsTagIdDeleteMutation,
+  useListAllTagsKnowledgeFlowV1TagsGetQuery,
 } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { EmptyState } from "../EmptyState";
 import InvisibleLink from "../InvisibleLink";
@@ -42,9 +41,12 @@ export function AllPromptLibrariesList() {
     data: libraries,
     refetch: refetchLibraries,
     isLoading,
-  } =   useListAllTagsKnowledgeFlowV1TagsGetQuery( { type: "prompt" as TagType }, {
-    refetchOnMountOrArgChange: true,
-  });
+  } = useListAllTagsKnowledgeFlowV1TagsGetQuery(
+    { type: "prompt" },
+    {
+      refetchOnMountOrArgChange: true,
+    },
+  );
   const [deleteTag] = useDeleteTagKnowledgeFlowV1TagsTagIdDeleteMutation();
 
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -310,4 +312,3 @@ function PromptLibraryRow({
     </TableRow>
   );
 }
-

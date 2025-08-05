@@ -15,10 +15,11 @@
 import logging
 from typing import List
 
-from opensearchpy import OpenSearch, NotFoundError, ConflictError, RequestsHttpConnection
+from fred_core import KeycloakUser
+from opensearchpy import ConflictError, NotFoundError, OpenSearch, RequestsHttpConnection
+
 from app.core.stores.tags.base_tag_store import BaseTagStore, TagAlreadyExistsError, TagNotFoundError
 from app.features.tag.structure import Tag
-from fred_core import KeycloakUser
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +61,13 @@ class OpenSearchTagStore(BaseTagStore):
     Automatically creates the index if it doesn't exist.
     Tags are scoped per user via `owner_id`.
     """
+
+    default_params: dict[str, str] = {
+        # Important to wait for the changes to be effective before sending response
+        # (if not, you can send a DELETE tag request, send a GET tags request to list
+        # them and still get the one you just deleted because OpenSearch hasn't deleted it)
+        "refresh": "wait_for",
+    }
 
     def __init__(
         self,
@@ -119,6 +127,7 @@ class OpenSearchTagStore(BaseTagStore):
                 index=self.index_name,
                 id=tag.id,
                 body=tag.model_dump(mode="json"),
+                params=self.default_params,
             )
             logger.info(f"[TAGS] Created tag '{tag.id}' for user '{tag.owner_id}'")
             return tag
@@ -131,7 +140,12 @@ class OpenSearchTagStore(BaseTagStore):
     def update_tag_by_id(self, tag_id: str, tag: Tag) -> Tag:
         try:
             self.get_tag_by_id(tag_id)  # ensure it exists
-            self.client.index(index=self.index_name, id=tag_id, body=tag.model_dump(mode="json"))
+            self.client.index(
+                index=self.index_name,
+                id=tag_id,
+                body=tag.model_dump(mode="json"),
+                params=self.default_params,
+            )
             logger.info(f"[TAGS] Updated tag '{tag_id}'")
             return tag
         except TagNotFoundError:
@@ -142,7 +156,11 @@ class OpenSearchTagStore(BaseTagStore):
 
     def delete_tag_by_id(self, tag_id: str) -> None:
         try:
-            self.client.delete(index=self.index_name, id=tag_id)
+            self.client.delete(
+                index=self.index_name,
+                id=tag_id,
+                params=self.default_params,
+            )
             logger.info(f"[TAGS] Deleted tag '{tag_id}'")
         except NotFoundError:
             raise TagNotFoundError(f"Tag with id '{tag_id}' not found.")

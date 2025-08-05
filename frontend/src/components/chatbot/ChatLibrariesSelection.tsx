@@ -14,7 +14,7 @@ import {
 } from "@mui/material";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useListAllTagsKnowledgeFlowV1TagsGetQuery, TagType } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { TagType, useListAllTagsKnowledgeFlowV1TagsGetQuery } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 
 export interface ChatLibrariesSelectionProps {
   selectedLibrariesIds: string[];
@@ -50,14 +50,27 @@ export function ChatLibrariesSelection({
         </Badge>
       </Tooltip>
 
+      {/* Popover card */}
       <Popover
         id={id}
         open={open}
         anchorEl={anchorEl}
         onClose={handleClose}
-        anchorOrigin={{ vertical: "top", horizontal: "center" }}
-        transformOrigin={{ vertical: "bottom", horizontal: "center" }}
-        slotProps={{ paper: { sx: { borderRadius: 4 } } }}
+        anchorOrigin={{
+          vertical: "top",
+          horizontal: "center",
+        }}
+        transformOrigin={{
+          vertical: "bottom",
+          horizontal: "center",
+        }}
+        slotProps={{
+          paper: {
+            sx: {
+              borderRadius: 4,
+            },
+          },
+        }}
       >
         <LibrariesSelectionCard
           selectedLibrariesIds={selectedLibrariesIds}
@@ -96,7 +109,9 @@ export function LibrariesSelectionCard({
         : [...selectedLibrariesIds, id],
     );
   };
+
   const label = libraryType === "document" ? t("chatbot.searchDocumentLibraries") : t("chatbot.searchPromptLibraries");
+
   return (
     <Box sx={{ width: "380px", height: "406px", display: "flex", flexDirection: "column" }}>
       <Box sx={{ mx: 2, mt: 2, mb: 1 }}>
@@ -111,6 +126,7 @@ export function LibrariesSelectionCard({
         />
       </Box>
 
+      {/* List of libraries */}
       <Stack
         sx={{
           overflowY: "auto",
@@ -149,7 +165,7 @@ export function LibrariesSelectionCard({
               sx={{ mr: 1 }}
               onClick={(e) => {
                 e.stopPropagation();
-                toggleLibrary(lib.id); // <-- this is the missing piece
+                toggleLibrary(lib.id);
               }}
             />
             <Typography
@@ -163,6 +179,7 @@ export function LibrariesSelectionCard({
               {lib.name}
             </Typography>
 
+            {/* Tooltip */}
             {hoveredId === lib.id && anchorEl && (
               <Tooltip
                 open
@@ -178,7 +195,17 @@ export function LibrariesSelectionCard({
                 }
                 placement="right"
                 disableInteractive
-                PopperProps={{ anchorEl }}
+                slotProps={{
+                  popper: {
+                    anchorEl,
+                    modifiers: [
+                      {
+                        name: "eventListeners",
+                        options: { scroll: false },
+                      },
+                    ],
+                  },
+                }}
               >
                 <span />
               </Tooltip>
