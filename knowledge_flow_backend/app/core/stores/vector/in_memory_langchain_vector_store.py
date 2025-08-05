@@ -14,7 +14,7 @@
 
 import logging
 from datetime import datetime, timezone
-from typing import List, Tuple
+from typing import Iterable, List, Tuple
 
 from langchain.embeddings.base import Embeddings
 from langchain.schema.document import Document
@@ -59,14 +59,14 @@ class InMemoryLangchainVectorStore(BaseVectoreStore):
             else:
                 break
 
-    def similarity_search_with_score(self, query: str, k: int = 5, tags: list[str] | None = None) -> List[Tuple[Document, float]]:
-        if tags:
-            # Create filter function for documents with at least one of the specified tags
+    def similarity_search_with_score(self, query: str, k: int = 5, documents_ids: Iterable[str] | None = None) -> List[Tuple[Document, float]]:
+        if documents_ids:
+            # Check if a document uid is in valid documents_ids list
             def tag_filter(doc: Document) -> bool:
-                doc_tags = doc.metadata.get("tags", [])
-                if not doc_tags:
+                doc_uid = doc.metadata.get("document_uid")
+                if not doc_uid:
                     return False
-                return any(tag in doc_tags for tag in tags)
+                return doc_uid in documents_ids
 
             results = self.vectorstore.similarity_search_with_score(query, k=k, filter=tag_filter)
         else:

@@ -13,17 +13,16 @@
 # limitations under the License.
 
 import logging
-import weaviate
-
 from datetime import datetime, timezone
-from typing import List, Tuple
+from typing import Iterable, List, Tuple
 
-from langchain_community.vectorstores import Weaviate
+import weaviate
 from langchain.embeddings.base import Embeddings
 from langchain.schema.document import Document
+from langchain_community.vectorstores import Weaviate
 
-from app.core.stores.vector.base_vector_store import BaseVectoreStore
 from app.common.utils import get_embedding_model_name
+from app.core.stores.vector.base_vector_store import BaseVectoreStore
 
 logger = logging.getLogger(__name__)
 
@@ -58,19 +57,10 @@ class WeaviateVectorStore(BaseVectoreStore):
         self.vectorstore.add_documents(documents)
         logger.info(f"✅ Added {len(documents)} documents to Weaviate.")
 
-    def similarity_search_with_score(self, query: str, k: int = 5, tags: list[str] | None = None) -> List[Tuple[Document, float]]:
-        if tags:
-            # Create Weaviate where filter for documents with at least one of the specified tags
-            where_filter = {
-                "operator": "Or",
-                "operands": [
-                    {
-                        "path": ["metadata", "tags"],
-                        "operator": "ContainsAny",
-                        "valueText": tags
-                    }
-                ]
-            }
+    def similarity_search_with_score(self, query: str, k: int = 5, documents_ids: Iterable[str] | None = None) -> List[Tuple[Document, float]]:
+        if documents_ids:
+            # Weaviate where filter to check if document uid is in valid documents_ids list
+            where_filter = {"operator": "Or", "operands": [{"path": ["metadata", "document_uid"], "operator": "ContainsAny", "valueText": documents_ids}]}
             results = self.vectorstore.similarity_search_with_score(query, k=k, where_filter=where_filter)
         else:
             results = self.vectorstore.similarity_search_with_score(query, k=k)
