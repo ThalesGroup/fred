@@ -305,3 +305,26 @@ class RagsExpert(AgentFlow):
             "retry_count": 0,
             "generation": None,
         }
+
+    # Edges
+    async def _decide_to_generate(self, state: Dict[str, Any]) -> str:
+        """
+        Decide next step based on document availability and retry count
+
+        Args:
+            state (Dict[str, Any]): Current graph state
+
+        Returns:
+            - "rephrase_query" if no documents were retrieved.
+            - "abort" if retry_count exceeds 2.
+            - "generate" otherwise.
+        """
+        documents: Optional[List[DocumentSource]] = state["documents"]
+        retry_count: int = state.get("retry_count", 0)
+
+        if not documents:
+            return "rephrase_query"
+        elif retry_count > 2:
+            return "abort"
+        else:
+            return "generate"
