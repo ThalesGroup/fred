@@ -289,13 +289,18 @@ export type FinalEvent = {
   messages: ChatMessagePayload[];
   session: SessionSchema;
 };
+export type RuntimeContext = {
+  selected_document_libraries_ids?: string[] | null;
+  selected_prompt_libraries_ids?: string[] | null;
+  [key: string]: any;
+};
 export type ChatAskInput = {
   user_id: string;
   session_id?: string | null;
   message: string;
   agent_name: string;
-  argument: string | null;
   chat_profile_id?: string | null;
+  runtime_context?: RuntimeContext | null;
 };
 export type SessionWithFiles = {
   id: string;

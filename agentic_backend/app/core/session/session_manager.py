@@ -12,21 +12,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from datetime import datetime
+import asyncio
 import logging
-from pathlib import Path
 import secrets
 import tempfile
-from typing import List, Tuple, Dict, Any, Optional, Union, Callable, Awaitable, cast
+from collections import defaultdict
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple, Union, cast
 from uuid import uuid4
 
-from app.core.agents.agent_manager import AgentManager
-from fastapi import UploadFile
-from collections import defaultdict
 import requests
+from fastapi import UploadFile
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
+from langgraph.graph.state import CompiledStateGraph
 
+from app.application_context import get_configuration, get_default_model
+from app.core.agents.agent_manager import AgentManager
 from app.core.agents.flow import AgentFlow
-from app.core.session.attachement_processing import AttachementProcessing
+from app.core.agents.runtime_context import RuntimeContext
 from app.core.chatbot.chat_schema import (
     ChatMessagePayload,
     SessionSchema,
@@ -37,13 +41,7 @@ from app.core.chatbot.chat_schema import (
 )
 from app.core.chatbot.chatbot_utils import enrich_ChatMessagePayloads_with_latencies
 from app.core.session.stores.abstract_session_backend import BaseSessionStore
-
-from app.application_context import get_configuration, get_default_model
-
-from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, SystemMessage
-from langgraph.graph.state import CompiledStateGraph
-
-import asyncio
+from app.core.session.attachement_processing import AttachementProcessing
 
 logger = logging.getLogger(__name__)
 
@@ -165,8 +163,8 @@ class SessionManager:
         session_id: str,
         message: str,
         agent_name: str,
-        argument: str,
         chat_profile_id: Optional[str] = None,
+        runtime_context: Optional[RuntimeContext] = None,
     ) -> Tuple[SessionSchema, List[ChatMessagePayload]]:
         logger.info(
             f"chat_ask_websocket called with user_id: {user_id}, session_id: {session_id}, message: {message}, agent_name: {agent_name}, chat_profile_id: {chat_profile_id}"
@@ -177,7 +175,7 @@ class SessionManager:
             session_id=session_id,
             message=message,
             agent_name=agent_name,
-            argument=argument,
+            runtime_context=runtime_context,
         )
         exchange_id = str(uuid4())
         base_rank = len(history)
@@ -287,7 +285,7 @@ class SessionManager:
         session_id: str | None,
         message: str,
         agent_name: str,
-        argument: str,
+        runtime_context: Optional[RuntimeContext] = None,
     ) -> Tuple[SessionSchema, List[BaseMessage], AgentFlow, bool]:
         """
         Prepares the session, message history, and agent instance.
@@ -332,7 +330,7 @@ class SessionManager:
 
         # Append the new question
         history.append(HumanMessage(message))
-        agent = self.agent_manager.get_agent_instance(agent_name)
+        agent = self.agent_manager.get_agent_instance(agent_name, runtime_context)
         return session, history, agent, is_new_session
 
     def delete_session(self, session_id: str, user_id: str) -> bool:

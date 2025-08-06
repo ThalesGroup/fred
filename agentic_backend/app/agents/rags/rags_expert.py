@@ -12,19 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from datetime import datetime
 import logging
+from datetime import datetime
 from typing import List
 
-from app.common.structures import AgentSettings
-from app.core.model.model_factory import get_model
 import requests
 from langchain_core.messages import HumanMessage
 from langgraph.graph import END, START, MessagesState, StateGraph
 
-from app.core.agents.flow import AgentFlow
 from app.common.document_source import DocumentSource
+from app.common.structures import AgentSettings
+from app.core.agents.flow import AgentFlow
+from app.core.agents.runtime_context import get_document_libraries_ids
 from app.core.chatbot.chat_schema import ChatSource
+from app.core.model.model_factory import get_model
 
 logger = logging.getLogger(__name__)
 
@@ -96,9 +97,18 @@ class RagsExpert(AgentFlow):
     async def _run_reasoning_step(self, state: MessagesState):
         question: str = state["messages"][-1].content
         try:
+            # Build the request payload
+            request_data = {"query": question, "top_k": 3}
+
+            # Add tags from runtime context if available
+            library_ids = get_document_libraries_ids(self.get_runtime_context())
+            if library_ids:
+                request_data["tags"] = library_ids
+                logger.info(f"RagsExpert filtering by libraries: {library_ids}")
+
             response = requests.post(
                 f"{self.knowledge_flow_url}/vector/search",
-                json={"query": question, "top_k": 3},
+                json=request_data,
                 timeout=10,
             )
             response.raise_for_status()
