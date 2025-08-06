@@ -268,10 +268,10 @@ class OpensearchSessionStore(BaseSessionStore, BaseSecuredResourceAccess):
 
             # 4. Aggregate
             buckets = []
-            logger.info(f"[metrics] Running OpenSearch query on index '{self.history_index}' with range: {start} to {end}, precision={precision}")
-            logger.info(f"[metrics] Query body: {query}")
-            logger.info(f"[metrics] Found {len(hits)} hits between {start} and {end}")
-            logger.info(f"[metrics] Truncated into {len(grouped)} groups based on precision={precision}")
+            logger.debug(f"[metrics] Running OpenSearch query on index '{self.history_index}' with range: {start} to {end}, precision={precision}")
+            logger.debug(f"[metrics] Query body: {query}")
+            logger.debug(f"[metrics] Found {len(hits)} hits between {start} and {end}")
+            logger.debug(f"[metrics] Truncated into {len(grouped)} groups based on precision={precision}")
             
             for key, group in grouped.items():
                 bucket_time = key[0]
