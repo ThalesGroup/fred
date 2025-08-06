@@ -24,24 +24,33 @@ Includes:
 """
 
 from threading import Lock
-from typing import Dict, List, Optional, Type
+from typing import Any, Dict, List, Optional, Type
+from fred_core import OpenSearchStorageConfig
+
 from app.core.agents.store.base_agent_store import BaseAgentStore
 from app.core.feedback.store.base_feedback_store import BaseFeedbackStore
-
 from pydantic import BaseModel
+
 from app.core.model.model_factory import get_structured_chain
 from app.common.structures import (
     AgentSettings,
     Configuration,
+    DuckdbAgentStorageConfig,
+    DuckdbFeedbackStorage,
+    DuckdbSessionStorageConfig,
     ModelConfiguration,
+    OpenSessionSearchStorageConfig,
     ServicesSettings,
 )
 from app.core.model.model_factory import get_model
 from langchain_core.language_models.base import BaseLanguageModel
-from app.core.session.stores.abstract_session_backend import AbstractSessionStorage
+from app.core.session.stores.base_session_store import BaseSessionStore
 from pathlib import Path
 
 import logging
+
+
+
 
 logger = logging.getLogger(__name__)
 
@@ -80,7 +89,7 @@ def get_configuration() -> Configuration:
     return get_app_context().configuration
 
 
-def get_sessions_store() -> AbstractSessionStorage:
+def get_sessions_store() -> BaseSessionStore:
     return get_app_context().get_sessions_store()
 
 
@@ -128,19 +137,6 @@ def get_default_model() -> BaseLanguageModel:
         BaseLanguageModel: The AI model configured for the agent.
     """
     return get_app_context().get_default_model()
-
-
-def get_agent_settings(agent_name: str) -> AgentSettings:
-    """
-    Retrieves the configuration settings for a given agent.
-
-    Args:
-        agent_name (str): The name of the agent.
-
-    Returns:
-        AgentSettings: The configuration of the agent.
-    """
-    return get_app_context().get_agent_settings(agent_name)
 
 
 def get_model_for_service(service_name: str) -> BaseLanguageModel:
@@ -202,8 +198,15 @@ class ApplicationContext:
 
     _instance = None
     _lock = Lock()
+    configuration: Configuration
+    status: RuntimeStatus
+    _service_instances: Dict[str, Any]
+    _service_index: Dict[str, ServicesSettings]
+    _feedback_store_instance: Optional[BaseFeedbackStore] = None
+    _agent_store_instance: Optional[BaseAgentStore] = None
+    _session_store_instance: Optional[BaseSessionStore] = None
 
-    def __new__(cls, configuration: Configuration = None):
+    def __new__(cls, configuration: Configuration):
         with cls._lock:
             if cls._instance is None:
                 if configuration is None:
@@ -223,10 +226,7 @@ class ApplicationContext:
 
     def _build_indexes(self):
         """Builds fast access indexes from the list-based configuration."""
-        self._agent_index: Dict[str, AgentSettings] = {
-            agent.name: agent for agent in self.configuration.ai.agents
-        }
-        self._service_index: Dict[str, ServicesSettings] = {
+        self._service_index = {
             service.name: service for service in self.configuration.ai.services
         }
 
@@ -273,12 +273,6 @@ class ApplicationContext:
 
     # --- AI Models ---
 
-    def get_agent_settings(self, agent_name: str) -> AgentSettings:
-        agent_settings = self._agent_index.get(agent_name)
-        if agent_settings is None or not agent_settings.enabled:
-            raise ValueError(f"AI agent '{agent_name}' is not configured or enabled.")
-        return agent_settings
-
     def get_service_settings(self, service_name: str) -> ServicesSettings:
         service_settings = self._service_index.get(service_name)
         if service_settings is None or not service_settings.enabled:
@@ -308,7 +302,7 @@ class ApplicationContext:
         """
         return [agent.name for agent in self.configuration.ai.agents if agent.enabled]
 
-    def get_sessions_store(self) -> AbstractSessionStorage:
+    def get_sessions_store(self) -> BaseSessionStore:
         """
         Factory function to create a sessions store instance based on the configuration.
         As of now, it supports in_memory and OpenSearch sessions storage.
@@ -316,22 +310,28 @@ class ApplicationContext:
         Returns:
             AbstractSessionStorage: An instance of the sessions store.
         """
-        # Import here to avoid avoid circular dependencies:
-        from app.core.session.stores.in_memory_session_store import (
-            InMemorySessionStorage,
-        )
-        from app.core.session.stores.opensearch_session_store import (
-            OpensearchSessionStorage,
-        )
+        if self._session_store_instance is not None:
+            return self._session_store_instance
 
         config = get_configuration().session_storage
-        if config.type == "in_memory":
-            return InMemorySessionStorage()
-        elif config.type == "opensearch":
-            return OpensearchSessionStorage(
+        if isinstance(config, DuckdbSessionStorageConfig):
+            from app.core.session.stores.duckdb_session_store import DuckdbSessionStore
+            db_path = Path(config.duckdb_path).expanduser()
+            return DuckdbSessionStore(db_path)
+        elif isinstance(config, OpenSessionSearchStorageConfig):
+            from app.core.session.stores.opensearch_session_store import OpensearchSessionStore
+            username = config.username
+            password = config.password
+
+            if not username or not password:
+                raise ValueError(
+                    "Missing OpenSearch credentials: OPENSEARCH_USER and/or OPENSEARCH_PASSWORD"
+                )
+
+            return OpensearchSessionStore(
                 host=config.host,
-                username=config.username,
-                password=config.password,
+                username=username,
+                password=password,
                 secure=config.secure,
                 verify_certs=config.verify_certs,
                 sessions_index=config.sessions_index,
@@ -348,12 +348,35 @@ class ApplicationContext:
         Returns:
             BaseDynamicAgentStore: An instance of the dynamic agents store.
         """
-        config = get_configuration().agent_storage
-        if config.type == "duckdb":
-            from app.core.agents.store.duckdb_agent_store import DuckdbAgentStorage
+        if self._agent_store_instance is not None:
+            return self._agent_store_instance
+        
+       
 
+        config = get_configuration().agent_storage
+        if isinstance(config, DuckdbAgentStorageConfig):
+            from app.core.agents.store.duckdb_agent_store import DuckdbAgentStore
             db_path = Path(config.duckdb_path).expanduser()
-            return DuckdbAgentStorage(db_path)
+            return DuckdbAgentStore(db_path)
+        elif isinstance(config, OpenSearchStorageConfig):
+            from app.core.agents.store.opensearch_agent_store import OpenSearchAgentStore
+            username = config.username
+            password = config.password
+
+            if not username or not password:
+                raise ValueError(
+                    "Missing OpenSearch credentials: OPENSEARCH_USER and/or OPENSEARCH_PASSWORD"
+                )
+
+            self._agent_store_instance = OpenSearchAgentStore(
+                host=config.host,
+                index=config.index,
+                username=username,
+                password=password,
+                secure=config.secure,
+                verify_certs=config.verify_certs,
+            )
+            return self._agent_store_instance
         else:
             raise ValueError(f"Unsupported sessions storage backend: {config.type}")
 
@@ -365,13 +388,39 @@ class ApplicationContext:
         Returns:
             BaseDynamicAgentStore: An instance of the dynamic agents store.
         """
+        if self._feedback_store_instance is not None:
+            return self._feedback_store_instance
+
+        
+
         config = get_configuration().feedback_storage
-        if config.type == "duckdb":
+        if isinstance(config, DuckdbFeedbackStorage):
             from app.core.feedback.store.duckdb_feedback_store import (
                 DuckdbFeedbackStore,
             )
 
             db_path = Path(config.duckdb_path).expanduser()
-            return DuckdbFeedbackStore(db_path)
+            self._feedback_store_instance = DuckdbFeedbackStore(db_path)
+            return self._feedback_store_instance
+        elif isinstance(config, OpenSearchStorageConfig):
+            from app.core.feedback.store.opensearch_feedback_store import OpenSearchFeedbackStore
+            username = config.username
+            password = config.password
+
+            if not username or not password:
+                raise ValueError(
+                    "Missing OpenSearch credentials: OPENSEARCH_USER and/or OPENSEARCH_PASSWORD"
+                )
+
+            self._feedback_store_instance = OpenSearchFeedbackStore(
+                host=config.host,
+                index=config.index,
+                username=username,
+                password=password,
+                secure=config.secure,
+                verify_certs=config.verify_certs,
+            )
+            return self._feedback_store_instance
+
         else:
             raise ValueError(f"Unsupported sessions storage backend: {config.type}")

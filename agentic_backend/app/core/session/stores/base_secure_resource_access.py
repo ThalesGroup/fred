@@ -12,30 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 from abc import ABC, abstractmethod
-from typing import List
 
-from app.core.feedback.structures import FeedbackRecord
+from app.common.error import AuthorizationSentinel
 
 
-class BaseFeedbackStore(ABC):
+class BaseSecuredResourceAccess(ABC):
     @abstractmethod
-    def list(self) -> List[FeedbackRecord]:
-        """Return all feedback entries as a list of dictionaries."""
-        pass
-
-    @abstractmethod
-    def get(self, feedback_id: str) -> FeedbackRecord | None:
-        """Retrieve a single feedback entry by ID."""
-        pass
-
-    @abstractmethod
-    def save(self, feedback: FeedbackRecord) -> None:
-        """Save or update a feedback entry."""
-        pass
-
-    @abstractmethod
-    def delete(self, feedback_id: str) -> None:
-        """Delete a feedback entry by ID."""
+    def get_authorized_user_id(self, session_id: str) -> str | AuthorizationSentinel:
+        """
+        Get the authorized user_id that can access a session
+        """
         pass

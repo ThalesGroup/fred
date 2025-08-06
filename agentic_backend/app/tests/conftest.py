@@ -28,13 +28,12 @@ from app.common.structures import (
     DAOTypeEnum,
     DatabaseConfiguration,
     DatabaseTypeEnum,
-    DuckdbDynamicAgentStorage,
-    FeedbackStorage,
+    DuckdbAgentStorageConfig,
+    DuckdbFeedbackStorage,
+    DuckdbSessionStorageConfig,
     FrontendFlags,
     FrontendSettings,
-    InMemoryStorageConfig,
     KubernetesConfiguration,
-    MetricsStorageConfig,
     ModelConfiguration,
     Properties,
     RecursionConfig,
@@ -121,19 +120,13 @@ def minimal_generalist_config() -> Configuration:
             base_path="/tmp/fred-dao",
             max_cached_delay_seconds=30,
         ),
-        node_metrics_storage=MetricsStorageConfig(
-            type="local",
-            local_path="/tmp/node-metrics",
+        feedback_storage=DuckdbFeedbackStorage(
+            type="duckdb", duckdb_path="/tmp/ducckdb.db"
         ),
-        tool_metrics_storage=MetricsStorageConfig(
-            type="local",
-            local_path="/tmp/tool-metrics",
+        session_storage=DuckdbSessionStorageConfig(
+             type="duckdb", duckdb_path="/tmp/ducckdb.db"
         ),
-        feedback_storage=FeedbackStorage(type="duckdb", duckdb_path="/tmp/ducckdb.db"),
-        session_storage=InMemoryStorageConfig(
-            type="in_memory",
-        ),
-        agent_storage=DuckdbDynamicAgentStorage(
+        agent_storage=DuckdbAgentStorageConfig(
             type="duckdb",
             duckdb_path="/tmp/duckdb.db",
         ),

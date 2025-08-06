@@ -12,15 +12,3 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from abc import ABC, abstractmethod
-
-from app.common.error import AuthorizationSentinel
-
-
-class AbstractSecuredResourceAccess(ABC):
-    @abstractmethod
-    def get_authorized_user_id(self, session_id: str) -> str | AuthorizationSentinel:
-        """
-        Get the authorized user_id that can access a session
-        """
-        pass

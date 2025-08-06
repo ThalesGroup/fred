@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Literal, Optional, List, Dict, Union, Any
+from typing import Literal, Optional, List, Dict, Union
 from datetime import datetime
 from pydantic import BaseModel, Field
 
@@ -86,17 +86,6 @@ class ChatMessagePayload(BaseModel):
             ]
         self.metadata.update(extra)
         return self
-
-
-class MetricsBucket(BaseModel):
-    timestamp: str  # truncated timestamp (per precision)
-    group: Dict[str, Any]
-    aggregations: Dict[str, Union[float, List[float]]]
-
-
-class MetricsResponse(BaseModel):
-    precision: str
-    buckets: List[MetricsBucket]
 
 
 # --- Session structure ---
