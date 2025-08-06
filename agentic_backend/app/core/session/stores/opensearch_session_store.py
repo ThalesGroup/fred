@@ -34,7 +34,7 @@ from app.common.error import AuthorizationSentinel, SESSION_NOT_INITIALIZED
 logger = logging.getLogger(__name__)
 
 
-class OpensearchSessionStorage(BaseSessionStore, BaseSecuredResourceAccess):
+class OpensearchSessionStore(BaseSessionStore, BaseSecuredResourceAccess):
     def __init__(
         self,
         host: str,

@@ -24,7 +24,7 @@ from fred_core.store.duckdb_store import DuckDBTableStore
 logger = logging.getLogger(__name__)
 
 
-class DuckdbAgentStorage(BaseAgentStore):
+class DuckdbAgentStore(BaseAgentStore):
     def __init__(self, db_path: Path):
         self.table_name = "agents"
         self.store = DuckDBTableStore(prefix="", db_path=db_path)

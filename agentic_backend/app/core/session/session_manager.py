@@ -37,9 +37,9 @@ from app.core.chatbot.chat_schema import (
     SessionWithFiles,
     clean_agent_metadata,
     clean_token_usage,
-    MetricsResponse,
 )
 from app.core.chatbot.chatbot_utils import enrich_ChatMessagePayloads_with_latencies
+from app.core.chatbot.metric_structures import MetricsResponse
 from app.core.session.stores.base_session_store import BaseSessionStore
 from app.core.session.attachement_processing import AttachementProcessing
 

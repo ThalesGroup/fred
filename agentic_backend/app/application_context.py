@@ -26,19 +26,18 @@ Includes:
 from threading import Lock
 from typing import Any, Dict, List, Optional, Type
 from fred_core import OpenSearchStorageConfig
-from app.core.agents.store.base_agent_store import BaseAgentStore
-from app.core.agents.store.duckdb_agent_store import DuckdbAgentStorage
-from app.core.agents.store.opensearch_agent_store import OpenSearchAgentStore
-from app.core.feedback.store.base_feedback_store import BaseFeedbackStore
 
+from app.core.agents.store.base_agent_store import BaseAgentStore
+from app.core.feedback.store.base_feedback_store import BaseFeedbackStore
 from pydantic import BaseModel
-from app.core.feedback.store.opensearch_feedback_store import OpenSearchFeedbackStore
+
 from app.core.model.model_factory import get_structured_chain
 from app.common.structures import (
     AgentSettings,
     Configuration,
+    DuckdbAgentStorageConfig,
     DuckdbFeedbackStorage,
-    DuckdbSessionStorage,
+    DuckdbSessionStorageConfig,
     ModelConfiguration,
     OpenSessionSearchStorageConfig,
     ServicesSettings,
@@ -50,8 +49,8 @@ from pathlib import Path
 
 import logging
 
-from app.core.session.stores.duckdb_session_store import DuckdbSessionStore
-from app.core.session.stores.opensearch_session_store import OpensearchSessionStorage
+
+
 
 logger = logging.getLogger(__name__)
 
@@ -338,10 +337,12 @@ class ApplicationContext:
             return self._session_store_instance
 
         config = get_configuration().session_storage
-        if isinstance(config, DuckdbSessionStorage):
+        if isinstance(config, DuckdbSessionStorageConfig):
+            from app.core.session.stores.duckdb_session_store import DuckdbSessionStore
             db_path = Path(config.duckdb_path).expanduser()
             return DuckdbSessionStore(db_path)
         elif isinstance(config, OpenSessionSearchStorageConfig):
+            from app.core.session.stores.opensearch_session_store import OpensearchSessionStore
             username = config.username
             password = config.password
 
@@ -350,7 +351,7 @@ class ApplicationContext:
                     "Missing OpenSearch credentials: OPENSEARCH_USER and/or OPENSEARCH_PASSWORD"
                 )
 
-            return OpensearchSessionStorage(
+            return OpensearchSessionStore(
                 host=config.host,
                 username=username,
                 password=password,
@@ -372,12 +373,16 @@ class ApplicationContext:
         """
         if self._agent_store_instance is not None:
             return self._agent_store_instance
-        config = get_configuration().agent_storage
-        if isinstance(config, DuckdbFeedbackStorage):
+        
+       
 
+        config = get_configuration().agent_storage
+        if isinstance(config, DuckdbAgentStorageConfig):
+            from app.core.agents.store.duckdb_agent_store import DuckdbAgentStore
             db_path = Path(config.duckdb_path).expanduser()
-            return DuckdbAgentStorage(db_path)
+            return DuckdbAgentStore(db_path)
         elif isinstance(config, OpenSearchStorageConfig):
+            from app.core.agents.store.opensearch_agent_store import OpenSearchAgentStore
             username = config.username
             password = config.password
 
@@ -408,6 +413,9 @@ class ApplicationContext:
         """
         if self._feedback_store_instance is not None:
             return self._feedback_store_instance
+
+        
+
         config = get_configuration().feedback_storage
         if isinstance(config, DuckdbFeedbackStorage):
             from app.core.feedback.store.duckdb_feedback_store import (
@@ -418,6 +426,7 @@ class ApplicationContext:
             self._feedback_store_instance = DuckdbFeedbackStore(db_path)
             return self._feedback_store_instance
         elif isinstance(config, OpenSearchStorageConfig):
+            from app.core.feedback.store.opensearch_feedback_store import OpenSearchFeedbackStore
             username = config.username
             password = config.password
 

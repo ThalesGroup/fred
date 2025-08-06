@@ -18,8 +18,8 @@ from abc import ABC, abstractmethod
 from app.core.chatbot.chat_schema import (
     ChatMessagePayload,
     SessionSchema,
-    MetricsResponse,
 )
+from app.core.chatbot.metric_structures import MetricsResponse
 
 
 class BaseSessionStore(ABC):

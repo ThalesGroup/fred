@@ -283,10 +283,7 @@ class AIConfig(BaseModel):
 ## ----------------------------------------------------------------------
 
 
-class InMemoryStorageConfig(BaseModel):
-    type: Literal["in_memory"]
-
-class DuckdbSessionStorage(BaseModel):
+class DuckdbSessionStorageConfig(BaseModel):
     type: Literal["duckdb"]
     duckdb_path: str = Field(
         default="~/.fred/agentic/session.duckdb",
@@ -318,7 +315,7 @@ class OpenSessionSearchStorageConfig(BaseModel):
 
 
 SessionStorageConfig = Annotated[
-    Union[DuckdbSessionStorage, OpenSessionSearchStorageConfig],
+    Union[DuckdbSessionStorageConfig, OpenSessionSearchStorageConfig],
     Field(discriminator="type"),
 ]
 
@@ -328,7 +325,7 @@ SessionStorageConfig = Annotated[
 #
 
 
-class DuckdbDynamicAgentStorage(BaseModel):
+class DuckdbAgentStorageConfig(BaseModel):
     type: Literal["duckdb"]
     duckdb_path: str = Field(
         default="~/.fred/agentic/db.duckdb",
@@ -336,8 +333,8 @@ class DuckdbDynamicAgentStorage(BaseModel):
     )
 
 
-DynamicAgentStorageConfig = Annotated[
-    Union[DuckdbDynamicAgentStorage, OpenSearchStorageConfig],
+AgentStorageConfig = Annotated[
+    Union[DuckdbAgentStorageConfig, OpenSearchStorageConfig],
     Field(discriminator="type"),
 ]
 
@@ -409,7 +406,7 @@ class Configuration(BaseModel):
     session_storage: SessionStorageConfig = Field(
         ..., description="Session Storage configuration"
     )
-    agent_storage: DynamicAgentStorageConfig = Field(
+    agent_storage: AgentStorageConfig = Field(
         ..., description="Agents Storage configuration"
     )
 
