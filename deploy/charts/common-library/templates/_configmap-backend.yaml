@@ -1,7 +1,12 @@
+{{- define "common-library.configmap-backend" }}
+
+{{- if .Values.configuration_type.backend.enabled }}
+
+---
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: "{{ .Values.applicationName }}-configmap"
+  name: "{{ .Values.applicationName }}-back"
   namespace: {{ .Release.Namespace }}
 data:
   configuration.yaml: |
@@ -15,3 +20,7 @@ data:
     {{ $key }}=""
     {{- end }}
     {{- end }}
+
+{{- end }}
+
+{{- end -}}

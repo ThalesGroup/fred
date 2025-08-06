@@ -1,14 +1,99 @@
 applicationName: fred-frontend
 
-replicaCount: 1
+deployment:
+  enabled: true
+
+statefulset:
+  enabled: false
+
+job:
+  enabled: false
+
+##########
+# Deployment/Statefulset/Job related
+##########
 
 image:
   repository: ghcr.io/thalesgroup/fred-agent/frontend
   tag: "v0.0.5"
   pullPolicy: IfNotPresent
 
-imagePullSecrets:
-  - name: "gitlab-registry-creds"
+spec:
+  revisionHistoryLimit: 2
+
+# imagePullSecrets:
+#   - name: "gitlab-registry-creds"
+
+replicaCount: 1
+
+rollingUpdate:
+  maxSurge: 1
+  maxUnavailable: 0
+
+env:
+  enabled: true
+  data:
+  - name: VITE_ALLOWED_HOSTS
+    value: "fred.dev"
+  - name: VITE_BACKEND_URL_KNOWLEDGE
+    value: "http://knowledge-flow-backend.dev.fred.thalesgroup.com"
+  - name: VITE_USE_AUTH
+    value: "true"
+
+command:
+  enabled: false
+
+ports:
+- name: http
+  containerPort: 80
+
+##################
+# Service related configuration
+##################
+
+service:
+  enabled: true
+  type: ClusterIP
+  port:
+    - name: http
+      port: 80
+      targetPort: 80
+
+##################
+# Ingress related configuration
+##################
+
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations: {}
+  hosts:
+    - host: fred.dev.local
+      paths:
+        - path: /
+          pathType: Prefix
+          servicePortName: http
+  tls:
+    - secretName: fred-frontend-crt
+      hosts:
+        - fred.dev.local
+
+###############
+# Probes related configuration
+###############
+
+lifecycle:
+  enabled: false
+
+livenessProbe:
+  enabled: false
+
+readinessProbe:
+  enabled: false
+
+###############
+# Service and RBAC related configuration
+###############
 
 serviceAccount:
   enabled: true
@@ -37,48 +122,57 @@ serviceAccount:
         resources: ["nodes"]
         verbs: ["get", "list", "watch"]
 
-service:
-  type: ClusterIP
-  port: 80
+##############
+# Volume and VolumeMount related configurations
+##############
 
-ingress:
+volumeMounts:
   enabled: true
-  className: "nginx"
-  annotations: {}
-  hosts:
-    - host: fred.dev.local
-      paths:
-        - path: /
-  tls:
-    - secretName: fred-frontend-crt
-      hosts:
-        - fred.dev.local
+  data:
+  - name: fred-frontend-config-vol
+    mountPath: /usr/share/nginx/html/config.json
+    subPath: config.json
+  - name: fred-frontend-config-vol
+    mountPath: /usr/share/nginx/html/keycloak.json
+    subPath: keycloak.json
 
-config:
-  backendUrlApi: "https://agentic-backend.dev.fred.thalesgroup.com"
-  backendUrlKnowledge: "https://knowledge-flow-backend.dev.fred.thalesgroup.com"
-  websocketUrl: "ws://agentic-backend.dev.fred.thalesgroup.com/fred/chatbot/query"
+volumes:
+  enabled: true
+  data:
+  - name: fred-frontend-config-vol
+    configMap:
+      name: fred-frontend-front
 
-env:
-  - name: VITE_ALLOWED_HOSTS
-    value: "fred.dev"
-  - name: VITE_BACKEND_URL_KNOWLEDGE
-    value: "http://knowledge-flow-backend.dev.fred.thalesgroup.com"
-  - name: VITE_USE_AUTH
-    value: "true"
+######################
+# Configmaps related configuration
+######################
+
+configuration_type:
+  frontend:
+    enabled: true
+  backend:
+    enabled: false 
 
 oidc:
   enabled: true
-  config:
-    realm: "fred"
-    authServerUrl: "https://idp.dev.fred.thalesgroup.com/"
-    clientId: "app"
+  # Warning ! keycloak.json is not rendered when oidc.enabled=false
+  # Look the template configmap-frontend.yaml for more details
 
-feedback_storage:
-  type: local
-  minio_endpoint: "localhost:9000"
-  minio_bucket_name: "fred-feedback"
-  minio_secure: false
+configuration:
+  config_json:
+    backendUrlApi: "https://agentic-backend.dev.fred.thalesgroup.com"
+    backendUrlKnowledge: "https://knowledge-flow-backend.dev.fred.thalesgroup.com"
+    websocketUrl: "ws://agentic-backend.dev.fred.thalesgroup.com/fred/chatbot/query"
+  keycloak_json:
+    realm: "fred"               # OIDC realm
+    auth-server-url: "https://idp.dev.fred.thalesgroup.com/"
+    resource: "app"             # OIDC Client ID
+    ssl-required: "external"
+    verify-token-audience: true
+    public-client: true
+    use-resource-role-mappings: true
+    confidential-port: 0
 
-resources: {}
-podAnnotations: {}
+kubeconfig:
+  enabled: false
+  data: []

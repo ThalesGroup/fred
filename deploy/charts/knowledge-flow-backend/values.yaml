@@ -1,17 +1,118 @@
 applicationName: knowledge-flow-backend
 
+deployment:
+  enabled: true
+
+statefulset:
+  enabled: false
+
+job:
+  enabled: false
+
+##########
+# Deployment/Statefulset/Job related
+##########
+
 image:
   repository: ghcr.io/thalesgroup/fred-agent/knowledge-flow-backend
   tag: "v0.0.5"
 
-Deployment:
-  enabled: true
-
-containers:
-  name: knowledge-flow-backend
-
 spec:
   revisionHistoryLimit: 2
+
+imagePullSecrets: []
+
+replicaCount: 1
+
+rollingUpdate:
+  maxSurge: 1
+  maxUnavailable: 0
+
+env:
+  enabled: true
+  data:
+  - name: LOG_LEVEL
+    value: "INFO"
+  - name: CONFIG_FILE
+    value: "/app/config/configuration.yaml"
+# env.extraEnvVars to add variable
+
+command:
+  enabled: true
+  # data:
+  #   - /bin/sh
+  #   - -c
+  #   - tail -f /dev/null
+  data:
+  - "uvicorn"
+  - "app.main:create_app"
+  - "--factory"
+  - "--host"
+  - "0.0.0.0"
+  - "--port"
+  - "8111"
+  - "--env-file"
+  - "/app/config/.env"
+  - "--log-level"
+  - "info"
+  - "--loop"
+  - "asyncio"
+
+ports:
+  - name: http
+    containerPort: 8111
+  - name: https
+    containerPort: 8443
+
+##################
+# Service related configuration
+##################
+
+service:
+  enabled: true
+  type: ClusterIP
+  port:
+    - name: "http"
+      port: 8080
+      targetPort: 8111
+      protocol: TCP
+    - name: "https"
+      port: 8443
+      targetPort: 8443
+      protocol: TCP
+
+##################
+# Ingress related configuration
+##################
+
+ingress:
+  enabled: true
+  className: ""
+  annotations: {}
+  hosts:
+    - host: knowledge-flow-backend.dev.fred.thalesgroup.com
+      paths:
+        - path: /
+          pathType: Prefix
+          servicePortName: http
+  tls: []
+
+###############
+# Probes related configuration
+###############
+
+lifecycle:
+  enabled: false
+
+livenessProbe:
+  enabled: false
+
+readinessProbe:
+  enabled: false
+
+###############
+# Service and RBAC related configuration
+###############
 
 serviceAccount:
   enabled: true
@@ -40,98 +141,9 @@ serviceAccount:
         resources: ["nodes"]
         verbs: ["get", "list", "watch"]
 
-ports:
-  enabled: true
-  data:
-  - containerPort: 8111
-
-rollingUpdate:
-  maxSurge: 1
-
-command:
-  enabled: true
-  # data:
-  #   - /bin/sh
-  #   - -c
-  #   - tail -f /dev/null
-  data:
-  - "uvicorn"
-  - "app.main:create_app"
-  - "--factory"
-  - "--host"
-  - "0.0.0.0"
-  - "--port"
-  - "8111"
-  - "--env-file"
-  - "/app/config/.env"
-  - "--log-level"
-  - "info"
-  - "--loop"
-  - "asyncio"
-
-env:
-  enabled: true
-  data:
-  - name: LOG_LEVEL
-    value: "INFO"
-  - name: CONFIG_FILE
-    value: "/app/config/configuration.yaml"
-
-# env.extraEnvVars to add variable
-
-
-
-lifecycle:
-  enabled: false
-
-livenessProbe:
-  enabled: false
-
-readinessProbe:
-  enabled: false
-
-service:
-  enabled: true
-  Type: ClusterIP
-  data:
-    - name: "http"
-      port: 8080
-      targetPort: 8111
-      protocol: TCP
-    - name: "https"
-      port: 8443
-      targetPort: 8443
-      protocol: TCP
-
-ingress:
-  enabled: true
-  className: ""
-  annotations: {}
-  hosts:
-    - host: knowledge-flow-backend.dev.fred.thalesgroup.com
-      paths:
-        - path: /
-          pathType: ImplementationSpecific
-  tls: []
-
-volumes:
-  enabled: true
-  data:
-  # AWS : TODO - replace the aws volume by a real AWS configuration
-  - name: aws-vol
-    emptyDir:
-      sizeLimit: 500Mi
-  # configuration.yaml && .env since we'll mount them as a directory && kube/config
-  - name: "knowledge-flow-backend-vol"
-    configMap:
-      name: "knowledge-flow-backend-configmap"
-  # kube/config
-  - name: "knowledge-flow-backend-kube-vol"
-    configMap:
-      name: "knowledge-flow-backend-kube-configmap"
-      items:
-      - key: kubeconfig
-        path: kubeconfig
+##############
+# Volume and VolumeMount related configurations
+##############
 
 volumeMounts:
   enabled: true
@@ -147,6 +159,37 @@ volumeMounts:
     mountPath: /home/knowledge-flow-user/.kube/config
     subPath: kubeconfig
 
+volumes:
+  enabled: true
+  data:
+  # AWS : TODO - replace the aws volume by a real AWS configuration
+  - name: aws-vol
+    emptyDir:
+      sizeLimit: 500Mi
+  # configuration.yaml && .env since we'll mount them as a directory && /app/config
+  - name: "knowledge-flow-backend-vol"
+    configMap:
+      name: "knowledge-flow-backend-configmap"
+  # kube/config
+  - name: "knowledge-flow-backend-kube-vol"
+    configMap:
+      name: "knowledge-flow-backend-kube"
+      items:
+      - key: kubeconfig
+        path: kubeconfig
+
+######################
+# Configmaps related configuration
+######################
+
+
+configuration_type:
+  frontend:
+    enabled: false
+  backend:
+    enabled: true 
+
+
 configuration:
   app:
     name: "Knowledge Flow Backend"
@@ -158,7 +201,7 @@ configuration:
     reload_dir: "."
     security:
       enabled: true
-      keycloak_url: "http://keycloak:8080/realms/fred"
+      keycloak_url: "http://keycloak/realms/fred"
       client_id: "app"
       authorized_origins:
       - "http://localhost:5173"
@@ -167,7 +210,7 @@ configuration:
 
   security:
     enabled: true
-    keycloak_url: "http://keycloak:8080/realms/fred"
+    keycloak_url: "http://keycloak/realms/fred"
     authorized_origins:
     - "http://localhost:5173"
     - "http://fred.dev.fred.thalesgroup.com"
@@ -271,8 +314,8 @@ configuration:
 
 
 
-dotenv:
 
+dotenv:
   # This file contains the environment variables for the application
 
   # -----------------------------------------------------------------------------
@@ -391,7 +434,11 @@ dotenv:
   LOCAL_METADATA_STORAGE_PATH: "~/.fred/knowledge-flow/metadata-store.json"
 
 
+
+
+
 kubeconfig:
+  enabled: true
   data:
     kubeconfig: |
       apiVersion: v1

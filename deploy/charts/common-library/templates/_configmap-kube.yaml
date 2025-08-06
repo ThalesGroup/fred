@@ -1,22 +1,23 @@
+{{- define "common-library.configmap-kube" -}}
+{{- if .Values.kubeconfig.enabled }}
+---
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: "{{ .Values.applicationName }}-kube-configmap"
+  name: "{{ .Values.applicationName }}-kube"
   namespace: {{ .Release.Namespace }}
   {{- if .Values.kubeconfig.annotations }}
   annotations:
     {{- toYaml .Values.kubeconfig.annotations | nindent 4 }}
   {{- end }}
   labels:
-    name: {{ .Release.Name }}
-    app: {{ .Chart.Name }}
-    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
-    release: "{{ .Values.applicationName }}"
-    heritage: "{{ .Release.Service }}"
+    app: {{ .Values.applicationName }}
     {{- if .Values.extraLabels }}
     {{- toYaml .Values.extraLabels.data | nindent 4 }}
     {{- end }}
 data:
-{{- range $key, $value := .Values.kubeconfig.data }}
+  {{- range $key, $value := .Values.kubeconfig.data }}
   {{ $key }}: {{ $value | quote }}
+  {{- end }}
 {{- end }}
+{{- end -}}

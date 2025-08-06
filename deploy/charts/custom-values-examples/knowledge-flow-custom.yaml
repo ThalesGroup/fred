@@ -1,10 +1,3 @@
-ingress:
-  hosts:
-    - host: knowledge-flow-backend.dev.fred.thalesgroup.com
-      paths:
-        - path: /
-          pathType: ImplementationSpecific
-
 env:
   enabled: true
   extraEnvVars:
@@ -12,6 +5,14 @@ env:
     value: "admin"
   - name: OPENSEARCH_PASSWORD
     value: "*****"
+
+ingress:
+  hosts:
+    - host: knowledge-flow-backend.dev.fred.thalesgroup.com
+      paths:
+        - path: /
+          pathType: Prefix
+          servicePortName: http
 
 configuration:
   vector_storage:
@@ -25,6 +26,7 @@ configuration:
   catalog_storage:
     username: "admin"
     password: "*****"
+
 
 dotenv:
   OPENAI_API_KEY: "sk-****"
