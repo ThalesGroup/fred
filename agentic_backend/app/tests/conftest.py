@@ -120,7 +120,9 @@ def minimal_generalist_config() -> Configuration:
             base_path="/tmp/fred-dao",
             max_cached_delay_seconds=30,
         ),
-        feedback_storage=DuckdbFeedbackStorage(type="duckdb", duckdb_path="/tmp/ducckdb.db"),
+        feedback_storage=DuckdbFeedbackStorage(
+            type="duckdb", duckdb_path="/tmp/ducckdb.db"
+        ),
         session_storage=InMemoryStorageConfig(
             type="in_memory",
         ),

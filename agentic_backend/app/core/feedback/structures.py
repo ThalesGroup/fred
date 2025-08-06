@@ -21,10 +21,16 @@ from typing import Optional
 class FeedbackRecord(BaseModelWithId):
     session_id: str = Field(..., description="Session ID associated with the feedback")
     message_id: str = Field(..., description="Message ID the feedback refers to")
-    agent_name: str = Field(..., description="Name of the agent that generated the message")
+    agent_name: str = Field(
+        ..., description="Name of the agent that generated the message"
+    )
     rating: int = Field(..., ge=1, le=5, description="User rating, typically 1–5 stars")
-    comment: Optional[str] = Field(None, description="Optional user comment or clarification")
-    created_at: datetime = Field(..., description="Timestamp when the feedback was submitted")
+    comment: Optional[str] = Field(
+        None, description="Optional user comment or clarification"
+    )
+    created_at: datetime = Field(
+        ..., description="Timestamp when the feedback was submitted"
+    )
     user_id: str = Field(..., description="Optional user ID if identity is tracked")
 
     class Config:
@@ -38,6 +44,6 @@ class FeedbackRecord(BaseModelWithId):
                 "rating": 4,
                 "comment": "Helpful but a bit long",
                 "created_at": "2025-08-06T12:00:00Z",
-                "user_id": "user_456"
+                "user_id": "user_456",
             }
         }

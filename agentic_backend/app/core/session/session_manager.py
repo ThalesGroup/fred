@@ -56,9 +56,7 @@ class SessionManager:
     as well as handling chat interactions.
     """
 
-    def __init__(
-        self, session_storage: BaseSessionStore, agent_manager: AgentManager
-    ):
+    def __init__(self, session_storage: BaseSessionStore, agent_manager: AgentManager):
         """
         Initializes the SessionManager with a storage backend and an optional agent manager.
         :param storage: An instance of AbstractSessionStorage for session management.

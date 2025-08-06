@@ -216,8 +216,7 @@ class ApplicationContext:
     _feedback_store_instance: Optional[BaseFeedbackStore] = None
     _agent_store_instance: Optional[BaseAgentStore] = None
     _session_store_instance: Optional[BaseSessionStore] = None
-   
-    
+
     def __new__(cls, configuration: Configuration):
         with cls._lock:
             if cls._instance is None:
@@ -349,7 +348,9 @@ class ApplicationContext:
             password = config.password
 
             if not username or not password:
-                raise ValueError("Missing OpenSearch credentials: OPENSEARCH_USER and/or OPENSEARCH_PASSWORD")
+                raise ValueError(
+                    "Missing OpenSearch credentials: OPENSEARCH_USER and/or OPENSEARCH_PASSWORD"
+                )
 
             return OpensearchSessionStorage(
                 host=config.host,
@@ -384,7 +385,9 @@ class ApplicationContext:
             password = config.password
 
             if not username or not password:
-                raise ValueError("Missing OpenSearch credentials: OPENSEARCH_USER and/or OPENSEARCH_PASSWORD")
+                raise ValueError(
+                    "Missing OpenSearch credentials: OPENSEARCH_USER and/or OPENSEARCH_PASSWORD"
+                )
 
             self._agent_store_instance = OpenSearchAgentStore(
                 host=config.host,
@@ -422,7 +425,9 @@ class ApplicationContext:
             password = config.password
 
             if not username or not password:
-                raise ValueError("Missing OpenSearch credentials: OPENSEARCH_USER and/or OPENSEARCH_PASSWORD")
+                raise ValueError(
+                    "Missing OpenSearch credentials: OPENSEARCH_USER and/or OPENSEARCH_PASSWORD"
+                )
 
             self._feedback_store_instance = OpenSearchFeedbackStore(
                 host=config.host,
@@ -433,6 +438,6 @@ class ApplicationContext:
                 verify_certs=config.verify_certs,
             )
             return self._feedback_store_instance
-            
+
         else:
             raise ValueError(f"Unsupported sessions storage backend: {config.type}")

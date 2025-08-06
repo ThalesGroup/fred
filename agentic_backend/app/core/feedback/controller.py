@@ -29,6 +29,7 @@ from app.core.feedback.structures import FeedbackRecord
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
+
 # ----------------------------------------------------------------------
 # Payload received from frontend
 # ----------------------------------------------------------------------
@@ -105,7 +106,9 @@ class FeedbackController:
             try:
                 deleted = self.service.delete_feedback(feedback_id)
                 if not deleted:
-                    raise HTTPException(status_code=404, detail="Feedback entry not found")
+                    raise HTTPException(
+                        status_code=404, detail="Feedback entry not found"
+                    )
                 return  # implicit 204
             except Exception as e:
                 raise handle_exception(e)

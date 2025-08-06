@@ -73,7 +73,9 @@ class OpenSearchAgentStore(BaseAgentStore):
             self.client.indices.create(index=self.index_name, body=AGENTS_INDEX_MAPPING)
             logger.info(f"[AGENTS] OpenSearch index '{self.index_name}' created.")
         else:
-            logger.info(f"[AGENTS] OpenSearch index '{self.index_name}' already exists.")
+            logger.info(
+                f"[AGENTS] OpenSearch index '{self.index_name}' already exists."
+            )
 
     def save(self, settings: AgentSettings) -> None:
         try:

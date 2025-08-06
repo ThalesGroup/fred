@@ -312,7 +312,8 @@ class OpenSessionSearchStorageConfig(BaseModel):
 
 
 SessionStorageConfig = Annotated[
-    Union[InMemoryStorageConfig, OpenSessionSearchStorageConfig], Field(discriminator="type")
+    Union[InMemoryStorageConfig, OpenSessionSearchStorageConfig],
+    Field(discriminator="type"),
 ]
 
 ###########################################################
@@ -330,7 +331,8 @@ class DuckdbDynamicAgentStorage(BaseModel):
 
 
 DynamicAgentStorageConfig = Annotated[
-    Union[DuckdbDynamicAgentStorage, OpenSearchStorageConfig], Field(discriminator="type")
+    Union[DuckdbDynamicAgentStorage, OpenSearchStorageConfig],
+    Field(discriminator="type"),
 ]
 
 ###########################################################
@@ -347,7 +349,9 @@ class DuckdbFeedbackStorage(BaseModel):
     )
 
 
-FeedbackStorageConfig = Annotated[Union[DuckdbFeedbackStorage, OpenSearchStorageConfig], Field(discriminator="type")]
+FeedbackStorageConfig = Annotated[
+    Union[DuckdbFeedbackStorage, OpenSearchStorageConfig], Field(discriminator="type")
+]
 
 # ----------------------------------------------------------------------
 # Other configurations

@@ -15,7 +15,12 @@
 import logging
 from typing import List, Optional
 
-from opensearchpy import OpenSearch, NotFoundError, ConflictError, RequestsHttpConnection
+from opensearchpy import (
+    OpenSearch,
+    NotFoundError,
+    ConflictError,
+    RequestsHttpConnection,
+)
 
 from app.core.feedback.structures import FeedbackRecord
 from app.core.feedback.store.base_feedback_store import BaseFeedbackStore
@@ -67,15 +72,25 @@ class OpenSearchFeedbackStore(BaseFeedbackStore):
         self.index_name = index
 
         if not self.client.indices.exists(index=self.index_name):
-            self.client.indices.create(index=self.index_name, body=FEEDBACK_INDEX_MAPPING)
+            self.client.indices.create(
+                index=self.index_name, body=FEEDBACK_INDEX_MAPPING
+            )
             logger.info(f"[FEEDBACK] OpenSearch index '{self.index_name}' created.")
         else:
-            logger.info(f"[FEEDBACK] OpenSearch index '{self.index_name}' already exists.")
+            logger.info(
+                f"[FEEDBACK] OpenSearch index '{self.index_name}' already exists."
+            )
 
     def list(self) -> List[FeedbackRecord]:
         try:
-            response = self.client.search(index=self.index_name, body={"query": {"match_all": {}}}, params={"size": 10000})
-            return [FeedbackRecord(**hit["_source"]) for hit in response["hits"]["hits"]]
+            response = self.client.search(
+                index=self.index_name,
+                body={"query": {"match_all": {}}},
+                params={"size": 10000},
+            )
+            return [
+                FeedbackRecord(**hit["_source"]) for hit in response["hits"]["hits"]
+            ]
         except Exception as e:
             logger.error(f"[FEEDBACK] Failed to list feedback entries: {e}")
             raise
@@ -92,13 +107,19 @@ class OpenSearchFeedbackStore(BaseFeedbackStore):
 
     def save(self, feedback: FeedbackRecord) -> None:
         try:
-            self.client.index(index=self.index_name, id=feedback.id, body=feedback.model_dump(mode="json"))
+            self.client.index(
+                index=self.index_name,
+                id=feedback.id,
+                body=feedback.model_dump(mode="json"),
+            )
             logger.info(f"[FEEDBACK] Saved feedback entry '{feedback.id}'")
         except ConflictError:
             logger.warning(f"[FEEDBACK] Conflict saving feedback entry '{feedback.id}'")
             raise
         except Exception as e:
-            logger.error(f"[FEEDBACK] Failed to save feedback entry '{feedback.id}': {e}")
+            logger.error(
+                f"[FEEDBACK] Failed to save feedback entry '{feedback.id}': {e}"
+            )
             raise
 
     def delete(self, feedback_id: str) -> None:
@@ -106,7 +127,11 @@ class OpenSearchFeedbackStore(BaseFeedbackStore):
             self.client.delete(index=self.index_name, id=feedback_id)
             logger.info(f"[FEEDBACK] Deleted feedback entry '{feedback_id}'")
         except NotFoundError:
-            logger.warning(f"[FEEDBACK] Feedback entry '{feedback_id}' not found for deletion")
+            logger.warning(
+                f"[FEEDBACK] Feedback entry '{feedback_id}' not found for deletion"
+            )
         except Exception as e:
-            logger.error(f"[FEEDBACK] Failed to delete feedback entry '{feedback_id}': {e}")
+            logger.error(
+                f"[FEEDBACK] Failed to delete feedback entry '{feedback_id}': {e}"
+            )
             raise
