@@ -20,7 +20,7 @@ from app.core.processors.input.common.base_input_processor import BaseMarkdownPr
 
 
 class AudioTranscriptionProcessor(BaseMarkdownProcessor):
-    def __init__(self, model_size="base"):
+    def __init__(self, model_size="tiny"):
         # model_size: "tiny", "base", "small", "medium", "large"
         self.model = whisper.load_model(model_size)
 
