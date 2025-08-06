@@ -42,7 +42,7 @@ class AudioTranscriptionProcessor(BaseMarkdownProcessor):
 
     def convert_file_to_markdown(self, file_path: Path, output_dir: Path, document_uid: str | None) -> dict:
         """
-        Transcrit un fichier audio en Markdown, sauvegarde et nettoie le répertoire de sortie.
+        Transcribes a voice audio file into Markdown and saves it into an output folder.
         """
         output_dir.mkdir(parents=True, exist_ok=True)
         md_path = output_dir / "output.md"
