@@ -58,9 +58,6 @@ class AudioTranscriptionProcessor(BaseMarkdownProcessor):
             md_content = md_content.replace(str(output_dir), f"knowledge-flow/v1/markdown/{document_uid}")
             md_path.write_text(md_content, encoding="utf-8")
 
-        for junk_file in output_dir.glob("*.lua"):
-            junk_file.unlink()
-
         return {
             "doc_dir": str(output_dir),
             "md_file": str(md_path)
