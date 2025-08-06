@@ -37,7 +37,6 @@ import {
 import ClearIcon from "@mui/icons-material/Clear";
 import LibraryBooksRoundedIcon from "@mui/icons-material/LibraryBooksRounded";
 import SearchIcon from "@mui/icons-material/Search";
-import UploadIcon from "@mui/icons-material/Upload";
 import RefreshIcon from "@mui/icons-material/Refresh";
 
 import { useEffect, useState } from "react";
@@ -52,7 +51,6 @@ import { EmptyState } from "../EmptyState";
 import { TableSkeleton } from "../TableSkeleton";
 import { useToast } from "../ToastProvider";
 import { DocumentTable } from "./DocumentTable";
-import { DocumentUploadDrawer } from "./DocumentUploadDrawer";
 import { useDocumentSources } from "../../hooks/useDocumentSources";
 import { useDocumentTags } from "../../hooks/useDocumentTags";
 
@@ -74,7 +72,6 @@ export const AllDocumentsList = ({}: DocumentsViewProps) => {
   // UI States
   const [documentsPerPage, setDocumentsPerPage] = useState(20);
   const [currentPage, setCurrentPage] = useState(1);
-  const [openUploadDrawer, setOpenUploadDrawer] = useState(false);
   const [selectedSourceTag, setSelectedSourceTag] = useState<string | null>(null);
 
   // Filter states (moved from DocumentLibrary)
@@ -162,10 +159,6 @@ export const AllDocumentsList = ({}: DocumentsViewProps) => {
     fetchFiles();
   }, [selectedSourceTag, searchQuery, selectedLibrary, selectedStages, searchableFilter, currentPage, documentsPerPage]);
 
-  const handleUploadComplete = async () => {
-    await fetchFiles();
-  };
-
   return (
     <Container maxWidth="xl">
       {/* Source Selector and Upload Button */}
@@ -191,18 +184,6 @@ export const AllDocumentsList = ({}: DocumentsViewProps) => {
           </Select>
         </FormControl>
 
-        {/* Upload Button */}
-        {userInfo.canManageDocuments && !isPullMode && (
-          <Button
-            variant="contained"
-            startIcon={<UploadIcon />}
-            onClick={() => setOpenUploadDrawer(true)}
-            size="medium"
-            sx={{ borderRadius: "8px" }}
-          >
-            {t("documentLibrary.upload")}
-          </Button>
-        )}
         {userInfo.canManageDocuments && isPullMode && (
           <Button
             variant="contained"
@@ -389,28 +370,9 @@ export const AllDocumentsList = ({}: DocumentsViewProps) => {
             icon={<LibraryBooksRoundedIcon />}
             title={t("documentLibrary.noDocument")}
             description={t("documentLibrary.modifySearch")}
-            actionButton={
-              userInfo.canManageDocuments
-                ? {
-                    label: t("documentLibrary.addDocuments"),
-                    onClick: () => setOpenUploadDrawer(true),
-                    startIcon: <UploadIcon />,
-                  }
-                : undefined
-            }
           />
         )}
       </Paper>
-
-      {/* Upload Drawer */}
-      {userInfo.canManageDocuments && (
-        <DocumentUploadDrawer
-          isOpen={openUploadDrawer}
-          onClose={() => setOpenUploadDrawer(false)}
-          onUploadComplete={handleUploadComplete}
-          metadata={{ source_tag: selectedSourceTag }}
-        />
-      )}
     </Container>
   );
 };

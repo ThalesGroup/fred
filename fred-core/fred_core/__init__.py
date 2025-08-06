@@ -12,7 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from fred_core.utils import raise_internal_error
+from fred_core.common.utils import raise_internal_error
+from fred_core.common.structures import OpenSearchStorageConfig
 from fred_core.security.keycloak import get_current_user, initialize_keycloak
 from fred_core.security.structure import (
     KeycloakUser,
@@ -30,10 +31,10 @@ __all__ = [
     "get_current_user",
     "initialize_keycloak",
     "KeycloakUser",
-    "Security",
     "SecurityConfiguration",
     "LocalJsonStore",
     "BaseModelWithId",
     "ResourceNotFoundError",
     "ResourceAlreadyExistsError",
+    "OpenSearchStorageConfig"
 ]

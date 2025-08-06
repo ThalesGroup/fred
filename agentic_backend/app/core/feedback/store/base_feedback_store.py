@@ -14,26 +14,28 @@
 
 
 from abc import ABC, abstractmethod
-from typing import Dict, List, Optional
+from typing import List
+
+from app.core.feedback.structures import FeedbackRecord
 
 
 class BaseFeedbackStore(ABC):
     @abstractmethod
-    def list(self) -> List[Dict]:
+    def list(self) -> List[FeedbackRecord]:
         """Return all feedback entries as a list of dictionaries."""
         pass
 
     @abstractmethod
-    def get(self, feedback_id: str) -> Optional[Dict]:
+    def get(self, feedback_id: str) -> FeedbackRecord | None:
         """Retrieve a single feedback entry by ID."""
         pass
 
     @abstractmethod
-    def save(self, feedback: Dict) -> None:
+    def save(self, feedback: FeedbackRecord) -> None:
         """Save or update a feedback entry."""
         pass
 
     @abstractmethod
-    def delete(self, feedback_id: str) -> bool:
+    def delete(self, feedback_id: str) -> None:
         """Delete a feedback entry by ID."""
         pass

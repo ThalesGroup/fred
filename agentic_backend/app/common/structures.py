@@ -17,7 +17,7 @@ from datetime import datetime
 from enum import Enum
 import os
 from pydantic import BaseModel, model_validator, Field
-from fred_core import SecurityConfiguration
+from fred_core import SecurityConfiguration, OpenSearchStorageConfig
 
 
 # ----------------------------------------------------------------------
@@ -113,7 +113,7 @@ class ModelConfiguration(BaseModel):
 
 
 class MCPServerConfiguration(BaseModel):
-    name: str = Field(None, description="Name of the MCP server")
+    name: str
     transport: Optional[str] = Field(
         "sse",
         description="MCP server transport. Can be sse, stdio, websocket or streamable_http",
@@ -198,7 +198,7 @@ class ServicesSettings(BaseModel):
         default_factory=dict, description="Service-specific settings."
     )
     model: ModelConfiguration = Field(
-        default_factory=ModelConfiguration,
+        ...,
         description="AI model configuration for this service.",
     )
 
@@ -210,7 +210,7 @@ class AgentSettings(BaseModel):
     enabled: bool = True
     categories: List[str] = Field(default_factory=list)
     settings: Dict[str, Any] = Field(default_factory=dict)
-    model: Optional[ModelConfiguration] = None
+    model: ModelConfiguration
     tag: Optional[str] = None
     mcp_servers: Optional[List[MCPServerConfiguration]] = Field(default_factory=list)
     max_steps: Optional[int] = 10
@@ -223,10 +223,10 @@ class AgentSettings(BaseModel):
 
 class AIConfig(BaseModel):
     timeout: TimeoutSettings = Field(
-        None, description="Timeout settings for the AI client."
+        ..., description="Timeout settings for the AI client."
     )
     default_model: ModelConfiguration = Field(
-        default_factory=ModelConfiguration,
+        ...,
         description="Default model configuration for all agents and services.",
     )
     services: List[ServicesSettings] = Field(
@@ -236,7 +236,7 @@ class AIConfig(BaseModel):
         default_factory=list, description="List of AI agents."
     )
     recursion: RecursionConfig = Field(
-        default_factory=int, description="Number of max recursion while using the model"
+        ..., description="Number of max recursion while using the model"
     )
 
     @model_validator(mode="after")
@@ -279,18 +279,6 @@ class AIConfig(BaseModel):
 # ----------------------------------------------------------------------
 
 ## ----------------------------------------------------------------------
-## Metrics storage configurations
-## ----------------------------------------------------------------------
-
-
-class MetricsStorageConfig(BaseModel):
-    type: str = Field(
-        default="local", description="The metrics store to use (e.g., 'local')"
-    )
-    local_path: str = Field(..., description="The path where local data is stored")
-
-
-## ----------------------------------------------------------------------
 ## Session storage configurations
 ## ----------------------------------------------------------------------
 
@@ -299,7 +287,7 @@ class InMemoryStorageConfig(BaseModel):
     type: Literal["in_memory"]
 
 
-class OpenSearchStorageConfig(BaseModel):
+class OpenSessionSearchStorageConfig(BaseModel):
     type: Literal["opensearch"]
     host: str = Field(
         default="https://localhost:9200", description="URL of the Opensearch host"
@@ -324,7 +312,7 @@ class OpenSearchStorageConfig(BaseModel):
 
 
 SessionStorageConfig = Annotated[
-    Union[InMemoryStorageConfig, OpenSearchStorageConfig], Field(discriminator="type")
+    Union[InMemoryStorageConfig, OpenSessionSearchStorageConfig], Field(discriminator="type")
 ]
 
 ###########################################################
@@ -342,7 +330,7 @@ class DuckdbDynamicAgentStorage(BaseModel):
 
 
 DynamicAgentStorageConfig = Annotated[
-    Union[DuckdbDynamicAgentStorage], Field(discriminator="type")
+    Union[DuckdbDynamicAgentStorage, OpenSearchStorageConfig], Field(discriminator="type")
 ]
 
 ###########################################################
@@ -351,7 +339,7 @@ DynamicAgentStorageConfig = Annotated[
 #
 
 
-class FeedbackStorage(BaseModel):
+class DuckdbFeedbackStorage(BaseModel):
     type: Literal["duckdb"]
     duckdb_path: str = Field(
         default="~/.fred/agentic/db.duckdb",
@@ -359,7 +347,7 @@ class FeedbackStorage(BaseModel):
     )
 
 
-FeedbackStorageConfig = Annotated[Union[FeedbackStorage], Field(discriminator="type")]
+FeedbackStorageConfig = Annotated[Union[DuckdbFeedbackStorage, OpenSearchStorageConfig], Field(discriminator="type")]
 
 # ----------------------------------------------------------------------
 # Other configurations
@@ -407,12 +395,6 @@ class Configuration(BaseModel):
     dao: DAOConfiguration
     feedback_storage: FeedbackStorageConfig = Field(
         ..., description="Feedback Storage configuration"
-    )
-    node_metrics_storage: MetricsStorageConfig = Field(
-        ..., description="Node Monitoring Storage configuration"
-    )
-    tool_metrics_storage: MetricsStorageConfig = Field(
-        ..., description="Tool Monitoring Storage configuration"
     )
     session_storage: SessionStorageConfig = Field(
         ..., description="Session Storage configuration"

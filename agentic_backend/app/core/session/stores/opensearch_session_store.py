@@ -18,7 +18,7 @@ from dateutil.parser import isoparse
 from collections import defaultdict
 from statistics import mean
 from opensearchpy import OpenSearch, RequestsHttpConnection
-from app.core.session.stores.abstract_session_backend import AbstractSessionStorage
+from app.core.session.stores.abstract_session_backend import BaseSessionStore
 from app.core.session.stores.abstract_user_authentication_backend import (
     AbstractSecuredResourceAccess,
 )
@@ -35,7 +35,7 @@ from app.common.error import AuthorizationSentinel, SESSION_NOT_INITIALIZED
 logger = logging.getLogger(__name__)
 
 
-class OpensearchSessionStorage(AbstractSessionStorage, AbstractSecuredResourceAccess):
+class OpensearchSessionStorage(BaseSessionStore, AbstractSecuredResourceAccess):
     def __init__(
         self,
         host: str,

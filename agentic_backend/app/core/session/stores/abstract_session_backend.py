@@ -22,7 +22,7 @@ from app.core.chatbot.chat_schema import (
 )
 
 
-class AbstractSessionStorage(ABC):
+class BaseSessionStore(ABC):
     @abstractmethod
     def save_session(self, session: SessionSchema) -> None:
         """

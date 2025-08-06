@@ -18,7 +18,7 @@ from dateutil.parser import isoparse
 from collections import defaultdict
 from statistics import mean
 
-from app.core.session.stores.abstract_session_backend import AbstractSessionStorage
+from app.core.session.stores.abstract_session_backend import BaseSessionStore
 from app.core.session.stores.abstract_user_authentication_backend import (
     AbstractSecuredResourceAccess,
 )
@@ -35,7 +35,7 @@ from app.common.utils import authorization_required
 logger = logging.getLogger(__name__)
 
 
-class InMemorySessionStorage(AbstractSessionStorage, AbstractSecuredResourceAccess):
+class InMemorySessionStorage(BaseSessionStore, AbstractSecuredResourceAccess):
     def __init__(self):
         self.sessions: Dict[str, SessionSchema] = {}
         self.history: Dict[str, List[ChatMessagePayload]] = {}

@@ -23,7 +23,7 @@ import logging
 import os
 
 from app.core.agents.agent_manager import AgentManager
-from app.core.feedback.feedback_controller import FeedbackController
+from app.core.feedback.controller import FeedbackController
 from app.features.frugal.ai_service import AIService
 from app.features.frugal.carbon.carbon_controller import CarbonController
 from app.features.frugal.energy.energy_controller import EnergyController
