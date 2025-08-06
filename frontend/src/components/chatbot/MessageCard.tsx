@@ -25,9 +25,9 @@ import { getAgentBadge } from "../../utils/avatar.tsx";
 import { FeedbackDialog } from "../../frugalit/component/FeedbackDialog.tsx";
 import { useToast } from "../ToastProvider.tsx";
 import { extractHttpErrorMessage } from "../../utils/extractHttpErrorMessage.tsx";
-import { usePostFeedbackMutation } from "../../slices/chatApi.tsx";
 import { ChatMessagePayload } from "../../slices/chatApiStructures.ts";
 import CustomMarkdownRenderer from "../markdown/CustomMarkdownRenderer.tsx";
+import { usePostFeedbackAgenticV1ChatbotFeedbackPostMutation } from "../../slices/agentic/agenticOpenApi.ts";
 
 export default function Message({
   message,
@@ -50,17 +50,19 @@ export default function Message({
   const { showError, showInfo } = useToast(); // Use the toast hook
 
   const [postSpeechText] = usePostSpeechTextMutation();
-  const [postFeedback] = usePostFeedbackMutation();
+  const [postFeedback] = usePostFeedbackAgenticV1ChatbotFeedbackPostMutation();
 
   const [audioToSpeech, setAudioToSpeech] = useState<HTMLAudioElement>(null);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const handleFeedbackSubmit = (rating: number, comment?: string) => {
     postFeedback({
-      rating,
-      comment,
-      messageId: message.exchange_id,
-      sessionId: message.session_id,
-      agentName: currentAgenticFlow.name ?? "unknown",
+      feedbackPayload: {
+        rating,
+        comment,
+        messageId: message.exchange_id,
+        sessionId: message.session_id,
+        agentName: currentAgenticFlow.name ?? "unknown",
+      },
     }).then((result) => {
       if (result.error) {
         showError({
@@ -135,9 +137,7 @@ export default function Message({
                     display: "flex",
                     flexDirection: "column",
                     backgroundColor:
-                      side === "right"
-                        ? theme.palette.background.paper
-                        : theme.palette.background.default,
+                      side === "right" ? theme.palette.background.paper : theme.palette.background.default,
                     padding: side === "right" ? "0.8em 16px 0 16px" : "0.8em 0 0 0", // consistent top padding, conditional horizontal
                     marginTop: side === "right" ? 1 : 0,
                     borderRadius: 3,
@@ -147,10 +147,9 @@ export default function Message({
                   <CustomMarkdownRenderer
                     content={message.content as string}
                     size="medium"
-                  //  enableEmojiSubstitution={side === "left"} // only apply for assistant replies
+                    //  enableEmojiSubstitution={side === "left"} // only apply for assistant replies
                   />
                 </Box>
-
               </Grid2>
               {side === "left" ? (
                 <Grid2 size={12} display="flex" alignItems="center" gap={1} flexWrap="wrap">

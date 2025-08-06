@@ -12,20 +12,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from fred_core.common.utils import raise_internal_error
-from fred_core.common.structures import OpenSearchStorageConfig, BaseModelWithId
-from fred_core.security.keycloak import get_current_user, initialize_keycloak
-from fred_core.security.structure import (
-    KeycloakUser,
-    SecurityConfiguration,
-)
+from typing import List, Dict, Union, Any
+from pydantic import BaseModel
 
-__all__ = [
-    "raise_internal_error",
-    "get_current_user",
-    "initialize_keycloak",
-    "KeycloakUser",
-    "SecurityConfiguration",
-    "BaseModelWithId",
-    "OpenSearchStorageConfig"
-]
+
+class MetricsBucket(BaseModel):
+    timestamp: str  # truncated timestamp (per precision)
+    group: Dict[str, Any]
+    aggregations: Dict[str, Union[float, List[float]]]
+
+
+class MetricsResponse(BaseModel):
+    precision: str
+    buckets: List[MetricsBucket]
+
+
+

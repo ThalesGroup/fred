@@ -12,21 +12,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from datetime import timezone
 import logging
 from typing import List, Dict
 from dateutil.parser import isoparse
 from collections import defaultdict
 from statistics import mean
 from opensearchpy import OpenSearch, RequestsHttpConnection
-from app.core.session.stores.abstract_session_backend import AbstractSessionStorage
-from app.core.session.stores.abstract_user_authentication_backend import (
-    AbstractSecuredResourceAccess,
+from app.core.chatbot.metric_structures import MetricsBucket, MetricsResponse
+from app.core.session.stores.base_session_store import BaseSessionStore
+from app.core.session.stores.base_secure_resource_access import (
+    BaseSecuredResourceAccess,
 )
 from app.core.session.session_manager import SessionSchema
 from app.core.chatbot.chat_schema import (
     ChatMessagePayload,
-    MetricsResponse,
-    MetricsBucket,
 )
 from app.core.session.stores.utils import flatten_message, truncate_datetime
 from app.common.utils import authorization_required
@@ -34,8 +34,59 @@ from app.common.error import AuthorizationSentinel, SESSION_NOT_INITIALIZED
 
 logger = logging.getLogger(__name__)
 
+SESSIONS_INDEX_MAPPING = {
+    "settings": {
+        "number_of_shards": 1,
+        "number_of_replicas": 0,
+        "refresh_interval": "1s"
+    },
+    "mappings": {
+        "properties": {
+            "id": {"type": "keyword"},
+            "user_id": {"type": "keyword"},
+            "title": {
+                "type": "text",
+                "fields": {"keyword": {"type": "keyword", "ignore_above": 256}}
+            },
+            "updated_at": {"type": "date"},
+            "file_names": {"type": "keyword"}  # Stores file names as exact-matchable strings
+        }
+    }
+}
 
-class OpensearchSessionStorage(AbstractSessionStorage, AbstractSecuredResourceAccess):
+# ==============================================================================
+# MESSAGES_INDEX_MAPPING
+# ==============================================================================
+# This mapping defines the schema used for chat messages (ChatMessagePayload).
+# We optimize for analytics (aggregation, filtering) and full-text search.
+# ==============================================================================
+
+MESSAGES_INDEX_MAPPING = {
+    "settings": {
+        "number_of_shards": 1,
+        "number_of_replicas": 0,
+        "refresh_interval": "1s"
+    },
+    "mappings": {
+        "properties": {
+            "exchange_id": {"type": "keyword"},
+            "type": {"type": "keyword"},
+            "sender": {"type": "keyword"},
+            "content": {"type": "text"},
+            "timestamp": {"type": "date"},
+            "session_id": {"type": "keyword"},
+            "rank": {"type": "integer"},
+            "subtype": {"type": "keyword"},
+            "metadata": {
+                "type": "object",
+                "dynamic": True
+            }
+        }
+    }
+}
+
+
+class OpensearchSessionStore(BaseSessionStore, BaseSecuredResourceAccess):
     def __init__(
         self,
         host: str,
@@ -57,12 +108,16 @@ class OpensearchSessionStorage(AbstractSessionStorage, AbstractSecuredResourceAc
         self.sessions_index = sessions_index
         self.history_index = history_index
 
-        for index in [sessions_index, history_index]:
+        for index, mapping in [(sessions_index, SESSIONS_INDEX_MAPPING), (history_index, MESSAGES_INDEX_MAPPING)]:
             if not self.client.indices.exists(index=index):
-                self.client.indices.create(index=index)
-                logger.info(f"Opensearch index '{index}' created.")
+                if mapping:
+                    self.client.indices.create(index=index, body=mapping)
+                    logger.info(f"OpenSearch index '{index}' created with mapping.")
+                else:
+                    self.client.indices.create(index=index)
+                    logger.info(f"OpenSearch index '{index}' created without mapping.")
             else:
-                logger.debug(f"Opensearch index '{index}' already exists.")
+                logger.info(f"OpenSearch index '{index}' already exists.")
 
     def get_authorized_user_id(self, session_id: str) -> str | AuthorizationSentinel:
         try:
@@ -172,9 +227,9 @@ class OpensearchSessionStorage(AbstractSessionStorage, AbstractSecuredResourceAc
         start: str,
         end: str,
         user_id: str,
-        groupby: List[str],
-        agg_mapping: Dict[str, List[str]],
         precision: str,
+        groupby: List[str],
+        agg_mapping: Dict[str, List[str]]
     ) -> MetricsResponse:
         try:
             # 1. Search messages in date range
@@ -194,7 +249,6 @@ class OpensearchSessionStorage(AbstractSessionStorage, AbstractSecuredResourceAc
 
             response = self.client.search(index=self.history_index, body=query)
             hits = response["hits"]["hits"]
-
             # 2. Filter and flatten AI messages
             flattened = []
             for hit in hits:
@@ -214,7 +268,11 @@ class OpensearchSessionStorage(AbstractSessionStorage, AbstractSecuredResourceAc
 
             # 4. Aggregate
             buckets = []
-
+            logger.debug(f"[metrics] Running OpenSearch query on index '{self.history_index}' with range: {start} to {end}, precision={precision}")
+            logger.debug(f"[metrics] Query body: {query}")
+            logger.debug(f"[metrics] Found {len(hits)} hits between {start} and {end}")
+            logger.debug(f"[metrics] Truncated into {len(grouped)} groups based on precision={precision}")
+            
             for key, group in grouped.items():
                 bucket_time = key[0]
                 group_fields = {field: value for field, value in zip(groupby, key[1:])}
@@ -241,11 +299,10 @@ class OpensearchSessionStorage(AbstractSessionStorage, AbstractSecuredResourceAc
                             case _:
                                 raise ValueError(f"Unsupported aggregation op: {op}")
 
+                timestamp = bucket_time.astimezone(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
                 buckets.append(
                     MetricsBucket(
-                        timestamp=bucket_time
-                        if isinstance(bucket_time, str)
-                        else bucket_time.isoformat(),
+                        timestamp=timestamp,
                         group=group_fields,
                         aggregations=aggs,
                     )

@@ -12,38 +12,36 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from datetime import datetime
+import asyncio
 import logging
-from pathlib import Path
 import secrets
 import tempfile
-from typing import List, Tuple, Dict, Any, Optional, Union, Callable, Awaitable, cast
+from collections import defaultdict
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple, Union, cast
 from uuid import uuid4
 
-from app.core.agents.agent_manager import AgentManager
-from fastapi import UploadFile
-from collections import defaultdict
 import requests
+from fastapi import UploadFile
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
+from langgraph.graph.state import CompiledStateGraph
 
+from app.application_context import get_configuration, get_default_model
+from app.core.agents.agent_manager import AgentManager
 from app.core.agents.flow import AgentFlow
-from app.core.session.attachement_processing import AttachementProcessing
+from app.core.agents.runtime_context import RuntimeContext
 from app.core.chatbot.chat_schema import (
     ChatMessagePayload,
     SessionSchema,
     SessionWithFiles,
     clean_agent_metadata,
     clean_token_usage,
-    MetricsResponse,
 )
 from app.core.chatbot.chatbot_utils import enrich_ChatMessagePayloads_with_latencies
-from app.core.session.stores.abstract_session_backend import AbstractSessionStorage
-
-from app.application_context import get_configuration, get_default_model
-
-from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, SystemMessage
-from langgraph.graph.state import CompiledStateGraph
-
-import asyncio
+from app.core.chatbot.metric_structures import MetricsResponse
+from app.core.session.stores.base_session_store import BaseSessionStore
+from app.core.session.attachement_processing import AttachementProcessing
 
 logger = logging.getLogger(__name__)
 
@@ -58,9 +56,7 @@ class SessionManager:
     as well as handling chat interactions.
     """
 
-    def __init__(
-        self, session_storage: AbstractSessionStorage, agent_manager: AgentManager
-    ):
+    def __init__(self, session_storage: BaseSessionStore, agent_manager: AgentManager):
         """
         Initializes the SessionManager with a storage backend and an optional agent manager.
         :param storage: An instance of AbstractSessionStorage for session management.
@@ -69,7 +65,6 @@ class SessionManager:
         """
         self.storage = session_storage
         self.agent_manager = agent_manager
-        self.context_cache = {}  # Cache for agent contexts
         self.temp_files: dict[str, list[str]] = defaultdict(list)
         self.attachement_processing = AttachementProcessing()
 
@@ -166,8 +161,8 @@ class SessionManager:
         session_id: str,
         message: str,
         agent_name: str,
-        argument: str,
         chat_profile_id: Optional[str] = None,
+        runtime_context: Optional[RuntimeContext] = None,
     ) -> Tuple[SessionSchema, List[ChatMessagePayload]]:
         logger.info(
             f"chat_ask_websocket called with user_id: {user_id}, session_id: {session_id}, message: {message}, agent_name: {agent_name}, chat_profile_id: {chat_profile_id}"
@@ -178,7 +173,7 @@ class SessionManager:
             session_id=session_id,
             message=message,
             agent_name=agent_name,
-            argument=argument,
+            runtime_context=runtime_context,
         )
         exchange_id = str(uuid4())
         base_rank = len(history)
@@ -288,7 +283,7 @@ class SessionManager:
         session_id: str | None,
         message: str,
         agent_name: str,
-        argument: str,
+        runtime_context: Optional[RuntimeContext] = None,
     ) -> Tuple[SessionSchema, List[BaseMessage], AgentFlow, bool]:
         """
         Prepares the session, message history, and agent instance.
@@ -333,7 +328,7 @@ class SessionManager:
 
         # Append the new question
         history.append(HumanMessage(message))
-        agent = self.agent_manager.get_agent_instance(agent_name)
+        agent = self.agent_manager.get_agent_instance(agent_name, runtime_context)
         return session, history, agent, is_new_session
 
     def delete_session(self, session_id: str, user_id: str) -> bool:
@@ -455,50 +450,6 @@ class SessionManager:
 
         return all_payloads
 
-    def _get_agent_contexts(self, agent_name: str) -> List[Dict[str, Any]]:
-        """
-        Gets contexts for an agent using the existing context service.
-
-        Args:
-            agent_name: Name of the agent for which to retrieve contexts
-
-        Returns:
-            List of context dictionaries
-        """
-        # Check if the context is already in cache
-        if agent_name in self.context_cache:
-            logger.debug(f"Using cached contexts for agent '{agent_name}'")
-            return self.context_cache[agent_name]
-
-        try:
-            # Retrieve contexts from the service
-            contexts = self.context_service.get_context(agent_name)
-            logger.debug(f"Retrieved {len(contexts)} contexts for agent '{agent_name}'")
-
-            # Cache it
-            self.context_cache[agent_name] = contexts
-            return contexts
-
-        except Exception as e:
-            logger.error(f"Error retrieving contexts for agent '{agent_name}': {e}")
-            return []
-
-    def refresh_context_for_agent(self, agent_name: str) -> bool:
-        """
-        Refreshes an agent's context by removing it from the cache.
-
-        Args:
-            agent_name: Name of the agent whose context to refresh
-
-        Returns:
-            True if the context was refreshed, False otherwise
-        """
-        if agent_name in self.context_cache:
-            del self.context_cache[agent_name]
-            logger.debug(f"Context refreshed for agent '{agent_name}'")
-            return True
-        return False
-
     def get_session_temp_folder(self, session_id: str) -> Path:
         base_temp_dir = Path(tempfile.gettempdir()) / "chatbot_uploads"
         session_folder = base_temp_dir / session_id
@@ -554,7 +505,7 @@ class SessionManager:
         precision: str,
         groupby: List[str],
         agg_mapping: Dict[str, List[str]],
-    ) -> List[MetricsResponse]:
+    ) -> MetricsResponse:
         return self.storage.get_metrics(
             start=start,
             end=end,

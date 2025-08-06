@@ -12,11 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import uuid
-from datetime import datetime
-from typing import List, Dict, Optional
+from typing import List
 
 from app.core.feedback.store.base_feedback_store import BaseFeedbackStore
+from app.core.feedback.structures import FeedbackRecord
 
 
 class FeedbackService:
@@ -28,33 +27,26 @@ class FeedbackService:
     def __init__(self, store: BaseFeedbackStore):
         self.store = store
 
-    def get_feedback(self) -> List[Dict]:
+    def get_feedback(self) -> List[FeedbackRecord]:
         """
         Returns all feedback entries stored.
         """
         return self.store.list()
 
-    def add_feedback(self, feedback: Dict) -> Dict:
+    def add_feedback(self, feedback: FeedbackRecord) -> None:
         """
         Adds a new feedback entry with a UUID and timestamp.
         """
-        feedback_id = str(uuid.uuid4())
-        entry = {
-            **feedback,
-            "id": feedback_id,
-            "created_at": datetime.utcnow().isoformat(),
-        }
-        self.store.save(entry)
-        return entry
+        self.store.save(feedback)
 
-    def delete_feedback(self, feedback_id: str) -> bool:
+    def delete_feedback(self, feedback_id: str) -> None:
         """
         Deletes a feedback entry by ID.
         Returns True if the entry was deleted, False if it was not found.
         """
-        return self.store.delete(feedback_id)
+        self.store.delete(feedback_id)
 
-    def get_feedback_by_id(self, feedback_id: str) -> Optional[Dict]:
+    def get_feedback_by_id(self, feedback_id: str) -> FeedbackRecord | None:
         """
         Returns a single feedback entry by ID, or None if not found.
         """

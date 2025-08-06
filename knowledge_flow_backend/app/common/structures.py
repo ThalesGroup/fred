@@ -19,7 +19,7 @@ from typing import Annotated, Dict, List, Literal, Union
 from pydantic import BaseModel, Field, model_validator
 from typing import Optional
 from enum import Enum
-from fred_core import SecurityConfiguration
+from fred_core import SecurityConfiguration, OpenSearchStorageConfig
 
 """
 This module defines the top level data structures used by controllers, processors
@@ -71,17 +71,6 @@ class DuckdbStorageConfig(BaseModel):
 class LocalJsonStorageConfig(BaseModel):
     type: Literal["local"]
     root_path: str = Field(default=str(Path("~/.fred/knowledge-flow/json-store.json")), description="Local storage json file")
-
-
-class OpenSearchStorageConfig(BaseModel):
-    type: Literal["opensearch"]
-    host: str = Field(..., description="OpenSearch host URL")
-    username: Optional[str] = Field(default_factory=lambda: os.getenv("OPENSEARCH_USER"), description="Username from env")
-    password: Optional[str] = Field(default_factory=lambda: os.getenv("OPENSEARCH_PASSWORD"), description="Password from env")
-    secure: bool = Field(default=False, description="Use TLS (https)")
-    verify_certs: bool = Field(default=False, description="Verify TLS certs")
-    index: str = Field(..., description="OpenSearch index name")
-
 
 ###########################################################
 #

@@ -12,20 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from fred_core.common.utils import raise_internal_error
-from fred_core.common.structures import OpenSearchStorageConfig, BaseModelWithId
-from fred_core.security.keycloak import get_current_user, initialize_keycloak
-from fred_core.security.structure import (
-    KeycloakUser,
-    SecurityConfiguration,
-)
+from abc import ABC, abstractmethod
 
-__all__ = [
-    "raise_internal_error",
-    "get_current_user",
-    "initialize_keycloak",
-    "KeycloakUser",
-    "SecurityConfiguration",
-    "BaseModelWithId",
-    "OpenSearchStorageConfig"
-]
+from app.common.error import AuthorizationSentinel
+
+
+class BaseSecuredResourceAccess(ABC):
+    @abstractmethod
+    def get_authorized_user_id(self, session_id: str) -> str | AuthorizationSentinel:
+        """
+        Get the authorized user_id that can access a session
+        """
+        pass

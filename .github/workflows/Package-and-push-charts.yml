@@ -36,6 +36,11 @@ jobs:
       - name: Check out the repo
         uses: actions/checkout@v4
 
+      - name: Install yq
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y yq
+
       - name: Setup Helm
         uses: azure/setup-helm@v3
 
@@ -52,13 +57,34 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           #images: ${{ env.REGISTRY }}/fred-agent/helm/${{ matrix.registry_name }}
-          images: dummy                   # We do not care about the image, we just want the version
+          images: dummy                   # We do not care about the image, we just want the version, NOTE : we exclure initial "v" from the version
           tags: |
-            type=match,pattern=chart/(v.*),group=1
-      
+              type=match,pattern=chart/v?(.*),group=1
+
+      - name: Extract image.tag from values.yaml
+        id: image_tag
+        run: |
+          IMAGE_TAG=$(yq -r '.image.tag' ${{ matrix.chart_path }}/values.yaml)
+          echo "Extracted image tag: $IMAGE_TAG"
+          echo "image_tag=$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+      - name: Inject version and appVersion into Chart.yaml
+        id: inject_version
+        run: |
+          # Get Chart.yaml path
+          CHART_FILE="${{ matrix.chart_path }}/Chart.yaml"
+
+          # Define appVersion, it doesn't have to be semver2
+          APP_VERSION="${{ steps.image_tag.outputs.image_tag }}"
+
+          # Inject both Version and appversion in Chart.yaml
+          echo "Injecting version=${{ steps.meta.outputs.version }} and appVersion=$APP_VERSION into $CHART_FILE"
+          yq -y --arg version "${{ steps.meta.outputs.version }}" --arg appVersion "$APP_VERSION" \
+            '.version = $version | .appVersion = $appVersion' "$CHART_FILE" > tmp.yaml && mv tmp.yaml "$CHART_FILE"
+
       - name: Package chart ${{ matrix.name }}
         run: |
-          echo "Packaging ${{ matrix.name }} chart with version ${{steps.meta.outputs.version}}"
+          echo "Packaging ${{ matrix.name }} chart with version ${{ steps.meta.outputs.version }}"
           helm package ${{ matrix.chart_path }} \
             --version ${{ steps.meta.outputs.version }} \
             --destination ./packages
@@ -85,7 +111,7 @@ jobs:
 
       - name: Push ${{ matrix.name }} to registry
         run: |
-          PACKAGE_FILE=$(ls ./packages/${{ matrix.registry_name }}-${{steps.meta.outputs.version}}.tgz)
+          PACKAGE_FILE=$(ls ./packages/${{ matrix.registry_name }}-${{ steps.meta.outputs.version }}.tgz)
           echo "Pushing $PACKAGE_FILE"
           REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
           helm push "$PACKAGE_FILE" oci://${{ env.REGISTRY }}/${REPO_OWNER}/fred-helm
@@ -103,7 +129,7 @@ jobs:
         with:
           images: dummy  # We do not care the image name, we just want to extract the version
           tags: |
-            type=match,pattern=chart/(v.*),group=1
+              type=match,pattern=chart/v?(.*),group=1
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
@@ -114,13 +140,10 @@ jobs:
            ## Setup
             
             ```bash
-            # Add the repository
-            helm repo add fred-agent oci://${{ env.REGISTRY }}/thalesgroup/fred-helm
-            
             # Install charts
-            helm install agentic-backend fred-agent/agentic-backend --version ${{ steps.meta.outputs.version }}
-            helm install knowledge-flow-backend fred-agent/knowledge-flow-backend --version ${{ steps.meta.outputs.version }}
-            helm install frontend fred-agent/frontend --version ${{ steps.meta.outputs.version }}
+            helm install agentic-backend oci://ghcr.io/thalesgroup/fred-helm/agentic-backend --version ${{ steps.meta.outputs.version }}
+            helm install knowledge-flow-backend oci://ghcr.io/thalesgroup/fred-helm/knowledge-flow-backend --version ${{ steps.meta.outputs.version }}
+            helm install frontend oci://ghcr.io/thalesgroup/fred-helm/frontend --version ${{ steps.meta.outputs.version }}
             ```
           draft: false
           prerelease: false

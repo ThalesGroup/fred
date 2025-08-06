@@ -12,40 +12,39 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useEffect, useRef, useState } from "react";
 import { Box, Grid2, Tooltip, Typography, useTheme } from "@mui/material";
-import { AgenticFlow } from "../../pages/Chat.tsx";
-import { usePostTranscribeAudioMutation } from "../../frugalit/slices/api.tsx";
-import { useToast } from "../ToastProvider.tsx";
-import UserInput, { UserInputContent } from "./UserInput.tsx";
-import DotsLoader from "../../common/DotsLoader.tsx";
-import { v4 as uuidv4 } from "uuid"; // If not already imported
-import { MessagesArea } from "./MessagesArea.tsx";
-import { getAgentBadge } from "../../utils/avatar.tsx";
-import { getConfig } from "../../common/config.tsx";
-import { useGetChatBotMessagesMutation } from "../../slices/chatApi.tsx";
-import { KeyCloakService } from "../../security/KeycloakService.ts";
-import { StreamEvent, ChatMessagePayload, SessionSchema, FinalEvent } from "../../slices/chatApiStructures.ts";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { v4 as uuidv4 } from "uuid"; // If not already imported
+import { getConfig } from "../../common/config.tsx";
+import DotsLoader from "../../common/DotsLoader.tsx";
+import { usePostTranscribeAudioMutation } from "../../frugalit/slices/api.tsx";
+import { AgenticFlow } from "../../pages/Chat.tsx";
+import { KeyCloakService } from "../../security/KeycloakService.ts";
+import { ChatAskInput, RuntimeContext } from "../../slices/agentic/agenticOpenApi.ts";
+import { useGetChatBotMessagesMutation } from "../../slices/chatApi.tsx";
+import { ChatMessagePayload, FinalEvent, SessionSchema, StreamEvent } from "../../slices/chatApiStructures.ts";
+import { getAgentBadge } from "../../utils/avatar.tsx";
+import { useToast } from "../ToastProvider.tsx";
+import { MessagesArea } from "./MessagesArea.tsx";
+import UserInput, { UserInputContent } from "./UserInput.tsx";
 
 export interface ChatBotError {
   session_id: string | null;
   content: string;
 }
 
-export interface ChatBotEventSend {
-  user_id: string;
-  session_id?: string;
-  message: string;
-  agent_name: string;
-  argument?: string; // Optional arguments for the agent
-  chat_profile_id?: string; //Optional argument for chat profile usage
-  document_library_ids?: string[];
-  prompt_library_ids?: string[];
-}
-
 interface TranscriptionResponse {
   text?: string; // 'text' might be optional
+}
+
+export interface ChatBotProps {
+  currentChatBotSession: SessionSchema;
+  currentAgenticFlow: AgenticFlow;
+  agenticFlows: AgenticFlow[];
+  onUpdateOrAddSession: (session: SessionSchema) => void;
+  isCreatingNewConversation: boolean;
+  runtimeContext?: RuntimeContext;
 }
 
 const ChatBot = ({
@@ -54,15 +53,8 @@ const ChatBot = ({
   agenticFlows,
   onUpdateOrAddSession,
   isCreatingNewConversation,
-  argument,
-}: {
-  currentChatBotSession: SessionSchema;
-  currentAgenticFlow: AgenticFlow;
-  agenticFlows: AgenticFlow[];
-  onUpdateOrAddSession: (session: SessionSchema) => void;
-  isCreatingNewConversation: boolean;
-  argument?: string; // Optional argument for the agent
-}) => {
+  runtimeContext: baseRuntimeContext,
+}: ChatBotProps) => {
   const theme = useTheme();
   const { t } = useTranslation();
 
@@ -250,8 +242,20 @@ const ChatBot = ({
     const userId = KeyCloakService.GetUserId();
     const sessionId = currentChatBotSession?.id;
     const agentName = currentAgenticFlow.name;
-    const documentLibraryIds = content.documentLibraryIds || [];
-    const promptLibraryIds = content.promptLibraryIds || [];
+
+    // Init runtime context (arguments passed to agents)
+    const runtimeContext: RuntimeContext = { ...baseRuntimeContext };
+
+    // Add selected document libraries to runtime context
+    if (content.documentLibraryIds && content.documentLibraryIds.length) {
+      runtimeContext.selected_document_libraries_ids = content.documentLibraryIds;
+    }
+
+    // Add selected prompt libraries to runtime context
+    if (content.promptLibraryIds && content.promptLibraryIds.length) {
+      runtimeContext.selected_prompt_libraries_ids = content.promptLibraryIds;
+    }
+
     if (content.files && content.files.length > 0) {
       for (const file of content.files) {
         const formData = new FormData();
@@ -291,11 +295,7 @@ const ChatBot = ({
     }
 
     if (content.text) {
-      console.log(`[📤 ChatBot] Sending document libraries: ${documentLibraryIds}`);
-      console.log(`[📤 ChatBot] Sending prompt libraries: ${promptLibraryIds}`);
-      queryChatBot(content.text.trim());
-      // queryChatBot(content.text.trim(), currentAgenticFlow, documentLibraryIds, promptLibraryIds);
-      
+      queryChatBot(content.text.trim(), undefined, runtimeContext);
     } else if (content.audio) {
       setWaitResponse(true);
       const audioFile: File = new File([content.audio], "audio.mp3", {
@@ -305,7 +305,7 @@ const ChatBot = ({
         if (response.data) {
           const message: TranscriptionResponse = response.data as TranscriptionResponse;
           if (message.text) {
-            queryChatBot(message.text);
+            queryChatBot(message.text, undefined, runtimeContext);
           }
         }
       });
@@ -327,11 +327,7 @@ const ChatBot = ({
    * - Handles file uploads and voice input separately (not covered here).
    * - Provides a smooth chat experience with real-time streaming via WebSocket.
    */
-  const queryChatBot = async (input: string, 
-    agent?: AgenticFlow,
-    documentLibraryIds: string[] = [],
-    promptLibraryIds: string[] = []
-    ) => {
+  const queryChatBot = async (input: string, agent?: AgenticFlow, runtimeContext?: RuntimeContext) => {
     console.log(`[📤 ChatBot] Sending message: ${input}`);
     const timestamp = new Date().toISOString();
 
@@ -380,14 +376,13 @@ const ChatBot = ({
     addMessage(userMessage);
 
     console.log("[📤 ChatBot] About to send, session_id =", currentChatBotSession?.id);
-    const event: ChatBotEventSend & { chat_profile_id?: string } = {
-      user_id: KeyCloakService.GetUserId(),
+    console.log("[📤 ChatBot] Runtime context:", runtimeContext);
+    const event: ChatAskInput = {
+      user_id: KeyCloakService.GetUserId(), // todo: front should not send used id, this is a security problem. Backend should infer it from the JTW token
       message: input,
       agent_name: agent ? agent.name : currentAgenticFlow.name,
       session_id: currentChatBotSession?.id,
-      argument,
-      document_library_ids: documentLibraryIds,
-      prompt_library_ids: promptLibraryIds,
+      runtime_context: runtimeContext,
     };
 
     try {
