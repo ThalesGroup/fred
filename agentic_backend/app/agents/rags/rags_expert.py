@@ -14,7 +14,7 @@
 
 import logging
 from datetime import datetime
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, cast
 
 import requests
 from requests import Response
@@ -265,13 +265,18 @@ class RagsExpert(AgentFlow):
                     ),
                 ]
             )
+
+            if self.model is None:
+                raise ValueError("model is None")
+
             chain = grade_prompt | self.model.with_structured_output(
                 GradeDocumentsOutput
             )
 
-            score = await chain.ainvoke(
+            llm_response = await chain.ainvoke(
                 {"question": question, "document": document.content}
             )
+            score = cast(GradeDocumentsOutput, llm_response)
 
             if score.binary_score == "yes":
                 filtered_docs.append(document)
@@ -326,6 +331,10 @@ class RagsExpert(AgentFlow):
             Question: {question}
             """
         )
+
+        if self.model is None:
+            raise ValueError("model is None")
+
         chain = prompt | self.model
 
         response = await chain.ainvoke({"context": documents_str, "question": question})
@@ -393,17 +402,21 @@ class RagsExpert(AgentFlow):
                 ),
             ]
         )
+
+        if self.model is None:
+            raise ValueError("model is None")
+
         chain = rewrite_prompt | self.model.with_structured_output(RephraseQueryOutput)
 
-        response = await chain.ainvoke({"question": question})
-        better_question = response.rephrase_query
+        llm_response = await chain.ainvoke({"question": question})
+        better_question = cast(RephraseQueryOutput, llm_response)
 
         logger.info(f"The question has been rephrased : {question}")
-        logger.info(f"The new question : {better_question}")
+        logger.info(f"The new question : {better_question.rephrase_query}")
         logger.info(f"Retry count : {retry_count}")
 
         message: SystemMessage = SystemMessage(
-            content=better_question,
+            content=better_question.rephrase_query,
             response_metadata={
                 "thought": True,
                 "fred": {
@@ -544,14 +557,18 @@ class RagsExpert(AgentFlow):
             ]
         )
 
+        if self.model is None:
+            raise ValueError("model is None")
+
         answer_grader = answer_prompt | self.model.with_structured_output(
             GradeAnswerOutput
         )
-        grader_response = await answer_grader.ainvoke(
+        llm_response = await answer_grader.ainvoke(
             {"question": question, "generation": generation.content}
         )
-        grade = grader_response.binary_score
-        if grade == "yes":
+
+        grade = cast(GradeAnswerOutput, llm_response)
+        if grade.binary_score == "yes":
             return "useful"
         elif retry_count >= 2:
             return "abort"
