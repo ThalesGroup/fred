@@ -74,6 +74,6 @@ class BaseSessionStore(ABC):
         precision: str,
         groupby: List[str],
         agg_mapping: Dict[str, List[str]],
-    ) -> List[MetricsResponse]:
+    ) -> MetricsResponse:
         """Retrieve messages for a given session."""
         pass

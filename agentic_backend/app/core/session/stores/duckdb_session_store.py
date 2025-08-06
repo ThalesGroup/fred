@@ -1,5 +1,6 @@
 # app/core/session/stores/duckdb_session_storage.py
 
+from datetime import timezone
 import logging
 import json
 from typing import List, Optional, Dict
@@ -151,7 +152,7 @@ class DuckdbSessionStore(BaseSessionStore, BaseSecuredResourceAccess):
         precision: str,
         groupby: List[str],
         agg_mapping: Dict[str, List[str]]
-    ) -> List[MetricsResponse]:
+    ) -> MetricsResponse:
         start_dt = isoparse(start)
         end_dt = isoparse(end)
         grouped = {}
@@ -187,7 +188,7 @@ class DuckdbSessionStore(BaseSessionStore, BaseSecuredResourceAccess):
 
             flat = flatten_message(msg)
             bucket_time = truncate_datetime(msg_dt, precision)
-            flat["timestamp"] = bucket_time.isoformat()
+            flat["timestamp"] = bucket_time.astimezone(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
             group_key = (flat["timestamp"], *(flat.get(g) for g in groupby))
             grouped.setdefault(group_key, []).append(flat)
@@ -225,4 +226,4 @@ class DuckdbSessionStore(BaseSessionStore, BaseSecuredResourceAccess):
                 )
             )
 
-        return [MetricsResponse(precision=precision, buckets=buckets)]
+        return MetricsResponse(precision=precision, buckets=buckets)

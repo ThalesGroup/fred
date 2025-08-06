@@ -27,7 +27,6 @@ from app.common.structures import (
     DuckdbStorageConfig,
     InMemoryVectorStorage,
     FileSystemPullSource,
-    LocalJsonStorageConfig,
     MinioPullSource,
     MinioStorageConfig,
     OpenSearchStorageConfig,
@@ -58,7 +57,6 @@ from app.core.stores.prompts.duckdb_prompt_store import DuckdbPromptStore
 from app.core.stores.prompts.opensearch_prompt_store import OpenSearchPromptStore
 from app.core.stores.tags.base_tag_store import BaseTagStore
 from app.core.stores.tags.duckdb_tag_store import DuckdbTagStore
-from app.core.stores.tags.local_tag_store import LocalTagStore
 from app.core.stores.tags.opensearch_tags_store import OpenSearchTagStore
 from app.core.stores.vector.in_memory_langchain_vector_store import InMemoryLangchainVectorStore
 from app.core.stores.vector.base_vector_store import BaseEmbeddingModel, BaseTextSplitter, BaseVectoreStore
@@ -441,11 +439,7 @@ class ApplicationContext:
 
         config = self.config.tag_storage
 
-        if isinstance(config, LocalJsonStorageConfig):
-            path = Path(config.root_path).expanduser()
-            self._tag_store_instance = LocalTagStore(path)
-            return self._tag_store_instance
-        elif isinstance(config, DuckdbStorageConfig):
+        if isinstance(config, DuckdbStorageConfig):
             path = Path(config.duckdb_path).expanduser()
             self._tag_store_instance = DuckdbTagStore(path)
             return self._tag_store_instance
