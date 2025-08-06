@@ -418,6 +418,78 @@ export type DocumentFilter = {
   date_added_to_kb__gte?: string | null;
   /** Exact match */
   retrievable?: boolean | null;
+  /** Exact match */
+  source_tag?: string | null;
+  /** Case-insensitive substring match */
+  source_tag__icontains?: string | null;
+  /** Value is one of the provided values */
+  source_tag__in?: string | null;
+  /** Exact match */
+  pull_location?: string | null;
+  /** Case-insensitive substring match */
+  pull_location__icontains?: string | null;
+  /** Value is one of the provided values */
+  pull_location__in?: string | null;
+  /** Check if value is present in list field */
+  tags__contains?: string[] | null;
+  /** Match if any values overlap with field list */
+  tags__overlap?: string[] | null;
+  /** Exact match */
+  title?: string | null;
+  /** Case-insensitive substring match */
+  title__icontains?: string | null;
+  /** Value is one of the provided values */
+  title__in?: string | null;
+  /** Exact match */
+  author?: string | null;
+  /** Case-insensitive substring match */
+  author__icontains?: string | null;
+  /** Value is one of the provided values */
+  author__in?: string | null;
+  /** Exact match */
+  created?: string | null;
+  /** Before this date */
+  created__lt?: string | null;
+  /** On or before this date */
+  created__lte?: string | null;
+  /** After this date */
+  created__gt?: string | null;
+  /** On or after this date */
+  created__gte?: string | null;
+  /** Exact match */
+  modified?: string | null;
+  /** Before this date */
+  modified__lt?: string | null;
+  /** On or before this date */
+  modified__lte?: string | null;
+  /** After this date */
+  modified__gt?: string | null;
+  /** On or after this date */
+  modified__gte?: string | null;
+  /** Exact match */
+  last_modified_by?: string | null;
+  /** Case-insensitive substring match */
+  last_modified_by__icontains?: string | null;
+  /** Value is one of the provided values */
+  last_modified_by__in?: string | null;
+  /** Exact match */
+  category?: string | null;
+  /** Case-insensitive substring match */
+  category__icontains?: string | null;
+  /** Value is one of the provided values */
+  category__in?: string | null;
+  /** Exact match */
+  subject?: string | null;
+  /** Case-insensitive substring match */
+  subject__icontains?: string | null;
+  /** Value is one of the provided values */
+  subject__in?: string | null;
+  /** Exact match */
+  keywords?: string | null;
+  /** Case-insensitive substring match */
+  keywords__icontains?: string | null;
+  /** Value is one of the provided values */
+  keywords__in?: string | null;
 };
 export type SortOption = {
   field: string;
