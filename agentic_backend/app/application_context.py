@@ -139,19 +139,6 @@ def get_default_model() -> BaseLanguageModel:
     return get_app_context().get_default_model()
 
 
-def get_agent_settings(agent_name: str) -> AgentSettings:
-    """
-    Retrieves the configuration settings for a given agent.
-
-    Args:
-        agent_name (str): The name of the agent.
-
-    Returns:
-        AgentSettings: The configuration of the agent.
-    """
-    return get_app_context().get_agent_settings(agent_name)
-
-
 def get_model_for_service(service_name: str) -> BaseLanguageModel:
     """
     Retrieves the AI model instance for a given service.
@@ -214,7 +201,6 @@ class ApplicationContext:
     configuration: Configuration
     status: RuntimeStatus
     _service_instances: Dict[str, Any]
-    _agent_index: Dict[str, AgentSettings]
     _service_index: Dict[str, ServicesSettings]
     _feedback_store_instance: Optional[BaseFeedbackStore] = None
     _agent_store_instance: Optional[BaseAgentStore] = None
@@ -240,10 +226,7 @@ class ApplicationContext:
 
     def _build_indexes(self):
         """Builds fast access indexes from the list-based configuration."""
-        self._agent_index: Dict[str, AgentSettings] = {
-            agent.name: agent for agent in self.configuration.ai.agents
-        }
-        self._service_index: Dict[str, ServicesSettings] = {
+        self._service_index = {
             service.name: service for service in self.configuration.ai.services
         }
 
@@ -289,12 +272,6 @@ class ApplicationContext:
         return agent_settings.model_copy(update={"model": merged_model})
 
     # --- AI Models ---
-
-    def get_agent_settings(self, agent_name: str) -> AgentSettings:
-        agent_settings = self._agent_index.get(agent_name)
-        if agent_settings is None or not agent_settings.enabled:
-            raise ValueError(f"AI agent '{agent_name}' is not configured or enabled.")
-        return agent_settings
 
     def get_service_settings(self, service_name: str) -> ServicesSettings:
         service_settings = self._service_index.get(service_name)
