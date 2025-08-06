@@ -26,7 +26,6 @@ __all__ = [
     "initialize_keycloak",
     "KeycloakUser",
     "SecurityConfiguration",
-    "LocalJsonStore",
     "BaseModelWithId",
     "OpenSearchStorageConfig"
 ]
