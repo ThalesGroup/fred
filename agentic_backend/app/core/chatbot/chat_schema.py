@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Literal, Optional, List, Dict, Union, Any
+from typing import Literal, Optional, List, Dict, Union
 from datetime import datetime
 from pydantic import BaseModel, Field
 
