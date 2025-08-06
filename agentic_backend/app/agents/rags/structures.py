@@ -1,24 +1,9 @@
-# Copyright Thales 2025
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
-from pydantic.v1 import BaseModel
 from langgraph.graph import MessagesState
-from typing import List, Optional
-from langchain_core.messages import AIMessage
-
 from app.core.chatbot.chat_schema import ChatSource
+from typing import List, Optional
 from app.common.document_source import DocumentSource
+from pydantic.v1 import BaseModel
+from langchain_core.messages import AIMessage
 
 
 class RagGraphState(MessagesState):
@@ -34,6 +19,7 @@ class RagGraphState(MessagesState):
         sources (Optional[List[ChatSource]]): Metadata or source references for retrieved documents.
         retry_count (Optional[int]): Number of retries attempted in the generation process.
         top_k (Optional[int]): Number of top documents to retrieve from the vector store.
+        irrelevant_documents (Optional[List[DocumentSource]]): List of irrelevant documents.
     """
 
     question: Optional[str]
@@ -42,6 +28,7 @@ class RagGraphState(MessagesState):
     sources: Optional[List[ChatSource]]
     retry_count: Optional[int]
     top_k: Optional[int]
+    irrelevant_documents: Optional[List[DocumentSource]]
 
 
 class GradeDocumentsOutput(BaseModel):

@@ -37,8 +37,6 @@ from app.core.agents.runtime_context import get_document_libraries_ids
 from app.core.chatbot.chat_schema import ChatSource
 from app.core.model.model_factory import get_model
 
-
-
 logger = logging.getLogger(__name__)
 
 
@@ -49,7 +47,7 @@ class RagsExpert(AgentFlow):
     responses based on the document content. This design is simple and straightworward.
     """
 
-    TOP_K = 4
+    TOP_K = 5
 
     name: str = "RagsExpert"
     role: str = "Rags Expert"
@@ -224,7 +222,6 @@ class RagsExpert(AgentFlow):
                 ]
             }
 
-
     async def _grade_documents(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """
         Grades the relevance of retrieved documents against the user question,
@@ -248,8 +245,17 @@ class RagsExpert(AgentFlow):
         """
 
         filtered_docs: List[DocumentSource] = []
+        irrelevant_documents: List[DocumentSource] = (
+            state.get("irrelevant_documents") or []
+        )
 
+        irrelevant_contents = {doc.content for doc in irrelevant_documents}
+        grade_documents: List[DocumentSource] = []
         for document in documents or []:
+            if document.content not in irrelevant_contents:
+                grade_documents.append(document)
+
+        for document in grade_documents or []:
             grade_prompt: ChatPromptTemplate = ChatPromptTemplate.from_messages(
                 [
                     ("system", system),
@@ -269,10 +275,28 @@ class RagsExpert(AgentFlow):
 
             if score.binary_score == "yes":
                 filtered_docs.append(document)
+            else:
+                irrelevant_documents.append(document)
+
+        serializable_documents = [document.model_dump() for document in filtered_docs]
+        message: SystemMessage = SystemMessage(
+            content=json.dumps(serializable_documents),
+            response_metadata={
+                "thought": True,
+                "fred": {
+                    "node": "grade_documents",
+                    "task": "Assess if the documents are relevant and filter them",
+                },
+            },
+        )
 
         logger.info(f"✅ {len(filtered_docs)} documents are relevant.")
 
-        return {"messages": [], "documents": filtered_docs}
+        return {
+            "messages": [message],
+            "documents": filtered_docs,
+            "irrelevant_documents": irrelevant_documents,
+        }
 
     async def _generate(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -330,7 +354,18 @@ class RagsExpert(AgentFlow):
             {"sources": [s.model_dump() for s in sources]}
         )
 
-        return {"messages": [], "generation": response}
+        message: SystemMessage = SystemMessage(
+            content=response.content,
+            response_metadata={
+                "thought": True,
+                "fred": {
+                    "node": "generate",
+                    "task": "Generating an answer to the question",
+                },
+            },
+        )
+
+        return {"messages": [message], "generation": response}
 
     async def _rephrase_query(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -367,8 +402,19 @@ class RagsExpert(AgentFlow):
         logger.info(f"The new question : {better_question}")
         logger.info(f"Retry count : {retry_count}")
 
+        message: SystemMessage = SystemMessage(
+            content=better_question,
+            response_metadata={
+                "thought": True,
+                "fred": {
+                    "node": "rephrase_query",
+                    "task": "Rephrasing the question",
+                },
+            },
+        )
+
         return {
-            "messages": [],
+            "messages": [message],
             "question": better_question,
             "retry_count": retry_count,
         }
@@ -383,14 +429,26 @@ class RagsExpert(AgentFlow):
         Returns:
             Dict[str, Any]: Updated state
         """
+        message: SystemMessage = SystemMessage(
+            content=state["generation"].content,
+            response_metadata={
+                "thought": True,
+                "fred": {
+                    "node": "finalize_success",
+                    "task": "Sending a relevant response.",
+                },
+            },
+        )
+
         return {
-            "messages": [state["generation"]],
+            "messages": [message, state["generation"]],
             "question": "",
             "documents": [],
             "top_k": self.TOP_K,
             "sources": [],
             "retry_count": 0,
             "generation": None,
+            "irrelevant_documents": [],
         }
 
     async def _finalize_failure(self, state: Dict[str, Any]) -> Dict[str, Any]:
@@ -403,11 +461,22 @@ class RagsExpert(AgentFlow):
         Returns:
             Dict[str, Any]: Updated state
         """
+        message: SystemMessage = SystemMessage(
+            content=state["generation"].content,
+            response_metadata={
+                "thought": True,
+                "fred": {
+                    "node": "finalize_failure",
+                    "task": "The response generated do not answer the question.",
+                },
+            },
+        )
         return {
             "messages": [
+                message,
                 SystemMessage(
                     content="The agent was unable to generate a satisfactory response to your question."
-                )
+                ),
             ],
             "question": "",
             "documents": [],
@@ -415,6 +484,7 @@ class RagsExpert(AgentFlow):
             "sources": [],
             "retry_count": 0,
             "generation": None,
+            "irrelevant_documents": [],
         }
 
     # Edges
