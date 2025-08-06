@@ -201,6 +201,8 @@ secrets/openai-api-key.sh
 
 # Helm dependency files
 *.tgz
+**/Chart.lock
+
 
 # OpenAPI specs
 agentic_backend/openapi.json

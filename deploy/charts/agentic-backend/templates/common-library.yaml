@@ -1,0 +1,8 @@
+{{- include "common-library.configmap-backend" . }}
+{{- include "common-library.configmap-frontend" . }}
+{{- include "common-library.configmap-kube" . }}
+{{- include "common-library.ingress" . }}
+{{- include "common-library.service" . }}
+{{- include "common-library.rbac" . }}
+{{- include "common-library.serviceaccount" . }}
+{{- include "common-library.deployment" . }}

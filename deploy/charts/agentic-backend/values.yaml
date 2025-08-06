@@ -1,60 +1,68 @@
 applicationName: agentic-backend
 
-# This will set the replicaset count more information can be found here: https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/
-replicaCount: 1
+deployment:
+  enabled: true
 
-# This sets the container image more information can be found here: https://kubernetes.io/docs/concepts/containers/images/
+statefulset:
+  enabled: false
+
+job:
+  enabled: false
+
+##########
+# Deployment/Statefulset/Job related
+##########
+
 image:
   repository: ghcr.io/thalesgroup/fred-agent/agentic-backend
-  # This sets the pull policy for images.
   pullPolicy: IfNotPresent
-  # Overrides the image tag whose default is the chart appVersion.
   tag: "v0.0.5"
 
-imagePullSecrets:
-  - name: "gitlab-registry-creds"
+spec:
+  revisionHistoryLimit: 2
 
-command:
-  enabled: true
-  data: ["uvicorn", "app.main:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000", "--env-file", "/app/config/.env", "--log-level", "info", "--loop", "asyncio"]
+# imagePullSecrets:
+#   - name: "gitlab-registry-creds"
 
-    # - /bin/s
-    # - -c
-    # - tail -f /dev/null
+replicaCount: 1
+
+rollingUpdate:
+  maxSurge: 1
+  maxUnavailable: 0
 
 env:
   enabled: true
   data:
   - name: CONFIG_FILE
     value: "/app/config/configuration.yaml"
-  
 
-# This is for setting Kubernetes Annotations to a Pod.
-# For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/
-podAnnotations: {}
-# This is for setting Kubernetes Labels to a Pod.
-# For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
-podLabels: {}
+command:
+  enabled: true
+  data: ["uvicorn", "app.main:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000", "--env-file", "/app/config/.env", "--log-level", "info", "--loop", "asyncio"]
+    # - /bin/s
+    # - -c
+    # - tail -f /dev/null
 
-podSecurityContext: {}
-  # fsGroup: 2000
+ports:
+- name: http
+  containerPort: 8000
 
-securityContext: {}
-  # capabilities:
-  #   drop:
-  #   - ALL
-  # readOnlyRootFilesystem: true
-  # runAsNonRoot: true
-  # runAsUser: 1000
+##################
+# Service related configuration
+##################
 
-# This is for setting up a service more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/
 service:
-  # This sets the service type more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#publishing-services-service-types
+  enabled: true
   type: ClusterIP
-  # This sets the ports more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#field-spec-ports
-  port: 80
+  port:
+    - name: http
+      port: 80
+      targetPort: 8000
 
-# This block is for setting up the ingress for more information can be found here: https://kubernetes.io/docs/concepts/services-networking/ingress/
+##################
+# Ingress related configuration
+##################
+
 ingress:
   enabled: true
   # className: "nginx"
@@ -65,41 +73,36 @@ ingress:
     - host: agentic-backend.dev.fred.thalesgroup.com
       paths:
         - path: /
-          pathType: ImplementationSpecific
+          pathType: Prefix
+          servicePortName: http
   tls: []
   #  - secretName: chart-example-tls
   #    hosts:
   #      - chart-example.local
 
-resources: {}
-  # We usually recommend not to specify default resources and to leave this as a conscious
-  # choice for the user. This also increases chances charts run on environments with little
-  # resources, such as Minikube. If you do want to specify resources, uncomment the following
-  # lines, adjust them as necessary, and remove the curly braces after "resources:".
-  # limits:
-  #   cpu: 100m
-  #   memory: 128Mi
-  # requests:
-  #   cpu: 100m
-  #   memory: 128Mi
 
-# This is to setup the liveness and readiness probes more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
-livenessProbe:
-  httpGet:
-    path: /
-    port: 80
-readinessProbe:
-  httpGet:
-    path: /
-    port: 80
+###############
+# Probes related configuration
+###############
 
-# This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
-autoscaling:
+lifecycle:
   enabled: false
-  minReplicas: 1
-  maxReplicas: 100
-  targetCPUUtilizationPercentage: 80
-  # targetMemoryUtilizationPercentage: 80
+
+livenessProbe:
+  enabled: false
+  httpGet:
+    path: /
+    port: 80
+
+readinessProbe:
+  enabled: false
+  httpGet:
+    path: /
+    port: 80
+
+###############
+# Service and RBAC related configuration
+###############
 
 serviceAccount:
   enabled: true
@@ -128,20 +131,9 @@ serviceAccount:
         resources: ["nodes"]
         verbs: ["get", "list", "watch"]
 
-volumes:
-  enabled: true
-  data:
-  # configuration.yaml && .env since we'll mount them as a directory && kube/config
-  - name: "agentic-backend-vol"
-    configMap:
-      name: "agentic-backend-configmap"
-  # kube/config
-  - name: "agentic-backend-kube-vol"
-    configMap:
-      name: "agentic-backend-kube-configmap"
-      items:
-      - key: kubeconfig
-        path: kubeconfig
+##############
+# Volume and VolumeMount related configurations
+##############
 
 volumeMounts:
   enabled: true
@@ -154,11 +146,31 @@ volumeMounts:
     mountPath: /home/fred-user/.kube/config
     subPath: kubeconfig
 
-nodeSelector: {}
+volumes:
+  enabled: true
+  data:
+  # configuration.yaml && .env since we'll mount them as a directory && kube/config
+  - name: "agentic-backend-vol"
+    configMap:
+      name: "agentic-backend-configmap"
+  # kube/config
+  - name: "agentic-backend-kube-vol"
+    configMap:
+      name: "agentic-backend-kube"
+      items:
+      - key: kubeconfig
+        path: kubeconfig
 
-tolerations: []
+######################
+# Configmaps related configuration
+######################
 
-affinity: {}
+configuration_type:
+  frontend:
+    enabled: false
+  backend:
+    enabled: true 
+
 
 configuration:
   app:
@@ -175,7 +187,7 @@ configuration:
       keycloak_url: "http://keycloak/realms/fred"
       authorized_origins:
       - "http://localhost:5173"
-      - "https://fred.dev.fred.thalesgroup.com"
+      - "http://fred.dev.fred.thalesgroup.com"
       - "https://fred.dev.fred.thalesgroup.com"
 
   frontend_settings:
@@ -349,32 +361,24 @@ configuration:
           chunk_overlap: 64
           knowledge_flow_url: "http://knowledge-flow-backend:8080/knowledge-flow/v1"
         model: {}
-
-
-
   node_metrics_storage:
     type: "local"
     local_path: "~/.fred/agentic/node-metrics-store"
-
   tool_metrics_storage:
     type: "local"
     local_path: "~/.fred/agentic/tool-metrics-store"
-
   feedback_storage:
     type: duckdb
     duckdb_path: "~/.fred/agentic/feedback.duckdb"
-
   agent_storage:
     type: "duckdb"
     duckdb_path: "~/.fred/agentic/agent.duckdb"
-
   # Where to save fred produced resources like Essentials or Scores
   # and external resources like Kubernetes Workload descriptions
   dao:
     type: "file"  # Currently the only one supported
     base_path: "~/.fred/agentic/dao-cache"
     max_cached_delay_seconds: 300  # Cache delay in seconds. Use 0 for no cache or a negative value for limitless cache.
-
   # Sessions and messages are stored by default in_memory
   # but it can be modified to use a backend like opensearch
   session_storage:
@@ -387,25 +391,6 @@ configuration:
     # password: xxx # Overrides the OPENSEARCH_PASSWORD environment variable
     secure: false
     verify_certs: false
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -425,6 +410,7 @@ dotenv:
 
 
 kubeconfig:
+  enabled: true
   data:
     kubeconfig: |
       apiVersion: v1
