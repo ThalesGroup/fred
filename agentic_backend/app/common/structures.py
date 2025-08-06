@@ -286,6 +286,12 @@ class AIConfig(BaseModel):
 class InMemoryStorageConfig(BaseModel):
     type: Literal["in_memory"]
 
+class DuckdbSessionStorage(BaseModel):
+    type: Literal["duckdb"]
+    duckdb_path: str = Field(
+        default="~/.fred/agentic/session.duckdb",
+        description="Path to the DuckDB database file.",
+    )
 
 class OpenSessionSearchStorageConfig(BaseModel):
     type: Literal["opensearch"]
@@ -312,7 +318,7 @@ class OpenSessionSearchStorageConfig(BaseModel):
 
 
 SessionStorageConfig = Annotated[
-    Union[InMemoryStorageConfig, OpenSessionSearchStorageConfig],
+    Union[DuckdbSessionStorage, OpenSessionSearchStorageConfig],
     Field(discriminator="type"),
 ]
 

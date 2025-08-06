@@ -27,6 +27,7 @@ from threading import Lock
 from typing import Any, Dict, List, Optional, Type
 from fred_core import OpenSearchStorageConfig
 from app.core.agents.store.base_agent_store import BaseAgentStore
+from app.core.agents.store.duckdb_agent_store import DuckdbAgentStorage
 from app.core.agents.store.opensearch_agent_store import OpenSearchAgentStore
 from app.core.feedback.store.base_feedback_store import BaseFeedbackStore
 
@@ -37,17 +38,20 @@ from app.common.structures import (
     AgentSettings,
     Configuration,
     DuckdbFeedbackStorage,
-    InMemoryStorageConfig,
+    DuckdbSessionStorage,
     ModelConfiguration,
     OpenSessionSearchStorageConfig,
     ServicesSettings,
 )
 from app.core.model.model_factory import get_model
 from langchain_core.language_models.base import BaseLanguageModel
-from app.core.session.stores.abstract_session_backend import BaseSessionStore
+from app.core.session.stores.base_session_store import BaseSessionStore
 from pathlib import Path
 
 import logging
+
+from app.core.session.stores.duckdb_session_store import DuckdbSessionStore
+from app.core.session.stores.opensearch_session_store import OpensearchSessionStorage
 
 logger = logging.getLogger(__name__)
 
@@ -332,17 +336,11 @@ class ApplicationContext:
         """
         if self._session_store_instance is not None:
             return self._session_store_instance
-        # Import here to avoid avoid circular dependencies:
-        from app.core.session.stores.in_memory_session_store import (
-            InMemorySessionStorage,
-        )
-        from app.core.session.stores.opensearch_session_store import (
-            OpensearchSessionStorage,
-        )
 
         config = get_configuration().session_storage
-        if isinstance(config, InMemoryStorageConfig):
-            return InMemorySessionStorage()
+        if isinstance(config, DuckdbSessionStorage):
+            db_path = Path(config.duckdb_path).expanduser()
+            return DuckdbSessionStore(db_path)
         elif isinstance(config, OpenSessionSearchStorageConfig):
             username = config.username
             password = config.password
@@ -376,7 +374,6 @@ class ApplicationContext:
             return self._agent_store_instance
         config = get_configuration().agent_storage
         if isinstance(config, DuckdbFeedbackStorage):
-            from app.core.agents.store.duckdb_agent_store import DuckdbAgentStorage
 
             db_path = Path(config.duckdb_path).expanduser()
             return DuckdbAgentStorage(db_path)

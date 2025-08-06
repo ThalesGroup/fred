@@ -88,17 +88,6 @@ class ChatMessagePayload(BaseModel):
         return self
 
 
-class MetricsBucket(BaseModel):
-    timestamp: str  # truncated timestamp (per precision)
-    group: Dict[str, Any]
-    aggregations: Dict[str, Union[float, List[float]]]
-
-
-class MetricsResponse(BaseModel):
-    precision: str
-    buckets: List[MetricsBucket]
-
-
 # --- Session structure ---
 class SessionSchema(BaseModel):
     id: str

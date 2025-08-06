@@ -160,5 +160,7 @@ session_storage:
   host: https://localhost:9200
   secure: true
   verify_certs: false
-  index: session-index
+  session_index: session-index
+  history_index: history-index
+
 

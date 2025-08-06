@@ -18,15 +18,14 @@ from dateutil.parser import isoparse
 from collections import defaultdict
 from statistics import mean
 from opensearchpy import OpenSearch, RequestsHttpConnection
-from app.core.session.stores.abstract_session_backend import BaseSessionStore
-from app.core.session.stores.abstract_user_authentication_backend import (
-    AbstractSecuredResourceAccess,
+from app.core.chatbot.metric_structures import MetricsBucket, MetricsResponse
+from app.core.session.stores.base_session_store import BaseSessionStore
+from app.core.session.stores.base_secure_resource_access import (
+    BaseSecuredResourceAccess,
 )
 from app.core.session.session_manager import SessionSchema
 from app.core.chatbot.chat_schema import (
     ChatMessagePayload,
-    MetricsResponse,
-    MetricsBucket,
 )
 from app.core.session.stores.utils import flatten_message, truncate_datetime
 from app.common.utils import authorization_required
@@ -35,7 +34,7 @@ from app.common.error import AuthorizationSentinel, SESSION_NOT_INITIALIZED
 logger = logging.getLogger(__name__)
 
 
-class OpensearchSessionStorage(BaseSessionStore, AbstractSecuredResourceAccess):
+class OpensearchSessionStorage(BaseSessionStore, BaseSecuredResourceAccess):
     def __init__(
         self,
         host: str,
@@ -172,10 +171,10 @@ class OpensearchSessionStorage(BaseSessionStore, AbstractSecuredResourceAccess):
         start: str,
         end: str,
         user_id: str,
-        groupby: List[str],
-        agg_mapping: Dict[str, List[str]],
         precision: str,
-    ) -> MetricsResponse:
+        groupby: List[str],
+        agg_mapping: Dict[str, List[str]]
+    ) -> List[MetricsResponse]:
         try:
             # 1. Search messages in date range
             query = {
@@ -251,8 +250,8 @@ class OpensearchSessionStorage(BaseSessionStore, AbstractSecuredResourceAccess):
                     )
                 )
 
-            return MetricsResponse(precision=precision, buckets=buckets)
+            return [MetricsResponse(precision=precision, buckets=buckets)]
 
         except Exception as e:
             logger.error(f"Failed to compute metrics: {e}")
-            return MetricsResponse(precision=precision, buckets=[])
+            return [MetricsResponse(precision=precision, buckets=[])]

@@ -17,7 +17,7 @@ from abc import ABC, abstractmethod
 from app.common.error import AuthorizationSentinel
 
 
-class AbstractSecuredResourceAccess(ABC):
+class BaseSecuredResourceAccess(ABC):
     @abstractmethod
     def get_authorized_user_id(self, session_id: str) -> str | AuthorizationSentinel:
         """

@@ -30,9 +30,9 @@ from app.common.structures import (
     DatabaseTypeEnum,
     DuckdbDynamicAgentStorage,
     DuckdbFeedbackStorage,
+    DuckdbSessionStorage,
     FrontendFlags,
     FrontendSettings,
-    InMemoryStorageConfig,
     KubernetesConfiguration,
     ModelConfiguration,
     Properties,
@@ -123,8 +123,8 @@ def minimal_generalist_config() -> Configuration:
         feedback_storage=DuckdbFeedbackStorage(
             type="duckdb", duckdb_path="/tmp/ducckdb.db"
         ),
-        session_storage=InMemoryStorageConfig(
-            type="in_memory",
+        session_storage=DuckdbSessionStorage(
+             type="duckdb", duckdb_path="/tmp/ducckdb.db"
         ),
         agent_storage=DuckdbDynamicAgentStorage(
             type="duckdb",
