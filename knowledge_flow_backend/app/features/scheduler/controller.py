@@ -17,7 +17,7 @@ from uuid import uuid4
 from app.common.utils import log_exception
 from fastapi import APIRouter, HTTPException
 from temporalio.client import Client
-from fred_core.utils import raise_internal_error
+from fred_core import raise_internal_error
 from app.application_context import ApplicationContext
 from app.features.scheduler.activities import create_pull_file_metadata, get_push_file_metadata, input_process, load_pull_file, load_push_file, output_process
 from app.features.scheduler.structure import PipelineDefinition, ProcessDocumentsRequest

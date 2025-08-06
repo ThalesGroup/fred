@@ -133,12 +133,18 @@ ai:
       model: {}
 
 feedback_storage:
-  type: "duckdb"
-  duckdb_path: "~/.fred/agentic/feedback.duckdb"
+  type: opensearch
+  host: https://localhost:9200
+  secure: true
+  verify_certs: false
+  index: feedback-index
 
 agent_storage:
-  type: "duckdb"
-  duckdb_path: "~/.fred/agentic/agent.duckdb"
+  type: opensearch
+  host: https://localhost:9200
+  secure: true
+  verify_certs: false
+  index: agent-index
 
 # Where to save fred produced resources like Essentials or Scores
 # and external resources like Kubernetes Workload descriptions
@@ -150,7 +156,11 @@ dao:
 # Sessions and messages are stored by default in_memory
 # but it can be modified to use a backend like opensearch
 session_storage:
-  type: "duckdb"
-  duckdb_path: "~/.fred/agentic/session.duckdb"
+  type: opensearch
+  host: https://localhost:9200
+  secure: true
+  verify_certs: false
+  session_index: session-index
+  history_index: history-index
 
 

@@ -108,14 +108,13 @@ const injectedRtkApi = api.injectEndpoints({
   overrideExisting: false,
 });
 export { injectedRtkApi as agenticApi };
-export type GetFeedbackAgenticV1ChatbotFeedbackGetApiResponse = /** status 200 Successful Response */ any;
+export type GetFeedbackAgenticV1ChatbotFeedbackGetApiResponse = /** status 200 Successful Response */ FeedbackRecord[];
 export type GetFeedbackAgenticV1ChatbotFeedbackGetApiArg = void;
-export type PostFeedbackAgenticV1ChatbotFeedbackPostApiResponse = /** status 200 Successful Response */ any;
+export type PostFeedbackAgenticV1ChatbotFeedbackPostApiResponse = unknown;
 export type PostFeedbackAgenticV1ChatbotFeedbackPostApiArg = {
   feedbackPayload: FeedbackPayload;
 };
-export type DeleteFeedbackAgenticV1ChatbotFeedbackFeedbackIdDeleteApiResponse =
-  /** status 200 Successful Response */ any;
+export type DeleteFeedbackAgenticV1ChatbotFeedbackFeedbackIdDeleteApiResponse = unknown;
 export type DeleteFeedbackAgenticV1ChatbotFeedbackFeedbackIdDeleteApiArg = {
   feedbackId: string;
 };
@@ -177,6 +176,23 @@ export type GetNodeNumericalMetricsAgenticV1MetricsChatbotNumericalGetApiArg = {
   agg?: string[];
   groupby?: string[];
 };
+export type FeedbackRecord = {
+  id: string;
+  /** Session ID associated with the feedback */
+  session_id: string;
+  /** Message ID the feedback refers to */
+  message_id: string;
+  /** Name of the agent that generated the message */
+  agent_name: string;
+  /** User rating, typically 1–5 stars */
+  rating: number;
+  /** Optional user comment or clarification */
+  comment?: string | null;
+  /** Timestamp when the feedback was submitted */
+  created_at: string;
+  /** Optional user ID if identity is tracked */
+  user_id: string;
+};
 export type ValidationError = {
   loc: (string | number)[];
   msg: string;
@@ -193,8 +209,7 @@ export type FeedbackPayload = {
   agentName: string;
 };
 export type McpServerConfiguration = {
-  /** Name of the MCP server */
-  name?: string;
+  name: string;
   /** MCP server transport. Can be sse, stdio, websocket or streamable_http */
   transport?: string | null;
   /** URL and endpoint of the MCP server */

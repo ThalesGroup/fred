@@ -18,11 +18,11 @@ from abc import ABC, abstractmethod
 from app.core.chatbot.chat_schema import (
     ChatMessagePayload,
     SessionSchema,
-    MetricsResponse,
 )
+from app.core.chatbot.metric_structures import MetricsResponse
 
 
-class AbstractSessionStorage(ABC):
+class BaseSessionStore(ABC):
     @abstractmethod
     def save_session(self, session: SessionSchema) -> None:
         """

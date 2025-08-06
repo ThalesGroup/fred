@@ -452,25 +452,7 @@
                 }
             }
         ],
-        "./app/core/stores/vector/in_memory_langchain_vector_store.py": [
-            {
-                "code": "reportIncompatibleMethodOverride",
-                "range": {
-                    "startColumn": 8,
-                    "endColumn": 36,
-                    "lineCount": 1
-                }
-            }
-        ],
         "./app/core/stores/vector/weaviate_vector_store.py": [
-            {
-                "code": "reportIncompatibleMethodOverride",
-                "range": {
-                    "startColumn": 8,
-                    "endColumn": 36,
-                    "lineCount": 1
-                }
-            },
             {
                 "code": "reportAttributeAccessIssue",
                 "range": {

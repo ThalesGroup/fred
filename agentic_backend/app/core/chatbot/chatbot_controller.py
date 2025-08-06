@@ -45,12 +45,12 @@ from app.core.chatbot.chat_schema import (
     ChatMessagePayload,
     ErrorEvent,
     FinalEvent,
-    MetricsResponse,
     SessionWithFiles,
     StreamEvent,
 )
 from app.core.chatbot.chatbot_error import ChatBotError
 from app.core.chatbot.chatbot_message import ChatAskInput
+from app.core.chatbot.metric_structures import MetricsResponse
 from app.core.session.session_manager import SessionManager
 
 logger = logging.getLogger(__name__)

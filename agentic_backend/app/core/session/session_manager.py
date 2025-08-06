@@ -37,11 +37,11 @@ from app.core.chatbot.chat_schema import (
     SessionWithFiles,
     clean_agent_metadata,
     clean_token_usage,
-    MetricsResponse,
 )
 from app.core.chatbot.chatbot_utils import enrich_ChatMessagePayloads_with_latencies
+from app.core.chatbot.metric_structures import MetricsResponse
+from app.core.session.stores.base_session_store import BaseSessionStore
 from app.core.session.attachement_processing import AttachementProcessing
-from app.core.session.stores.abstract_session_backend import AbstractSessionStorage
 
 logger = logging.getLogger(__name__)
 
@@ -56,9 +56,7 @@ class SessionManager:
     as well as handling chat interactions.
     """
 
-    def __init__(
-        self, session_storage: AbstractSessionStorage, agent_manager: AgentManager
-    ):
+    def __init__(self, session_storage: BaseSessionStore, agent_manager: AgentManager):
         """
         Initializes the SessionManager with a storage backend and an optional agent manager.
         :param storage: An instance of AbstractSessionStorage for session management.
@@ -67,7 +65,6 @@ class SessionManager:
         """
         self.storage = session_storage
         self.agent_manager = agent_manager
-        self.context_cache = {}  # Cache for agent contexts
         self.temp_files: dict[str, list[str]] = defaultdict(list)
         self.attachement_processing = AttachementProcessing()
 
@@ -452,50 +449,6 @@ class SessionManager:
             raise e
 
         return all_payloads
-
-    def _get_agent_contexts(self, agent_name: str) -> List[Dict[str, Any]]:
-        """
-        Gets contexts for an agent using the existing context service.
-
-        Args:
-            agent_name: Name of the agent for which to retrieve contexts
-
-        Returns:
-            List of context dictionaries
-        """
-        # Check if the context is already in cache
-        if agent_name in self.context_cache:
-            logger.debug(f"Using cached contexts for agent '{agent_name}'")
-            return self.context_cache[agent_name]
-
-        try:
-            # Retrieve contexts from the service
-            contexts = self.context_service.get_context(agent_name)
-            logger.debug(f"Retrieved {len(contexts)} contexts for agent '{agent_name}'")
-
-            # Cache it
-            self.context_cache[agent_name] = contexts
-            return contexts
-
-        except Exception as e:
-            logger.error(f"Error retrieving contexts for agent '{agent_name}': {e}")
-            return []
-
-    def refresh_context_for_agent(self, agent_name: str) -> bool:
-        """
-        Refreshes an agent's context by removing it from the cache.
-
-        Args:
-            agent_name: Name of the agent whose context to refresh
-
-        Returns:
-            True if the context was refreshed, False otherwise
-        """
-        if agent_name in self.context_cache:
-            del self.context_cache[agent_name]
-            logger.debug(f"Context refreshed for agent '{agent_name}'")
-            return True
-        return False
 
     def get_session_temp_folder(self, session_id: str) -> Path:
         base_temp_dir = Path(tempfile.gettempdir()) / "chatbot_uploads"

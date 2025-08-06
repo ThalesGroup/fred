@@ -25,6 +25,12 @@ app:
     authorized_origins:
       - "http://localhost:5173"
 
+security:
+  enabled: false
+  keycloak_url: "http://fred-keycloak:8080/realms/fred"
+  authorized_origins:
+    - "http://localhost:5173"
+
 scheduler:
   enabled: true
   backend: "temporal"
@@ -52,8 +58,8 @@ input_processors:
     class_path: app.core.processors.input.pps_tabular_processor.pps_tabular_processor.PpsTabularProcessor
 
 content_storage:
-  type: "local"
-  root_path: ~/.fred/knowledge-flow/content-storage
+  type: local
+  root_path: ~/.fred/knowledge-flow/content-store
 
 document_sources:
   fred:
@@ -72,11 +78,11 @@ metadata_storage:
 
 tag_storage:
   type: "duckdb"
-  root_path: ~/.fred/knowledge-flow/tag.duckdb
+  duckdb_path: "~/.fred/knowledge-flow/tag.duckdb"
 
 prompt_storage:
   type: "duckdb"
-  root_path: ~/.fred/knowledge-flow/prompt-storage
+  duckdb_path: "~/.fred/knowledge-flow/prompt.duckdb"
 
 vector_storage:
   type: in_memory
@@ -87,8 +93,7 @@ tabular_storage:
 
 catalog_storage:
   type: "duckdb"
-  duckdb_path: "~/.fred/knowledge-flow/db.duckdb"
+  duckdb_path: "~/.fred/knowledge-flow/catalog.duckdb"
 
 embedding:
-  type:
-    "openai"
+  type: "openai"
