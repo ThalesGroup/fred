@@ -11,27 +11,22 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import logging
-from typing import Any, Dict, List, Literal, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Type
 
-from fred_core import KeycloakUser, get_current_user
-from app.common.utils import log_exception
-from app.features.pull.controller import PullDocumentsResponse
-from app.features.pull.service import PullDocumentService
 from fastapi import APIRouter, Body, Depends, HTTPException
 
-from app.common.structures import Status
-from app.application_context import ApplicationContext
-from app.features.metadata.service import InvalidMetadataRequest, MetadataNotFound, MetadataService, MetadataUpdateError
-from app.features.metadata.structures import (
-    GetDocumentMetadataResponse,
-    GetDocumentsMetadataResponse,
-    UpdateRetrievableRequest,
-)
-from threading import Lock
-
+from fred_core import BaseFilter, KeycloakUser, generate_filter_model, get_current_user
 from pydantic import BaseModel, Field
+
+from app.application_context import ApplicationContext
+from app.common.document_structures import DocumentMetadata
+from app.common.structures import Status
+from app.common.utils import log_exception
+from app.features.metadata.service import InvalidMetadataRequest, MetadataNotFound, MetadataService, MetadataUpdateError
+from app.features.metadata.structures import GetDocumentMetadataResponse, GetDocumentsMetadataResponse, UpdateRetrievableRequest
+from app.features.pull.controller import PullDocumentsResponse
+from app.features.pull.service import PullDocumentService
 
 
 class SortOption(BaseModel):
@@ -41,12 +36,16 @@ class SortOption(BaseModel):
 
 logger = logging.getLogger(__name__)
 
-lock = Lock()
+
+# Create the filter model dynamically - now returns BaseFilter subclass
+DocumentFilter = Type[BaseFilter]
+if not TYPE_CHECKING:
+    DocumentFilter = generate_filter_model(DocumentMetadata, name="DocumentFilter")
 
 
 class BrowseDocumentsRequest(BaseModel):
     source_tag: str = Field(..., description="Tag of the document source to browse (pull or push)")
-    filters: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Optional metadata filters")
+    filters: Optional[DocumentFilter] = Field(default=None, description="Optional metadata filters")
     offset: int = Field(0, ge=0)
     limit: int = Field(50, gt=0, le=500)
     sort_by: Optional[List[SortOption]] = None
@@ -186,7 +185,11 @@ class MetadataController:
 
             try:
                 if config.type == "push":
-                    filters = req.filters or {}
+                    # Convert DocumentFilter to dict, filtering out None values
+                    if req.filters is not None:
+                        filters = req.filters.to_dict()  # Use the convenient method from BaseFilter
+                    else:
+                        filters = {}
                     filters["source_tag"] = req.source_tag
                     docs = self.service.get_documents_metadata(filters)
                     sort_by = req.sort_by or [SortOption(field="document_name", direction="asc")]

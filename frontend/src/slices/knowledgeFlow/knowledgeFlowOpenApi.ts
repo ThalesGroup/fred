@@ -393,6 +393,32 @@ export type PullDocumentsResponse = {
   total: number;
   documents: DocumentMetadata[];
 };
+export type DocumentFilter = {
+  /** Exact match */
+  document_name?: string | null;
+  /** Case-insensitive substring match */
+  document_name__icontains?: string | null;
+  /** Value is one of the provided values */
+  document_name__in?: string | null;
+  /** Exact match */
+  document_uid?: string | null;
+  /** Case-insensitive substring match */
+  document_uid__icontains?: string | null;
+  /** Value is one of the provided values */
+  document_uid__in?: string | null;
+  /** Exact match */
+  date_added_to_kb?: string | null;
+  /** Before this date */
+  date_added_to_kb__lt?: string | null;
+  /** On or before this date */
+  date_added_to_kb__lte?: string | null;
+  /** After this date */
+  date_added_to_kb__gt?: string | null;
+  /** On or after this date */
+  date_added_to_kb__gte?: string | null;
+  /** Exact match */
+  retrievable?: boolean | null;
+};
 export type SortOption = {
   field: string;
   direction: "asc" | "desc";
@@ -401,9 +427,7 @@ export type BrowseDocumentsRequest = {
   /** Tag of the document source to browse (pull or push) */
   source_tag: string;
   /** Optional metadata filters */
-  filters?: {
-    [key: string]: any;
-  } | null;
+  filters?: DocumentFilter | null;
   offset?: number;
   limit?: number;
   sort_by?: SortOption[] | null;
