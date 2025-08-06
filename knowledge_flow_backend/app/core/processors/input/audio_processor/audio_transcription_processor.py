@@ -50,7 +50,7 @@ class AudioTranscriptionProcessor(BaseMarkdownProcessor):
         result = self.model.transcribe(str(file_path))
         transcription_text = result["text"]
 
-        markdown_text = f"# Transcription de {file_path.name}\n\n{transcription_text}"
+        markdown_text = f"# Transcription of {file_path.name}\n\n{transcription_text}"
         md_path.write_text(markdown_text, encoding="utf-8")
 
         if document_uid:
