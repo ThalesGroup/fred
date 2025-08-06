@@ -16,6 +16,8 @@ import os
 from typing import Literal, Optional
 from pydantic import BaseModel, Field
 
+class BaseModelWithId(BaseModel):
+    id: str
 
 class OpenSearchStorageConfig(BaseModel):
     type: Literal["opensearch"]
