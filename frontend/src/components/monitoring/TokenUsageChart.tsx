@@ -1,87 +1,93 @@
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
-import { NumericalMetric, Precision } from "../../slices/monitoringApi";
-import dayjs from "dayjs";
+// Copyright Thales 2025
+//
+// Licensed under the Apache License, Version 2.0
+
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  CartesianGrid,
+} from "recharts";
+import dayjs, { ManipulateType } from "dayjs";
 import { useTheme } from "@mui/material/styles";
+import { MetricsResponse } from "../../slices/agentic/agenticOpenApi";
 
 export interface TokenUsageChartProps {
   start: Date;
   end: Date;
-  precision: Precision;
-  metrics: NumericalMetric[];
+  precision: string; // "sec" | "min" | "hour" | "day"
+  metrics: MetricsResponse;
 }
 
 export function TokenUsageChart({ start, end, precision, metrics }: TokenUsageChartProps) {
   const theme = useTheme();
 
+  const precisionToUnit: Record<string, ManipulateType> = {
+    sec: "second",
+    min: "minute",
+    hour: "hour",
+    day: "day",
+  };
+
   function getBucketKey(date: Date): string {
-    const d = dayjs(date);
-    switch (precision) {
-      case "day":
-        return d.format("YYYY-MM-DD");
-      case "hour":
-        return d.format("YYYY-MM-DD HH:00");
-      case "min":
-        return d.format("YYYY-MM-DD HH:mm");
-      case "sec":
-      default:
-        return d.format("YYYY-MM-DD HH:mm:ss");
-    }
+    return dayjs(date).utc().format("YYYY-MM-DDTHH:mm:ss[Z]");
   }
 
-  // Label formatting for X axis, rounded for "round" numbers
   function getLabel(date: Date): string {
     const d = dayjs(date);
     switch (precision) {
       case "day":
-        return d.format("DD MMMM");
+        return d.format("DD MMM");
       case "hour":
         return d.format("HH:00");
       case "min":
-        // Only show label for "round" 10-minutes (e.g., 16:00, 16:10, 16:20)
         return d.minute() % 10 === 0 ? d.format("HH:mm") : "";
       case "sec":
       default:
-        // Only show label for "round" 5-minutes (e.g., 16:00:00, 16:05:00)
         return d.second() === 0 && d.minute() % 5 === 0 ? d.format("HH:mm:ss") : "";
     }
   }
 
-  const metricMap = new Map(metrics.map((m) => [m.time_bucket, m]));
+  // Map of timestamp -> token value
+  const metricMap = new Map(
+    (metrics.buckets || []).map((b) => [b.timestamp, b.aggregations["total_tokens_sum"] ?? 0])
+  );
 
-  // Generate all buckets between start and end according to precision
+  // Debug: show available bucket keys
+  console.log("[TokenChart] metricMap keys:", Array.from(metricMap.keys()));
+  console.log("[TokenChart] precision:", precision);
+  console.log("[TokenChart] start:", start.toISOString(), "end:", end.toISOString());
+
   const data: { time: string; tokens: number }[] = [];
-  let current = dayjs(start);
-  const endTime = dayjs(end);
-
-  function incrementDate(date: dayjs.Dayjs) {
-    switch (precision) {
-      case "day":
-        return date.add(1, "day");
-      case "hour":
-        return date.add(1, "hour").startOf("hour");
-      case "min":
-        return date.add(1, "minute").startOf("minute");
-      case "sec":
-      default:
-        return date.add(1, "second").startOf("second");
-    }
-  }
+  const unit = precisionToUnit[precision] || "minute";
+  let current = dayjs.utc(start).startOf(unit);
+  const endTime = dayjs.utc(end).endOf(unit);
+  
 
   while (current.isBefore(endTime) || current.isSame(endTime)) {
-    // Retrieve the metric for the current time (if it exists)
     const key = getBucketKey(current.toDate());
-    const metric = metricMap.get(key);
+    const val = metricMap.get(key) ?? 0;
+    const numberValue = Array.isArray(val) ? val[0] ?? 0 : val;
+
+    // Debug: log each computed key and value
+    console.log("[TokenChart] key:", key, "| value:", numberValue);
 
     data.push({
       time: getLabel(current.toDate()),
-      tokens: metric ? (metric.values["total_tokens--sum"] ?? 0) : 0,
+      tokens: numberValue,
     });
 
-    current = incrementDate(current);
+    current = current.add(1, unit);
   }
 
-  // Filter ticks to only those with a label
-  const ticks = data.map((d, i) => (d.time ? i : null)).filter((i) => i !== null) as number[];
+  console.log("[TokenChart] total points:", data.length);
+
+  const ticks = data
+    .map((d, i) => (d.time ? i : null))
+    .filter((i) => i !== null) as number[];
 
   return (
     <ResponsiveContainer width="100%" height={300}>

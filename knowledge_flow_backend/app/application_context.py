@@ -27,7 +27,6 @@ from app.common.structures import (
     DuckdbStorageConfig,
     InMemoryVectorStorage,
     FileSystemPullSource,
-    LocalJsonStorageConfig,
     MinioPullSource,
     MinioStorageConfig,
     OpenSearchStorageConfig,

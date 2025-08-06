@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from datetime import timezone
 import logging
 from typing import List, Dict
 from dateutil.parser import isoparse
@@ -32,6 +33,57 @@ from app.common.utils import authorization_required
 from app.common.error import AuthorizationSentinel, SESSION_NOT_INITIALIZED
 
 logger = logging.getLogger(__name__)
+
+SESSIONS_INDEX_MAPPING = {
+    "settings": {
+        "number_of_shards": 1,
+        "number_of_replicas": 0,
+        "refresh_interval": "1s"
+    },
+    "mappings": {
+        "properties": {
+            "id": {"type": "keyword"},
+            "user_id": {"type": "keyword"},
+            "title": {
+                "type": "text",
+                "fields": {"keyword": {"type": "keyword", "ignore_above": 256}}
+            },
+            "updated_at": {"type": "date"},
+            "file_names": {"type": "keyword"}  # Stores file names as exact-matchable strings
+        }
+    }
+}
+
+# ==============================================================================
+# MESSAGES_INDEX_MAPPING
+# ==============================================================================
+# This mapping defines the schema used for chat messages (ChatMessagePayload).
+# We optimize for analytics (aggregation, filtering) and full-text search.
+# ==============================================================================
+
+MESSAGES_INDEX_MAPPING = {
+    "settings": {
+        "number_of_shards": 1,
+        "number_of_replicas": 0,
+        "refresh_interval": "1s"
+    },
+    "mappings": {
+        "properties": {
+            "exchange_id": {"type": "keyword"},
+            "type": {"type": "keyword"},
+            "sender": {"type": "keyword"},
+            "content": {"type": "text"},
+            "timestamp": {"type": "date"},
+            "session_id": {"type": "keyword"},
+            "rank": {"type": "integer"},
+            "subtype": {"type": "keyword"},
+            "metadata": {
+                "type": "object",
+                "dynamic": True
+            }
+        }
+    }
+}
 
 
 class OpensearchSessionStore(BaseSessionStore, BaseSecuredResourceAccess):
@@ -56,12 +108,16 @@ class OpensearchSessionStore(BaseSessionStore, BaseSecuredResourceAccess):
         self.sessions_index = sessions_index
         self.history_index = history_index
 
-        for index in [sessions_index, history_index]:
+        for index, mapping in [(sessions_index, SESSIONS_INDEX_MAPPING), (history_index, MESSAGES_INDEX_MAPPING)]:
             if not self.client.indices.exists(index=index):
-                self.client.indices.create(index=index)
-                logger.info(f"Opensearch index '{index}' created.")
+                if mapping:
+                    self.client.indices.create(index=index, body=mapping)
+                    logger.info(f"OpenSearch index '{index}' created with mapping.")
+                else:
+                    self.client.indices.create(index=index)
+                    logger.info(f"OpenSearch index '{index}' created without mapping.")
             else:
-                logger.debug(f"Opensearch index '{index}' already exists.")
+                logger.info(f"OpenSearch index '{index}' already exists.")
 
     def get_authorized_user_id(self, session_id: str) -> str | AuthorizationSentinel:
         try:
@@ -174,7 +230,7 @@ class OpensearchSessionStore(BaseSessionStore, BaseSecuredResourceAccess):
         precision: str,
         groupby: List[str],
         agg_mapping: Dict[str, List[str]]
-    ) -> List[MetricsResponse]:
+    ) -> MetricsResponse:
         try:
             # 1. Search messages in date range
             query = {
@@ -193,7 +249,6 @@ class OpensearchSessionStore(BaseSessionStore, BaseSecuredResourceAccess):
 
             response = self.client.search(index=self.history_index, body=query)
             hits = response["hits"]["hits"]
-
             # 2. Filter and flatten AI messages
             flattened = []
             for hit in hits:
@@ -213,7 +268,11 @@ class OpensearchSessionStore(BaseSessionStore, BaseSecuredResourceAccess):
 
             # 4. Aggregate
             buckets = []
-
+            logger.info(f"[metrics] Running OpenSearch query on index '{self.history_index}' with range: {start} to {end}, precision={precision}")
+            logger.info(f"[metrics] Query body: {query}")
+            logger.info(f"[metrics] Found {len(hits)} hits between {start} and {end}")
+            logger.info(f"[metrics] Truncated into {len(grouped)} groups based on precision={precision}")
+            
             for key, group in grouped.items():
                 bucket_time = key[0]
                 group_fields = {field: value for field, value in zip(groupby, key[1:])}
@@ -240,18 +299,17 @@ class OpensearchSessionStore(BaseSessionStore, BaseSecuredResourceAccess):
                             case _:
                                 raise ValueError(f"Unsupported aggregation op: {op}")
 
+                timestamp = bucket_time.astimezone(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
                 buckets.append(
                     MetricsBucket(
-                        timestamp=bucket_time
-                        if isinstance(bucket_time, str)
-                        else bucket_time.isoformat(),
+                        timestamp=timestamp,
                         group=group_fields,
                         aggregations=aggs,
                     )
                 )
 
-            return [MetricsResponse(precision=precision, buckets=buckets)]
+            return MetricsResponse(precision=precision, buckets=buckets)
 
         except Exception as e:
             logger.error(f"Failed to compute metrics: {e}")
-            return [MetricsResponse(precision=precision, buckets=[])]
+            return MetricsResponse(precision=precision, buckets=[])

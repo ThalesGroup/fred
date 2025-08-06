@@ -333,7 +333,7 @@ class ChatbotController:
             summary="Get aggregated numerical chatbot metrics",
             tags=fastapi_tags,
             response_model=MetricsResponse,
-        )
+        ) 
         def get_node_numerical_metrics(
             start: str,
             end: str,
@@ -341,7 +341,7 @@ class ChatbotController:
             agg: List[str] = Query(default=[]),
             groupby: List[str] = Query(default=[]),
             user: KeycloakUser = Depends(get_current_user),
-        ):
+        ) -> MetricsResponse:
             SUPPORTED_OPS = {"mean", "sum", "min", "max", "values"}
             agg_mapping: Dict[str, List[str]] = {}
 

@@ -151,7 +151,7 @@ class DuckdbSessionStore(BaseSessionStore, BaseSecuredResourceAccess):
         precision: str,
         groupby: List[str],
         agg_mapping: Dict[str, List[str]]
-    ) -> List[MetricsResponse]:
+    ) -> MetricsResponse:
         start_dt = isoparse(start)
         end_dt = isoparse(end)
         grouped = {}
@@ -225,4 +225,4 @@ class DuckdbSessionStore(BaseSessionStore, BaseSecuredResourceAccess):
                 )
             )
 
-        return [MetricsResponse(precision=precision, buckets=buckets)]
+        return MetricsResponse(precision=precision, buckets=buckets)
