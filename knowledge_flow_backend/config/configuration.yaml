@@ -75,43 +75,27 @@ document_sources:
     description: "Personal local documents available for pull-mode ingestion"
 
 metadata_storage:
-  type: opensearch
-  host: https://localhost:9200
-  secure: true
-  verify_certs: false
-  index: document-index
+  type: "duckdb"
+  duckdb_path: "~/.fred/knowledge-flow/metadata.duckdb"
 
 tag_storage:
-  type: opensearch
-  host: https://localhost:9200
-  secure: true
-  verify_certs: false
-  index: tag-index
+  type: "duckdb"
+  duckdb_path: "~/.fred/knowledge-flow/tag.duckdb"
 
 prompt_storage:
-  type: opensearch
-  host: https://localhost:9200
-  secure: true
-  verify_certs: false
-  index: prompt-index
+  type: "duckdb"
+  duckdb_path: "~/.fred/knowledge-flow/prompt.duckdb"
 
 vector_storage:
-  type: opensearch
-  host: https://localhost:9200
-  secure: true
-  verify_certs: false
-  index: vector-index-ada002
+  type: in_memory
 
 tabular_storage:
   type: "duckdb"
   duckdb_path: "~/.fred/knowledge-flow/tabular.duckdb"
 
 catalog_storage:
-  type: opensearch
-  host: https://localhost:9200
-  secure: true
-  verify_certs: false
-  index: catalog-index
+  type: "duckdb"
+  duckdb_path: "~/.fred/knowledge-flow/catalog.duckdb"
 
 embedding:
   type: "openai"
