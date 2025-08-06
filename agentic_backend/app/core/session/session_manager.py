@@ -505,7 +505,7 @@ class SessionManager:
         precision: str,
         groupby: List[str],
         agg_mapping: Dict[str, List[str]],
-    ) -> List[MetricsResponse]:
+    ) -> MetricsResponse:
         return self.storage.get_metrics(
             start=start,
             end=end,

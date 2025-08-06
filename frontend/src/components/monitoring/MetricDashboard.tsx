@@ -18,10 +18,12 @@ import dayjs, { Dayjs } from "dayjs";
 import "dayjs/locale/fr";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Precision, useFetchNumericalMetricsMutation } from "../../slices/monitoringApi";
+import { Precision } from "../../slices/monitoringApi";
 import LoadingWithProgress from "../LoadingWithProgress";
 import DashboardCard from "./DashboardCard";
 import { TokenUsageChart } from "./TokenUsageChart";
+import { useLazyGetNodeNumericalMetricsAgenticV1MetricsChatbotNumericalGetQuery } from "../../slices/agentic/agenticOpenApi";
+import { alignDateRangeToPrecision } from "./alignDateRangeToPrecision";
 
 type QuickRangeType =
   | "today"
@@ -59,7 +61,8 @@ function getPrecisionForRange(start: Dayjs, end: Dayjs): Precision {
 }
 
 export default function MetricsDashboard() {
-  const [fetchNumericalMetrics, { data: numericalSum, isLoading, isError }] = useFetchNumericalMetricsMutation();
+  const [triggerMetricsFetch, { data: metrics, isLoading, isError }] =
+    useLazyGetNodeNumericalMetricsAgenticV1MetricsChatbotNumericalGetQuery();
   const { t } = useTranslation();
 
   const now = dayjs();
@@ -71,17 +74,17 @@ export default function MetricsDashboard() {
   }, [startDate, endDate]);
 
   function fetchNumericalSumAggregation(start: Dayjs, end: Dayjs) {
-    const param = {
-      start: start.toISOString(),
-      end: end.toISOString(),
-      precision: getPrecisionForRange(start, end),
+    const precision = getPrecisionForRange(start, end);
+    const [alignedStart, alignedEnd] = alignDateRangeToPrecision(start, end, precision);
+
+    triggerMetricsFetch({
+      start: alignedStart,
+      end: alignedEnd,
+      precision,
       agg: ["total_tokens:sum"],
-    };
-
-    console.log("Fetching numerical metrics", param);
-    fetchNumericalMetrics(param);
+      groupby: [],
+    });
   }
-
   // Helper to check if a quick range is selected
   function isRangeSelected(type: QuickRangeType): boolean {
     const today = dayjs();
@@ -127,47 +130,22 @@ export default function MetricsDashboard() {
   }
 
   function setSelectedRange(type: QuickRangeType) {
-    const today = dayjs();
-    switch (type) {
-      case "today":
-        setStartDate(today.startOf("day"));
-        setEndDate(today.endOf("day"));
-        break;
-      case "yesterday":
-        setStartDate(today.subtract(1, "day").startOf("day"));
-        setEndDate(today.subtract(1, "day").endOf("day"));
-        break;
-      case "thisWeek":
-        setStartDate(today.startOf("week"));
-        setEndDate(today.endOf("week"));
-        break;
-      case "thisMonth":
-        setStartDate(today.startOf("month"));
-        setEndDate(today.endOf("month"));
-        break;
-      case "thisYear":
-        setStartDate(today.startOf("year"));
-        setEndDate(today.endOf("year"));
-        break;
-      case "last12h":
-        setStartDate(today.subtract(12, "hour"));
-        setEndDate(today);
-        break;
-      case "last24h":
-        setStartDate(today.subtract(24, "hour"));
-        setEndDate(today);
-        break;
-      case "last7d":
-        setStartDate(today.subtract(7, "day"));
-        setEndDate(today);
-        break;
-      case "last30d":
-        setStartDate(today.subtract(30, "day"));
-        setEndDate(today);
-        break;
-      default:
-        break;
-    }
+    const now = dayjs();
+    const ranges: Record<QuickRangeType, [Dayjs, Dayjs]> = {
+      today: [now.startOf("day"), now.endOf("day")],
+      yesterday: [now.subtract(1, "day").startOf("day"), now.subtract(1, "day").endOf("day")],
+      thisWeek: [now.startOf("week"), now.endOf("week")],
+      thisMonth: [now.startOf("month"), now.endOf("month")],
+      thisYear: [now.startOf("year"), now.endOf("year")],
+      last24h: [now.subtract(24, "hour").startOf("hour"), now.endOf("hour")],
+      last12h: [now.subtract(12, "hour").startOf("hour"), now.endOf("hour")],
+      last7d: [now.subtract(7, "day").startOf("day"), now.endOf("day")],
+      last30d: [now.subtract(30, "day").startOf("day"), now.endOf("day")],
+    };
+
+    const [start, end] = ranges[type];
+    setStartDate(start);
+    setEndDate(end);
   }
 
   if (isError) {
@@ -180,7 +158,7 @@ export default function MetricsDashboard() {
     );
   }
 
-  if (isLoading || !numericalSum) {
+  if (isLoading || !metrics) {
     return <LoadingWithProgress />;
   }
 
@@ -272,7 +250,7 @@ export default function MetricsDashboard() {
           start={startDate.toDate()}
           end={endDate.toDate()}
           precision={getPrecisionForRange(startDate, endDate)}
-          metrics={numericalSum}
+          metrics={metrics}
         />
       </DashboardCard>
     </Box>
