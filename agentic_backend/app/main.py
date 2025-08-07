@@ -19,29 +19,22 @@
 Entrypoint for the Agentic Backend App.
 """
 
+from contextlib import asynccontextmanager
 import logging
 import os
 
 from app.core.agents.agent_manager import AgentManager
 from app.core.feedback.controller import FeedbackController
-from app.features.frugal.ai_service import AIService
-from app.features.frugal.carbon.carbon_controller import CarbonController
-from app.features.frugal.energy.energy_controller import EnergyController
-from app.features.frugal.finops.finops_controller import FinopsController
 from app.core.agents.agent_controller import AgentController
-from app.features.k8.kube_service import KubeService
 from app.application_context import (
     ApplicationContext,
     get_agent_store,
-    get_sessions_store,
+    get_session_store,
 )
 from app.core.chatbot.chatbot_controller import ChatbotController
 from app.common.structures import Configuration
 from app.common.utils import parse_server_configuration
-from app.features.frugal.ai_controller import AIController
 from app.core.session.session_manager import SessionManager
-from app.features.frugal.frontend_controller import UiController
-from app.features.k8.kube_controller import KubeController
 from dotenv import load_dotenv
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -93,9 +86,10 @@ def create_app() -> FastAPI:
     initialize_keycloak(configuration.app.security)
     agent_manager = AgentManager(configuration, get_agent_store())
     session_manager = SessionManager(
-        session_storage=get_sessions_store(), agent_manager=agent_manager
+        session_store=get_session_store(), agent_manager=agent_manager
     )
 
+    @asynccontextmanager
     async def lifespan(app: FastAPI):
         await agent_manager.load_agents()
         agent_manager.start_retry_loop()
@@ -115,21 +109,9 @@ def create_app() -> FastAPI:
         allow_methods=["GET", "POST", "PUT", "DELETE"],
         allow_headers=["Content-Type", "Authorization"],
     )
-
     router = APIRouter(prefix=base_url)
-    enable_k8_features = configuration.frontend_settings.feature_flags.enableK8Features
-    if enable_k8_features:
-        kube_service = KubeService()
-        ai_service = AIService(kube_service)
-        KubeController(router)
-        AIController(router, ai_service)
-        UiController(router, kube_service, ai_service)
-        CarbonController(router)
-        EnergyController(router)
-        FinopsController(router)
-
     # Register controllers
-    FeedbackController(router, configuration.feedback_storage)
+    FeedbackController(router)
     AgentController(router, agent_manager=agent_manager)
     ChatbotController(
         router, session_manager=session_manager, agent_manager=agent_manager

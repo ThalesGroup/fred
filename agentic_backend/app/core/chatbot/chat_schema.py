@@ -42,6 +42,7 @@ class ChatMessagePayload(BaseModel):
     exchange_id: str = Field(
         ..., description="Unique ID for the current question repsonse(s) exchange"
     )
+    user_id: str
     type: Literal["human", "ai", "system", "tool"]
     sender: Literal["user", "assistant", "system"]
     content: str
@@ -63,7 +64,7 @@ class ChatMessagePayload(BaseModel):
             "execution",
             "observation",
             "error",
-            "injected_context",
+            "injected_context"
         ]
     ] = None
 

@@ -27,7 +27,7 @@ from fastapi import UploadFile
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from langgraph.graph.state import CompiledStateGraph
 
-from app.application_context import get_configuration, get_default_model
+from app.application_context import get_configuration, get_default_model, get_history_store
 from app.core.agents.agent_manager import AgentManager
 from app.core.agents.flow import AgentFlow
 from app.core.agents.runtime_context import RuntimeContext
@@ -56,24 +56,24 @@ class SessionManager:
     as well as handling chat interactions.
     """
 
-    def __init__(self, session_storage: BaseSessionStore, agent_manager: AgentManager):
+    def __init__(self, session_store: BaseSessionStore, agent_manager: AgentManager):
         """
         Initializes the SessionManager with a storage backend and an optional agent manager.
         :param storage: An instance of AbstractSessionStorage for session management.
         :param agent_manager: An instance of AgentManager for managing agent instances.
         :param dynamic_agent_manager: An instance of DynamicAgentManager for managing dynamic agent instances.
         """
-        self.storage = session_storage
+        self.session_store = session_store
         self.agent_manager = agent_manager
         self.temp_files: dict[str, list[str]] = defaultdict(list)
         self.attachement_processing = AttachementProcessing()
-
+        self.history_store = get_history_store()
         config = get_configuration()
         self.recursion_limit = config.ai.recursion.recursion_limit
 
     def _infer_message_subtype(
         self, metadata: dict, message_type: str | None = None
-    ) -> Optional[str]:
+    ) -> str | None:
         """
         Infers the semantic subtype of a message based on its metadata and optionally its message type.
         """
@@ -129,7 +129,7 @@ class SessionManager:
             A tuple of (SessionSchema, is_new_session)
         """
         if session_id:
-            session = self.storage.get_session(session_id, user_id)
+            session = self.session_store.get(session_id)
             if session:
                 logger.info(f"Resumed existing session {session_id} for user {user_id}")
                 return session, False
@@ -150,7 +150,7 @@ class SessionManager:
             title=title,
             updated_at=datetime.now(),
         )
-        self.storage.save_session(session)
+        self.session_store.save(session)
         logger.warning(f"Created new session {new_session_id} for user {user_id}")
         return session, True
 
@@ -205,6 +205,7 @@ class SessionManager:
                     rank=base_rank,  # injected context comes before user message
                     metadata={"injected": True, "origin": "chat_profile"},
                     subtype="injected_context",
+                    user_id=user_id
                 )
 
                 logger.info(
@@ -234,6 +235,7 @@ class SessionManager:
             session_id=session.id,
             rank=base_rank,
             subtype=subtype,
+            user_id=user_id
         )
 
         all_payloads = []
@@ -251,6 +253,7 @@ class SessionManager:
                 callback=callback,
                 exchange_id=exchange_id,
                 base_rank=base_rank,
+                user_id=user_id
             )
 
             # Ensure correct ranks for assistant messages
@@ -272,8 +275,8 @@ class SessionManager:
 
         # 💾 Save all messages in correct order
         session.updated_at = datetime.now()
-        self.storage.save_session(session)
-        self.storage.save_messages(session.id, all_payloads, user_id)
+        self.session_store.save(session)
+        self.history_store.save(session.id, all_payloads, user_id)
 
         return session, all_payloads
 
@@ -331,8 +334,8 @@ class SessionManager:
         agent = self.agent_manager.get_agent_instance(agent_name, runtime_context)
         return session, history, agent, is_new_session
 
-    def delete_session(self, session_id: str, user_id: str) -> bool:
-        return self.storage.delete_session(session_id, user_id)
+    def delete_session(self, session_id: str, user_id: str) -> None:
+        self.session_store.delete(session_id)
 
     def get_sessions(self, user_id: str) -> List[SessionWithFiles]:
         """
@@ -346,7 +349,7 @@ class SessionManager:
         Returns:
             A list of SessionWithFiles objects, each containing session data and file names.
         """
-        sessions = self.storage.get_sessions_for_user(user_id)
+        sessions = self.session_store.get_for_user(user_id)
         enriched_sessions = []
 
         for session in sessions:
@@ -364,7 +367,7 @@ class SessionManager:
     def get_session_history(
         self, session_id: str, user_id: str
     ) -> List[ChatMessagePayload]:
-        return self.storage.get_message_history(session_id, user_id)
+        return self.history_store.get(session_id)
 
     async def _stream_agent_response(
         self,
@@ -374,7 +377,7 @@ class SessionManager:
         base_rank: int,
         callback: CallbackType,
         exchange_id: str,
-        config: Dict = None,
+        user_id: str
     ) -> List[BaseMessage]:
         """
         Executes the agentic flow and streams responses via the given callback.
@@ -391,7 +394,7 @@ class SessionManager:
             The final AIMessage.
         """
 
-        config = config or {
+        config = {
             "configurable": {"thread_id": session_id},
             "recursion_limit": self.recursion_limit,
         }
@@ -426,6 +429,7 @@ class SessionManager:
                         session_id=session_id,
                         metadata=cleaned_metadata,
                         subtype=subtype,
+                        user_id=user_id
                     )
 
                     all_payloads.append(enriched)  # ✅ collect all messages
@@ -474,6 +478,8 @@ class SessionManager:
         try:
             # Create session-specific temp directory
             session_folder = self.get_session_temp_folder(session_id)
+            if file.filename is None:
+                raise ValueError("Uploaded file must have a filename.")
             file_path = session_folder / file.filename
 
             # Write file content
@@ -506,7 +512,7 @@ class SessionManager:
         groupby: List[str],
         agg_mapping: Dict[str, List[str]],
     ) -> MetricsResponse:
-        return self.storage.get_metrics(
+        return self.history_store.get_metrics(
             start=start,
             end=end,
             precision=precision,

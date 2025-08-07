@@ -12,85 +12,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Any, Dict, List, Optional, Literal, Union, Annotated
-from datetime import datetime
-from enum import Enum
-import os
-from pydantic import BaseModel, model_validator, Field
-from fred_core import SecurityConfiguration, OpenSearchStorageConfig
+from typing import Any, Dict, List, Optional, Literal
+from pydantic import BaseModel, Field
+from fred_core import (
+    SecurityConfiguration, 
+    PostgresStoreConfig,
+    OpenSearchStoreConfig,
+    StoreConfig,
+    )
 
-
-# ----------------------------------------------------------------------
-# Enums
-# ----------------------------------------------------------------------
-
-
-class HttpSchemeEnum(Enum):
-    HTTP = "http"
-    HTTPS = "https"
-
-
-class DatabaseTypeEnum(str, Enum):
-    csv = "csv"
-
-
-class DAOTypeEnum(str, Enum):
-    file = "file"
-
-
-class PrecisionEnum(str, Enum):
-    T = "T"
-    H = "H"
-    D = "D"
-    W = "W"
-    M = "M"
-    Y = "Y"
-    NONE = "NONE"
-
-    def to_pandas_precision(self) -> str | None:
-        match self:
-            case self.T:
-                return "min"
-            case self.H:
-                return "h"
-            case self.W:
-                return "W"
-            case self.M:
-                return "M"
-            case self.Y:
-                return "Y"
-            case self.NONE:
-                return None
-
-
-class SampleDataType(str, Enum):
-    AVERAGE = "average"
-    SUM = "sum"
-
-
-class CaseInsensitiveEnum(Enum):
-    @classmethod
-    def _missing_(cls, value):
-        if isinstance(value, str):
-            value_lower = value.lower()
-            for member in cls:
-                if member.value.lower() == value_lower:
-                    return member
-        return None
-
-
-class WorkloadKind(CaseInsensitiveEnum):
-    DEPLOYMENT = "Deployment"
-    STATEFUL_SET = "StatefulSet"
-    DAEMON_SET = "DaemonSet"
-    JOB = "Job"
-    CRONJOB = "CronJob"
-
-
-# ----------------------------------------------------------------------
-# Models
-# ----------------------------------------------------------------------
-
+class StorageConfig(BaseModel):
+    postgres: PostgresStoreConfig
+    opensearch: OpenSearchStoreConfig
+    agent_store: StoreConfig
+    session_store: StoreConfig
+    history_store: StoreConfig
+    feedback_store: StoreConfig
 
 class TimeoutSettings(BaseModel):
     connect: Optional[int] = Field(
@@ -99,7 +36,6 @@ class TimeoutSettings(BaseModel):
     read: Optional[int] = Field(
         15, description="Time to wait for a response in seconds."
     )
-
 
 class ModelConfiguration(BaseModel):
     provider: Optional[str] = Field(
@@ -110,7 +46,6 @@ class ModelConfiguration(BaseModel):
         default_factory=dict,
         description="Additional provider-specific settings, e.g., Azure deployment name.",
     )
-
 
 class MCPServerConfiguration(BaseModel):
     name: str
@@ -135,74 +70,8 @@ class MCPServerConfiguration(BaseModel):
         None, description="Environment variables to give the MCP server"
     )
 
-
-class PathOrIndexPrefix(BaseModel):
-    energy_mix: str
-    carbon_footprint: str
-    energy_footprint: str
-    financial_footprint: str
-    frequencies: str
-    sensors_test_new: str
-    mission: str
-    radio: str
-    signal_identification_guide: str
-
-
-class DatabaseConfiguration(BaseModel):
-    type: DatabaseTypeEnum
-    csv_files: Optional[PathOrIndexPrefix] = None
-    host: Optional[str] = None
-    port: Optional[int] = None
-    scheme: Optional[HttpSchemeEnum] = HttpSchemeEnum.HTTP
-    username: Optional[str] = None
-    password: Optional[str] = None
-    index_prefix: Optional[PathOrIndexPrefix] = None
-
-    @model_validator(mode="after")
-    def check_fields(self) -> "DatabaseConfiguration":
-        match self.type:
-            case DatabaseTypeEnum.csv:
-                required_fields = ["csv_files"]
-            case _:
-                required_fields = []
-
-        missing_fields = [
-            field for field in required_fields if getattr(self, field) is None
-        ]
-        if missing_fields:
-            raise ValueError(
-                f"With type '{self.type}', the following fields are required: {', '.join(missing_fields)}"
-            )
-        return self
-
-
-class KubernetesConfiguration(BaseModel):
-    kube_config: str
-    aws_config: Optional[str] = None
-    timeout: TimeoutSettings
-
-
-# ----------------------------------------------------------------------
-# Services and Agents — now as lists!
-# ----------------------------------------------------------------------
-
-
 class RecursionConfig(BaseModel):
     recursion_limit: int
-
-
-class ServicesSettings(BaseModel):
-    name: str = Field(..., description="Service identifier name.")
-    enabled: bool = Field(default=True, description="Whether the service is enabled.")
-    settings: Dict[str, Any] = Field(
-        default_factory=dict, description="Service-specific settings."
-    )
-    model: ModelConfiguration = Field(
-        ...,
-        description="AI model configuration for this service.",
-    )
-
-
 class AgentSettings(BaseModel):
     type: Literal["mcp", "custom", "leader"] = "custom"
     name: str
@@ -220,7 +89,6 @@ class AgentSettings(BaseModel):
     role: Optional[str] = None
     icon: Optional[str] = None
 
-
 class AIConfig(BaseModel):
     timeout: TimeoutSettings = Field(
         ..., description="Timeout settings for the AI client."
@@ -229,9 +97,6 @@ class AIConfig(BaseModel):
         ...,
         description="Default model configuration for all agents and services.",
     )
-    services: List[ServicesSettings] = Field(
-        default_factory=list, description="List of AI services."
-    )
     agents: List[AgentSettings] = Field(
         default_factory=list, description="List of AI agents."
     )
@@ -239,148 +104,32 @@ class AIConfig(BaseModel):
         ..., description="Number of max recursion while using the model"
     )
 
-    @model_validator(mode="after")
-    def validate_unique_names(self):
-        service_names = [service.name for service in self.services]
-        agent_names = [agent.name for agent in self.agents]
-        duplicates = set(
-            name
-            for name in service_names + agent_names
-            if (service_names + agent_names).count(name) > 1
-        )
-        if duplicates:
-            raise ValueError(
-                f"Duplicate service or agent names found: {', '.join(duplicates)}"
-            )
-        return self
-
     def apply_default_models(self):
         """
         Apply default model configuration to all agents and services if not specified.
         """
-
         def merge(target: ModelConfiguration) -> ModelConfiguration:
             defaults = self.default_model.model_dump(exclude_unset=True)
             target_dict = target.model_dump(exclude_unset=True)
             merged_dict = {**defaults, **target_dict}
             return ModelConfiguration(**merged_dict)
 
-        for service in self.services:
-            if service.enabled:
-                service.model = merge(service.model)
-
         for agent in self.agents:
             if agent.enabled:
                 agent.model = merge(agent.model)
-
-
-# ----------------------------------------------------------------------
-# Storage configurations
-# ----------------------------------------------------------------------
-
-## ----------------------------------------------------------------------
-## Session storage configurations
-## ----------------------------------------------------------------------
-
-
-class DuckdbSessionStorageConfig(BaseModel):
-    type: Literal["duckdb"]
-    duckdb_path: str = Field(
-        default="~/.fred/agentic/session.duckdb",
-        description="Path to the DuckDB database file.",
-    )
-
-class OpenSessionSearchStorageConfig(BaseModel):
-    type: Literal["opensearch"]
-    host: str = Field(
-        default="https://localhost:9200", description="URL of the Opensearch host"
-    )
-    username: Optional[str] = Field(
-        default_factory=lambda: os.getenv("OPENSEARCH_USER"),
-        description="Opensearch username",
-    )
-    password: Optional[str] = Field(
-        default_factory=lambda: os.getenv("OPENSEARCH_PASSWORD"),
-        description="Opensearch user password",
-    )
-    secure: bool = Field(default=False, description="Use TLS with Opensearch")
-    verify_certs: bool = Field(default=False, description="Verify certificates")
-    sessions_index: str = Field(
-        default="active-sessions-index", description="Index where sessions are stored"
-    )
-    history_index: str = Field(
-        default="chat-interactions-index",
-        description="Index where messages histories are stored",
-    )
-
-
-SessionStorageConfig = Annotated[
-    Union[DuckdbSessionStorageConfig, OpenSessionSearchStorageConfig],
-    Field(discriminator="type"),
-]
-
-###########################################################
-#
-#  --- Dynamic Agents Storage Configuration
-#
-
-
-class DuckdbAgentStorageConfig(BaseModel):
-    type: Literal["duckdb"]
-    duckdb_path: str = Field(
-        default="~/.fred/agentic/db.duckdb",
-        description="Path to the DuckDB database file.",
-    )
-
-
-AgentStorageConfig = Annotated[
-    Union[DuckdbAgentStorageConfig, OpenSearchStorageConfig],
-    Field(discriminator="type"),
-]
-
-###########################################################
-#
-#  --- Feedback Storage Configuration
-#
-
-
-class DuckdbFeedbackStorage(BaseModel):
-    type: Literal["duckdb"]
-    duckdb_path: str = Field(
-        default="~/.fred/agentic/db.duckdb",
-        description="Path to the DuckDB database file.",
-    )
-
-
-FeedbackStorageConfig = Annotated[
-    Union[DuckdbFeedbackStorage, OpenSearchStorageConfig], Field(discriminator="type")
-]
-
-# ----------------------------------------------------------------------
-# Other configurations
-# ----------------------------------------------------------------------
-
-
-class DAOConfiguration(BaseModel):
-    type: DAOTypeEnum
-    base_path: Optional[str] = Field(default="/tmp")
-    max_cached_delay_seconds: Optional[int] = Field(60)
 
 
 class FrontendFlags(BaseModel):
     enableK8Features: bool = False
     enableElecWarfare: bool = False
 
-
 class Properties(BaseModel):
     logoName: str = "fred"
-
 
 class FrontendSettings(BaseModel):
     feature_flags: FrontendFlags
     properties: Properties
     security: SecurityConfiguration
-
 
 class AppConfig(BaseModel):
     name: Optional[str] = "Agentic Backend"
@@ -396,46 +145,8 @@ class AppConfig(BaseModel):
 class Configuration(BaseModel):
     app: AppConfig
     frontend_settings: FrontendSettings
-    database: DatabaseConfiguration
-    kubernetes: KubernetesConfiguration
     ai: AIConfig
-    dao: DAOConfiguration
-    feedback_storage: FeedbackStorageConfig = Field(
-        ..., description="Feedback Storage configuration"
-    )
-    session_storage: SessionStorageConfig = Field(
-        ..., description="Session Storage configuration"
-    )
-    agent_storage: AgentStorageConfig = Field(
-        ..., description="Agents Storage configuration"
-    )
+    storage: StorageConfig
 
 
-class OfflineStatus(BaseModel):
-    is_offline: bool
 
-
-class Window(BaseModel):
-    start: datetime
-    end: datetime
-    total: float
-
-
-class Difference(BaseModel):
-    value: float
-    percentage: float
-
-
-class CompareResult(BaseModel):
-    cluster: str
-    unit: str
-    window_1: Window
-    window_2: Window
-    difference: Difference
-
-
-class Series(BaseModel):
-    timestamps: List[datetime]
-    values: List[float]
-    auc: float
-    unit: str

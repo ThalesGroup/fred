@@ -21,7 +21,6 @@ from app.core.feedback.service import FeedbackService
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from typing import List, Optional
-from app.common.structures import FeedbackStorageConfig
 import logging
 
 from app.core.feedback.structures import FeedbackRecord
@@ -48,7 +47,7 @@ class FeedbackPayload(BaseModel):
 # FeedbackController
 # ----------------------------------------------------------------------
 class FeedbackController:
-    def __init__(self, router: APIRouter, config: FeedbackStorageConfig):
+    def __init__(self, router: APIRouter):
         self.service = FeedbackService(get_feedback_store())
 
         def handle_exception(e: Exception) -> HTTPException:

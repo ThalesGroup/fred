@@ -24,23 +24,14 @@ from app.common.structures import (
     AgentSettings,
     AppConfig,
     Configuration,
-    DAOConfiguration,
-    DAOTypeEnum,
-    DatabaseConfiguration,
-    DatabaseTypeEnum,
-    DuckdbAgentStorageConfig,
-    DuckdbFeedbackStorage,
-    DuckdbSessionStorageConfig,
     FrontendFlags,
     FrontendSettings,
-    KubernetesConfiguration,
     ModelConfiguration,
     Properties,
     RecursionConfig,
     TimeoutSettings,
 )
 from app.application_context import ApplicationContext
-from app.common.structures import PathOrIndexPrefix
 from fred_core import SecurityConfiguration
 
 
@@ -66,24 +57,6 @@ def minimal_generalist_config() -> Configuration:
             security=SecurityConfiguration(
                 enabled=False, keycloak_url="", client_id="app", authorized_origins=[]
             ),
-        ),
-        database=DatabaseConfiguration(
-            type=DatabaseTypeEnum.csv,
-            csv_files=PathOrIndexPrefix(
-                energy_mix="dummy.csv",
-                carbon_footprint="dummy.csv",
-                energy_footprint="dummy.csv",
-                financial_footprint="dummy.csv",
-                frequencies="dummy.csv",
-                sensors_test_new="dummy.csv",
-                mission="dummy.csv",
-                radio="dummy.csv",
-                signal_identification_guide="dummy.csv",
-            ),
-        ),
-        kubernetes=KubernetesConfiguration(
-            kube_config="~/.kube/config",
-            timeout=TimeoutSettings(connect=5, read=15),
         ),
         ai=AIConfig(
             timeout=TimeoutSettings(connect=5, read=15),
@@ -112,13 +85,7 @@ def minimal_generalist_config() -> Configuration:
                     ),
                 )
             ],
-            services=[],
             recursion=RecursionConfig(recursion_limit=40),
-        ),
-        dao=DAOConfiguration(
-            type=DAOTypeEnum("file"),
-            base_path="/tmp/fred-dao",
-            max_cached_delay_seconds=30,
         ),
         feedback_storage=DuckdbFeedbackStorage(
             type="duckdb", duckdb_path="/tmp/ducckdb.db"

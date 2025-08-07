@@ -176,6 +176,12 @@ class DuckdbMetadataStore(BaseMetadataStore):
                 if not isinstance(sub_item, dict) or not self._match_nested(sub_item, value):
                     return False
             else:
-                if str(item.get(key)) != str(value):
-                    return False
+                item_value = item.get(key)
+                # If the filter value is a list → accept if any match
+                if isinstance(value, list):
+                    if str(item_value) not in map(str, value):
+                        return False
+                else:
+                    if str(item_value) != str(value):
+                        return False
         return True

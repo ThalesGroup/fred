@@ -20,7 +20,6 @@ from app.application_context import ApplicationContext
 from app.common.structures import (
     AppConfig,
     Configuration,
-    DuckdbStorageConfig,
     EmbeddingConfig,
     InMemoryVectorStorage,
     LocalContentStorageConfig,
