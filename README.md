@@ -77,8 +77,11 @@ Production services and databases can be added later or via the **deployment fac
 | Python | 3.12.8  | `pyenv install 3.12.8` |
 | Node   | 22.13.0 | `nvm install 22.13.0`  |
 | Make   | any     | install from your OS   |
+| FFmpeg | any     | `apt install ffmpeg`   |
 
-##### Optional
+**Note:**: `FFmpeg` is only required for the `knowledge-flow backend` in order to be able to process audio files.
+
+##### Optiona
 
 | Tool   | Version | Install hint                                                           | Comment                     |
 | ------ | ------- | ---------------------------------------------------------------------- | --------------------------- |
