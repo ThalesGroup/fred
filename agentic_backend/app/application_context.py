@@ -303,7 +303,7 @@ class ApplicationContext:
                 )
             from app.core.session.stores.opensearch_history_index import OpensearchHistoryIndex
             return OpensearchHistoryIndex(
-                host=opensearch_config.username,
+                host=opensearch_config.host,
                 username=opensearch_config.username,
                 password=password,
                 secure=opensearch_config.secure,
@@ -340,7 +340,7 @@ class ApplicationContext:
                 )
             from app.core.agents.store.opensearch_agent_store import OpenSearchAgentStore
             return OpenSearchAgentStore(
-                host=opensearch_config.username,
+                host=opensearch_config.host,
                 username=opensearch_config.username,
                 password=password,
                 secure=opensearch_config.secure,
@@ -376,7 +376,7 @@ class ApplicationContext:
                 )
             from app.core.feedback.store.opensearch_feedback_store import OpenSearchFeedbackStore
             return OpenSearchFeedbackStore(
-                host=opensearch_config.username,
+                host=opensearch_config.host,
                 username=opensearch_config.username,
                 password=password,
                 secure=opensearch_config.secure,

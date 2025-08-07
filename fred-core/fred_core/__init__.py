@@ -18,6 +18,7 @@ from fred_core.security.structure import (
     KeycloakUser,
     SecurityConfiguration,
 )
+from fred_core.common.lru_cache import ThreadSafeLRUCache
 from fred_core.common.structures import (
     BaseModelWithId,
     OpenSearchStoreConfig,
@@ -41,4 +42,5 @@ __all__ = [
     "PostgresStoreConfig",
     "PostgresTableConfig",
     "StoreConfig",
+    "ThreadSafeLRUCache"
 ]

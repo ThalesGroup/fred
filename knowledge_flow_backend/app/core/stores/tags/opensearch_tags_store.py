@@ -16,6 +16,8 @@ import logging
 from typing import List
 
 from fred_core import KeycloakUser
+from fred_core import ThreadSafeLRUCache
+
 from opensearchpy import ConflictError, NotFoundError, OpenSearch, RequestsHttpConnection
 
 from app.core.stores.tags.base_tag_store import BaseTagStore, TagAlreadyExistsError, TagNotFoundError
@@ -85,6 +87,7 @@ class OpenSearchTagStore(BaseTagStore):
             verify_certs=verify_certs,
             connection_class=RequestsHttpConnection,
         )
+        self._cache = ThreadSafeLRUCache[str, Tag](max_size=1000)
         self.index_name = index
 
         if not self.client.indices.exists(index=self.index_name):
@@ -112,6 +115,9 @@ class OpenSearchTagStore(BaseTagStore):
             raise
 
     def get_tag_by_id(self, tag_id: str) -> Tag:
+        if cached := self._cache.get(tag_id):
+            logger.debug(f"[TAGS] Cache hit for tag '{tag_id}'")
+            return cached
         try:
             response = self.client.get(index=self.index_name, id=tag_id)
             return Tag(**response["_source"])
@@ -129,6 +135,7 @@ class OpenSearchTagStore(BaseTagStore):
                 body=tag.model_dump(mode="json"),
                 params=self.default_params,
             )
+            self._cache.set(tag.id, tag)
             logger.info(f"[TAGS] Created tag '{tag.id}' for user '{tag.owner_id}'")
             return tag
         except ConflictError:
@@ -146,6 +153,7 @@ class OpenSearchTagStore(BaseTagStore):
                 body=tag.model_dump(mode="json"),
                 params=self.default_params,
             )
+            self._cache.set(tag_id, tag)
             logger.info(f"[TAGS] Updated tag '{tag_id}'")
             return tag
         except TagNotFoundError:
@@ -155,6 +163,7 @@ class OpenSearchTagStore(BaseTagStore):
             raise
 
     def delete_tag_by_id(self, tag_id: str) -> None:
+        self._cache.delete(tag_id)
         try:
             self.client.delete(
                 index=self.index_name,

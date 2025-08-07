@@ -21,9 +21,6 @@ from statistics import mean
 from opensearchpy import OpenSearch, RequestsHttpConnection
 from app.core.chatbot.metric_structures import MetricsBucket, MetricsResponse
 from app.core.session.stores.base_history_store import BaseHistoryStore
-from app.core.session.stores.base_secure_resource_access import (
-    BaseSecuredResourceAccess,
-)
 from app.core.chatbot.chat_schema import (
     ChatMessagePayload,
 )
@@ -47,6 +44,7 @@ MAPPING = {
     "mappings": {
         "properties": {
             "exchange_id": {"type": "keyword"},
+            "user_id": { "type": "keyword" },
             "type": {"type": "keyword"},
             "sender": {"type": "keyword"},
             "content": {"type": "text"},

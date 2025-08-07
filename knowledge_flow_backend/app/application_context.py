@@ -452,7 +452,7 @@ class ApplicationContext:
                     "Missing OpenSearch credentials: OPENSEARCH_PASSWORD"
                 )
             self._metadata_store_instance = OpenSearchMetadataStore(
-                host=opensearch_config.username,
+                host=opensearch_config.host,
                 username=opensearch_config.username,
                 password=password,
                 secure=opensearch_config.secure,
@@ -479,7 +479,7 @@ class ApplicationContext:
                     "Missing OpenSearch credentials: OPENSEARCH_PASSWORD"
                 )
             self._tag_store_instance = OpenSearchTagStore(
-                host=opensearch_config.username,
+                host=opensearch_config.host,
                 username=opensearch_config.username,
                 password=password,
                 secure=opensearch_config.secure,
@@ -506,7 +506,7 @@ class ApplicationContext:
                     "Missing OpenSearch credentials: OPENSEARCH_PASSWORD"
                 )
             self._prompt_store_instance = OpenSearchPromptStore(
-                host=opensearch_config.username,
+                host=opensearch_config.host,
                 username=opensearch_config.username,
                 password=password,
                 secure=opensearch_config.secure,
@@ -553,7 +553,7 @@ class ApplicationContext:
                     "Missing OpenSearch credentials: OPENSEARCH_PASSWORD"
                 )
             self._catalog_store_instance = OpenSearchCatalogStore(
-                host=opensearch_config.username,
+                host=opensearch_config.host,
                 username=opensearch_config.username,
                 password=password,
                 secure=opensearch_config.secure,
