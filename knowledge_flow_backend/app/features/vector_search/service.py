@@ -20,6 +20,7 @@ from fred_core import KeycloakUser
 from langchain.schema.document import Document
 
 from app.application_context import ApplicationContext
+from app.features.metadata.service import MetadataService
 from app.features.tag.service import TagService
 
 logger = logging.getLogger(__name__)
@@ -34,18 +35,21 @@ class VectorSearchService:
     def __init__(self):
         context = ApplicationContext.get_instance()
         embedder = context.get_embedder()
-        self.tag_service = TagService()
         self.vector_store = context.get_vector_store(embedder)
+        self.document_metadata_service = MetadataService()
 
     def similarity_search_with_score(self, question: str, user: KeycloakUser, k: int = 10, tags_ids: list[str] | None = None) -> List[tuple[Document, float]]:
         # todo: handle autorization (check if use can rag on listed tags OR restrict research to all document users has access to ?)
 
-        documents_ids: set[str] | None = None
-        if tags_ids is not None and len(tags_ids) >= 1:
-            documents_ids = set()
-            for tag_id in tags_ids:
-                tag = self.tag_service.get_tag_for_user(tag_id, user)
-                documents_ids.update(tag.item_ids)
+        docs = self.document_metadata_service.get_documents_metadata(
+            {
+                # Document must be retrievable
+                "retrievable": True,
+                # Document must be in at least one of the tags
+                "tags__overlap": tags_ids,
+            }
+        )
+        documents_ids = {doc.document_uid for doc in docs}
 
         logger.debug("doing similartiy search on following document uids:", documents_ids)
         return self.vector_store.similarity_search_with_score(question, k=k, documents_ids=documents_ids)
