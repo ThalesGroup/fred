@@ -256,6 +256,7 @@ export type AgenticFlow = {
 export type ChatMessagePayload = {
   /** Unique ID for the current question repsonse(s) exchange */
   exchange_id: string;
+  user_id: string;
   type: "human" | "ai" | "system" | "tool";
   sender: "user" | "assistant" | "system";
   content: string;

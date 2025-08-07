@@ -15,6 +15,7 @@
 import logging
 from typing import List
 
+from fred_core import ThreadSafeLRUCache
 from opensearchpy import OpenSearch, NotFoundError, ConflictError, RequestsHttpConnection
 
 from app.core.stores.prompts.base_prompt_store import (
@@ -65,6 +66,7 @@ class OpenSearchPromptStore(BasePromptStore):
             verify_certs=verify_certs,
             connection_class=RequestsHttpConnection,
         )
+        self._cache = ThreadSafeLRUCache[str, Prompt](max_size=1000)
         self.index_name = index
 
         if not self.client.indices.exists(index=self.index_name):
@@ -82,6 +84,9 @@ class OpenSearchPromptStore(BasePromptStore):
             raise
 
     def get_prompt_by_id(self, prompt_id: str) -> Prompt:
+        if cached := self._cache.get(prompt_id):
+            logger.debug(f"[TAPROMPTGS] Cache hit for tag '{prompt_id}'")
+            return cached
         try:
             response = self.client.get(index=self.index_name, id=prompt_id)
             return Prompt(**response["_source"])
@@ -98,6 +103,7 @@ class OpenSearchPromptStore(BasePromptStore):
                 id=prompt.id,
                 body=prompt.model_dump(mode="json"),
             )
+            self._cache.set(prompt.id, prompt)
             logger.info(f"[PROMPTS] Created prompt '{prompt.id}'")
             return prompt
         except ConflictError:
@@ -114,6 +120,7 @@ class OpenSearchPromptStore(BasePromptStore):
                 id=prompt_id,
                 body=prompt.model_dump(mode="json"),
             )
+            self._cache.set(prompt.id, prompt)
             logger.info(f"[PROMPTS] Updated prompt '{prompt_id}'")
             return prompt
         except PromptNotFoundError:
@@ -123,6 +130,7 @@ class OpenSearchPromptStore(BasePromptStore):
             raise
 
     def delete_prompt(self, prompt_id: str) -> None:
+        self._cache.delete(prompt_id)
         try:
             self.client.delete(index=self.index_name, id=prompt_id)
             logger.info(f"[PROMPTS] Deleted prompt '{prompt_id}'")

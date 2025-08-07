@@ -19,7 +19,13 @@ from typing import Annotated, Dict, List, Literal, Union
 from pydantic import BaseModel, Field, model_validator
 from typing import Optional
 from enum import Enum
-from fred_core import SecurityConfiguration, OpenSearchStorageConfig
+from fred_core import (
+    SecurityConfiguration, 
+    PostgresStoreConfig,
+    OpenSearchStoreConfig,
+    OpenSearchIndexConfig,
+    StoreConfig,
+    )
 
 """
 This module defines the top level data structures used by controllers, processors
@@ -59,21 +65,6 @@ class ProcessorConfig(BaseModel):
 
 ###########################################################
 #
-#  --- Generic Storage Configuration
-#
-
-
-class DuckdbStorageConfig(BaseModel):
-    type: Literal["duckdb"]
-    duckdb_path: str = Field(default="~/.fred/knowledge-flow/db.duckdb", description="Path to the DuckDB database file.")
-
-
-class LocalJsonStorageConfig(BaseModel):
-    type: Literal["local"]
-    root_path: str = Field(default=str(Path("~/.fred/knowledge-flow/json-store.json")), description="Local storage json file")
-
-###########################################################
-#
 #  --- Content Storage Configuration
 #
 
@@ -109,28 +100,11 @@ ContentStorageConfig = Annotated[Union[LocalContentStorageConfig, MinioStorageCo
 
 ###########################################################
 #
-#  --- Internal Storage Configuration
-#
-
-MetadataStorageConfig = Annotated[Union[DuckdbStorageConfig, OpenSearchStorageConfig], Field(discriminator="type")]
-
-PromptStorageConfig = Annotated[Union[DuckdbStorageConfig, OpenSearchStorageConfig], Field(discriminator="type")]
-
-TagStorageConfig = Annotated[Union[DuckdbStorageConfig, OpenSearchStorageConfig], Field(discriminator="type")]
-
-CatalogStorageConfig = Annotated[Union[DuckdbStorageConfig, OpenSearchStorageConfig], Field(discriminator="type")]
-
-TabularStorageConfig = Annotated[Union[DuckdbStorageConfig], Field(discriminator="type")]
-
-###########################################################
-#
 #  --- Vector storage configuration
 #
 
-
 class InMemoryVectorStorage(BaseModel):
     type: Literal["in_memory"]
-
 
 class WeaviateVectorStorage(BaseModel):
     type: Literal["weaviate"]
@@ -138,7 +112,7 @@ class WeaviateVectorStorage(BaseModel):
     index_name: str = Field(default="CodeDocuments", description="Weaviate class (collection) name")
 
 
-VectorStorageConfig = Annotated[Union[InMemoryVectorStorage, OpenSearchStorageConfig, WeaviateVectorStorage], Field(discriminator="type")]
+VectorStorageConfig = Annotated[Union[InMemoryVectorStorage, OpenSearchIndexConfig, WeaviateVectorStorage], Field(discriminator="type")]
 
 
 class EmbeddingConfig(BaseModel):
@@ -291,6 +265,15 @@ PullSourceConfig = Annotated[
 ]
 DocumentSourceConfig = Annotated[Union[PushSourceConfig, PullSourceConfig], Field(discriminator="type")]
 
+class StorageConfig(BaseModel):
+    postgres: PostgresStoreConfig
+    opensearch: OpenSearchStoreConfig
+    prompt_store: StoreConfig
+    tag_store: StoreConfig
+    metadata_store: StoreConfig
+    catalog_store: StoreConfig
+    tabular_store: StoreConfig
+    vector_store: VectorStorageConfig
 
 class Configuration(BaseModel):
     app: AppConfig
@@ -298,12 +281,7 @@ class Configuration(BaseModel):
     input_processors: List[ProcessorConfig]
     output_processors: Optional[List[ProcessorConfig]] = None
     content_storage: ContentStorageConfig = Field(..., description="Content Storage configuration")
-    metadata_storage: MetadataStorageConfig = Field(..., description="Metadata storage configuration")
-    tag_storage: TagStorageConfig = Field(..., description="Tag storage configuration")
-    prompt_storage: PromptStorageConfig = Field(..., description="Tag storage configuration")
-    vector_storage: VectorStorageConfig = Field(..., description="Vector storage configuration")
-    tabular_storage: TabularStorageConfig = Field(..., description="Tabular storage configuration")
-    catalog_storage: CatalogStorageConfig = Field(..., description="Catalog storage configuration")
     embedding: EmbeddingConfig = Field(..., description="Embedding configuration")
     scheduler: SchedulerConfig
     document_sources: Dict[str, DocumentSourceConfig] = Field(default_factory=dict, description="Mapping of source_tag identifiers to push/pull source configurations")
+    storage: StorageConfig

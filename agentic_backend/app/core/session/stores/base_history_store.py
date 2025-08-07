@@ -12,39 +12,40 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List
+from typing import List, Dict
 from abc import ABC, abstractmethod
 
 from app.core.chatbot.chat_schema import (
-    SessionSchema,
+    ChatMessagePayload,
 )
+from app.core.chatbot.metric_structures import MetricsResponse
 
-class BaseSessionStore(ABC):
+
+class BaseHistoryStore(ABC):
+
     @abstractmethod
-    def save(self, session: SessionSchema) -> None:
-        """
-        Save a session to the storage.
-        """
+    def save(
+        self, session_id: str, messages: List[ChatMessagePayload], user_id: str
+    ) -> None:
+        """Save a batch of messages to the session history."""
         pass
 
     @abstractmethod
-    def get(self, session_id: str) -> SessionSchema | None:
-        """
-        Retrieve a session by its ID.
-        """
+    def get(
+        self, session_id: str,
+    ) -> List[ChatMessagePayload]:
+        """Retrieve messages for a given session."""
         pass
 
     @abstractmethod
-    def delete(self, session_id: str) -> None:
-        """
-        Delete a session by its ID.
-        """
+    def get_metrics(
+        self,
+        start: str,
+        end: str,
+        user_id: str,
+        precision: str,
+        groupby: List[str],
+        agg_mapping: Dict[str, List[str]],
+    ) -> MetricsResponse:
+        """Retrieve messages for a given session."""
         pass
-
-    @abstractmethod
-    def get_for_user(self, user_id: str) -> List[SessionSchema]:
-        """
-        Retrieve all sessions for a specific user.
-        """
-        pass
-

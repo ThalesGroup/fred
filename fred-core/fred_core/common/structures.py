@@ -13,17 +13,42 @@
 # limitations under the License.
 
 import os
-from typing import Literal, Optional
+from typing import Annotated, Literal, Optional, Union
 from pydantic import BaseModel, Field
 
 class BaseModelWithId(BaseModel):
     id: str
 
-class OpenSearchStorageConfig(BaseModel):
-    type: Literal["opensearch"]
+class OpenSearchStoreConfig(BaseModel):
     host: str = Field(..., description="OpenSearch host URL")
-    username: Optional[str] = Field(default_factory=lambda: os.getenv("OPENSEARCH_USER"), description="Username from env")
+    username: str = Field(..., description="Username from env")
     password: Optional[str] = Field(default_factory=lambda: os.getenv("OPENSEARCH_PASSWORD"), description="Password from env")
     secure: bool = Field(default=False, description="Use TLS (https)")
     verify_certs: bool = Field(default=False, description="Verify TLS certs")
+
+class OpenSearchIndexConfig(BaseModel):
+    type: Literal["opensearch"]
     index: str = Field(..., description="OpenSearch index name")
+
+class DuckdbStoreConfig(BaseModel):
+    type: Literal["duckdb"]
+    duckdb_path: str = Field(...,description="Path to the DuckDB database file.")
+
+class PostgresStoreConfig(BaseModel):
+    host: str = Field(..., description="PostgreSQL host")
+    port: int = 5432
+    database: str
+    username: str
+    password: Optional[str] = Field(default_factory=lambda: os.getenv("POSTGRES_PASSWORD"))
+
+    def dsn(self) -> str:
+        return f"postgresql://{self.username}:{self.password}@{self.host}:{self.port}/{self.database}"
+
+class PostgresTableConfig(BaseModel):
+    type: Literal["postgres"]
+    table: str
+
+StoreConfig = Annotated[
+    Union[DuckdbStoreConfig, PostgresTableConfig, OpenSearchIndexConfig],
+    Field(discriminator="type")
+]

@@ -34,10 +34,6 @@ from fred_core import KeycloakUser, get_current_user
 from starlette.websockets import WebSocketState
 
 from app.application_context import get_configuration
-from app.common.file_dao import FileDAO
-from app.common.structures import (
-    DAOTypeEnum,
-)
 from app.common.utils import log_exception
 from app.core.agents.agent_manager import AgentManager
 from app.core.agents.structures import AgenticFlow
@@ -70,13 +66,6 @@ class ChatbotController:
     ):
         self.agent_manager = agent_manager
         self.session_manager = session_manager
-        # For import-export operations
-        match get_configuration().dao.type:
-            case DAOTypeEnum.file:
-                self.dao = FileDAO(get_configuration().dao)
-            case dao_type:
-                raise NotImplementedError(f"DAO type {dao_type}")
-
         fastapi_tags: list[str | Enum] = ["Frontend"]
 
         @app.get(
@@ -95,7 +84,7 @@ class ChatbotController:
         )
         def get_agentic_flows(
             user: KeycloakUser = Depends(get_current_user),
-        ) -> list[AgenticFlow]:
+        ) -> List[AgenticFlow]:
             return self.agent_manager.get_agentic_flows()
 
         @app.post(
@@ -298,7 +287,8 @@ class ChatbotController:
         def delete_session(
             session_id: str, user: KeycloakUser = Depends(get_current_user)
         ) -> bool:
-            return self.session_manager.delete_session(session_id, user.uid)
+            self.session_manager.delete_session(session_id, user.uid)
+            return True
 
         @app.post(
             "/chatbot/upload",

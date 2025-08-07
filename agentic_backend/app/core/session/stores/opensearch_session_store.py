@@ -12,29 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from datetime import timezone
 import logging
-from typing import List, Dict
-from dateutil.parser import isoparse
-from collections import defaultdict
-from statistics import mean
+from typing import List
 from opensearchpy import OpenSearch, RequestsHttpConnection
-from app.core.chatbot.metric_structures import MetricsBucket, MetricsResponse
 from app.core.session.stores.base_session_store import BaseSessionStore
-from app.core.session.stores.base_secure_resource_access import (
-    BaseSecuredResourceAccess,
-)
 from app.core.session.session_manager import SessionSchema
-from app.core.chatbot.chat_schema import (
-    ChatMessagePayload,
-)
-from app.core.session.stores.utils import flatten_message, truncate_datetime
-from app.common.utils import authorization_required
-from app.common.error import AuthorizationSentinel, SESSION_NOT_INITIALIZED
-
+from fred_core import ThreadSafeLRUCache
 logger = logging.getLogger(__name__)
 
-SESSIONS_INDEX_MAPPING = {
+MAPPING = {
     "settings": {
         "number_of_shards": 1,
         "number_of_replicas": 0,
@@ -54,44 +40,11 @@ SESSIONS_INDEX_MAPPING = {
     }
 }
 
-# ==============================================================================
-# MESSAGES_INDEX_MAPPING
-# ==============================================================================
-# This mapping defines the schema used for chat messages (ChatMessagePayload).
-# We optimize for analytics (aggregation, filtering) and full-text search.
-# ==============================================================================
-
-MESSAGES_INDEX_MAPPING = {
-    "settings": {
-        "number_of_shards": 1,
-        "number_of_replicas": 0,
-        "refresh_interval": "1s"
-    },
-    "mappings": {
-        "properties": {
-            "exchange_id": {"type": "keyword"},
-            "type": {"type": "keyword"},
-            "sender": {"type": "keyword"},
-            "content": {"type": "text"},
-            "timestamp": {"type": "date"},
-            "session_id": {"type": "keyword"},
-            "rank": {"type": "integer"},
-            "subtype": {"type": "keyword"},
-            "metadata": {
-                "type": "object",
-                "dynamic": True
-            }
-        }
-    }
-}
-
-
-class OpensearchSessionStore(BaseSessionStore, BaseSecuredResourceAccess):
+class OpensearchSessionStore(BaseSessionStore):
     def __init__(
         self,
         host: str,
-        sessions_index: str,
-        history_index: str,
+        index: str,
         username: str,
         password: str,
         secure: bool = False,
@@ -104,67 +57,54 @@ class OpensearchSessionStore(BaseSessionStore, BaseSecuredResourceAccess):
             verify_certs=verify_certs,
             connection_class=RequestsHttpConnection,
         )
+        self._cache = ThreadSafeLRUCache[str, SessionSchema](max_size=1000)
+        self.index = index
+        if not self.client.indices.exists(index=index):
+            self.client.indices.create(index=index, body=MAPPING)
+            logger.info(f"OpenSearch index '{index}' created with mapping.")
+        else:
+            logger.info(f"OpenSearch index '{index}' already exists.")
 
-        self.sessions_index = sessions_index
-        self.history_index = history_index
-
-        for index, mapping in [(sessions_index, SESSIONS_INDEX_MAPPING), (history_index, MESSAGES_INDEX_MAPPING)]:
-            if not self.client.indices.exists(index=index):
-                if mapping:
-                    self.client.indices.create(index=index, body=mapping)
-                    logger.info(f"OpenSearch index '{index}' created with mapping.")
-                else:
-                    self.client.indices.create(index=index)
-                    logger.info(f"OpenSearch index '{index}' created without mapping.")
-            else:
-                logger.info(f"OpenSearch index '{index}' already exists.")
-
-    def get_authorized_user_id(self, session_id: str) -> str | AuthorizationSentinel:
-        try:
-            session = self.client.get(index=self.sessions_index, id=session_id)
-            return session["_source"].get("user_id")
-        except Exception as e:
-            logger.warning(f"Could not get user_id for session {session_id}: {e}")
-            return SESSION_NOT_INITIALIZED
-
-    def save_session(self, session: SessionSchema) -> None:
+        
+    def save(self, session: SessionSchema) -> None:
         try:
             session_dict = session.model_dump()
             self.client.index(
-                index=self.sessions_index, id=session.id, body=session_dict
+                index=self.index, id=session.id, body=session_dict
             )
+            self._cache.set(session.id, session) 
             logger.debug(f"Session {session.id} saved for user {session.user_id}")
         except Exception as e:
             logger.error(f"Failed to save session {session.id}: {e}")
             raise
 
-    @authorization_required
-    def get_session(self, session_id: str, user_id: str) -> SessionSchema | None:
+    def get(self, session_id: str) -> SessionSchema | None:
         try:
-            response = self.client.get(index=self.sessions_index, id=session_id)
+            if cached := self._cache.get(session_id):
+                logger.debug(f"[cache hit] session_id={session_id}")
+                return cached
+            response = self.client.get(index=self.index, id=session_id)
             session_data = response["_source"]
             return SessionSchema(**session_data)
         except Exception as e:
             logger.error(f"Failed to retrieve session {session_id}: {e}")
             return None
 
-    @authorization_required
-    def delete_session(self, session_id: str, user_id: str) -> bool:
+    def delete(self, session_id: str) -> None:
         try:
-            self.client.delete(index=self.sessions_index, id=session_id)
-            query = {"query": {"term": {"session_id.keyword": {"value": session_id}}}}
-            self.client.delete_by_query(index=self.history_index, body=query)
-            logger.info(f"Deleted session {session_id} and its messages")
-            return True
+            self._cache.delete(session_id)
+            self.client.delete(index=self.index, id=session_id)
+            # query = {"query": {"term": {"session_id.keyword": {"value": session_id}}}}
+            # self.client.delete_by_query(index=self.history_index, body=query)
+            # logger.info(f"Deleted session {session_id} and its messages")
         except Exception as e:
             logger.error(f"Failed to delete session {session_id}: {e}")
-            return False
 
-    def get_sessions_for_user(self, user_id: str) -> List[SessionSchema]:
+    def get_for_user(self, user_id: str) -> List[SessionSchema]:
         try:
             query = {"query": {"term": {"user_id.keyword": {"value": user_id}}}}
             response = self.client.search(
-                params={"size": 10000}, index=self.sessions_index, body=query
+                params={"size": 10000}, index=self.index, body=query
             )
             sessions = [
                 SessionSchema(**hit["_source"]) for hit in response["hits"]["hits"]
@@ -175,141 +115,3 @@ class OpensearchSessionStore(BaseSessionStore, BaseSecuredResourceAccess):
             logger.error(f"Failed to fetch sessions for user {user_id}: {e}")
             return []
 
-    @authorization_required
-    def save_messages(
-        self, session_id: str, messages: List[ChatMessagePayload], user_id: str
-    ) -> None:
-        try:
-            actions = [
-                {
-                    "index": {
-                        "_index": self.history_index,
-                        "_id": f"{session_id}-{message.rank or i}",
-                    }
-                }
-                for i, message in enumerate(messages)
-            ]
-            bodies = [msg.model_dump() for msg in messages]
-            bulk_body = [entry for pair in zip(actions, bodies) for entry in pair]
-
-            # OpenSearch Bulk API
-            self.client.bulk(body=bulk_body)
-            self.client.indices.refresh(
-                index=self.history_index
-            )  # Necessary due to indexing delay for whoever wants to access the newly stored data (from save_messages).
-            logger.info(f"Saved {len(messages)} messages for session {session_id}")
-        except Exception as e:
-            logger.error(f"Failed to save messages for session {session_id}: {e}")
-            raise
-
-    @authorization_required
-    def get_message_history(
-        self, session_id: str, user_id: str
-    ) -> List[ChatMessagePayload]:
-        try:
-            query = {
-                "query": {"term": {"session_id.keyword": {"value": session_id}}},
-                "sort": [{"rank": {"order": "asc", "unmapped_type": "integer"}}],
-                "size": 1000,
-            }
-            response = self.client.search(
-                index=self.history_index, body=query, params={"size": 10000}
-            )
-            return [
-                ChatMessagePayload(**hit["_source"]) for hit in response["hits"]["hits"]
-            ]
-        except Exception as e:
-            logger.error(f"Failed to retrieve messages for session {session_id}: {e}")
-            return []
-
-    def get_metrics(
-        self,
-        start: str,
-        end: str,
-        user_id: str,
-        precision: str,
-        groupby: List[str],
-        agg_mapping: Dict[str, List[str]]
-    ) -> MetricsResponse:
-        try:
-            # 1. Search messages in date range
-            query = {
-                "query": {
-                    "range": {
-                        "timestamp": {
-                            "gte": start,
-                            "lte": end,
-                            "format": "strict_date_optional_time",
-                        }
-                    }
-                },
-                "sort": [{"rank": {"order": "asc", "unmapped_type": "integer"}}],
-                "size": 10000,
-            }
-
-            response = self.client.search(index=self.history_index, body=query)
-            hits = response["hits"]["hits"]
-            # 2. Filter and flatten AI messages
-            flattened = []
-            for hit in hits:
-                msg = ChatMessagePayload(**hit["_source"])
-                if msg.type != "ai":
-                    continue
-                flat = flatten_message(msg)
-                flat["_datetime"] = isoparse(flat["timestamp"])
-                flat["_bucket"] = truncate_datetime(flat["_datetime"], precision)
-                flattened.append(flat)
-
-            # 3. Group by (bucket_time, groupby fields)
-            grouped = defaultdict(list)
-            for row in flattened:
-                group_key = tuple([row["_bucket"]] + [row.get(f) for f in groupby])
-                grouped[group_key].append(row)
-
-            # 4. Aggregate
-            buckets = []
-            logger.debug(f"[metrics] Running OpenSearch query on index '{self.history_index}' with range: {start} to {end}, precision={precision}")
-            logger.debug(f"[metrics] Query body: {query}")
-            logger.debug(f"[metrics] Found {len(hits)} hits between {start} and {end}")
-            logger.debug(f"[metrics] Truncated into {len(grouped)} groups based on precision={precision}")
-            
-            for key, group in grouped.items():
-                bucket_time = key[0]
-                group_fields = {field: value for field, value in zip(groupby, key[1:])}
-                aggs = {}
-
-                for field, ops in agg_mapping.items():
-                    values = [
-                        row.get(field) for row in group if row.get(field) is not None
-                    ]
-                    if not values:
-                        continue
-                    for op in ops:
-                        match op:
-                            case "sum":
-                                aggs[field + "_sum"] = sum(values)
-                            case "min":
-                                aggs[field + "_min"] = min(values)
-                            case "max":
-                                aggs[field + "_max"] = max(values)
-                            case "mean":
-                                aggs[field + "_mean"] = mean(values)
-                            case "values":
-                                aggs[field + "_values"] = values
-                            case _:
-                                raise ValueError(f"Unsupported aggregation op: {op}")
-
-                timestamp = bucket_time.astimezone(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
-                buckets.append(
-                    MetricsBucket(
-                        timestamp=timestamp,
-                        group=group_fields,
-                        aggregations=aggs,
-                    )
-                )
-
-            return MetricsResponse(precision=precision, buckets=buckets)
-
-        except Exception as e:
-            logger.error(f"Failed to compute metrics: {e}")
-            return MetricsResponse(precision=precision, buckets=[])
