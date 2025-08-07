@@ -16,7 +16,7 @@ data:
   .env: |
     {{- range $key, $value := .Values.dotenv }}
     {{- if $value }}
-    {{ $key }}="{{ $value }}"
+    {{ $key }}="{{ tpl $value $ }}"
     {{- else }}
     {{ $key }}=""
     {{- end }}

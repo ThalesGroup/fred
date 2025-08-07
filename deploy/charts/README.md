@@ -9,6 +9,13 @@
 - An IDP provider (such as keycloak or alternative)
 - A full-text search engine (such as opensearch or alternative)
 
+## Prerequisites
+
+- dotenv-cli for a smooth env variable replacement in the helm values:
+
+    ```bash
+    sudo npm install -g dotenv-cli
+    ```
 ## Build images
 
 Build the agentic backend, the knowledge-flow backend and the frontend images :
@@ -63,9 +70,9 @@ Then deploy knowledge-flow-backend
 ```
 cd deploy/charts
 
-helm upgrade -i knowledge-flow-backend ./knowledge-flow-backend/ -n dev
+dotenv -e ../../../knowledge_flow_backend/config/.env -- envsubst < ./agentic-backend/values.yaml.tpl | helm upgrade -i knowledge-flow-backend ./knowledge-flow-backend/ -n dev
 OR
-helm upgrade -i knowledge-flow-backend ./knowledge-flow-backend/ -n dev --values ./knowledge-flow-custom.yaml
+dotenv -e ../../../knowledge_flow_backend/config/.env -- envsubst < ./agentic-backend/values.yaml.tpl | helm upgrade -i knowledge-flow-backend ./knowledge-flow-backend/ -n dev --values ./knowledge-flow-custom.yaml
 ```
 
 ## Install the agentic backend
@@ -86,7 +93,7 @@ Then deploy the backend :
 
 ```
 cd deploy/charts/
-helm upgrade -i agentic-backend ./agentic-backend/ -n dev --values ./custom-values-examples/agentic-backend-custom.yaml
+dotenv -e ../../../agentic_backend/config/.env -- envsubst < ./agentic-backend/values.yaml.tpl | helm upgrade -i agentic-backend ./agentic-backend/ -n dev --values ./custom-values-examples/agentic-backend-custom.yaml
 ```
 
 ## Install the Fred frontend
