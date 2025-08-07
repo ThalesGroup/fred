@@ -59,6 +59,9 @@ input_processors:
   - prefix: ".mp3"
     class_path: app.core.processors.input.audio_processor.audio_transcription_processor.AudioTranscriptionProcessor
 
+audio:
+  whisper_model_size: base # or tiny, small, medium, large
+
 content_storage:
   type: local
   root_path: ~/.fred/knowledge-flow/content-store

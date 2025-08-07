@@ -14,15 +14,13 @@
 
 from pathlib import Path
 import librosa
-import whisper
-
+from typing import Optional
 from app.core.processors.input.common.base_input_processor import BaseMarkdownProcessor
-
+from app.application_context import get_app_context
 
 class AudioTranscriptionProcessor(BaseMarkdownProcessor):
-    def __init__(self, model_size="tiny"):
-        # model_size: "tiny", "base", "small", "medium", "large"
-        self.model = whisper.load_model(model_size)
+    def __init__(self, model_size: Optional[str] = None):
+        self.model = get_app_context().get_whisper_model(model_size)
 
     def check_file_validity(self, file_path: Path) -> bool:
         return file_path.exists() and file_path.suffix.lower() in [".mp3"] # @TODO add support for ".wav", ".flac", ".ogg", ".m4a"]

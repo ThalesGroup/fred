@@ -162,13 +162,20 @@ class ApplicationContext:
         if ApplicationContext._instance is not None:
             # Optionally: log or assert config equality here
             return
-
+        
+        self._whisper_model = None
         self.configuration = configuration
         validate_input_processor_config(configuration)
         validate_output_processor_config(configuration)
         self.input_processor_registry: Dict[str, Type[BaseInputProcessor]] = self._load_input_processor_registry()
         self.output_processor_registry: Dict[str, Type[BaseOutputProcessor]] = self._load_output_processor_registry()
         ApplicationContext._instance = self
+        if self._whisper_model is None:
+            whisper_model_size = configuration.audio.whisper_model_size
+            logger.info(f"🧠 Preloading Whisper model ({whisper_model_size}) at startup...")
+            import whisper
+            self._whisper_model = whisper.load_model(whisper_model_size)
+            logger.info("✅ Whisper model loaded successfully.")
         self._log_config_summary()
 
     def is_tabular_file(self, file_name: str) -> bool:
@@ -703,3 +710,17 @@ class ApplicationContext:
             logger.info(f"    • {ext} → {cls.__name__}")
 
         logger.info("--------------------------------------------------")
+
+    def get_whisper_model(self, override_size: Optional[str] = None):
+        """
+        Returns the shared Whisper model (singleton). If override_size is provided, loads a new instance (not cached).
+        """
+        import whisper
+
+        if override_size:
+            logger.info(f"⚠️ Loading Whisper model on-demand with override size: {override_size}")
+            return whisper.load_model(override_size)
+
+        if self._whisper_model is None:
+            raise RuntimeError("Whisper model not preloaded.")
+        return self._whisper_model
