@@ -17,6 +17,7 @@ from fred_core.common.utils import raise_internal_error
 from fred_core.security.keycloak import get_current_user, initialize_keycloak
 from fred_core.security.structure import KeycloakUser, SecurityConfiguration
 from fred_core.store.filters import generate_filter_model, BaseFilter
+from fred_core.store.filter_processors import FilterProcessor, OpenSearchFilterProcessor, DuckDBFilterProcessor
 from fred_core.store.local_json_store import (
     BaseModelWithId,
     LocalJsonStore,
@@ -33,6 +34,9 @@ __all__ = [
     "SecurityConfiguration",
     "generate_filter_model",
     "BaseFilter",
+    "FilterProcessor",
+    "OpenSearchFilterProcessor",
+    "DuckDBFilterProcessor",
     "BaseModelWithId",
     "LocalJsonStore",
     "ResourceAlreadyExistsError",

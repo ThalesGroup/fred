@@ -14,10 +14,12 @@
 
 import logging
 from pathlib import Path
-from typing import List, Tuple
+from typing import List, Tuple, Dict, Any
 
 import pandas as pd
 import duckdb
+
+from fred_core.store.filter_processors import DuckDBFilterProcessor
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +33,7 @@ class DuckDBTableStore:
     def __init__(self, db_path: Path, prefix: str):
         self.db_path = db_path
         self.prefix = prefix
+        self.filter_processor = DuckDBFilterProcessor()
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         logger.info(f"DuckDBTableStore ({self.prefix}) initialized at {self.db_path}")
 
@@ -139,3 +142,108 @@ class DuckDBTableStore:
         except Exception as e:
             logger.error(f"Failed to execute SQL query: {e}", exc_info=True)
             raise
+
+    def _build_filtered_query(self, table_name: str, filters: Dict[str, Any]) -> Tuple[str, List[Any]]:
+        """
+        Build a filtered SQL query for a table.
+        
+        Args:
+            table_name: Name of the table to query (will be prefixed automatically)
+            filters: Structured filter dictionary with operations like {"field__gt": 5}
+            
+        Returns:
+            Tuple of (SQL query string, parameters list)
+        """
+        full_table = self._prefixed(table_name)
+        where_clause, parameters = self.filter_processor.process_filters(filters)
+        
+        if where_clause:
+            sql = f"SELECT * FROM {full_table} WHERE {where_clause}"
+        else:
+            sql = f"SELECT * FROM {full_table}"
+            
+        return sql, parameters
+
+    def query_table_with_filters(self, table_name: str, filters: Dict[str, Any]) -> pd.DataFrame:
+        """
+        Query a table with structured filters applied.
+        
+        Args:
+            table_name: Name of the table to query (will be prefixed automatically)
+            filters: Structured filter dictionary with operations like {"field__gt": 5}
+            
+        Returns:
+            DataFrame containing filtered results
+        """
+        sql, parameters = self._build_filtered_query(table_name, filters)
+        
+        if parameters:
+            return self.execute_parametrized_query(sql, parameters)
+        else:
+            return self.execute_sql_query(sql)
+
+    def query_table_with_filters_raw(self, table_name: str, filters: Dict[str, Any]) -> List[Tuple]:
+        """
+        Query a table with structured filters and return raw tuples.
+        
+        Useful when you need raw results for custom deserialization.
+        
+        Args:
+            table_name: Name of the table to query (will be prefixed automatically)
+            filters: Structured filter dictionary with operations like {"field__gt": 5}
+            
+        Returns:
+            List of result tuples
+        """
+        sql, parameters = self._build_filtered_query(table_name, filters)
+        
+        try:
+            with self._connect() as con:
+                if parameters:
+                    rows = con.execute(sql, parameters).fetchall()
+                else:
+                    rows = con.execute(sql).fetchall()
+            return rows
+        except Exception as e:
+            logger.error(f"Failed to execute filtered query: {e}", exc_info=True)
+            raise
+
+    def execute_parametrized_query(self, sql: str, parameters: List[Any]) -> pd.DataFrame:
+        """
+        Execute a parametrized SQL query and return the result as a pandas DataFrame.
+        
+        Args:
+            sql: SQL query with ? placeholders
+            parameters: List of parameter values
+            
+        Returns:
+            DataFrame containing query results
+        """
+        try:
+            with self._connect() as con:
+                df = con.execute(sql, parameters).df()
+            return df
+        except Exception as e:
+            logger.error(f"Failed to execute parametrized query: {e}", exc_info=True)
+            raise
+
+    def execute_filtered_query(self, base_sql: str, filters: Dict[str, Any]) -> pd.DataFrame:
+        """
+        Execute a base SQL query with additional WHERE clause filters applied.
+        
+        Args:
+            base_sql: Base SQL query (SELECT ... FROM table)
+            filters: Structured filter dictionary to append as WHERE conditions
+            
+        Returns:
+            DataFrame containing filtered results
+        """
+        where_clause, parameters = self.filter_processor.process_filters(filters)
+        
+        if where_clause:
+            # Determine if we need WHERE or AND based on existing query
+            connector = " AND " if "WHERE" in base_sql.upper() else " WHERE "
+            sql = f"{base_sql}{connector}{where_clause}"
+            return self.execute_parametrized_query(sql, parameters)
+        else:
+            return self.execute_sql_query(base_sql)

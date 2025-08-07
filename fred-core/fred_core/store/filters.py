@@ -49,6 +49,33 @@ filter_ops_by_type: FilterOpInfo = {
 }
 
 
+def extract_non_none_type(t: Type[Any]) -> Type[Any]:
+    """
+    Extract the non-None type from Optional/Union types.
+    
+    Args:
+        t: Type annotation that may be Optional[T], Union[T, None], or T | None
+        
+    Returns:
+        The inner non-None type, or the original type if not Optional/Union
+    """
+    origin = get_origin(t)
+    args = get_args(t)
+
+    # Handle Union types (includes Optional which is Union[T, None])
+    if origin is Union:
+        non_none_args = [arg for arg in args if arg is not type(None)]
+        if len(non_none_args) == 1:
+            # This is Optional[T] or T | None - recursively extract the inner type
+            return extract_non_none_type(non_none_args[0])
+        elif len(non_none_args) > 1:
+            # This is a true Union of multiple non-None types
+            # Take the first non-None type
+            return extract_non_none_type(non_none_args[0])
+
+    return t
+
+
 def resolve_type(t: Type[Any]) -> Type[Any] | str:
     """
     Resolve a type annotation to its base type for filter operation mapping.
@@ -60,36 +87,57 @@ def resolve_type(t: Type[Any]) -> Type[Any] | str:
     - list[T] -> "list[T]"
     - Regular types -> T
     """
-    origin = get_origin(t)
-    args = get_args(t)
-
-    # Handle Union types (includes Optional which is Union[T, None])
-    if origin is Union:
-        # Filter out None/NoneType and get the actual type
-        non_none_args = [arg for arg in args if arg is not type(None)]
-        if len(non_none_args) == 1:
-            # This is Optional[T] or T | None - recursively resolve the inner type
-            return resolve_type(non_none_args[0])
-        elif len(non_none_args) > 1:
-            # This is a true Union of multiple non-None types
-            # For now, we'll take the first non-None type
-            # In the future, we could support multiple type operations
-            return resolve_type(non_none_args[0])
+    # First extract the non-None type
+    inner_type = extract_non_none_type(t)
+    origin = get_origin(inner_type)
+    args = get_args(inner_type)
 
     # Handle list types
     if origin is list:
-        inner = args[0] if args else Any
-        if hasattr(inner, "__name__"):
-            return f"list[{inner.__name__}]"
+        list_inner = args[0] if args else Any
+        if hasattr(list_inner, "__name__"):
+            return f"list[{list_inner.__name__}]"
         else:
             # Handle complex inner types
-            resolved_inner = resolve_type(inner)
+            resolved_inner = resolve_type(list_inner)
             if isinstance(resolved_inner, str):
                 return f"list[{resolved_inner}]"
             else:
                 return f"list[{resolved_inner.__name__}]"
 
-    return t
+    return inner_type
+
+
+def get_filter_field_type(field_type: Type[Any], resolved_type: Type[Any] | str, operation: str) -> Type[Any]:
+    """
+    Determine the appropriate type for a filter field based on the original field type and operation.
+    
+    Args:
+        field_type: Original field type annotation
+        resolved_type: Resolved type from resolve_type()
+        operation: Filter operation (eq, contains, overlap, etc.)
+        
+    Returns:
+        The type that should be used for the filter field
+    """
+    # Extract the non-None inner type for the base field type
+    base_inner_type = extract_non_none_type(field_type)
+    
+    # For list operations, we need special handling
+    if isinstance(resolved_type, str) and resolved_type.startswith("list["):
+        list_origin = get_origin(base_inner_type)
+        list_args = get_args(base_inner_type)
+        
+        if list_origin is list and list_args:
+            if operation == "contains":
+                # For list contains, expect a single element of the list's inner type
+                return list_args[0]  # e.g., str from List[str]
+            elif operation == "overlap":
+                # For list overlap, expect a list of the same inner type  
+                return base_inner_type  # e.g., List[str]
+    
+    # For non-list operations, use the base inner type
+    return base_inner_type
 
 
 class BaseFilter(BaseModel):
@@ -128,23 +176,15 @@ def generate_filter_model(
         if not op_map:
             continue
 
-        # For filter fields, we want to use the inner type (not the Optional wrapper)
-        # The filter fields themselves will always be Optional in the generated model
-        inner_type = resolved_type if not isinstance(resolved_type, str) else field_type
-
-        # Extract inner type from Optional/Union for better type annotation
-        if get_origin(field_type) is Union:
-            non_none_args = [
-                arg for arg in get_args(field_type) if arg is not type(None)
-            ]
-            if non_none_args:
-                inner_type = non_none_args[0]
-
         for op, meta in op_map.items():
             description = meta.get("description", "")
             filter_field_name = f"{field_name}__{op}" if op != "eq" else field_name
+            
+            # Determine the correct type for this specific operation
+            filter_field_type = get_filter_field_type(field_type, resolved_type, op)
+            
             fields[filter_field_name] = (
-                Optional[inner_type],
+                Optional[filter_field_type],
                 Field(default=None, description=description),
             )
 

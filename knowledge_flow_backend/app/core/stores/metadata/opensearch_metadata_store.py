@@ -17,6 +17,7 @@ from typing import List, Optional
 from opensearchpy import OpenSearch, RequestsHttpConnection, OpenSearchException
 from pydantic import ValidationError
 
+from fred_core import OpenSearchFilterProcessor
 from app.common.document_structures import DocumentMetadata
 from app.core.stores.metadata.base_metadata_store import (
     BaseMetadataStore,
@@ -126,6 +127,7 @@ class OpenSearchMetadataStore(BaseMetadataStore):
             connection_class=RequestsHttpConnection,
         )
         self.metadata_index_name = index
+        self.filter_processor = OpenSearchFilterProcessor()
 
         if not self.client.indices.exists(index=self.metadata_index_name):
             self.client.indices.create(index=self.metadata_index_name, body=METADATA_INDEX_MAPPING)
@@ -156,13 +158,9 @@ class OpenSearchMetadataStore(BaseMetadataStore):
             raise MetadataDeserializationError from e
 
     def get_all_metadata(self, filters: dict) -> List[DocumentMetadata]:
-        """
-        Retrieve all metadata documents that match the given filters.
-        Filters should be a dictionary where keys are field names and values are the filter values.
-        Example: {"source_tag": "local-docs", "category": "reports"}
-        """
+        """OpenSearch implementation of structured filtering."""
         try:
-            must_clauses = self._build_must_clauses(filters)
+            must_clauses = self.filter_processor.process_filters(filters)
             query = {"match_all": {}} if not must_clauses else {"bool": {"must": must_clauses}}
 
             response = self.client.search(
@@ -183,26 +181,6 @@ class OpenSearchMetadataStore(BaseMetadataStore):
                 logger.warning(f"Deserialization failed for doc {h.get('_id')}: {e}")
         return results
 
-    def _build_must_clauses(self, filters_dict: dict) -> List[dict]:
-        must = []
-
-        def flatten(prefix: str, val):
-            if isinstance(val, dict):
-                for k, v in val.items():
-                    yield from flatten(f"{prefix}.{k}", v)
-            else:
-                yield (prefix, val)
-
-        for field, value in filters_dict.items():
-            if isinstance(value, dict):
-                for flat_field, flat_value in flatten(field, value):
-                    must.append({"term": {flat_field: flat_value}})
-            elif isinstance(value, list):
-                must.append({"terms": {field: value}})
-            else:
-                must.append({"term": {field: value}})
-
-        return must
 
     def list_by_source_tag(self, source_tag: str) -> List[DocumentMetadata]:
         """

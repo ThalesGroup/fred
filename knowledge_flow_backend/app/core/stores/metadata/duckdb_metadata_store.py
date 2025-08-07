@@ -107,9 +107,9 @@ class DuckdbMetadataStore(BaseMetadataStore):
         return [self._deserialize(row) for row in rows]
 
     def get_all_metadata(self, filters: dict) -> List[DocumentMetadata]:
-        # In-memory filtering for now
-        all_docs = self._query_all()
-        return [md for md in all_docs if self._match_nested(md.model_dump(mode="json"), filters)]
+        """DuckDB implementation using SQL-based structured filtering."""
+        rows = self.store.query_table_with_filters_raw(self.table_name, filters)
+        return [self._deserialize(row) for row in rows]
 
     def get_metadata_in_tag(self, tag_id: str) -> List[DocumentMetadata]:
         with self.store._connect() as conn:
@@ -152,12 +152,19 @@ class DuckdbMetadataStore(BaseMetadataStore):
             )
 
     def delete_metadata(self, document_uid: str) -> None:
-        with self.store._connect() as conn:
-            result = conn.execute(f"DELETE FROM {self._table()} WHERE document_uid = ?", [document_uid])
-        if result.rowcount == 0:
+        if not document_uid:
+            raise ValueError("Document UID must not be empty")
+            
+        # First check if the document exists
+        existing = self.get_metadata_by_uid(document_uid)
+        if not existing:
             raise ValueError(f"No document found with UID {document_uid}")
+            
+        # Now delete it
+        with self.store._connect() as conn:
+            conn.execute(f"DELETE FROM {self._table()} WHERE document_uid = ?", [document_uid])
 
-    def _update_metadata_field(self, document_uid: str, field: str, value: Any) -> DocumentMetadata:
+    def update_metadata_field(self, document_uid: str, field: str, value: Any) -> DocumentMetadata:
         existing = self.get_metadata_by_uid(document_uid)
         if not existing:
             raise ValueError(f"No document found with UID {document_uid}")
@@ -169,13 +176,3 @@ class DuckdbMetadataStore(BaseMetadataStore):
         with self.store._connect() as conn:
             conn.execute(f"DELETE FROM {self._table()}")
 
-    def _match_nested(self, item: dict, filter_dict: dict) -> bool:
-        for key, value in filter_dict.items():
-            if isinstance(value, dict):
-                sub_item = item.get(key, {})
-                if not isinstance(sub_item, dict) or not self._match_nested(sub_item, value):
-                    return False
-            else:
-                if str(item.get(key)) != str(value):
-                    return False
-        return True

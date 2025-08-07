@@ -38,7 +38,7 @@ logger = logging.getLogger(__name__)
 
 
 # Create the filter model dynamically - now returns BaseFilter subclass
-DocumentFilter = Type[BaseFilter]
+DocumentFilter = BaseFilter
 if not TYPE_CHECKING:
     DocumentFilter = generate_filter_model(DocumentMetadata, name="DocumentFilter")
 

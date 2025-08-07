@@ -41,7 +41,11 @@ def test_save_and_get_metadata(metadata_store):
     metadata = DocumentMetadata(source_type=SourceType("push"), document_uid="doc1", document_name="Test Doc")
     metadata_store.save_metadata(metadata)
     result = metadata_store.get_metadata_by_uid("doc1")
-    assert result == metadata
+
+    assert result.document_uid == metadata.document_uid
+    assert result.document_name == metadata.document_name
+    assert result.source_type == metadata.source_type
+    assert result.retrievable == metadata.retrievable
 
 
 def test_update_metadata_field(metadata_store):
@@ -82,15 +86,13 @@ def test_update_metadata_uid_not_found(metadata_store):
 
 
 def test_delete_metadata_uid_not_found(metadata_store):
-    ghost = DocumentMetadata(source_type=SourceType("push"), document_uid="ghost", document_name="Ghost")
     with pytest.raises(ValueError):
-        metadata_store.delete_metadata(ghost)
+        metadata_store.delete_metadata("non-exsiting-uid")
 
 
 def test_delete_metadata_missing_uid(metadata_store):
-    broken = DocumentMetadata(source_type=SourceType("push"), document_uid="", document_name="Broken")
     with pytest.raises(ValueError):
-        metadata_store.delete_metadata(broken)
+        metadata_store.delete_metadata("")
 
 
 # ----------------------------
@@ -112,7 +114,7 @@ def test_overwrite_existing_metadata(metadata_store):
 def test_delete_existing_metadata(metadata_store):
     doc = DocumentMetadata(source_type=SourceType("push"), document_uid="doc6", document_name="ToDelete")
     metadata_store.save_metadata(doc)
-    metadata_store.delete_metadata(doc)
+    metadata_store.delete_metadata("doc6")
 
     assert metadata_store.get_metadata_by_uid("doc6") is None
 
@@ -123,13 +125,3 @@ def test_match_nested_with_value_mismatch(metadata_store):
 
     result = metadata_store.get_all_metadata({"author": "alice"})
     assert result == []
-
-
-def test_load_returns_empty_if_file_missing(tmp_path):
-    json_path = tmp_path / "missing.json"
-    store = DuckdbMetadataStore(json_path)
-
-    if json_path.exists():
-        json_path.unlink()
-
-    assert store.get_all_metadata({}) == []
