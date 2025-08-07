@@ -15,7 +15,7 @@ IMAGE_FULL          ?= $(REGISTRY_URL)/$(REGISTRY_NAMESPACE)/$(IMAGE_NAME):$(IMA
 
 # Runtime
 PORT                ?= 8111
-ENV_FILE            ?= .env
-LOG_LEVEL           ?= INFO
+ENV_FILE            ?= .venv
+LOG_LEVEL           ?= info
 PROJECT_ID          ?= 74648
 HELM_ARCHIVE        ?= ./$(PROJECT_SLUG)-$(VERSION).tgz
