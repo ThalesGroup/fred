@@ -104,6 +104,20 @@ ai:
         chunk_overlap: 64
         knowledge_flow_url: "http://localhost:8111/knowledge-flow/v1"
       model: {}
+    - name: "RetiredRagsExpert"
+      role: "Document Retrieval Expert"
+      description: >
+        Answers user questions by retrieving relevant information from ingested document corpora.
+        Uses a vector-based retrieval pipeline to ground responses in internal or uploaded knowledge.
+      class_path: "app.agents.rags.retired_rags_expert.RetiredRagsExpert"
+      enabled: false
+      categories:
+        - "rag"
+      settings:
+        chunk_size: 512
+        chunk_overlap: 64
+        knowledge_flow_url: "http://localhost:8111/knowledge-flow/v1"
+      model: {}
 
 storage:
   postgres:
