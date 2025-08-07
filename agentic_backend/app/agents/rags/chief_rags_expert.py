@@ -428,7 +428,7 @@ class ChiefRagsExpert(AgentFlow):
 
         return {
             "messages": [message],
-            "question": better_question,
+            "question": better_question.rephrase_query,
             "retry_count": retry_count,
         }
 
@@ -474,8 +474,15 @@ class ChiefRagsExpert(AgentFlow):
         Returns:
             Dict[str, Any]: Updated state
         """
+        generation = state.get("generation")
+        content: str = generation.content if generation is not None else ""
+        system_message: str = (
+            "The agent was unable to generate a satisfactory response to your question."
+        )
+        if generation:
+            system_message += " Here is the latest response :"
         message: SystemMessage = SystemMessage(
-            content=state["generation"].content,
+            content=content,
             response_metadata={
                 "thought": True,
                 "fred": {
@@ -484,13 +491,17 @@ class ChiefRagsExpert(AgentFlow):
                 },
             },
         )
+        messages = [
+            message,
+            SystemMessage(
+                content=system_message,
+            ),
+        ]
+        if generation is not None:
+            messages.append(generation)
+
         return {
-            "messages": [
-                message,
-                SystemMessage(
-                    content="The agent was unable to generate a satisfactory response to your question."
-                ),
-            ],
+            "messages": messages,
             "question": "",
             "documents": [],
             "top_k": self.TOP_K,
@@ -509,17 +520,17 @@ class ChiefRagsExpert(AgentFlow):
             state (Dict[str, Any]): Current graph state
 
         Returns:
-            - "rephrase_query" if no documents were retrieved.
             - "abort" if retry_count exceeds 2.
+            - "rephrase_query" if no documents were retrieved.
             - "generate" otherwise.
         """
         documents: Optional[List[DocumentSource]] = state["documents"]
         retry_count: int = state.get("retry_count", 0)
 
-        if not documents:
-            return "rephrase_query"
-        elif retry_count > 2:
+        if retry_count > 2:
             return "abort"
+        elif not documents:
+            return "rephrase_query"
         else:
             return "generate"
 
