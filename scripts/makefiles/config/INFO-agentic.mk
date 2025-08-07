@@ -2,7 +2,7 @@
 PROJECT_NAME        ?= agentic
 PROJECT_SLUG        ?= agentic-backend
 PY_PACKAGE          ?= app
-VERSION             ?= 0.1.0
+VERSION             ?= 0.1-dev
 
 # Docker/Registry
 REGISTRY_URL        ?= registry.thalesdigital.io
@@ -15,7 +15,7 @@ IMAGE_FULL          ?= $(REGISTRY_URL)/$(REGISTRY_NAMESPACE)/$(IMAGE_NAME):$(IMA
 
 # Runtime
 PORT                ?= 8000
-ENV_FILE            ?= .env
-LOG_LEVEL           ?= INFO
+ENV_FILE            ?= .venv
+LOG_LEVEL           ?= info
 PROJECT_ID          ?= 12345  # Optional if using Helm
 HELM_ARCHIVE        ?= ./$(PROJECT_SLUG)-$(VERSION).tgz
