@@ -123,15 +123,15 @@ storage:
     index: feedback-index
 
   agent_store:
-    type: "duckdb"
+    type: "opensearch"
     index: agent-index
 
   session_store:
-    type: "duckdb"
+    type: "opensearch"
     index: session-index
 
   history_store:
-    type: "duckdb"
+    type: "opensearch"
     index: history-index
 
 
