@@ -24,59 +24,33 @@ Includes:
 """
 
 from threading import Lock
-from typing import Any, Dict, List, Optional, Type
-from fred_core import OpenSearchStorageConfig
+from typing import Any, Dict, List, Optional
 
 from app.core.agents.store.base_agent_store import BaseAgentStore
 from app.core.feedback.store.base_feedback_store import BaseFeedbackStore
 from pydantic import BaseModel
 
-from app.core.model.model_factory import get_structured_chain
 from app.common.structures import (
     AgentSettings,
     Configuration,
-    DuckdbAgentStorageConfig,
-    DuckdbFeedbackStorage,
-    DuckdbSessionStorageConfig,
     ModelConfiguration,
-    OpenSessionSearchStorageConfig,
-    ServicesSettings,
 )
 from app.core.model.model_factory import get_model
 from langchain_core.language_models.base import BaseLanguageModel
+from app.core.session.stores.base_history_store import BaseHistoryStore
 from app.core.session.stores.base_session_store import BaseSessionStore
 from pathlib import Path
-
+from fred_core import (
+    OpenSearchIndexConfig,
+    DuckdbStoreConfig,
+)
 import logging
 
-
-
-
 logger = logging.getLogger(__name__)
-
 
 # -------------------------------
 # Public access helper functions
 # -------------------------------
-
-
-def get_structured_chain_for_service(service_name: str, schema: Type[BaseModel]):
-    """
-    Returns a structured output chain for a given service and schema.
-    This method provides fallback for unsupported providers. Only OpenAI and Azure
-    support the function_calling features. If not, like Ollama, it will use a default
-    prompt as a fallback.
-
-    Args:
-        service_name (str): The name of the AI service as configured.
-        schema (Type[BaseModel]): The Pydantic schema expected from the LLM.
-
-    Returns:
-        A Langchain chain capable of returning a structured schema instance.
-    """
-    app_context = get_app_context()
-    model_config = app_context.get_service_settings(service_name).model
-    return get_structured_chain(schema, model_config)
 
 
 def get_configuration() -> Configuration:
@@ -89,8 +63,11 @@ def get_configuration() -> Configuration:
     return get_app_context().configuration
 
 
-def get_sessions_store() -> BaseSessionStore:
-    return get_app_context().get_sessions_store()
+def get_session_store() -> BaseSessionStore:
+    return get_app_context().get_session_store()
+
+def get_history_store() -> BaseHistoryStore:
+    return get_app_context().get_history_store()
 
 
 def get_agent_store() -> BaseAgentStore:
@@ -138,24 +115,9 @@ def get_default_model() -> BaseLanguageModel:
     """
     return get_app_context().get_default_model()
 
-
-def get_model_for_service(service_name: str) -> BaseLanguageModel:
-    """
-    Retrieves the AI model instance for a given service.
-
-    Args:
-        service_name (str): The name of the service.
-
-    Returns:
-        BaseLanguageModel: The AI model configured for the service.
-    """
-    return get_app_context().get_model_for_service(service_name)
-
-
 # -------------------------------
 # Runtime status class
 # -------------------------------
-
 
 class RuntimeStatus:
     """
@@ -201,10 +163,10 @@ class ApplicationContext:
     configuration: Configuration
     status: RuntimeStatus
     _service_instances: Dict[str, Any]
-    _service_index: Dict[str, ServicesSettings]
     _feedback_store_instance: Optional[BaseFeedbackStore] = None
     _agent_store_instance: Optional[BaseAgentStore] = None
     _session_store_instance: Optional[BaseSessionStore] = None
+    _history_store_instance: Optional[BaseHistoryStore] = None
 
     def __new__(cls, configuration: Configuration):
         with cls._lock:
@@ -220,15 +182,8 @@ class ApplicationContext:
                 cls._instance.status = RuntimeStatus()
                 cls._instance._service_instances = {}  # Cache for service instances
                 cls._instance.apply_default_models()
-                cls._instance._build_indexes()
 
             return cls._instance
-
-    def _build_indexes(self):
-        """Builds fast access indexes from the list-based configuration."""
-        self._service_index = {
-            service.name: service for service in self.configuration.ai.services
-        }
 
     def apply_default_models(self):
         """
@@ -243,10 +198,6 @@ class ApplicationContext:
             target_dict = target.model_dump(exclude_unset=True)
             merged_dict = {**defaults, **target_dict}
             return type(target)(**merged_dict)
-
-        # Apply to services
-        for service in self.configuration.ai.services:
-            service.model = self._merge_with_default_model(service.model)
 
         # Apply to agents
         for agent in self.configuration.ai.agents:
@@ -273,18 +224,6 @@ class ApplicationContext:
 
     # --- AI Models ---
 
-    def get_service_settings(self, service_name: str) -> ServicesSettings:
-        service_settings = self._service_index.get(service_name)
-        if service_settings is None or not service_settings.enabled:
-            raise ValueError(
-                f"AI service '{service_name}' is not configured or enabled."
-            )
-        return service_settings
-
-    def get_model_for_service(self, service_name: str) -> BaseLanguageModel:
-        service_settings = self.get_service_settings(service_name)
-        return get_model(service_settings.model)
-
     def get_default_model(self) -> BaseLanguageModel:
         """
         Retrieves the default AI model instance.
@@ -302,7 +241,7 @@ class ApplicationContext:
         """
         return [agent.name for agent in self.configuration.ai.agents if agent.enabled]
 
-    def get_sessions_store(self) -> BaseSessionStore:
+    def get_session_store(self) -> BaseSessionStore:
         """
         Factory function to create a sessions store instance based on the configuration.
         As of now, it supports in_memory and OpenSearch sessions storage.
@@ -313,72 +252,104 @@ class ApplicationContext:
         if self._session_store_instance is not None:
             return self._session_store_instance
 
-        config = get_configuration().session_storage
-        if isinstance(config, DuckdbSessionStorageConfig):
+        store_config = get_configuration().storage.session_store
+        if isinstance(store_config, DuckdbStoreConfig):
             from app.core.session.stores.duckdb_session_store import DuckdbSessionStore
-            db_path = Path(config.duckdb_path).expanduser()
+            db_path = Path(store_config.duckdb_path).expanduser()
             return DuckdbSessionStore(db_path)
-        elif isinstance(config, OpenSessionSearchStorageConfig):
+        elif isinstance(store_config, OpenSearchIndexConfig):
+            opensearch_config = get_configuration().storage.opensearch
             from app.core.session.stores.opensearch_session_store import OpensearchSessionStore
-            username = config.username
-            password = config.password
-
-            if not username or not password:
+            password = opensearch_config.password
+            if not password:
                 raise ValueError(
                     "Missing OpenSearch credentials: OPENSEARCH_USER and/or OPENSEARCH_PASSWORD"
                 )
 
             return OpensearchSessionStore(
-                host=config.host,
-                username=username,
+                host=opensearch_config.host,
+                username=opensearch_config.username,
                 password=password,
-                secure=config.secure,
-                verify_certs=config.verify_certs,
-                sessions_index=config.sessions_index,
-                history_index=config.history_index,
+                secure=opensearch_config.secure,
+                verify_certs=opensearch_config.verify_certs,
+                index=store_config.index,
             )
         else:
-            raise ValueError(f"Unsupported sessions storage backend: {config.type}")
+            raise ValueError("Unsupported sessions storage backend")
 
-    def get_agent_store(self) -> BaseAgentStore:
+    def get_history_store(self) -> BaseHistoryStore:
         """
-        Retrieve the configured agent store. It is used to save all the configured or
-        dynamically created agents
+        Factory function to create a sessions store instance based on the configuration.
+        As of now, it supports in_memory and OpenSearch sessions storage.
 
         Returns:
-            BaseDynamicAgentStore: An instance of the dynamic agents store.
+            AbstractSessionStorage: An instance of the sessions store.
         """
-        if self._agent_store_instance is not None:
-            return self._agent_store_instance
-        
-       
+        if self._history_store_instance is not None:
+            return self._history_store_instance
+        from app.core.session.stores.duckdb_history_store import DuckdbHistoryStore
 
-        config = get_configuration().agent_storage
-        if isinstance(config, DuckdbAgentStorageConfig):
-            from app.core.agents.store.duckdb_agent_store import DuckdbAgentStore
-            db_path = Path(config.duckdb_path).expanduser()
-            return DuckdbAgentStore(db_path)
-        elif isinstance(config, OpenSearchStorageConfig):
-            from app.core.agents.store.opensearch_agent_store import OpenSearchAgentStore
-            username = config.username
-            password = config.password
-
-            if not username or not password:
+        store_config = get_configuration().storage.history_store
+        if isinstance(store_config, DuckdbStoreConfig):
+            from app.core.session.stores.duckdb_history_store import DuckdbHistoryStore
+            db_path = Path(store_config.duckdb_path).expanduser()
+            return DuckdbHistoryStore(db_path)
+        elif isinstance(store_config, OpenSearchIndexConfig):
+            opensearch_config = get_configuration().storage.opensearch
+            password = opensearch_config.password
+            if not password:
                 raise ValueError(
                     "Missing OpenSearch credentials: OPENSEARCH_USER and/or OPENSEARCH_PASSWORD"
                 )
-
-            self._agent_store_instance = OpenSearchAgentStore(
-                host=config.host,
-                index=config.index,
-                username=username,
+            from app.core.session.stores.opensearch_history_index import OpensearchHistoryIndex
+            return OpensearchHistoryIndex(
+                host=opensearch_config.host,
+                username=opensearch_config.username,
                 password=password,
-                secure=config.secure,
-                verify_certs=config.verify_certs,
+                secure=opensearch_config.secure,
+                verify_certs=opensearch_config.verify_certs,
+                index=store_config.index,
             )
-            return self._agent_store_instance
         else:
-            raise ValueError(f"Unsupported sessions storage backend: {config.type}")
+            raise ValueError("Unsupported sessions storage backend")
+
+    def get_agent_store(self) -> BaseAgentStore:
+        """
+        Factory function to create a sessions store instance based on the configuration.
+        As of now, it supports in_memory and OpenSearch sessions storage.
+
+        Returns:
+            AbstractSessionStorage: An instance of the sessions store.
+        """
+        if self._agent_store_instance is not None:
+            return self._agent_store_instance
+        from app.core.agents.store.duckdb_agent_store import DuckdbAgentStore
+        from app.core.agents.store.opensearch_agent_store import OpenSearchAgentStore
+
+        store_config = get_configuration().storage.agent_store
+        if isinstance(store_config, DuckdbStoreConfig):
+            from app.core.agents.store.duckdb_agent_store import DuckdbAgentStore
+            db_path = Path(store_config.duckdb_path).expanduser()
+            return DuckdbAgentStore(db_path)
+        elif isinstance(store_config, OpenSearchIndexConfig):
+            opensearch_config = get_configuration().storage.opensearch
+            password = opensearch_config.password
+            if not password:
+                raise ValueError(
+                    "Missing OpenSearch credentials: OPENSEARCH_USER and/or OPENSEARCH_PASSWORD"
+                )
+            from app.core.agents.store.opensearch_agent_store import OpenSearchAgentStore
+            return OpenSearchAgentStore(
+                host=opensearch_config.host,
+                username=opensearch_config.username,
+                password=password,
+                secure=opensearch_config.secure,
+                verify_certs=opensearch_config.verify_certs,
+                index=store_config.index,
+            )
+        else:
+            raise ValueError("Unsupported sessions storage backend")
+
 
     def get_feedback_store(self) -> BaseFeedbackStore:
         """
@@ -391,36 +362,28 @@ class ApplicationContext:
         if self._feedback_store_instance is not None:
             return self._feedback_store_instance
 
+        store_config = get_configuration().storage.feedback_store
+        if isinstance(store_config, DuckdbStoreConfig):
+            db_path = Path(store_config.duckdb_path).expanduser()
+            from app.core.feedback.store.duckdb_feedback_store import DuckdbFeedbackStore
+            return DuckdbFeedbackStore(db_path)
+        elif isinstance(store_config, OpenSearchIndexConfig):
+            opensearch_config = get_configuration().storage.opensearch
+            password = opensearch_config.password
+            if not password:
+                raise ValueError(
+                    "Missing OpenSearch credentials: OPENSEARCH_PASSWORD"
+                )
+            from app.core.feedback.store.opensearch_feedback_store import OpenSearchFeedbackStore
+            return OpenSearchFeedbackStore(
+                host=opensearch_config.host,
+                username=opensearch_config.username,
+                password=password,
+                secure=opensearch_config.secure,
+                verify_certs=opensearch_config.verify_certs,
+                index=store_config.index,
+            )
+        else:
+            raise ValueError("Unsupported sessions storage backend")
         
 
-        config = get_configuration().feedback_storage
-        if isinstance(config, DuckdbFeedbackStorage):
-            from app.core.feedback.store.duckdb_feedback_store import (
-                DuckdbFeedbackStore,
-            )
-
-            db_path = Path(config.duckdb_path).expanduser()
-            self._feedback_store_instance = DuckdbFeedbackStore(db_path)
-            return self._feedback_store_instance
-        elif isinstance(config, OpenSearchStorageConfig):
-            from app.core.feedback.store.opensearch_feedback_store import OpenSearchFeedbackStore
-            username = config.username
-            password = config.password
-
-            if not username or not password:
-                raise ValueError(
-                    "Missing OpenSearch credentials: OPENSEARCH_USER and/or OPENSEARCH_PASSWORD"
-                )
-
-            self._feedback_store_instance = OpenSearchFeedbackStore(
-                host=config.host,
-                index=config.index,
-                username=username,
-                password=password,
-                secure=config.secure,
-                verify_certs=config.verify_certs,
-            )
-            return self._feedback_store_instance
-
-        else:
-            raise ValueError(f"Unsupported sessions storage backend: {config.type}")

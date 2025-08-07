@@ -72,28 +72,41 @@ document_sources:
     base_path: ~/Documents/Fred
     description: "Personal local documents available for pull-mode ingestion"
 
-metadata_storage:
-  type: "duckdb"
-  duckdb_path: "~/.fred/knowledge-flow/metadata.duckdb"
-
-tag_storage:
-  type: "duckdb"
-  duckdb_path: "~/.fred/knowledge-flow/tag.duckdb"
-
-prompt_storage:
-  type: "duckdb"
-  duckdb_path: "~/.fred/knowledge-flow/prompt.duckdb"
-
-vector_storage:
-  type: in_memory
-
-tabular_storage:
-  type: "duckdb"
-  duckdb_path: "~/.fred/knowledge-flow/tabular.duckdb"
-
-catalog_storage:
-  type: "duckdb"
-  duckdb_path: "~/.fred/knowledge-flow/catalog.duckdb"
-
 embedding:
   type: "openai"
+
+storage:
+  postgres:
+    host: localhost
+    port: 5432
+    database: fred
+    username: admin
+
+  opensearch:
+    host: https://localhost:9200
+    secure: true
+    verify_certs: false
+    username: admin
+
+  tabular_store:
+    type: "duckdb"
+    duckdb_path: "~/.fred/knowledge-flow/tabular.duckdb"
+
+  catalog_store:
+    type: "duckdb"
+    duckdb_path: "~/.fred/knowledge-flow/catalog.duckdb"
+
+  prompt_store:
+    type: "duckdb"
+    duckdb_path: "~/.fred/knowledge-flow/prompt.duckdb"
+
+  tag_store:
+    type: "duckdb"
+    duckdb_path: "~/.fred/knowledge-flow/tag.duckdb"
+
+  metadata_store:
+    type: "duckdb"
+    duckdb_path: "~/.fred/knowledge-flow/metadata.duckdb"
+
+  vector_store:
+    type: in_memory

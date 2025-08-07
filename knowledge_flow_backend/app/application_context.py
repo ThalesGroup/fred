@@ -17,6 +17,10 @@ import logging
 import os
 from pathlib import Path
 from typing import Dict, Type, Union, Optional
+from fred_core import (
+    OpenSearchIndexConfig,
+    DuckdbStoreConfig,
+)
 from app.core.stores.catalog.opensearch_catalog_store import OpenSearchCatalogStore
 from app.core.stores.content.base_content_loader import BaseContentLoader
 from app.core.stores.content.filesystem_content_loader import FileSystemContentLoader
@@ -24,12 +28,10 @@ from app.core.stores.content.minio_content_loader import MinioContentLoader
 from fred_core.store.duckdb_store import DuckDBTableStore
 from app.common.structures import (
     Configuration,
-    DuckdbStorageConfig,
     InMemoryVectorStorage,
     FileSystemPullSource,
     MinioPullSource,
     MinioStorageConfig,
-    OpenSearchStorageConfig,
     WeaviateVectorStorage,
 )
 from app.common.utils import validate_settings_or_exit
@@ -62,7 +64,6 @@ from app.core.stores.vector.in_memory_langchain_vector_store import InMemoryLang
 from app.core.stores.vector.base_vector_store import BaseEmbeddingModel, BaseTextSplitter, BaseVectoreStore
 from app.core.stores.vector.opensearch_vector_store import OpenSearchVectorStoreAdapter
 from app.core.processors.output.vectorization_processor.semantic_splitter import SemanticSplitter
-from app.core.stores.vector.weaviate_vector_store import WeaviateVectorStore
 
 # Union of supported processor base classes
 BaseProcessorType = Union[BaseMarkdownProcessor, BaseTabularProcessor]
@@ -89,6 +90,29 @@ EXTENSION_CATEGORY = {
 }
 
 logger = logging.getLogger(__name__)
+
+def get_configuration() -> Configuration:
+    """
+    Retrieves the global application configuration.
+
+    Returns:
+        Configuration: The singleton application configuration.
+    """
+    return get_app_context().configuration
+
+def get_app_context() -> "ApplicationContext":
+    """
+    Retrieves the global application context instance.
+
+    Returns:
+        ApplicationContext: The singleton application context.
+
+    Raises:
+        RuntimeError: If the context has not been initialized yet.
+    """
+    if ApplicationContext._instance is None:
+        raise RuntimeError("ApplicationContext is not yet initialized")
+    return ApplicationContext._instance
 
 
 def validate_input_processor_config(config: Configuration):
@@ -123,6 +147,7 @@ def validate_output_processor_config(config: Configuration):
 
 class ApplicationContext:
     _instance: Optional["ApplicationContext"] = None
+    configuration: Configuration
     _input_processor_instances: Dict[str, BaseInputProcessor] = {}
     _output_processor_instances: Dict[str, BaseOutputProcessor] = {}
     _vector_store_instance: Optional[BaseVectoreStore] = None
@@ -130,16 +155,17 @@ class ApplicationContext:
     _tag_store_instance: Optional[BaseTagStore] = None
     _prompt_store_instance: Optional[BasePromptStore] = None
     _tabular_store_instance: Optional[DuckDBTableStore] = None
+    _catalog_store_instance: Optional[BaseCatalogStore] = None
 
-    def __init__(self, config: Configuration):
+    def __init__(self, configuration: Configuration):
         # Allow reuse if already initialized with same config
         if ApplicationContext._instance is not None:
             # Optionally: log or assert config equality here
             return
 
-        self.config = config
-        validate_input_processor_config(config)
-        validate_output_processor_config(config)
+        self.configuration = configuration
+        validate_input_processor_config(configuration)
+        validate_output_processor_config(configuration)
         self.input_processor_registry: Dict[str, Type[BaseInputProcessor]] = self._load_input_processor_registry()
         self.output_processor_registry: Dict[str, Type[BaseOutputProcessor]] = self._load_output_processor_registry()
         ApplicationContext._instance = self
@@ -224,7 +250,7 @@ class ApplicationContext:
 
     def _load_input_processor_registry(self) -> Dict[str, Type[BaseInputProcessor]]:
         registry = {}
-        for entry in self.config.input_processors:
+        for entry in self.configuration.input_processors:
             cls = self._dynamic_import(entry.class_path)
             if not issubclass(cls, BaseInputProcessor):
                 raise TypeError(f"{entry.class_path} is not a subclass of BaseProcessor")
@@ -234,9 +260,9 @@ class ApplicationContext:
 
     def _load_output_processor_registry(self) -> Dict[str, Type[BaseOutputProcessor]]:
         registry = {}
-        if not self.config.output_processors:
+        if not self.configuration.output_processors:
             return registry
-        for entry in self.config.output_processors:
+        for entry in self.configuration.output_processors:
             cls = self._dynamic_import(entry.class_path)
             if not issubclass(cls, BaseOutputProcessor):
                 raise TypeError(f"{entry.class_path} is not a subclass of BaseOutputProcessor")
@@ -245,7 +271,7 @@ class ApplicationContext:
         return registry
 
     def get_config(self) -> Configuration:
-        return self.config
+        return self.configuration
 
     def _get_input_processor_class(self, extension: str) -> Optional[Type[BaseInputProcessor]]:
         """
@@ -309,7 +335,7 @@ class ApplicationContext:
         Factory method to create an embedding model instance based on the configuration.
         Supports Azure OpenAI and OpenAI.
         """
-        backend_type = self.config.embedding.type
+        backend_type = self.configuration.embedding.type
 
         if backend_type == "openai":
             settings = EmbeddingOpenAISettings()  # type: ignore[call-arg]
@@ -377,173 +403,167 @@ class ApplicationContext:
             vector_store.add_embeddings(embedded_chunks)
 
         """
-        backend_type = self.config.vector_storage.type
+        if self._vector_store_instance is not None:
+            return self._vector_store_instance
+        
+        store = self.configuration.storage.vector_store 
 
-        if isinstance(self.config.vector_storage, OpenSearchStorageConfig):
-            s = self.config.vector_storage
-            if not s.username or not s.password:
-                raise ValueError("Missing required environment variables: OPENSEARCH_USER and OPENSEARCH_PASSWORD")
+        if isinstance(store, OpenSearchIndexConfig):
+            opensearch_config = get_configuration().storage.opensearch
+            password = opensearch_config.password
+            if not password:
+                raise ValueError(
+                    "Missing OpenSearch credentials: OPENSEARCH_PASSWORD"
+                )
 
-            if self._vector_store_instance is None:
-                self._vector_store_instance = OpenSearchVectorStoreAdapter(
+            self._vector_store_instance = OpenSearchVectorStoreAdapter(
                     embedding_model=embedding_model,
-                    host=s.host,
-                    index=s.index,
-                    username=s.username,
-                    password=s.password,
-                    secure=s.secure,
-                    verify_certs=s.verify_certs,
+                    host=opensearch_config.host,
+                    index=store.index,
+                    username=opensearch_config.username,
+                    password=password,
+                    secure=opensearch_config.secure,
+                    verify_certs=opensearch_config.verify_certs,
                 )
             return self._vector_store_instance
-        elif isinstance(self.config.vector_storage, WeaviateVectorStorage):
-            s = self.config.vector_storage
-            if self._vector_store_instance is None:
-                self._vector_store_instance = WeaviateVectorStore(embedding_model, s.host, s.index_name)
-            return self._vector_store_instance
-        elif isinstance(self.config.vector_storage, InMemoryVectorStorage):
-            if self._vector_store_instance is None:
-                self._vector_store_instance = InMemoryLangchainVectorStore(embedding_model=embedding_model)
-            return self._vector_store_instance
-        raise ValueError(f"Unsupported vector store backend: {backend_type}")
-
+        # elif isinstance(store, WeaviateVectorStorage):
+        #     if self._vector_store_instance is None:
+        #         self._vector_store_instance = WeaviateVectorStore(embedding_model, s.host, s.index_name)
+        #     return self._vector_store_instance
+        elif isinstance(store, InMemoryVectorStorage):
+            self._vector_store_instance = InMemoryLangchainVectorStore(embedding_model=embedding_model)
+        else:
+            raise ValueError("Unsupported vector store backend")
+        return self._vector_store_instance
+    
     def get_metadata_store(self) -> BaseMetadataStore:
         if self._metadata_store_instance is not None:
             return self._metadata_store_instance
-        config = self.config.metadata_storage
-        if isinstance(config, DuckdbStorageConfig):
-            db_path = Path(config.duckdb_path).expanduser()
+
+        store_config = get_configuration().storage.metadata_store
+        if isinstance(store_config, DuckdbStoreConfig):
+            db_path = Path(store_config.duckdb_path).expanduser()
             self._metadata_store_instance = DuckdbMetadataStore(db_path)
-        elif isinstance(config, OpenSearchStorageConfig):
-            username = config.username
-            password = config.password
-
-            if not username or not password:
-                raise ValueError("Missing OpenSearch credentials: OPENSEARCH_USER and/or OPENSEARCH_PASSWORD")
-
+        elif isinstance(store_config, OpenSearchIndexConfig):
+            opensearch_config = get_configuration().storage.opensearch
+            password = opensearch_config.password
+            if not password:
+                raise ValueError(
+                    "Missing OpenSearch credentials: OPENSEARCH_PASSWORD"
+                )
             self._metadata_store_instance = OpenSearchMetadataStore(
-                host=config.host,
-                username=username,
+                host=opensearch_config.host,
+                username=opensearch_config.username,
                 password=password,
-                secure=config.secure,
-                verify_certs=config.verify_certs,
-                index=config.index,
+                secure=opensearch_config.secure,
+                verify_certs=opensearch_config.verify_certs,
+                index=store_config.index,
             )
-
         else:
-            raise ValueError(f"Unsupported metadata storage backend: {config.type}")
+            raise ValueError("Unsupported metadata storage backend")
         return self._metadata_store_instance
-
+    
     def get_tag_store(self) -> BaseTagStore:
         if self._tag_store_instance is not None:
             return self._tag_store_instance
 
-        config = self.config.tag_storage
-
-        if isinstance(config, DuckdbStorageConfig):
-            path = Path(config.duckdb_path).expanduser()
-            self._tag_store_instance = DuckdbTagStore(path)
-            return self._tag_store_instance
-        elif isinstance(config, OpenSearchStorageConfig):
-            username = config.username
-            password = config.password
-
-            if not username or not password:
-                raise ValueError("Missing OpenSearch credentials: OPENSEARCH_USER and/or OPENSEARCH_PASSWORD")
-
+        store_config = get_configuration().storage.tag_store
+        if isinstance(store_config, DuckdbStoreConfig):
+            db_path = Path(store_config.duckdb_path).expanduser()
+            self._tag_store_instance = DuckdbTagStore(db_path)
+        elif isinstance(store_config, OpenSearchIndexConfig):
+            opensearch_config = get_configuration().storage.opensearch
+            password = opensearch_config.password
+            if not password:
+                raise ValueError(
+                    "Missing OpenSearch credentials: OPENSEARCH_PASSWORD"
+                )
             self._tag_store_instance = OpenSearchTagStore(
-                host=config.host,
-                index=config.index,
-                username=username,
+                host=opensearch_config.host,
+                username=opensearch_config.username,
                 password=password,
-                secure=config.secure,
-                verify_certs=config.verify_certs,
+                secure=opensearch_config.secure,
+                verify_certs=opensearch_config.verify_certs,
+                index=store_config.index,
             )
-            return self._tag_store_instance
         else:
-            raise ValueError(f"Unsupported tag storage backend: {config.type}")
-
+            raise ValueError("Unsupported sessions storage backend")
+        return self._tag_store_instance
+    
     def get_prompt_store(self) -> BasePromptStore:
         if self._prompt_store_instance is not None:
             return self._prompt_store_instance
 
-        config = self.config.prompt_storage
-
-        if isinstance(config, DuckdbStorageConfig):
-            path = Path(config.duckdb_path).expanduser()
-            self._prompt_store_instance = DuckdbPromptStore(path)
-            return self._prompt_store_instance
-        elif isinstance(config, OpenSearchStorageConfig):
-            username = config.username
-            password = config.password
-
-            if not username or not password:
-                raise ValueError("Missing OpenSearch credentials: OPENSEARCH_USER and/or OPENSEARCH_PASSWORD")
-
+        store_config = get_configuration().storage.prompt_store
+        if isinstance(store_config, DuckdbStoreConfig):
+            db_path = Path(store_config.duckdb_path).expanduser()
+            self._prompt_store_instance = DuckdbPromptStore(db_path)
+        elif isinstance(store_config, OpenSearchIndexConfig):
+            opensearch_config = get_configuration().storage.opensearch
+            password = opensearch_config.password
+            if not password:
+                raise ValueError(
+                    "Missing OpenSearch credentials: OPENSEARCH_PASSWORD"
+                )
             self._prompt_store_instance = OpenSearchPromptStore(
-                host=config.host,
-                index=config.index,
-                username=username,
+                host=opensearch_config.host,
+                username=opensearch_config.username,
                 password=password,
-                secure=config.secure,
-                verify_certs=config.verify_certs,
+                secure=opensearch_config.secure,
+                verify_certs=opensearch_config.verify_certs,
+                index=store_config.index,
             )
-            return self._prompt_store_instance
         else:
-            raise ValueError(f"Unsupported tag storage backend: {config.type}")
-
+            raise ValueError("Unsupported sessions storage backend")
+        return self._prompt_store_instance
+    
     def get_tabular_store(self) -> DuckDBTableStore:
         """
         Lazy-initialize and return the configured tabular store backend.
         Currently supports only DuckDB.
         """
-        if hasattr(self, "_tabular_store_instance") and self._tabular_store_instance is not None:
+        if self._tabular_store_instance is not None:
             return self._tabular_store_instance
 
-        config = self.config.tabular_storage
-
-        if isinstance(config, DuckdbStorageConfig):
-            db_path = Path(config.duckdb_path).expanduser()
-            self._tabular_store_instance = DuckDBTableStore(db_path, prefix="tabular_")
+        store_config = get_configuration().storage.tabular_store
+        if isinstance(store_config, DuckdbStoreConfig):
+            db_path = Path(store_config.duckdb_path).expanduser()
+            self._tabular_store_instance = DuckDBTableStore(db_path, "tabular_")
         else:
-            raise ValueError(f"Unsupported tabular storage backend: {config.type}")
-
+            raise ValueError("Unsupported tabular storage backend")
         return self._tabular_store_instance
-
+    
     def get_catalog_store(self) -> BaseCatalogStore:
         """
         Return the store used to save a local view of pull files, i.e. files not yet processed.
         Currently supports only DuckDB.
         """
-        if hasattr(self, "_catalog_store_instance") and self._catalog_store_instance is not None:
+        if self._catalog_store_instance is not None:
             return self._catalog_store_instance
 
-        config = self.config.catalog_storage
-
-        if isinstance(config, DuckdbStorageConfig):
-            db_path = Path(config.duckdb_path).expanduser()
+        store_config = get_configuration().storage.catalog_store
+        if isinstance(store_config, DuckdbStoreConfig):
+            db_path = Path(store_config.duckdb_path).expanduser()
             self._catalog_store_instance = DuckdbCatalogStore(db_path)
-        elif isinstance(config, OpenSearchStorageConfig):
-            username = config.username
-            password = config.password
-
-            if not username or not password:
-                raise ValueError("Missing OpenSearch credentials: OPENSEARCH_USER and/or OPENSEARCH_PASSWORD")
-
+        elif isinstance(store_config, OpenSearchIndexConfig):
+            opensearch_config = get_configuration().storage.opensearch
+            password = opensearch_config.password
+            if not password:
+                raise ValueError(
+                    "Missing OpenSearch credentials: OPENSEARCH_PASSWORD"
+                )
             self._catalog_store_instance = OpenSearchCatalogStore(
-                host=config.host,
-                index=config.index,
-                username=username,
+                host=opensearch_config.host,
+                username=opensearch_config.username,
                 password=password,
-                secure=config.secure,
-                verify_certs=config.verify_certs,
+                secure=opensearch_config.secure,
+                verify_certs=opensearch_config.verify_certs,
+                index=store_config.index,
             )
-            return self._catalog_store_instance
-
         else:
-            raise ValueError(f"Unsupported catalog storage backend: {config.type}")
-
+            raise ValueError("Unsupported sessions storage backend")
         return self._catalog_store_instance
-
+    
     def get_content_loader(self, source: str) -> BaseContentLoader:
         """
         Factory method to create a document loader instance based on configuration.
@@ -572,7 +592,7 @@ class ApplicationContext:
         return SemanticSplitter()
 
     def get_pull_provider(self, source_tag: str) -> BaseContentLoader:
-        source_config = self.config.document_sources.get(source_tag)
+        source_config = self.configuration.document_sources.get(source_tag)
 
         if not source_config:
             raise ValueError(f"Unknown document source tag: {source_tag}")
@@ -590,7 +610,7 @@ class ApplicationContext:
         logger.info(f"     ↳ {name} set: {'✅' if value else '❌'}")
 
     def _log_config_summary(self):
-        backend = self.config.embedding.type
+        backend = self.configuration.embedding.type
         logger.info("🔧 Application configuration summary:")
         logger.info("--------------------------------------------------")
         logger.info(f"  📦 Embedding backend: {backend}")
@@ -621,16 +641,17 @@ class ApplicationContext:
         else:
             logger.warning("⚠️ Unknown embedding backend configured.")
 
-        vector_type = self.config.vector_storage.type
+        vector_type = self.configuration.storage.vector_store
         logger.info(f"  📚 Vector store backend: {vector_type}")
         try:
-            s = self.config.vector_storage
-            if isinstance(s, OpenSearchStorageConfig):
+            store = self.configuration.storage.vector_store
+            s = self.configuration.storage.opensearch
+            if isinstance(store, OpenSearchIndexConfig):
                 logger.info(f"     ↳ Host: {s.host}")
-                logger.info(f"     ↳ Vector Index: {s.index}")
+                logger.info(f"     ↳ Vector Index: {store.index}")
                 logger.info(f"     ↳ Secure (TLS): {s.secure}")
                 logger.info(f"     ↳ Verify Certs: {s.verify_certs}")
-                self._log_sensitive("OPENSEARCH_USER", os.getenv("OPENSEARCH_USER"))
+                logger.info(f"     ↳ Username: {s.username}")
                 self._log_sensitive("OPENSEARCH_PASSWORD", os.getenv("OPENSEARCH_PASSWORD"))
             elif isinstance(s, WeaviateVectorStorage):
                 logger.info(f"     ↳ Host: {s.host}")
@@ -641,27 +662,25 @@ class ApplicationContext:
         except Exception:
             logger.warning("⚠️ Failed to load vector store settings — some variables may be missing or misconfigured.")
 
-        metadata_type = self.config.metadata_storage.type
+        logger.info(f"  🗃️ Metadata storage backend: {self.configuration.storage.metadata_store.type}")
+        if isinstance(self.configuration.storage.metadata_store, DuckdbStoreConfig):
+            logger.info(f"     ↳ DB Path: {self.configuration.storage.metadata_store.duckdb_path}")
 
-        logger.info(f"  🗃️ Metadata storage backend: {metadata_type}")
-        if isinstance(self.config.metadata_storage, DuckdbStorageConfig):
-            logger.info(f"     ↳ DB Path: {self.config.metadata_storage.duckdb_path}")
+        logger.info(f"  🗃️ Catalog storage backend: {self.configuration.storage.catalog_store.type}")
+        if isinstance(self.configuration.storage.catalog_store, DuckdbStoreConfig):
+            logger.info(f"     ↳ DB Path: {self.configuration.storage.catalog_store.duckdb_path}")
 
-        logger.info(f"  📂 Catalog storage backend: {self.config.catalog_storage.type}")
-        if isinstance(self.config.catalog_storage, DuckdbStorageConfig):
-            logger.info(f"     ↳ DB Path: {self.config.catalog_storage.duckdb_path}")
+        logger.info(f"  📂 Prompt storage backend: {self.configuration.storage.prompt_store.type}")
+        if isinstance(self.configuration.storage.prompt_store, DuckdbStoreConfig):
+            logger.info(f"     ↳ DB Path: {self.configuration.storage.prompt_store.duckdb_path}")
 
-        logger.info(f"  📂 Prompt storage backend: {self.config.prompt_storage.type}")
-        if isinstance(self.config.prompt_storage, DuckdbStorageConfig):
-            logger.info(f"     ↳ DB Path: {self.config.prompt_storage.duckdb_path}")
+        logger.info(f"  📂 Tag storage backend: {self.configuration.storage.tag_store.type}")
+        if isinstance(self.configuration.storage.tag_store, DuckdbStoreConfig):
+            logger.info(f"     ↳ DB Path: {self.configuration.storage.tag_store.duckdb_path}")
 
-        logger.info(f"  📂 Tag storage backend: {self.config.tag_storage.type}")
-        if isinstance(self.config.tag_storage, DuckdbStorageConfig):
-            logger.info(f"     ↳ DB Path: {self.config.tag_storage.duckdb_path}")
-
-        logger.info(f"  📁 Content storage backend: {self.config.content_storage.type}")
-        if isinstance(self.config.content_storage, MinioStorageConfig):
-            logger.info(f"     ↳ Local Path: {self.config.content_storage.bucket_name}")
+        logger.info(f"  📁 Content storage backend: {self.configuration.content_storage.type}")
+        if isinstance(self.configuration.content_storage, MinioStorageConfig):
+            logger.info(f"     ↳ Local Path: {self.configuration.content_storage.bucket_name}")
 
         logger.info("  🧩 Input Processor Mappings:")
         for ext, cls in self.input_processor_registry.items():

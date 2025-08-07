@@ -83,44 +83,42 @@ document_sources:
     prefix: ""
     secure: false
 
-metadata_storage:
-  type: opensearch
-  host: https://localhost:9200
-  secure: true
-  verify_certs: false
-  index: document-index
-
-tag_storage:
-  type: opensearch
-  host: https://localhost:9200
-  secure: true
-  verify_certs: false
-  index: tag-index
-
-prompt_storage:
-  type: opensearch
-  host: https://localhost:9200
-  secure: true
-  verify_certs: false
-  index: prompt-index
-
-vector_storage:
-  type: opensearch
-  host: https://localhost:9200
-  secure: true
-  verify_certs: false
-  index: vector-index-ada002
-
-tabular_storage:
-  type: "duckdb"
-  duckdb_path: "~/.fred/knowledge-flow/tabular.duckdb"
-
-catalog_storage:
-  type: opensearch
-  host: https://localhost:9200
-  secure: true
-  verify_certs: false
-  index: catalog-index
-
 embedding:
   type: "openai"
+
+storage:
+  postgres:
+    host: localhost
+    port: 5432
+    database: fred
+    username: admin
+
+  opensearch:
+    host: https://localhost:9200
+    secure: true
+    verify_certs: false
+    username: admin
+
+  tabular_store:
+    type: "duckdb"
+    duckdb_path: "~/.fred/knowledge-flow/tabular.duckdb"
+
+  catalog_store:
+    type: "opensearch"
+    index: catalog-index
+
+  prompt_store:
+    type: "opensearch"
+    index: prompt-index
+
+  tag_store:
+    type: "opensearch"
+    index: tag-index
+
+  metadata_store:
+    type: "opensearch"
+    index: metadata-index
+
+  vector_store:
+    type: opensearch
+    index: vector-index-ada002

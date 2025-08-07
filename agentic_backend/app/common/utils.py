@@ -12,22 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from datetime import datetime, timedelta
-from typing import Tuple, Dict, Optional
+from typing import Dict, Optional
 from app.common.error import SESSION_NOT_INITIALIZED
 from app.common.structures import (
-    CompareResult,
     Configuration,
-    Difference,
-    PrecisionEnum,
-    SampleDataType,
-    Series,
-    Window,
 )
 from fastapi import HTTPException
 import logging
 import traceback
-import pandas as pd
 import yaml
 from functools import wraps
 import inspect
@@ -54,87 +46,6 @@ def parse_server_configuration(configuration_path: str) -> Configuration:
     return Configuration(**config)
 
 
-def sample_data(
-    x: list[datetime],
-    y: list[float],
-    precision: PrecisionEnum,
-    data_type: SampleDataType,
-) -> Tuple[list[datetime], list[float]]:
-    """
-    Downsample the data to the given step
-    """
-    if not x or not y:
-        return [], []
-    df = pd.DataFrame({"x": x, "y": y})
-    df.set_index("x", inplace=True)
-    df.index = pd.to_datetime(df.index)
-
-    pandas_precision = precision.to_pandas_precision()
-    if pandas_precision is None:
-        resampled_data = df
-    else:
-        match data_type.value:
-            case SampleDataType.AVERAGE:
-                resampled_data = df.resample(pandas_precision, origin="start").mean()
-                resampled_data = resampled_data.ffill()
-            case SampleDataType.SUM:
-                resampled_data = df.resample(pandas_precision, origin="start").sum()
-            case _:
-                raise NotImplementedError(f"Data type {data_type.value} not supported")
-
-    resampled_data = resampled_data.round(2)
-    return resampled_data.index.to_list(), resampled_data["y"].to_list()
-
-
-def to_timedelta(duration_str: str) -> timedelta:
-    """
-    Parse a duration string into a timedelta object.
-
-    Args:
-        duration_str (str): A string representing a duration in the format "NdNhNmNs",
-            where N is a number, d represents days, h represents hours,
-            m represents minutes, and s represents seconds.
-
-    Returns:
-        timedelta: A timedelta object representing the parsed duration.
-
-    Raises:
-        ValueError: If the input duration string is not in the correct format or contains invalid characters.
-
-    Example:
-        >>> to_timedelta("2d3h30m15s")
-        datetime.timedelta(days=2, seconds=12615)
-
-    """
-    days = 0
-    hours = 0
-    minutes = 0
-    seconds = 0
-
-    current_number = ""
-    for ch in duration_str:
-        if ch.isdigit():
-            current_number += ch
-        else:
-            if ch == "d":
-                days = int(current_number)
-            elif ch == "h":
-                hours = int(current_number)
-            elif ch == "m":
-                minutes = int(current_number)
-            elif ch == "s":
-                seconds = int(current_number)
-            else:
-                raise ValueError(
-                    'Invalid duration, valid format is format "NdNhNmNs", where N is a number, '
-                    "d represents days, h represents hours, m represents minutes, and s represents "
-                    "seconds"
-                )
-            current_number = ""
-
-    return timedelta(days=days, hours=hours, minutes=minutes, seconds=seconds)
-
-
 def get_class_path(cls: type) -> str:
     """
     Returns the fully qualified class path as a string, e.g.:
@@ -144,68 +55,6 @@ def get_class_path(cls: type) -> str:
     if not module or not hasattr(cls, "__name__"):
         raise ValueError(f"Could not determine class path for {cls}")
     return f"{module.__name__}.{cls.__name__}"
-
-
-def auc_calculation(values: list[float]) -> float:
-    """
-    Calculate the area under the curve of the consumption during the period
-    """
-    return sum(values)
-
-
-def resample_series(series: Series, precision: PrecisionEnum) -> Series:
-    """
-    Resample the series data to the given precision
-    """
-    resampled_timestamps, resampled_values = sample_data(
-        series.timestamps, series.values, precision, SampleDataType.SUM
-    )
-    return Series(
-        timestamps=resampled_timestamps,
-        values=resampled_values,
-        auc=auc_calculation(resampled_values),
-        unit=series.unit,
-    )
-
-
-# Used to explain the comparison in all the routes that propose a comparison between two windows
-API_COMPARE_DOC = """
-This endpoint compares the total metric values between two time windows.
-
-The difference is computed as follows:
-- **Difference Value**: This is calculated as the total value in the second window minus the total value in the first window.
-For example, if the total in window 1 is 22 and in window 2 is 10, the difference value is `10 - 22 = -12`.
-- **Difference Percentage**: This is calculated as the difference value divided by the total value of the first window, multiplied by 100 to get the percentage.
-For example, if the total in window 1 is 22 and the difference value is -12, the percentage difference is `(-12 / 22) * 100 = -54.55%`.
-"""
-
-
-def compare_two_windows(
-    window_1: Series,
-    window_2: Series,
-    start_window_1: datetime,
-    end_window_1: datetime,
-    start_window_2: datetime,
-    end_window_2: datetime,
-    cluster: str,
-) -> CompareResult:
-    if window_1.unit != window_2.unit:
-        raise ValueError(
-            f"Got two different units, unable to compare '{window_1.unit}' and '{window_2.unit}'"
-        )
-    diff_total = window_2.auc - window_1.auc
-    percentage = (diff_total / window_1.auc) * 100
-    return CompareResult(
-        cluster=cluster,
-        unit=window_1.unit,
-        window_1=Window(start=start_window_1, end=end_window_1, total=window_1.auc),
-        window_2=Window(start=start_window_2, end=end_window_2, total=window_2.auc),
-        difference=Difference(value=diff_total, percentage=percentage),
-    )
-
-
-def format_to_en(number) -> float:
-    return str(number).replace(",", ".")
 
 
 def log_exception(e: Exception, context_message: Optional[str] = None) -> str:

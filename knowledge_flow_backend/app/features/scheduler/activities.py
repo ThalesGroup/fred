@@ -18,6 +18,7 @@ import tempfile
 
 from app.common.document_structures import DocumentMetadata, ProcessingStage
 
+
 from app.features.scheduler.structure import FileToProcess
 from temporalio import activity
 from temporalio import exceptions
@@ -180,8 +181,9 @@ def output_process(file: FileToProcess, metadata: DocumentMetadata, accept_memor
     preview_file = ingestion_service.get_preview_file(metadata, output_dir)
 
     if not ApplicationContext.get_instance().is_tabular_file(preview_file.name):
-        vector_store_type = ApplicationContext.get_instance().get_config().vector_storage.type
-        if vector_store_type == "in_memory" and not accept_memory_storage:
+        from app.common.structures import InMemoryVectorStorage
+        vector_store = ApplicationContext.get_instance().get_config().storage.vector_store
+        if isinstance(vector_store, InMemoryVectorStorage) and not accept_memory_storage:
             raise exceptions.ApplicationError(
                 "❌ Vectorization from temporal activity is not allowed with an in-memory vector store. Please configure a persistent vector store like OpenSearch.",
                 non_retryable=True,
