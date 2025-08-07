@@ -41,29 +41,6 @@ frontend_settings:
   properties:
     logoName: "fred"
 
-database:
-  type: csv
-  csv_files:
-    # Can be absolute paths or relative paths to the main
-    energy_mix: './services/cluster_consumption/data/simulated_energy_mix.csv'
-    carbon_footprint: './services/cluster_consumption/data/simulated_cluster_consumption_gco2.csv'
-    energy_footprint: './services/cluster_consumption/data/simulated_cluster_consumption_wh.csv'
-    financial_footprint: './services/cluster_consumption/data/simulated_cluster_consumption_usd.csv'
-    # Guerre elec & ship identification service
-    frequencies: './services/sensor/data/bandes_freq.csv'
-    sensors_test_new: './services/theater_analysis/data/detections-capteur-donnees-test_new_scenario.csv'
-    mission: './services/mission/data/mission.csv'
-    radio: './services/theater_analysis/data/radio-maritime-donnees-tests_excel_light_militaire.csv'
-    signal_identification_guide: './services/theorical_radio/data/Signal_identification_guide_new.csv'
-
-kubernetes:
-  kube_config: '~/.kube/config'
-  aws_config: '~/.aws/config' # Optional, needed for aws EKS clusters.
-  # Timeout settings for the client
-  timeout:
-    connect: 5  # Time to wait for a connection in seconds
-    read: 15    # Time to wait for a response in seconds
-
 ai:
   # Timeout settings for the client
   timeout:
@@ -78,10 +55,6 @@ ai:
       temperature: 0.0
       max_retries: 2
       request_timeout: 30
-  services:
-    - name: "kubernetes"
-      enabled: false
-      model: {}
   recursion:
     recursion_limit: 40 # Number or max recursion use by the agents while using the model
   agents:
@@ -132,35 +105,33 @@ ai:
         knowledge_flow_url: "http://localhost:8111/knowledge-flow/v1"
       model: {}
 
-feedback_storage:
-  type: opensearch
-  host: https://localhost:9200
-  secure: true
-  verify_certs: false
-  index: feedback-index
+storage:
+  postgres:
+    host: localhost
+    port: 5432
+    database: fred
+    username: admin
 
-agent_storage:
-  type: opensearch
-  host: https://localhost:9200
-  secure: true
-  verify_certs: false
-  index: agent-index
+  opensearch:
+    host: https://localhost:9200
+    secure: true
+    verify_certs: false
+    username: admin
 
-# Where to save fred produced resources like Essentials or Scores
-# and external resources like Kubernetes Workload descriptions
-dao:
-  type: "file"  # Currently the only one supported
-  base_path: "~/.fred/agentic/dao-cache"
-  max_cached_delay_seconds: 300  # Cache delay in seconds. Use 0 for no cache or a negative value for limitless cache.
+  feedback_store:
+    type: "opensearch"
+    index: feedback-index
 
-# Sessions and messages are stored by default in_memory
-# but it can be modified to use a backend like opensearch
-session_storage:
-  type: opensearch
-  host: https://localhost:9200
-  secure: true
-  verify_certs: false
-  session_index: session-index
-  history_index: history-index
+  agent_store:
+    type: "duckdb"
+    index: agent-index
+
+  session_store:
+    type: "duckdb"
+    index: session-index
+
+  history_store:
+    type: "duckdb"
+    index: history-index
 
 
