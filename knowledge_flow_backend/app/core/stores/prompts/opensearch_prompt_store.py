@@ -130,7 +130,7 @@ class OpenSearchPromptStore(BasePromptStore):
             raise
 
     def delete_prompt(self, prompt_id: str) -> None:
-        self._cache.delete(tag_id)
+        self._cache.delete(prompt_id)
         try:
             self.client.delete(index=self.index_name, id=prompt_id)
             logger.info(f"[PROMPTS] Deleted prompt '{prompt_id}'")
