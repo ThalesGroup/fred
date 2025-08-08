@@ -18,13 +18,14 @@ from opensearchpy import OpenSearch, RequestsHttpConnection
 from app.core.session.stores.base_session_store import BaseSessionStore
 from app.core.session.session_manager import SessionSchema
 from fred_core import ThreadSafeLRUCache
+
 logger = logging.getLogger(__name__)
 
 MAPPING = {
     "settings": {
         "number_of_shards": 1,
         "number_of_replicas": 0,
-        "refresh_interval": "1s"
+        "refresh_interval": "1s",
     },
     "mappings": {
         "properties": {
@@ -32,13 +33,16 @@ MAPPING = {
             "user_id": {"type": "keyword"},
             "title": {
                 "type": "text",
-                "fields": {"keyword": {"type": "keyword", "ignore_above": 256}}
+                "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
             },
             "updated_at": {"type": "date"},
-            "file_names": {"type": "keyword"}  # Stores file names as exact-matchable strings
+            "file_names": {
+                "type": "keyword"
+            },  # Stores file names as exact-matchable strings
         }
-    }
+    },
 }
+
 
 class OpensearchSessionStore(BaseSessionStore):
     def __init__(
@@ -65,14 +69,11 @@ class OpensearchSessionStore(BaseSessionStore):
         else:
             logger.info(f"OpenSearch index '{index}' already exists.")
 
-        
     def save(self, session: SessionSchema) -> None:
         try:
             session_dict = session.model_dump()
-            self.client.index(
-                index=self.index, id=session.id, body=session_dict
-            )
-            self._cache.set(session.id, session) 
+            self.client.index(index=self.index, id=session.id, body=session_dict)
+            self._cache.set(session.id, session)
             logger.debug(f"Session {session.id} saved for user {session.user_id}")
         except Exception as e:
             logger.error(f"Failed to save session {session.id}: {e}")
@@ -102,7 +103,11 @@ class OpensearchSessionStore(BaseSessionStore):
 
     def get_for_user(self, user_id: str) -> List[SessionSchema]:
         try:
-            query = {"query": {"term": {"user_id.keyword": {"value": user_id}}}}
+            query = {
+                "query": {
+                    "term": {"user_id": {"value": user_id}}  # fixed
+                }
+            }
             response = self.client.search(
                 params={"size": 10000}, index=self.index, body=query
             )
@@ -114,4 +119,3 @@ class OpensearchSessionStore(BaseSessionStore):
         except Exception as e:
             logger.error(f"Failed to fetch sessions for user {user_id}: {e}")
             return []
-

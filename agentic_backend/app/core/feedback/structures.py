@@ -35,7 +35,7 @@ class FeedbackRecord(BaseModelWithId):
 
     class Config:
         populate_by_name = True
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "id": "fbk_abc123",
                 "session_id": "sess_xyz789",

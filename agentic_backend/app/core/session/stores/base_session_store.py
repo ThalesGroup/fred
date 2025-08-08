@@ -19,6 +19,7 @@ from app.core.chatbot.chat_schema import (
     SessionSchema,
 )
 
+
 class BaseSessionStore(ABC):
     @abstractmethod
     def save(self, session: SessionSchema) -> None:
@@ -47,4 +48,3 @@ class BaseSessionStore(ABC):
         Retrieve all sessions for a specific user.
         """
         pass
-

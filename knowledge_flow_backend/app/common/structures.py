@@ -20,12 +20,12 @@ from pydantic import BaseModel, Field, model_validator
 from typing import Optional
 from enum import Enum
 from fred_core import (
-    SecurityConfiguration, 
+    SecurityConfiguration,
     PostgresStoreConfig,
     OpenSearchStoreConfig,
     OpenSearchIndexConfig,
     StoreConfig,
-    )
+)
 
 """
 This module defines the top level data structures used by controllers, processors
@@ -103,8 +103,10 @@ ContentStorageConfig = Annotated[Union[LocalContentStorageConfig, MinioStorageCo
 #  --- Vector storage configuration
 #
 
+
 class InMemoryVectorStorage(BaseModel):
     type: Literal["in_memory"]
+
 
 class WeaviateVectorStorage(BaseModel):
     type: Literal["weaviate"]
@@ -264,6 +266,7 @@ PullSourceConfig = Annotated[
     Field(discriminator="provider"),
 ]
 DocumentSourceConfig = Annotated[Union[PushSourceConfig, PullSourceConfig], Field(discriminator="type")]
+
 
 class StorageConfig(BaseModel):
     postgres: PostgresStoreConfig

@@ -182,6 +182,7 @@ def output_process(file: FileToProcess, metadata: DocumentMetadata, accept_memor
 
     if not ApplicationContext.get_instance().is_tabular_file(preview_file.name):
         from app.common.structures import InMemoryVectorStorage
+
         vector_store = ApplicationContext.get_instance().get_config().storage.vector_store
         if isinstance(vector_store, InMemoryVectorStorage) and not accept_memory_storage:
             raise exceptions.ApplicationError(
