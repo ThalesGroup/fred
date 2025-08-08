@@ -44,6 +44,9 @@ dependencies = [
   "fred-core",
   "temporalio>=1.14.1",
   "dateparser>=1.2.2",
+  "pymysql>=1.1.1",
+  "duckdb-engine>=0.17.0",
+  "psycopg2-binary>=2.9.10",
 ]
 
 [project.optional-dependencies]
