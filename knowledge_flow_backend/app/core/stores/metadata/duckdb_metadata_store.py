@@ -25,7 +25,7 @@ from app.common.document_structures import DocumentMetadata
 class DuckdbMetadataStore(BaseMetadataStore):
     def __init__(self, db_path: Path):
         self.table_name = "metadata"
-        self.store = DuckDBTableStore(db_path, prefix="")
+        self.store = DuckDBTableStore(db_path, prefix="metadata_")
         self._ensure_schema()
 
     def _ensure_schema(self):

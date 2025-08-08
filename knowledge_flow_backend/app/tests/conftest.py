@@ -27,11 +27,14 @@ from fred_core import (
     OpenSearchStoreConfig,
 )
 
+
 @pytest.fixture(scope="function", autouse=True)
 def fake_embedder(monkeypatch):
     """Monkeypatch the Embedder to avoid real API calls."""
+
     def fake_init(self, config=None):
         self.model = FakeEmbeddings(size=1352)
+
     monkeypatch.setattr(Embedder, "__init__", fake_init)
 
 
@@ -51,9 +54,7 @@ def app_context(monkeypatch, fake_embedder):
             log_level="debug",
             reload=False,
             reload_dir=".",
-            security=SecurityConfiguration(
-                enabled=False, keycloak_url="", client_id="app", authorized_origins=[]
-            ),
+            security=SecurityConfiguration(enabled=False, keycloak_url="", client_id="app", authorized_origins=[]),
         ),
         scheduler=SchedulerConfig(
             enabled=False,
@@ -66,11 +67,7 @@ def app_context(monkeypatch, fake_embedder):
                 connect_timeout_seconds=3,
             ),
         ),
-        document_sources={
-            "uploads": PushSourceConfig(
-                type="push", description="Uploaded files for testing"
-            )
-        },
+        document_sources={"uploads": PushSourceConfig(type="push", description="Uploaded files for testing")},
         storage=StorageConfig(
             postgres=PostgresStoreConfig(
                 host="localhost",

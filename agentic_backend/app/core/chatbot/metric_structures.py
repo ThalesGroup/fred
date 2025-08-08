@@ -25,6 +25,3 @@ class MetricsBucket(BaseModel):
 class MetricsResponse(BaseModel):
     precision: str
     buckets: List[MetricsBucket]
-
-
-

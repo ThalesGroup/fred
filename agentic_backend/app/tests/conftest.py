@@ -87,7 +87,11 @@ def minimal_generalist_config() -> Configuration:
                     model=ModelConfiguration(
                         provider="openai",
                         name="gpt-4o",
-                        settings={"temperature": 0.0, "max_retries": 2, "request_timeout": 30},
+                        settings={
+                            "temperature": 0.0,
+                            "max_retries": 2,
+                            "request_timeout": 30,
+                        },
                     ),
                 )
             ],
