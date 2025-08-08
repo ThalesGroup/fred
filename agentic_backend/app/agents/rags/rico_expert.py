@@ -38,7 +38,7 @@ class RicoExpert(AgentFlow):
     """
 
     name: str = "RicoExpert"
-    role: str
+    role: str = "Rags Expert"
     nickname: str = "Rico"
     description: str
     icon: str = "rags_agent"
