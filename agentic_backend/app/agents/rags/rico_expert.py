@@ -14,7 +14,7 @@
 
 import logging
 from datetime import datetime
-from typing import List
+from typing import Any, Dict, List
 
 import requests
 from langchain_core.messages import HumanMessage
@@ -30,17 +30,17 @@ from app.core.model.model_factory import get_model
 logger = logging.getLogger(__name__)
 
 
-class RetiredRagsExpert(AgentFlow):
+class RicoExpert(AgentFlow):
     """
     An expert agent that searches and analyzes documents to answer user questions.
     This agent uses a vector search service using the knowledge-flow search REST API to find relevant documents and generates
     responses based on the document content. This design is simple and straightworward.
     """
 
-    name: str = "RetiredRagsExpert"
-    role: str = "Rags Expert"
-    nickname: str = "Retired Rico"
-    description: str = "Extracts and analyzes document content to answer questions."
+    name: str = "RicoExpert"
+    role: str
+    nickname: str = "Rico"
+    description: str
     icon: str = "rags_agent"
     categories: List[str] = []
     tag: str = "Innovation"
@@ -56,6 +56,14 @@ class RetiredRagsExpert(AgentFlow):
         self._graph = None
         self.categories = agent_settings.categories or ["Documentation"]
         self.tag = agent_settings.tag or "rags"
+        if not agent_settings.description:
+            self.description = "Provides quick answers based on document content, using direct retrieval and generation."
+        else:
+            self.description = agent_settings.description
+        if not agent_settings.role:
+            self.role = "Rags Expert"
+        else:
+            self.description = agent_settings.role
 
     async def async_init(self):
         self.model = get_model(self.agent_settings.model)
@@ -95,10 +103,21 @@ class RetiredRagsExpert(AgentFlow):
         return builder
 
     async def _run_reasoning_step(self, state: MessagesState):
-        question: str = state["messages"][-1].content
+        if self.model is None:
+            raise RuntimeError(
+                "Model is not initialized. Did you forget to call async_init()?"
+            )
+
+        msg = state["messages"][-1]
+        if not isinstance(msg.content, str):
+            raise TypeError(
+                f"Expected string content, got: {type(msg.content).__name__}"
+            )
+        question = msg.content
+
         try:
             # Build the request payload
-            request_data = {"query": question, "top_k": 3}
+            request_data: Dict[str, Any] = {"query": question, "top_k": 3}
 
             # Add tags from runtime context if available
             library_ids = get_document_libraries_ids(self.get_runtime_context())

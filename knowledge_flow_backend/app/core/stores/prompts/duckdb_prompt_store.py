@@ -28,7 +28,7 @@ from fred_core.store.duckdb_store import DuckDBTableStore
 class DuckdbPromptStore(BasePromptStore):
     def __init__(self, db_path: Path):
         self.table_name = "prompts"
-        self.store = DuckDBTableStore(db_path, prefix="")
+        self.store = DuckDBTableStore(db_path, prefix="prompt_")
         self._ensure_schema()
 
     def _ensure_schema(self):

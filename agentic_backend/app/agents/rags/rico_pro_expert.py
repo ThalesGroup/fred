@@ -40,7 +40,7 @@ from app.core.model.model_factory import get_model
 logger = logging.getLogger(__name__)
 
 
-class RagsExpert(AgentFlow):
+class RicoProExpert(AgentFlow):
     """
     An expert agent that searches and analyzes documents to answer user questions.
     This agent uses a vector search service using the knowledge-flow search REST API to find relevant documents and generates
@@ -51,8 +51,8 @@ class RagsExpert(AgentFlow):
 
     name: str = "RagsExpert"
     role: str = "Rags Expert"
-    nickname: str = "Rico"
-    description: str = "Extracts and analyzes document content to answer questions."
+    nickname: str = "Rico Pro"
+    description: str
     icon: str = "rags_agent"
     categories: List[str] = []
     tag: str = "Innovation"
@@ -68,6 +68,14 @@ class RagsExpert(AgentFlow):
         self._graph = None
         self.categories = agent_settings.categories or ["Documentation"]
         self.tag = agent_settings.tag or "rags"
+        if not agent_settings.description:
+            self.description = "Analyzes and grades documents in multiple steps to generate precise, well-sourced answers."
+        else:
+            self.description = agent_settings.description
+        if not agent_settings.role:
+            self.role = "Rags Expert"
+        else:
+            self.description = agent_settings.role
 
     async def async_init(self):
         self.model = get_model(self.agent_settings.model)

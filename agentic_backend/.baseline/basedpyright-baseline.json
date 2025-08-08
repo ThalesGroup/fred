@@ -296,40 +296,6 @@
                 }
             }
         ],
-        "./app/agents/rags/rags_expert.py": [
-            {
-                "code": "reportAssignmentType",
-                "range": {
-                    "startColumn": 24,
-                    "endColumn": 53,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportOptionalMemberAccess",
-                "range": {
-                    "startColumn": 50,
-                    "endColumn": 57,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportOptionalMemberAccess",
-                "range": {
-                    "startColumn": 40,
-                    "endColumn": 47,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportOptionalMemberAccess",
-                "range": {
-                    "startColumn": 40,
-                    "endColumn": 47,
-                    "lineCount": 1
-                }
-            }
-        ],
         "./app/agents/tabular/tabular_expert.py": [
             {
                 "code": "reportArgumentType",

@@ -90,12 +90,12 @@ ai:
           url: http://localhost:8111/mcp_tabular
           sse_read_timeout: 2000
       model: {}
-    - name: "RagsExpert"
+    - name: "RicoProExpert"
       role: "Document Retrieval Expert"
       description: >
         Answers user questions by retrieving relevant information from ingested document corpora.
         Uses a vector-based retrieval pipeline to ground responses in internal or uploaded knowledge.
-      class_path: "app.agents.rags.rags_expert.RagsExpert"
+      class_path: "app.agents.rags.rico_pro_expert.RicoProExpert"
       enabled: true
       categories:
         - "rag"
@@ -104,13 +104,12 @@ ai:
         chunk_overlap: 64
         knowledge_flow_url: "http://localhost:8111/knowledge-flow/v1"
       model: {}
-    - name: "RetiredRagsExpert"
+    - name: "RicoExpert"
       role: "Document Retrieval Expert"
       description: >
-        Answers user questions by retrieving relevant information from ingested document corpora.
-        Uses a vector-based retrieval pipeline to ground responses in internal or uploaded knowledge.
-      class_path: "app.agents.rags.retired_rags_expert.RetiredRagsExpert"
-      enabled: false
+        Provides quick answers based on document content, using direct retrieval and generation.
+      class_path: "app.agents.rags.rico_expert.RicoExpert"
+      enabled: true
       categories:
         - "rag"
       settings:

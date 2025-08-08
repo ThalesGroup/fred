@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 class DuckdbHistoryStore(BaseHistoryStore):
     def __init__(self, db_path):
-        self.store = DuckDBTableStore(prefix="", db_path=db_path)
+        self.store = DuckDBTableStore(prefix="history_", db_path=db_path)
         self._ensure_schema()
 
     def _ensure_schema(self):
@@ -40,7 +40,9 @@ class DuckdbHistoryStore(BaseHistoryStore):
                 )
             """)
 
-    def save(self, session_id: str, messages: List[ChatMessagePayload], user_id: str) -> None:
+    def save(
+        self, session_id: str, messages: List[ChatMessagePayload], user_id: str
+    ) -> None:
         with self.store._connect() as conn:
             for msg in messages:
                 conn.execute(
@@ -61,7 +63,7 @@ class DuckdbHistoryStore(BaseHistoryStore):
                         msg.content,
                         json.dumps(msg.metadata or {}),
                         msg.subtype,
-                    )
+                    ),
                 )
 
     def get(self, session_id: str) -> List[ChatMessagePayload]:
@@ -73,25 +75,27 @@ class DuckdbHistoryStore(BaseHistoryStore):
                 WHERE session_id = ?
                 ORDER BY rank ASC
                 """,
-                (session_id,)
+                (session_id,),
             ).fetchall()
 
         messages = []
         for row in rows:
             try:
-                messages.append(ChatMessagePayload(
-                    user_id=row[0],
-                    rank=row[1],
-                    timestamp=row[2],
-                    type=row[3],
-                    sender=row[4],
-                    exchange_id=row[5],
-                    content=row[6],
-                    metadata=json.loads(row[7]) if row[7] else {},
-                    subtype=row[8],
-                    session_id=session_id,
-                ))
-                
+                messages.append(
+                    ChatMessagePayload(
+                        user_id=row[0],
+                        rank=row[1],
+                        timestamp=row[2],
+                        type=row[3],
+                        sender=row[4],
+                        exchange_id=row[5],
+                        content=row[6],
+                        metadata=json.loads(row[7]) if row[7] else {},
+                        subtype=row[8],
+                        session_id=session_id,
+                    )
+                )
+
             except ValidationError as e:
                 logger.error(f"Failed to parse ChatMessagePayload: {e}")
         return messages
@@ -103,7 +107,7 @@ class DuckdbHistoryStore(BaseHistoryStore):
         user_id: str,
         precision: str,
         groupby: List[str],
-        agg_mapping: Dict[str, List[str]]
+        agg_mapping: Dict[str, List[str]],
     ) -> MetricsResponse:
         start_dt = isoparse(start)
         end_dt = isoparse(end)
@@ -139,14 +143,21 @@ class DuckdbHistoryStore(BaseHistoryStore):
                 if msg_dt.tzinfo is None:
                     msg_dt = msg_dt.replace(tzinfo=timezone.utc)
             except Exception as e:
-                logger.warning(f"[⚠️ Invalid timestamp] msg_id={msg.exchange_id} timestamp={msg.timestamp} error={e}")
+                logger.warning(
+                    f"[⚠️ Invalid timestamp] msg_id={msg.exchange_id} timestamp={msg.timestamp} error={e}"
+                )
                 continue
             if not (start_dt <= msg_dt <= end_dt):
                 continue
 
             flat = flatten_message(msg)
             bucket_time = truncate_datetime(msg_dt, precision)
-            flat["timestamp"] = bucket_time.astimezone(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+            flat["timestamp"] = (
+                bucket_time.astimezone(timezone.utc)
+                .replace(microsecond=0)
+                .isoformat()
+                .replace("+00:00", "Z")
+            )
 
             group_key = (flat["timestamp"], *(flat.get(g) for g in groupby))
             grouped.setdefault(group_key, []).append(flat)
@@ -178,9 +189,7 @@ class DuckdbHistoryStore(BaseHistoryStore):
 
             buckets.append(
                 MetricsBucket(
-                    timestamp=timestamp,
-                    group=group_values,
-                    aggregations=aggs
+                    timestamp=timestamp, group=group_values, aggregations=aggs
                 )
             )
 

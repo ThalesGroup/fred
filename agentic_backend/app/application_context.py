@@ -66,6 +66,7 @@ def get_configuration() -> Configuration:
 def get_session_store() -> BaseSessionStore:
     return get_app_context().get_session_store()
 
+
 def get_history_store() -> BaseHistoryStore:
     return get_app_context().get_history_store()
 
@@ -115,9 +116,11 @@ def get_default_model() -> BaseLanguageModel:
     """
     return get_app_context().get_default_model()
 
+
 # -------------------------------
 # Runtime status class
 # -------------------------------
+
 
 class RuntimeStatus:
     """
@@ -255,11 +258,15 @@ class ApplicationContext:
         store_config = get_configuration().storage.session_store
         if isinstance(store_config, DuckdbStoreConfig):
             from app.core.session.stores.duckdb_session_store import DuckdbSessionStore
+
             db_path = Path(store_config.duckdb_path).expanduser()
             return DuckdbSessionStore(db_path)
         elif isinstance(store_config, OpenSearchIndexConfig):
             opensearch_config = get_configuration().storage.opensearch
-            from app.core.session.stores.opensearch_session_store import OpensearchSessionStore
+            from app.core.session.stores.opensearch_session_store import (
+                OpensearchSessionStore,
+            )
+
             password = opensearch_config.password
             if not password:
                 raise ValueError(
@@ -292,6 +299,7 @@ class ApplicationContext:
         store_config = get_configuration().storage.history_store
         if isinstance(store_config, DuckdbStoreConfig):
             from app.core.session.stores.duckdb_history_store import DuckdbHistoryStore
+
             db_path = Path(store_config.duckdb_path).expanduser()
             return DuckdbHistoryStore(db_path)
         elif isinstance(store_config, OpenSearchIndexConfig):
@@ -301,7 +309,10 @@ class ApplicationContext:
                 raise ValueError(
                     "Missing OpenSearch credentials: OPENSEARCH_USER and/or OPENSEARCH_PASSWORD"
                 )
-            from app.core.session.stores.opensearch_history_index import OpensearchHistoryIndex
+            from app.core.session.stores.opensearch_history_index import (
+                OpensearchHistoryIndex,
+            )
+
             return OpensearchHistoryIndex(
                 host=opensearch_config.host,
                 username=opensearch_config.username,
@@ -329,6 +340,7 @@ class ApplicationContext:
         store_config = get_configuration().storage.agent_store
         if isinstance(store_config, DuckdbStoreConfig):
             from app.core.agents.store.duckdb_agent_store import DuckdbAgentStore
+
             db_path = Path(store_config.duckdb_path).expanduser()
             return DuckdbAgentStore(db_path)
         elif isinstance(store_config, OpenSearchIndexConfig):
@@ -338,7 +350,10 @@ class ApplicationContext:
                 raise ValueError(
                     "Missing OpenSearch credentials: OPENSEARCH_USER and/or OPENSEARCH_PASSWORD"
                 )
-            from app.core.agents.store.opensearch_agent_store import OpenSearchAgentStore
+            from app.core.agents.store.opensearch_agent_store import (
+                OpenSearchAgentStore,
+            )
+
             return OpenSearchAgentStore(
                 host=opensearch_config.host,
                 username=opensearch_config.username,
@@ -349,7 +364,6 @@ class ApplicationContext:
             )
         else:
             raise ValueError("Unsupported sessions storage backend")
-
 
     def get_feedback_store(self) -> BaseFeedbackStore:
         """
@@ -365,16 +379,20 @@ class ApplicationContext:
         store_config = get_configuration().storage.feedback_store
         if isinstance(store_config, DuckdbStoreConfig):
             db_path = Path(store_config.duckdb_path).expanduser()
-            from app.core.feedback.store.duckdb_feedback_store import DuckdbFeedbackStore
+            from app.core.feedback.store.duckdb_feedback_store import (
+                DuckdbFeedbackStore,
+            )
+
             return DuckdbFeedbackStore(db_path)
         elif isinstance(store_config, OpenSearchIndexConfig):
             opensearch_config = get_configuration().storage.opensearch
             password = opensearch_config.password
             if not password:
-                raise ValueError(
-                    "Missing OpenSearch credentials: OPENSEARCH_PASSWORD"
-                )
-            from app.core.feedback.store.opensearch_feedback_store import OpenSearchFeedbackStore
+                raise ValueError("Missing OpenSearch credentials: OPENSEARCH_PASSWORD")
+            from app.core.feedback.store.opensearch_feedback_store import (
+                OpenSearchFeedbackStore,
+            )
+
             return OpenSearchFeedbackStore(
                 host=opensearch_config.host,
                 username=opensearch_config.username,
@@ -385,5 +403,3 @@ class ApplicationContext:
             )
         else:
             raise ValueError("Unsupported sessions storage backend")
-        
-

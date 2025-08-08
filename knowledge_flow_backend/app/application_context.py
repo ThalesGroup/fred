@@ -91,6 +91,7 @@ EXTENSION_CATEGORY = {
 
 logger = logging.getLogger(__name__)
 
+
 def get_configuration() -> Configuration:
     """
     Retrieves the global application configuration.
@@ -99,6 +100,7 @@ def get_configuration() -> Configuration:
         Configuration: The singleton application configuration.
     """
     return get_app_context().configuration
+
 
 def get_app_context() -> "ApplicationContext":
     """
@@ -405,26 +407,24 @@ class ApplicationContext:
         """
         if self._vector_store_instance is not None:
             return self._vector_store_instance
-        
-        store = self.configuration.storage.vector_store 
+
+        store = self.configuration.storage.vector_store
 
         if isinstance(store, OpenSearchIndexConfig):
             opensearch_config = get_configuration().storage.opensearch
             password = opensearch_config.password
             if not password:
-                raise ValueError(
-                    "Missing OpenSearch credentials: OPENSEARCH_PASSWORD"
-                )
+                raise ValueError("Missing OpenSearch credentials: OPENSEARCH_PASSWORD")
 
             self._vector_store_instance = OpenSearchVectorStoreAdapter(
-                    embedding_model=embedding_model,
-                    host=opensearch_config.host,
-                    index=store.index,
-                    username=opensearch_config.username,
-                    password=password,
-                    secure=opensearch_config.secure,
-                    verify_certs=opensearch_config.verify_certs,
-                )
+                embedding_model=embedding_model,
+                host=opensearch_config.host,
+                index=store.index,
+                username=opensearch_config.username,
+                password=password,
+                secure=opensearch_config.secure,
+                verify_certs=opensearch_config.verify_certs,
+            )
             return self._vector_store_instance
         # elif isinstance(store, WeaviateVectorStorage):
         #     if self._vector_store_instance is None:
@@ -435,7 +435,7 @@ class ApplicationContext:
         else:
             raise ValueError("Unsupported vector store backend")
         return self._vector_store_instance
-    
+
     def get_metadata_store(self) -> BaseMetadataStore:
         if self._metadata_store_instance is not None:
             return self._metadata_store_instance
@@ -448,9 +448,7 @@ class ApplicationContext:
             opensearch_config = get_configuration().storage.opensearch
             password = opensearch_config.password
             if not password:
-                raise ValueError(
-                    "Missing OpenSearch credentials: OPENSEARCH_PASSWORD"
-                )
+                raise ValueError("Missing OpenSearch credentials: OPENSEARCH_PASSWORD")
             self._metadata_store_instance = OpenSearchMetadataStore(
                 host=opensearch_config.host,
                 username=opensearch_config.username,
@@ -462,7 +460,7 @@ class ApplicationContext:
         else:
             raise ValueError("Unsupported metadata storage backend")
         return self._metadata_store_instance
-    
+
     def get_tag_store(self) -> BaseTagStore:
         if self._tag_store_instance is not None:
             return self._tag_store_instance
@@ -475,9 +473,7 @@ class ApplicationContext:
             opensearch_config = get_configuration().storage.opensearch
             password = opensearch_config.password
             if not password:
-                raise ValueError(
-                    "Missing OpenSearch credentials: OPENSEARCH_PASSWORD"
-                )
+                raise ValueError("Missing OpenSearch credentials: OPENSEARCH_PASSWORD")
             self._tag_store_instance = OpenSearchTagStore(
                 host=opensearch_config.host,
                 username=opensearch_config.username,
@@ -489,7 +485,7 @@ class ApplicationContext:
         else:
             raise ValueError("Unsupported sessions storage backend")
         return self._tag_store_instance
-    
+
     def get_prompt_store(self) -> BasePromptStore:
         if self._prompt_store_instance is not None:
             return self._prompt_store_instance
@@ -502,9 +498,7 @@ class ApplicationContext:
             opensearch_config = get_configuration().storage.opensearch
             password = opensearch_config.password
             if not password:
-                raise ValueError(
-                    "Missing OpenSearch credentials: OPENSEARCH_PASSWORD"
-                )
+                raise ValueError("Missing OpenSearch credentials: OPENSEARCH_PASSWORD")
             self._prompt_store_instance = OpenSearchPromptStore(
                 host=opensearch_config.host,
                 username=opensearch_config.username,
@@ -516,7 +510,7 @@ class ApplicationContext:
         else:
             raise ValueError("Unsupported sessions storage backend")
         return self._prompt_store_instance
-    
+
     def get_tabular_store(self) -> DuckDBTableStore:
         """
         Lazy-initialize and return the configured tabular store backend.
@@ -532,7 +526,7 @@ class ApplicationContext:
         else:
             raise ValueError("Unsupported tabular storage backend")
         return self._tabular_store_instance
-    
+
     def get_catalog_store(self) -> BaseCatalogStore:
         """
         Return the store used to save a local view of pull files, i.e. files not yet processed.
@@ -549,9 +543,7 @@ class ApplicationContext:
             opensearch_config = get_configuration().storage.opensearch
             password = opensearch_config.password
             if not password:
-                raise ValueError(
-                    "Missing OpenSearch credentials: OPENSEARCH_PASSWORD"
-                )
+                raise ValueError("Missing OpenSearch credentials: OPENSEARCH_PASSWORD")
             self._catalog_store_instance = OpenSearchCatalogStore(
                 host=opensearch_config.host,
                 username=opensearch_config.username,
@@ -563,7 +555,7 @@ class ApplicationContext:
         else:
             raise ValueError("Unsupported sessions storage backend")
         return self._catalog_store_instance
-    
+
     def get_content_loader(self, source: str) -> BaseContentLoader:
         """
         Factory method to create a document loader instance based on configuration.

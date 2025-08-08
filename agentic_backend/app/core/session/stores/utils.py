@@ -49,4 +49,3 @@ def flatten_message(msg: ChatMessagePayload) -> dict:
         flat["finish_reason"] = metadata["finish_reason"]
 
     return flat
-
