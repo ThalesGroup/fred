@@ -175,7 +175,7 @@ configuration:
       keycloak_url: "http://keycloak/realms/fred"
       authorized_origins:
       - "http://localhost:5173"
-      - "https://fred.dev.fred.thalesgroup.com"
+      - "http://fred.dev.fred.thalesgroup.com"
       - "https://fred.dev.fred.thalesgroup.com"
 
   frontend_settings:
@@ -196,29 +196,6 @@ configuration:
       enableElecWarfare: false
     properties:
       logoName: "fred"
-
-  database:
-    type: csv
-    csv_files:
-      # Can be absolute paths or relative paths to the main
-      energy_mix: './services/cluster_consumption/data/simulated_energy_mix.csv'
-      carbon_footprint: './services/cluster_consumption/data/simulated_cluster_consumption_gco2.csv'
-      energy_footprint: './services/cluster_consumption/data/simulated_cluster_consumption_wh.csv'
-      financial_footprint: './services/cluster_consumption/data/simulated_cluster_consumption_usd.csv'
-      # Guerre elec & ship identification service
-      frequencies: './services/sensor/data/bandes_freq.csv'
-      sensors_test_new: './services/theater_analysis/data/detections-capteur-donnees-test_new_scenario.csv'
-      mission: './services/mission/data/mission.csv'
-      radio: './services/theater_analysis/data/radio-maritime-donnees-tests_excel_light_militaire.csv'
-      signal_identification_guide: './services/theorical_radio/data/Signal_identification_guide_new.csv'
-
-  kubernetes:
-    kube_config: '~/.kube/config'
-    aws_config: '~/.aws/config' # Optional, needed for aws EKS clusters.
-    # Timeout settings for the client
-    timeout:
-      connect: 5  # Time to wait for a connection in seconds
-      read: 15    # Time to wait for a response in seconds
 
   ai:
     # Timeout settings for the client
@@ -350,66 +327,34 @@ configuration:
           knowledge_flow_url: "http://knowledge-flow-backend:8080/knowledge-flow/v1"
         model: {}
 
+  storage:
+    postgres:
+      host: postgresql.sql-store
+      port: 5432
+      database: fred
+      username: admin
 
+    opensearch:
+      host: https://opensearch-cluster-master.doc-store:9200
+      secure: true
+      verify_certs: false
+      username: admin
 
-  node_metrics_storage:
-    type: "local"
-    local_path: "~/.fred/agentic/node-metrics-store"
+    feedback_store:
+      type: "opensearch"
+      index: feedback-index
 
-  tool_metrics_storage:
-    type: "local"
-    local_path: "~/.fred/agentic/tool-metrics-store"
+    agent_store:
+      type: "opensearch"
+      index: agent-index
 
-  feedback_storage:
-    type: duckdb
-    duckdb_path: "~/.fred/agentic/feedback.duckdb"
+    session_store:
+      type: "opensearch"
+      index: session-index
 
-  agent_storage:
-    type: "duckdb"
-    duckdb_path: "~/.fred/agentic/agent.duckdb"
-
-  # Where to save fred produced resources like Essentials or Scores
-  # and external resources like Kubernetes Workload descriptions
-  dao:
-    type: "file"  # Currently the only one supported
-    base_path: "~/.fred/agentic/dao-cache"
-    max_cached_delay_seconds: 300  # Cache delay in seconds. Use 0 for no cache or a negative value for limitless cache.
-
-  # Sessions and messages are stored by default in_memory
-  # but it can be modified to use a backend like opensearch
-  session_storage:
-    ## Session Storage in memory:
-    type: in_memory
-    ## Session Storage using OpenSearch:
-    # type: opensearch # username and password are passed via the OPENSEARCH_USER and OPENSEARCH_PASSWORD env variables defined in thes .env file
-    # host: https://localhost:9200
-    # username: Admin # Overrides the OPENSEARCH_USER environment variable
-    # password: xxx # Overrides the OPENSEARCH_PASSWORD environment variable
-    secure: false
-    verify_certs: false
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    history_store:
+      type: "opensearch"
+      index: history-index
 
 dotenv:
   AZURE_TENANT_ID: ""  
@@ -422,7 +367,6 @@ dotenv:
   OPENAI_API_KEY: "sk-..."
   OPENSEARCH_USER: "admin"
   OPENSEARCH_PASSWORD: "admin123"
-
 
 kubeconfig:
   data:
