@@ -1,4 +1,0 @@
-apiVersion: v2
-name: certmanager-letsencrypt
-description: Acme ClusterIssuer for cert-manager
-version: 0.1.0
