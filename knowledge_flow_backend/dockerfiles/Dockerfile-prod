@@ -9,7 +9,7 @@ ARG UV_VERSION=0.7.21
 
 # Install system deps required for build
 RUN apt-get update && \
-    apt-get install -y git curl make && \
+    apt-get install -y git curl make ffmpeg && \
     rm -rf /var/lib/apt/lists/*
 
 # Install uv globally
