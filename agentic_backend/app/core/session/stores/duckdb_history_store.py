@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 class DuckdbHistoryStore(BaseHistoryStore):
     def __init__(self, db_path):
-        self.store = DuckDBTableStore(prefix="", db_path=db_path)
+        self.store = DuckDBTableStore(prefix="history_", db_path=db_path)
         self._ensure_schema()
 
     def _ensure_schema(self):

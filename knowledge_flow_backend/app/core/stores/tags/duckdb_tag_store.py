@@ -18,7 +18,7 @@ class DuckdbTagStore(BaseTagStore):
 
     def __init__(self, db_path: Path):
         self.table_name = "tags"
-        self.store = DuckDBTableStore(db_path, prefix="")
+        self.store = DuckDBTableStore(db_path, prefix="tag_")
         self._ensure_schema()
 
     def _table(self) -> str:

@@ -25,6 +25,7 @@ from app.core.chatbot.chat_schema import (
     ChatMessagePayload,
 )
 from app.core.session.stores.utils import flatten_message, truncate_datetime
+from fred_core import ThreadSafeLRUCache
 
 logger = logging.getLogger(__name__)
 
@@ -78,7 +79,7 @@ class OpensearchHistoryIndex(BaseHistoryStore):
             verify_certs=verify_certs,
             connection_class=RequestsHttpConnection,
         )
-
+        self._cache = ThreadSafeLRUCache[str, List[ChatMessagePayload]](max_size=1000)
         self.index = index
         if not self.client.indices.exists(index=index):
             self.client.indices.create(index=index, body=MAPPING)
@@ -91,6 +92,12 @@ class OpensearchHistoryIndex(BaseHistoryStore):
         self, session_id: str, messages: List[ChatMessagePayload], user_id: str
     ) -> None:
         try:
+            for msg in messages:
+                logger.info(f"[OpenSearch SAVE] session={session_id} sender={msg.sender} rank={msg.rank} subtype={msg.subtype} content='{msg.content[:50]}...'")
+               
+                if msg.rank is None:
+                    logger.warning(f"[OpenSearch WARNING] Message missing rank: {msg}")
+
             actions = [
                 {
                     "index": {
@@ -105,9 +112,10 @@ class OpensearchHistoryIndex(BaseHistoryStore):
 
             # OpenSearch Bulk API
             self.client.bulk(body=bulk_body)
-            self.client.indices.refresh(
-                index=self.index
-            )  # Necessary due to indexing delay for whoever wants to access the newly stored data (from save_messages).
+            # append to the cached entry if any
+            existing = self._cache.get(session_id) or []
+            updated = existing + messages  # naive append
+            self._cache.set(session_id, updated)
             logger.info(f"Saved {len(messages)} messages for session {session_id}")
         except Exception as e:
             logger.error(f"Failed to save messages for session {session_id}: {e}")
@@ -117,6 +125,9 @@ class OpensearchHistoryIndex(BaseHistoryStore):
         self, session_id: str, 
     ) -> List[ChatMessagePayload]:
         try:
+            if cached := self._cache.get(session_id):
+                logger.debug(f"[TAPROMPTGS] Cache hit for tag '{session_id}'")
+                return cached
             query = {
                 "query": {"term": {"session_id.keyword": {"value": session_id}}},
                 "sort": [{"rank": {"order": "asc", "unmapped_type": "integer"}}],
@@ -125,6 +136,12 @@ class OpensearchHistoryIndex(BaseHistoryStore):
             response = self.client.search(
                 index=self.index, body=query, params={"size": 10000}
             )
+            hits = response["hits"]["hits"]
+            logger.info(f"[OpenSearch GET] Loaded {len(hits)} messages for session {session_id}")
+            for h in hits:
+                msg = h["_source"]
+                logger.info(f"[OpenSearch GET] rank={msg.get('rank')} sender={msg.get('sender')} content='{msg.get('content', '')[:50]}...'")
+
             return [
                 ChatMessagePayload(**hit["_source"]) for hit in response["hits"]["hits"]
             ]

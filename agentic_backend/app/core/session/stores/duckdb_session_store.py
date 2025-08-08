@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 class DuckdbSessionStore(BaseSessionStore):
     def __init__(self, db_path):
-        self.store = DuckDBTableStore(prefix="", db_path=db_path)
+        self.store = DuckDBTableStore(prefix="session_", db_path=db_path)
         self._ensure_schema()
 
     def _ensure_schema(self):
@@ -54,5 +54,4 @@ class DuckdbSessionStore(BaseSessionStore):
 
     def delete(self, session_id: str) -> None:
         with self.store._connect() as conn:
-            conn.execute("DELETE FROM messages WHERE session_id = ?", (session_id,))
             conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))

@@ -102,7 +102,11 @@ class OpensearchSessionStore(BaseSessionStore):
 
     def get_for_user(self, user_id: str) -> List[SessionSchema]:
         try:
-            query = {"query": {"term": {"user_id.keyword": {"value": user_id}}}}
+            query = {
+                "query": {
+                    "term": {"user_id": {"value": user_id}}  # fixed
+                }
+            }
             response = self.client.search(
                 params={"size": 10000}, index=self.index, body=query
             )
