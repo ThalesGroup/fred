@@ -15,11 +15,12 @@
 from typing import Any, Dict, List, Optional, Literal
 from pydantic import BaseModel, Field
 from fred_core import (
-    SecurityConfiguration, 
+    SecurityConfiguration,
     PostgresStoreConfig,
     OpenSearchStoreConfig,
     StoreConfig,
-    )
+)
+
 
 class StorageConfig(BaseModel):
     postgres: PostgresStoreConfig
@@ -29,6 +30,7 @@ class StorageConfig(BaseModel):
     history_store: StoreConfig
     feedback_store: StoreConfig
 
+
 class TimeoutSettings(BaseModel):
     connect: Optional[int] = Field(
         5, description="Time to wait for a connection in seconds."
@@ -36,6 +38,7 @@ class TimeoutSettings(BaseModel):
     read: Optional[int] = Field(
         15, description="Time to wait for a response in seconds."
     )
+
 
 class ModelConfiguration(BaseModel):
     provider: Optional[str] = Field(
@@ -46,6 +49,7 @@ class ModelConfiguration(BaseModel):
         default_factory=dict,
         description="Additional provider-specific settings, e.g., Azure deployment name.",
     )
+
 
 class MCPServerConfiguration(BaseModel):
     name: str
@@ -70,8 +74,11 @@ class MCPServerConfiguration(BaseModel):
         None, description="Environment variables to give the MCP server"
     )
 
+
 class RecursionConfig(BaseModel):
     recursion_limit: int
+
+
 class AgentSettings(BaseModel):
     type: Literal["mcp", "custom", "leader"] = "custom"
     name: str
@@ -88,6 +95,7 @@ class AgentSettings(BaseModel):
     nickname: Optional[str] = None
     role: Optional[str] = None
     icon: Optional[str] = None
+
 
 class AIConfig(BaseModel):
     timeout: TimeoutSettings = Field(
@@ -108,6 +116,7 @@ class AIConfig(BaseModel):
         """
         Apply default model configuration to all agents and services if not specified.
         """
+
         def merge(target: ModelConfiguration) -> ModelConfiguration:
             defaults = self.default_model.model_dump(exclude_unset=True)
             target_dict = target.model_dump(exclude_unset=True)
@@ -123,13 +132,16 @@ class FrontendFlags(BaseModel):
     enableK8Features: bool = False
     enableElecWarfare: bool = False
 
+
 class Properties(BaseModel):
     logoName: str = "fred"
+
 
 class FrontendSettings(BaseModel):
     feature_flags: FrontendFlags
     properties: Properties
     security: SecurityConfiguration
+
 
 class AppConfig(BaseModel):
     name: Optional[str] = "Agentic Backend"
@@ -147,6 +159,3 @@ class Configuration(BaseModel):
     frontend_settings: FrontendSettings
     ai: AIConfig
     storage: StorageConfig
-
-
-

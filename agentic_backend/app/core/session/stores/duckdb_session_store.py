@@ -31,22 +31,25 @@ class DuckdbSessionStore(BaseSessionStore):
         with self.store._connect() as conn:
             conn.execute(
                 "INSERT OR REPLACE INTO sessions (id, user_id, title, updated_at) VALUES (?, ?, ?, ?)",
-                (session.id, session.user_id, session.title, session.updated_at)
+                (session.id, session.user_id, session.title, session.updated_at),
             )
 
     def get_for_user(self, user_id: str) -> List[SessionSchema]:
         with self.store._connect() as conn:
             rows = conn.execute(
                 "SELECT id, user_id, title, updated_at FROM sessions WHERE user_id = ?",
-                (user_id,)
+                (user_id,),
             ).fetchall()
-        return [SessionSchema(id=row[0], user_id=row[1], title=row[2], updated_at=row[3]) for row in rows]
+        return [
+            SessionSchema(id=row[0], user_id=row[1], title=row[2], updated_at=row[3])
+            for row in rows
+        ]
 
     def get(self, session_id: str) -> Optional[SessionSchema]:
         with self.store._connect() as conn:
             row = conn.execute(
                 "SELECT id, user_id, title, updated_at FROM sessions WHERE id = ?",
-                (session_id,)
+                (session_id,),
             ).fetchone()
         if not row:
             return None

@@ -40,12 +40,12 @@ MAPPING = {
     "settings": {
         "number_of_shards": 1,
         "number_of_replicas": 0,
-        "refresh_interval": "1s"
+        "refresh_interval": "1s",
     },
     "mappings": {
         "properties": {
             "exchange_id": {"type": "keyword"},
-            "user_id": { "type": "keyword" },
+            "user_id": {"type": "keyword"},
             "type": {"type": "keyword"},
             "sender": {"type": "keyword"},
             "content": {"type": "text"},
@@ -53,12 +53,9 @@ MAPPING = {
             "session_id": {"type": "keyword"},
             "rank": {"type": "integer"},
             "subtype": {"type": "keyword"},
-            "metadata": {
-                "type": "object",
-                "dynamic": True
-            }
+            "metadata": {"type": "object", "dynamic": True},
         }
-    }
+    },
 }
 
 
@@ -87,14 +84,15 @@ class OpensearchHistoryIndex(BaseHistoryStore):
         else:
             logger.info(f"OpenSearch index '{index}' already exists.")
 
-
     def save(
         self, session_id: str, messages: List[ChatMessagePayload], user_id: str
     ) -> None:
         try:
             for msg in messages:
-                logger.info(f"[OpenSearch SAVE] session={session_id} sender={msg.sender} rank={msg.rank} subtype={msg.subtype} content='{msg.content[:50]}...'")
-               
+                logger.info(
+                    f"[OpenSearch SAVE] session={session_id} sender={msg.sender} rank={msg.rank} subtype={msg.subtype} content='{msg.content[:50]}...'"
+                )
+
                 if msg.rank is None:
                     logger.warning(f"[OpenSearch WARNING] Message missing rank: {msg}")
 
@@ -122,7 +120,8 @@ class OpensearchHistoryIndex(BaseHistoryStore):
             raise
 
     def get(
-        self, session_id: str, 
+        self,
+        session_id: str,
     ) -> List[ChatMessagePayload]:
         try:
             if cached := self._cache.get(session_id):
@@ -137,10 +136,14 @@ class OpensearchHistoryIndex(BaseHistoryStore):
                 index=self.index, body=query, params={"size": 10000}
             )
             hits = response["hits"]["hits"]
-            logger.info(f"[OpenSearch GET] Loaded {len(hits)} messages for session {session_id}")
+            logger.info(
+                f"[OpenSearch GET] Loaded {len(hits)} messages for session {session_id}"
+            )
             for h in hits:
                 msg = h["_source"]
-                logger.info(f"[OpenSearch GET] rank={msg.get('rank')} sender={msg.get('sender')} content='{msg.get('content', '')[:50]}...'")
+                logger.info(
+                    f"[OpenSearch GET] rank={msg.get('rank')} sender={msg.get('sender')} content='{msg.get('content', '')[:50]}...'"
+                )
 
             return [
                 ChatMessagePayload(**hit["_source"]) for hit in response["hits"]["hits"]
@@ -156,7 +159,7 @@ class OpensearchHistoryIndex(BaseHistoryStore):
         user_id: str,
         precision: str,
         groupby: List[str],
-        agg_mapping: Dict[str, List[str]]
+        agg_mapping: Dict[str, List[str]],
     ) -> MetricsResponse:
         try:
             # 1. Search messages in date range
@@ -195,11 +198,15 @@ class OpensearchHistoryIndex(BaseHistoryStore):
 
             # 4. Aggregate
             buckets = []
-            logger.debug(f"[metrics] Running OpenSearch query on index '{self.index}' with range: {start} to {end}, precision={precision}")
+            logger.debug(
+                f"[metrics] Running OpenSearch query on index '{self.index}' with range: {start} to {end}, precision={precision}"
+            )
             logger.debug(f"[metrics] Query body: {query}")
             logger.debug(f"[metrics] Found {len(hits)} hits between {start} and {end}")
-            logger.debug(f"[metrics] Truncated into {len(grouped)} groups based on precision={precision}")
-            
+            logger.debug(
+                f"[metrics] Truncated into {len(grouped)} groups based on precision={precision}"
+            )
+
             for key, group in grouped.items():
                 bucket_time = key[0]
                 group_fields = {field: value for field, value in zip(groupby, key[1:])}
@@ -226,7 +233,12 @@ class OpensearchHistoryIndex(BaseHistoryStore):
                             case _:
                                 raise ValueError(f"Unsupported aggregation op: {op}")
 
-                timestamp = bucket_time.astimezone(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+                timestamp = (
+                    bucket_time.astimezone(timezone.utc)
+                    .replace(microsecond=0)
+                    .isoformat()
+                    .replace("+00:00", "Z")
+                )
                 buckets.append(
                     MetricsBucket(
                         timestamp=timestamp,

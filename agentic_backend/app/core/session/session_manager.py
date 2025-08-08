@@ -27,7 +27,11 @@ from fastapi import UploadFile
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from langgraph.graph.state import CompiledStateGraph
 
-from app.application_context import get_configuration, get_default_model, get_history_store
+from app.application_context import (
+    get_configuration,
+    get_default_model,
+    get_history_store,
+)
 from app.core.agents.agent_manager import AgentManager
 from app.core.agents.flow import AgentFlow
 from app.core.agents.runtime_context import RuntimeContext
@@ -205,7 +209,7 @@ class SessionManager:
                     rank=base_rank,  # injected context comes before user message
                     metadata={"injected": True, "origin": "chat_profile"},
                     subtype="injected_context",
-                    user_id=user_id
+                    user_id=user_id,
                 )
 
                 logger.info(
@@ -235,7 +239,7 @@ class SessionManager:
             session_id=session.id,
             rank=base_rank,
             subtype=subtype,
-            user_id=user_id
+            user_id=user_id,
         )
 
         all_payloads = []
@@ -253,7 +257,7 @@ class SessionManager:
                 callback=callback,
                 exchange_id=exchange_id,
                 base_rank=base_rank,
-                user_id=user_id
+                user_id=user_id,
             )
 
             # Ensure correct ranks for assistant messages
@@ -377,7 +381,7 @@ class SessionManager:
         base_rank: int,
         callback: CallbackType,
         exchange_id: str,
-        user_id: str
+        user_id: str,
     ) -> List[BaseMessage]:
         """
         Executes the agentic flow and streams responses via the given callback.
@@ -429,7 +433,7 @@ class SessionManager:
                         session_id=session_id,
                         metadata=cleaned_metadata,
                         subtype=subtype,
-                        user_id=user_id
+                        user_id=user_id,
                     )
 
                     all_payloads.append(enriched)  # ✅ collect all messages

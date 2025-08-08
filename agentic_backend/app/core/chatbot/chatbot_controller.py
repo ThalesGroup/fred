@@ -323,7 +323,7 @@ class ChatbotController:
             summary="Get aggregated numerical chatbot metrics",
             tags=fastapi_tags,
             response_model=MetricsResponse,
-        ) 
+        )
         def get_node_numerical_metrics(
             start: str,
             end: str,
