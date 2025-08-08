@@ -25,7 +25,7 @@ let isSecurityEnabled = false
  *    realm: app
  */
 function parseKeycloakUrl(fullUrl: string): { url: string; realm: string } {
-  const match = fullUrl.match(/^(https?:\/\/[^/]+)\/realms\/([^/]+)\/?$/);
+  const match = fullUrl.match(/^(https?:\/\/[^/]+(?:\/[^/]+)*)\/realms\/([^/]+)\/?$/);
   if (!match) {
     throw new Error(`Invalid keycloak_url format: ${fullUrl}`);
   }
