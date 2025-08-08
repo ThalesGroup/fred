@@ -64,7 +64,7 @@ class ChatMessagePayload(BaseModel):
             "execution",
             "observation",
             "error",
-            "injected_context"
+            "injected_context",
         ]
     ] = None
 

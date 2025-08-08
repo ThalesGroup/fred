@@ -22,7 +22,6 @@ from app.core.chatbot.metric_structures import MetricsResponse
 
 
 class BaseHistoryStore(ABC):
-
     @abstractmethod
     def save(
         self, session_id: str, messages: List[ChatMessagePayload], user_id: str
@@ -32,7 +31,8 @@ class BaseHistoryStore(ABC):
 
     @abstractmethod
     def get(
-        self, session_id: str,
+        self,
+        session_id: str,
     ) -> List[ChatMessagePayload]:
         """Retrieve messages for a given session."""
         pass

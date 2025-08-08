@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 class DuckdbFeedbackStore(BaseFeedbackStore):
     def __init__(self, db_path: Path):
         self.table_name = "feedback"
-        self.store = DuckDBTableStore(prefix="", db_path=db_path)
+        self.store = DuckDBTableStore(prefix="feedback_", db_path=db_path)
         self._ensure_schema()
 
     def _ensure_schema(self):
