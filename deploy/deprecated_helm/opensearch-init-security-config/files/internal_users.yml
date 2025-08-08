@@ -1,8 +1,0 @@
-_meta:
-  type: "internalusers"
-  config_version: 2
-{{- range $name, $props := .Values.securityConfigFiles.users }}
-{{- $fullHash := htpasswd $name $props.password | split ":" }}
-{{ $name }}:
-  hash: {{ index $fullHash "_1" }}
-{{- end }}
