@@ -122,6 +122,18 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Build dependency - agentic-backend
+        run: |
+          helm dependency build deploy/charts/agentic-backend
+
+      - name: Build dependency - frontend
+        run: |
+          helm dependency build deploy/charts/frontend
+
+      - name: Build dependency - knowledge-flow-backend
+        run: |
+          helm dependency build deploy/charts/knowledge-flow-backend
       
       - name: Check chart - agentic-backend
         run: |
