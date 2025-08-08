@@ -48,20 +48,19 @@ sed -i 's|^\([[:space:]]*server:\)[[:space:]]*.*$|\1 https://kubernetes.default.
 
 ## Install Knowledge-Flow
 
-Overload the file `knowlegde-flow-backend/values.yaml`, specially the three following variables, we recommend a separated *knowledge-flow-custom.yaml* file
+Overload the file `knowlegde-flow-backend/values.yaml`, specially the three following variables, we recommend a separated *knowledge-flow-custom.yaml* file.
 
 ```
-env:*
-ingress.hosts:*
-configuration:*
-dotenv:*
-kubeconfig:*
+# Pay attention to the example file
+- custom-values-examples/knowledge-flow-custom.yaml
 ```
 
 Then deploy knowledge-flow-backend
 
 ```
 cd deploy/charts
+
+helm dependency build knowledge-flow-backend
 
 helm upgrade -i knowledge-flow-backend ./knowledge-flow-backend/ -n dev
 OR
@@ -70,12 +69,7 @@ helm upgrade -i knowledge-flow-backend ./knowledge-flow-backend/ -n dev --values
 
 ## Install the agentic backend
 
-Overload the following variables in `charts/agentic-backend/values.yaml`, we recommend a separated *agentic-backend-custom.yaml* values file :
-```
-dotenv:*
-env:*
-kubeconfig:*
-```
+Overload the following variables in `charts/agentic-backend/values.yaml`, we recommend a separated *agentic-backend-custom.yaml* values file.
 
 ```
 # Pay attention to the example file
@@ -86,6 +80,11 @@ Then deploy the backend :
 
 ```
 cd deploy/charts/
+
+helm dependency build agentic-backend
+
+helm upgrade -i agentic-backend ./agentic-backend/ -n dev
+OR
 helm upgrade -i agentic-backend ./agentic-backend/ -n dev --values ./custom-values-examples/agentic-backend-custom.yaml
 ```
 
@@ -98,10 +97,15 @@ Overload the Fred frontend similarly to the following example :
 - custom-values-examples/fred-frontend-custom.yaml
 ```
 
-Deploy the frontend
+Then deploy the frontend
 
 ```
 cd deploy/charts/
+
+helm dependency build frontend
+
+helm upgrade -i fred-frontend ./frontend/ -n dev
+OR
 helm upgrade -i fred-frontend ./frontend/ -n dev --values ./fred-frontend-custom.yaml
 ```
 

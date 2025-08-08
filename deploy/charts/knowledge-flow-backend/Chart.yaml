@@ -4,3 +4,9 @@ description: A Helm chart to deploy Knowledge-flow-backend
 type: application
 version: "0.1"
 appVersion: "0.1"
+
+
+dependencies:
+  - name: common-library
+    version: 0.0.1
+    repository: file://../common-library

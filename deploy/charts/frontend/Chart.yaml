@@ -3,3 +3,9 @@ name: frontend
 description: A Helm chart for deploying the Fred frontend
 version: 0.1.0
 appVersion: 0.1.0
+
+
+dependencies:
+  - name: common-library
+    version: 0.0.1
+    repository: file://../common-library

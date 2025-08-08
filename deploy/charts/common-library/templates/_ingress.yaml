@@ -1,19 +1,19 @@
+{{- define "common-library.ingress" }}
+
+
 {{- if .Values.ingress.enabled }}
+---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: {{ lower .Chart.Name | replace "-" "" }}
-  namespace: {{ .Release.Namespace }}
-  labels:
-    app: {{ .Chart.Name }}
-    release: {{ .Release.Name }}
+  name: {{ $.Values.applicationName }}
   {{- with .Values.ingress.annotations }}
   annotations:
     {{- toYaml . | nindent 4 }}
   {{- end }}
 spec:
   {{- if .Values.ingress.className }}
-  ingressClassName: {{ .Values.ingress.className | quote }}
+  ingressClassName: {{ .Values.ingress.className }}
   {{- end }}
   rules:
     {{- range .Values.ingress.hosts }}
@@ -22,15 +22,14 @@ spec:
         paths:
           {{- range .paths }}
           - path: {{ .path }}
-            pathType: Prefix
+            pathType: {{ .pathType | default "Prefix" }}
             backend:
               service:
                 name: {{ $.Values.applicationName }}
                 port:
-                  number: 8080
+                  name: {{ .servicePortName }}
           {{- end }}
     {{- end }}
-
   {{- if .Values.ingress.tls }}
   tls:
     {{- range .Values.ingress.tls }}
@@ -42,3 +41,6 @@ spec:
     {{- end }}
   {{- end }}
 {{- end }}
+
+
+{{- end -}}

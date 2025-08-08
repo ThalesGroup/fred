@@ -1,0 +1,22 @@
+{{- define "common-library.configmap-frontend" }}
+
+{{- if .Values.configuration_type.frontend.enabled }}
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: "{{ .Values.applicationName }}-front"
+data:
+  config.json: |
+{{ .Values.configuration.config_json | toJson | nindent 4 }}
+
+  {{- if .Values.oidc.enabled }}
+  keycloak.json: |
+{{ .Values.configuration.keycloak_json | toJson | nindent 4 }}
+  {{- end }}
+
+{{- end }}
+
+
+{{- end -}}
