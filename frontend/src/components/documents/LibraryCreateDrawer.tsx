@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import SaveIcon from "@mui/icons-material/Save";
-import { Box, Button, Drawer, TextField, Typography } from "@mui/material";
+import { Alert, Box, Button, Drawer, TextField, Typography } from "@mui/material";
 import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
@@ -27,14 +27,21 @@ interface LibraryCreateDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   onLibraryCreated?: () => void;
-   mode: "documents" | "prompts";
+  mode: "documents" | "prompts";
+  currentPath?: string; // <- NEW: parent folder from breadcrumb (undefined = root)
 }
 
-export const LibraryCreateDrawer: React.FC<LibraryCreateDrawerProps> = ({ isOpen, onClose, onLibraryCreated, mode }) => {
+export const LibraryCreateDrawer: React.FC<LibraryCreateDrawerProps> = ({
+  isOpen,
+  onClose,
+  onLibraryCreated,
+  mode,
+  currentPath,
+}) => {
   const { t } = useTranslation();
   const { showError, showSuccess } = useToast();
   const navigate = useNavigate();
-  const [createTag, { isLoading }] = useCreateTagKnowledgeFlowV1TagsPostMutation();
+  const [createTag, { isLoading, error }] = useCreateTagKnowledgeFlowV1TagsPostMutation();
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -46,61 +53,67 @@ export const LibraryCreateDrawer: React.FC<LibraryCreateDrawerProps> = ({ isOpen
   };
 
   const handleCreate = async (e?: React.FormEvent) => {
-  e?.preventDefault();
+    e?.preventDefault();
 
-  if (!name.trim()) {
-    showError({
-      summary: t("libraryCreateDrawer.validationError"),
-      detail: t("libraryCreateDrawer.nameRequired"),
-    });
-    return;
-  }
-
-  try {
-    let result;
-
-    if (mode === "documents") {
-      result = await createTag({
-        tagCreate: {
-          name: name.trim(),
-          description: description.trim() || null,
-          type: "document" as TagType,
-          item_ids: [],
-        },
-      }).unwrap();
-    } else {
-      result = await createTag({
-        tagCreate: {
-          name: name.trim(),
-          description: description.trim() || null,
-          type: "prompt" as TagType,
-          item_ids: [],
-        },
-      }).unwrap();
+    const trimmed = name.trim();
+    if (!trimmed) {
+      showError({
+        summary: t("libraryCreateDrawer.validationError"),
+        detail: t("libraryCreateDrawer.nameRequired"),
+      });
+      return;
     }
 
-    showSuccess({
-      summary: t("libraryCreateDrawer.libraryCreated"),
-      detail: t("libraryCreateDrawer.libraryCreatedDetail", { name }),
-    });
-
-    onLibraryCreated?.();
-    handleClose();
-
-    if (mode === "documents") {
-      navigate(`/documentLibrary/${result.id}`);
-    } else {
-      navigate(`/promptLibrary/${result.id}`); 
+    // Option C guard: keep 'name' as a leaf (no '/')
+    if (mode === "documents" && trimmed.includes("/")) {
+      showError({
+        summary: t("libraryCreateDrawer.validationError"),
+        detail: t("libraryCreateDrawer.nameNoSlash") || "Name cannot contain '/'. Use the folder picker to change location.",
+      });
+      return;
     }
-  } catch (error) {
-    console.error("Error creating library:", error);
-    showError({
-      summary: t("libraryCreateDrawer.creationFailed"),
-      detail: t("libraryCreateDrawer.creationFailedDetail", { error: error.message || error }),
-    });
-  }
-};
 
+    try {
+      const payload =
+        mode === "documents"
+          ? {
+              name: trimmed,
+              path: currentPath ?? null, // <- key line: put it under the current folder
+              description: description.trim() || null,
+              type: "document" as TagType,
+              item_ids: [],
+            }
+          : {
+              name: trimmed,
+              description: description.trim() || null,
+              type: "prompt" as TagType,
+              item_ids: [],
+            };
+
+      const result = await createTag({ tagCreate: payload }).unwrap();
+
+      showSuccess({
+        summary: t("libraryCreateDrawer.libraryCreated"),
+        detail: t("libraryCreateDrawer.libraryCreatedDetail", { name: trimmed }),
+      });
+
+      onLibraryCreated?.();
+      handleClose();
+
+      if (mode === "documents") {
+        navigate(`/documentLibrary/${result.id}`);
+      } else {
+        navigate(`/promptLibrary/${result.id}`);
+      }
+    } catch (err: any) {
+      console.error("Error creating library:", err);
+      const detail = err?.data?.detail || err?.message || String(err);
+      showError({
+        summary: t("libraryCreateDrawer.creationFailed"),
+        detail,
+      });
+    }
+  };
 
   return (
     <Drawer
@@ -120,6 +133,14 @@ export const LibraryCreateDrawer: React.FC<LibraryCreateDrawerProps> = ({ isOpen
         {t("libraryCreateDrawer.title")}
       </Typography>
 
+      {/* Small hint about where it will be created */}
+      {mode === "documents" && (
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+          {t("libraryCreateDrawer.createUnder") || "Will be created under:"}{" "}
+          <strong>{currentPath || "/"}</strong>
+        </Typography>
+      )}
+
       <Box component="form" onSubmit={handleCreate} sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
         <TextField
           fullWidth
@@ -128,6 +149,7 @@ export const LibraryCreateDrawer: React.FC<LibraryCreateDrawerProps> = ({ isOpen
           onChange={(e) => setName(e.target.value)}
           required
           autoFocus
+          inputProps={mode === "documents" ? { pattern: "^[^/]+$", title: "Name cannot contain '/'" } : undefined}
         />
 
         <TextField
@@ -138,6 +160,12 @@ export const LibraryCreateDrawer: React.FC<LibraryCreateDrawerProps> = ({ isOpen
           multiline
           rows={3}
         />
+
+        {error && (
+          <Alert severity="error">
+            {(error as any)?.data?.detail || t("libraryCreateDrawer.creationFailed")}
+          </Alert>
+        )}
 
         <Box sx={{ display: "flex", justifyContent: "space-between" }}>
           <Button variant="outlined" onClick={handleClose} sx={{ borderRadius: "8px" }}>

@@ -86,11 +86,15 @@
     }
   },
   "chatbot": {
-    "startNew": "Démarrer une nouvelle conversation avec {{name}}",
-    "changeAssistant": "Vous pouvez choisir un autre assistant dans le panneau des paramètres.",
+    "searchDocumentLibraries": "Rechercher dans les bibliothèques de documents...",
+    "searchPromptLibraries": "Rechercher dans les bibliothèques de prompts...",
+    "startNew": "Commencer une nouvelle conversation avec {{name}}",
+    "changeAssistant": "Vous pouvez sélectionner un autre assistant dans le panneau des paramètres.",
     "tooltip": {
-      "tokenUsage": "Cette conversation a utilisé {{input}} tokens de prompt et {{output}} tokens de réponse",
-      "tokenCount": "Cette conversation a utilisé {{total}} tokens"
+      "tokenUsage": "Cette conversation a utilisé {{input}} jetons de prompt et {{output}} jetons de réponse",
+      "tokenCount": "Cette conversation a utilisé {{total}} jetons",
+      "selectDocumentLibraries": "Sélectionnez les bibliothèques de documents à utiliser dans cette conversation",
+      "selectPromptLibraries": "Sélectionnez les bibliothèques de prompts à utiliser dans cette conversation"
     }
   },
   "settings": {
@@ -140,16 +144,6 @@
     "taggedWith": "Tagué : {{tag}}",
     "expertIntegrations": "Intégrations expertes :"
   },
-  "workspaces": {
-    "title": "Espaces de travail",
-    "description": "Gérez vos espaces de travail",
-    "searchPlaceholder": "Rechercher des espaces...",
-    "noResults": "Aucun espace trouvé.",
-    "drawerTitle": "Description de l'espace de travail",
-    "noDescription": "Aucune description disponible.",
-    "createDialogTitle": "Espace de travail",
-    "editDialogTitle": "Espace de travail"
-  },
   "dialogs": {
     "create": {
       "title": "Nouveau {{type}}",
@@ -164,6 +158,7 @@
       "errorDetail": "Impossible de créer le contexte : {{message}}"
     },
     "cancel": "Annuler",
+    "retry": "Réessayer",
     "edit": {
       "title": "Modifier {{context}}",
       "name": "Nom",
@@ -221,6 +216,9 @@
   },
   "documentLibrary": {
     "title": "Bibliothèque de documents",
+    "folders": "Dossiers",
+    "failedToLoad": "Échec du chargement des bibliothèques",
+    "loadingLibraries": "Chargement des bibliothèques",
     "description": "Accédez aux documents de la base de connaissances",
     "upload": "Ajouter un document",
     "uploadAndProcess": "Ajouter et traiter le document",
@@ -304,7 +302,9 @@
     "noLibrariesFoundDescription": "Commencez par créer votre première bibliothèque pour organiser et gérer vos documents.",
     "documentCountSingular": "{{count}} document",
     "documentCountPlural": "{{count}} documents",
-    "createLibrary": "Créer une bibliothèque de documents"
+    "createLibrary": "Créer une bibliothèque de documents",
+    "collapseAll": "Tout réduire",
+    "expandAll": "Tout développer"
   },
   "promptLibrariesList": {
     "libraryName": "Nom de la bibliothèque",

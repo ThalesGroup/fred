@@ -144,16 +144,6 @@
     "taggedWith": "Tagged with {{tag}}",
     "expertIntegrations": "Expert integrations"
   },
-  "workspaces": {
-    "title": "Workspaces",
-    "description": "Manage workspaces",
-    "searchPlaceholder": "Search workspaces...",
-    "noResults": "No workspaces found.",
-    "drawerTitle": "Workspace description",
-    "noDescription": "No description provided.",
-    "createDialogTitle": "Workspace",
-    "editDialogTitle": "Workspace"
-  },
   "dialogs": {
     "create": {
       "title": "New {{type}}",
@@ -168,6 +158,7 @@
       "errorDetail": "Could not create context: {{message}}"
     },
     "cancel": "Cancel",
+    "retry": "Retry",
     "edit": {
       "title": "Edit {{type}}",
       "name": "Name",
@@ -225,6 +216,9 @@
   },
   "documentLibrary": {
     "title": "Document Library",
+    "folders": "Folders",
+    "failedToLoad": "Failed to load libraries",
+    "loadingLibraries": "Loading libraries",
     "description": "Access the knowledge base documents",
     "upload": "Upload a document",
     "uploadAndProcess": "Upload and Process document",
@@ -308,7 +302,9 @@
     "noLibrariesFoundDescription": "Get started by creating your first document library to organize and manage your documents.",
     "documentCountSingular": "{{count}} document",
     "documentCountPlural": "{{count}} documents",
-    "createLibrary": "Create Document Library"
+    "createLibrary": "Create Document Library",
+    "collapseAll": "Collapse all",
+    "expandAll": "Expnad all"
   },
   "promptLibrariesList": {
     "libraryName": "Library Name",

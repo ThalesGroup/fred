@@ -126,6 +126,9 @@ const injectedRtkApi = api.injectEndpoints({
         url: `/knowledge-flow/v1/tags`,
         params: {
           type: queryArg["type"],
+          path_prefix: queryArg.pathPrefix,
+          limit: queryArg.limit,
+          offset: queryArg.offset,
         },
       }),
     }),
@@ -298,8 +301,14 @@ export type ListAllTagsKnowledgeFlowV1TagsGetApiResponse = /** status 200 Succes
 export type ListAllTagsKnowledgeFlowV1TagsGetApiArg = {
   /** Filter by tag type */
   type?: TagType | null;
+  /** Filter by hierarchical path prefix, e.g. 'Sales' or 'Sales/HR' */
+  pathPrefix?: string | null;
+  /** Max items to return */
+  limit?: number;
+  /** Items to skip */
+  offset?: number;
 };
-export type CreateTagKnowledgeFlowV1TagsPostApiResponse = /** status 200 Successful Response */ TagWithItemsId;
+export type CreateTagKnowledgeFlowV1TagsPostApiResponse = /** status 201 Successful Response */ TagWithItemsId;
 export type CreateTagKnowledgeFlowV1TagsPostApiArg = {
   tagCreate: TagCreate;
 };
@@ -460,18 +469,21 @@ export type TagWithItemsId = {
   updated_at: string;
   owner_id: string;
   name: string;
+  path?: string | null;
   description?: string | null;
   type: TagType;
   item_ids: string[];
 };
 export type TagCreate = {
   name: string;
+  path?: string | null;
   description?: string | null;
   type: TagType;
   item_ids?: string[];
 };
 export type TagUpdate = {
   name: string;
+  path?: string | null;
   description?: string | null;
   type: TagType;
   item_ids?: string[];

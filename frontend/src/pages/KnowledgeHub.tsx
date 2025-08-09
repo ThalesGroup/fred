@@ -17,10 +17,10 @@ import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
 import { TopBar } from "../common/TopBar";
-import { AllDocumentLibrariesList } from "../components/documents/AllDocumentLibrariesList";
 import { AllDocumentsList } from "../components/documents/AllDocumentsList";
 import InvisibleLink from "../components/InvisibleLink";
 import { AllPromptLibrariesList } from "../components/prompts/AllPromptLibrariesList";
+import NewAllDocumentLibrariesList from "../components/documents/NewAllDocumentLibrariesList";
 
 const knowledgeHubViews = ["prompts", "operations", "documents"] as const;
 type KnowledgeHubView = (typeof knowledgeHubViews)[number];
@@ -72,7 +72,7 @@ export const KnowledgeHub = () => {
       <Box sx={{ mb: 3 }}>
         {selectedView === "documents" && (
           <Container maxWidth="xl">
-            <AllDocumentLibrariesList />
+            <NewAllDocumentLibrariesList />
           </Container>
         )}
         {selectedView === "prompts" && (
