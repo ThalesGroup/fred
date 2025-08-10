@@ -39,8 +39,6 @@ import { FrugalIt } from "../pages/FrugalIt";
 import Inspect from "../frugalit/pages/Inspect";
 import { Monitoring } from "../pages/Monitoring";
 import { K8ApplicationContextProvider } from "../app/K8ApplicationContextProvider";
-import { DocumentLibraryViewPage } from "../pages/DocumentLibraryViewPage";
-import { PromptLibraryViewPage } from "../pages/PromptLibraryViewPage";
 
 const RootLayout = ({ children }: React.PropsWithChildren<{}>) => (
   <ProtectedRoute permission="viewer">
@@ -201,22 +199,22 @@ export const routes: RouteObject[] = [
       </RootLayout>
     ),
   },
-  {
-    path: "/documentLibrary/:libraryId",
-    element: (
-      <RootLayout>
-        <DocumentLibraryViewPage />
-      </RootLayout>
-    ),
-  },
-  {
-    path: "/promptLibrary/:libraryId",
-    element: (
-      <RootLayout>
-        <PromptLibraryViewPage />
-      </RootLayout>
-    ),
-  },
+  // {
+  //   path: "/documentLibrary/:libraryId",
+  //   element: (
+  //     <RootLayout>
+  //       <DocumentLibraryViewPage />
+  //     </RootLayout>
+  //   ),
+  // },
+  // {
+  //   path: "/promptLibrary/:libraryId",
+  //   element: (
+  //     <RootLayout>
+  //       <PromptLibraryViewPage />
+  //     </RootLayout>
+  //   ),
+  // },
 
   {
     path: "*",

@@ -72,6 +72,13 @@ class PromptService:
     def get_prompt_for_user(self, prompt_id: str, user: KeycloakUser) -> Prompt:
         return self._prompt_store.get_prompt_by_id(prompt_id)
 
+    def get_user_prompts(self, user: KeycloakUser) -> list[Prompt]:
+        return self._prompt_store.list_prompts_for_user(user.username)
+    
+    def get_all_prompts(self, user: KeycloakUser) -> list[Prompt]:
+        return self._prompt_store.get_all_prompts()
+
+
     def create_prompt_for_user(self, prompt_data: Prompt, user: KeycloakUser) -> TagWithItemsId:
         now = datetime.now()
         prompt = Prompt(

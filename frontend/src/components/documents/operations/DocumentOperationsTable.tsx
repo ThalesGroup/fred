@@ -31,18 +31,18 @@ import {
 import dayjs from "dayjs";
 import React, { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { DOCUMENT_PROCESSING_STAGES, useUpdateDocumentRetrievableMutation } from "../../slices/documentApi";
+import { DOCUMENT_PROCESSING_STAGES, useUpdateDocumentRetrievableMutation } from "../../../slices/documentApi";
 import {
   DocumentMetadata,
   TagType,
   TagWithItemsId,
   useLazyGetTagKnowledgeFlowV1TagsTagIdGetQuery,
-} from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
-import { useToast } from "../ToastProvider";
-import { CustomRowAction, DocumentTableRowActionsMenu } from "./DocumentTableRowActionsMenu";
-import { CustomBulkAction, DocumentTableSelectionToolbar } from "./DocumentTableSelectionToolbar";
-import { useDocumentActions } from "./common/useDocumentActions";
-import { getDocumentIcon } from "./common/DocumentIcon";
+} from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { useToast } from "../../ToastProvider";
+import { CustomRowAction, DocumentTableRowActionsMenu } from "./DocumentOperationsTableRowActionsMenu";
+import { CustomBulkAction, DocumentOperationsTableSelectionToolbar } from "./DocumentOperationsTableSelectionToolbar";
+import { useDocumentActions } from "../common/useDocumentActions";
+import { getDocumentIcon } from "../common/DocumentIcon";
 
 // Todo: use `DocumentMetadata` directly (as `DocumentMetadata` is auto-generated from OpenAPI spec)
 
@@ -59,7 +59,7 @@ interface DocumentTableColumns {
   actions?: boolean;
 }
 
-interface FileTableProps {
+interface DocumentOperationsTableProps {
   files: DocumentMetadata[];
   onRefreshData?: () => void;
   showSelectionActions?: boolean;
@@ -70,7 +70,7 @@ interface FileTableProps {
   isAdmin?: boolean; // For retrievable toggle functionality
 }
 
-export const DocumentTable: React.FC<FileTableProps> = ({
+export const DocumentOperationsTable: React.FC<DocumentOperationsTableProps> = ({
   files,
   onRefreshData,
   showSelectionActions = true,
@@ -244,7 +244,7 @@ export const DocumentTable: React.FC<FileTableProps> = ({
   return (
     <>
       {showSelectionActions && (
-        <DocumentTableSelectionToolbar
+        <DocumentOperationsTableSelectionToolbar
           selectedFiles={selectedFiles}
           actions={enhancedBulkActions}
           isVisible={selectedFiles.length > 0}

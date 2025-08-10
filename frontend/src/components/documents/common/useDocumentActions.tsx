@@ -33,8 +33,8 @@ import {
   createPreviewAction,
   createProcessAction,
   createScheduleAction,
-} from "./../DocumentActions";
-import { useDocumentViewer } from "./useDocumentViewer";
+} from "../operations/DocumentOperationsActions";
+import { useDocumentViewer } from "../../../common/useDocumentViewer";
 
 export const useDocumentActions = (onRefreshData?: () => void) => {
   const { t } = useTranslation();

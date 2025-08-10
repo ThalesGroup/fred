@@ -15,7 +15,7 @@
 import { Box, Button, Typography } from "@mui/material";
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { DocumentMetadata } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { DocumentMetadata } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 
 export interface CustomBulkAction {
   icon: React.ReactElement;
@@ -29,7 +29,7 @@ export interface DocumentTableSelectionToolbarProps {
   isVisible: boolean;
 }
 
-export const DocumentTableSelectionToolbar: React.FC<DocumentTableSelectionToolbarProps> = ({
+export const DocumentOperationsTableSelectionToolbar: React.FC<DocumentTableSelectionToolbarProps> = ({
   selectedFiles,
   actions,
   isVisible,

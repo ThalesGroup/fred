@@ -19,8 +19,8 @@ import { useTranslation } from "react-i18next";
 import {
   useCreateTagKnowledgeFlowV1TagsPostMutation,
   TagType,
-} from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
-import { useToast } from "../ToastProvider";
+} from "../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { useToast } from "../components/ToastProvider";
 
 interface LibraryCreateDrawerProps {
   isOpen: boolean;

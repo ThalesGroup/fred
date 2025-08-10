@@ -50,13 +50,13 @@ import {
 import { EmptyState } from "../../EmptyState";
 import { TableSkeleton } from "../../TableSkeleton";
 import { useToast } from "../../ToastProvider";
-import { DocumentTable } from "../DocumentTable";
+import { DocumentOperationsTable } from "./DocumentOperationsTable";
 import { useDocumentSources } from "../../../hooks/useDocumentSources";
 import { useDocumentTags } from "../../../hooks/useDocumentTags";
 
 interface DocumentsViewProps {}
 
-export const AllDocumentsList = ({}: DocumentsViewProps) => {
+export const DocumentOperations = ({}: DocumentsViewProps) => {
   const { showError } = useToast();
   const { t } = useTranslation();
   const theme = useTheme();
@@ -331,7 +331,7 @@ export const AllDocumentsList = ({}: DocumentsViewProps) => {
               {t("documentLibrary.documents", { count: totalDocCount })}
             </Typography>
 
-            <DocumentTable
+            <DocumentOperationsTable
               files={allDocuments}
               isAdmin={userInfo.canManageDocuments}
               onRefreshData={fetchFiles}

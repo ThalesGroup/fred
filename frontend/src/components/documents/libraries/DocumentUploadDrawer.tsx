@@ -18,9 +18,9 @@ import { Box, Button, Drawer, FormControl, MenuItem, Paper, Select, Typography, 
 import React, { useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { useTranslation } from "react-i18next";
-import { streamUploadOrProcessDocument } from "../../slices/streamDocumentUpload";
-import { ProgressStep, ProgressStepper } from "../ProgressStepper";
-import { useToast } from "../ToastProvider";
+import { streamUploadOrProcessDocument } from "../../../slices/streamDocumentUpload";
+import { ProgressStep, ProgressStepper } from "../../ProgressStepper";
+import { useToast } from "../../ToastProvider";
 import { DocumentDrawerTable } from "./DocumentDrawerTable";
 
 interface DocumentUploadDrawerProps {

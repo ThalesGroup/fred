@@ -16,17 +16,15 @@ import logging
 from typing import Any, Dict, List, Literal, Optional
 
 from fred_core import KeycloakUser, get_current_user
+from app.common.document_structures import DocumentMetadata
 from app.common.utils import log_exception
 from app.features.pull.controller import PullDocumentsResponse
 from app.features.pull.service import PullDocumentService
 from fastapi import APIRouter, Body, Depends, HTTPException
 
-from app.common.structures import Status
 from app.application_context import ApplicationContext
 from app.features.metadata.service import InvalidMetadataRequest, MetadataNotFound, MetadataService, MetadataUpdateError
 from app.features.metadata.structures import (
-    GetDocumentMetadataResponse,
-    GetDocumentsMetadataResponse,
     UpdateRetrievableRequest,
 )
 from threading import Lock
@@ -105,9 +103,9 @@ class MetadataController:
         self.pull_document_service = pull_document_service
 
         @router.post(
-            "/documents/metadata",
+            "/documents/metadata/search",
             tags=["Documents"],
-            response_model=GetDocumentsMetadataResponse,
+            response_model=List[DocumentMetadata],
             summary="List metadata for all ingested documents (optional filters)",
             description=(
                 "Returns metadata for all ingested documents in the knowledge base. "
@@ -116,18 +114,17 @@ class MetadataController:
                 "Discovered files (e.g., in pull-mode) are not returned by this endpoint — see `/documents/pull`."
             ),
         )
-        def get_documents_metadata(filters: Dict[str, Any] = Body(default={})):
+        def search_document_metadata(filters: Dict[str, Any] = Body(default={}), user: KeycloakUser = Depends(get_current_user)):
             try:
-                push_docs = self.service.get_documents_metadata(filters)
-                return GetDocumentsMetadataResponse(status=Status.SUCCESS, documents=push_docs)
+                return self.service.get_documents_metadata(filters)
             except Exception as e:
                 log_exception(e)
                 raise handle_exception(e)
 
         @router.get(
-            "/document/{document_uid}",
+            "/documents/metadata/{document_uid}",
             tags=["Documents"],
-            response_model=GetDocumentMetadataResponse,
+            response_model=DocumentMetadata,
             summary="Fetch metadata for an ingested document",
             description=(
                 "Returns full metadata for a document that has already been ingested, either via push or pull. "
@@ -137,13 +134,12 @@ class MetadataController:
         )
         def get_document_metadata(document_uid: str):
             try:
-                metadata = self.service.get_document_metadata(document_uid)
-                return GetDocumentMetadataResponse(status=Status.SUCCESS, metadata=metadata)
+                return self.service.get_document_metadata(document_uid)
             except Exception as e:
                 raise handle_exception(e)
 
         @router.put(
-            "/document/{document_uid}",
+            "/document/metadata/{document_uid}",
             tags=["Documents"],
             response_model=None,
             summary="Toggle document retrievability (indexed for search)",
@@ -154,7 +150,7 @@ class MetadataController:
                 "the flag has no effect."
             ),
         )
-        def update_document_retrievable(
+        def update_document_metadata_retrievable(
             document_uid: str,
             update: UpdateRetrievableRequest,
             user: KeycloakUser = Depends(get_current_user),

@@ -18,7 +18,6 @@ from fred_core import BaseModelWithId
 
 from app.features.tag.structure import Tag
 
-
 class PromptCreate(BaseModel):
     name: str
     content: str
@@ -49,3 +48,5 @@ class TagWithPrompts(Tag, BaseModel):
     @classmethod
     def from_tag(cls, tag: Tag, prompts: list[Prompt]) -> "TagWithPrompts":
         return cls(**tag.model_dump(), prompts=prompts)
+
+
