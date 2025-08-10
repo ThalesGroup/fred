@@ -16,7 +16,6 @@ import SaveIcon from "@mui/icons-material/Save";
 import { Alert, Box, Button, Drawer, TextField, Typography } from "@mui/material";
 import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "react-router-dom";
 import {
   useCreateTagKnowledgeFlowV1TagsPostMutation,
   TagType,
@@ -28,9 +27,12 @@ interface LibraryCreateDrawerProps {
   onClose: () => void;
   onLibraryCreated?: () => void;
   mode: "documents" | "prompts";
-  currentPath?: string; // <- NEW: parent folder from breadcrumb (undefined = root)
+  currentPath?: string;
 }
 
+/**
+ * This module create a library of prompts or documents
+ */
 export const LibraryCreateDrawer: React.FC<LibraryCreateDrawerProps> = ({
   isOpen,
   onClose,
@@ -40,7 +42,6 @@ export const LibraryCreateDrawer: React.FC<LibraryCreateDrawerProps> = ({
 }) => {
   const { t } = useTranslation();
   const { showError, showSuccess } = useToast();
-  const navigate = useNavigate();
   const [createTag, { isLoading, error }] = useCreateTagKnowledgeFlowV1TagsPostMutation();
 
   const [name, setName] = useState("");
@@ -90,8 +91,7 @@ export const LibraryCreateDrawer: React.FC<LibraryCreateDrawerProps> = ({
               item_ids: [],
             };
 
-      const result = await createTag({ tagCreate: payload }).unwrap();
-
+      await createTag({ tagCreate: payload }).unwrap();
       showSuccess({
         summary: t("libraryCreateDrawer.libraryCreated"),
         detail: t("libraryCreateDrawer.libraryCreatedDetail", { name: trimmed }),
@@ -100,11 +100,6 @@ export const LibraryCreateDrawer: React.FC<LibraryCreateDrawerProps> = ({
       onLibraryCreated?.();
       handleClose();
 
-      if (mode === "documents") {
-        navigate(`/documentLibrary/${result.id}`);
-      } else {
-        navigate(`/promptLibrary/${result.id}`);
-      }
     } catch (err: any) {
       console.error("Error creating library:", err);
       const detail = err?.data?.detail || err?.message || String(err);

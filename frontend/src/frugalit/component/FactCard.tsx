@@ -30,7 +30,7 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import EditIcon from "@mui/icons-material/Edit";
 import { Fact } from "../slices/factsStructures";
 import { getUserAvatar } from "../../utils/avatar";
-import { FactInputForm } from "../../common/FactInputForm";
+import { FactInputForm } from "../../contrib/FactInputForm";
 interface FactCardProps {
   fact: Fact;
   maxContentLength?: number;

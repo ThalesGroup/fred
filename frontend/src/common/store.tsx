@@ -15,7 +15,7 @@
 import { combineReducers, configureStore, createReducer, isFulfilled, isPending, isRejected } from "@reduxjs/toolkit";
 import { apiSlice } from "../frugalit/slices/api.tsx";
 import { agenticApi } from "../slices/agentic/agenticApi.ts";
-import { chatApiSlice } from "../slices/chatApi";
+import { chatApiSlice } from "../slices/chatApi.tsx";
 import { documentApiSlice } from "../slices/documentApi.tsx";
 import { knowledgeFlowApi } from "../slices/knowledgeFlow/knowledgeFlowApi.ts";
 import { monitoringApiMiddleware, monitoringApiReducer } from "../slices/monitoringApi.tsx";

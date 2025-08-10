@@ -28,7 +28,7 @@ function FredUi() {
 
   useEffect(() => {
     // Dynamically import the router after config has loaded
-    import("./router").then((mod) => {
+    import("../common/router").then((mod) => {
       setRouter(mod.router);
     });
   }, []);
