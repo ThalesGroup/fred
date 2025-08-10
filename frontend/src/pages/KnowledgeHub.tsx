@@ -17,10 +17,10 @@ import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
 import { TopBar } from "../common/TopBar";
-import { AllDocumentsList } from "../components/documents/AllDocumentsList";
+import { AllDocumentsList } from "../components/documents/operations/AllDocumentsList";
 import InvisibleLink from "../components/InvisibleLink";
 import { AllPromptLibrariesList } from "../components/prompts/AllPromptLibrariesList";
-import NewAllDocumentLibrariesList from "../components/documents/NewAllDocumentLibrariesList";
+import NewAllDocumentLibrariesList from "../components/documents/libraries/DocumentLibraryList";
 
 const knowledgeHubViews = ["prompts", "operations", "documents"] as const;
 type KnowledgeHubView = (typeof knowledgeHubViews)[number];

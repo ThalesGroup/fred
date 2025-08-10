@@ -37,7 +37,7 @@ import { CustomRowAction } from "../components/documents/DocumentTableRowActions
 import { CustomBulkAction } from "../components/documents/DocumentTableSelectionToolbar";
 import { DocumentUploadDrawer } from "../components/documents/DocumentUploadDrawer";
 import { LibraryInfoCard } from "../components/documents/LibraryInfoCard";
-import { useDocumentActions } from "../components/documents/useDocumentActions";
+import { useDocumentActions } from "../components/documents/common/useDocumentActions";
 import { EmptyState } from "../components/EmptyState";
 import { TableSkeleton } from "../components/TableSkeleton";
 import { useToast } from "../components/ToastProvider";

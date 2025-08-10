@@ -41,18 +41,18 @@ import RefreshIcon from "@mui/icons-material/Refresh";
 
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { KeyCloakService } from "../../security/KeycloakService";
-import { DOCUMENT_PROCESSING_STAGES, useRescanCatalogSourceMutation } from "../../slices/documentApi";
+import { KeyCloakService } from "../../../security/KeycloakService";
+import { DOCUMENT_PROCESSING_STAGES, useRescanCatalogSourceMutation } from "../../../slices/documentApi";
 import {
   DocumentMetadata,
   useBrowseDocumentsKnowledgeFlowV1DocumentsBrowsePostMutation,
-} from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
-import { EmptyState } from "../EmptyState";
-import { TableSkeleton } from "../TableSkeleton";
-import { useToast } from "../ToastProvider";
-import { DocumentTable } from "./DocumentTable";
-import { useDocumentSources } from "../../hooks/useDocumentSources";
-import { useDocumentTags } from "../../hooks/useDocumentTags";
+} from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { EmptyState } from "../../EmptyState";
+import { TableSkeleton } from "../../TableSkeleton";
+import { useToast } from "../../ToastProvider";
+import { DocumentTable } from "../DocumentTable";
+import { useDocumentSources } from "../../../hooks/useDocumentSources";
+import { useDocumentTags } from "../../../hooks/useDocumentTags";
 
 interface DocumentsViewProps {}
 

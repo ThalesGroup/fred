@@ -13,7 +13,6 @@
 // limitations under the License.
 
 /**
- * NewAllDocumentLibrary.tsx
  *
  * This component renders the "Document Libraries" view for the knowledge flow app.
  * It displays a hierarchical folder structure (libraries) in a collapsible TreeView
@@ -36,20 +35,6 @@
  *  - selectedFolder: the folder currently selected in the UI (affects create target).
  *  - isCreateDrawerOpen: controls visibility of LibraryCreateDrawer for creating new libraries.
  *
- * Structure:
- *  1. Breadcrumb bar with:
- *     - Root chip ("Document Libraries") to reset selection.
- *     - Path links for each ancestor folder.
- *     - "Create library" button (primary action).
- *  2. Loading / error states.
- *  3. Card containing:
- *     - Tree header with "Expand/Collapse all" icon button.
- *     - DocumentLibraryTree component with recursive rendering of folders.
- *  4. LibraryCreateDrawer component for creating new libraries.
- *
- * Note:
- *  - This component does not display documents yet; it focuses purely on folder navigation.
- *  - Document counts, document listing, and per-folder actions can be added later.
  */
 
 import * as React from "react";
@@ -59,19 +44,20 @@ import UploadIcon from "@mui/icons-material/Upload";
 import { IconButton, Tooltip } from "@mui/material";
 import UnfoldMoreIcon from "@mui/icons-material/UnfoldMore";
 import UnfoldLessIcon from "@mui/icons-material/UnfoldLess";
-import { LibraryCreateDrawer } from "./LibraryCreateDrawer";
+import { LibraryCreateDrawer } from "../LibraryCreateDrawer";
 import { Box, Breadcrumbs, Button, Card, Chip, Link, Typography } from "@mui/material";
 import {
   useGetDocumentsMetadataKnowledgeFlowV1DocumentsMetadataPostMutation,
   useListAllTagsKnowledgeFlowV1TagsGetQuery,
-} from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
-import { buildTree, TagNode, collectDescendantTagIds, findNode } from "../tags/tagTree";
+} from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { buildTree, TagNode, findNode } from "../../tags/tagTree";
 import { useTranslation } from "react-i18next";
 import { DocumentLibraryTree } from "./DocumentLibraryTree";
-import { KeyCloakService } from "../../security/KeycloakService";
-import { DocumentUploadDrawer } from "./DocumentUploadDrawer";
+import { DocumentUploadDrawer } from "../DocumentUploadDrawer";
+import { useDocumentCommands } from "../common/useDocumentCommands";
 
-export default function NewAllDocumentLibrary() {
+export default function DocumentLibraryList() {
+  /** get our internalization library for english or french */
   const { t } = useTranslation();
 
   /** Expanded folder paths in the TreeView */
@@ -86,10 +72,6 @@ export default function NewAllDocumentLibrary() {
   const [openUploadDrawer, setOpenUploadDrawer] = React.useState(false);
   const [uploadTargetTagId, setUploadTargetTagId] = React.useState<string | null>(null);
 
-  const hasDocumentManagementPermission = () => {
-    const userRoles = KeyCloakService.GetUserRoles();
-    return userRoles.includes("admin") || userRoles.includes("editor");
-  };
   /** Fetch all tags of type "document" to build the folder tree */
   const {
     data: tags,
@@ -101,7 +83,7 @@ export default function NewAllDocumentLibrary() {
     { refetchOnMountOrArgChange: true },
   );
 
-  const [fetchAllDocuments, { data: allDocuments, isLoading: docsLoading, isError: docsError }] =
+  const [fetchAllDocuments, { data: allDocuments }] =
     useGetDocumentsMetadataKnowledgeFlowV1DocumentsMetadataPostMutation();
 
   React.useEffect(() => {
@@ -136,86 +118,63 @@ export default function NewAllDocumentLibrary() {
     setExpanded(expand ? ids : []);
   };
 
-  // Find tag IDs for selected folder (recursively)
-  const selectedTagIds = React.useMemo(() => {
-    if (!tree) return [];
-    let node: TagNode | undefined = tree;
-
-    if (selectedFolder) {
-      const parts = selectedFolder.split("/");
-      for (const p of parts) {
-        const next = node.children.get(p);
-        if (!next) return [];
-        node = next;
-      }
-    }
-
-    return collectDescendantTagIds(node);
-  }, [tree, selectedFolder]);
-
-  // 2️⃣ filteredDocuments
-  const filteredDocuments = React.useMemo(() => {
-    if (!allDocuments?.documents) return [];
-    if (!selectedFolder) return allDocuments.documents;
-
-    return allDocuments.documents.filter((doc) => doc.tags?.some((id) => selectedTagIds.includes(id)));
-  }, [allDocuments, selectedFolder, selectedTagIds]);
-
   /** Whether the tree is fully expanded */
   const allExpanded = React.useMemo(() => expanded.length > 0, [expanded]);
+
+  /** the toggle retrievable handler */
+  const { toggleRetrievable, removeFromLibrary, preview } = useDocumentCommands({
+    refetchTags: refetch,
+    refetchDocs: () => fetchAllDocuments({ filters: {} }),
+  });
 
   return (
     <Box display="flex" flexDirection="column" gap={2}>
       {/* Breadcrumb navigation and create-library button */}
-{/* Toolbar with both actions */}
-<Box display="flex" alignItems="center" justifyContent="space-between">
-  <Breadcrumbs>
-    <Chip
-      label={t("documentLibrariesList.documents")}
-      icon={<FolderOutlinedIcon />}
-      onClick={() => setSelectedFolder(undefined)}
-      clickable
-      sx={{ fontWeight: 500 }}
-    />
-    {selectedFolder?.split("/").map((c, i, arr) => (
-      <Link key={i} component="button" onClick={() => setSelectedFolder(arr.slice(0, i + 1).join("/"))}>
-        {c}
-      </Link>
-    ))}
-  </Breadcrumbs>
+      {/* Toolbar with both actions */}
+      <Box display="flex" alignItems="center" justifyContent="space-between">
+        <Breadcrumbs>
+          <Chip
+            label={t("documentLibrariesList.documents")}
+            icon={<FolderOutlinedIcon />}
+            onClick={() => setSelectedFolder(undefined)}
+            clickable
+            sx={{ fontWeight: 500 }}
+          />
+          {selectedFolder?.split("/").map((c, i, arr) => (
+            <Link key={i} component="button" onClick={() => setSelectedFolder(arr.slice(0, i + 1).join("/"))}>
+              {c}
+            </Link>
+          ))}
+        </Breadcrumbs>
 
-  <Box display="flex" gap={1}>
-    {hasDocumentManagementPermission() && (
-      <>
-        <Button
-          variant="outlined"
-          startIcon={<AddIcon />}
-          onClick={() => setIsCreateDrawerOpen(true)}
-          sx={{ borderRadius: "8px" }}
-        >
-          {t("documentLibrariesList.createLibrary")}
-        </Button>
-        <Button
-          variant="contained"
-          startIcon={<UploadIcon />}
-          onClick={() => {
-            if (!selectedFolder) return; // or handle root uploads
-            const node = findNode(tree, selectedFolder);
-            const firstTagId = node?.tagsHere?.[0]?.id;
-            if (firstTagId) {
-              setUploadTargetTagId(firstTagId);
-              setOpenUploadDrawer(true);
-            }
-          }}
-          disabled={!selectedFolder} // disable if no folder selected
-          sx={{ borderRadius: "8px" }}
-        >
-          {t("documentLibrary.uploadInLibrary")}
-        </Button>
-      </>
-    )}
-  </Box>
-</Box>
+        <Box display="flex" gap={1}>
+          <Button
+            variant="outlined"
+            startIcon={<AddIcon />}
+            onClick={() => setIsCreateDrawerOpen(true)}
+            sx={{ borderRadius: "8px" }}
+          >
+            {t("documentLibrariesList.createLibrary")}
+          </Button>
+          <Button
+            variant="contained"
+            startIcon={<UploadIcon />}
+            onClick={() => {
+              if (!selectedFolder) return; // or handle root uploads
+              const node = findNode(tree, selectedFolder);
+              const firstTagId = node?.tagsHere?.[0]?.id;
+              if (firstTagId) {
+                setUploadTargetTagId(firstTagId);
+                setOpenUploadDrawer(true);
+              }
+            }}
+            disabled={!selectedFolder} // disable if no folder selected
+            sx={{ borderRadius: "8px" }}
+          >
+            {t("documentLibrary.uploadInLibrary")}
+          </Button>
+        </Box>
+      </Box>
 
       {/* Loading state */}
       {isLoading && (
@@ -261,23 +220,25 @@ export default function NewAllDocumentLibrary() {
               setSelectedFolder={setSelectedFolder}
               getChildren={getChildren}
               documents={allDocuments?.documents || []}
+              onPreview={preview}
+              onToggleRetrievable={toggleRetrievable}
+              onRemoveFromLibrary={removeFromLibrary}
             />
           </Box>
           {/* ⬇️ Document list appears under the tree */}
         </Card>
       )}
 
-      {hasDocumentManagementPermission() && (
-        <DocumentUploadDrawer
-          isOpen={openUploadDrawer}
-          onClose={() => setOpenUploadDrawer(false)}
-          onUploadComplete={async () => {
-            await refetch(); // reload all tags
-            await fetchAllDocuments({ filters: {} }); // reload all documents
-          }}
-          metadata={{ tags: [uploadTargetTagId] }}
-        />
-      )}
+      <DocumentUploadDrawer
+        isOpen={openUploadDrawer}
+        onClose={() => setOpenUploadDrawer(false)}
+        onUploadComplete={async () => {
+          await refetch(); // reload all tags
+          await fetchAllDocuments({ filters: {} }); // reload all documents
+        }}
+        metadata={{ tags: [uploadTargetTagId] }}
+      />
+
       {/* Create-library drawer */}
       <LibraryCreateDrawer
         isOpen={isCreateDrawerOpen}

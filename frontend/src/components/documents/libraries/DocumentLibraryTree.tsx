@@ -6,24 +6,16 @@
 import * as React from "react";
 import FolderOutlinedIcon from "@mui/icons-material/FolderOutlined";
 import FolderOpenOutlinedIcon from "@mui/icons-material/FolderOpenOutlined";
-import InsertDriveFileOutlinedIcon from "@mui/icons-material/InsertDriveFileOutlined";
-import { Box, Button, Tooltip } from "@mui/material";
+import { Box } from "@mui/material";
 import { SimpleTreeView } from "@mui/x-tree-view/SimpleTreeView";
 import { TreeItem } from "@mui/x-tree-view/TreeItem";
 import KeyboardArrowRightIcon from "@mui/icons-material/KeyboardArrowRight";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
-import { TagNode } from "../tags/tagTree";
-import { useTranslation } from "react-i18next";
+import { TagNode } from "../../tags/tagTree";
+import { DocumentRowCompact } from "./DocumentLibraryRow";
+import { DocumentMetadata, TagWithItemsId } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 
-// Adjust to your OpenAPI model if needed
-type DocumentMetadata = {
-  document_uid: string;
-  title?: string;
-  document_name?: string;
-  tags?: string[]; // IDs of tags associated with this doc
-};
-
-type Props = {
+interface DocumentLibraryTreeProps {
   tree: TagNode;
   expanded: string[];
   setExpanded: (ids: string[]) => void;
@@ -31,7 +23,12 @@ type Props = {
   setSelectedFolder: (full: string) => void;
   getChildren: (n: TagNode) => TagNode[];
   documents: DocumentMetadata[];
-};
+  onPreview: (doc: DocumentMetadata) => void;
+  onToggleRetrievable: (doc: DocumentMetadata) => void;
+  onRemoveFromLibrary: (doc: DocumentMetadata, tag: TagWithItemsId) => void;
+}
+
+type Props = DocumentLibraryTreeProps;
 
 export function DocumentLibraryTree({
   tree,
@@ -41,9 +38,10 @@ export function DocumentLibraryTree({
   setSelectedFolder,
   getChildren,
   documents,
+  onPreview,
+  onToggleRetrievable,
+  onRemoveFromLibrary,
 }: Props) {
-  const { t } = useTranslation();
-
   const renderTree = (n: TagNode): React.ReactNode[] =>
     getChildren(n).map((c) => {
       const isExpanded = expanded.includes(c.full);
@@ -53,7 +51,6 @@ export function DocumentLibraryTree({
       const docsInFolder = documents.filter((doc) =>
         doc.tags?.some((tagId) => c.tagsHere?.some((t) => t.id === tagId)),
       );
-
 
       return (
         <TreeItem
@@ -82,7 +79,6 @@ export function DocumentLibraryTree({
                 {isExpanded ? <FolderOpenOutlinedIcon fontSize="small" /> : <FolderOutlinedIcon fontSize="small" />}
                 <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.name}</span>
               </Box>
-
             </Box>
           }
         >
@@ -110,8 +106,15 @@ export function DocumentLibraryTree({
                     console.log("Open document:", doc);
                   }}
                 >
-                  <InsertDriveFileOutlinedIcon fontSize="small" />
-                  <span>{doc.title || doc.document_name || doc.document_uid}</span>
+                  <DocumentRowCompact
+                    doc={doc}
+                    onPreview={(d) => onPreview(d)}
+                    onRemoveFromLibrary={() => {
+                      const tag = c.tagsHere?.[0];
+                      if (tag) onRemoveFromLibrary(doc, tag);
+                    }}
+                    onToggleRetrievable={(d) => onToggleRetrievable(d)}
+                  />
                 </Box>
               }
             />

@@ -39,10 +39,10 @@ import {
   useLazyGetTagKnowledgeFlowV1TagsTagIdGetQuery,
 } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { useToast } from "../ToastProvider";
-import { getDocumentIcon } from "./DocumentIcon";
 import { CustomRowAction, DocumentTableRowActionsMenu } from "./DocumentTableRowActionsMenu";
 import { CustomBulkAction, DocumentTableSelectionToolbar } from "./DocumentTableSelectionToolbar";
-import { useDocumentActions } from "./useDocumentActions";
+import { useDocumentActions } from "./common/useDocumentActions";
+import { getDocumentIcon } from "./common/DocumentIcon";
 
 // Todo: use `DocumentMetadata` directly (as `DocumentMetadata` is auto-generated from OpenAPI spec)
 

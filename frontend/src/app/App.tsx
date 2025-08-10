@@ -21,6 +21,7 @@ import { DrawerProvider } from "../components/DrawerProvider";
 import { ToastProvider } from "../components/ToastProvider";
 import { darkTheme, lightTheme } from "../styles/theme";
 import { ApplicationContext, ApplicationContextProvider } from "./ApplicationContextProvider";
+import { AuthProvider } from "../security/AuthContext";
 
 function FredUi() {
   const [router, setRouter] = useState<any>(null);
@@ -36,9 +37,11 @@ function FredUi() {
 
   return (
     <React.Suspense fallback={<div>Loading UI...</div>}>
-      <ApplicationContextProvider>
-        <AppWithTheme router={router} />
-      </ApplicationContextProvider>
+      <AuthProvider>
+        <ApplicationContextProvider>
+          <AppWithTheme router={router} />
+        </ApplicationContextProvider>
+      </AuthProvider>
     </React.Suspense>
   );
 }
