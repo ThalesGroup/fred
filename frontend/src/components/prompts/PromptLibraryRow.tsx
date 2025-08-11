@@ -6,7 +6,7 @@ import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import EventAvailableIcon from "@mui/icons-material/EventAvailable";
 import dayjs from "dayjs";
 import { useTranslation } from "react-i18next";
-import { Prompt } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { Prompt } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 
 export type PromptRowCompactProps = {
   prompt: Prompt;
@@ -60,7 +60,7 @@ export function PromptRowCompact({ prompt, onPreview, onEdit, onRemoveFromLibrar
           </Tooltip>
         )}
         {onEdit && (
-          <Tooltip title={t("common.edit")}>
+          <Tooltip title={t("promptLibrary.edit")}>
             <IconButton size="small" onClick={() => onEdit(prompt)}>
               <EditOutlinedIcon fontSize="inherit" />
             </IconButton>

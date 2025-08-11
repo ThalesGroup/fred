@@ -63,7 +63,7 @@ export function usePromptCommands({ refetchTags, refetchPrompts }: PromptRefresh
         });
       } catch (e: any) {
         showError?.({
-          summary: t("common.error") || "Error",
+          summary: t("validation.error") || "Error",
           detail: e?.data?.detail || e?.message || "Failed to remove from library.",
         });
       }
@@ -84,7 +84,7 @@ export function usePromptCommands({ refetchTags, refetchPrompts }: PromptRefresh
         });
       } catch (e: any) {
         showError({
-          summary: t("common.error") || "Error",
+          summary: t("validation.error") || "Error",
           detail: e?.data?.detail || e?.message || "Failed to create prompt.",
         });
       }

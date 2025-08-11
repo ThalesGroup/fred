@@ -24,7 +24,9 @@ const injectedRtkApi = api.injectEndpoints({
       query: (queryArg) => ({
         url: `/knowledge-flow/v1/document/metadata/${queryArg.documentUid}`,
         method: "PUT",
-        body: queryArg.updateRetrievableRequest,
+        params: {
+          retrievable: queryArg.retrievable,
+        },
       }),
     }),
     browseDocumentsKnowledgeFlowV1DocumentsBrowsePost: build.mutation<
@@ -238,7 +240,7 @@ export type UpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocu
   /** status 200 Successful Response */ any;
 export type UpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutApiArg = {
   documentUid: string;
-  updateRetrievableRequest: UpdateRetrievableRequest;
+  retrievable: boolean;
 };
 export type BrowseDocumentsKnowledgeFlowV1DocumentsBrowsePostApiResponse =
   /** status 200 Successful Response */ PullDocumentsResponse;
@@ -402,9 +404,6 @@ export type ValidationError = {
 };
 export type HttpValidationError = {
   detail?: ValidationError[];
-};
-export type UpdateRetrievableRequest = {
-  retrievable: boolean;
 };
 export type PullDocumentsResponse = {
   total: number;

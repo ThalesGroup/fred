@@ -24,9 +24,6 @@ from fastapi import APIRouter, Body, Depends, HTTPException
 
 from app.application_context import ApplicationContext
 from app.features.metadata.service import InvalidMetadataRequest, MetadataNotFound, MetadataService, MetadataUpdateError
-from app.features.metadata.structures import (
-    UpdateRetrievableRequest,
-)
 from threading import Lock
 
 from pydantic import BaseModel, Field
@@ -152,11 +149,11 @@ class MetadataController:
         )
         def update_document_metadata_retrievable(
             document_uid: str,
-            update: UpdateRetrievableRequest,
+            retrievable: bool,
             user: KeycloakUser = Depends(get_current_user),
         ):
             try:
-                self.service.update_document_retrievable(document_uid, update.retrievable, user.username)
+                self.service.update_document_retrievable(document_uid, retrievable, user.username)
             except Exception as e:
                 raise handle_exception(e)
 

@@ -4,7 +4,9 @@
     "invalid_url": "URL invalide",
     "invalid_transport": "Transport invalide",
     "timeout_min": "Doit être ≥ 0",
-    "invalid_type": "Type invalide"
+    "invalid_type": "Type invalide",
+    "updated": "Mis à jour",
+    "error": "Erreur"
   },
   "sidebar": {
     "cluster": "Cluster",
@@ -122,7 +124,7 @@
     "description": "Suivez l’utilisation, la performance et les coûts de tous les agents et services IA — y compris les tokens, la latence et les tendances d’activité."
   },
   "metrics": {
-    "error": "❌ Échec du chargement des métriques",
+    "error": "Échec du chargement des métriques",
     "from": "De",
     "to": "À",
     "tokenUsage": "Utilisation des tokens dans le temps",
@@ -243,12 +245,15 @@
     "removedDocuments": "{{count}} document(s) supprimé(s) de la bibliothèque",
     "removeError": "Échec de la suppression",
     "removeErrorGeneric": "Impossible de supprimer les documents de la bibliothèque",
+    "removeFromLibrary": "Supprimer de la bibliothèque",
     "emptyLibraryTitle": "Aucun document dans cette bibliothèque",
     "emptyLibraryDescription": "Cette bibliothèque est vide. Commencez par ajouter votre premier document pour le rendre consultable par vos assistants IA.",
-    "uploadFirstDocument": "Ajouter votre premier document"
+    "uploadFirstDocument": "Ajouter votre premier document",
+    "preview": "Preview"
   },
   "promptLibrary": {
     "title": "Bibliothèque de prompts",
+    "edit": "Editer le prompt",
     "description": "Accédez à la bibliothèque de prompts",
     "uploadInLibrary": "Ajouter un prompt à la bibliothèque",
     "prompts": "{{count}} prompt(s)",
@@ -256,7 +261,9 @@
     "addPrompt": "Ajouter un prompt",
     "emptyLibraryTitle": "Aucun prompt dans cette bibliothèque",
     "emptyLibraryDescription": "Cette bibliothèque est vide. Ajoutez votre premier prompt pour le rendre disponible à vos assistants IA.",
-    "uploadFirstDocument": "Ajouter votre premier prompt"
+    "uploadFirstDocument": "Ajouter votre premier prompt",
+    "removeFromLibrary": "Supprimer de la bibliothèque",
+    "preview": "Preview"
   },
   "documentTable": {
     "selectedCount": "{{count}} sélectionné(s)",
@@ -274,7 +281,8 @@
     "noMetadata": "Aucune métadonnée disponible.",
     "yes": "Oui",
     "no": "Non",
-    "librairies": "Bibliothèques"
+    "librairies": "Bibliothèques",
+    "nowSearchable": "Maintenant cherchable"
   },
   "promptTable": {
     "name": "nom",
@@ -324,6 +332,7 @@
     "libraryDescription": "Description",
     "cancel": "Annuler",
     "save": "Créer",
+    "createUnder": "Créer une  nouvelle bibliothèque sous",
     "saving": "Création en cours...",
     "validationError": "Erreur de validation",
     "nameRequired": "Le nom de la bibliothèque est obligatoire",

@@ -19,8 +19,8 @@ import {
   TagWithItemsId,
   DocumentMetadata,
   useLazyGetTagKnowledgeFlowV1TagsTagIdGetQuery,
+  useUpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutMutation,
 } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
-import { useUpdateDocumentRetrievableMutation } from "../../../slices/documentApi";
 import { useToast } from "../../ToastProvider";
 import { useTranslation } from "react-i18next";
 
@@ -35,7 +35,7 @@ export function useDocumentCommands({ refetchTags, refetchDocs }: DocumentRefres
   const [] = useLazyGetTagKnowledgeFlowV1TagsTagIdGetQuery();
 
   const [updateTag] = useUpdateTagKnowledgeFlowV1TagsTagIdPutMutation();
-  const [updateRetrievable] = useUpdateDocumentRetrievableMutation();
+  const [updateRetrievable] = useUpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutMutation();
   const [fetchAllDocuments] = useSearchDocumentMetadataKnowledgeFlowV1DocumentsMetadataSearchPostMutation();
 
   const refresh = useCallback(async () => {
@@ -46,19 +46,19 @@ export function useDocumentCommands({ refetchTags, refetchDocs }: DocumentRefres
     async (doc: DocumentMetadata) => {
       try {
         await updateRetrievable({
-          document_uid: doc.document_uid,
+          documentUid: doc.document_uid,
           retrievable: !doc.retrievable,
         }).unwrap();
         await refresh();
         showSuccess?.({
-          summary: t("common.updated") || "Updated",
+          summary: t("validation.updated") || "Updated",
           detail: !doc.retrievable
             ? t("documentTable.nowSearchable") || "Document is now searchable."
             : t("documentTable.nowExcluded") || "Document is now excluded from search.",
         });
       } catch (e: any) {
         showError?.({
-          summary: t("common.error") || "Error",
+          summary: t("validation.error") || "Error",
           detail: e?.data?.detail || e?.message || "Failed to update retrievable flag.",
         });
       }
@@ -86,7 +86,7 @@ export function useDocumentCommands({ refetchTags, refetchDocs }: DocumentRefres
         });
       } catch (e: any) {
         showError?.({
-          summary: t("common.error") || "Error",
+          summary: t("validation.error") || "Error",
           detail: e?.data?.detail || e?.message || "Failed to remove from library.",
         });
       }
@@ -101,3 +101,4 @@ export function useDocumentCommands({ refetchTags, refetchDocs }: DocumentRefres
 
   return { toggleRetrievable, removeFromLibrary, preview, refresh };
 }
+

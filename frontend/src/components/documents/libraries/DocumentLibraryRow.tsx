@@ -165,7 +165,7 @@ export function DocumentRowCompact({
       {/* Right section: actions */}
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, flexShrink: 0, ml: 2 }}>
         {onPreview && (
-          <Tooltip title={t("documentTable.preview")}>
+          <Tooltip title={t("documentLibrary.preview")}>
             <IconButton size="small" onClick={() => onPreview(doc)}>
               <VisibilityOutlinedIcon fontSize="inherit" />
             </IconButton>
