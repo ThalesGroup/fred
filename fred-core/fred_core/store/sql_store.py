@@ -1,8 +1,8 @@
 import pandas as pd
-from sqlalchemy import create_engine, text, Table, MetaData, select, inspect
+from sqlalchemy import create_engine, text, inspect
 from sqlalchemy.exc import SQLAlchemyError, OperationalError
 import logging
-from typing import List, Tuple
+from typing import List
 import tempfile
 from pathlib import Path
 import sqlparse
@@ -75,13 +75,13 @@ class SQLTableStore:
     def list_tables(self) -> List[str]:
         return inspect(self.engine).get_table_names()
 
-    def get_table_schema(self, table_name: str) -> List[Tuple[str, str]]:
+    def get_table_schema(self, table_name):
         self._validate_table_name(table_name)
-        metadata = MetaData()
-        table = Table(table_name, metadata, autoload_with=self.engine)
-        with self.engine.connect() as conn:
-            result = conn.execute(select(table).limit(0))
-            return [(col, str(dtype)) for col, dtype in zip(result.keys(), result.cursor.description)]
+        inspector = inspect(self.engine)
+        return [
+            (col["name"], str(col["type"]))
+            for col in inspector.get_columns(table_name)
+        ]
 
     def execute_sql_query(self, sql: str) -> pd.DataFrame:
         """Exécute une requête SQL générée par un LLM avec validation basique."""
