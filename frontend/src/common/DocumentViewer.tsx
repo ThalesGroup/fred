@@ -16,8 +16,8 @@ import CloseIcon from "@mui/icons-material/Close";
 import DownloadIcon from "@mui/icons-material/Download";
 import { AppBar, Box, CircularProgress, IconButton, Toolbar, Typography } from "@mui/material";
 import { useEffect, useState } from "react";
-import { useGetDocumentMarkdownPreviewMutation } from "../../slices/documentApi.tsx";
-import MarkdownRendererWithHighlights, { HighlightedPart } from "../markdown/MarkdownRendererWithHighlights.tsx";
+import { useGetDocumentMarkdownPreviewMutation } from "../slices/documentApi.tsx";
+import MarkdownRendererWithHighlights, { HighlightedPart } from "../components/markdown/MarkdownRendererWithHighlights.tsx";
 
 // Props definition for the DocumentViewer component
 interface DocumentViewerProps {

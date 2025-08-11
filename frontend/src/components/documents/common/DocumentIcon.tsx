@@ -14,7 +14,7 @@
 
 // utils/DocumentIcon.tsx
 import InsertDriveFileIcon from "@mui/icons-material/InsertDriveFile";
-import { ExcelIcon, PdfIcon, WordIcon } from "../../utils/icons";
+import { ExcelIcon, PdfIcon, WordIcon } from "../../../utils/icons";
 
 export const getDocumentIcon = (filename: string): JSX.Element | null => {
   const ext = filename.split(".").pop()?.toLowerCase();

@@ -17,9 +17,9 @@ import DownloadIcon from "@mui/icons-material/Download";
 import RocketLaunchIcon from "@mui/icons-material/RocketLaunch";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import { TFunction } from "i18next";
-import { DocumentMetadata } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
-import { CustomRowAction } from "./DocumentTableRowActionsMenu";
-import { CustomBulkAction } from "./DocumentTableSelectionToolbar";
+import { DocumentMetadata } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { CustomRowAction } from "./DocumentOperationsTableRowActionsMenu";
+import { CustomBulkAction } from "./DocumentOperationsTableSelectionToolbar";
 
 // Individual action creators that parent components can use
 export const createPreviewAction = (

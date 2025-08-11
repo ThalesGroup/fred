@@ -12,8 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useDrawer } from "../DrawerProvider";
+import { useDrawer } from "../components/DrawerProvider";
 import DocumentViewer from "./DocumentViewer";
+
 
 export interface DocumentViewerDocument {
   document_uid: string;

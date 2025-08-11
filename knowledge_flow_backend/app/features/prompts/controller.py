@@ -13,8 +13,10 @@
 # limitations under the License.
 
 import logging
+from typing import Any, Dict, List
 
-from fastapi import APIRouter, Depends, HTTPException
+from app.common.utils import log_exception
+from fastapi import APIRouter, Body, Depends, HTTPException
 from app.core.stores.prompts.base_prompt_store import PromptNotFoundError, PromptAlreadyExistsError
 from fred_core import KeycloakUser, get_current_user
 
@@ -45,6 +47,18 @@ class PromptController:
         self._register_routes(router, handle_exception)
 
     def _register_routes(self, router: APIRouter, handle_exception):
+        # Advanced search with JSON body (for complex filters later)
+        @router.post("/prompts/search", tags=["Prompts"], response_model=List[Prompt], summary="Search prompts (advanced)", description="Advanced search endpoint that accepts a JSON filter object.")
+        def search_prompts(
+            filters: Dict[str, Any] = Body(default={}),
+            user: KeycloakUser = Depends(get_current_user),
+        ) -> List[Prompt]:
+            try:
+                return self.service.get_all_prompts(user=user)
+            except Exception as e:
+                log_exception(e)
+                raise handle_exception(e)
+
         @router.get("/prompts/{prompt_id}", response_model=Prompt, tags=["Prompts"], summary="Get a prompt by ID")
         async def get_prompt(prompt_id: str, user: KeycloakUser = Depends(get_current_user)) -> Prompt:
             try:

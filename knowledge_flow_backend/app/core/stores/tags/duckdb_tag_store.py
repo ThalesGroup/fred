@@ -1,6 +1,6 @@
 import logging
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 from fred_core import KeycloakUser
 from fred_core.store.duckdb_store import DuckDBTableStore
@@ -10,10 +10,15 @@ from app.features.tag.structure import Tag, TagType
 logger = logging.getLogger(__name__)
 
 
+def _compose_full_path(path: Optional[str], name: str) -> str:
+    return f"{path}/{name}" if path else name
+
+
 class DuckdbTagStore(BaseTagStore):
     """
     DuckDB implementation of BaseTagStore.
-    Creates table if not exists. Tags are scoped per user via `owner_id`.
+    Creates table if not exists and migrates schema if needed.
+    Tags are scoped per user via `owner_id`.
     """
 
     def __init__(self, db_path: Path):
@@ -26,29 +31,72 @@ class DuckdbTagStore(BaseTagStore):
 
     def _ensure_schema(self) -> None:
         with self.store._connect() as conn:
-            conn.execute(f"""
+            # 1) Create table if it doesn't exist (with the full, current schema)
+            conn.execute(
+                f"""
                 CREATE TABLE IF NOT EXISTS {self._table()} (
                     id TEXT PRIMARY KEY,
                     created_at TIMESTAMP,
                     updated_at TIMESTAMP,
                     owner_id TEXT,
                     name TEXT,
+                    path TEXT,                     -- ✅ NEW: store parent path (NULL at root)
                     description TEXT,
                     type TEXT
                 )
-            """)
+                """
+            )
+
+            # 2) Idempotent migration: add missing columns if upgrading from older schema
+            cols = {row[1] for row in conn.execute(f"PRAGMA table_info('{self._table()}')").fetchall()}
+            if "path" not in cols:
+                conn.execute(f"ALTER TABLE {self._table()} ADD COLUMN path TEXT")
+                logger.info(f"[TAGS] Migrated DuckDB table '{self._table()}' - added column 'path'.")
+
         logger.info(f"[TAGS] DuckDB table '{self._table()}' ensured.")
 
+    # ---- (De)serialization helpers using explicit column order ----
+
     def _serialize(self, tag: Tag) -> tuple:
-        return (tag.id, tag.created_at, tag.updated_at, tag.owner_id, tag.name, tag.description, tag.type.value)
+        # Order MUST match the INSERT column list below
+        return (
+            tag.id,
+            tag.created_at,
+            tag.updated_at,
+            tag.owner_id,
+            tag.name,
+            tag.path,  # ✅ include path
+            tag.description,
+            tag.type.value,
+        )
 
     def _deserialize(self, row: tuple) -> Tag:
-        return Tag(id=row[0], created_at=row[1], updated_at=row[2], owner_id=row[3], name=row[4], description=row[5], type=TagType(row[6]))
+        # Row order MUST match the SELECT column list used in queries
+        return Tag(
+            id=row[0],
+            created_at=row[1],
+            updated_at=row[2],
+            owner_id=row[3],
+            name=row[4],
+            path=row[5],  # ✅ include path
+            description=row[6],
+            type=TagType(row[7]),
+        )
+
+    # ---- CRUD ----
 
     def list_tags_for_user(self, user: KeycloakUser) -> List[Tag]:
         try:
             with self.store._connect() as conn:
-                rows = conn.execute(f"SELECT * FROM {self._table()} WHERE owner_id = ?", [user.uid]).fetchall()
+                rows = conn.execute(
+                    f"""
+                    SELECT id, created_at, updated_at, owner_id, name, path, description, type
+                    FROM {self._table()}
+                    WHERE owner_id = ?
+                    ORDER BY COALESCE(path, ''), name
+                    """,
+                    [user.uid],
+                ).fetchall()
             return [self._deserialize(row) for row in rows]
         except Exception as e:
             logger.error(f"[TAGS] Failed to list tags for user '{user.uid}': {e}")
@@ -56,21 +104,35 @@ class DuckdbTagStore(BaseTagStore):
 
     def get_tag_by_id(self, tag_id: str) -> Tag:
         with self.store._connect() as conn:
-            row = conn.execute(f"SELECT * FROM {self._table()} WHERE id = ?", [tag_id]).fetchone()
+            row = conn.execute(
+                f"""
+                SELECT id, created_at, updated_at, owner_id, name, path, description, type
+                FROM {self._table()}
+                WHERE id = ?
+                """,
+                [tag_id],
+            ).fetchone()
         if not row:
             raise TagNotFoundError(f"Tag with id '{tag_id}' not found.")
         return self._deserialize(row)
 
     def create_tag(self, tag: Tag) -> Tag:
+        # Fail if already exists
         try:
-            # Check existence first
             self.get_tag_by_id(tag.id)
             raise TagAlreadyExistsError(f"Tag with id '{tag.id}' already exists.")
         except TagNotFoundError:
-            pass  # Expected path
+            pass
         try:
             with self.store._connect() as conn:
-                conn.execute(f"INSERT INTO {self._table()} VALUES (?, ?, ?, ?, ?, ?, ?)", self._serialize(tag))
+                conn.execute(
+                    f"""
+                    INSERT INTO {self._table()} (
+                        id, created_at, updated_at, owner_id, name, path, description, type
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    self._serialize(tag),
+                )
             logger.info(f"[TAGS] Created tag '{tag.id}' for user '{tag.owner_id}'")
             return tag
         except Exception as e:
@@ -84,10 +146,25 @@ class DuckdbTagStore(BaseTagStore):
                 conn.execute(
                     f"""
                     UPDATE {self._table()}
-                    SET created_at = ?, updated_at = ?, owner_id = ?, name = ?, description = ?, type = ?
+                    SET created_at = ?,
+                        updated_at = ?,
+                        owner_id   = ?,
+                        name       = ?,
+                        path       = ?,         -- ✅ update path
+                        description= ?,
+                        type       = ?
                     WHERE id = ?
                     """,
-                    (tag.created_at, tag.updated_at, tag.owner_id, tag.name, tag.description, tag.type.value, tag_id),
+                    (
+                        tag.created_at,
+                        tag.updated_at,
+                        tag.owner_id,
+                        tag.name,
+                        tag.path,  # ✅ include path
+                        tag.description,
+                        tag.type.value,
+                        tag_id,
+                    ),
                 )
             logger.info(f"[TAGS] Updated tag '{tag_id}'")
             return tag
@@ -107,3 +184,28 @@ class DuckdbTagStore(BaseTagStore):
         except Exception as e:
             logger.error(f"[TAGS] Failed to delete tag '{tag_id}': {e}")
             raise
+
+    # ---- Lookup by full path (owner + type + "a/b/name") ----
+
+    def get_by_owner_type_full_path(self, owner_id: str, tag_type: TagType, full_path: str) -> Tag | None:
+        """
+        Match against computed full_path:
+          - if path is NULL/empty → full_path = name
+          - else → full_path = path || '/' || name
+        """
+        with self.store._connect() as conn:
+            row = conn.execute(
+                f"""
+                SELECT id, created_at, updated_at, owner_id, name, path, description, type
+                FROM {self._table()}
+                WHERE owner_id = ?
+                  AND type = ?
+                  AND CASE WHEN path IS NULL OR path = ''
+                           THEN name
+                           ELSE path || '/' || name
+                      END = ?
+                LIMIT 1
+                """,
+                [owner_id, tag_type.value, full_path],
+            ).fetchone()
+        return self._deserialize(row) if row else None

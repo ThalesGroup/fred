@@ -15,7 +15,7 @@
 import ArticleOutlinedIcon from "@mui/icons-material/ArticleOutlined";
 import { Box, Tooltip, Typography } from "@mui/material";
 import { ChatSource } from "../../slices/chatApiStructures.ts";
-import { useDocumentViewer } from "../documents/useDocumentViewer.tsx";
+import { useDocumentViewer } from "../../common/useDocumentViewer.tsx";
 
 interface SourceCardProps {
   documentId: string; // Unique identifier for the document
