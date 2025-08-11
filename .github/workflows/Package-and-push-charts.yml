@@ -81,11 +81,6 @@ jobs:
           echo "Injecting version=${{ steps.meta.outputs.version }} and appVersion=$APP_VERSION into $CHART_FILE"
           yq -y --arg version "${{ steps.meta.outputs.version }}" --arg appVersion "$APP_VERSION" \
             '.version = $version | .appVersion = $appVersion' "$CHART_FILE" > tmp.yaml && mv tmp.yaml "$CHART_FILE"
-
-      - name: Build dependency ${{ matrix.name }}
-        run: |
-          echo "Building ${{ matrix.name }} chart dependency"
-          helm dependency build ${{ matrix.chart_path }}
       
       - name: Package chart ${{ matrix.name }}
         run: |
