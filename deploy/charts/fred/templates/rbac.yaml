@@ -1,0 +1,71 @@
+{{- define "common-library.rbac" -}}
+
+{{- if .app.serviceAccount.rbac.enabled }}
+
+{{- if .app.serviceAccount.rbac.permissions.namespaced }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ .app.applicationName }}-role
+  namespace: {{ .root.Release.Namespace }}
+  {{- with .app.serviceAccount.labels }}
+  labels:
+{{ toYaml . | nindent 4 }}
+  {{- end }}
+rules:
+{{ toYaml .app.serviceAccount.rbac.permissions.namespaced | nindent 2 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ .app.applicationName }}-rb
+  namespace: {{ .root.Release.Namespace }}
+  {{- with .app.serviceAccount.labels }}
+  labels:
+{{ toYaml . | nindent 4 }}
+  {{- end }}
+subjects:
+- kind: ServiceAccount
+  name: {{ default .app.applicationName .app.serviceAccount.name }}
+  namespace: {{ .root.Release.Namespace }}
+roleRef:
+  kind: Role
+  name: {{ .app.applicationName }}-role
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}
+
+{{- if .app.serviceAccount.rbac.permissions.cluster }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ .app.applicationName }}-cr
+  {{- with .app.serviceAccount.labels }}
+  labels:
+{{ toYaml . | nindent 4 }}
+  {{- end }}
+rules:
+{{ toYaml .app.serviceAccount.rbac.permissions.cluster | nindent 2 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ .app.applicationName }}-crb
+  {{- with .app.serviceAccount.labels }}
+  labels:
+{{ toYaml . | nindent 4 }}
+  {{- end }}
+subjects:
+- kind: ServiceAccount
+  name: {{ default .app.applicationName .app.serviceAccount.name }}
+  namespace: {{ .root.Release.Namespace }}
+roleRef:
+  kind: ClusterRole
+  name: {{ .app.applicationName }}-cr
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}
+
+{{- end }}
+
+{{ end -}}

@@ -1,0 +1,11 @@
+{{- range $name, $app := .Values.applications }}
+  {{- $ctx := dict "app" $app "root" $ }}
+  {{- include "common-library.service" $ctx }}
+  {{- include "common-library.serviceaccount" $ctx }}
+  {{- include "common-library.ingress" $ctx }}
+  {{- include "common-library.rbac" $ctx }}
+  {{- include "common-library.configmap-frontend" $ctx }}
+  {{- include "common-library.configmap-kube" $ctx }}
+  {{- include "common-library.configmap-backend" $ctx }}
+  {{- include "common-library.deployment" $ctx }}
+{{- end }}

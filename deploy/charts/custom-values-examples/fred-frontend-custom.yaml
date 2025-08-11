@@ -1,6 +1,16 @@
 # spe frontend
 
 imagePullSecretName: []
+
+env:
+  data:
+  - name: VITE_ALLOWED_HOSTS
+    value: "fred.dev.fred.thalesgroup.com"
+  - name: VITE_BACKEND_URL_KNOWLEDGE
+    value: "https://knowledge-flow-backend.dev.fred.thalesgroup.com"
+  - name: VITE_USE_AUTH
+    value: "true"
+
 ingress:
   enabled: true
   className: "traefik"
@@ -9,24 +19,17 @@ ingress:
     - host: fred.dev.fred.thalesgroup.com
       paths:
         - path: /
+          pathType: Prefix
+          servicePortName: http
   tls:
     - secretName: fred-frontend-crt
       hosts:
         - fred.dev.fred.thalesgroup.com
 
-config:
-  backendUrlApi: "https://agentic-backend.dev.fred.thalesgroup.com"
-  backendUrlKnowledge: "https://knowledge-flow-backend.dev.fred.thalesgroup.com"
-  websocketUrl: "ws://agentic-backend.dev.fred.thalesgroup.com/fred/chatbot/query"
-
-env:
-  - name: VITE_ALLOWED_HOSTS
-    value: "fred.dev.fred.thalesgroup.com"
-  - name: VITE_BACKEND_URL_KNOWLEDGE
-    value: "https://knowledge-flow-backend.dev.fred.thalesgroup.com"
-  - name: VITE_USE_AUTH
-    value: "true"
-
-oidc:
-  config:
-    authServerUrl: "https://idp.dev.fred.thalesgroup.com/"
+configuration:
+  config_json:
+    backendUrlApi: "https://agentic-backend.dev.fred.thalesgroup.com"
+    backendUrlKnowledge: "https://knowledge-flow-backend.dev.fred.thalesgroup.com"
+    websocketUrl: "ws://agentic-backend.dev.fred.thalesgroup.com/fred/chatbot/query"
+  keycloak_json:
+    auth-server-url: "https://idp.dev.fred.thalesgroup.com/"
