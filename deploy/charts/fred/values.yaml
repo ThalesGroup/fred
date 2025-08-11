@@ -1,0 +1,287 @@
+# values.yaml unifié corrigé
+
+global:
+  kubeconfig: ""
+
+applications:
+
+  agentic-backend:
+    applicationName: agentic-backend
+    deployment:
+      enabled: true
+    statefulset:
+      enabled: false
+    job:
+      enabled: false
+    image:
+      repository: ghcr.io/thalesgroup/fred-agent/agentic-backend
+      tag: "v0.0.5"
+      pullPolicy: IfNotPresent
+    command:
+      enabled: true
+      data: ["uvicorn", "app.main:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000", "--env-file", "/app/config/.env", "--log-level", "info", "--loop", "asyncio"]
+    env:
+      - name: CONFIG_FILE
+        value: "/app/config/configuration.yaml"
+    ports:
+      - name: http
+        containerPort: 8000
+    service:
+      annotations: {}
+      extraLabels: {}
+      type: ClusterIP
+      ports:
+        - name: http
+          port: 80
+          targetPort: 8000
+    ingress:
+      enabled: true
+      hosts:
+        - host: agentic-backend.dev.fred.thalesgroup.com
+          paths:
+            - path: /
+              pathType: Prefix
+              servicePortName: http
+    volumeMounts:
+      - name: agentic-backend-vol
+        mountPath: /app/config
+      - name: agentic-backend-kube-vol
+        mountPath: /home/fred-user/.kube/config
+        subPath: kubeconfig
+    volumes:
+      - name: agentic-backend-vol
+        configMap:
+          name: agentic-backend-configmap
+      - name: agentic-backend-kube-vol
+        configMap:
+          name: agentic-backend-kube
+          items:
+            - key: kubeconfig
+              path: kubeconfig
+    probes:
+      lifecycle:
+        enabled: false
+      livenessProbe:
+        enabled: false
+      readinessProbe:
+        enabled: false
+    serviceAccount:
+      annotations: {}
+      labels: {}
+      automountServiceAccountToken: true
+      rbac:
+        enabled: true
+        permissions:
+          namespaced:
+            - apiGroups: [""]
+              resources: ["pods", "configmaps", "secrets"]
+              verbs: ["get", "list", "watch"]
+            - apiGroups: ["apps"]
+              resources: ["deployments", "replicasets"]
+              verbs: ["get", "list", "watch", "create", "update", "patch"]
+            - apiGroups: [""]
+              resources: ["events"]
+              verbs: ["create"]
+          cluster:
+            - apiGroups: [""]
+              resources: ["nodes"]
+              verbs: ["get", "list", "watch"]
+    kubeconfig:
+      enabled: true
+    configuration_type:
+      backend: true
+      frontend: false
+    configuration:
+      # ... ta config complète ici (inchangée) ...
+
+  fred-frontend:
+    applicationName: fred-frontend
+    deployment:
+      enabled: true
+    statefulset:
+      enabled: false
+    job:
+      enabled: false
+    image:
+      repository: ghcr.io/thalesgroup/fred-agent/frontend
+      tag: "v0.0.5"
+      pullPolicy: IfNotPresent
+    env:
+      - name: VITE_ALLOWED_HOSTS
+        value: "fred.dev"
+      - name: VITE_BACKEND_URL_KNOWLEDGE
+        value: "http://knowledge-flow-backend.dev.fred.thalesgroup.com"
+      - name: VITE_USE_AUTH
+        value: "true"
+    ports:
+      - name: http
+        containerPort: 80
+    service:
+      annotations: {}
+      extraLabels: {}
+      type: ClusterIP
+      ports:
+        - name: http
+          port: 80
+          targetPort: 80
+    ingress:
+      enabled: true
+      className: "nginx"
+      hosts:
+        - host: fred.dev.local
+          paths:
+            - path: /
+              pathType: Prefix
+              servicePortName: http
+      tls:
+        - secretName: fred-frontend-crt
+          hosts:
+            - fred.dev.local
+    volumeMounts:
+      - name: fred-frontend-config-vol
+        mountPath: /usr/share/nginx/html/config.json
+        subPath: config.json
+      - name: fred-frontend-config-vol
+        mountPath: /usr/share/nginx/html/keycloak.json
+        subPath: keycloak.json
+    volumes:
+      - name: fred-frontend-config-vol
+        configMap:
+          name: fred-frontend-front
+    probes:
+      lifecycle:
+        enabled: false
+      livenessProbe:
+        enabled: false
+      readinessProbe:
+        enabled: false
+    serviceAccount:
+      annotations: {}
+      labels: {}
+      automountServiceAccountToken: true
+      rbac:
+        enabled: true
+        permissions: {}
+    kubeconfig:
+      enabled: false
+    configuration_type:
+      frontend: true
+      backend: false
+    oidc:
+      enabled: true
+    configuration:
+      config_json:
+        backendUrlApi: "https://agentic-backend.dev.fred.thalesgroup.com"
+        backendUrlKnowledge: "https://knowledge-flow-backend.dev.fred.thalesgroup.com"
+        websocketUrl: "ws://agentic-backend.dev.fred.thalesgroup.com/fred/chatbot/query"
+      keycloak_json:
+        realm: "fred"               # OIDC realm
+        auth-server-url: "https://idp.dev.fred.thalesgroup.com/"
+        resource: "app"             # OIDC Client ID
+        ssl-required: "external"
+        verify-token-audience: true
+        public-client: true
+        use-resource-role-mappings: true
+        confidential-port: 0
+
+  knowledge-flow-backend:
+    applicationName: knowledge-flow-backend
+    deployment:
+      enabled: true
+    statefulset:
+      enabled: false
+    job:
+      enabled: false
+    image:
+      repository: ghcr.io/thalesgroup/fred-agent/knowledge-flow-backend
+      tag: "v0.0.5"
+    command:
+      enabled: true
+      data:
+        - "uvicorn"
+        - "app.main:create_app"
+        - "--factory"
+        - "--host"
+        - "0.0.0.0"
+        - "--port"
+        - "8111"
+        - "--env-file"
+        - "/app/config/.env"
+        - "--log-level"
+        - "info"
+        - "--loop"
+        - "asyncio"
+    env:
+      - name: LOG_LEVEL
+        value: "INFO"
+      - name: CONFIG_FILE
+        value: "/app/config/configuration.yaml"
+    ports:
+      - name: http
+        containerPort: 8111
+      - name: https
+        containerPort: 8443
+    service:
+      annotations: {}
+      extraLabels: {}
+      type: ClusterIP
+      ports:
+        - name: "http"
+          port: 8080
+          targetPort: 8111
+          protocol: TCP
+        - name: "https"
+          port: 8443
+          targetPort: 8443
+          protocol: TCP
+    ingress:
+      enabled: true
+      className: ""
+      hosts:
+        - host: knowledge-flow-backend.dev.fred.thalesgroup.com
+          paths:
+            - path: /
+              pathType: Prefix
+              servicePortName: http
+    volumeMounts:
+      - name: aws-vol
+        mountPath: /home/knowledge-flow-user/.aws
+      - name: knowledge-flow-backend-vol
+        mountPath: /app/config
+      - name: knowledge-flow-backend-kube-vol
+        mountPath: /home/knowledge-flow-user/.kube/config
+        subPath: kubeconfig
+    volumes:
+      - name: aws-vol
+        emptyDir:
+          sizeLimit: 500Mi
+      - name: knowledge-flow-backend-vol
+        configMap:
+          name: knowledge-flow-backend-configmap
+      - name: knowledge-flow-backend-kube-vol
+        configMap:
+          name: knowledge-flow-backend-kube
+          items:
+            - key: kubeconfig
+              path: kubeconfig
+    probes:
+      lifecycle:
+        enabled: false
+      livenessProbe:
+        enabled: false
+      readinessProbe:
+        enabled: false
+    serviceAccount:
+      annotations: {}
+      labels: {}
+      automountServiceAccountToken: true
+      rbac:
+        enabled: true
+        permissions: {}
+    kubeconfig:
+      enabled: true
+    configuration_type:
+      backend: true
+      frontend: false
+    configuration:
+      # ... ta config complète ici (inchangée) ...
