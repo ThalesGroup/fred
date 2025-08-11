@@ -54,7 +54,7 @@ import { useTranslation } from "react-i18next";
 import { usePromptCommands } from "./usePromptCommands";
 import { PromptLibraryTree } from "./PromptLibraryTree";
 import { LibraryCreateDrawer } from "../../common/LibraryCreateDrawer";
-import { EditPromptModal } from "./PromptEditor";
+import { PromptEditorModal } from "./PromptEditorModal";
 
 export default function PromptLibraryList() {
   /** get our internalization library for english or french */
@@ -223,7 +223,7 @@ export default function PromptLibraryList() {
           {/* ⬇️ Document list appears under the tree */}
         </Card>
       )}
-      <EditPromptModal
+      <PromptEditorModal
         isOpen={openCreatePrompt}
         prompt={null}
         onClose={() => setOpenCreatePrompt(false)}
@@ -232,10 +232,6 @@ export default function PromptLibraryList() {
             createPrompt(p, uploadTargetTagId);
             setOpenCreatePrompt(false);
           }
-        }}
-        getSuggestion={async () => {
-          const res = await fetch("/api/ai/suggest-prompt");
-          return (await res.json()).suggestion;
         }}
       />
       {/* Create-library drawer */}

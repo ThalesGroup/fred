@@ -19,6 +19,16 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/agentic/v1/chatbot/feedback/${queryArg.feedbackId}`, method: "DELETE" }),
     }),
+    completePromptAgenticV1PromptsCompletePost: build.mutation<
+      CompletePromptAgenticV1PromptsCompletePostApiResponse,
+      CompletePromptAgenticV1PromptsCompletePostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/agentic/v1/prompts/complete`,
+        method: "POST",
+        body: queryArg.promptCompleteRequest,
+      }),
+    }),
     createAgentAgenticV1AgentsCreatePost: build.mutation<
       CreateAgentAgenticV1AgentsCreatePostApiResponse,
       CreateAgentAgenticV1AgentsCreatePostApiArg
@@ -118,6 +128,11 @@ export type DeleteFeedbackAgenticV1ChatbotFeedbackFeedbackIdDeleteApiResponse = 
 export type DeleteFeedbackAgenticV1ChatbotFeedbackFeedbackIdDeleteApiArg = {
   feedbackId: string;
 };
+export type CompletePromptAgenticV1PromptsCompletePostApiResponse =
+  /** status 200 Successful Response */ PromptCompleteResponse;
+export type CompletePromptAgenticV1PromptsCompletePostApiArg = {
+  promptCompleteRequest: PromptCompleteRequest;
+};
 export type CreateAgentAgenticV1AgentsCreatePostApiResponse = /** status 200 Successful Response */ any;
 export type CreateAgentAgenticV1AgentsCreatePostApiArg = {
   req: {
@@ -207,6 +222,16 @@ export type FeedbackPayload = {
   messageId: string;
   sessionId: string;
   agentName: string;
+};
+export type PromptCompleteResponse = {
+  prompt: string;
+  completion: string;
+};
+export type PromptCompleteRequest = {
+  prompt: string;
+  temperature?: number | null;
+  max_tokens?: number | null;
+  model?: string | null;
 };
 export type McpServerConfiguration = {
   name: string;
@@ -334,6 +359,7 @@ export const {
   useLazyGetFeedbackAgenticV1ChatbotFeedbackGetQuery,
   usePostFeedbackAgenticV1ChatbotFeedbackPostMutation,
   useDeleteFeedbackAgenticV1ChatbotFeedbackFeedbackIdDeleteMutation,
+  useCompletePromptAgenticV1PromptsCompletePostMutation,
   useCreateAgentAgenticV1AgentsCreatePostMutation,
   useUpdateAgentAgenticV1AgentsNamePutMutation,
   useDeleteAgentAgenticV1AgentsNameDeleteMutation,
