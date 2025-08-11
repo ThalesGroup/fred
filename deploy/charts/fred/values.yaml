@@ -54,7 +54,7 @@ applications:
     volumes:
       - name: agentic-backend-vol
         configMap:
-          name: agentic-backend-configmap
+          name: agentic-backend-back
       - name: agentic-backend-kube-vol
         configMap:
           name: agentic-backend-kube
@@ -528,6 +528,7 @@ applications:
       backend: true
       frontend: false
     configuration: |
+
       app:
         name: "Knowledge Flow Backend"
         base_url: "/knowledge-flow/v1"

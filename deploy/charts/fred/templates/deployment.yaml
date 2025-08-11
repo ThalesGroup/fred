@@ -10,7 +10,7 @@ metadata:
   labels:
     app: {{ .app.applicationName }}
 spec:
-  replicas: {{ .app.replicaCount }}
+  replicas: {{ .app.replicaCount | default 1 }}
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -138,4 +138,4 @@ spec:
 
 {{- end }}
 
-{{- end -}}
+{{ end -}}

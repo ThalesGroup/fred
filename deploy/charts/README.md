@@ -46,67 +46,23 @@ cp $HOME/.kube/config /tmp/config
 sed -i 's|^\([[:space:]]*server:\)[[:space:]]*.*$|\1 https://kubernetes.default.svc|' /tmp/config
 ```
 
-## Install Knowledge-Flow
+# Customize Fred
 
-Overload the file `knowlegde-flow-backend/values.yaml`, specially the three following variables, we recommend a separated *knowledge-flow-custom.yaml* file.
+Overload the file `fred/values.yaml`
 
 ```
 # Pay attention to the example file
-- custom-values-examples/knowledge-flow-custom.yaml
+- custom-values-examples/fred-custom.yaml
 ```
 
-Then deploy knowledge-flow-backend
+# Deploy Fred
 
 ```
 cd deploy/charts
 
-helm dependency build knowledge-flow-backend
-
 helm upgrade -i knowledge-flow-backend ./knowledge-flow-backend/ -n dev
 OR
 helm upgrade -i knowledge-flow-backend ./knowledge-flow-backend/ -n dev --values ./knowledge-flow-custom.yaml
-```
-
-## Install the agentic backend
-
-Overload the following variables in `charts/agentic-backend/values.yaml`, we recommend a separated *agentic-backend-custom.yaml* values file.
-
-```
-# Pay attention to the example file
-- custom-values-examples/agentic-backend-custom.yaml
-```
-
-Then deploy the backend :
-
-```
-cd deploy/charts/
-
-helm dependency build agentic-backend
-
-helm upgrade -i agentic-backend ./agentic-backend/ -n dev
-OR
-helm upgrade -i agentic-backend ./agentic-backend/ -n dev --values ./custom-values-examples/agentic-backend-custom.yaml
-```
-
-## Install the Fred frontend
-
-Overload the Fred frontend similarly to the following example :
-
-```
-# Pay attention to the example file
-- custom-values-examples/fred-frontend-custom.yaml
-```
-
-Then deploy the frontend
-
-```
-cd deploy/charts/
-
-helm dependency build frontend
-
-helm upgrade -i fred-frontend ./frontend/ -n dev
-OR
-helm upgrade -i fred-frontend ./frontend/ -n dev --values ./fred-frontend-custom.yaml
 ```
 
 ## Access
