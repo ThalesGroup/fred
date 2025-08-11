@@ -1,16 +1,5 @@
-# Example of custom configuration for agentic backend
-
-imagePullSecrets: []
-
-ingress:
-  className: "traefik"
-
-dotenv:
-  OPENAI_API_KEY: "sk-pr*****"
-
-kubeconfig:
-  data:
-    kubeconfig: |
+global:
+  kubeconfig: |
       apiVersion: v1
       clusters:
       - cluster:
