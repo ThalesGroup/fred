@@ -125,7 +125,7 @@ jobs:
 
       - name: Check chart - Fred
         run: |
-          helm template fred deploy/charts/knowledge-flow-backend
+          helm template fred deploy/charts/fred
 
   # Job to check agentic backend
   agentic-backend-checks:
