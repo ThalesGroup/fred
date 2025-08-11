@@ -510,6 +510,7 @@ class ApplicationContext:
             )
         else:
             raise ValueError(f"Unsupported tag storage backend: {store_config.type}")
+        return self._prompt_store_instance
 
     def get_tabular_store(self):
         if hasattr(self, "_tabular_store_instance") and self._tabular_store_instance is not None:
@@ -521,23 +522,19 @@ class ApplicationContext:
             logger.warning("No tabular store configured")
             self._tabular_store_instance = create_empty_duckdb_store()
 
-        else :
-
+        else:
             if store_config.type == "duckdb":
                 db_path = Path(store_config.duckdb_path).expanduser()
                 self._tabular_store_instance = DuckDBTableStore(db_path, prefix="tabular_")
 
-            elif store_config.type == "sql":                
-                if store_config.path :
+            elif store_config.type == "sql":
+                if store_config.path:
                     path = Path(store_config.path)
-                    self._tabular_store_instance = SQLTableStore(
-                        driver = store_config.driver,
-                        path = path
-                    )
+                    self._tabular_store_instance = SQLTableStore(driver=store_config.driver, path=path)
 
             else:
                 raise ValueError("Unsupported tabular storage backend")
-            
+
         return self._tabular_store_instance
 
     def get_catalog_store(self) -> BaseCatalogStore:

@@ -56,6 +56,8 @@ class TabularService:
 
     def list_tabular_datasets(self) -> List[TabularDatasetMetadata]:
         datasets = []
+        if self.tabular_store is None:
+            raise RuntimeError("tabular_store is not initialized")
         for table_name in self.tabular_store.list_tables():
             try:
                 count_df = self.tabular_store.execute_sql_query(f"SELECT COUNT(*) AS count FROM {table_name}")
@@ -78,6 +80,8 @@ class TabularService:
 
     def get_schema(self, document_name: str) -> TabularSchemaResponse:
         table_name = document_name.replace("-", "_")
+        if self.tabular_store is None:
+            raise RuntimeError("tabular_store is not initialized")
         schema = self.tabular_store.get_table_schema(table_name)
 
         columns = [TabularColumnSchema(name=col, dtype=self._map_duckdb_type_to_literal(dtype)) for col, dtype in schema]
@@ -89,6 +93,8 @@ class TabularService:
 
     def list_datasets_with_schema(self) -> list[TabularSchemaResponse]:
         responses = []
+        if self.tabular_store is None:
+            raise RuntimeError("tabular_store is not initialized")
         table_names = self.tabular_store.list_tables()
 
         for table in table_names:
@@ -127,6 +133,8 @@ class TabularService:
         logger.info(f"🧠 Final SQL executed: {sql}")
 
         try:
+            if self.tabular_store is None:
+                raise RuntimeError("tabular_store is not initialized")
             df = self.tabular_store.execute_sql_query(sql)
             rows = df.to_dict(orient="records")
             return TabularQueryResponse(sql_query=sql, rows=rows, error=None)

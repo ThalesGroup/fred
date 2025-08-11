@@ -422,16 +422,6 @@
                 }
             }
         ],
-        "./app/core/processors/output/duckdb_processor/duckdb_processor.py": [
-            {
-                "code": "reportIncompatibleMethodOverride",
-                "range": {
-                    "startColumn": 8,
-                    "endColumn": 15,
-                    "lineCount": 1
-                }
-            }
-        ],
         "./app/core/stores/content/minio_content_store.py": [
             {
                 "code": "reportReturnType",

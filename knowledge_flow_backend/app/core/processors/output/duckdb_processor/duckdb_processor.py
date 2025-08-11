@@ -14,7 +14,6 @@
 
 import logging
 from pathlib import Path
-from app.common.structures import OutputProcessorResponse, Status
 from app.common.document_structures import DocumentMetadata, ProcessingStage
 from app.core.processors.output.base_output_processor import BaseOutputProcessor
 from app.application_context import ApplicationContext
@@ -33,7 +32,7 @@ class DuckDBProcessor(BaseOutputProcessor):
         self.context = ApplicationContext.get_instance()
         self.tabular_store = self.context.get_tabular_store()
 
-    def process(self, file_path: str, metadata: DocumentMetadata) -> OutputProcessorResponse:
+    def process(self, file_path: str, metadata: DocumentMetadata) -> DocumentMetadata:
         try:
             logger.info(f"Loading DuckDB file from: {file_path}")
             db_path = Path(file_path)
@@ -42,7 +41,8 @@ class DuckDBProcessor(BaseOutputProcessor):
 
             source_con = duckdb.connect(str(db_path))
             target_store = self.tabular_store
-            target_store._connect()
+            if target_store is None:
+                raise RuntimeError("tabular_store is not initialized")
 
             tables = source_con.execute("SHOW TABLES").fetchall()
             if not tables:
@@ -54,7 +54,7 @@ class DuckDBProcessor(BaseOutputProcessor):
                 logger.info(f"Imported table: {table_name} ({len(df)} rows)")
 
             metadata.mark_stage_done(ProcessingStage.SQL_INDEXED)
-            return OutputProcessorResponse(status=Status.SUCCESS)
+            return metadata
 
         except Exception as e:
             logger.exception("Failed to import .duckdb file")

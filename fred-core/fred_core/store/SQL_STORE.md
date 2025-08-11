@@ -83,4 +83,9 @@ For debugging, host and driver info can also be printed if needed.
 
 ✅ The driver field must match a valid SQLAlchemy dialect+driver combination.
 
+# Next
+
+- Update the CSV processing pipeline to save the processed data to a separate database from the one loaded.
+
+
 
