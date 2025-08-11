@@ -9,7 +9,7 @@ metadata:
   name: "{{ .app.applicationName }}-back"
   namespace: {{ .root.Release.Namespace }}
 data:
-  configuration.yaml:
+  configuration.yaml: |
 {{ .app.configuration | toYaml | indent 4 }}
 
   .env: |

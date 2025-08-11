@@ -13,7 +13,8 @@ metadata:
 {{ toYaml . | nindent 4 }}
   {{- end }}
 data:
-{{ toYaml .root.Values.global.kubeconfig | nindent 2 }}
+  kubeconfig: |
+{{ toYaml .root.Values.global.kubeconfig | indent 4 }}
 
 {{- end }}
 {{end -}}
