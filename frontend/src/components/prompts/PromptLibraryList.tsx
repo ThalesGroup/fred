@@ -55,6 +55,7 @@ import { usePromptCommands } from "./usePromptCommands";
 import { PromptLibraryTree } from "./PromptLibraryTree";
 import { LibraryCreateDrawer } from "../../common/LibraryCreateDrawer";
 import { PromptEditorModal } from "./PromptEditorModal";
+import { useCascadeDeleteLibrary } from "../../common/libraryCommand";
 
 export default function PromptLibraryList() {
   /** get our internalization library for english or french */
@@ -126,6 +127,17 @@ export default function PromptLibraryList() {
     refetchPrompts: () => fetchAllPrompts({ filters: {} }),
   });
 
+  const { handleDeleteFolder } = useCascadeDeleteLibrary({
+    allItems: allPrompts ?? [],
+    // getTags: (p: Prompt) => p.tags ?? [], // default works
+    selectedFolder,
+    setSelectedFolder,
+    expanded,
+    setExpanded,
+    refetchTags: refetch,
+    refetchItems: () => fetchAllPrompts({ filters: {} }),
+    itemKey: "promptLabel",
+  });
   return (
     <Box display="flex" flexDirection="column" gap={2}>
       {/* Breadcrumb navigation and create-library button */}
@@ -218,6 +230,7 @@ export default function PromptLibraryList() {
               getChildren={getChildren}
               prompts={allPrompts ?? []}
               onRemoveFromLibrary={removeFromLibrary}
+              onDeleteFolder={handleDeleteFolder}
             />
           </Box>
           {/* ⬇️ Document list appears under the tree */}

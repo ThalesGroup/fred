@@ -348,5 +348,13 @@
     "save": "Save",
     "updateFailed": "Update Failed",
     "updateFailedDetail": "An error occurred while updating the library. Please try again."
+  },
+  "libraryDelete": {
+    "title": "Delete \"{{full}}\" and subfolders?",
+    "message": "This will recursively delete {{libCount}} library(ies).\n• {{touchedCount}} {{itemLabel}}(s) will lose at least one tag.\n• {{orphanedCount}} {{itemLabel}}(s) will be deleted (tag-orphans)."
+  },
+  "common": {
+    "documentLabel": "document",
+    "promptLabel": "prompt"
   }
 }

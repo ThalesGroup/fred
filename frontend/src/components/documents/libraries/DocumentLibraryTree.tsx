@@ -6,7 +6,7 @@
 import * as React from "react";
 import FolderOutlinedIcon from "@mui/icons-material/FolderOutlined";
 import FolderOpenOutlinedIcon from "@mui/icons-material/FolderOpenOutlined";
-import { Box } from "@mui/material";
+import { Box, IconButton } from "@mui/material";
 import { SimpleTreeView } from "@mui/x-tree-view/SimpleTreeView";
 import { TreeItem } from "@mui/x-tree-view/TreeItem";
 import KeyboardArrowRightIcon from "@mui/icons-material/KeyboardArrowRight";
@@ -14,6 +14,7 @@ import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import { TagNode } from "../../tags/tagTree";
 import { DocumentRowCompact } from "./DocumentLibraryRow";
 import { DocumentMetadata, TagWithItemsId } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 
 interface DocumentLibraryTreeProps {
   tree: TagNode;
@@ -26,6 +27,7 @@ interface DocumentLibraryTreeProps {
   onPreview: (doc: DocumentMetadata) => void;
   onToggleRetrievable: (doc: DocumentMetadata) => void;
   onRemoveFromLibrary: (doc: DocumentMetadata, tag: TagWithItemsId) => void;
+  onDeleteFolder?: (node: TagNode) => void;
 }
 
 type Props = DocumentLibraryTreeProps;
@@ -41,6 +43,7 @@ export function DocumentLibraryTree({
   onPreview,
   onToggleRetrievable,
   onRemoveFromLibrary,
+  onDeleteFolder,
 }: Props) {
   const renderTree = (n: TagNode): React.ReactNode[] =>
     getChildren(n).map((c) => {
@@ -77,6 +80,24 @@ export function DocumentLibraryTree({
               <Box sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0 }}>
                 {isExpanded ? <FolderOpenOutlinedIcon fontSize="small" /> : <FolderOutlinedIcon fontSize="small" />}
                 <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.name}</span>
+              </Box>
+              {/* Right: actions (hidden until hover) */}
+              <Box
+                className="folder-actions"
+                sx={{ display: "flex", gap: 0.5, opacity: 0, transition: "opacity .15s" }}
+              >
+                {onDeleteFolder && c.tagsHere?.[0] && (
+                  <IconButton
+                    size="small"
+                    title="Delete library"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDeleteFolder(c);
+                    }}
+                  >
+                    <DeleteOutlineIcon fontSize="small" />
+                  </IconButton>
+                )}
               </Box>
             </Box>
           }
@@ -121,7 +142,7 @@ export function DocumentLibraryTree({
         </TreeItem>
       );
     });
-    
+
   return (
     <SimpleTreeView
       expandedItems={expanded}

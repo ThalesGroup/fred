@@ -31,7 +31,7 @@ import { K8ApplicationContextStruct } from "./K8ApplicationContextStruct.tsx";
  */
 export const K8ApplicationContext = createContext<K8ApplicationContextStruct>(null!);
 export const K8ApplicationContextProvider = (props: PropsWithChildren<{}>) => {
-  const { showError } = useToast(); // Use the toast hook
+  const { showError } = useToast(); 
 
   const [getClusterList] = useGetClusterListMutation();
   const [getNamespaceList] = useGetNamespaceListMutation();

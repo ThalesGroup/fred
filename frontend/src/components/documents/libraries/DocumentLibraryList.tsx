@@ -55,11 +55,11 @@ import { useTranslation } from "react-i18next";
 import { DocumentLibraryTree } from "./DocumentLibraryTree";
 import { DocumentUploadDrawer } from "./DocumentUploadDrawer";
 import { useDocumentCommands } from "../common/useDocumentCommands";
+import { useCascadeDeleteLibrary } from "../../../common/libraryCommand";
 
 export default function DocumentLibraryList() {
   /** get our internalization library for english or french */
   const { t } = useTranslation();
-
   /** Expanded folder paths in the TreeView */
   const [expanded, setExpanded] = React.useState<string[]>([]);
 
@@ -91,8 +91,6 @@ export default function DocumentLibraryList() {
   }, [fetchAllDocuments]);
   /** Build the TagNode tree from the flat list of tags */
   const tree = React.useMemo<TagNode | null>(() => (tags ? buildTree(tags) : null), [tags]);
-
-  // after your selectedTagIds memo
 
   /** Return sorted list of direct children for a given node */
   const getChildren = React.useCallback((n: TagNode) => {
@@ -126,7 +124,18 @@ export default function DocumentLibraryList() {
     refetchTags: refetch,
     refetchDocs: () => fetchAllDocuments({ filters: {} }),
   });
-  
+
+  const { handleDeleteFolder } = useCascadeDeleteLibrary({
+    allItems: allDocuments ?? [],
+    // getTags: (d: DocumentMetadata) => d.tags ?? [], // default works already
+    selectedFolder,
+    setSelectedFolder,
+    expanded,
+    setExpanded,
+    refetchTags: refetch,
+    refetchItems: () => fetchAllDocuments({ filters: {} }),
+    itemKey: "documentLabel",
+  });
   return (
     <Box display="flex" flexDirection="column" gap={2}>
       {/* Breadcrumb navigation and create-library button */}
@@ -223,6 +232,7 @@ export default function DocumentLibraryList() {
               onPreview={preview}
               onToggleRetrievable={toggleRetrievable}
               onRemoveFromLibrary={removeFromLibrary}
+              onDeleteFolder={handleDeleteFolder}
             />
           </Box>
           {/* ⬇️ Document list appears under the tree */}

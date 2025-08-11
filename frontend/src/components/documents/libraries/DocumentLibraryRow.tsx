@@ -75,7 +75,7 @@ export function DocumentRowCompact({
           }}
           onClick={() => onPreview?.(doc)}
         >
-          {doc.title || doc.document_name || doc.document_uid}
+          { doc.document_name || doc.document_uid}
         </Typography>
       </Box>
 
