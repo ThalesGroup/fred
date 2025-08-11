@@ -1,19 +1,19 @@
 {{- define "common-library.configmap-backend" }}
 
-{{- if .Values.configuration_type.backend.enabled }}
+{{- if .app.configuration_type.backend }}
 
 ---
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: "{{ .Values.applicationName }}-back"
-  namespace: {{ .Release.Namespace }}
+  name: "{{ .app.applicationName }}-back"
+  namespace: {{ .root.Release.Namespace }}
 data:
   configuration.yaml: |
-{{ .Values.configuration | toYaml | indent 4 }}
+{{ .app.configuration | toYaml | indent 4 }}
 
   .env: |
-    {{- range $key, $value := .Values.dotenv }}
+    {{- range $key, $value := .app.dotenv }}
     {{- if $value }}
     {{ $key }}="{{ $value }}"
     {{- else }}
@@ -23,4 +23,4 @@ data:
 
 {{- end }}
 
-{{- end -}}
+{{ end -}}

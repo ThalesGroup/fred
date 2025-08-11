@@ -6,4 +6,6 @@
   {{- include "common-library.rbac" $ctx }}
   {{- include "common-library.configmap-frontend" $ctx }}
   {{- include "common-library.configmap-kube" $ctx }}
+  {{- include "common-library.configmap-backend" $ctx }}
+  {{- include "common-library.deployment" $ctx }}
 {{- end }}

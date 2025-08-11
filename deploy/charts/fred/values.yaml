@@ -13,6 +13,9 @@ applications:
       enabled: false
     job:
       enabled: false
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
     image:
       repository: ghcr.io/thalesgroup/fred-agent/agentic-backend
       tag: "v0.0.5"
@@ -65,6 +68,8 @@ applications:
         enabled: false
       readinessProbe:
         enabled: false
+      startupProbe:
+        enabled: false
     serviceAccount:
       annotations: {}
       labels: {}
@@ -91,9 +96,236 @@ applications:
     configuration_type:
       backend: true
       frontend: false
-    configuration:
-      # ... ta config complète ici (inchangée) ...
+    configuration: |
+      app:
+        name: "Agentic Backend"
+        base_url: "/agentic/v1"
+        address: "0.0.0.0"
+        port: 8000
+        log_level: "info"
+        reload: false
+        reload_dir: "."
+        security:
+          enabled: true
+          client_id: "app"
+          keycloak_url: "http://keycloak/realms/fred"
+          authorized_origins:
+          - "http://localhost:5173"
+          - "http://fred.dev.fred.thalesgroup.com"
+          - "https://fred.dev.fred.thalesgroup.com"
 
+      frontend_settings:
+        security:
+          enabled: true
+          client_id: "app"
+          keycloak_url: "https://idp.dev.fred.thalesgroup.com/realms/fred"
+          authorized_origins:
+          - "http://localhost:5173"
+          - "http://fred.dev.fred.thalesgroup.com"
+          - "https://fred.dev.fred.thalesgroup.com"
+
+        feature_flags:
+          # If true activate the backend and frontend modules in charge of K8
+          # and frugality monitoring
+          enableK8Features: false
+          # If true activate support for an electronic warfare demonstration
+          enableElecWarfare: false
+        properties:
+          logoName: "fred"
+
+      database:
+        type: csv
+        csv_files:
+          # Can be absolute paths or relative paths to the main
+          energy_mix: './services/cluster_consumption/data/simulated_energy_mix.csv'
+          carbon_footprint: './services/cluster_consumption/data/simulated_cluster_consumption_gco2.csv'
+          energy_footprint: './services/cluster_consumption/data/simulated_cluster_consumption_wh.csv'
+          financial_footprint: './services/cluster_consumption/data/simulated_cluster_consumption_usd.csv'
+          # Guerre elec & ship identification service
+          frequencies: './services/sensor/data/bandes_freq.csv'
+          sensors_test_new: './services/theater_analysis/data/detections-capteur-donnees-test_new_scenario.csv'
+          mission: './services/mission/data/mission.csv'
+          radio: './services/theater_analysis/data/radio-maritime-donnees-tests_excel_light_militaire.csv'
+          signal_identification_guide: './services/theorical_radio/data/Signal_identification_guide_new.csv'
+
+      kubernetes:
+        kube_config: '~/.kube/config'
+        aws_config: '~/.aws/config' # Optional, needed for aws EKS clusters.
+        # Timeout settings for the client
+        timeout:
+          connect: 5  # Time to wait for a connection in seconds
+          read: 15    # Time to wait for a response in seconds
+
+      ai:
+        # Timeout settings for the client
+        timeout:
+          connect: 5  # Time to wait for a connection in seconds
+          read: 15    # Time to wait for a response in seconds
+        default_model:
+          # Required in .env:
+          # - OPENAI_API_KEY
+          provider: "openai"
+          name: "gpt-4o"
+          settings:
+            temperature: 0.0
+            max_retries: 2
+            request_timeout: 30
+
+          # --- OR uncomment for Azure OpenAI ---
+          # Required in .env:
+          # - AZURE_OPENAI_API_KEY
+          #
+          # Optional for token-based auth:
+          # - AZURE_TENANT_ID
+          # - AZURE_CLIENT_ID
+          # - AZURE_CLIENT_SECRET
+          # provider: "azure"
+          # name: "fred-gpt-4o"
+          # settings:
+          #  api_version: "2024-05-01-preview"
+          #  temperature: 0.0
+          #  max_retries: 2
+          #  request_timeout: 30
+          #  azure_endpoint: "https://tehopenai.openai.azure.com/"
+
+          # --- OR uncomment for AzureAPim ---
+          # provider: "azureapim"
+          # name: "gpt-4o"
+          # settings:
+          #   api_version: "2024-06-01"
+          #   temperature: 0.0
+          #   max_retries: 2
+          #   request_timeout: 30
+
+          # --- OR uncomment for Ollama ---
+          # provider: "ollama"
+          # name: "llama2"
+          # settings:
+          #   base_url: "http://localhost:11434"
+          #   temperature: 0.0
+        services:
+          - name: "kubernetes"
+            enabled: false
+            model: {}
+        recursion:
+          recursion_limit: 40 # Number or max recursion use by the agents while using the model
+        agents:
+          # - name: "JiraExpert"
+          #   class_path: "app.agents.jira.jira_expert.JiraExpert"
+          #   enabled: false
+          #   mcp_servers:
+          #     - name: jira-mcp-server
+          #       transport: stdio
+          #       command: uvx
+          #       args:
+          #         - "mcp-atlassian"
+          #       env:
+          #         JIRA_URL: "@TO_CHANGE"
+          #         JIRA_USERNAME: "@TO_CHANGE"
+          #         JIRA_API_TOKEN: "@TO_CHANGE"
+          #         READ_ONLY_MODE: "true"
+          #       sse_read_timeout: 600 # 10 minutes. It is 5 minutes by default but it is too short.
+          #   model: {}
+          - name: "Fred"
+            role: "Multi-Agent Orchestrator"
+            description: >
+              Handles complex, ambiguous, or multi-step user queries. Delegates tasks to the most suitable experts 
+              based on context, capabilities, and relevance. Ensures coherent, high-quality responses by coordinating the expert team.
+            class_path: "app.agents.leader.leader.Leader"
+            type: "leader"
+            enabled: true
+            max_steps: 5
+            model: {}
+          - name: "GeneralistExpert"
+            role: "Fallback Generalist Expert"
+            description: >
+              Provides broad, high-level guidance when no specific expert is better suited. 
+              Acts as a default agent to assist with general questions across all domains.
+            class_path: "app.agents.generalist.generalist_expert.GeneralistExpert"
+            enabled: true
+            model: {}
+          - name: "TabularExpert"
+            role: "Data Query and SQL Expert"
+            description: >
+              Executes advanced SQL queries (including joins and aggregations) 
+              over structured datasets like CSVs, Postgres exports, or DuckDB files. 
+              Ideal for analyzing tabular data ingested into the platform.
+            class_path: "app.agents.tabular.tabular_expert.TabularExpert"
+            enabled: true
+            mcp_servers:
+              - name: knowledge-flow-mcp-server
+                transport: sse
+                url: http://knowledge-flow-backend:8080/mcp_tabular
+                sse_read_timeout: 2000
+            model: {}
+          - name: "DocumentsExpert"
+            role: "Document Retrieval Expert"
+            description: >
+              Answers user questions by retrieving relevant information from ingested document corpora.
+              Uses a MCP search service to ground responses in internal or uploaded knowledge.
+            class_path: "app.agents.documents.documents_expert.DocumentsExpert"
+            enabled: true
+            mcp_servers:
+              - name: knowledge-flow-mcp-server
+                transport: sse
+                url: http://knowledge-flow-backend:8080/mcp_text
+                sse_read_timeout: 2000
+            model: {}
+          - name: "RagsExpert"
+            role: "Document Retrieval Expert"
+            description: >
+              Answers user questions by retrieving relevant information from ingested document corpora.
+              Uses a vector-based retrieval pipeline to ground responses in internal or uploaded knowledge.
+            class_path: "app.agents.rags.rags_expert.RagsExpert"
+            enabled: true
+            categories:
+              - "rag"
+            settings:
+              chunk_size: 512
+              chunk_overlap: 64
+              knowledge_flow_url: "http://knowledge-flow-backend:8080/knowledge-flow/v1"
+            model: {}
+      node_metrics_storage:
+        type: "local"
+        local_path: "~/.fred/agentic/node-metrics-store"
+      tool_metrics_storage:
+        type: "local"
+        local_path: "~/.fred/agentic/tool-metrics-store"
+      feedback_storage:
+        type: duckdb
+        duckdb_path: "~/.fred/agentic/feedback.duckdb"
+      agent_storage:
+        type: "duckdb"
+        duckdb_path: "~/.fred/agentic/agent.duckdb"
+      # Where to save fred produced resources like Essentials or Scores
+      # and external resources like Kubernetes Workload descriptions
+      dao:
+        type: "file"  # Currently the only one supported
+        base_path: "~/.fred/agentic/dao-cache"
+        max_cached_delay_seconds: 300  # Cache delay in seconds. Use 0 for no cache or a negative value for limitless cache.
+      # Sessions and messages are stored by default in_memory
+      # but it can be modified to use a backend like opensearch
+      session_storage:
+        ## Session Storage in memory:
+        type: in_memory
+        ## Session Storage using OpenSearch:
+        # type: opensearch # username and password are passed via the OPENSEARCH_USER and OPENSEARCH_PASSWORD env variables defined in thes .env file
+        # host: https://localhost:9200
+        # username: Admin # Overrides the OPENSEARCH_USER environment variable
+        # password: xxx # Overrides the OPENSEARCH_PASSWORD environment variable
+        secure: false
+        verify_certs: false
+    dotenv:
+      AZURE_TENANT_ID: ""  
+      AZURE_CLIENT_ID: ""  
+      AZURE_CLIENT_SECRET: ""
+      AZURE_CLIENT_SCOPE: ""
+      AZURE_API_VERSION: "2024-06-01"
+      AZURE_APIM_KEY: "your-subscription-key"
+      AZURE_OPENAI_API_KEY: "your-real-azure-openai-api-key"
+      OPENAI_API_KEY: "sk-..."
+      OPENSEARCH_USER: "admin"
+      OPENSEARCH_PASSWORD: "admin123"
   fred-frontend:
     applicationName: fred-frontend
     deployment:
@@ -102,10 +334,15 @@ applications:
       enabled: false
     job:
       enabled: false
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
     image:
       repository: ghcr.io/thalesgroup/fred-agent/frontend
       tag: "v0.0.5"
       pullPolicy: IfNotPresent
+    command:
+      enabled: false
     env:
       - name: VITE_ALLOWED_HOSTS
         value: "fred.dev"
@@ -155,6 +392,8 @@ applications:
         enabled: false
       readinessProbe:
         enabled: false
+      startupProbe:
+        enabled: false
     serviceAccount:
       annotations: {}
       labels: {}
@@ -192,6 +431,9 @@ applications:
       enabled: false
     job:
       enabled: false
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
     image:
       repository: ghcr.io/thalesgroup/fred-agent/knowledge-flow-backend
       tag: "v0.0.5"
@@ -271,6 +513,8 @@ applications:
         enabled: false
       readinessProbe:
         enabled: false
+      startupProbe:
+        enabled: false
     serviceAccount:
       annotations: {}
       labels: {}
@@ -283,5 +527,247 @@ applications:
     configuration_type:
       backend: true
       frontend: false
-    configuration:
-      # ... ta config complète ici (inchangée) ...
+    configuration: |
+      app:
+        name: "Knowledge Flow Backend"
+        base_url: "/knowledge-flow/v1"
+        address: "0.0.0.0"
+        port: 8111
+        log_level: "info"
+        reload: false
+        reload_dir: "."
+        security:
+          enabled: true
+          keycloak_url: "http://keycloak/realms/fred"
+          client_id: "app"
+          authorized_origins:
+          - "http://localhost:5173"
+          - "http://fred.dev.fred.thalesgroup.com"
+          - "https://fred.dev.fred.thalesgroup.com"
+
+      security:
+        enabled: true
+        keycloak_url: "http://keycloak/realms/fred"
+        authorized_origins:
+        - "http://localhost:5173"
+        - "http://fred.dev.fred.thalesgroup.com"
+        - "https://fred.dev.fred.thalesgroup.com"
+      
+      scheduler:
+        enabled: true
+        backend: "temporal"
+        temporal:
+          host: "localhost:7233"
+          namespace: "default"
+          task_queue: "ingestion"
+          workflow_prefix: "pipeline"
+          connect_timeout_seconds: 5
+
+      input_processors:
+        - prefix: ".pdf"
+          class_path: app.core.processors.input.pdf_markdown_processor.openai_pdf_markdown_processor.OpenaiPdfMarkdownProcessor
+        - prefix: ".docx"
+          class_path: app.core.processors.input.docx_markdown_processor.docx_markdown_processor.DocxMarkdownProcessor
+        - prefix: ".pptx"
+          class_path: app.core.processors.input.pptx_markdown_processor.pptx_markdown_processor.PptxMarkdownProcessor
+        - prefix: ".csv"
+          class_path: app.core.processors.input.csv_tabular_processor.csv_tabular_processor.CsvTabularProcessor
+        - prefix: ".txt"
+          class_path: app.core.processors.input.text_markdown_processor.text_markdown_processor.TextMarkdownProcessor
+        - prefix: ".md"
+          class_path: app.core.processors.input.markdown_markdown_processor.markdown_markdown_processor.MarkdownMarkdownProcessor
+        - prefix: ".xlsm"
+          class_path: app.core.processors.input.pps_tabular_processor.pps_tabular_processor.PpsTabularProcessor
+
+      content_storage:
+        type: minio
+        endpoint: http://minio:9000
+        bucket_name: "knowledge-flow-content"
+        secure: false
+
+      document_sources:
+        fred:
+          type: push
+          description: "Documents manually uploaded by users"
+
+        local:
+          type: pull
+          provider: local_path
+          base_path: ~/Documents/Fred
+          description: "Personal local documents available for pull-mode ingestion"
+
+        minio:
+          type: pull
+          provider: minio
+          description: "Documents available for pull from MinIO"
+          endpoint_url: localhost:9000
+          bucket_name: "shared-content"
+          prefix: ""
+          secure: false
+
+      metadata_storage:
+        type: opensearch
+        host: https://opensearch:9200
+        secure: true
+        verify_certs: false
+        index: document-index
+
+      tag_storage:
+        type: opensearch
+        host: https://opensearch:9200
+        secure: true
+        verify_certs: false
+        index: tag-index
+
+      prompt_storage:
+        type: opensearch
+        host: https://opensearch:9200
+        secure: true
+        verify_certs: false
+        index: prompt-index
+
+      vector_storage:
+        type: opensearch
+        host: https://opensearch:9200
+        secure: true
+        verify_certs: false
+        index: vector-index-ada002
+        #type: in_memory
+
+
+      tabular_storage:
+        type: "duckdb"
+        duckdb_path: "~/.fred/knowledge-flow/tabular.duckdb"
+
+      catalog_storage:
+        type: opensearch
+        host: https://opensearch:9200
+        secure: true
+        verify_certs: false
+        index: catalog-index
+
+      embedding:
+        type: "openai"
+
+
+
+
+
+    dotenv:
+      # This file contains the environment variables for the application
+
+      # -----------------------------------------------------------------------------
+      # 🔵 AZURE AUTHENTICATION (for getting OAuth token)
+      # -----------------------------------------------------------------------------
+
+      AZURE_TENANT_ID: ""
+      # Azure Active Directory Tenant ID for your application (OAuth 2.0 flow)
+
+      AZURE_CLIENT_ID: ""
+      # Client ID of your registered Azure AD Application (Service Principal)
+
+      AZURE_CLIENT_SECRET: ""
+      # Client Secret of your Azure AD Application
+
+      AZURE_CLIENT_SCOPE: ""
+      # OAuth2 scope for requesting tokens (typically "https://cognitiveservices.azure.com/.default")
+
+
+      # -----------------------------------------------------------------------------
+      # 🔵 AZURE API SETTINGS
+      # -----------------------------------------------------------------------------
+
+      AZURE_API_VERSION: "2024-06-01"
+      # API version used for Azure OpenAI API requests (depends on your Azure resource)
+
+
+      # -----------------------------------------------------------------------------
+      # 🔵 API GATEWAY (APIM) SETTINGS
+      # -----------------------------------------------------------------------------
+
+      AZURE_APIM_BASE_URL: "https://trustnest.azure-api.net"
+      # Base URL of your Azure API Management Gateway (APIM)
+      # Example: https://company-apim-gateway.azure-api.net
+
+      AZURE_RESOURCE_PATH_EMBEDDINGS: "/genai-aoai-inference/v1"
+      # Path after base URL for Embeddings API (before /deployments/...)
+
+      AZURE_RESOURCE_PATH_LLM: "/genai-aoai-inference/v2"
+      # Path after base URL for LLM Chat API (before /deployments/...)
+
+      AZURE_APIM_KEY: ""
+      # Subscription Key required by the APIM Gateway ("TrustNest-Apim-Subscription-Key" header)
+
+      # -----------------------------------------------------------------------------
+      # 🔵 AZURE OPENAI DIRECT SETTINGS (if AZURE_USE_APIM=false)
+      # -----------------------------------------------------------------------------
+
+      AZURE_OPENAI_BASE_URL: "https://your-azure-openai-resource.openai.azure.com"
+      # Base URL for direct Azure OpenAI access (no APIM)
+
+      AZURE_OPENAI_API_KEY: ""
+      # Azure OpenAI API Key (directly from Azure portal, not APIM key)
+
+      # -----------------------------------------------------------------------------
+      # 🔵 AZURE OPENAI DEPLOYMENT NAMES
+      # -----------------------------------------------------------------------------
+
+      AZURE_DEPLOYMENT_LLM: "gpt-4o"
+      # Deployment name in Azure OpenAI for Chat LLMs (ex: GPT-4 Turbo, GPT-4o)
+
+      AZURE_DEPLOYMENT_EMBEDDING: "fred-text-embedding-3-large"
+      # Deployment name in Azure OpenAI for Embedding Models
+
+
+      # -----------------------------------------------------------------------------
+      # 🔵 OPENAI EMBEDDING (Public API - NOT Azure)
+      # -----------------------------------------------------------------------------
+
+      OPENAI_API_KEY: ""
+      # Your OpenAI API key from https://platform.openai.com/account/api-keys
+
+      # OPENAI_API_BASE: "https://api.openai.com/v1"
+      # Optional. Defaults to https://api.openai.com/v1 for OpenAI public API
+
+      OPENAI_API_VERSION: ""
+      # Leave blank for OpenAI public API (only needed for Azure)
+      # Example (Azure only): "2024-06-01"
+
+      # Example model for embeddings (default for OpenAI)
+      # OPENAI_MODEL_NAME: "text-embedding-ada-002"
+
+      # -----------------------------------------------------------------------------
+      # 🔵 OLLAMA SETTINGS
+      # -----------------------------------------------------------------------------
+
+      OLLAMA_API_URL: "http://localhost:11434"
+      # Ollama API URL (optional)
+
+      OLLAMA_EMBEDDING_MODEL_NAME: "snowflake-arctic-embed2:latest"
+      # Model name for embeddings
+
+      OLLAMA_VISION_MODEL_NAME: "llama3-vision:latest"
+      # Model name for vision tasks (optional)
+
+
+      # KEYCLOAK
+      KEYCLOAK_SERVER_URL: "http://keycloak:8080"
+      KEYCLOAK_REALM_NAME: "fred"
+      KEYCLOAK_CLIENT_ID: "fred"
+
+      # OPENSEARCH
+      OPENSEARCH_USER: "admin"
+      OPENSEARCH_PASSWORD: "admin123"
+
+      #MINIO
+      MINIO_ACCESS_KEY: "admin"
+      MINIO_SECRET_KEY: "Azerty123_"
+
+      #GCS
+      GCS_CREDENTIALS_PATH: "/path/to/sa-key.json"
+      GCS_BUCKET_NAME: "my-bucket"
+      GCS_PROJECT_ID: "my-gcp-project"
+      # LOCAL STORAGE
+      LOCAL_CONTENT_STORAGE_PATH: "~/.fred/knowledge-flow/content-store"
+      LOCAL_METADATA_STORAGE_PATH: "~/.fred/knowledge-flow/metadata-store.json"
+

@@ -1,0 +1,141 @@
+{{- define "common-library.deployment" }}
+
+{{- if .app.deployment.enabled }}
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .app.applicationName }}
+  labels:
+    app: {{ .app.applicationName }}
+spec:
+  replicas: {{ .app.replicaCount }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: {{ .app.rollingUpdate.maxSurge }}
+      maxUnavailable: {{ .app.rollingUpdate.maxUnavailable }}
+  revisionHistoryLimit: {{ .app.revisionHistoryLimit | default 2 }}
+  selector:
+    matchLabels:
+      app: {{ .app.applicationName }}
+  template:
+    metadata:
+      annotations:
+        {{- if .app.podAnnotations }}
+{{ toYaml .app.podAnnotations | nindent 8 }}
+        {{- end }}
+        # BEGIN - Force refresh of the deployment when configmap is changed
+        {{- if .app.configuration }}
+        configmap.configurations.checksum: "{{ .app.configuration | join "," | sha256sum }}"
+        {{- end }}
+        {{- if .app.kubeconfig.enabled }}
+        configmap.kubeconfig.checksum: "{{ .root.kubeconfig | join "," | sha256sum }}"
+        {{- end }}
+        # END - Force refresh of the deployment when configmap is changed
+      labels:
+        app: {{ .app.applicationName }}
+    spec:
+      {{- if .app.imagePullSecrets }}
+      imagePullSecrets:
+{{ toYaml .app.imagePullSecrets | nindent 8 }}
+      {{- end }}
+
+      {{- if .app.serviceAccount.enabled }}
+      serviceAccount: {{ .app.serviceAccount.name }}
+      serviceAccountName: {{ .app.serviceAccount.name }}
+      {{- end }}
+
+      {{- with .app.podSecurityContext }}
+      securityContext:
+{{ toYaml . | nindent 8 }}
+      {{- end }}
+
+      containers:
+        - name: {{ .app.applicationName }}
+          image: "{{ .app.image.repository }}:{{ .app.image.tag }}"
+          imagePullPolicy: {{ default "IfNotPresent" .app.image.pullPolicy }}
+
+          {{- with .app.securityContext }}
+          securityContext:
+{{ toYaml . | nindent 12 }}
+          {{- end }}
+
+          ports:
+          {{- range .app.ports }}
+            - containerPort: {{ .containerPort }}
+              {{- if .name }}
+              name: {{ .name }}
+              {{- end }}
+          {{- end }}
+
+          {{- if .app.command.enabled }}
+          command:
+{{ toYaml .app.command.data | nindent 12 }}
+          {{- end }}
+
+          {{- if or .app.env .app.extraEnvVars }}
+          env:
+            {{- if .app.env }}
+{{ toYaml .app.env | nindent 12 }}
+            {{- end }}
+            {{- if .app.extraEnvVars }}
+{{ toYaml .app.extraEnvVars | nindent 12 }}
+            {{- end }}
+          {{- end }}
+
+          {{- if .app.probes.livenessProbe.enabled }}
+          livenessProbe:
+{{ toYaml .app.probes.probes.livenessProbe.data | nindent 12 }}
+          {{- end }}
+
+          {{- if .app.probes.readinessProbe.enabled }}
+          readinessProbe:
+{{ toYaml .app.probes.readinessProbe.data | nindent 12 }}
+          {{- end }}
+
+          {{- if .app.probes.startupProbe.enabled }}
+          startupProbe:
+{{ toYaml .app.probes.startupProbe.data | nindent 12 }}
+          {{- end }}
+
+          volumeMounts:
+{{ toYaml .app.volumeMounts| nindent 12 }}
+          {{- if and .app.extraVolumeMounts (gt (len .app.extraVolumeMounts) 0) }}
+{{ toYaml .app.extraVolumeMounts| nindent 12 }}
+          {{- end }}
+
+          {{- with .app.resources }}
+          resources:
+{{ toYaml . | nindent 12 }}
+          {{- end }}
+
+      {{- if .app.priorityClass }}
+      priorityClassName: {{ .app.priorityClass.name }}
+      {{- end }}
+
+      volumes:
+{{ toYaml .app.volumes | nindent 8 }}
+      {{- if and .app.extraVolumes (gt (len .app.extraVolumes) 0) }}
+{{ toYaml .app.extraVolumes | nindent 8 }}
+      {{- end }}
+
+      {{- with .app.nodeSelector }}
+      nodeSelector:
+{{ toYaml . | nindent 8 }}
+      {{- end }}
+
+      {{- with .app.affinity }}
+      affinity:
+{{ toYaml . | nindent 8 }}
+      {{- end }}
+
+      {{- with .app.tolerations }}
+      tolerations:
+{{ toYaml . | nindent 8 }}
+      {{- end }}
+
+{{- end }}
+
+{{- end -}}
