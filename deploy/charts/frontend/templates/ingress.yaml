@@ -21,9 +21,9 @@ spec:
         pathType: Prefix
         backend:
           service:
-            name: {{ $.Chart.Name }}
+            name: {{ .service.name }}
             port:
-              number: {{ $.Values.service.port }}
+              number: {{ .service.port }}
       {{- end }}
   {{- end }}
 {{- if .Values.ingress.tls }}
