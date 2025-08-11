@@ -1,12 +1,12 @@
 import pandas as pd
-import sqlalchemy
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, text, Table, MetaData, select, inspect
 from sqlalchemy.exc import SQLAlchemyError, OperationalError
 import logging
 from typing import List, Tuple
 import tempfile
-import os
 from pathlib import Path
+import sqlparse
+import duckdb
 
 logger = logging.getLogger(__name__)
 
@@ -51,38 +51,62 @@ class SQLTableStore:
             logger.error(msg)
             raise RuntimeError(msg) from e
 
+    def _validate_table_name(self, table_name: str):
+        """Vérifie que la table existe réellement dans la DB."""
+        valid_tables = inspect(self.engine).get_table_names()
+        if table_name not in valid_tables:
+            raise ValueError(f"Invalid or unauthorized table name: {table_name}")
+
     def save_table(self, table_name: str, df: pd.DataFrame):
         df.to_sql(table_name, self.engine, if_exists="replace", index=False)
         logger.info(f"Saved table '{table_name}' to SQL database")
 
     def load_table(self, table_name: str) -> pd.DataFrame:
+        self._validate_table_name(table_name)
         return pd.read_sql_table(table_name, self.engine)
 
     def delete_table(self, table_name: str):
+        self._validate_table_name(table_name)
         with self.engine.connect() as conn:
-            conn.execute(sqlalchemy.text(f"DROP TABLE IF EXISTS {table_name}"))
+            # On quote le nom pour éviter injection
+            conn.execute(text(f'DROP TABLE IF EXISTS "{table_name}"'))
             logger.info(f"Deleted table '{table_name}'")
 
     def list_tables(self) -> List[str]:
-        inspector = sqlalchemy.inspect(self.engine)
-        return [t for t in inspector.get_table_names()]
+        return inspect(self.engine).get_table_names()
 
     def get_table_schema(self, table_name: str) -> List[Tuple[str, str]]:
+        self._validate_table_name(table_name)
+        metadata = MetaData()
+        table = Table(table_name, metadata, autoload_with=self.engine)
         with self.engine.connect() as conn:
-            result = conn.execute(sqlalchemy.text(f"SELECT * FROM {table_name} LIMIT 0"))
+            result = conn.execute(select(table).limit(0))
             return [(col, str(dtype)) for col, dtype in zip(result.keys(), result.cursor.description)]
 
     def execute_sql_query(self, sql: str) -> pd.DataFrame:
-        return pd.read_sql(sqlalchemy.text(sql), self.engine)
+        """Exécute une requête SQL générée par un LLM avec validation basique."""
+        # Extraction des noms de tables de la requête
+        parsed = sqlparse.parse(sql)
+        tokens = [t for t in parsed[0].tokens if not t.is_whitespace]
+        valid_tables = set(self.list_tables())
+
+        # Vérification simple : la requête ne doit contenir que des tables autorisées
+        for token in tokens:
+            token_val = token.value.strip('"')
+            if token.ttype is None and token_val in valid_tables:
+                continue
+            # Si le token ressemble à un nom de table mais n'est pas valide
+            if token.ttype is None and token_val not in valid_tables:
+                raise ValueError(f"Unauthorized table in query: {token_val}")
+
+        return pd.read_sql(text(sql), self.engine)
 
 def create_empty_duckdb_store() -> SQLTableStore:
-    db_path = Path(tempfile.gettempdir()) / "empty_fallback.duckdb"
+    db_path = (Path(tempfile.gettempdir()) / "empty_fallback.duckdb").resolve()
     db_path.parent.mkdir(parents=True, exist_ok=True)
-    
-    if not db_path.exists():
-        db_path.touch()
-        logger.info(f"✅ Created empty DuckDB file at {db_path}")
+    if db_path.exists():
+        logger.info(f"Creating new DuckDB file at {db_path}")
+        duckdb.connect(db_path).close()
 
-    clean_path = str(db_path).lstrip("/")
-    logger.warning(f"⚠️ Using an empty fallback DuckDB SQLTableStore with path: {clean_path}")
-    return SQLTableStore(driver="duckdb",path=clean_path)
+    logger.warning(f"Using an empty fallback DuckDB SQLTableStore with path: {db_path}")
+    return SQLTableStore(driver="duckdb", path=db_path)
