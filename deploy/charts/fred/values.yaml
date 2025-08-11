@@ -528,7 +528,6 @@ applications:
       backend: true
       frontend: false
     configuration: |
-
       app:
         name: "Knowledge Flow Backend"
         base_url: "/knowledge-flow/v1"
