@@ -14,7 +14,7 @@
 
 /**
  *
- * This component renders the "Document Libraries" view for the knowledge flow app.
+ * This component renders the "Prompt Libraries" view for the knowledge flow app.
  * It displays a hierarchical folder structure (libraries) in a collapsible TreeView
  * using MUI X SimpleTreeView (MIT community edition). It supports:
  *
@@ -133,7 +133,7 @@ export default function PromptLibraryList() {
       <Box display="flex" alignItems="center" justifyContent="space-between">
         <Breadcrumbs>
           <Chip
-            label={t("promptLibrary.documents")}
+            label={t("promptLibrariesList.prompts")}
             icon={<FolderOutlinedIcon />}
             onClick={() => setSelectedFolder(undefined)}
             clickable
@@ -153,7 +153,7 @@ export default function PromptLibraryList() {
             onClick={() => setIsCreateDrawerOpen(true)}
             sx={{ borderRadius: "8px" }}
           >
-            {t("promptLibrary.createLibrary")}
+            {t("promptLibrariesList.createLibrary")}
           </Button>
           <Button
             variant="contained"

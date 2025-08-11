@@ -253,6 +253,7 @@
   },
   "promptLibrary": {
     "title": "Bibliothèque de prompts",
+    "folders": "Dossiers",
     "edit": "Editer le prompt",
     "description": "Accédez à la bibliothèque de prompts",
     "uploadInLibrary": "Ajouter un prompt à la bibliothèque",

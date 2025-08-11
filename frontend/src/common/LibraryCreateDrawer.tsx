@@ -1,20 +1,7 @@
 // Copyright Thales 2025
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 import SaveIcon from "@mui/icons-material/Save";
 import { Alert, Box, Button, Drawer, TextField, Typography } from "@mui/material";
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   useCreateTagKnowledgeFlowV1TagsPostMutation,
@@ -27,12 +14,19 @@ interface LibraryCreateDrawerProps {
   onClose: () => void;
   onLibraryCreated?: () => void;
   mode: "documents" | "prompts";
+  /** Parent folder as a path like "thales/six" or "/" or undefined */
   currentPath?: string;
 }
 
-/**
- * This module create a library of prompts or documents
- */
+/** ---- Helpers ---- */
+const normalizePathForApi = (p?: string | null): string | null => {
+  if (!p) return null;
+  const normalized = p.split("/").filter(Boolean).join("/");
+  return normalized.length ? normalized : null; // API expects null at root
+};
+
+const validateLeafName = (s: string) => !s.includes("/"); // name is a single segment
+
 export const LibraryCreateDrawer: React.FC<LibraryCreateDrawerProps> = ({
   isOpen,
   onClose,
@@ -46,6 +40,10 @@ export const LibraryCreateDrawer: React.FC<LibraryCreateDrawerProps> = ({
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+
+  // Normalize once per render; safe for passing to API
+  const parentPath = useMemo(() => normalizePathForApi(currentPath), [currentPath]);
+  const asTagType: TagType = mode === "documents" ? "document" : "prompt";
 
   const handleClose = () => {
     setName("");
@@ -65,33 +63,28 @@ export const LibraryCreateDrawer: React.FC<LibraryCreateDrawerProps> = ({
       return;
     }
 
-    // Option C guard: keep 'name' as a leaf (no '/')
-    if (mode === "documents" && trimmed.includes("/")) {
+    // Enforce leaf-only for BOTH modes (backend assumes name is the leaf)
+    if (!validateLeafName(trimmed)) {
       showError({
         summary: t("libraryCreateDrawer.validationError"),
-        detail: t("libraryCreateDrawer.nameNoSlash") || "Name cannot contain '/'. Use the folder picker to change location.",
+        detail:
+          t("libraryCreateDrawer.nameNoSlash") ||
+          "Name cannot contain '/'. Use the folder picker to set the location.",
       });
       return;
     }
 
     try {
-      const payload =
-        mode === "documents"
-          ? {
-              name: trimmed,
-              path: currentPath ?? null, // <- key line: put it under the current folder
-              description: description.trim() || null,
-              type: "document" as TagType,
-              item_ids: [],
-            }
-          : {
-              name: trimmed,
-              description: description.trim() || null,
-              type: "prompt" as TagType,
-              item_ids: [],
-            };
+      const payload = {
+        name: trimmed,
+        path: parentPath, // ✅ always normalized (null at root)
+        description: description.trim() || null,
+        type: asTagType,
+        item_ids: [] as string[],
+      };
 
       await createTag({ tagCreate: payload }).unwrap();
+
       showSuccess({
         summary: t("libraryCreateDrawer.libraryCreated"),
         detail: t("libraryCreateDrawer.libraryCreatedDetail", { name: trimmed }),
@@ -99,14 +92,10 @@ export const LibraryCreateDrawer: React.FC<LibraryCreateDrawerProps> = ({
 
       onLibraryCreated?.();
       handleClose();
-
     } catch (err: any) {
       console.error("Error creating library:", err);
       const detail = err?.data?.detail || err?.message || String(err);
-      showError({
-        summary: t("libraryCreateDrawer.creationFailed"),
-        detail,
-      });
+      showError({ summary: t("libraryCreateDrawer.creationFailed"), detail });
     }
   };
 
@@ -128,13 +117,11 @@ export const LibraryCreateDrawer: React.FC<LibraryCreateDrawerProps> = ({
         {t("libraryCreateDrawer.title")}
       </Typography>
 
-      {/* Small hint about where it will be created */}
-      {mode === "documents" && (
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-          {t("libraryCreateDrawer.createUnder") || "Will be created under:"}{" "}
-          <strong>{currentPath || "/"}</strong>
-        </Typography>
-      )}
+      {/* Always show target location so users understand hierarchy */}
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+        {t("libraryCreateDrawer.createUnder") || "Will be created under:"}{" "}
+        <strong>{parentPath || "/"}</strong>
+      </Typography>
 
       <Box component="form" onSubmit={handleCreate} sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
         <TextField
@@ -144,7 +131,7 @@ export const LibraryCreateDrawer: React.FC<LibraryCreateDrawerProps> = ({
           onChange={(e) => setName(e.target.value)}
           required
           autoFocus
-          inputProps={mode === "documents" ? { pattern: "^[^/]+$", title: "Name cannot contain '/'" } : undefined}
+          inputProps={{ pattern: "^[^/]+$", title: "Name cannot contain '/'" }}
         />
 
         <TextField
