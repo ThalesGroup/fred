@@ -13,8 +13,9 @@
 # limitations under the License.
 
 import os
+from pathlib import Path
 from typing import Annotated, Literal, Optional, Union
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 class BaseModelWithId(BaseModel):
     id: str
@@ -48,7 +49,44 @@ class PostgresTableConfig(BaseModel):
     type: Literal["postgres"]
     table: str
 
+
+class SQLStorageConfig(BaseModel):
+    type: Literal["sql"] = "sql"
+    driver: str
+    database: Optional[str] = None
+    host: Optional[str] = None
+    port: Optional[int] = None
+    username: Optional[str] = Field(default_factory=lambda: os.getenv("SQL_USERNAME"))
+    password: Optional[str] = Field(default_factory=lambda: os.getenv("SQL_PASSWORD"))
+    path: Optional[str] = None
+    
+    @model_validator(mode="after")
+    def build_path(self) -> "SQLStorageConfig":
+        if not self.driver:
+            raise ValueError("Driver is required.")
+
+        if self.path:
+            # Facultatif : expanduser si tu veux supporter les "~"
+            self.path = str(Path(self.path).expanduser())
+        else:
+            if not self.database:
+                raise ValueError("Database name is required to build the path.")
+
+            auth = ""
+            if self.username:
+                auth = self.username
+                if self.password:
+                    auth += f":{self.password}"
+                auth += "@"
+
+            host = self.host or "localhost"
+            port = f":{self.port}" if self.port else ""
+            self.path = f"{auth}{host}{port}/{self.database}"
+
+        return self
+
+
 StoreConfig = Annotated[
-    Union[DuckdbStoreConfig, PostgresTableConfig, OpenSearchIndexConfig],
+    Union[DuckdbStoreConfig, PostgresTableConfig, OpenSearchIndexConfig, SQLStorageConfig],
     Field(discriminator="type")
 ]

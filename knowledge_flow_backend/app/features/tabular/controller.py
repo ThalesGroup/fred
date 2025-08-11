@@ -27,6 +27,8 @@ class TabularController:
         async def list_tables():
             logger.info("Listing all available table names")
             try:
+                if self.service.tabular_store is None:
+                    raise RuntimeError("tabular_store is not initialized")
                 return self.service.tabular_store.list_tables()
             except Exception as e:
                 logger.exception("Failed to list table names")
