@@ -268,51 +268,45 @@ configuration:
       prefix: ""
       secure: false
 
-  metadata_storage:
-    type: opensearch
-    host: https://opensearch:9200
-    secure: true
-    verify_certs: false
-    index: document-index
+  storage:
+    postgres:
+      host: postgre
+      port: 5432
+      database: fred
+      username: admin
 
-  tag_storage:
-    type: opensearch
-    host: https://opensearch:9200
-    secure: true
-    verify_certs: false
-    index: tag-index
+    opensearch:
+      host: https://opensearch:9200
+      secure: true
+      verify_certs: false
+      username: admin
 
-  prompt_storage:
-    type: opensearch
-    host: https://opensearch:9200
-    secure: true
-    verify_certs: false
-    index: prompt-index
+    tabular_store:
+      type: "duckdb"
+      duckdb_path: "~/.fred/knowledge-flow/tabular.duckdb"
 
-  vector_storage:
-    type: opensearch
-    host: https://opensearch:9200
-    secure: true
-    verify_certs: false
-    index: vector-index-ada002
-    #type: in_memory
+    catalog_store:
+      type: "opensearch"
+      index: catalog-index
 
+    prompt_store:
+      type: "opensearch"
+      index: prompt-index
 
-  tabular_storage:
-    type: "duckdb"
-    duckdb_path: "~/.fred/knowledge-flow/tabular.duckdb"
+    tag_store:
+      type: "opensearch"
+      index: tag-index
 
-  catalog_storage:
-    type: opensearch
-    host: https://opensearch:9200
-    secure: true
-    verify_certs: false
-    index: catalog-index
+    metadata_store:
+      type: "opensearch"
+      index: metadata-index
+
+    vector_store:
+      type: opensearch
+      index: vector-index-ada002
 
   embedding:
     type: "openai"
-
-
 
 
 dotenv:
