@@ -28,9 +28,9 @@ spec:
   template:
     metadata:
       annotations:
-    {{- if .Values.annotations }}
-{{ toYaml .Values.annotations.data | indent 8 }}
-    {{- end }}
+        {{- if .Values.podAnnotations }}
+          {{- toYaml .Values.podAnnotations | nindent 8 }}
+        {{- end }}
     ## BEGIN -- additional optional annotations to trigger a change on the deployment in case of a modification in a configmap
     {{- if .Values.ConfigMap }}
       {{- if .Values.ConfigMap.enabled }}

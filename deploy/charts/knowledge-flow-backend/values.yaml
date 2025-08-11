@@ -48,6 +48,8 @@ ports:
 rollingUpdate:
   maxSurge: 1
 
+podAnnotations: {}
+
 command:
   enabled: true
   # data:
