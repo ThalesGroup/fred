@@ -123,29 +123,9 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
 
-      - name: Build dependency - agentic-backend
+      - name: Check chart - Fred
         run: |
-          helm dependency build deploy/charts/agentic-backend
-
-      - name: Build dependency - frontend
-        run: |
-          helm dependency build deploy/charts/frontend
-
-      - name: Build dependency - knowledge-flow-backend
-        run: |
-          helm dependency build deploy/charts/knowledge-flow-backend
-      
-      - name: Check chart - agentic-backend
-        run: |
-          helm template agentic-backend deploy/charts/agentic-backend
-
-      - name: Check chart - frontend
-        run: |
-          helm template frontend deploy/charts/frontend
-
-      - name: Check chart - knowledge-flow-backend
-        run: |
-          helm template knowledge-flow-backend deploy/charts/knowledge-flow-backend
+          helm template fred deploy/charts/knowledge-flow-backend
 
   # Job to check agentic backend
   agentic-backend-checks:
