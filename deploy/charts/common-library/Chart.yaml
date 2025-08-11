@@ -1,5 +1,0 @@
-apiVersion: v2
-name: common-library
-description: A common library containing templates for Fred
-type: library
-version: 0.0.1
