@@ -15,8 +15,8 @@
 import React from "react";
 import { Typography, IconButton, List, ListItem, ListItemIcon, ListItemText } from "@mui/material";
 import DeleteIcon from "@mui/icons-material/Delete";
-import { getDocumentIcon } from "./DocumentIcon";
 import { useTranslation } from "react-i18next";
+import { getDocumentIcon } from "../common/DocumentIcon";
 
 interface TempFile {
   name: string;

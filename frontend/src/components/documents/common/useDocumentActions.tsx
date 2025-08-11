@@ -19,10 +19,10 @@ import {
   useLazyGetDocumentRawContentQuery,
   useProcessDocumentsMutation,
   useScheduleDocumentsMutation,
-} from "../../slices/documentApi";
-import { DocumentMetadata } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
-import { downloadFile } from "../../utils/downloadUtils";
-import { useToast } from "../ToastProvider";
+} from "../../../slices/documentApi";
+import { DocumentMetadata } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { downloadFile } from "../../../utils/downloadUtils";
+import { useToast } from "../../ToastProvider";
 import {
   //createBulkDeleteAction,
   createBulkDownloadAction,
@@ -33,8 +33,8 @@ import {
   createPreviewAction,
   createProcessAction,
   createScheduleAction,
-} from "./DocumentActions";
-import { useDocumentViewer } from "./useDocumentViewer";
+} from "../operations/DocumentOperationsActions";
+import { useDocumentViewer } from "../../../common/useDocumentViewer";
 
 export const useDocumentActions = (onRefreshData?: () => void) => {
   const { t } = useTranslation();

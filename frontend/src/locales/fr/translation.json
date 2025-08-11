@@ -4,7 +4,9 @@
     "invalid_url": "URL invalide",
     "invalid_transport": "Transport invalide",
     "timeout_min": "Doit être ≥ 0",
-    "invalid_type": "Type invalide"
+    "invalid_type": "Type invalide",
+    "updated": "Mis à jour",
+    "error": "Erreur"
   },
   "sidebar": {
     "cluster": "Cluster",
@@ -86,11 +88,15 @@
     }
   },
   "chatbot": {
-    "startNew": "Démarrer une nouvelle conversation avec {{name}}",
-    "changeAssistant": "Vous pouvez choisir un autre assistant dans le panneau des paramètres.",
+    "searchDocumentLibraries": "Rechercher dans les bibliothèques de documents...",
+    "searchPromptLibraries": "Rechercher dans les bibliothèques de prompts...",
+    "startNew": "Commencer une nouvelle conversation avec {{name}}",
+    "changeAssistant": "Vous pouvez sélectionner un autre assistant dans le panneau des paramètres.",
     "tooltip": {
-      "tokenUsage": "Cette conversation a utilisé {{input}} tokens de prompt et {{output}} tokens de réponse",
-      "tokenCount": "Cette conversation a utilisé {{total}} tokens"
+      "tokenUsage": "Cette conversation a utilisé {{input}} jetons de prompt et {{output}} jetons de réponse",
+      "tokenCount": "Cette conversation a utilisé {{total}} jetons",
+      "selectDocumentLibraries": "Sélectionnez les bibliothèques de documents à utiliser dans cette conversation",
+      "selectPromptLibraries": "Sélectionnez les bibliothèques de prompts à utiliser dans cette conversation"
     }
   },
   "settings": {
@@ -118,7 +124,7 @@
     "description": "Suivez l’utilisation, la performance et les coûts de tous les agents et services IA — y compris les tokens, la latence et les tendances d’activité."
   },
   "metrics": {
-    "error": "❌ Échec du chargement des métriques",
+    "error": "Échec du chargement des métriques",
     "from": "De",
     "to": "À",
     "tokenUsage": "Utilisation des tokens dans le temps",
@@ -140,16 +146,6 @@
     "taggedWith": "Tagué : {{tag}}",
     "expertIntegrations": "Intégrations expertes :"
   },
-  "workspaces": {
-    "title": "Espaces de travail",
-    "description": "Gérez vos espaces de travail",
-    "searchPlaceholder": "Rechercher des espaces...",
-    "noResults": "Aucun espace trouvé.",
-    "drawerTitle": "Description de l'espace de travail",
-    "noDescription": "Aucune description disponible.",
-    "createDialogTitle": "Espace de travail",
-    "editDialogTitle": "Espace de travail"
-  },
   "dialogs": {
     "create": {
       "title": "Nouveau {{type}}",
@@ -164,6 +160,7 @@
       "errorDetail": "Impossible de créer le contexte : {{message}}"
     },
     "cancel": "Annuler",
+    "retry": "Réessayer",
     "edit": {
       "title": "Modifier {{context}}",
       "name": "Nom",
@@ -221,6 +218,9 @@
   },
   "documentLibrary": {
     "title": "Bibliothèque de documents",
+    "folders": "Dossiers",
+    "failedToLoad": "Échec du chargement des bibliothèques",
+    "loadingLibraries": "Chargement des bibliothèques",
     "description": "Accédez aux documents de la base de connaissances",
     "upload": "Ajouter un document",
     "uploadAndProcess": "Ajouter et traiter le document",
@@ -245,12 +245,16 @@
     "removedDocuments": "{{count}} document(s) supprimé(s) de la bibliothèque",
     "removeError": "Échec de la suppression",
     "removeErrorGeneric": "Impossible de supprimer les documents de la bibliothèque",
+    "removeFromLibrary": "Supprimer de la bibliothèque",
     "emptyLibraryTitle": "Aucun document dans cette bibliothèque",
     "emptyLibraryDescription": "Cette bibliothèque est vide. Commencez par ajouter votre premier document pour le rendre consultable par vos assistants IA.",
-    "uploadFirstDocument": "Ajouter votre premier document"
+    "uploadFirstDocument": "Ajouter votre premier document",
+    "preview": "Preview"
   },
   "promptLibrary": {
     "title": "Bibliothèque de prompts",
+    "folders": "Dossiers",
+    "edit": "Editer le prompt",
     "description": "Accédez à la bibliothèque de prompts",
     "uploadInLibrary": "Ajouter un prompt à la bibliothèque",
     "prompts": "{{count}} prompt(s)",
@@ -258,7 +262,9 @@
     "addPrompt": "Ajouter un prompt",
     "emptyLibraryTitle": "Aucun prompt dans cette bibliothèque",
     "emptyLibraryDescription": "Cette bibliothèque est vide. Ajoutez votre premier prompt pour le rendre disponible à vos assistants IA.",
-    "uploadFirstDocument": "Ajouter votre premier prompt"
+    "uploadFirstDocument": "Ajouter votre premier prompt",
+    "removeFromLibrary": "Supprimer de la bibliothèque",
+    "preview": "Preview"
   },
   "documentTable": {
     "selectedCount": "{{count}} sélectionné(s)",
@@ -276,7 +282,8 @@
     "noMetadata": "Aucune métadonnée disponible.",
     "yes": "Oui",
     "no": "Non",
-    "librairies": "Bibliothèques"
+    "librairies": "Bibliothèques",
+    "nowSearchable": "Maintenant cherchable"
   },
   "promptTable": {
     "name": "nom",
@@ -304,7 +311,9 @@
     "noLibrariesFoundDescription": "Commencez par créer votre première bibliothèque pour organiser et gérer vos documents.",
     "documentCountSingular": "{{count}} document",
     "documentCountPlural": "{{count}} documents",
-    "createLibrary": "Créer une bibliothèque de documents"
+    "createLibrary": "Créer une bibliothèque de documents",
+    "collapseAll": "Tout réduire",
+    "expandAll": "Tout développer"
   },
   "promptLibrariesList": {
     "libraryName": "Nom de la bibliothèque",
@@ -324,6 +333,7 @@
     "libraryDescription": "Description",
     "cancel": "Annuler",
     "save": "Créer",
+    "createUnder": "Créer une  nouvelle bibliothèque sous",
     "saving": "Création en cours...",
     "validationError": "Erreur de validation",
     "nameRequired": "Le nom de la bibliothèque est obligatoire",

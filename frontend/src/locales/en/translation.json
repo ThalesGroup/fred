@@ -4,7 +4,9 @@
     "invalid_url": "Invalid URL",
     "invalid_transport": "Invalid Transport",
     "timeout_min": "Must be ≥ 0",
-    "invalid_type": "Invalid Type"
+    "invalid_type": "Invalid Type",
+    "updated": "Updated",
+    "error": "Error"
   },
   "sidebar": {
     "cluster": "Cluster",
@@ -122,7 +124,7 @@
     "description": "Track usage, performance, and costs across all AI agents and services — including tokens, latency, and activity trends."
   },
   "metrics": {
-    "error": "❌ Failed to load metrics",
+    "error": "Failed to load metrics",
     "from": "From",
     "to": "To",
     "tokenUsage": "Token usage over time",
@@ -144,16 +146,6 @@
     "taggedWith": "Tagged with {{tag}}",
     "expertIntegrations": "Expert integrations"
   },
-  "workspaces": {
-    "title": "Workspaces",
-    "description": "Manage workspaces",
-    "searchPlaceholder": "Search workspaces...",
-    "noResults": "No workspaces found.",
-    "drawerTitle": "Workspace description",
-    "noDescription": "No description provided.",
-    "createDialogTitle": "Workspace",
-    "editDialogTitle": "Workspace"
-  },
   "dialogs": {
     "create": {
       "title": "New {{type}}",
@@ -168,6 +160,7 @@
       "errorDetail": "Could not create context: {{message}}"
     },
     "cancel": "Cancel",
+    "retry": "Retry",
     "edit": {
       "title": "Edit {{type}}",
       "name": "Name",
@@ -225,6 +218,9 @@
   },
   "documentLibrary": {
     "title": "Document Library",
+    "folders": "Folders",
+    "failedToLoad": "Failed to load libraries",
+    "loadingLibraries": "Loading libraries",
     "description": "Access the knowledge base documents",
     "upload": "Upload a document",
     "uploadAndProcess": "Upload and Process document",
@@ -249,12 +245,16 @@
     "removedDocuments": "{{count}} document(s) removed from library",
     "removeError": "Remove Failed",
     "removeErrorGeneric": "Failed to remove documents from library",
+    "removeFromLibrary": "Remove from library",
     "emptyLibraryTitle": "No documents in this library",
     "emptyLibraryDescription": "This library is empty. Add your first documents to make them available to your AI assistants.",
-    "uploadFirstDocument": "Add your first document"
+    "uploadFirstDocument": "Add your first document",
+    "preview": "Preview"
   },
   "promptLibrary": {
     "title": "Prompt Library",
+    "folders": "Folders",
+    "edit": "Edit prompt",
     "description": "Access the prompt library",
     "uploadInLibrary": "Add prompt to library",
     "prompts": "{{count}} prompt(s)",
@@ -262,7 +262,9 @@
     "addPrompt": "Add prompt",
     "emptyLibraryTitle": "No prompt in this library",
     "emptyLibraryDescription": "This library is empty. Add your first prompt to make it available to your AI assistants.",
-    "uploadFirstDocument": "Add your first prompt"
+    "uploadFirstDocument": "Add your first prompt",
+    "removeFromLibrary": "Remove from library",
+    "preview": "Preview"
   },
   "documentTable": {
     "selectedCount": "{{count}} selected",
@@ -280,7 +282,8 @@
     "noMetadata": "No metadata available.",
     "yes": "Yes",
     "no": "No",
-    "librairies": "Librairies"
+    "librairies": "Librairies",
+    "nowSearchable": "Now searchable"
   },
   "promptTable": {
     "name": "name",
@@ -308,7 +311,9 @@
     "noLibrariesFoundDescription": "Get started by creating your first document library to organize and manage your documents.",
     "documentCountSingular": "{{count}} document",
     "documentCountPlural": "{{count}} documents",
-    "createLibrary": "Create Document Library"
+    "createLibrary": "Create Document Library",
+    "collapseAll": "Collapse all",
+    "expandAll": "Expand all"
   },
   "promptLibrariesList": {
     "libraryName": "Library Name",
@@ -328,6 +333,7 @@
     "libraryDescription": "Description",
     "cancel": "Cancel",
     "save": "Create",
+    "createUnder": "Create new library under",
     "saving": "Creating...",
     "validationError": "Validation Error",
     "nameRequired": "Library name is required",

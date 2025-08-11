@@ -14,7 +14,7 @@
 
 import { createApi } from "@reduxjs/toolkit/query/react";
 import { createDynamicBaseQuery } from "../common/dynamicBaseQuery.tsx";
-import { Metadata } from "../components/documents/DocumentTable.tsx";
+import { Metadata } from "../components/documents/operations/DocumentOperationsTable.tsx";
 
 export const DOCUMENT_PROCESSING_STAGES = ["raw", "preview", "vector", "sql", "mcp"] as const;
 export interface KnowledgeDocument {

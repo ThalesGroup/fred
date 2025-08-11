@@ -28,19 +28,17 @@ import { AgentHub } from "../pages/AgentHub";
 import { Optimize } from "../frugalit/pages/Optimize";
 import { Geomap } from "../warfare/pages/TheaterOfOperations";
 import { ProtectedRoute } from "../components/ProtectedRoute";
-import { FootprintContextProvider } from "./FootprintContextProvider";
-import { ExplainContextProvider } from "./ExplainContextProvider";
-import { FeatureFlagKey, isFeatureEnabled } from "../common/config";
-import { LayoutWithSidebar } from "./LayoutWithSidebar";
+import { FootprintContextProvider } from "../app/FootprintContextProvider";
+import { ExplainContextProvider } from "../app/ExplainContextProvider";
+import { FeatureFlagKey, isFeatureEnabled } from "./config";
+import { LayoutWithSidebar } from "../app/LayoutWithSidebar";
 import { Explain } from "../frugalit/pages/Explain";
 import { Facts } from "../frugalit/pages/Facts";
 import { Audit } from "../pages/Audit";
 import { FrugalIt } from "../pages/FrugalIt";
 import Inspect from "../frugalit/pages/Inspect";
 import { Monitoring } from "../pages/Monitoring";
-import { K8ApplicationContextProvider } from "./K8ApplicationContextProvider";
-import { DocumentLibraryViewPage } from "../pages/DocumentLibraryViewPage";
-import { PromptLibraryViewPage } from "../pages/PromptLibraryViewPage";
+import { K8ApplicationContextProvider } from "../app/K8ApplicationContextProvider";
 
 const RootLayout = ({ children }: React.PropsWithChildren<{}>) => (
   <ProtectedRoute permission="viewer">
@@ -201,22 +199,22 @@ export const routes: RouteObject[] = [
       </RootLayout>
     ),
   },
-  {
-    path: "/documentLibrary/:libraryId",
-    element: (
-      <RootLayout>
-        <DocumentLibraryViewPage />
-      </RootLayout>
-    ),
-  },
-  {
-    path: "/promptLibrary/:libraryId",
-    element: (
-      <RootLayout>
-        <PromptLibraryViewPage />
-      </RootLayout>
-    ),
-  },
+  // {
+  //   path: "/documentLibrary/:libraryId",
+  //   element: (
+  //     <RootLayout>
+  //       <DocumentLibraryViewPage />
+  //     </RootLayout>
+  //   ),
+  // },
+  // {
+  //   path: "/promptLibrary/:libraryId",
+  //   element: (
+  //     <RootLayout>
+  //       <PromptLibraryViewPage />
+  //     </RootLayout>
+  //   ),
+  // },
 
   {
     path: "*",

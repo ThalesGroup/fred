@@ -13,6 +13,7 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Prompt } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { useCompletePromptAgenticV1PromptsCompletePostMutation } from "../../slices/agentic/agenticOpenApi";
 
 const promptSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -21,21 +22,22 @@ const promptSchema = z.object({
 
 type PromptFormData = z.infer<typeof promptSchema>;
 
-interface EditPromptModalProps {
+interface PromptEditorModalProps {
   prompt: Prompt | null;
   isOpen: boolean;
   onClose: () => void;
   onSave: (updated: Prompt) => void;
-  getSuggestion?: () => Promise<string>; // optional AI helper
+  /** Optional override: if provided, we'll use this instead of the API */
+  getSuggestion?: () => Promise<string>;
 }
 
-export const EditPromptModal = ({
+export const PromptEditorModal = ({
   prompt,
   isOpen,
   onClose,
   onSave,
   getSuggestion,
-}: EditPromptModalProps) => {
+}: PromptEditorModalProps) => {
   const [loadingSuggestion, setLoadingSuggestion] = useState(false);
 
   const {
@@ -43,6 +45,7 @@ export const EditPromptModal = ({
     handleSubmit,
     setValue,
     reset,
+    getValues,
     formState: { errors, isSubmitting },
   } = useForm<PromptFormData>({
     resolver: zodResolver(promptSchema),
@@ -52,6 +55,10 @@ export const EditPromptModal = ({
     },
   });
 
+  // RTK Query mutation for /agentic/v1/prompts/complete
+  const [completePrompt, { isLoading: isCompleting }] =
+    useCompletePromptAgenticV1PromptsCompletePostMutation();
+
   useEffect(() => {
     if (prompt) {
       reset({
@@ -59,23 +66,44 @@ export const EditPromptModal = ({
         content: prompt.content,
       });
     } else {
-      reset({
-        name: "",
-        content: "",
-      });
+      reset({ name: "", content: "" });
     }
   }, [prompt, reset]);
 
   const handleAIHelp = async () => {
-    if (!getSuggestion) return;
-    setLoadingSuggestion(true);
+    // If a custom suggester is provided, prefer it
+    if (getSuggestion) {
+      setLoadingSuggestion(true);
+      try {
+        const suggestion = await getSuggestion();
+        if (suggestion) setValue("content", suggestion);
+      } catch (err) {
+        console.error("AI suggestion failed", err);
+      } finally {
+        setLoadingSuggestion(false);
+      }
+      return;
+    }
+
+    // Otherwise call our backend
+    const content = (getValues("content") || "").trim();
+    const name = (getValues("name") || "").trim();
+    const basePrompt = content || name;
+    if (!basePrompt) return;
+
     try {
-      const suggestion = await getSuggestion();
-      setValue("content", suggestion);
+      const res = await completePrompt({
+        promptCompleteRequest: {
+          prompt: basePrompt,
+          // temperature: 0.3,
+          // max_tokens: 512,
+          // model: undefined,
+        },
+      }).unwrap();
+
+      if (res?.completion) setValue("content", res.completion);
     } catch (err) {
-      console.error("AI suggestion failed", err);
-    } finally {
-      setLoadingSuggestion(false);
+      console.error("AI completion failed", err);
     }
   };
 
@@ -110,7 +138,7 @@ export const EditPromptModal = ({
               label="Prompt Content"
               fullWidth
               multiline
-              minRows={6}
+              minRows={14}  // roomier editor here too
               {...register("content")}
               error={!!errors.content}
               helperText={errors.content?.message}
@@ -119,16 +147,14 @@ export const EditPromptModal = ({
         </DialogContent>
         <DialogActions>
           <Button onClick={onClose} variant="outlined">Cancel</Button>
-          {getSuggestion && (
-            <Button
-              onClick={handleAIHelp}
-              variant="text"
-              disabled={loadingSuggestion}
-              startIcon={loadingSuggestion ? <CircularProgress size={16} /> : undefined}
-            >
-              Get Help from AI
-            </Button>
-          )}
+          <Button
+            onClick={handleAIHelp}
+            variant="text"
+            disabled={loadingSuggestion || isCompleting}
+            startIcon={(loadingSuggestion || isCompleting) ? <CircularProgress size={16} /> : undefined}
+          >
+            Get Help from AI
+          </Button>
           <Button type="submit" variant="contained" disabled={isSubmitting}>
             Save
           </Button>
