@@ -67,22 +67,21 @@ TAGS_INDEX_MAPPING = {
                 "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
             },
             "path": {"type": "keyword", "normalizer": "lc_norm", "null_value": ""},
-
             # Canonical hierarchy: "path/name" or "name" if path is empty.
             "full_path": {
                 "type": "keyword",
                 "normalizer": "lc_norm",
-                "fields": {
-                    "tree": {"type": "text", "analyzer": "path_hierarchy_analyzer"}
-                },
+                "fields": {"tree": {"type": "text", "analyzer": "path_hierarchy_analyzer"}},
             },
             "type": {"type": "keyword"},  # TagType enum (e.g., "library")
         }
-    }
+    },
 }
+
 
 def _compose_full_path(path: Optional[str], name: str) -> str:
     return f"{path}/{name}" if path else name
+
 
 class OpenSearchTagStore(BaseTagStore):
     """
@@ -210,9 +209,7 @@ class OpenSearchTagStore(BaseTagStore):
             logger.error(f"[TAGS] Failed to delete tag '{tag_id}': {e}")
             raise
 
-    def get_by_owner_type_full_path(
-        self, owner_id: str, tag_type: TagType, full_path: str
-    ) -> Tag | None:
+    def get_by_owner_type_full_path(self, owner_id: str, tag_type: TagType, full_path: str) -> Tag | None:
         body = {
             "query": {
                 "bool": {
@@ -230,7 +227,5 @@ class OpenSearchTagStore(BaseTagStore):
             hits = resp.get("hits", {}).get("hits", [])
             return Tag(**hits[0]["_source"]) if hits else None
         except Exception as e:
-            logger.error(
-                f"[TAGS] get_by_owner_type_full_path failed ({owner_id}, {tag_type}, {full_path}): {e}"
-            )
+            logger.error(f"[TAGS] get_by_owner_type_full_path failed ({owner_id}, {tag_type}, {full_path}): {e}")
             raise

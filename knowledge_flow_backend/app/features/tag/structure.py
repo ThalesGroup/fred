@@ -19,9 +19,11 @@ from pydantic import BaseModel, field_validator
 from fred_core import BaseModelWithId
 from app.common.document_structures import DocumentMetadata
 
+
 class TagType(str, Enum):
     DOCUMENT = "document"
     PROMPT = "prompt"
+
 
 def _normalize_path(p: Optional[str]) -> Optional[str]:
     if p is None:
@@ -30,11 +32,13 @@ def _normalize_path(p: Optional[str]) -> Optional[str]:
     parts = [seg.strip() for seg in p.split("/") if seg.strip()]
     return "/".join(parts) or None
 
+
 class TagCreate(BaseModel):
     """
     name: leaf segment (e.g. 'HR')
     path: optional parent path (e.g. 'Sales'); full path becomes 'Sales/HR'
     """
+
     name: str
     path: Optional[str] = None
     description: Optional[str] = None
@@ -60,6 +64,7 @@ class TagCreate(BaseModel):
                 raise ValueError("Path contains forbidden character '\\'")
         return v
 
+
 class TagUpdate(BaseModel):
     name: str
     path: Optional[str] = None
@@ -77,13 +82,14 @@ class TagUpdate(BaseModel):
     def _validate_and_normalize_path(cls, v: Optional[str]) -> Optional[str]:
         return TagCreate._validate_and_normalize_path(v)  # reuse logic
 
+
 class Tag(BaseModelWithId):
     created_at: datetime
     updated_at: datetime
     owner_id: str
 
-    name: str                      # leaf segment, e.g. 'HR'
-    path: Optional[str] = None     # parent path, e.g. 'Sales'
+    name: str  # leaf segment, e.g. 'HR'
+    path: Optional[str] = None  # parent path, e.g. 'Sales'
     description: Optional[str] = None
     type: TagType
 
@@ -92,12 +98,14 @@ class Tag(BaseModelWithId):
         """Canonical hierarchical identifier (used for uniqueness & permissions)."""
         return f"{self.path}/{self.name}" if self.path else self.name
 
+
 class TagWithItemsId(Tag):
     item_ids: list[str]
 
     @classmethod
     def from_tag(cls, tag: Tag, item_ids: list[str]) -> "TagWithItemsId":
         return cls(**tag.model_dump(), item_ids=item_ids)
+
 
 class TagWithDocuments(Tag):
     documents: list[DocumentMetadata]

@@ -56,10 +56,7 @@ class TagController:
             response_model=list[TagWithItemsId],
             response_model_exclude_none=True,
             tags=["Tags"],
-            summary=(
-                "List tags (optionally filter by type or path prefix). "
-                "Supports pagination to avoid huge payloads."
-            ),
+            summary=("List tags (optionally filter by type or path prefix). Supports pagination to avoid huge payloads."),
         )
         async def list_all_tags(
             type: Annotated[Optional[TagType], Query(description="Filter by tag type")] = None,

@@ -47,47 +47,33 @@ class PromptController:
         self._register_routes(router, handle_exception)
 
     def _register_routes(self, router: APIRouter, handle_exception):
-
         # Advanced search with JSON body (for complex filters later)
-        @router.post(
-            "/prompts/search",
-            tags=["Prompts"],
-            response_model=List[Prompt],
-            summary="Search prompts (advanced)",
-            description="Advanced search endpoint that accepts a JSON filter object."
-        )
+        @router.post("/prompts/search", tags=["Prompts"], response_model=List[Prompt], summary="Search prompts (advanced)", description="Advanced search endpoint that accepts a JSON filter object.")
         def search_prompts(
             filters: Dict[str, Any] = Body(default={}),
             user: KeycloakUser = Depends(get_current_user),
         ) -> List[Prompt]:
             try:
-                return  self.service.get_all_prompts(user=user)
+                return self.service.get_all_prompts(user=user)
             except Exception as e:
                 log_exception(e)
                 raise handle_exception(e)
-            
+
         @router.get("/prompts/{prompt_id}", response_model=Prompt, tags=["Prompts"], summary="Get a prompt by ID")
-        async def get_prompt(prompt_id: str, 
-                             user: KeycloakUser = Depends(get_current_user)) -> Prompt:
+        async def get_prompt(prompt_id: str, user: KeycloakUser = Depends(get_current_user)) -> Prompt:
             try:
                 return self.service.get_prompt_for_user(prompt_id, user)
             except Exception as e:
                 raise handle_exception(e)
- 
-        @router.post("/prompts", 
-                     response_model=TagWithItemsId, 
-                     tags=["Prompts"], 
-                     summary="Create a new prompt")
+
+        @router.post("/prompts", response_model=TagWithItemsId, tags=["Prompts"], summary="Create a new prompt")
         async def create_prompt(prompt_data: Prompt, user: KeycloakUser = Depends(get_current_user)) -> TagWithItemsId:
             try:
                 return self.service.create_prompt_for_user(prompt_data, user)
             except Exception as e:
                 raise handle_exception(e)
 
-        @router.put("/prompts/{prompt_id}", 
-                    response_model=Prompt, 
-                    tags=["Prompts"], 
-                    summary="Update an existing prompt")
+        @router.put("/prompts/{prompt_id}", response_model=Prompt, tags=["Prompts"], summary="Update an existing prompt")
         async def update_prompt(prompt_id: str, prompt_data: Prompt, user: KeycloakUser = Depends(get_current_user)) -> Prompt:
             try:
                 return self.service.update_prompt_for_user(prompt_id, prompt_data, user)

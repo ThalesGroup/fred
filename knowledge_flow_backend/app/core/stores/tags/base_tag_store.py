@@ -56,11 +56,9 @@ class BaseTagStore(ABC):
         pass
 
     @abstractmethod
-    def get_by_owner_type_full_path(
-        self, owner_id: str, tag_type: TagType, full_path: str
-    ) -> Tag | None:
+    def get_by_owner_type_full_path(self, owner_id: str, tag_type: TagType, full_path: str) -> Tag | None:
         pass
-        
+
     @abstractmethod
     def create_tag(self, tag: Tag) -> Tag:
         pass

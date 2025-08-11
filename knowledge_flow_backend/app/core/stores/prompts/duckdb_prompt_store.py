@@ -86,7 +86,7 @@ class DuckdbPromptStore(BasePromptStore):
         with self.store._connect() as conn:
             rows = conn.execute(f"SELECT * FROM {self._table()}").fetchall()
         return [self._deserialize(row) for row in rows]
-    
+
     def get_prompt_by_id(self, prompt_id: str) -> Prompt:
         with self.store._connect() as conn:
             row = conn.execute(f"SELECT * FROM {self._table()} WHERE id = ?", [prompt_id]).fetchone()

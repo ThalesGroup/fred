@@ -49,7 +49,7 @@ class BasePromptStore(ABC):
     @abstractmethod
     def get_all_prompts(self) -> list[Prompt]:
         pass
-    
+
     @abstractmethod
     def get_prompt_by_id(self, prompt_id: str) -> Prompt:
         pass

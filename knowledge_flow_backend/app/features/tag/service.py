@@ -247,14 +247,11 @@ class TagService:
         full_path: str,
         user: KeycloakUser,
         exclude_tag_id: Optional[str] = None,
-       
     ) -> None:
         """
         Check uniqueness of (owner_id, type, full_path). Prefer delegating to the store if it exposes a method.
         """
         existing = self._tag_store.get_by_owner_type_full_path(owner_id, tag_type, full_path)
         if existing and existing.id != (exclude_tag_id or ""):
-            raise TagAlreadyExistsError(
-                f"Tag '{full_path}' already exists for owner {owner_id} and type {tag_type}."
-            )
+            raise TagAlreadyExistsError(f"Tag '{full_path}' already exists for owner {owner_id} and type {tag_type}.")
         return
