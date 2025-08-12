@@ -49,7 +49,11 @@ applications:
                 port: 80    
     volumeMounts:
       - name: agentic-backend-vol
-        mountPath: /app/config
+        mountPath: /app/config/configuration.yaml
+        subPath: configuration.yaml
+      - name: agentic-backend-env-vol
+        mountPath: /app/config/.env
+        subPath: .env
       - name: agentic-backend-kube-vol
         mountPath: /home/fred-user/.kube/config
         subPath: kubeconfig
@@ -57,6 +61,9 @@ applications:
       - name: agentic-backend-vol
         configMap:
           name: agentic-backend-back
+      - name: agentic-backend-env-vol
+        secret: 
+          name: agentic-backend-env
       - name: agentic-backend-kube-vol
         configMap:
           name: agentic-backend-kube
@@ -423,26 +430,20 @@ applications:
                 name: knowledge-flow-backend-backend-svc
                 port: 8000    
     volumeMounts:
-      - name: aws-vol
-        mountPath: /home/knowledge-flow-user/.aws
       - name: knowledge-flow-backend-vol
-        mountPath: /app/config
-      - name: knowledge-flow-backend-kube-vol
-        mountPath: /home/knowledge-flow-user/.kube/config
-        subPath: kubeconfig
+        mountPath: /app/config/configuration.yaml
+        subPath: configuration.yaml
+      - name: knowledge-flow-backend-env-vol
+        mountPath: /app/config/.env
+        subPath: .env
     volumes:
-      - name: aws-vol
-        emptyDir:
-          sizeLimit: 500Mi
       - name: knowledge-flow-backend-vol
         configMap:
           name: knowledge-flow-backend-configmap
-      - name: knowledge-flow-backend-kube-vol
-        configMap:
-          name: knowledge-flow-backend-kube
-          items:
-            - key: kubeconfig
-              path: kubeconfig
+      - name: knowledge-flow-backend-env-vol
+        secret: 
+          name: knowledge-flow-backend-env
+      
     probes:
       lifecycle:
         enabled: false
