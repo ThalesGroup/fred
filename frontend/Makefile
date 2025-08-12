@@ -1,19 +1,8 @@
+include ../scripts/makefiles/config/INFO-frontend.mk
+
 .DEFAULT_GOAL := help
 
-VERSION ?= 0.1-dev
-PROJECT_REGISTRY=registry.thalesdigital.io/tsn/projects/fred
-PROJECT_NAME=fred-frontend
 NODE_VERSION=22.13.0
-
-# Docker
-IMG=$(PROJECT_REGISTRY)/$(PROJECT_NAME):$(VERSION)
-
-# Helm
-HELM_ARCHIVE=./$(PROJECT_NAME)-$(VERSION).tgz
-
-# Project id in GitLab
-PROJECT_ID="74328"
-
 
 ##@ Build
 
@@ -44,9 +33,18 @@ build: check-node node_modules ## Build the ui using npm run build
 helm-package: ## Package the Helm chart into a chart archive
 	helm package helm-chart/
 
+##@ Docker
+
 .PHONY: docker-build
 docker-build: ## Build the Docker image
-	docker build --no-cache -t $(IMG) -f dockerfiles/Dockerfile .
+	docker build \
+		-f $(DOCKERFILE_PATH) \
+		-t $(IMAGE_FULL) \
+		$(DOCKER_CONTEXT)
+
+.PHONY: docker-push
+docker-push: ## Push the Docker image
+	docker push $(IMAGE_FULL)
 
 ##@ Run
 
@@ -56,14 +54,6 @@ run: check-node node_modules ## Run fred-ui front-end locally
 
 run-only:
 	npm run dev
-
-.PHONY: docker-run
-docker-run: ## Docker run
-	docker run -it --rm \
-      -v ~/.kube/config:/kube/config \
-      --network=host \
-      --name fred-ui \
-      $(IMG)
 
 ##@ Dev
 
@@ -103,11 +93,6 @@ clean-docker: ## Clean up Docker-related artifacts
 full-clean: clean clean-docker ## Perform a full cleanup
 
 ##@ Image and Helm chart publishing
-
-.PHONY: docker-push
-docker-push: ## Push the docker image
-	docker push $(IMG)
-
 
 .PHONY: helm-push
 helm-push: ## Push the Helm chart to the project registry
