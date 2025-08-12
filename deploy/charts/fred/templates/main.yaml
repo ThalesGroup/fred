@@ -8,4 +8,5 @@
   {{- include "common-library.configmap-kube" $ctx }}
   {{- include "common-library.configmap-backend" $ctx }}
   {{- include "common-library.deployment" $ctx }}
+  {{- include "common-library.secrets-env" $ctx }}
 {{- end }}
