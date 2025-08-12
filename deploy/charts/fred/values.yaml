@@ -460,7 +460,7 @@ applications:
         enabled: true
         permissions: {}
     kubeconfig:
-      enabled: true
+      enabled: false
     configuration_type:
       backend: true
       frontend: false
