@@ -242,12 +242,11 @@ applications:
       AZURE_CLIENT_ID: ""  
       AZURE_CLIENT_SECRET: ""
       AZURE_CLIENT_SCOPE: ""
-      AZURE_API_VERSION: "2024-06-01"
-      AZURE_APIM_KEY: "your-subscription-key"
-      AZURE_OPENAI_API_KEY: "your-real-azure-openai-api-key"
-      OPENAI_API_KEY: "sk-..."
-      OPENSEARCH_USER: "admin"
-      OPENSEARCH_PASSWORD: "admin123"
+      AZURE_API_VERSION: ""
+      AZURE_APIM_KEY: ""
+      AZURE_OPENAI_API_KEY: ""
+      OPENAI_API_KEY: ""
+      OPENSEARCH_PASSWORD: ""
   fred-frontend:
     applicationName: fred-frontend
     deployment:
@@ -579,120 +578,34 @@ applications:
           type: in_memory
 
     dotenv:
-      # This file contains the environment variables for the application
-
-      # -----------------------------------------------------------------------------
-      # 🔵 AZURE AUTHENTICATION (for getting OAuth token)
-      # -----------------------------------------------------------------------------
-
       AZURE_TENANT_ID: ""
-      # Azure Active Directory Tenant ID for your application (OAuth 2.0 flow)
-
       AZURE_CLIENT_ID: ""
-      # Client ID of your registered Azure AD Application (Service Principal)
-
       AZURE_CLIENT_SECRET: ""
-      # Client Secret of your Azure AD Application
-
       AZURE_CLIENT_SCOPE: ""
-      # OAuth2 scope for requesting tokens (typically "https://cognitiveservices.azure.com/.default")
-
-
-      # -----------------------------------------------------------------------------
-      # 🔵 AZURE API SETTINGS
-      # -----------------------------------------------------------------------------
-
-      AZURE_API_VERSION: "2024-06-01"
-      # API version used for Azure OpenAI API requests (depends on your Azure resource)
-
-
-      # -----------------------------------------------------------------------------
-      # 🔵 API GATEWAY (APIM) SETTINGS
-      # -----------------------------------------------------------------------------
-
-      AZURE_APIM_BASE_URL: "https://trustnest.azure-api.net"
-      # Base URL of your Azure API Management Gateway (APIM)
-      # Example: https://company-apim-gateway.azure-api.net
-
-      AZURE_RESOURCE_PATH_EMBEDDINGS: "/genai-aoai-inference/v1"
-      # Path after base URL for Embeddings API (before /deployments/...)
-
-      AZURE_RESOURCE_PATH_LLM: "/genai-aoai-inference/v2"
-      # Path after base URL for LLM Chat API (before /deployments/...)
-
+      AZURE_API_VERSION: ""
+      AZURE_APIM_BASE_URL: ""
+      AZURE_RESOURCE_PATH_EMBEDDINGS: ""
+      AZURE_RESOURCE_PATH_LLM: ""
       AZURE_APIM_KEY: ""
-      # Subscription Key required by the APIM Gateway ("TrustNest-Apim-Subscription-Key" header)
-
-      # -----------------------------------------------------------------------------
-      # 🔵 AZURE OPENAI DIRECT SETTINGS (if AZURE_USE_APIM=false)
-      # -----------------------------------------------------------------------------
-
-      AZURE_OPENAI_BASE_URL: "https://your-azure-openai-resource.openai.azure.com"
-      # Base URL for direct Azure OpenAI access (no APIM)
-
+      AZURE_OPENAI_BASE_URL: ""
       AZURE_OPENAI_API_KEY: ""
-      # Azure OpenAI API Key (directly from Azure portal, not APIM key)
-
-      # -----------------------------------------------------------------------------
-      # 🔵 AZURE OPENAI DEPLOYMENT NAMES
-      # -----------------------------------------------------------------------------
-
-      AZURE_DEPLOYMENT_LLM: "gpt-4o"
-      # Deployment name in Azure OpenAI for Chat LLMs (ex: GPT-4 Turbo, GPT-4o)
-
-      AZURE_DEPLOYMENT_EMBEDDING: "fred-text-embedding-3-large"
-      # Deployment name in Azure OpenAI for Embedding Models
-
-
-      # -----------------------------------------------------------------------------
-      # 🔵 OPENAI EMBEDDING (Public API - NOT Azure)
-      # -----------------------------------------------------------------------------
-
+      AZURE_DEPLOYMENT_LLM: ""
+      AZURE_DEPLOYMENT_EMBEDDING: ""
       OPENAI_API_KEY: ""
-      # Your OpenAI API key from https://platform.openai.com/account/api-keys
-
-      # OPENAI_API_BASE: "https://api.openai.com/v1"
-      # Optional. Defaults to https://api.openai.com/v1 for OpenAI public API
-
       OPENAI_API_VERSION: ""
-      # Leave blank for OpenAI public API (only needed for Azure)
-      # Example (Azure only): "2024-06-01"
-
-      # Example model for embeddings (default for OpenAI)
-      # OPENAI_MODEL_NAME: "text-embedding-ada-002"
-
-      # -----------------------------------------------------------------------------
-      # 🔵 OLLAMA SETTINGS
-      # -----------------------------------------------------------------------------
-
-      OLLAMA_API_URL: "http://localhost:11434"
-      # Ollama API URL (optional)
-
-      OLLAMA_EMBEDDING_MODEL_NAME: "snowflake-arctic-embed2:latest"
-      # Model name for embeddings
-
-      OLLAMA_VISION_MODEL_NAME: "llama3-vision:latest"
-      # Model name for vision tasks (optional)
-
-
-      # KEYCLOAK
-      KEYCLOAK_SERVER_URL: "http://keycloak:8080"
-      KEYCLOAK_REALM_NAME: "fred"
-      KEYCLOAK_CLIENT_ID: "fred"
-
-      # OPENSEARCH
-      OPENSEARCH_USER: "admin"
-      OPENSEARCH_PASSWORD: "admin123"
-
-      #MINIO
-      MINIO_ACCESS_KEY: "admin"
-      MINIO_SECRET_KEY: "Azerty123_"
-
-      #GCS
-      GCS_CREDENTIALS_PATH: "/path/to/sa-key.json"
-      GCS_BUCKET_NAME: "my-bucket"
-      GCS_PROJECT_ID: "my-gcp-project"
-      # LOCAL STORAGE
-      LOCAL_CONTENT_STORAGE_PATH: "~/.fred/knowledge-flow/content-store"
-      LOCAL_METADATA_STORAGE_PATH: "~/.fred/knowledge-flow/metadata-store.json"
-
+      OLLAMA_API_URL: ""
+      OLLAMA_EMBEDDING_MODEL_NAME: ""
+      OLLAMA_VISION_MODEL_NAME: ""
+      KEYCLOAK_SERVER_URL: ""
+      KEYCLOAK_REALM_NAME: ""
+      KEYCLOAK_CLIENT_ID: ""
+      OPENSEARCH_PASSWORD: ""
+      MINIO_ACCESS_KEY: ""
+      MINIO_SECRET_KEY: ""
+      GCS_CREDENTIALS_PATH: ""
+      GCS_BUCKET_NAME: ""
+      GCS_PROJECT_ID: ""
+      LOCAL_CONTENT_STORAGE_PATH: ""
+      LOCAL_METADATA_STORAGE_PATH: ""
+      SQL_USERNAME: ""
+      SQL_PASSWORD: ""

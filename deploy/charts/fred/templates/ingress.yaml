@@ -22,9 +22,9 @@ spec:
             pathType: {{ .pathType | default "Prefix" }}
             backend:
               service:
-                name: {{ $.app.applicationName }}
+                name: {{ .service.name }}
                 port:
-                  name: {{ .servicePortName }}
+                  number: {{ .service.port }}
         {{- end }}
   {{- end }}
   {{- if .app.ingress.tls }}
