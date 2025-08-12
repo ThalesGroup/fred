@@ -100,30 +100,25 @@ applications:
       app:
         name: "Agentic Backend"
         base_url: "/agentic/v1"
-        address: "0.0.0.0"
+        address: "127.0.0.1"
         port: 8000
         log_level: "info"
         reload: false
         reload_dir: "."
         security:
-          enabled: true
+          enabled: false
           client_id: "app"
-          keycloak_url: "http://keycloak/realms/fred"
+          keycloak_url: "http://app-keycloak:8080/realms/app"
           authorized_origins:
-          - "http://localhost:5173"
-          - "http://fred.dev.fred.thalesgroup.com"
-          - "https://fred.dev.fred.thalesgroup.com"
+          -  "http://localhost:5173"
 
       frontend_settings:
         security:
-          enabled: true
+          enabled: false
           client_id: "app"
-          keycloak_url: "https://idp.dev.fred.thalesgroup.com/realms/fred"
+          keycloak_url: "http://app-keycloak:8080/realms/app"
           authorized_origins:
-          - "http://localhost:5173"
-          - "http://fred.dev.fred.thalesgroup.com"
-          - "https://fred.dev.fred.thalesgroup.com"
-
+          -  "http://localhost:5173"
         feature_flags:
           # If true activate the backend and frontend modules in charge of K8
           # and frugality monitoring
@@ -132,29 +127,6 @@ applications:
           enableElecWarfare: false
         properties:
           logoName: "fred"
-
-      database:
-        type: csv
-        csv_files:
-          # Can be absolute paths or relative paths to the main
-          energy_mix: './services/cluster_consumption/data/simulated_energy_mix.csv'
-          carbon_footprint: './services/cluster_consumption/data/simulated_cluster_consumption_gco2.csv'
-          energy_footprint: './services/cluster_consumption/data/simulated_cluster_consumption_wh.csv'
-          financial_footprint: './services/cluster_consumption/data/simulated_cluster_consumption_usd.csv'
-          # Guerre elec & ship identification service
-          frequencies: './services/sensor/data/bandes_freq.csv'
-          sensors_test_new: './services/theater_analysis/data/detections-capteur-donnees-test_new_scenario.csv'
-          mission: './services/mission/data/mission.csv'
-          radio: './services/theater_analysis/data/radio-maritime-donnees-tests_excel_light_militaire.csv'
-          signal_identification_guide: './services/theorical_radio/data/Signal_identification_guide_new.csv'
-
-      kubernetes:
-        kube_config: '~/.kube/config'
-        aws_config: '~/.aws/config' # Optional, needed for aws EKS clusters.
-        # Timeout settings for the client
-        timeout:
-          connect: 5  # Time to wait for a connection in seconds
-          read: 15    # Time to wait for a response in seconds
 
       ai:
         # Timeout settings for the client
@@ -170,62 +142,9 @@ applications:
             temperature: 0.0
             max_retries: 2
             request_timeout: 30
-
-          # --- OR uncomment for Azure OpenAI ---
-          # Required in .env:
-          # - AZURE_OPENAI_API_KEY
-          #
-          # Optional for token-based auth:
-          # - AZURE_TENANT_ID
-          # - AZURE_CLIENT_ID
-          # - AZURE_CLIENT_SECRET
-          # provider: "azure"
-          # name: "fred-gpt-4o"
-          # settings:
-          #  api_version: "2024-05-01-preview"
-          #  temperature: 0.0
-          #  max_retries: 2
-          #  request_timeout: 30
-          #  azure_endpoint: "https://tehopenai.openai.azure.com/"
-
-          # --- OR uncomment for AzureAPim ---
-          # provider: "azureapim"
-          # name: "gpt-4o"
-          # settings:
-          #   api_version: "2024-06-01"
-          #   temperature: 0.0
-          #   max_retries: 2
-          #   request_timeout: 30
-
-          # --- OR uncomment for Ollama ---
-          # provider: "ollama"
-          # name: "llama2"
-          # settings:
-          #   base_url: "http://localhost:11434"
-          #   temperature: 0.0
-        services:
-          - name: "kubernetes"
-            enabled: false
-            model: {}
         recursion:
           recursion_limit: 40 # Number or max recursion use by the agents while using the model
         agents:
-          # - name: "JiraExpert"
-          #   class_path: "app.agents.jira.jira_expert.JiraExpert"
-          #   enabled: false
-          #   mcp_servers:
-          #     - name: jira-mcp-server
-          #       transport: stdio
-          #       command: uvx
-          #       args:
-          #         - "mcp-atlassian"
-          #       env:
-          #         JIRA_URL: "@TO_CHANGE"
-          #         JIRA_USERNAME: "@TO_CHANGE"
-          #         JIRA_API_TOKEN: "@TO_CHANGE"
-          #         READ_ONLY_MODE: "true"
-          #       sse_read_timeout: 600 # 10 minutes. It is 5 minutes by default but it is too short.
-          #   model: {}
           - name: "Fred"
             role: "Multi-Agent Orchestrator"
             description: >
@@ -255,66 +174,67 @@ applications:
             mcp_servers:
               - name: knowledge-flow-mcp-server
                 transport: sse
-                url: http://knowledge-flow-backend:8080/mcp_tabular
+                url: http://localhost:8111/mcp_tabular
                 sse_read_timeout: 2000
             model: {}
-          - name: "DocumentsExpert"
-            role: "Document Retrieval Expert"
-            description: >
-              Answers user questions by retrieving relevant information from ingested document corpora.
-              Uses a MCP search service to ground responses in internal or uploaded knowledge.
-            class_path: "app.agents.documents.documents_expert.DocumentsExpert"
-            enabled: true
-            mcp_servers:
-              - name: knowledge-flow-mcp-server
-                transport: sse
-                url: http://knowledge-flow-backend:8080/mcp_text
-                sse_read_timeout: 2000
-            model: {}
-          - name: "RagsExpert"
+          - name: "RicoProExpert"
             role: "Document Retrieval Expert"
             description: >
               Answers user questions by retrieving relevant information from ingested document corpora.
               Uses a vector-based retrieval pipeline to ground responses in internal or uploaded knowledge.
-            class_path: "app.agents.rags.rags_expert.RagsExpert"
+            class_path: "app.agents.rags.rico_pro_expert.RicoProExpert"
             enabled: true
             categories:
               - "rag"
             settings:
               chunk_size: 512
               chunk_overlap: 64
-              knowledge_flow_url: "http://knowledge-flow-backend:8080/knowledge-flow/v1"
+              knowledge_flow_url: "http://localhost:8111/knowledge-flow/v1"
             model: {}
-      node_metrics_storage:
-        type: "local"
-        local_path: "~/.fred/agentic/node-metrics-store"
-      tool_metrics_storage:
-        type: "local"
-        local_path: "~/.fred/agentic/tool-metrics-store"
-      feedback_storage:
-        type: duckdb
-        duckdb_path: "~/.fred/agentic/feedback.duckdb"
-      agent_storage:
-        type: "duckdb"
-        duckdb_path: "~/.fred/agentic/agent.duckdb"
-      # Where to save fred produced resources like Essentials or Scores
-      # and external resources like Kubernetes Workload descriptions
-      dao:
-        type: "file"  # Currently the only one supported
-        base_path: "~/.fred/agentic/dao-cache"
-        max_cached_delay_seconds: 300  # Cache delay in seconds. Use 0 for no cache or a negative value for limitless cache.
-      # Sessions and messages are stored by default in_memory
-      # but it can be modified to use a backend like opensearch
-      session_storage:
-        ## Session Storage in memory:
-        type: in_memory
-        ## Session Storage using OpenSearch:
-        # type: opensearch # username and password are passed via the OPENSEARCH_USER and OPENSEARCH_PASSWORD env variables defined in thes .env file
-        # host: https://localhost:9200
-        # username: Admin # Overrides the OPENSEARCH_USER environment variable
-        # password: xxx # Overrides the OPENSEARCH_PASSWORD environment variable
-        secure: false
-        verify_certs: false
+          - name: "RicoExpert"
+            role: "Document Retrieval Expert"
+            description: >
+              Provides quick answers based on document content, using direct retrieval and generation.
+            class_path: "app.agents.rags.rico_expert.RicoExpert"
+            enabled: true
+            categories:
+              - "rag"
+            settings:
+              chunk_size: 512
+              chunk_overlap: 64
+              knowledge_flow_url: "http://localhost:8111/knowledge-flow/v1"
+            model: {}
+
+      storage:
+        postgres:
+          host: localhost
+          port: 5432
+          database: fred
+          username: admin
+
+        opensearch:
+          host: https://localhost:9200
+          secure: true
+          verify_certs: false
+          username: admin
+
+        feedback_store:
+          type: "duckdb"
+          duckdb_path: "~/.fred/agentic/feedback.duckdb"
+
+        agent_store:
+          type: "duckdb"
+          duckdb_path: "~/.fred/agentic/agent.duckdb"
+
+        session_store:
+          type: "duckdb"
+          duckdb_path: "~/.fred/agentic/session.duckdb"
+
+        history_store:
+          type: "duckdb"
+          duckdb_path: "~/.fred/agentic/history.duckdb"
+
+
     dotenv:
       AZURE_TENANT_ID: ""  
       AZURE_CLIENT_ID: ""  
@@ -531,28 +451,24 @@ applications:
       app:
         name: "Knowledge Flow Backend"
         base_url: "/knowledge-flow/v1"
-        address: "0.0.0.0"
+        address: "127.0.0.1"
         port: 8111
         log_level: "info"
         reload: false
         reload_dir: "."
         security:
-          enabled: true
-          keycloak_url: "http://keycloak/realms/fred"
+          enabled: false
+          keycloak_url: "http://app-keycloak:8080/realms/app"
           client_id: "app"
           authorized_origins:
-          - "http://localhost:5173"
-          - "http://fred.dev.fred.thalesgroup.com"
-          - "https://fred.dev.fred.thalesgroup.com"
+            - "http://localhost:5173"
 
       security:
-        enabled: true
-        keycloak_url: "http://keycloak/realms/fred"
+        enabled: false
+        keycloak_url: "http://fred-keycloak:8080/realms/fred"
         authorized_origins:
-        - "http://localhost:5173"
-        - "http://fred.dev.fred.thalesgroup.com"
-        - "https://fred.dev.fred.thalesgroup.com"
-      
+          - "http://localhost:5173"
+
       scheduler:
         enabled: true
         backend: "temporal"
@@ -580,10 +496,8 @@ applications:
           class_path: app.core.processors.input.pps_tabular_processor.pps_tabular_processor.PpsTabularProcessor
 
       content_storage:
-        type: minio
-        endpoint: http://minio:9000
-        bucket_name: "knowledge-flow-content"
-        secure: false
+        type: local
+        root_path: ~/.fred/knowledge-flow/content-store
 
       document_sources:
         fred:
@@ -596,62 +510,55 @@ applications:
           base_path: ~/Documents/Fred
           description: "Personal local documents available for pull-mode ingestion"
 
-        minio:
-          type: pull
-          provider: minio
-          description: "Documents available for pull from MinIO"
-          endpoint_url: localhost:9000
-          bucket_name: "shared-content"
-          prefix: ""
-          secure: false
-
-      metadata_storage:
-        type: opensearch
-        host: https://opensearch:9200
-        secure: true
-        verify_certs: false
-        index: document-index
-
-      tag_storage:
-        type: opensearch
-        host: https://opensearch:9200
-        secure: true
-        verify_certs: false
-        index: tag-index
-
-      prompt_storage:
-        type: opensearch
-        host: https://opensearch:9200
-        secure: true
-        verify_certs: false
-        index: prompt-index
-
-      vector_storage:
-        type: opensearch
-        host: https://opensearch:9200
-        secure: true
-        verify_certs: false
-        index: vector-index-ada002
-        #type: in_memory
-
-
-      tabular_storage:
-        type: "duckdb"
-        duckdb_path: "~/.fred/knowledge-flow/tabular.duckdb"
-
-      catalog_storage:
-        type: opensearch
-        host: https://opensearch:9200
-        secure: true
-        verify_certs: false
-        index: catalog-index
-
       embedding:
         type: "openai"
 
+      storage:
+        postgres:
+          host: localhost
+          port: 5432
+          database: fred
+          username: admin
 
+        opensearch:
+          host: https://localhost:9200
+          secure: true
+          verify_certs: false
+          username: admin
 
+        tabular_store:
+          # Local DB 
+          # type: "sql"
+          # driver: "duckdb"
+          # path: "~/.fred/knowledge-flow/db.duckdb"
+          ## Servor DB
+          # type: "sql"
+          # driver: "postgresql+psycopg2"
+          # port: 5433
+          # database: "test_db_postgre_sql"
+          # username: "my_username" # Overrides the one specified as "SQL_USERNAME" in the .env file
+          # password: "my_password" # Overrides the one specified as "SQL_PASSWORD" in the .env file
 
+        
+
+        catalog_store:
+          type: "duckdb"
+          duckdb_path: "~/.fred/knowledge-flow/catalog.duckdb"
+
+        prompt_store:
+          type: "duckdb"
+          duckdb_path: "~/.fred/knowledge-flow/prompt.duckdb"
+
+        tag_store:
+          type: "duckdb"
+          duckdb_path: "~/.fred/knowledge-flow/tag.duckdb"
+
+        metadata_store:
+          type: "duckdb"
+          duckdb_path: "~/.fred/knowledge-flow/metadata.duckdb"
+
+        vector_store:
+          type: in_memory
 
     dotenv:
       # This file contains the environment variables for the application
