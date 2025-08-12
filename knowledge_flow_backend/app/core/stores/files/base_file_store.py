@@ -15,12 +15,13 @@
 from abc import ABC, abstractmethod
 from app.core.stores.files.structures import FileInfo
 
+
 class BaseFileStore(ABC):
     """
     Minimal abstract interface for a namespace-based file store.
 
     This store is intended to manage binary resources (e.g., templates, documents, prompts)
-    that can be accessed by agents or users in a unified way across different backends 
+    that can be accessed by agents or users in a unified way across different backends
     (e.g., local filesystem, S3/MinIO, HTTP, etc.).
 
     The API abstracts away storage details behind a clean, strongly typed contract.

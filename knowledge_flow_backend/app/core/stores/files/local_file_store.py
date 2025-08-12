@@ -65,7 +65,6 @@ class LocalFileStore(BaseFileStore):
         k = key.lstrip("/")
         return self.destination_root / ns / k
 
-
     def list(self, namespace: str, prefix: str = "") -> list[str]:
         base = self.destination_root / namespace.strip("/")
         root = (base / prefix.lstrip("/")) if prefix else base

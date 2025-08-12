@@ -40,7 +40,7 @@ class DocumentsExpert(AgentFlow):
     """
 
     name: str
-    role: str 
+    role: str
     nickname: str
     description: str
     icon: str = "documents_agent"

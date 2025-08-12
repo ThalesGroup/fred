@@ -81,7 +81,7 @@ class RecursionConfig(BaseModel):
 
 class AgentSettings(BaseModel):
     type: Literal["mcp", "custom", "leader"] = "custom"
-    name: str # a unique name
+    name: str  # a unique name
     class_path: Optional[str] = None
     enabled: bool = True
     categories: List[str] = Field(default_factory=list)

@@ -15,7 +15,6 @@
 import logging
 from typing import List, Optional
 
-from app.application_context import get_app_context
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from fred_core import KeycloakUser, get_current_user
@@ -51,7 +50,7 @@ class TemplateController:
     """
 
     def __init__(self, router: APIRouter):
-        self.service = TemplateService() 
+        self.service = TemplateService()
 
         @router.get(
             "/templates",
@@ -121,7 +120,6 @@ class TemplateController:
             except Exception as e:
                 log_exception(e)
                 raise _http_500(e)
-
 
         @router.get(
             "/templates/{template_id}/{version}/content",

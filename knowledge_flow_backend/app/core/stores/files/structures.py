@@ -37,6 +37,7 @@ class FileInfo(BaseModel):
         checksum_sha256 (str): SHA-256 checksum (hex-encoded lowercase string) of the raw content.
             This ensures content integrity and may be used to detect changes or verify uploads.
     """
+
     uri: str
     size_bytes: int
     content_type: str

@@ -339,20 +339,20 @@ class ApplicationContext:
             return FileSystemContentStore(Path(root).expanduser())
         else:
             raise ValueError(f"Unsupported storage backend: {backend_type}")
-        
+
     def get_file_store(self) -> BaseFileStore:
         """
-        Return a simple file store. 
+        Return a simple file store.
         Returns:
             BaseContentStore: An instance of the storage backend.
         """
         # Get the singleton application context and configuration
         if self._file_store_instance:
             return self._file_store_instance
-        
+
         config = ApplicationContext.get_instance().get_config().content_storage
         backend_type = config.type
-        
+
         if isinstance(config, MinioStorageConfig):
             self._file_store_instance = MinioFileStore(endpoint=config.endpoint, access_key=config.access_key, secret_key=config.secret_key, bucket_name=config.bucket_name, secure=config.secure)
         elif isinstance(config, LocalContentStorageConfig):
@@ -360,7 +360,7 @@ class ApplicationContext:
         else:
             raise ValueError(f"Unsupported file backend: {backend_type}")
         return self._file_store_instance
-    
+
     def get_embedder(self) -> BaseEmbeddingModel:
         """
         Factory method to create an embedding model instance based on the configuration.

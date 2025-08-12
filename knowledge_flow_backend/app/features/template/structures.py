@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 
 class TemplateSummary(BaseModel):
     """Lightweight identity for discovery screens + agent pickers."""
+
     id: str = Field(..., description="Template identifier (unique within its family).")
     family: str = Field(..., description="Functional group, e.g. 'reports'.")
     name: Optional[str] = Field(None, description="Human display name.")
@@ -14,6 +15,7 @@ class TemplateSummary(BaseModel):
 
 class TemplateMetadata(BaseModel):
     """Detailed info for one version, used by UIs and agents to know required inputs."""
+
     id: str
     family: str
     version: str
@@ -30,4 +32,3 @@ class TemplateContent(BaseModel):
     version: str
     mime: Literal["text/markdown", "text/html", "application/json", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"] = "text/markdown"
     body: str
-

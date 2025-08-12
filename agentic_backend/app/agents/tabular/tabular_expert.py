@@ -37,7 +37,7 @@ class TabularExpert(AgentFlow):
     """
 
     name: str
-    role: str 
+    role: str
     nickname: str = "Tessa"
     description: str
     icon: str = "tabulat_agent"

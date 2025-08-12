@@ -25,6 +25,7 @@ from app.core.stores.files.base_file_store import BaseFileStore, FileInfo
 
 logger = logging.getLogger(__name__)
 
+
 class MinioFileStore(BaseFileStore):
     """
     Minimal MinIO-backed file store for PoC usage.
@@ -99,7 +100,7 @@ class MinioFileStore(BaseFileStore):
             base = namespace.strip("/") + "/"
             for o in objs:
                 if o.object_name and o.object_name.startswith(base):
-                    out.append(o.object_name[len(base):])
+                    out.append(o.object_name[len(base) :])
             return out
         except S3Error as e:
             logger.error(f"❌ Failed to list '{full_prefix}': {e}")
