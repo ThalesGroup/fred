@@ -18,3 +18,7 @@ docker-build: ## Build the Docker image
 		-f $(DOCKERFILE_PATH) \
 		-t $(IMAGE_FULL) \
 		$(DOCKER_CONTEXT)
+
+.PHONY: docker-push
+docker-push: ## Push the Docker image
+	docker push $(IMAGE_FULL)
