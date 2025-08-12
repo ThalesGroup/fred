@@ -12,15 +12,6 @@ data:
   configuration.yaml: |
 {{ .app.configuration | toYaml | indent 4 }}
 
-  .env: |
-    {{- range $key, $value := .app.dotenv }}
-    {{- if $value }}
-    {{ $key }}="{{ $value }}"
-    {{- else }}
-    {{ $key }}=""
-    {{- end }}
-    {{- end }}
-
 {{- end }}
 
 {{ end -}}
