@@ -44,7 +44,9 @@ applications:
           paths:
             - path: /
               pathType: Prefix
-              servicePortName: http
+              service:
+                name: agentic-backend-svc
+                port: 80    
     volumeMounts:
       - name: agentic-backend-vol
         mountPath: /app/config
@@ -289,7 +291,21 @@ applications:
           paths:
             - path: /
               pathType: Prefix
-              servicePortName: http
+              service:
+                name: fred-frontend-svc
+                port: 80
+            # # The additionnal paths might be useful if
+            # # only the frontend is exposed
+            # - path: /agentic
+            #   pathType: Prefix
+            #   service:
+            #     name: agentic-backend-svc
+            #     port: 80
+            # - path: /knowledge-flow
+            #   pathType: Prefix
+            #   service:
+            #     name: knowledge-flow-backend-svc
+            #     port: 8080
       tls:
         - secretName: fred-frontend-crt
           hosts:
@@ -404,7 +420,9 @@ applications:
           paths:
             - path: /
               pathType: Prefix
-              servicePortName: http
+              service:
+                name: knowledge-flow-backend-backend-svc
+                port: 8000    
     volumeMounts:
       - name: aws-vol
         mountPath: /home/knowledge-flow-user/.aws
