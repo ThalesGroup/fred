@@ -1,15 +1,15 @@
 # Project Metadata
 PROJECT_NAME        ?= knowledge-flow
-PROJECT_SLUG        ?= knowledge_flow_app
+PROJECT_SLUG		?= knowledge-flow-backend
+VERSION             ?= 0.0.6
 PY_PACKAGE          ?= app
-VERSION             ?= 0.1-dev
 
 # Docker/Registry
-REGISTRY_URL        ?= registry.thalesdigital.io
-REGISTRY_NAMESPACE  ?= tsn/projects/knowledge_flow_app
+REGISTRY_URL        ?= ghcr.io
+REGISTRY_NAMESPACE  ?= thalesgroup/fred-agent
 DOCKERFILE_PATH     ?= ./dockerfiles/Dockerfile-prod
 DOCKER_CONTEXT      ?= ..
-IMAGE_NAME          ?= $(PROJECT_NAME)
+IMAGE_NAME          ?= knowledge-flow
 IMAGE_TAG           ?= $(VERSION)
 IMAGE_FULL          ?= $(REGISTRY_URL)/$(REGISTRY_NAMESPACE)/$(IMAGE_NAME):$(IMAGE_TAG)
 
