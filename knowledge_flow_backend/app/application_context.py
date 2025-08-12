@@ -31,6 +31,7 @@ from app.common.structures import (
     Configuration,
     InMemoryVectorStorage,
     FileSystemPullSource,
+    LocalContentStorageConfig,
     MinioPullSource,
     MinioStorageConfig,
     WeaviateVectorStorage,
@@ -45,6 +46,9 @@ from app.core.stores.content.filesystem_content_store import FileSystemContentSt
 from app.core.stores.content.minio_content_store import MinioStorageBackend
 from app.core.stores.catalog.base_catalog_store import BaseCatalogStore
 from app.core.stores.catalog.duckdb_catalog_store import DuckdbCatalogStore
+from app.core.stores.files.base_file_store import BaseFileStore
+from app.core.stores.files.local_file_store import LocalFileStore
+from app.core.stores.files.minio_file_store import MinioFileStore
 from app.core.stores.metadata.duckdb_metadata_store import DuckdbMetadataStore
 from langchain_openai import OpenAIEmbeddings, AzureOpenAIEmbeddings
 from langchain_ollama import OllamaEmbeddings
@@ -159,6 +163,7 @@ class ApplicationContext:
     _prompt_store_instance: Optional[BasePromptStore] = None
     _tabular_store_instance: Optional[Union[DuckDBTableStore, SQLTableStore]] = None
     _catalog_store_instance: Optional[BaseCatalogStore] = None
+    _file_store_instance: Optional[BaseFileStore] = None
 
     def __init__(self, configuration: Configuration):
         # Allow reuse if already initialized with same config
@@ -327,12 +332,35 @@ class ApplicationContext:
         backend_type = config.type
 
         if isinstance(config, MinioStorageConfig):
-            return MinioStorageBackend(endpoint=config.endpoint, access_key=config.access_key, secret_key=config.secret_key, bucket_name=config.bucket_name, secure=config.secure)
-        elif backend_type == "local":
-            return FileSystemContentStore(Path(config.root_path).expanduser())
+            bucket = f"{config.bucket_name}-documents"
+            return MinioStorageBackend(endpoint=config.endpoint, access_key=config.access_key, secret_key=config.secret_key, bucket_name=bucket, secure=config.secure)
+        elif isinstance(config, LocalContentStorageConfig):
+            root = Path(config.root_path).expanduser() / "documents"
+            return FileSystemContentStore(Path(root).expanduser())
         else:
             raise ValueError(f"Unsupported storage backend: {backend_type}")
-
+        
+    def get_file_store(self) -> BaseFileStore:
+        """
+        Return a simple file store. 
+        Returns:
+            BaseContentStore: An instance of the storage backend.
+        """
+        # Get the singleton application context and configuration
+        if self._file_store_instance:
+            return self._file_store_instance
+        
+        config = ApplicationContext.get_instance().get_config().content_storage
+        backend_type = config.type
+        
+        if isinstance(config, MinioStorageConfig):
+            self._file_store_instance = MinioFileStore(endpoint=config.endpoint, access_key=config.access_key, secret_key=config.secret_key, bucket_name=config.bucket_name, secure=config.secure)
+        elif isinstance(config, LocalContentStorageConfig):
+            self._file_store_instance = LocalFileStore(Path(config.root_path).expanduser())
+        else:
+            raise ValueError(f"Unsupported file backend: {backend_type}")
+        return self._file_store_instance
+    
     def get_embedder(self) -> BaseEmbeddingModel:
         """
         Factory method to create an embedding model instance based on the configuration.

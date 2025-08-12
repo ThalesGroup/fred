@@ -11,7 +11,9 @@ async def get_mcp_client_for_agent(
 ) -> MultiServerMCPClient:
     client = MultiServerMCPClient()
     exceptions = []
-
+    if not agent_settings.mcp_servers:
+        raise ValueError("no mcp server configuration") 
+    
     for server in agent_settings.mcp_servers:
         if server.transport not in SUPPORTED_TRANSPORTS:
             raise UnsupportedTransportError(

@@ -31,6 +31,7 @@ from app.features.pull.service import PullDocumentService
 from app.features.scheduler.controller import SchedulerController
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from app.features.template.controller import TemplateController
 from fastapi_mcp import FastApiMCP
 from fred_core import initialize_keycloak
 
@@ -109,6 +110,7 @@ def create_app() -> FastAPI:
     IngestionController(router)
     TabularController(router)
     # CodeSearchController(router)
+    TemplateController(router)
     TagController(router)
     PromptController(router)
     VectorSearchController(router)
@@ -138,6 +140,15 @@ def create_app() -> FastAPI:
         describe_full_response_schema=True,
     )
     mcp_text.mount(mount_path="/mcp_text")
+    mcp_template = FastApiMCP(
+        app,
+        name="Knowledge Flow Text MCP",
+        description="MCP server for Knowledge Flow Text",
+        include_tags=["Vector Search"],
+        describe_all_responses=True,
+        describe_full_response_schema=True,
+    )
+    mcp_template.mount(mount_path="/mcp_template")
     mcp_code = FastApiMCP(
         app,
         name="Knowledge Flow Code MCP",

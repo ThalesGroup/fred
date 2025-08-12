@@ -39,14 +39,10 @@ class DocumentsExpert(AgentFlow):
     responses based on the document content.
     """
 
-    name: str = "DocumentsExpert"
-    role: str = "Documents Expert"
-    nickname: str = "Dominic"
-    description: str = """
-        An expert agent that searches and analyzes documents to answer user questions.
-        This agent uses a mcp vector search service to find relevant documents and generates
-        responses based on the documents content.
-        """
+    name: str
+    role: str 
+    nickname: str
+    description: str
     icon: str = "documents_agent"
     categories: list[str] = []
     tag: str = "documents"
@@ -58,8 +54,11 @@ class DocumentsExpert(AgentFlow):
         knowledge base service.
         """
         self.agent_settings = agent_settings
+        self.name = agent_settings.name
+        self.nickname = agent_settings.nickname or agent_settings.name
+        self.role = agent_settings.role
+        self.description = agent_settings.description
         self.current_date = datetime.now().strftime("%Y-%m-%d")
-        self.agent_settings = agent_settings
         self.model = None
         self.mcp_client = None
         self.toolkit = None

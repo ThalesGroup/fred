@@ -49,8 +49,8 @@ class RicoProExpert(AgentFlow):
 
     TOP_K = 5
 
-    name: str = "RicoProExpert"
-    role: str = "Rags Expert"
+    name: str 
+    role: str
     nickname: str = "Rico Pro"
     description: str
     icon: str = "rags_agent"
@@ -59,23 +59,20 @@ class RicoProExpert(AgentFlow):
 
     def __init__(self, agent_settings: AgentSettings):
         self.agent_settings = agent_settings
+        self.name = agent_settings.name
+        self.nickname = agent_settings.nickname or agent_settings.name
+        self.role = agent_settings.role
+        self.description = agent_settings.description
+        self.current_date = datetime.now().strftime("%Y-%m-%d")
+        self.categories = agent_settings.categories or ["General"]
         self.knowledge_flow_url = agent_settings.settings.get(
             "knowledge_flow_url", "http://localhost:8111/knowledge-flow/v1"
         )
-        self.current_date = datetime.now().strftime("%Y-%m-%d")
         self.model = None
         self.base_prompt = ""
         self._graph = None
         self.categories = agent_settings.categories or ["Documentation"]
         self.tag = agent_settings.tag or "rags"
-        if not agent_settings.description:
-            self.description = "Analyzes and grades documents in multiple steps to generate precise, well-sourced answers."
-        else:
-            self.description = agent_settings.description
-        if not agent_settings.role:
-            self.role = "Rags Expert"
-        else:
-            self.description = agent_settings.role
 
     async def async_init(self):
         self.model = get_model(self.agent_settings.model)
