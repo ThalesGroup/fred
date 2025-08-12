@@ -45,8 +45,8 @@ applications:
             - path: /
               pathType: Prefix
               service:
-                name: agentic-backend-svc
-                port: 80    
+                name: agentic-backend
+                port: 80
     volumeMounts:
       - name: agentic-backend-vol
         mountPath: /app/config/configuration.yaml
@@ -63,7 +63,7 @@ applications:
           name: agentic-backend-back
       - name: agentic-backend-env-vol
         secret: 
-          name: agentic-backend-env
+          secretName: agentic-backend-env
       - name: agentic-backend-kube-vol
         configMap:
           name: agentic-backend-kube
@@ -298,19 +298,19 @@ applications:
             - path: /
               pathType: Prefix
               service:
-                name: fred-frontend-svc
+                name: fred-frontend
                 port: 80
             # # The additionnal paths might be useful if
             # # only the frontend is exposed
             # - path: /agentic
             #   pathType: Prefix
             #   service:
-            #     name: agentic-backend-svc
+            #     name: agentic-backend
             #     port: 80
             # - path: /knowledge-flow
             #   pathType: Prefix
             #   service:
-            #     name: knowledge-flow-backend-svc
+            #     name: knowledge-flow-backend
             #     port: 8080
       tls:
         - secretName: fred-frontend-crt
@@ -411,7 +411,7 @@ applications:
       type: ClusterIP
       ports:
         - name: "http"
-          port: 8080
+          port: 8000
           targetPort: 8111
           protocol: TCP
         - name: "https"
@@ -427,7 +427,7 @@ applications:
             - path: /
               pathType: Prefix
               service:
-                name: knowledge-flow-backend-backend-svc
+                name: knowledge-flow-backend
                 port: 8000    
     volumeMounts:
       - name: knowledge-flow-backend-vol
@@ -439,11 +439,10 @@ applications:
     volumes:
       - name: knowledge-flow-backend-vol
         configMap:
-          name: knowledge-flow-backend-configmap
+          name: knowledge-flow-backend-back
       - name: knowledge-flow-backend-env-vol
         secret: 
-          name: knowledge-flow-backend-env
-      
+          secretName: knowledge-flow-backend-env
     probes:
       lifecycle:
         enabled: false
