@@ -2,6 +2,8 @@
 
 global:
   kubeconfig: ""
+  create_index:
+    image: "alpine:3.22"
 
 applications:
 
@@ -544,6 +546,8 @@ applications:
           username: admin
 
         tabular_store:
+          type: "duckdb"
+          duckdb_path: "~/.fred/knowledge-flow/tabular.duckdb"
           # Local DB 
           # type: "sql"
           # driver: "duckdb"

@@ -1,0 +1,108 @@
+{{- define "common-library.job" -}}
+
+{{- if .app.job.enabled }}
+
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .app.applicationName }}-job
+  namespace: {{ .root.Release.Namespace }}
+  labels:
+    app: {{ .app.applicationName }}
+    type: job
+spec:
+  backoffLimit: {{ default 0 .app.job.backoffLimit }}
+  template:
+    metadata:
+      annotations:
+        {{- if .app.podAnnotations }}
+{{ toYaml .app.podAnnotations | nindent 8 }}
+        {{- end }}
+        {{- if .app.configuration }}
+        configmap.configurations.checksum: "{{ .app.configuration | join "," | sha256sum }}"
+        {{- end }}
+        {{- if .app.kubeconfig.enabled }}
+        configmap.kubeconfig.checksum: "{{ .root.Values.global.kubeconfig | join "," | sha256sum }}"
+        {{- end }}
+      labels:
+        app: {{ .app.applicationName }}
+        type: job
+    spec:
+      {{- if .app.imagePullSecrets }}
+      imagePullSecrets:
+{{ toYaml .app.imagePullSecrets | nindent 8 }}
+      {{- end }}
+
+      {{- if .app.serviceAccount.enabled }}
+      serviceAccountName: {{ .app.serviceAccount.name }}
+      {{- end }}
+
+      {{- with .app.podSecurityContext }}
+      securityContext:
+{{ toYaml . | nindent 8 }}
+      {{- end }}
+
+      restartPolicy: {{ default "Never" .app.job.restartPolicy }}
+
+      containers:
+        - name: {{ .app.applicationName }}-job
+          image: "{{ .app.image.repository }}:{{ .app.image.tag }}"
+          imagePullPolicy: {{ default "IfNotPresent" .app.image.pullPolicy }}
+
+          {{- with .app.securityContext }}
+          securityContext:
+{{ toYaml . | nindent 12 }}
+          {{- end }}
+
+          {{- if .app.command.enabled }}
+          command:
+{{ toYaml .app.command.data | nindent 12 }}
+          {{- end }}
+
+          {{- if .app.args }}
+          args:
+{{ toYaml .app.args | nindent 12 }}
+          {{- end }}
+
+          {{- if .app.env.enabled }}
+          env:
+{{ toYaml .app.env.data | nindent 12 }}
+            {{- if .app.env.extraEnvVars }}
+{{ toYaml .app.env.extraEnvVars | nindent 12 }}
+            {{- end }}
+          {{- end }}
+
+          {{- if .app.volumeMounts.enabled }}
+          volumeMounts:
+{{ toYaml .app.volumeMounts.data | nindent 12 }}
+          {{- end }}
+
+          {{- with .app.resources }}
+          resources:
+{{ toYaml . | nindent 12 }}
+          {{- end }}
+
+      {{- if .app.volumes.enabled }}
+      volumes:
+{{ toYaml .app.volumes.data | nindent 8 }}
+      {{- end }}
+
+      {{- with .app.nodeSelector }}
+      nodeSelector:
+{{ toYaml . | nindent 8 }}
+      {{- end }}
+
+      {{- with .app.affinity }}
+      affinity:
+{{ toYaml . | nindent 8 }}
+      {{- end }}
+
+      {{- with .app.tolerations }}
+      tolerations:
+{{ toYaml . | nindent 8 }}
+      {{- end }}
+
+{{- end }}
+
+{{ end -}}
