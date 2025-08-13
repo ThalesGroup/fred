@@ -8,7 +8,7 @@ from uuid import uuid4
 
 import yaml
 
-from app.features.resources.structures import Resource, ResourceCreate, ResourceKind
+from app.features.resources.structures import Resource, ResourceCreate
 
 _DASH_LINE_RE = re.compile(r"^\s*---\s*$")
 

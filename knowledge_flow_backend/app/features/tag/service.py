@@ -177,14 +177,14 @@ class TagService:
             for rid in added:
                 try:
                     self.resource_service.add_tag_to_resource(rid, tag_id)
-                except Exception as e:
+                except Exception:
                     # Decide whether to continue or fail fast
                     raise
             for rid in removed:
                 try:
                     # auto-delete orphan if it loses its last tag
                     self.resource_service.remove_tag_from_resource(rid, tag_id, delete_if_orphan=True)
-                except Exception as e:
+                except Exception:
                     raise
         else:
             raise ValueError(f"Unsupported tag type: {tag.type}")

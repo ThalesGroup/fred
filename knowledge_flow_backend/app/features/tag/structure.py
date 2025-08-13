@@ -17,7 +17,6 @@ from enum import Enum
 from typing import Optional
 from pydantic import BaseModel, field_validator
 from fred_core import BaseModelWithId
-from app.common.document_structures import DocumentMetadata
 
 
 class TagType(str, Enum):
