@@ -25,14 +25,12 @@ from rich.logging import RichHandler
 from dotenv import load_dotenv
 
 from app.features.catalog.controller import CatalogController
-from app.features.prompts.controller import PromptController
 from app.features.pull.controller import PullDocumentController
 from app.features.pull.service import PullDocumentService
 from app.features.resources.controller import ResourceController
 from app.features.scheduler.controller import SchedulerController
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.features.template.controller import TemplateController
 from fastapi_mcp import FastApiMCP
 from fred_core import initialize_keycloak
 
@@ -111,9 +109,7 @@ def create_app() -> FastAPI:
     IngestionController(router)
     TabularController(router)
     # CodeSearchController(router)
-    # TemplateController(router)
     TagController(router)
-    # PromptController(router)
     ResourceController(router)
     VectorSearchController(router)
 
