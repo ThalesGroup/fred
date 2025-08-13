@@ -511,6 +511,8 @@ applications:
           class_path: app.core.processors.input.markdown_markdown_processor.markdown_markdown_processor.MarkdownMarkdownProcessor
         - prefix: ".xlsm"
           class_path: app.core.processors.input.pps_tabular_processor.pps_tabular_processor.PpsTabularProcessor
+      audio:
+        whisper_model_size: base
 
       content_storage:
         type: local
