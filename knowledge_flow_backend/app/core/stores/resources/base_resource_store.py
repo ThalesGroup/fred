@@ -20,11 +20,13 @@ from app.features.resources.structures import Resource, ResourceKind
 
 class ResourceNotFoundError(Exception):
     """Raised when a resource is not found."""
+
     pass
 
 
 class ResourceAlreadyExistsError(Exception):
     """Raised when trying to create a resource that already exists."""
+
     pass
 
 
@@ -41,7 +43,7 @@ class BaseResourceStore(ABC):
     """
 
     @abstractmethod
-    def get_all_resources(self , kind: ResourceKind) -> list[Resource]:
+    def get_all_resources(self, kind: ResourceKind) -> list[Resource]:
         pass
 
     @abstractmethod

@@ -53,14 +53,14 @@ export function ResourceRowCompact({ resource: prompt, onPreview, onEdit, onRemo
       {/* Right: actions */}
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, flexShrink: 0, ml: 2 }}>
         {onPreview && (
-          <Tooltip title={t("documentTable.preview")}>
+          <Tooltip title={t("resourceLibrary.preview")}>
             <IconButton size="small" onClick={() => onPreview(prompt)}>
               <VisibilityOutlinedIcon fontSize="inherit" />
             </IconButton>
           </Tooltip>
         )}
         {onEdit && (
-          <Tooltip title={t("promptLibrary.edit")}>
+          <Tooltip title={t("resourceLibrary.edit")}>
             <IconButton size="small" onClick={() => onEdit(prompt)}>
               <EditOutlinedIcon fontSize="inherit" />
             </IconButton>

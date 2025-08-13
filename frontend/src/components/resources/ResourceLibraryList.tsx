@@ -181,7 +181,7 @@ export default function ResourceLibraryList({ kind }: Props) {
       {/* Loading & error */}
       {isLoading && (
         <Card sx={{ p: 3, borderRadius: 3 }}>
-          <Typography variant="body2">{t("promptLibrary.loadingLibraries")}</Typography>
+          <Typography variant="body2">{t("resourceLibrary.loadingLibraries")}</Typography>
         </Card>
       )}
       {isError && (

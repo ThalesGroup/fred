@@ -24,6 +24,7 @@ class TagType(str, Enum):
     PROMPT = "prompt"
     TEMPLATE = "template"
 
+
 def _normalize_path(p: Optional[str]) -> Optional[str]:
     if p is None:
         return None
@@ -104,5 +105,3 @@ class TagWithItemsId(Tag):
     @classmethod
     def from_tag(cls, tag: Tag, item_ids: list[str]) -> "TagWithItemsId":
         return cls(**tag.model_dump(), item_ids=item_ids)
-
-

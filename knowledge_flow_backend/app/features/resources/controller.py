@@ -30,6 +30,7 @@ from app.features.resources.structures import Resource, ResourceCreate, Resource
 
 logger = logging.getLogger(__name__)
 
+
 class ResourceController:
     """
     Controller for managing Resource objects (CRUD).

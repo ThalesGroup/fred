@@ -19,9 +19,11 @@ from typing import List, Optional
 from pydantic import BaseModel, Field
 from fred_core import BaseModelWithId
 
+
 class ResourceKind(str, Enum):
     PROMPT = "prompt"
     TEMPLATE = "template"
+
 
 class ResourceUpdate(BaseModel):
     content: Optional[str] = None
@@ -29,12 +31,14 @@ class ResourceUpdate(BaseModel):
     description: Optional[str] = None
     labels: Optional[List[str]] = None
 
+
 class ResourceCreate(BaseModel):
     kind: ResourceKind
     content: str
     name: Optional[str] = None
     description: Optional[str] = None
-    labels: Optional[List[str]] = None 
+    labels: Optional[List[str]] = None
+
 
 class Resource(BaseModelWithId):
     id: str
@@ -42,10 +46,9 @@ class Resource(BaseModelWithId):
     version: str
     name: Optional[str] = None
     description: Optional[str] = None
-    labels: Optional[List[str]] = None 
+    labels: Optional[List[str]] = None
     author: str
     created_at: datetime
     updated_at: datetime
     content: str = Field(..., description="Raw YAML text or other content")
     library_tags: List[str] = Field(..., description="List of tags associated with the resource")
-

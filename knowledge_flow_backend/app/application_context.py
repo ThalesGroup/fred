@@ -540,7 +540,6 @@ class ApplicationContext:
             raise ValueError(f"Unsupported tag storage backend: {store_config.type}")
         return self._resource_store_instance
 
-
     def get_tabular_store(self):
         if hasattr(self, "_tabular_store_instance") and self._tabular_store_instance is not None:
             return self._tabular_store_instance

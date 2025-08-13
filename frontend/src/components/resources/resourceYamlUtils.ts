@@ -1,6 +1,7 @@
 // resourceYaml.ts
 // Lightweight YAML helpers shared by Prompt/Template editors.
 
+import yaml from "js-yaml";
 export type TemplateFormat = "markdown" | "html" | "text" | "json";
 
 // Extract {placeholders} from a body string
@@ -13,7 +14,7 @@ export const extractPlaceholders = (body: string) => {
 };
 
 // Serialize a simple front-matter header; uses inline JSON for nested values
-export const buildFrontMatter = (header: Record<string, any>, body: string) => {
+export const buildFrontMatter1 = (header: Record<string, any>, body: string) => {
   const lines: string[] = [];
   for (const [k, v] of Object.entries(header)) {
     if (v === undefined || v === null || (Array.isArray(v) && v.length === 0)) continue;
@@ -21,6 +22,10 @@ export const buildFrontMatter = (header: Record<string, any>, body: string) => {
     else lines.push(`${k}: ${String(v)}`);
   }
   return `${lines.join("\n")}\n---\n${body ?? ""}`;
+};
+export const buildFrontMatter = (header: Record<string, any>, body: string): string => {
+  const yamlHeader = yaml.dump(header).trim(); // pretty block-style YAML
+  return `${yamlHeader}\n---\n${body?.trim() ?? ""}`;
 };
 
 // Heuristic: did the user paste a full YAML doc already?
@@ -38,7 +43,7 @@ export const buildPromptYaml = (opts: {
   const version = opts.version || "v1";
   const vars = extractPlaceholders(opts.body);
 
-  const prompt_schema = {
+  const schema = {
     type: "object",
     required: vars,
     properties: Object.fromEntries(vars.map((v) => [v, { type: "string", title: v }])),
@@ -50,7 +55,7 @@ export const buildPromptYaml = (opts: {
     name: opts.name || undefined,
     description: opts.description || undefined,
     // tags: opts.labels && opts.labels.length ? opts.labels : undefined,
-    prompt_schema,
+    schema,
   };
 
   return buildFrontMatter(header, opts.body);
@@ -68,7 +73,7 @@ export const buildTemplateYaml = (opts: {
   const version = opts.version || "v1";
   const vars = extractPlaceholders(opts.body);
 
-  const input_schema = {
+  const schema = {
     type: "object",
     required: vars,
     properties: Object.fromEntries(vars.map((v) => [v, { type: "string", title: v }])),
@@ -81,7 +86,7 @@ export const buildTemplateYaml = (opts: {
     description: opts.description || undefined,
     format: opts.format,
     // tags: opts.labels && opts.labels.length ? opts.labels : undefined,
-    input_schema,
+    schema,
   };
 
   return buildFrontMatter(header, opts.body);

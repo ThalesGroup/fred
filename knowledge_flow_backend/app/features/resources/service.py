@@ -9,8 +9,10 @@ from .structures import Resource, ResourceCreate, ResourceUpdate, ResourceKind
 
 logger = logging.getLogger(__name__)
 
+
 def utc_now():
     return datetime.now(timezone.utc)
+
 
 class ResourceService:
     def __init__(self):

@@ -22,7 +22,6 @@ from app.application_context import ApplicationContext
 from app.common.document_structures import DocumentMetadata
 from app.core.stores.tags.base_tag_store import TagAlreadyExistsError
 from app.features.metadata.service import MetadataService
-from app.features.prompts.service import PromptService
 from app.features.resources.service import ResourceService
 from app.features.resources.structures import ResourceKind
 from app.features.tag.structure import Tag, TagCreate, TagType, TagUpdate, TagWithItemsId
@@ -30,12 +29,14 @@ from fred_core import KeycloakUser
 
 logger = logging.getLogger(__name__)
 
+
 def _tagtype_to_rk(tag_type: TagType) -> ResourceKind:
     if tag_type == TagType.PROMPT:
         return ResourceKind.PROMPT
     if tag_type == TagType.TEMPLATE:
         return ResourceKind.TEMPLATE
     raise ValueError(f"Unsupported TagType for resources: {tag_type}")
+
 
 class TagService:
     """
@@ -47,7 +48,6 @@ class TagService:
         context = ApplicationContext.get_instance()
         self._tag_store = context.get_tag_store()
         self.document_metadata_service = MetadataService()
-        self.prompt_service = PromptService()
         self.resource_service = ResourceService()  # For templates, if needed
 
     # ---------- Public API ----------
@@ -140,11 +140,9 @@ class TagService:
         # Link items
         if tag.type == TagType.DOCUMENT:
             for doc in documents:
-                self.document_metadata_service.add_tag_id_to_document(
-                    metadata=doc, new_tag_id=tag.id, modified_by=user.username
-                )
+                self.document_metadata_service.add_tag_id_to_document(metadata=doc, new_tag_id=tag.id, modified_by=user.username)
         elif tag.type in (TagType.PROMPT, TagType.TEMPLATE):
-            rk = _tagtype_to_rk(tag.type)
+            # rk = _tagtype_to_rk(tag.type)
             for rid in tag_data.item_ids:
                 try:
                     self.resource_service.add_tag_to_resource(rid, tag.id)
@@ -197,9 +195,7 @@ class TagService:
         new_full_path = self._compose_full_path(norm_path, new_name)
         old_full_path = self._full_path_of(tag)
         if new_full_path != old_full_path:
-            self._ensure_unique_full_path(
-                owner_id=tag.owner_id, tag_type=tag.type, full_path=new_full_path, exclude_tag_id=tag.id
-            )
+            self._ensure_unique_full_path(owner_id=tag.owner_id, tag_type=tag.type, full_path=new_full_path, exclude_tag_id=tag.id)
 
         tag.name = new_name
         tag.path = norm_path

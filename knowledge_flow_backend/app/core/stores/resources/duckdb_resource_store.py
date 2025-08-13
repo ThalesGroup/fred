@@ -80,26 +80,17 @@ class DuckdbResourceStore(BaseResourceStore):
 
     def list_resources_for_user(self, user: str, kind: ResourceKind) -> List[Resource]:
         with self.store._connect() as conn:
-            rows = conn.execute(
-                f"SELECT * FROM {self._table()} WHERE user = ? AND kind = ?",
-                [user, kind.value]
-            ).fetchall()
+            rows = conn.execute(f"SELECT * FROM {self._table()} WHERE user = ? AND kind = ?", [user, kind.value]).fetchall()
         return [self._deserialize(row) for row in rows]
 
     def get_all_resources(self, kind: ResourceKind) -> list[Resource]:
         with self.store._connect() as conn:
-            rows = conn.execute(
-                f"SELECT * FROM {self._table()} WHERE kind = ?",
-                [kind.value]
-            ).fetchall()
+            rows = conn.execute(f"SELECT * FROM {self._table()} WHERE kind = ?", [kind.value]).fetchall()
         return [self._deserialize(row) for row in rows]
 
     def get_resource_by_id(self, resource_id: str) -> Resource:
         with self.store._connect() as conn:
-            row = conn.execute(
-                f"SELECT * FROM {self._table()} WHERE id = ?",
-                [resource_id]
-            ).fetchone()
+            row = conn.execute(f"SELECT * FROM {self._table()} WHERE id = ?", [resource_id]).fetchone()
         if not row:
             raise ResourceNotFoundError(f"No resource with ID {resource_id}")
         return self._deserialize(row)
@@ -111,10 +102,7 @@ class DuckdbResourceStore(BaseResourceStore):
         except ResourceNotFoundError:
             pass
         with self.store._connect() as conn:
-            conn.execute(
-                f"INSERT INTO {self._table()} VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                self._serialize(resource)
-            )
+            conn.execute(f"INSERT INTO {self._table()} VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", self._serialize(resource))
         return resource
 
     def update_resource(self, resource_id: str, resource: Resource) -> Resource:
@@ -145,10 +133,7 @@ class DuckdbResourceStore(BaseResourceStore):
 
     def delete_resource(self, resource_id: str) -> None:
         with self.store._connect() as conn:
-            result = conn.execute(
-                f"DELETE FROM {self._table()} WHERE id = ?",
-                [resource_id]
-            )
+            result = conn.execute(f"DELETE FROM {self._table()} WHERE id = ?", [resource_id])
         if result.rowcount == 0:
             raise ResourceNotFoundError(f"No resource with ID {resource_id}")
 

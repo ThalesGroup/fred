@@ -260,6 +260,8 @@
   },
   "resourceLibrary": {
     "title": "{{typePlural}}",
+    "edit": "Edit",
+    "preview": "Preview",
     "createLibrary": "Create library",
     "createResource": "Add {{typeOne}} to library",
     "importResource": "Import {{typeOne}} from file",
