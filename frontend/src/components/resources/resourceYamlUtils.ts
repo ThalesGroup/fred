@@ -1,10 +1,8 @@
 // resourceYaml.ts
-// Lightweight YAML helpers shared by Prompt/Template editors.
-
 import yaml from "js-yaml";
+
 export type TemplateFormat = "markdown" | "html" | "text" | "json";
 
-// Extract {placeholders} from a body string
 export const extractPlaceholders = (body: string) => {
   const re = /\{([a-zA-Z_][a-zA-Z0-9_]*)\}/g;
   const vars = new Set<string>();
@@ -13,26 +11,118 @@ export const extractPlaceholders = (body: string) => {
   return Array.from(vars);
 };
 
-// Serialize a simple front-matter header; uses inline JSON for nested values
-export const buildFrontMatter1 = (header: Record<string, any>, body: string) => {
-  const lines: string[] = [];
-  for (const [k, v] of Object.entries(header)) {
-    if (v === undefined || v === null || (Array.isArray(v) && v.length === 0)) continue;
-    if (typeof v === "object") lines.push(`${k}: ${JSON.stringify(v)}`);
-    else lines.push(`${k}: ${String(v)}`);
-  }
-  return `${lines.join("\n")}\n---\n${body ?? ""}`;
-};
 export const buildFrontMatter = (header: Record<string, any>, body: string): string => {
-  const yamlHeader = yaml.dump(header).trim(); // pretty block-style YAML
-  return `${yamlHeader}\n---\n${body?.trim() ?? ""}`;
+  const yamlHeader = Object.keys(header || {}).length ? yaml.dump(header, { lineWidth: 100 }).trim() : "";
+  const cleanBody = (body ?? "").replace(/\r\n/g, "\n").trimEnd();
+  return yamlHeader ? `${yamlHeader}\n---\n${cleanBody}` : cleanBody;
 };
 
-// Heuristic: did the user paste a full YAML doc already?
-export const looksLikeYamlDoc = (text: string) =>
-  text.includes("\n---\n") && /^[A-Za-z0-9_-]+:\s/m.test(text);
+/** Detect if text looks like a front-matter doc (with or without opening ---). */
+export const looksLikeYamlDoc = (text: string) => {
+  const s = (text ?? "").replace(/\r\n/g, "\n").trimStart();
+  if (s.startsWith("---\n")) return true;
+  const sep = "\n---\n";
+  const i = s.indexOf(sep);
+  if (i === -1) return false;
+  const head = s.slice(0, i);
+  // header-ish if it contains at least one "key: value" line
+  return /^[A-Za-z0-9_-]+\s*:\s?/m.test(head);
+};
 
-// Build YAML for a PROMPT
+/** Split front-matter header + body.
+ * Supports:
+ *  A) Standard:  ---\nheader\n---\nbody
+ *  B) No opening delimiter:  header\n---\nbody
+ * If no header is found, returns { header: {}, body: text }.
+ */
+export const splitFrontMatter = (text: string): { header: Record<string, any>; body: string } => {
+  const norm = (text ?? "").replace(/\r\n/g, "\n").trimStart();
+
+  // Case A: standard front-matter with opening ---
+  let m = norm.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
+  if (m) {
+    const header = (yaml.load(m[1]) as Record<string, any>) ?? {};
+    return { header, body: m[2] ?? "" };
+  }
+
+  // Case B: header at top, then a single '---' line
+  const sep = "\n---\n";
+  const i = norm.indexOf(sep);
+  if (i !== -1) {
+    const headBlock = norm.slice(0, i);
+    // Only treat as header if it looks like YAML key/value lines
+    if (/^[A-Za-z0-9_-]+\s*:\s?/m.test(headBlock)) {
+      let header: Record<string, any> = {};
+      try {
+        header = (yaml.load(headBlock) as Record<string, any>) ?? {};
+      } catch {
+        header = {};
+      }
+      const body = norm.slice(i + sep.length);
+      return { header, body };
+    }
+  }
+
+  // Fallback: no header
+  return { header: {}, body: norm };
+};
+
+/** NEW: Rebuild a prompt schema from the body placeholders. */
+export const buildPromptSchemaFromBody = (body: string) => {
+  const vars = extractPlaceholders(body || "");
+  return {
+    type: "object",
+    required: vars,
+    properties: Object.fromEntries(vars.map((v) => [v, { type: "string", title: v }])),
+  };
+};
+
+/** NEW: Make a cleaned/upgraded header for PROMPT keeping extra keys unless overridden. */
+export const normalizePromptHeader = (
+  rawHeader: Record<string, any>,
+  body: string,
+  opts?: { keepVersion?: boolean; recomputeSchema?: boolean }
+): Record<string, any> => {
+  const keepVersion = opts?.keepVersion ?? true;
+  const recomputeSchema = opts?.recomputeSchema ?? true;
+
+  const header = { ...(rawHeader || {}) };
+
+  // Enforce kind
+  header.kind = "prompt";
+
+  // Version policy in UI-only mode:
+  if (!keepVersion || !header.version) {
+    header.version = header.version || "v1";
+  }
+
+  // Optional: ensure known fields exist (don’t kill unknown ones)
+  if (!("name" in header)) header.name = undefined;
+  if (!("description" in header)) header.description = undefined;
+  if (!("labels" in header)) header.labels = undefined;
+
+  // Recompute schema from body placeholders if desired
+  if (recomputeSchema) {
+    header.schema = buildPromptSchemaFromBody(body);
+  }
+
+  return header;
+};
+
+/** NEW: For TEMPLATE (if you need it later) */
+export const normalizeTemplateHeader = (
+  rawHeader: Record<string, any>,
+  body: string,
+  format: TemplateFormat,
+  opts?: { keepVersion?: boolean; recomputeSchema?: boolean }
+) => {
+  const h = normalizePromptHeader(rawHeader, body, opts);
+  h.kind = "template";
+  h.format = format;
+  return h;
+};
+
+// Existing builders (unchanged)
 export const buildPromptYaml = (opts: {
   name?: string | null;
   description?: string | null;
@@ -41,27 +131,17 @@ export const buildPromptYaml = (opts: {
   version?: string; // default v1
 }) => {
   const version = opts.version || "v1";
-  const vars = extractPlaceholders(opts.body);
-
-  const schema = {
-    type: "object",
-    required: vars,
-    properties: Object.fromEntries(vars.map((v) => [v, { type: "string", title: v }])),
-  };
-
+  const schema = buildPromptSchemaFromBody(opts.body);
   const header: Record<string, any> = {
     version,
     kind: "prompt",
     name: opts.name || undefined,
     description: opts.description || undefined,
-    // tags: opts.labels && opts.labels.length ? opts.labels : undefined,
     schema,
   };
-
   return buildFrontMatter(header, opts.body);
 };
 
-// Build YAML for a TEMPLATE
 export const buildTemplateYaml = (opts: {
   name?: string | null;
   description?: string | null;
@@ -71,23 +151,14 @@ export const buildTemplateYaml = (opts: {
   version?: string; // default v1
 }) => {
   const version = opts.version || "v1";
-  const vars = extractPlaceholders(opts.body);
-
-  const schema = {
-    type: "object",
-    required: vars,
-    properties: Object.fromEntries(vars.map((v) => [v, { type: "string", title: v }])),
-  };
-
+  const schema = buildPromptSchemaFromBody(opts.body);
   const header: Record<string, any> = {
     version,
     kind: "template",
     name: opts.name || undefined,
     description: opts.description || undefined,
     format: opts.format,
-    // tags: opts.labels && opts.labels.length ? opts.labels : undefined,
     schema,
   };
-
   return buildFrontMatter(header, opts.body);
 };
