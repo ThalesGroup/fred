@@ -54,6 +54,7 @@ class ResourceController:
     def _register_routes(self, router: APIRouter, handle_exception):
         @router.post(
             "/resources",
+            tags=["Resources"],
             response_model=Resource,
             response_model_exclude_none=True,
             status_code=status.HTTP_201_CREATED,
@@ -71,6 +72,7 @@ class ResourceController:
 
         @router.put(
             "/resources/{resource_id}",
+            tags=["Resources"],
             response_model=Resource,
             response_model_exclude_none=True,
             summary="Update a resource (content/metadata).",
@@ -87,6 +89,7 @@ class ResourceController:
 
         @router.get(
             "/resources/{resource_id}",
+            tags=["Resources"],
             response_model=Resource,
             response_model_exclude_none=True,
             summary="Get a resource by id.",
@@ -102,6 +105,7 @@ class ResourceController:
 
         @router.get(
             "/resources",
+            tags=["Resources"],
             response_model=List[Resource],
             response_model_exclude_none=True,
             summary="List all resources for a kind (prompt|template).",
@@ -117,6 +121,7 @@ class ResourceController:
 
         @router.delete(
             "/resources/{resource_id}",
+            tags=["Resources"],
             summary="Delete a resource by id.",
         )
         async def delete_resource(
