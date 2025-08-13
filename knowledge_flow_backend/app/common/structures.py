@@ -272,6 +272,7 @@ class StorageConfig(BaseModel):
     postgres: PostgresStoreConfig
     opensearch: OpenSearchStoreConfig
     prompt_store: StoreConfig
+    resource_store: StoreConfig
     tag_store: StoreConfig
     metadata_store: StoreConfig
     catalog_store: StoreConfig

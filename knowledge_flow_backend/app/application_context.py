@@ -62,6 +62,9 @@ from app.core.stores.metadata.opensearch_metadata_store import OpenSearchMetadat
 from app.core.stores.prompts.base_prompt_store import BasePromptStore
 from app.core.stores.prompts.duckdb_prompt_store import DuckdbPromptStore
 from app.core.stores.prompts.opensearch_prompt_store import OpenSearchPromptStore
+from app.core.stores.resources.base_resource_store import BaseResourceStore
+from app.core.stores.resources.duckdb_resource_store import DuckdbResourceStore
+from app.core.stores.resources.opensearch_resource_store import OpenSearchResourceStore
 from app.core.stores.tags.base_tag_store import BaseTagStore
 from app.core.stores.tags.duckdb_tag_store import DuckdbTagStore
 from app.core.stores.tags.opensearch_tags_store import OpenSearchTagStore
@@ -161,6 +164,7 @@ class ApplicationContext:
     _metadata_store_instance: Optional[BaseMetadataStore] = None
     _tag_store_instance: Optional[BaseTagStore] = None
     _prompt_store_instance: Optional[BasePromptStore] = None
+    _resource_store_instance: Optional[BaseResourceStore] = None
     _tabular_store_instance: Optional[Union[DuckDBTableStore, SQLTableStore]] = None
     _catalog_store_instance: Optional[BaseCatalogStore] = None
     _file_store_instance: Optional[BaseFileStore] = None
@@ -539,6 +543,32 @@ class ApplicationContext:
         else:
             raise ValueError(f"Unsupported tag storage backend: {store_config.type}")
         return self._prompt_store_instance
+
+    def get_resource_store(self) -> BaseResourceStore:
+        if self._resource_store_instance is not None:
+            return self._resource_store_instance
+
+        store_config = get_configuration().storage.resource_store
+        if isinstance(store_config, DuckdbStoreConfig):
+            db_path = Path(store_config.duckdb_path).expanduser()
+            self._resource_store_instance = DuckdbResourceStore(db_path)
+        elif isinstance(store_config, OpenSearchIndexConfig):
+            opensearch_config = get_configuration().storage.opensearch
+            password = opensearch_config.password
+            if not password:
+                raise ValueError("Missing OpenSearch credentials: OPENSEARCH_PASSWORD")
+            self._resource_store_instance = OpenSearchResourceStore(
+                host=opensearch_config.host,
+                username=opensearch_config.username,
+                password=password,
+                secure=opensearch_config.secure,
+                verify_certs=opensearch_config.verify_certs,
+                index=store_config.index,
+            )
+        else:
+            raise ValueError(f"Unsupported tag storage backend: {store_config.type}")
+        return self._resource_store_instance
+
 
     def get_tabular_store(self):
         if hasattr(self, "_tabular_store_instance") and self._tabular_store_instance is not None:

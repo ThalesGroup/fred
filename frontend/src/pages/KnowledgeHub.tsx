@@ -20,9 +20,9 @@ import { TopBar } from "../common/TopBar";
 import { DocumentOperations } from "../components/documents/operations/DocumentOperations";
 import InvisibleLink from "../components/InvisibleLink";
 import DocumentLibraryList from "../components/documents/libraries/DocumentLibraryList";
-import PromptLibraryList from "../components/prompts/PromptLibraryList";
+import ResourceLibraryList from "../components/resources/ResourceLibraryList";
 
-const knowledgeHubViews = ["prompts", "operations", "documents"] as const;
+const knowledgeHubViews = ["templates", "prompts", "operations", "documents"] as const;
 type KnowledgeHubView = (typeof knowledgeHubViews)[number];
 
 function isKnowledgeHubView(value: string): value is KnowledgeHubView {
@@ -50,6 +50,11 @@ export const KnowledgeHub = () => {
       <TopBar title={t("knowledge.title")} description={t("knowledge.description")}>
         <Box>
           <ButtonGroup variant="outlined" color="primary" size="small">
+            <InvisibleLink to="/knowledge?view=templates">
+              <Button variant={selectedView === "templates" ? "contained" : "outlined"}>
+                {t("knowledge.viewSelector.templates")}
+              </Button>
+            </InvisibleLink>
             <InvisibleLink to="/knowledge?view=prompts">
               <Button variant={selectedView === "prompts" ? "contained" : "outlined"}>
                 {t("knowledge.viewSelector.prompts")}
@@ -75,9 +80,19 @@ export const KnowledgeHub = () => {
             <DocumentLibraryList />
           </Container>
         )}
-        {selectedView === "prompts" && (
+        {/* {selectedView === "prompts" && (
           <Container maxWidth="xl">
             <PromptLibraryList />
+          </Container>
+        )} */}
+        {selectedView === "prompts" && (
+          <Container maxWidth="xl">
+            <ResourceLibraryList kind="prompt" />
+          </Container>
+        )}
+        {selectedView === "templates" && (
+          <Container maxWidth="xl">
+            <ResourceLibraryList kind="template" />
           </Container>
         )}
         {selectedView === "operations" && <DocumentOperations />}

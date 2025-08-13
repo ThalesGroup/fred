@@ -23,7 +23,7 @@ from app.common.document_structures import DocumentMetadata
 class TagType(str, Enum):
     DOCUMENT = "document"
     PROMPT = "prompt"
-
+    TEMPLATE = "template"
 
 def _normalize_path(p: Optional[str]) -> Optional[str]:
     if p is None:
@@ -107,9 +107,3 @@ class TagWithItemsId(Tag):
         return cls(**tag.model_dump(), item_ids=item_ids)
 
 
-class TagWithDocuments(Tag):
-    documents: list[DocumentMetadata]
-
-    @classmethod
-    def from_tag(cls, tag: Tag, documents: list[DocumentMetadata]) -> "TagWithDocuments":
-        return cls(**tag.model_dump(), documents=documents)

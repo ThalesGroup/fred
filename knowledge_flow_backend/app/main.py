@@ -28,6 +28,7 @@ from app.features.catalog.controller import CatalogController
 from app.features.prompts.controller import PromptController
 from app.features.pull.controller import PullDocumentController
 from app.features.pull.service import PullDocumentService
+from app.features.resources.controller import ResourceController
 from app.features.scheduler.controller import SchedulerController
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -113,6 +114,7 @@ def create_app() -> FastAPI:
     TemplateController(router)
     TagController(router)
     PromptController(router)
+    ResourceController(router)
     VectorSearchController(router)
 
     if configuration.scheduler.enabled:

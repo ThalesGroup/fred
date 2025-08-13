@@ -133,7 +133,7 @@ export default function PromptLibraryList() {
       <Box display="flex" alignItems="center" justifyContent="space-between">
         <Breadcrumbs>
           <Chip
-            label={t("promptLibrariesList.prompts")}
+            label={t("resourceLibrary.title", { typePlural })}
             icon={<FolderOutlinedIcon />}
             onClick={() => setSelectedFolder(undefined)}
             clickable
@@ -153,7 +153,7 @@ export default function PromptLibraryList() {
             onClick={() => setIsCreateDrawerOpen(true)}
             sx={{ borderRadius: "8px" }}
           >
-            {t("promptLibrariesList.createLibrary")}
+            {t("resourceLibrary.createLibrary")}
           </Button>
           <Button
             variant="contained"
@@ -241,7 +241,7 @@ export default function PromptLibraryList() {
         onLibraryCreated={async () => {
           await refetch();
         }}
-        mode="prompts"
+        mode="prompt"
         currentPath={selectedFolder} // undefined for root-level creation
       />
     </Box>

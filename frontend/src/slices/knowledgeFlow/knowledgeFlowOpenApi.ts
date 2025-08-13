@@ -124,6 +124,25 @@ const injectedRtkApi = api.injectEndpoints({
     rawSqlQuery: build.mutation<RawSqlQueryApiResponse, RawSqlQueryApiArg>({
       query: (queryArg) => ({ url: `/knowledge-flow/v1/tabular/sql`, method: "POST", body: queryArg.rawSqlRequest }),
     }),
+    templatesList: build.query<TemplatesListApiResponse, TemplatesListApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/templates`,
+        params: {
+          family: queryArg.family,
+          tags: queryArg.tags,
+          q: queryArg.q,
+        },
+      }),
+    }),
+    templatesGetVersions: build.query<TemplatesGetVersionsApiResponse, TemplatesGetVersionsApiArg>({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/templates/${queryArg.templateId}` }),
+    }),
+    templatesGet: build.query<TemplatesGetApiResponse, TemplatesGetApiArg>({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/templates/${queryArg.templateId}/${queryArg.version}` }),
+    }),
+    templatesGetContent: build.query<TemplatesGetContentApiResponse, TemplatesGetContentApiArg>({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/templates/${queryArg.templateId}/${queryArg.version}/content` }),
+    }),
     listAllTagsKnowledgeFlowV1TagsGet: build.query<
       ListAllTagsKnowledgeFlowV1TagsGetApiResponse,
       ListAllTagsKnowledgeFlowV1TagsGetApiArg
@@ -193,6 +212,52 @@ const injectedRtkApi = api.injectEndpoints({
       CreatePromptKnowledgeFlowV1PromptsPostApiArg
     >({
       query: (queryArg) => ({ url: `/knowledge-flow/v1/prompts`, method: "POST", body: queryArg.prompt }),
+    }),
+    createResourceKnowledgeFlowV1ResourcesPost: build.mutation<
+      CreateResourceKnowledgeFlowV1ResourcesPostApiResponse,
+      CreateResourceKnowledgeFlowV1ResourcesPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/resources`,
+        method: "POST",
+        body: queryArg.resourceCreate,
+        params: {
+          library_tag_id: queryArg.libraryTagId,
+        },
+      }),
+    }),
+    listResourcesByKindKnowledgeFlowV1ResourcesGet: build.query<
+      ListResourcesByKindKnowledgeFlowV1ResourcesGetApiResponse,
+      ListResourcesByKindKnowledgeFlowV1ResourcesGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/resources`,
+        params: {
+          kind: queryArg.kind,
+        },
+      }),
+    }),
+    updateResourceKnowledgeFlowV1ResourcesResourceIdPut: build.mutation<
+      UpdateResourceKnowledgeFlowV1ResourcesResourceIdPutApiResponse,
+      UpdateResourceKnowledgeFlowV1ResourcesResourceIdPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/resources/${queryArg.resourceId}`,
+        method: "PUT",
+        body: queryArg.resourceUpdate,
+      }),
+    }),
+    getResourceKnowledgeFlowV1ResourcesResourceIdGet: build.query<
+      GetResourceKnowledgeFlowV1ResourcesResourceIdGetApiResponse,
+      GetResourceKnowledgeFlowV1ResourcesResourceIdGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/resources/${queryArg.resourceId}` }),
+    }),
+    deleteResourceKnowledgeFlowV1ResourcesResourceIdDelete: build.mutation<
+      DeleteResourceKnowledgeFlowV1ResourcesResourceIdDeleteApiResponse,
+      DeleteResourceKnowledgeFlowV1ResourcesResourceIdDeleteApiArg
+    >({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/resources/${queryArg.resourceId}`, method: "DELETE" }),
     }),
     searchDocumentsUsingVectorization: build.mutation<
       SearchDocumentsUsingVectorizationApiResponse,
@@ -309,6 +374,29 @@ export type RawSqlQueryApiResponse = /** status 200 Successful Response */ Tabul
 export type RawSqlQueryApiArg = {
   rawSqlRequest: RawSqlRequest;
 };
+export type TemplatesListApiResponse = /** status 200 Successful Response */ TemplateSummary[];
+export type TemplatesListApiArg = {
+  /** Filter by family, e.g. 'reports' */
+  family?: string | null;
+  /** Comma-separated tags */
+  tags?: string | null;
+  /** Free-text search on name/description */
+  q?: string | null;
+};
+export type TemplatesGetVersionsApiResponse = /** status 200 Successful Response */ TemplateSummary;
+export type TemplatesGetVersionsApiArg = {
+  templateId: string;
+};
+export type TemplatesGetApiResponse = /** status 200 Successful Response */ TemplateMetadata;
+export type TemplatesGetApiArg = {
+  templateId: string;
+  version: string;
+};
+export type TemplatesGetContentApiResponse = /** status 200 Successful Response */ TemplateContent;
+export type TemplatesGetContentApiArg = {
+  templateId: string;
+  version: string;
+};
 export type ListAllTagsKnowledgeFlowV1TagsGetApiResponse = /** status 200 Successful Response */ TagWithItemsId[];
 export type ListAllTagsKnowledgeFlowV1TagsGetApiArg = {
   /** Filter by tag type */
@@ -355,6 +443,34 @@ export type UpdatePromptKnowledgeFlowV1PromptsPromptIdPutApiArg = {
 export type CreatePromptKnowledgeFlowV1PromptsPostApiResponse = /** status 200 Successful Response */ TagWithItemsId;
 export type CreatePromptKnowledgeFlowV1PromptsPostApiArg = {
   prompt: Prompt;
+};
+export type CreateResourceKnowledgeFlowV1ResourcesPostApiResponse = /** status 201 Successful Response */ Resource;
+export type CreateResourceKnowledgeFlowV1ResourcesPostApiArg = {
+  /** Library tag id to attach this resource to */
+  libraryTagId: string;
+  resourceCreate: ResourceCreate;
+};
+export type ListResourcesByKindKnowledgeFlowV1ResourcesGetApiResponse =
+  /** status 200 Successful Response */ Resource[];
+export type ListResourcesByKindKnowledgeFlowV1ResourcesGetApiArg = {
+  /** prompt | template */
+  kind: ResourceKind;
+};
+export type UpdateResourceKnowledgeFlowV1ResourcesResourceIdPutApiResponse =
+  /** status 200 Successful Response */ Resource;
+export type UpdateResourceKnowledgeFlowV1ResourcesResourceIdPutApiArg = {
+  resourceId: string;
+  resourceUpdate: ResourceUpdate;
+};
+export type GetResourceKnowledgeFlowV1ResourcesResourceIdGetApiResponse =
+  /** status 200 Successful Response */ Resource;
+export type GetResourceKnowledgeFlowV1ResourcesResourceIdGetApiArg = {
+  resourceId: string;
+};
+export type DeleteResourceKnowledgeFlowV1ResourcesResourceIdDeleteApiResponse =
+  /** status 200 Successful Response */ any;
+export type DeleteResourceKnowledgeFlowV1ResourcesResourceIdDeleteApiArg = {
+  resourceId: string;
 };
 export type SearchDocumentsUsingVectorizationApiResponse = /** status 200 Successful Response */ DocumentSource[];
 export type SearchDocumentsUsingVectorizationApiArg = {
@@ -469,7 +585,43 @@ export type TabularQueryResponse = {
 export type RawSqlRequest = {
   query: string;
 };
-export type TagType = "document" | "prompt";
+export type TemplateSummary = {
+  /** Template identifier (unique within its family). */
+  id: string;
+  /** Functional group, e.g. 'reports'. */
+  family: string;
+  /** Human display name. */
+  name?: string | null;
+  /** Short description. */
+  description?: string | null;
+  /** Available versions. */
+  versions?: string[];
+  tags?: string[];
+};
+export type TemplateMetadata = {
+  id: string;
+  family: string;
+  version: string;
+  name?: string | null;
+  description?: string | null;
+  format?: "markdown" | "docx" | "html" | "json";
+  input_schema?: {
+    [key: string]: any;
+  };
+  size_bytes?: number | null;
+  checksum?: string | null;
+};
+export type TemplateContent = {
+  id: string;
+  version: string;
+  mime?:
+    | "text/markdown"
+    | "text/html"
+    | "application/json"
+    | "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  body: string;
+};
+export type TagType = "document" | "prompt" | "template";
 export type TagWithItemsId = {
   id: string;
   created_at: string;
@@ -504,6 +656,35 @@ export type Prompt = {
   owner_id: string;
   created_at: string;
   updated_at: string;
+};
+export type ResourceKind = "prompt" | "template";
+export type Resource = {
+  id: string;
+  kind: ResourceKind;
+  version: string;
+  name?: string | null;
+  description?: string | null;
+  labels?: string[] | null;
+  author: string;
+  created_at: string;
+  updated_at: string;
+  /** Raw YAML text or other content */
+  content: string;
+  /** List of tags associated with the resource */
+  library_tags: string[];
+};
+export type ResourceCreate = {
+  kind: ResourceKind;
+  content: string;
+  name?: string | null;
+  description?: string | null;
+  labels?: string[] | null;
+};
+export type ResourceUpdate = {
+  content?: string | null;
+  name?: string | null;
+  description?: string | null;
+  labels?: string[] | null;
 };
 export type DocumentSource = {
   content: string;
@@ -577,6 +758,14 @@ export const {
   useGetAllSchemasQuery,
   useLazyGetAllSchemasQuery,
   useRawSqlQueryMutation,
+  useTemplatesListQuery,
+  useLazyTemplatesListQuery,
+  useTemplatesGetVersionsQuery,
+  useLazyTemplatesGetVersionsQuery,
+  useTemplatesGetQuery,
+  useLazyTemplatesGetQuery,
+  useTemplatesGetContentQuery,
+  useLazyTemplatesGetContentQuery,
   useListAllTagsKnowledgeFlowV1TagsGetQuery,
   useLazyListAllTagsKnowledgeFlowV1TagsGetQuery,
   useCreateTagKnowledgeFlowV1TagsPostMutation,
@@ -589,6 +778,13 @@ export const {
   useLazyGetPromptKnowledgeFlowV1PromptsPromptIdGetQuery,
   useUpdatePromptKnowledgeFlowV1PromptsPromptIdPutMutation,
   useCreatePromptKnowledgeFlowV1PromptsPostMutation,
+  useCreateResourceKnowledgeFlowV1ResourcesPostMutation,
+  useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery,
+  useLazyListResourcesByKindKnowledgeFlowV1ResourcesGetQuery,
+  useUpdateResourceKnowledgeFlowV1ResourcesResourceIdPutMutation,
+  useGetResourceKnowledgeFlowV1ResourcesResourceIdGetQuery,
+  useLazyGetResourceKnowledgeFlowV1ResourcesResourceIdGetQuery,
+  useDeleteResourceKnowledgeFlowV1ResourcesResourceIdDeleteMutation,
   useSearchDocumentsUsingVectorizationMutation,
   useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation,
   useScheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPostMutation,

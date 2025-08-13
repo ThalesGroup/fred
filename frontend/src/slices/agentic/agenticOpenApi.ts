@@ -255,9 +255,9 @@ export type McpAgentRequest = {
   name: string;
   base_prompt: string;
   mcp_servers: McpServerConfiguration[];
-  role?: string | null;
+  role: string;
   nickname?: string | null;
-  description?: string | null;
+  description: string;
   icon?: string | null;
   categories?: string[] | null;
   tag?: string | null;

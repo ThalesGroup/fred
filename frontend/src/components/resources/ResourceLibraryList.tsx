@@ -14,7 +14,7 @@
 
 /**
  *
- * This component renders the "Document Libraries" view for the knowledge flow app.
+ * This component renders the "Prompt Libraries" view for the knowledge flow app.
  * It displays a hierarchical folder structure (libraries) in a collapsible TreeView
  * using MUI X SimpleTreeView (MIT community edition). It supports:
  *
@@ -44,19 +44,34 @@ import UploadIcon from "@mui/icons-material/Upload";
 import { IconButton, Tooltip } from "@mui/material";
 import UnfoldMoreIcon from "@mui/icons-material/UnfoldMore";
 import UnfoldLessIcon from "@mui/icons-material/UnfoldLess";
-import { LibraryCreateDrawer } from "../../../common/LibraryCreateDrawer";
 import { Box, Breadcrumbs, Button, Card, Chip, Link, Typography } from "@mui/material";
 import {
-  useSearchDocumentMetadataKnowledgeFlowV1DocumentsMetadataSearchPostMutation,
   useListAllTagsKnowledgeFlowV1TagsGetQuery,
-} from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
-import { buildTree, TagNode, findNode } from "../../tags/tagTree";
+  ResourceKind,
+  useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery,
+} from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { buildTree, TagNode, findNode } from "../tags/tagTree";
 import { useTranslation } from "react-i18next";
-import { DocumentLibraryTree } from "./DocumentLibraryTree";
-import { DocumentUploadDrawer } from "./DocumentUploadDrawer";
-import { useDocumentCommands } from "../common/useDocumentCommands";
+import { useResourceCommands } from "./useResourceCommands";
+import { ResourceLibraryTree } from "./ResourceLibraryTree";
+import { LibraryCreateDrawer } from "../../common/LibraryCreateDrawer";
+import { PromptEditorModal } from "./PromptEditorModal";
+import { TemplateEditorModal } from "./TemplateEditorModal";
 
-export default function DocumentLibraryList() {
+const useKindLabels = (kind: "prompt" | "template") => {
+  const { t } = useTranslation();
+  const one = t(`resource.kind.${kind}.one`);
+  const other = t(`resource.kind.${kind}.other`);
+  return { one, other };
+};
+// Accept kind prop to ensure this component is typed correctly
+type Props = {
+  kind: ResourceKind;
+};
+
+export default function ResourceLibraryList({ kind }: Props) {
+  console.log("ResourceLibraryList rendered with kind:", kind);
+  const { one: typeOne, other: typePlural } = useKindLabels(kind);
   /** get our internalization library for english or french */
   const { t } = useTranslation();
 
@@ -69,37 +84,38 @@ export default function DocumentLibraryList() {
   /** Whether the create-library drawer is open */
   const [isCreateDrawerOpen, setIsCreateDrawerOpen] = React.useState(false);
 
-  const [openUploadDrawer, setOpenUploadDrawer] = React.useState(false);
+  const [openCreatePrompt, setOpenCreatePrompt] = React.useState(false);
   const [uploadTargetTagId, setUploadTargetTagId] = React.useState<string | null>(null);
 
-  /** Fetch all tags of type "document" to build the folder tree */
+  // 1) Query tags filtered by the current resource kind ("prompt" | "template")
   const {
-    data: tags,
+    data: allTags,
     isLoading,
     isError,
-    refetch,
+    refetch: refetchTags,
   } = useListAllTagsKnowledgeFlowV1TagsGetQuery(
-    { type: "document", limit: 100, offset: 0 },
+    { type: kind, limit: 10000, offset: 0 },
     { refetchOnMountOrArgChange: true },
   );
+  // 2) Query all resources of the current kind
+  const { data: allResources, refetch: refetchResources } = useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery({
+    kind,
+  });
 
-  const [fetchAllDocuments, { data: allDocuments }] =
-    useSearchDocumentMetadataKnowledgeFlowV1DocumentsMetadataSearchPostMutation();
-
-  React.useEffect(() => {
-    fetchAllDocuments({ filters: {} });
-  }, [fetchAllDocuments]);
   /** Build the TagNode tree from the flat list of tags */
-  const tree = React.useMemo<TagNode | null>(() => (tags ? buildTree(tags) : null), [tags]);
+  const tree = React.useMemo<TagNode | null>(() => (allTags ? buildTree(allTags) : null), [allTags]);
 
   // after your selectedTagIds memo
 
   /** Return sorted list of direct children for a given node */
-  const getChildren = React.useCallback((n: TagNode) => {
-    const arr = Array.from(n.children.values());
-    arr.sort((a, b) => a.name.localeCompare(b.name));
-    return arr;
-  }, []);
+  const getChildren = React.useCallback(
+    (n: TagNode) => {
+      const arr = Array.from(n.children.values());
+      arr.sort((a, b) => a.name.localeCompare(b.name));
+      return arr;
+    },
+    [kind],
+  );
 
   /**
    * Expand or collapse the entire tree
@@ -122,11 +138,13 @@ export default function DocumentLibraryList() {
   const allExpanded = React.useMemo(() => expanded.length > 0, [expanded]);
 
   /** the toggle retrievable handler */
-  const { toggleRetrievable, removeFromLibrary, preview } = useDocumentCommands({
-    refetchTags: refetch,
-    refetchDocs: () => fetchAllDocuments({ filters: {} }),
+  const { removeFromLibrary, createResource } = useResourceCommands(kind, {
+    refetchTags: refetchTags,
+    refetchResources: refetchResources,
   });
-  
+  React.useEffect(() => {
+    setOpenCreatePrompt(false);
+  }, [kind]);
   return (
     <Box display="flex" flexDirection="column" gap={2}>
       {/* Breadcrumb navigation and create-library button */}
@@ -134,7 +152,7 @@ export default function DocumentLibraryList() {
       <Box display="flex" alignItems="center" justifyContent="space-between">
         <Breadcrumbs>
           <Chip
-            label={t("documentLibrariesList.documents")}
+            label={t("resourceLibrary.title", { typePlural })}
             icon={<FolderOutlinedIcon />}
             onClick={() => setSelectedFolder(undefined)}
             clickable
@@ -154,24 +172,24 @@ export default function DocumentLibraryList() {
             onClick={() => setIsCreateDrawerOpen(true)}
             sx={{ borderRadius: "8px" }}
           >
-            {t("documentLibrariesList.createLibrary")}
+            {t("resourceLibrary.createLibrary")}
           </Button>
           <Button
             variant="contained"
             startIcon={<UploadIcon />}
             onClick={() => {
-              if (!selectedFolder) return; // or handle root uploads
+              if (!selectedFolder) return;
               const node = findNode(tree, selectedFolder);
               const firstTagId = node?.tagsHere?.[0]?.id;
               if (firstTagId) {
                 setUploadTargetTagId(firstTagId);
-                setOpenUploadDrawer(true);
+                setOpenCreatePrompt(true);
               }
             }}
             disabled={!selectedFolder} // disable if no folder selected
             sx={{ borderRadius: "8px" }}
           >
-            {t("documentLirbrary.uploadInLibrary")}
+            {t("resourceLibrary.uploadInLibrary", { typeOne })}
           </Button>
         </Box>
       </Box>
@@ -179,15 +197,15 @@ export default function DocumentLibraryList() {
       {/* Loading state */}
       {isLoading && (
         <Card sx={{ p: 3, borderRadius: 3 }}>
-          <Typography variant="body2">{t("documentLibrary.loadingLibraries")}</Typography>
+          <Typography variant="body2">{t("promptLibrary.loadingLibraries")}</Typography>
         </Card>
       )}
 
       {/* Error state */}
       {isError && (
         <Card sx={{ p: 3, borderRadius: 3 }}>
-          <Typography color="error">{t("documentLibrary.failedToLoad")}</Typography>
-          <Button onClick={() => refetch()} sx={{ mt: 1 }} size="small" variant="outlined">
+          <Typography color="error">{t("resourceLibrary.failedToLoad")}</Typography>
+          <Button onClick={() => refetchTags()} sx={{ mt: 1 }} size="small" variant="outlined">
             {t("dialogs.retry")}
           </Button>
         </Card>
@@ -199,11 +217,9 @@ export default function DocumentLibraryList() {
           {/* Tree header with expand/collapse all control */}
           <Box display="flex" alignItems="center" justifyContent="space-between" px={1} py={0.5}>
             <Typography variant="subtitle2" color="text.secondary">
-              {t("documentLibrary.folders")}
+              {t("resourceLibrary.folders")}
             </Typography>
-            <Tooltip
-              title={allExpanded ? t("documentLibrariesList.collapseAll") : t("documentLibrariesList.expandAll")}
-            >
+            <Tooltip title={allExpanded ? t("resourceLibrary.collapseAll") : t("resourceLibrary.expandAll")}>
               <IconButton size="small" onClick={() => setAllExpanded(!allExpanded)} disabled={!tree}>
                 {allExpanded ? <UnfoldLessIcon fontSize="small" /> : <UnfoldMoreIcon fontSize="small" />}
               </IconButton>
@@ -212,41 +228,52 @@ export default function DocumentLibraryList() {
 
           {/* Recursive folder rendering */}
           <Box px={1} pb={1}>
-            <DocumentLibraryTree
+            <ResourceLibraryTree
               tree={tree}
               expanded={expanded}
               setExpanded={setExpanded}
               selectedFolder={selectedFolder}
               setSelectedFolder={setSelectedFolder}
               getChildren={getChildren}
-              documents={allDocuments ?? []}
-              onPreview={preview}
-              onToggleRetrievable={toggleRetrievable}
+              resources={allResources ?? []}
               onRemoveFromLibrary={removeFromLibrary}
             />
           </Box>
           {/* ⬇️ Document list appears under the tree */}
         </Card>
       )}
-
-      <DocumentUploadDrawer
-        isOpen={openUploadDrawer}
-        onClose={() => setOpenUploadDrawer(false)}
-        onUploadComplete={async () => {
-          await refetch(); // reload all tags
-          await fetchAllDocuments({ filters: {} }); // reload all documents
-        }}
-        metadata={{ tags: [uploadTargetTagId] }}
-      />
+      {kind === "template" ? (
+        <TemplateEditorModal
+          isOpen={openCreatePrompt}
+          onClose={() => setOpenCreatePrompt(false)}
+          onSave={(payload) => {
+            if (uploadTargetTagId) {
+              // payload is ResourceCreate-like { name?, description?, content }
+              createResource(payload, uploadTargetTagId);
+              setOpenCreatePrompt(false);
+            }
+          }}
+        />
+      ) : (
+        <PromptEditorModal
+          isOpen={openCreatePrompt}
+          onClose={() => setOpenCreatePrompt(false)}
+          onSave={(payload) => {
+            if (!uploadTargetTagId) return;
+            createResource(payload, uploadTargetTagId); // ← same call
+            setOpenCreatePrompt(false);
+          }}
+        />
+      )}
 
       {/* Create-library drawer */}
       <LibraryCreateDrawer
         isOpen={isCreateDrawerOpen}
         onClose={() => setIsCreateDrawerOpen(false)}
         onLibraryCreated={async () => {
-          await refetch();
+          await refetchTags();
         }}
-        mode="document" // always create document libraries
+        mode={kind}
         currentPath={selectedFolder} // undefined for root-level creation
       />
     </Box>
