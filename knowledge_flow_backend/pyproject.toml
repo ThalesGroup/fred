@@ -47,7 +47,7 @@ dependencies = [
   "librosa==0.11.0",
   "openai-whisper==20250625",
   "numba>=0.59",
-  "llvmlite>=0.42"
+  "llvmlite>=0.42",
   "pymysql>=1.1.1",
   "duckdb-engine>=0.17.0",
   "psycopg2-binary>=2.9.10",

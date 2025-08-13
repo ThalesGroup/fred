@@ -81,7 +81,7 @@ Production services and databases can be added later or via the **deployment fac
 
 **Note:**: `FFmpeg` is only required for the `knowledge-flow backend` in order to be able to process audio files.
 
-##### Optiona
+##### Optional
 
 | Tool   | Version | Install hint                                                           | Comment                     |
 | ------ | ------- | ---------------------------------------------------------------------- | --------------------------- |
