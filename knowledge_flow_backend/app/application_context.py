@@ -700,9 +700,9 @@ class ApplicationContext:
         if isinstance(self.configuration.storage.catalog_store, DuckdbStoreConfig):
             logger.info(f"     ↳ DB Path: {self.configuration.storage.catalog_store.duckdb_path}")
 
-        logger.info(f"  📂 Prompt storage backend: {self.configuration.storage.prompt_store.type}")
-        if isinstance(self.configuration.storage.prompt_store, DuckdbStoreConfig):
-            logger.info(f"     ↳ DB Path: {self.configuration.storage.prompt_store.duckdb_path}")
+        logger.info(f"  📂 Resource storage backend: {self.configuration.storage.resource_store.type}")
+        if isinstance(self.configuration.storage.resource_store, DuckdbStoreConfig):
+            logger.info(f"     ↳ DB Path: {self.configuration.storage.resource_store.duckdb_path}")
 
         logger.info(f"  📂 Tag storage backend: {self.configuration.storage.tag_store.type}")
         if isinstance(self.configuration.storage.tag_store, DuckdbStoreConfig):
