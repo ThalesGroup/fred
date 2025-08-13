@@ -1,4 +1,7 @@
 {{- define "common-library.ingress" -}}
+
+{{- if .app.ingress.enabled }}
+
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -22,9 +25,9 @@ spec:
             pathType: {{ .pathType | default "Prefix" }}
             backend:
               service:
-                name: {{ $.app.applicationName }}
+                name: {{ .service.name }}
                 port:
-                  name: {{ .servicePortName }}
+                  number: {{ .service.port }}
         {{- end }}
   {{- end }}
   {{- if .app.ingress.tls }}
@@ -37,4 +40,7 @@ spec:
       secretName: {{ .secretName }}
   {{- end }}
   {{- end }}
+
+{{- end }}
+
 {{ end -}}

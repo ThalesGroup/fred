@@ -126,7 +126,7 @@ class TabularExpert(AgentFlow):
                 if isinstance(msg, ToolMessage):
                     try:
                         datasets = json.loads(msg.content)
-                        summaries = self._extract_dataset_summaries(datasets)
+                        summaries = self._extract_dataset_summaries_from_get_schema_reponse(datasets)
                         if summaries:
                             response.content += (
                                 "\n\n### Available Datasets:\n" + "\n".join(summaries)
@@ -147,14 +147,16 @@ class TabularExpert(AgentFlow):
             )
             return {"messages": [fallback]}
 
-    def _extract_dataset_summaries(self, data: list[dict]) -> list[str]:
+    def _extract_dataset_summaries_from_get_schema_reponse(self, data: list[dict]) -> list[str]:
         summaries = []
         for entry in data:
-            try:
-                title = entry.get("document_name", "Untitled")
-                uid = entry.get("document_uid", "")
-                rows = entry.get("row_count", "?")
-                summaries.append(f"- **{title}** (`{uid}`), {rows} rows")
-            except Exception as e:
-                logger.warning(f"Failed to summarize dataset entry: {e}")
+            if isinstance(entry, dict) and {"document_name", "columns", "row_count"}.issubset(entry.keys()):
+                try:
+                    title = entry.get("document_name", "Untitled")
+                    uid = entry.get("document_uid", "")
+                    rows = entry.get("row_count", "?")
+                    summaries.append(f"- **{title}** (`{uid}`), {rows} rows")
+                except Exception as e:
+                    logger.warning(f"Failed to summarize dataset entry: {e}")
+
         return summaries
