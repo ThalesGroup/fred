@@ -105,7 +105,7 @@ applications:
     configuration_type:
       backend: true
       frontend: false
-    configuration: |
+    configuration:
       app:
         name: "Agentic Backend"
         base_url: "/agentic/v1"
@@ -464,7 +464,7 @@ applications:
     configuration_type:
       backend: true
       frontend: false
-    configuration: |
+    configuration:
       app:
         name: "Knowledge Flow Backend"
         base_url: "/knowledge-flow/v1"
