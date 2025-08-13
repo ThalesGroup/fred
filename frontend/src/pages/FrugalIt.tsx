@@ -18,10 +18,10 @@ import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
 import "dayjs/locale/en-gb";
 import { PeriodPicker } from "../frugalit/component/PeriodPicker.tsx";
-import { ClusterFilter } from "../common/ClusterFilter.tsx";
+import { ClusterFilter } from "../contrib/ClusterFilter.tsx";
 import { useContext, useState, useEffect } from "react";
 import { FootprintContext } from "../app/FootprintContextProvider.tsx";
-import { InspectCard } from "../common/InspectCard.tsx";
+import { InspectCard } from "../contrib/InspectCard.tsx";
 import { TopBar } from "../common/TopBar.tsx";
 
 // Import icons

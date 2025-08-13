@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import logging
-from typing import List
+from typing import List, Optional
 
 from fred_core import KeycloakUser
 from fred_core import ThreadSafeLRUCache
@@ -21,7 +21,7 @@ from fred_core import ThreadSafeLRUCache
 from opensearchpy import ConflictError, NotFoundError, OpenSearch, RequestsHttpConnection
 
 from app.core.stores.tags.base_tag_store import BaseTagStore, TagAlreadyExistsError, TagNotFoundError
-from app.features.tag.structure import Tag
+from app.features.tag.structure import Tag, TagType
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +36,22 @@ logger = logging.getLogger(__name__)
 #   - owner_id: User UID who owns this tag (type: keyword)
 # ==============================================================================
 
+TAGS_INDEX_SETTINGS = {
+    "analysis": {
+        "normalizer": {
+            "lc_norm": {"type": "custom", "filter": ["lowercase"]},
+        },
+        "analyzer": {
+            "path_hierarchy_analyzer": {
+                "type": "custom",
+                "tokenizer": "path_hierarchy",
+                "filter": ["lowercase"],
+            }
+        },
+    }
+}
 TAGS_INDEX_MAPPING = {
+    "settings": TAGS_INDEX_SETTINGS,
     "mappings": {
         "properties": {
             "id": {"type": "keyword"},
@@ -51,10 +66,21 @@ TAGS_INDEX_MAPPING = {
                 "type": "text",
                 "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
             },
+            "path": {"type": "keyword", "normalizer": "lc_norm", "null_value": ""},
+            # Canonical hierarchy: "path/name" or "name" if path is empty.
+            "full_path": {
+                "type": "keyword",
+                "normalizer": "lc_norm",
+                "fields": {"tree": {"type": "text", "analyzer": "path_hierarchy_analyzer"}},
+            },
             "type": {"type": "keyword"},  # TagType enum (e.g., "library")
         }
-    }
+    },
 }
+
+
+def _compose_full_path(path: Optional[str], name: str) -> str:
+    return f"{path}/{name}" if path else name
 
 
 class OpenSearchTagStore(BaseTagStore):
@@ -129,10 +155,13 @@ class OpenSearchTagStore(BaseTagStore):
 
     def create_tag(self, tag: Tag) -> Tag:
         try:
+            payload = tag.model_dump(mode="json")
+            payload["full_path"] = _compose_full_path(payload.get("path"), payload["name"])
+
             self.client.index(
                 index=self.index_name,
                 id=tag.id,
-                body=tag.model_dump(mode="json"),
+                body=payload,
                 params=self.default_params,
             )
             self._cache.set(tag.id, tag)
@@ -147,10 +176,13 @@ class OpenSearchTagStore(BaseTagStore):
     def update_tag_by_id(self, tag_id: str, tag: Tag) -> Tag:
         try:
             self.get_tag_by_id(tag_id)  # ensure it exists
+            payload = tag.model_dump(mode="json")
+            payload["full_path"] = _compose_full_path(payload.get("path"), payload["name"])
+
             self.client.index(
                 index=self.index_name,
                 id=tag_id,
-                body=tag.model_dump(mode="json"),
+                body=payload,
                 params=self.default_params,
             )
             self._cache.set(tag_id, tag)
@@ -175,4 +207,25 @@ class OpenSearchTagStore(BaseTagStore):
             raise TagNotFoundError(f"Tag with id '{tag_id}' not found.")
         except Exception as e:
             logger.error(f"[TAGS] Failed to delete tag '{tag_id}': {e}")
+            raise
+
+    def get_by_owner_type_full_path(self, owner_id: str, tag_type: TagType, full_path: str) -> Tag | None:
+        body = {
+            "query": {
+                "bool": {
+                    "filter": [
+                        {"term": {"owner_id": owner_id}},
+                        {"term": {"type": tag_type.value}},
+                        {"term": {"full_path": full_path}},
+                    ]
+                }
+            },
+            "size": 1,
+        }
+        try:
+            resp = self.client.search(index=self.index_name, body=body)
+            hits = resp.get("hits", {}).get("hits", [])
+            return Tag(**hits[0]["_source"]) if hits else None
+        except Exception as e:
+            logger.error(f"[TAGS] get_by_owner_type_full_path failed ({owner_id}, {tag_type}, {full_path}): {e}")
             raise

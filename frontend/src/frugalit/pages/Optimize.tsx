@@ -16,7 +16,7 @@ import { Box, FormControl, Grid2, InputLabel, MenuItem, Select, useTheme } from 
 import "dayjs/locale/en-gb";
 import { useContext, useEffect, useState } from "react";
 import { Serie, transformClusterConsumptionToSerie } from "../../utils/serie.tsx";
-import { ChartCard } from "../../common/ChartCard.tsx";
+import { ChartCard } from "../../contrib/ChartCard.tsx";
 import dayjs, { Dayjs } from "dayjs";
 import {
   Detail,
@@ -25,11 +25,11 @@ import {
   useGetEnergyMixMutation,
   useGetFinopsCostMutation,
 } from "../slices/api.tsx";
-import { OptimizeGainCard } from "../../common/OptimizeGainCard.tsx";
+import { OptimizeGainCard } from "../../contrib/OptimizeGainCard.tsx";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
-import { ElectricityMixChart } from "../../common/energy/ElectricityMixChart.tsx";
-import { ElectricityGco2 } from "../../common/energy/ElectricityGco2.tsx";
+import { ElectricityMixChart } from "../../contrib/energy/ElectricityMixChart.tsx";
+import { ElectricityGco2 } from "../../contrib/energy/ElectricityGco2.tsx";
 import { useSearchParams } from "react-router-dom";
 import LoadingWithProgress from "../../components/LoadingWithProgress.tsx";
 import { TopBar } from "../../common/TopBar.tsx";

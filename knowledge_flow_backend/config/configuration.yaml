@@ -94,8 +94,19 @@ storage:
     username: admin
 
   tabular_store:
-    type: "duckdb"
-    duckdb_path: "~/.fred/knowledge-flow/tabular.duckdb"
+    # Local DB 
+    # type: "sql"
+    # driver: "duckdb"
+    # path: "~/.fred/knowledge-flow/db.duckdb"
+    ## Servor DB
+    # type: "sql"
+    # driver: "postgresql+psycopg2"
+    # port: 5433
+    # database: "test_db_postgre_sql"
+    # username: "my_username" # Overrides the one specified as "SQL_USERNAME" in the .env file
+    # password: "my_password" # Overrides the one specified as "SQL_PASSWORD" in the .env file
+
+  
 
   catalog_store:
     type: "duckdb"

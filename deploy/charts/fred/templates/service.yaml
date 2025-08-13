@@ -1,0 +1,23 @@
+{{- define "common-library.service" -}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .app.applicationName }}
+  {{- if .app.service.annotations }}
+  annotations:
+{{ toYaml .app.service.annotations | indent 4 }}
+  {{- end }}
+  labels:
+    app: {{ .app.applicationName }}
+    {{- if .app.service.extraLabels }}
+{{ toYaml .app.service.extraLabels | indent 4 }}
+    {{- end }}
+spec:
+  type: {{ .app.service.type }}
+  selector:
+    app: {{ .app.applicationName }}
+  ports:
+{{ toYaml .app.service.ports | indent 2  }}
+
+{{ end -}}

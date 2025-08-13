@@ -1,0 +1,17 @@
+{{- define "common-library.configmap-backend" }}
+
+{{- if .app.configuration_type.backend }}
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: "{{ .app.applicationName }}-back"
+  namespace: {{ .root.Release.Namespace }}
+data:
+  configuration.yaml: |
+{{ .app.configuration | toYaml | indent 4 }}
+
+{{- end }}
+
+{{ end -}}

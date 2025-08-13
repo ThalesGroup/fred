@@ -43,10 +43,10 @@ import { ClusterConsumption } from "../slices/api";
 import { FootprintContext } from "../../app/FootprintContextProvider";
 import { Box, Grid2, Theme, useTheme } from "@mui/material";
 import { PeriodPicker } from "../component/PeriodPicker";
-import { ChartCard } from "../../common/ChartCard";
+import { ChartCard } from "../../contrib/ChartCard";
 import { transformClusterConsumptionToSerie } from "../../utils/serie";
-import { NamespaceFilter } from "../../common/NamespaceFilter";
-import { InspectCard } from "../../common/InspectCard";
+import { NamespaceFilter } from "../../contrib/NamespaceFilter";
+import { InspectCard } from "../../contrib/InspectCard";
 import { K8ApplicationContext } from "../../app/K8ApplicationContextProvider";
 
 const Inspect = () => {

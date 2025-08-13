@@ -81,7 +81,7 @@ jobs:
           echo "Injecting version=${{ steps.meta.outputs.version }} and appVersion=$APP_VERSION into $CHART_FILE"
           yq -y --arg version "${{ steps.meta.outputs.version }}" --arg appVersion "$APP_VERSION" \
             '.version = $version | .appVersion = $appVersion' "$CHART_FILE" > tmp.yaml && mv tmp.yaml "$CHART_FILE"
-
+      
       - name: Package chart ${{ matrix.name }}
         run: |
           echo "Packaging ${{ matrix.name }} chart with version ${{ steps.meta.outputs.version }}"
@@ -114,7 +114,7 @@ jobs:
           PACKAGE_FILE=$(ls ./packages/${{ matrix.registry_name }}-${{ steps.meta.outputs.version }}.tgz)
           echo "Pushing $PACKAGE_FILE"
           REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-          helm push "$PACKAGE_FILE" oci://${{ env.REGISTRY }}/${REPO_OWNER}/fred-helm
+          helm push "$PACKAGE_FILE" oci://${{ env.REGISTRY }}/${REPO_OWNER}/fred
 
   create-release:
     needs: package-and-push
@@ -141,9 +141,7 @@ jobs:
             
             ```bash
             # Install charts
-            helm install agentic-backend oci://ghcr.io/thalesgroup/fred-helm/agentic-backend --version ${{ steps.meta.outputs.version }}
-            helm install knowledge-flow-backend oci://ghcr.io/thalesgroup/fred-helm/knowledge-flow-backend --version ${{ steps.meta.outputs.version }}
-            helm install frontend oci://ghcr.io/thalesgroup/fred-helm/frontend --version ${{ steps.meta.outputs.version }}
+            helm install fred oci://ghcr.io/thalesgroup/fred --version ${{ steps.meta.outputs.version }}
             ```
           draft: false
           prerelease: false

@@ -83,6 +83,14 @@ class OpenSearchPromptStore(BasePromptStore):
             logger.error(f"[PROMPTS] Failed to list prompts for user '{user}': {e}")
             raise
 
+    def get_all_prompts(self) -> List[Prompt]:
+        try:
+            response = self.client.search(index=self.index_name, body={"query": {"match_all": {}}}, params={"size": 10000})
+            return [Prompt(**hit["_source"]) for hit in response["hits"]["hits"]]
+        except Exception as e:
+            logger.error(f"[PROMPTS] Failed to list prompts: {e}")
+            raise
+
     def get_prompt_by_id(self, prompt_id: str) -> Prompt:
         if cached := self._cache.get(prompt_id):
             logger.debug(f"[TAPROMPTGS] Cache hit for tag '{prompt_id}'")

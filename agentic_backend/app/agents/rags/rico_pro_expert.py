@@ -49,7 +49,7 @@ class RicoProExpert(AgentFlow):
 
     TOP_K = 5
 
-    name: str = "RagsExpert"
+    name: str = "RicoProExpert"
     role: str = "Rags Expert"
     nickname: str = "Rico Pro"
     description: str

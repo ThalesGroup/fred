@@ -14,7 +14,7 @@
 
 from abc import ABC, abstractmethod
 from typing import List
-from app.features.tag.structure import Tag
+from app.features.tag.structure import Tag, TagType
 from fred_core import KeycloakUser
 
 
@@ -53,6 +53,10 @@ class BaseTagStore(ABC):
         Raises:
             TagNotFoundError: If the tag does not exist.
         """
+        pass
+
+    @abstractmethod
+    def get_by_owner_type_full_path(self, owner_id: str, tag_type: TagType, full_path: str) -> Tag | None:
         pass
 
     @abstractmethod

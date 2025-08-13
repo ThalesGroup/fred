@@ -1,4 +1,4 @@
-# spe backend
+# Example of custom configuration for agentic backend
 
 imagePullSecrets: []
 

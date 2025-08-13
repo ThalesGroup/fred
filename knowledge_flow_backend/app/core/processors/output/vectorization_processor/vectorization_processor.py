@@ -78,6 +78,7 @@ class VectorizationProcessor(BaseOutputProcessor):
                 logger.exception("Failed to add documents to Vectore Store")
                 raise VectorProcessingError("Failed to add documents to Vectore Store") from e
             metadata.mark_stage_done(ProcessingStage.VECTORIZED)
+            metadata.retrievable = True
             return metadata
 
         except Exception as e:

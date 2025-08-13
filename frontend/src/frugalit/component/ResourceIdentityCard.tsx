@@ -14,7 +14,7 @@
 
 import { Box, Grid2 } from "@mui/material";
 import { IconComponent, KindLogoComponent } from "../../utils/image";
-import { LabelValuePair } from "../../common/LabelValuePair";
+import { LabelValuePair } from "../../contrib/LabelValuePair";
 
 interface ResourceIdentityCardProps {
   resource_name: string;

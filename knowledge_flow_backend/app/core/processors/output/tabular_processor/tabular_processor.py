@@ -72,6 +72,8 @@ class TabularProcessor(BaseOutputProcessor):
 
             # 3. save the document into the selected tabular storage
             try:
+                if self.tabular_store is None:
+                    raise RuntimeError("tabular_store is not initialized")
                 result = self.tabular_store.save_table(document_name, df)
                 logger.debug(f"Document added to Tabular Store: {result}")
             except Exception as e:
