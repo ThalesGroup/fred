@@ -14,6 +14,7 @@
 
 # Copyright Thales 2025
 from datetime import datetime
+import logging
 from typing import Optional, Iterable
 from uuid import uuid4
 
@@ -22,12 +23,19 @@ from app.common.document_structures import DocumentMetadata
 from app.core.stores.tags.base_tag_store import TagAlreadyExistsError
 from app.features.metadata.service import MetadataService
 from app.features.prompts.service import PromptService
-from app.features.prompts.structure import Prompt
 from app.features.resources.service import ResourceService
 from app.features.resources.structures import ResourceKind
 from app.features.tag.structure import Tag, TagCreate, TagType, TagUpdate, TagWithItemsId
 from fred_core import KeycloakUser
 
+logger = logging.getLogger(__name__)
+
+def _tagtype_to_rk(tag_type: TagType) -> ResourceKind:
+    if tag_type == TagType.PROMPT:
+        return ResourceKind.PROMPT
+    if tag_type == TagType.TEMPLATE:
+        return ResourceKind.TEMPLATE
+    raise ValueError(f"Unsupported TagType for resources: {tag_type}")
 
 class TagService:
     """
@@ -105,18 +113,14 @@ class TagService:
         # Validate referenced items first
         if tag_data.type == TagType.DOCUMENT:
             documents = self._retrieve_documents_metadata(tag_data.item_ids)
-        elif tag_data.type == TagType.PROMPT:
-            documents = []  
-        elif tag_data.type == TagType.TEMPLATE:
-            documents = []  #
+        elif tag_data.type in (TagType.PROMPT, TagType.TEMPLATE):
+            documents = []  # not used here
         else:
             raise ValueError(f"Unsupported tag type: {tag_data.type}")
 
-        # Normalize/compute canonical path
+        # Normalize + uniqueness
         norm_path = self._normalize_path(tag_data.path)
         full_path = self._compose_full_path(norm_path, tag_data.name)
-
-        # Enforce uniqueness per owner + type + full_path
         self._ensure_unique_full_path(owner_id=user.uid, tag_type=tag_data.type, full_path=full_path)
 
         now = datetime.now()
@@ -133,52 +137,69 @@ class TagService:
             )
         )
 
-        # Link items (by tag id) — unchanged behavior
+        # Link items
         if tag.type == TagType.DOCUMENT:
             for doc in documents:
                 self.document_metadata_service.add_tag_id_to_document(
-                    metadata=doc,
-                    new_tag_id=tag.id,
-                    modified_by=user.username,
+                    metadata=doc, new_tag_id=tag.id, modified_by=user.username
                 )
-        elif tag.type == TagType.PROMPT:
-            for prompt_id in tag_data.item_ids:
-                self.prompt_service.add_tag_to_prompt(prompt_id, tag.id)
+        elif tag.type in (TagType.PROMPT, TagType.TEMPLATE):
+            rk = _tagtype_to_rk(tag.type)
+            for rid in tag_data.item_ids:
+                try:
+                    self.resource_service.add_tag_to_resource(rid, tag.id)
+                except Exception as e:
+                    logger.warning(f"Failed to attach tag {tag.id} to resource {rid}: {e}")
+                    raise
 
         return TagWithItemsId.from_tag(tag, tag_data.item_ids)
 
     def update_tag_for_user(self, tag_id: str, tag_data: TagUpdate, user: KeycloakUser) -> TagWithItemsId:
         tag = self._tag_store.get_tag_by_id(tag_id)
 
-        # Update item memberships first (unchanged behavior)
+        # Update memberships first
         if tag.type == TagType.DOCUMENT:
             old_item_ids = self._retrieve_document_ids_for_tag(tag_id)
             added, removed = self._compute_ids_diff(old_item_ids, tag_data.item_ids)
 
             added_documents = self._retrieve_documents_metadata(added)
             removed_documents = self._retrieve_documents_metadata(removed)
-
             for doc in added_documents:
                 self.document_metadata_service.add_tag_id_to_document(doc, tag.id, modified_by=user.username)
             for doc in removed_documents:
                 self.document_metadata_service.remove_tag_id_from_document(doc, tag.id, modified_by=user.username)
 
-        elif tag.type == TagType.PROMPT:
-            raise NotImplementedError("Updating prompt tags is not supported.")
-        elif tag.type == TagType.TEMPLATE:
-            raise NotImplementedError("Updating template tags is not supported.")
+        elif tag.type in (TagType.PROMPT, TagType.TEMPLATE):
+            rk = _tagtype_to_rk(tag.type)
+            old_item_ids = self.resource_service.get_resource_ids_for_tag(rk, tag_id)
+            added, removed = self._compute_ids_diff(old_item_ids, tag_data.item_ids)
 
-        # Rename / move (hierarchy)
-        # NOTE: TagUpdate now supports optional path if you added it.
+            for rid in added:
+                try:
+                    self.resource_service.add_tag_to_resource(rid, tag_id)
+                except Exception as e:
+                    # Decide whether to continue or fail fast
+                    raise
+            for rid in removed:
+                try:
+                    # auto-delete orphan if it loses its last tag
+                    self.resource_service.remove_tag_from_resource(rid, tag_id, delete_if_orphan=True)
+                except Exception as e:
+                    raise
+        else:
+            raise ValueError(f"Unsupported tag type: {tag.type}")
+
+        # Rename / move
         new_name = tag_data.name
-        new_path = getattr(tag_data, "path", None)  # keep compatible if controller didn’t add 'path' yet
+        new_path = getattr(tag_data, "path", None)
         norm_path = self._normalize_path(new_path)
 
-        # If moved/renamed, enforce uniqueness on the new canonical path
         new_full_path = self._compose_full_path(norm_path, new_name)
         old_full_path = self._full_path_of(tag)
         if new_full_path != old_full_path:
-            self._ensure_unique_full_path(owner_id=tag.owner_id, tag_type=tag.type, full_path=new_full_path, exclude_tag_id=tag.id)
+            self._ensure_unique_full_path(
+                owner_id=tag.owner_id, tag_type=tag.type, full_path=new_full_path, exclude_tag_id=tag.id
+            )
 
         tag.name = new_name
         tag.path = norm_path
@@ -186,7 +207,16 @@ class TagService:
         tag.updated_at = datetime.now()
         updated_tag = self._tag_store.update_tag_by_id(tag_id, tag)
 
-        return TagWithItemsId.from_tag(updated_tag, tag_data.item_ids)
+        # For the response, return the up-to-date list of item ids
+        if tag.type == TagType.DOCUMENT:
+            item_ids = self._retrieve_document_ids_for_tag(tag_id)
+        elif tag.type in (TagType.PROMPT, TagType.TEMPLATE):
+            rk = _tagtype_to_rk(tag.type)
+            item_ids = self.resource_service.get_resource_ids_for_tag(rk, tag_id)
+        else:
+            item_ids = []
+
+        return TagWithItemsId.from_tag(updated_tag, item_ids)
 
     def delete_tag_for_user(self, tag_id: str, user: KeycloakUser) -> None:
         tag = self._tag_store.get_tag_by_id(tag_id)
@@ -198,7 +228,8 @@ class TagService:
         elif tag.type == TagType.PROMPT:
             self.resource_service.remove_tag_from_resources(ResourceKind.PROMPT, tag_id)
         elif tag.type == TagType.TEMPLATE:
-            self.resource_service.remove_tag_from_resources(ResourceKind.PROMPT, tag_id)
+            # BUGFIX: was PROMPT before; must be TEMPLATE
+            self.resource_service.remove_tag_from_resources(ResourceKind.TEMPLATE, tag_id)
         else:
             raise ValueError(f"Unsupported tag type: {tag.type}")
 
@@ -213,9 +244,6 @@ class TagService:
 
     def _retrieve_documents_for_tag(self, tag_id: str) -> list[DocumentMetadata]:
         return self.document_metadata_service.get_document_metadata_in_tag(tag_id)
-
-    def _retrieve_prompts_for_tag(self, tag_id: str) -> list[Prompt]:
-        return self.prompt_service.get_prompt_in_tag(tag_id)
 
     def _retrieve_document_ids_for_tag(self, tag_id: str) -> list[str]:
         return [d.document_uid for d in self._retrieve_documents_for_tag(tag_id)]

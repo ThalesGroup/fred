@@ -124,25 +124,6 @@ const injectedRtkApi = api.injectEndpoints({
     rawSqlQuery: build.mutation<RawSqlQueryApiResponse, RawSqlQueryApiArg>({
       query: (queryArg) => ({ url: `/knowledge-flow/v1/tabular/sql`, method: "POST", body: queryArg.rawSqlRequest }),
     }),
-    templatesList: build.query<TemplatesListApiResponse, TemplatesListApiArg>({
-      query: (queryArg) => ({
-        url: `/knowledge-flow/v1/templates`,
-        params: {
-          family: queryArg.family,
-          tags: queryArg.tags,
-          q: queryArg.q,
-        },
-      }),
-    }),
-    templatesGetVersions: build.query<TemplatesGetVersionsApiResponse, TemplatesGetVersionsApiArg>({
-      query: (queryArg) => ({ url: `/knowledge-flow/v1/templates/${queryArg.templateId}` }),
-    }),
-    templatesGet: build.query<TemplatesGetApiResponse, TemplatesGetApiArg>({
-      query: (queryArg) => ({ url: `/knowledge-flow/v1/templates/${queryArg.templateId}/${queryArg.version}` }),
-    }),
-    templatesGetContent: build.query<TemplatesGetContentApiResponse, TemplatesGetContentApiArg>({
-      query: (queryArg) => ({ url: `/knowledge-flow/v1/templates/${queryArg.templateId}/${queryArg.version}/content` }),
-    }),
     listAllTagsKnowledgeFlowV1TagsGet: build.query<
       ListAllTagsKnowledgeFlowV1TagsGetApiResponse,
       ListAllTagsKnowledgeFlowV1TagsGetApiArg
@@ -184,34 +165,6 @@ const injectedRtkApi = api.injectEndpoints({
       DeleteTagKnowledgeFlowV1TagsTagIdDeleteApiArg
     >({
       query: (queryArg) => ({ url: `/knowledge-flow/v1/tags/${queryArg.tagId}`, method: "DELETE" }),
-    }),
-    searchPromptsKnowledgeFlowV1PromptsSearchPost: build.mutation<
-      SearchPromptsKnowledgeFlowV1PromptsSearchPostApiResponse,
-      SearchPromptsKnowledgeFlowV1PromptsSearchPostApiArg
-    >({
-      query: (queryArg) => ({ url: `/knowledge-flow/v1/prompts/search`, method: "POST", body: queryArg.filters }),
-    }),
-    getPromptKnowledgeFlowV1PromptsPromptIdGet: build.query<
-      GetPromptKnowledgeFlowV1PromptsPromptIdGetApiResponse,
-      GetPromptKnowledgeFlowV1PromptsPromptIdGetApiArg
-    >({
-      query: (queryArg) => ({ url: `/knowledge-flow/v1/prompts/${queryArg.promptId}` }),
-    }),
-    updatePromptKnowledgeFlowV1PromptsPromptIdPut: build.mutation<
-      UpdatePromptKnowledgeFlowV1PromptsPromptIdPutApiResponse,
-      UpdatePromptKnowledgeFlowV1PromptsPromptIdPutApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/knowledge-flow/v1/prompts/${queryArg.promptId}`,
-        method: "PUT",
-        body: queryArg.prompt,
-      }),
-    }),
-    createPromptKnowledgeFlowV1PromptsPost: build.mutation<
-      CreatePromptKnowledgeFlowV1PromptsPostApiResponse,
-      CreatePromptKnowledgeFlowV1PromptsPostApiArg
-    >({
-      query: (queryArg) => ({ url: `/knowledge-flow/v1/prompts`, method: "POST", body: queryArg.prompt }),
     }),
     createResourceKnowledgeFlowV1ResourcesPost: build.mutation<
       CreateResourceKnowledgeFlowV1ResourcesPostApiResponse,
@@ -374,29 +327,6 @@ export type RawSqlQueryApiResponse = /** status 200 Successful Response */ Tabul
 export type RawSqlQueryApiArg = {
   rawSqlRequest: RawSqlRequest;
 };
-export type TemplatesListApiResponse = /** status 200 Successful Response */ TemplateSummary[];
-export type TemplatesListApiArg = {
-  /** Filter by family, e.g. 'reports' */
-  family?: string | null;
-  /** Comma-separated tags */
-  tags?: string | null;
-  /** Free-text search on name/description */
-  q?: string | null;
-};
-export type TemplatesGetVersionsApiResponse = /** status 200 Successful Response */ TemplateSummary;
-export type TemplatesGetVersionsApiArg = {
-  templateId: string;
-};
-export type TemplatesGetApiResponse = /** status 200 Successful Response */ TemplateMetadata;
-export type TemplatesGetApiArg = {
-  templateId: string;
-  version: string;
-};
-export type TemplatesGetContentApiResponse = /** status 200 Successful Response */ TemplateContent;
-export type TemplatesGetContentApiArg = {
-  templateId: string;
-  version: string;
-};
 export type ListAllTagsKnowledgeFlowV1TagsGetApiResponse = /** status 200 Successful Response */ TagWithItemsId[];
 export type ListAllTagsKnowledgeFlowV1TagsGetApiArg = {
   /** Filter by tag type */
@@ -424,25 +354,6 @@ export type UpdateTagKnowledgeFlowV1TagsTagIdPutApiArg = {
 export type DeleteTagKnowledgeFlowV1TagsTagIdDeleteApiResponse = unknown;
 export type DeleteTagKnowledgeFlowV1TagsTagIdDeleteApiArg = {
   tagId: string;
-};
-export type SearchPromptsKnowledgeFlowV1PromptsSearchPostApiResponse = /** status 200 Successful Response */ Prompt[];
-export type SearchPromptsKnowledgeFlowV1PromptsSearchPostApiArg = {
-  filters: {
-    [key: string]: any;
-  };
-};
-export type GetPromptKnowledgeFlowV1PromptsPromptIdGetApiResponse = /** status 200 Successful Response */ Prompt;
-export type GetPromptKnowledgeFlowV1PromptsPromptIdGetApiArg = {
-  promptId: string;
-};
-export type UpdatePromptKnowledgeFlowV1PromptsPromptIdPutApiResponse = /** status 200 Successful Response */ Prompt;
-export type UpdatePromptKnowledgeFlowV1PromptsPromptIdPutApiArg = {
-  promptId: string;
-  prompt: Prompt;
-};
-export type CreatePromptKnowledgeFlowV1PromptsPostApiResponse = /** status 200 Successful Response */ TagWithItemsId;
-export type CreatePromptKnowledgeFlowV1PromptsPostApiArg = {
-  prompt: Prompt;
 };
 export type CreateResourceKnowledgeFlowV1ResourcesPostApiResponse = /** status 201 Successful Response */ Resource;
 export type CreateResourceKnowledgeFlowV1ResourcesPostApiArg = {
@@ -585,42 +496,6 @@ export type TabularQueryResponse = {
 export type RawSqlRequest = {
   query: string;
 };
-export type TemplateSummary = {
-  /** Template identifier (unique within its family). */
-  id: string;
-  /** Functional group, e.g. 'reports'. */
-  family: string;
-  /** Human display name. */
-  name?: string | null;
-  /** Short description. */
-  description?: string | null;
-  /** Available versions. */
-  versions?: string[];
-  tags?: string[];
-};
-export type TemplateMetadata = {
-  id: string;
-  family: string;
-  version: string;
-  name?: string | null;
-  description?: string | null;
-  format?: "markdown" | "docx" | "html" | "json";
-  input_schema?: {
-    [key: string]: any;
-  };
-  size_bytes?: number | null;
-  checksum?: string | null;
-};
-export type TemplateContent = {
-  id: string;
-  version: string;
-  mime?:
-    | "text/markdown"
-    | "text/html"
-    | "application/json"
-    | "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-  body: string;
-};
 export type TagType = "document" | "prompt" | "template";
 export type TagWithItemsId = {
   id: string;
@@ -646,16 +521,6 @@ export type TagUpdate = {
   description?: string | null;
   type: TagType;
   item_ids?: string[];
-};
-export type Prompt = {
-  id: string;
-  name: string;
-  content: string;
-  description?: string | null;
-  tags: string[];
-  owner_id: string;
-  created_at: string;
-  updated_at: string;
 };
 export type ResourceKind = "prompt" | "template";
 export type Resource = {
@@ -758,14 +623,6 @@ export const {
   useGetAllSchemasQuery,
   useLazyGetAllSchemasQuery,
   useRawSqlQueryMutation,
-  useTemplatesListQuery,
-  useLazyTemplatesListQuery,
-  useTemplatesGetVersionsQuery,
-  useLazyTemplatesGetVersionsQuery,
-  useTemplatesGetQuery,
-  useLazyTemplatesGetQuery,
-  useTemplatesGetContentQuery,
-  useLazyTemplatesGetContentQuery,
   useListAllTagsKnowledgeFlowV1TagsGetQuery,
   useLazyListAllTagsKnowledgeFlowV1TagsGetQuery,
   useCreateTagKnowledgeFlowV1TagsPostMutation,
@@ -773,11 +630,6 @@ export const {
   useLazyGetTagKnowledgeFlowV1TagsTagIdGetQuery,
   useUpdateTagKnowledgeFlowV1TagsTagIdPutMutation,
   useDeleteTagKnowledgeFlowV1TagsTagIdDeleteMutation,
-  useSearchPromptsKnowledgeFlowV1PromptsSearchPostMutation,
-  useGetPromptKnowledgeFlowV1PromptsPromptIdGetQuery,
-  useLazyGetPromptKnowledgeFlowV1PromptsPromptIdGetQuery,
-  useUpdatePromptKnowledgeFlowV1PromptsPromptIdPutMutation,
-  useCreatePromptKnowledgeFlowV1PromptsPostMutation,
   useCreateResourceKnowledgeFlowV1ResourcesPostMutation,
   useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery,
   useLazyListResourcesByKindKnowledgeFlowV1ResourcesGetQuery,

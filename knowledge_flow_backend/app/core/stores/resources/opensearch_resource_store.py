@@ -3,6 +3,7 @@ from typing import List
 
 from fred_core import ThreadSafeLRUCache
 from opensearchpy import OpenSearch, NotFoundError, ConflictError, RequestsHttpConnection
+from fred_core import ThreadSafeLRUCache
 
 from app.core.stores.resources.base_resource_store import (
     BaseResourceStore,

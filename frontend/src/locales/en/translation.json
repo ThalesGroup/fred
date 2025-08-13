@@ -261,7 +261,8 @@
   "resourceLibrary": {
     "title": "{{typePlural}}",
     "createLibrary": "Create library",
-    "uploadInLibrary": "Add {{typeOne}} to library",
+    "createResource": "Add {{typeOne}} to library",
+    "importResource": "Import {{typeOne}} from file",
     "folders": "Folders",
     "loadingLibraries": "Loading libraries…",
     "failedToLoad": "Failed to load libraries.",

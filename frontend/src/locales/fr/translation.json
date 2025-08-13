@@ -261,7 +261,8 @@
   "resourceLibrary": {
     "title": "{{typePlural}}",
     "createLibrary": "Créer une bibliothèque",
-    "uploadInLibrary": "Ajouter un {{typeOne}} à la bibliothèque",
+    "createResource": "Créer un {{typeOne}}",
+    "importResource": "Importer un {{typeOne}} depuis un fichier",
     "folders": "Dossiers",
     "loadingLibraries": "Chargement des bibliothèques…",
     "failedToLoad": "Échec du chargement des bibliothèques.",

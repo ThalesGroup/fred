@@ -8,6 +8,8 @@ import {
   TagWithItemsId,
   useCreateResourceKnowledgeFlowV1ResourcesPostMutation,
   useUpdateTagKnowledgeFlowV1TagsTagIdPutMutation,
+  useUpdateResourceKnowledgeFlowV1ResourcesResourceIdPutMutation,
+  useLazyGetResourceKnowledgeFlowV1ResourcesResourceIdGetQuery,
 } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { useToast } from "../ToastProvider";
 import { useTranslation } from "react-i18next";
@@ -25,6 +27,14 @@ type CreateInput = {
   labels?: string[];
 };
 
+/** Editable fields for update */
+type UpdateInput = {
+  content?: string;
+  name?: string;
+  description?: string;
+  labels?: string[];
+};
+
 export function useResourceCommands(
   kind: ResourceKind,
   { refetchTags, refetchResources }: ResourceRefresher = {},
@@ -33,6 +43,8 @@ export function useResourceCommands(
   const { showSuccess, showError } = useToast();
 
   const [createResourceMutation] = useCreateResourceKnowledgeFlowV1ResourcesPostMutation();
+  const [updateResourceMutation] = useUpdateResourceKnowledgeFlowV1ResourcesResourceIdPutMutation();
+  const [triggerGetResource] = useLazyGetResourceKnowledgeFlowV1ResourcesResourceIdGetQuery();
   const [updateTag] = useUpdateTagKnowledgeFlowV1TagsTagIdPutMutation();
 
   const refresh = useCallback(async () => {
@@ -46,7 +58,7 @@ export function useResourceCommands(
         await createResourceMutation({
           libraryTagId: targetTagId,
           resourceCreate: {
-            kind, // <-- injected from the view (prompt | template)
+            kind, // injected (prompt | template)
             content: payload.content,
             name: payload.name,
             description: payload.description,
@@ -71,11 +83,57 @@ export function useResourceCommands(
     [createResourceMutation, refresh, showSuccess, showError, t, kind],
   );
 
+  /** Update resource fields (content/name/description/labels). */
+  const updateResource = useCallback(
+    async (resourceId: string, patch: UpdateInput) => {
+      try {
+        await updateResourceMutation({
+          resourceId,
+          resourceUpdate: {
+            content: patch.content,
+            name: patch.name,
+            description: patch.description,
+            labels: patch.labels,
+          },
+        }).unwrap();
+
+        await refresh();
+        showSuccess?.({
+          summary: t("resourceLibrary.updateSuccess") || "Updated",
+          detail:
+            t("resourceLibrary.updateDetail", { typeOne: kind }) ||
+            "Resource updated.",
+        });
+      } catch (e: any) {
+        showError?.({
+          summary: t("validation.error") || "Error",
+          detail: e?.data?.detail || e?.message || "Failed to update resource.",
+        });
+      }
+    },
+    [updateResourceMutation, refresh, showSuccess, showError, t, kind],
+  );
+
   /**
-   * Remove a resource from ONE library.
-   * NOTE: This currently updates the Tag (removes the resource id from tag.item_ids),
-   * which matches your current UI. When you migrate membership off tags, switch this
-   * to an `updateResource` call that clears/changes the resource’s library.
+   * Optional fetch to support preview (or to re-fetch before editing).
+   * If you’re already passing the full resource down, you don’t need this.
+   */
+  const getResource = useCallback(async (resourceId: string) => {
+    try {
+      const res = await triggerGetResource({ resourceId }).unwrap();
+      return res;
+    } catch (e: any) {
+      showError?.({
+        summary: t("validation.error") || "Error",
+        detail: e?.data?.detail || e?.message || "Failed to fetch resource.",
+      });
+      throw e;
+    }
+  }, [triggerGetResource, showError, t]);
+
+  /**
+   * Remove a resource from ONE library (current tag system).
+   * When you migrate membership off tags, replace with a resource update.
    */
   const removeFromLibrary = useCallback(
     async (resource: Resource, tag: TagWithItemsId) => {
@@ -108,5 +166,5 @@ export function useResourceCommands(
     [updateTag, refresh, showSuccess, showError, t, kind],
   );
 
-  return { createResource, removeFromLibrary };
+  return { createResource, updateResource, getResource, removeFromLibrary };
 }

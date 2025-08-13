@@ -80,11 +80,6 @@ export const KnowledgeHub = () => {
             <DocumentLibraryList />
           </Container>
         )}
-        {/* {selectedView === "prompts" && (
-          <Container maxWidth="xl">
-            <PromptLibraryList />
-          </Container>
-        )} */}
         {selectedView === "prompts" && (
           <Container maxWidth="xl">
             <ResourceLibraryList kind="prompt" />

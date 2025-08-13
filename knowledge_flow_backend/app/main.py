@@ -111,9 +111,9 @@ def create_app() -> FastAPI:
     IngestionController(router)
     TabularController(router)
     # CodeSearchController(router)
-    TemplateController(router)
+    # TemplateController(router)
     TagController(router)
-    PromptController(router)
+    # PromptController(router)
     ResourceController(router)
     VectorSearchController(router)
 

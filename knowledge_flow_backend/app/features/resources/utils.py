@@ -18,8 +18,7 @@ def build_resource_from_create(payload: ResourceCreate, library_tag_id: str, use
     Validates YAML header/body and returns a fully-populated Resource ready to persist.
     - Requires 'version' in header
     - If header.kind is present, it must match payload.kind
-    - PROMPT requires 'prompt_schema' in header
-    - TEMPLATE requires 'input_schema' in header
+    - requires 'schema' in header
     - Body must be non-empty (after the '---')
     - payload.{name,description,labels} override header {name,description,tags} when provided
     """
@@ -34,13 +33,9 @@ def build_resource_from_create(payload: ResourceCreate, library_tag_id: str, use
     if yaml_kind and yaml_kind != payload.kind.value:
         raise ValueError(f"YAML kind '{yaml_kind}' does not match payload.kind '{payload.kind.value}'")
 
-    # 2) kind-specific header requirements
-    if payload.kind == ResourceKind.PROMPT:
-        if "prompt_schema" not in header:
-            raise ValueError("Missing 'prompt_schema' for prompt")
-    elif payload.kind == ResourceKind.TEMPLATE:
-        if "input_schema" not in header:
-            raise ValueError("Missing 'input_schema' for template")
+    schema = header.get("schema") 
+    if not isinstance(schema, dict):
+        raise ValueError("Missing or invalid 'schema' in header.")
 
     # 3) body must exist
     if not body or not body.strip():
