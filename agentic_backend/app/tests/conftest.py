@@ -82,6 +82,8 @@ def minimal_generalist_config() -> Configuration:
             agents=[
                 AgentSettings(
                     name="GeneralistExpert",
+                    role="Generalist",
+                    description="Generalist",
                     class_path="app.agents.generalist.generalist_expert.GeneralistExpert",
                     enabled=True,
                     model=ModelConfiguration(

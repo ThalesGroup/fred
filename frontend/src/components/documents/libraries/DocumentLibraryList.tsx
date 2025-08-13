@@ -171,7 +171,7 @@ export default function DocumentLibraryList() {
             disabled={!selectedFolder} // disable if no folder selected
             sx={{ borderRadius: "8px" }}
           >
-            {t("documentLibrary.uploadInLibrary")}
+            {t("documentLirbrary.uploadInLibrary")}
           </Button>
         </Box>
       </Box>
@@ -246,7 +246,7 @@ export default function DocumentLibraryList() {
         onLibraryCreated={async () => {
           await refetch();
         }}
-        mode="documents"
+        mode="document" // always create document libraries
         currentPath={selectedFolder} // undefined for root-level creation
       />
     </Box>

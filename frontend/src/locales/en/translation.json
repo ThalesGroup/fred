@@ -1,4 +1,10 @@
 {
+  "resource": {
+    "kind": {
+      "prompt":   { "one": "prompt",   "other": "prompts" },
+      "template": { "one": "template", "other": "templates" }
+    }
+  },
   "validation": {
     "required": "Required",
     "invalid_url": "Invalid URL",
@@ -211,6 +217,7 @@
     "description": "Manage your document and prompt libraries",
     "viewSelector": {
       "libraries": "Libraries",
+      "templates": "Templates",
       "prompts": "Prompts",
       "documents": "Documents",
       "operations": "Operations"
@@ -251,20 +258,20 @@
     "uploadFirstDocument": "Add your first document",
     "preview": "Preview"
   },
-  "promptLibrary": {
-    "title": "Prompt Library",
+  "resourceLibrary": {
+    "title": "{{typePlural}}",
+    "edit": "Edit",
+    "preview": "Preview",
+    "createLibrary": "Create library",
+    "createResource": "Add {{typeOne}} to library",
+    "importResource": "Import {{typeOne}} from file",
     "folders": "Folders",
-    "edit": "Edit prompt",
-    "description": "Access the prompt library",
-    "uploadInLibrary": "Add prompt to library",
-    "prompts": "{{count}} prompt(s)",
-    "noPrompt": "No prompt found",
-    "addPrompt": "Add prompt",
-    "emptyLibraryTitle": "No prompt in this library",
-    "emptyLibraryDescription": "This library is empty. Add your first prompt to make it available to your AI assistants.",
-    "uploadFirstDocument": "Add your first prompt",
-    "removeFromLibrary": "Remove from library",
-    "preview": "Preview"
+    "loadingLibraries": "Loading libraries…",
+    "failedToLoad": "Failed to load libraries.",
+    "createSuccess": "Created",
+    "createDetail": "{{typeOne, capitalize}} added to the library.",
+    "removeSuccess": "Removed",
+    "removeDetail": "{{typeOne, capitalize}} removed from the library."
   },
   "documentTable": {
     "selectedCount": "{{count}} selected",

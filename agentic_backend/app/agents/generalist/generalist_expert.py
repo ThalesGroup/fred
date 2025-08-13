@@ -32,17 +32,20 @@ class GeneralistExpert(AgentFlow):
     """
 
     # Class-level metadata
-    name: str = "GeneralistExpert"
-    role: str = "Generalist Expert"
-    nickname: str = "Georges"
-    description: str = (
-        "Provides guidance on a wide range of topics without deep specialization."
-    )
+    name: str
+    role: str
+    nickname: str
+    description: str
     icon: str = "generalist_agent"
     tag: str = "Generalist"
 
     def __init__(self, agent_settings: AgentSettings):
         self.agent_settings = agent_settings
+        self.name = agent_settings.name
+        self.nickname = agent_settings.nickname or agent_settings.name
+        self.role = agent_settings.role
+        self.description = agent_settings.description
+        self.current_date = datetime.now().strftime("%Y-%m-%d")
         self.categories = agent_settings.categories or ["General"]
         self.model = None  # Will be set in async_init
         self.base_prompt = ""  # Will be set in async_init

@@ -8,8 +8,8 @@ import { TreeItem } from "@mui/x-tree-view/TreeItem";
 import KeyboardArrowRightIcon from "@mui/icons-material/KeyboardArrowRight";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import { TagNode } from "../tags/tagTree";
-import { Prompt, TagWithItemsId } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
-import { PromptRowCompact } from "./PromptLibraryRow";
+import { Resource, TagWithItemsId } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { ResourceRowCompact } from "./ResourceRowCompact";
 
 type Props = {
   tree: TagNode;
@@ -18,20 +18,20 @@ type Props = {
   selectedFolder?: string;
   setSelectedFolder: (full: string) => void;
   getChildren: (n: TagNode) => TagNode[];
-  prompts: Prompt[];
-  onPreview?: (p: Prompt) => void;
-  onEdit?: (p: Prompt) => void;
-  onRemoveFromLibrary?: (p: Prompt, tag: TagWithItemsId) => void;
+  resources: Resource[];
+  onPreview?: (p: Resource) => void;
+  onEdit?: (p: Resource) => void;
+  onRemoveFromLibrary?: (p: Resource, tag: TagWithItemsId) => void;
 };
 
-export function PromptLibraryTree({
+export function ResourceLibraryTree({
   tree,
   expanded,
   setExpanded,
   selectedFolder,
   setSelectedFolder,
   getChildren,
-  prompts,
+  resources: resources,
   onPreview,
   onEdit,
   onRemoveFromLibrary,
@@ -42,8 +42,8 @@ export function PromptLibraryTree({
       const isSelected = selectedFolder === c.full;
 
       // prompts whose prompt.tags contains any tag that ends here (c.tagsHere)
-      const promptsInFolder = prompts.filter((p) =>
-        p.tags?.some((tagId) => c.tagsHere?.some((t) => t.id === tagId)),
+      const resourcesInFolder = resources.filter((p) =>
+        p.library_tags?.some((tagId) => c.tagsHere?.some((t) => t.id === tagId)),
       );
 
       const hereTag = c.tagsHere?.[0]; // primary tag for this folder
@@ -77,14 +77,14 @@ export function PromptLibraryTree({
         >
           {c.children.size ? renderTree(c) : null}
 
-          {promptsInFolder.map((p) => (
+          {resourcesInFolder.map((p) => (
             <TreeItem
               key={p.id}
               itemId={p.id}
               label={
                 <Box sx={{ display: "flex", alignItems: "center", gap: 1, px: 0.5 }}>
-                  <PromptRowCompact
-                    prompt={p}
+                  <ResourceRowCompact
+                    resource={p}
                     onPreview={onPreview}
                     onEdit={onEdit}
                     onRemoveFromLibrary={

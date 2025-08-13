@@ -61,7 +61,7 @@ class TagController:
         async def list_all_tags(
             type: Annotated[Optional[TagType], Query(description="Filter by tag type")] = None,
             path_prefix: Annotated[Optional[str], Query(description="Filter by hierarchical path prefix, e.g. 'Sales' or 'Sales/HR'")] = None,
-            limit: Annotated[int, Query(ge=1, le=500, description="Max items to return")] = 200,
+            limit: Annotated[int, Query(ge=1, le=10000, description="Max items to return")] = 10000,
             offset: Annotated[int, Query(ge=0, description="Items to skip")] = 0,
             user: KeycloakUser = Depends(get_current_user),
         ) -> list[TagWithItemsId]:
@@ -100,6 +100,7 @@ class TagController:
         async def create_tag(tag: TagCreate, user: KeycloakUser = Depends(get_current_user)):
             try:
                 # Consider normalizing tag.path in the service if not already done
+                logger.info(f"Creating tag: {tag} for user: {user.username}")
                 return self.service.create_tag_for_user(tag, user)
             except Exception as e:
                 raise handle_exception(e)

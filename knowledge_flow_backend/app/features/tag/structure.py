@@ -17,12 +17,12 @@ from enum import Enum
 from typing import Optional
 from pydantic import BaseModel, field_validator
 from fred_core import BaseModelWithId
-from app.common.document_structures import DocumentMetadata
 
 
 class TagType(str, Enum):
     DOCUMENT = "document"
     PROMPT = "prompt"
+    TEMPLATE = "template"
 
 
 def _normalize_path(p: Optional[str]) -> Optional[str]:
@@ -105,11 +105,3 @@ class TagWithItemsId(Tag):
     @classmethod
     def from_tag(cls, tag: Tag, item_ids: list[str]) -> "TagWithItemsId":
         return cls(**tag.model_dump(), item_ids=item_ids)
-
-
-class TagWithDocuments(Tag):
-    documents: list[DocumentMetadata]
-
-    @classmethod
-    def from_tag(cls, tag: Tag, documents: list[DocumentMetadata]) -> "TagWithDocuments":
-        return cls(**tag.model_dump(), documents=documents)

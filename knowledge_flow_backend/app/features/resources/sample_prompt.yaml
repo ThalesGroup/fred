@@ -1,0 +1,18 @@
+id: sales-email-draft
+version: v1
+kind: prompt
+name: "Sales Email Draft"
+description: "Draft a concise sales email tailored to a prospect and product."
+format: text
+tags: [sales, outreach, writing, agent:Rico]    # <- agent/profile as a tag
+prompt_schema:
+  type: object
+  required: [prospect_name, company, product, key_benefit]
+  properties:
+    prospect_name: { type: string }
+    company: { type: string }
+    product: { type: string }
+    key_benefit: { type: string }
+    tone: { type: string, enum: ["friendly","professional","enthusiastic"], default: "professional" }
+---
+You are a helpful assistant…

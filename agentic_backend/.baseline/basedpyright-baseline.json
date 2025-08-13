@@ -316,14 +316,6 @@
         ],
         "./app/common/mcp_utils.py": [
             {
-                "code": "reportOptionalIterable",
-                "range": {
-                    "startColumn": 18,
-                    "endColumn": 44,
-                    "lineCount": 1
-                }
-            },
-            {
                 "code": "reportArgumentType",
                 "range": {
                     "startColumn": 20,
@@ -736,32 +728,6 @@
                 "range": {
                     "startColumn": 20,
                     "endColumn": 30,
-                    "lineCount": 1
-                }
-            }
-        ],
-        "./app/core/agents/mcp_agent.py": [
-            {
-                "code": "reportAttributeAccessIssue",
-                "range": {
-                    "startColumn": 24,
-                    "endColumn": 47,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportOptionalMemberAccess",
-                "range": {
-                    "startColumn": 40,
-                    "endColumn": 47,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportOptionalMemberAccess",
-                "range": {
-                    "startColumn": 40,
-                    "endColumn": 47,
                     "lineCount": 1
                 }
             }

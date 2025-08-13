@@ -1,4 +1,3 @@
-
 from anyio import to_thread
 import logging
 from fastapi import APIRouter, Depends, HTTPException
@@ -9,11 +8,13 @@ from app.application_context import get_default_model
 
 logger = logging.getLogger(__name__)
 
+
 class PromptCompleteRequest(BaseModel):
     prompt: str
     temperature: float | None = 0.3
     max_tokens: int | None = 512
     model: str | None = None
+
 
 class PromptCompleteResponse(BaseModel):
     prompt: str
@@ -34,7 +35,7 @@ class PromptController:
             tags=["Prompts"],
             response_model=PromptCompleteResponse,
             summary="Complete a raw prompt string with AI",
-            description="Returns an AI-completed version of the provided prompt text."
+            description="Returns an AI-completed version of the provided prompt text.",
         )
         async def complete_prompt(
             req: PromptCompleteRequest,
@@ -50,11 +51,15 @@ class PromptController:
 
                 # Get model and apply optional params if supported
                 model = get_default_model()
-                bind_kwargs = {k: v for k, v in {
-                    "temperature": req.temperature,
-                    "max_tokens": req.max_tokens,
-                    "model": req.model,
-                }.items() if v is not None}
+                bind_kwargs = {
+                    k: v
+                    for k, v in {
+                        "temperature": req.temperature,
+                        "max_tokens": req.max_tokens,
+                        "model": req.model,
+                    }.items()
+                    if v is not None
+                }
 
                 if bind_kwargs and hasattr(model, "bind"):
                     model = model.bind(**bind_kwargs)

@@ -102,14 +102,13 @@ storage:
     # password: "my_password" # Overrides the one specified as "SQL_PASSWORD" in the .env file
 
   
-
   catalog_store:
     type: "duckdb"
     duckdb_path: "~/.fred/knowledge-flow/catalog.duckdb"
 
-  prompt_store:
+  resource_store:
     type: "duckdb"
-    duckdb_path: "~/.fred/knowledge-flow/prompt.duckdb"
+    duckdb_path: "~/.fred/knowledge-flow/resource.duckdb"
 
   tag_store:
     type: "duckdb"

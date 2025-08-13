@@ -1,4 +1,10 @@
 {
+  "resource": {
+    "kind": {
+      "prompt":   { "one": "prompt",   "other": "prompts" },
+      "template": { "one": "modèle", "other": "modèles" }
+    }
+  },
   "validation": {
     "required": "Champ requis",
     "invalid_url": "URL invalide",
@@ -211,6 +217,7 @@
     "description": "Gérez vos bibliothèques de documents et de prompts",
     "viewSelector": {
       "libraries": "Bibliothèques",
+       "templates": "Modèles",
       "prompts": "Prompts",
       "documents": "Documents",
       "operations": "Opérations"
@@ -251,20 +258,18 @@
     "uploadFirstDocument": "Ajouter votre premier document",
     "preview": "Preview"
   },
-  "promptLibrary": {
-    "title": "Bibliothèque de prompts",
+  "resourceLibrary": {
+    "title": "{{typePlural}}",
+    "createLibrary": "Créer une bibliothèque",
+    "createResource": "Créer un {{typeOne}}",
+    "importResource": "Importer un {{typeOne}} depuis un fichier",
     "folders": "Dossiers",
-    "edit": "Editer le prompt",
-    "description": "Accédez à la bibliothèque de prompts",
-    "uploadInLibrary": "Ajouter un prompt à la bibliothèque",
-    "prompts": "{{count}} prompt(s)",
-    "noPrompt": "Aucun prompt trouvé",
-    "addPrompt": "Ajouter un prompt",
-    "emptyLibraryTitle": "Aucun prompt dans cette bibliothèque",
-    "emptyLibraryDescription": "Cette bibliothèque est vide. Ajoutez votre premier prompt pour le rendre disponible à vos assistants IA.",
-    "uploadFirstDocument": "Ajouter votre premier prompt",
-    "removeFromLibrary": "Supprimer de la bibliothèque",
-    "preview": "Preview"
+    "loadingLibraries": "Chargement des bibliothèques…",
+    "failedToLoad": "Échec du chargement des bibliothèques.",
+    "createSuccess": "Créé",
+    "createDetail": "{{typeOne | capitalize}} ajouté à la bibliothèque.",
+    "removeSuccess": "Supprimé",
+    "removeDetail": "{{typeOne | capitalize}} supprimé de la bibliothèque."
   },
   "documentTable": {
     "selectedCount": "{{count}} sélectionné(s)",
