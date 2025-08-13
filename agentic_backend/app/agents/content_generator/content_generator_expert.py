@@ -87,23 +87,26 @@ class ContentGeneratorExpert(AgentFlow):
             f"Today's date: {self.current_date}"
         )
 
-    def _build_graph(self) -> StateGraph:
-        builder = StateGraph(MessagesState)
-        builder.add_node("main", self._reasoner)
-        builder.add_node("tools", ToolNode(self.toolkit.get_tools()))
-        builder.add_edge(START, "main")
-        builder.add_edge("main", "tools")
-        return builder
 
     async def _reasoner(self, state: MessagesState):
         """
         Send user request to the model with the base prompt so it calls MCP tools directly.
         """
-        try:
-            response = await self.model.ainvoke(
-                [HumanMessage(content=self.base_prompt)] + state["messages"]
-            )
-            return {"messages": [response]}
-        except Exception:
-            logger.exception("MCPResourceContentAgent failed.")
-            return {"messages": [HumanMessage(content="Error while retrieving or generating content.")]}
+        response = await self.model.ainvoke([self.base_prompt] + state["messages"])
+        return {"messages": [response]}
+
+
+    def _build_graph(self):
+        builder = StateGraph(MessagesState)
+
+        builder.add_node("reasoner", self._reasoner)
+        assert self.toolkit is not None, (
+            "Toolkit must be initialized before building graph"
+        )
+        builder.add_node("tools", ToolNode(self.toolkit.get_tools()))
+
+        builder.add_edge(START, "reasoner")
+        builder.add_conditional_edges("reasoner", tools_condition)
+        builder.add_edge("tools", "reasoner")
+
+        return builder
