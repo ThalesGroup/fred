@@ -59,9 +59,6 @@ from app.core.processors.output.vectorization_processor.azure_apim_embedder impo
 from app.core.processors.output.vectorization_processor.embedder import Embedder
 from app.core.stores.metadata.base_metadata_store import BaseMetadataStore
 from app.core.stores.metadata.opensearch_metadata_store import OpenSearchMetadataStore
-from app.core.stores.prompts.base_prompt_store import BasePromptStore
-from app.core.stores.prompts.duckdb_prompt_store import DuckdbPromptStore
-from app.core.stores.prompts.opensearch_prompt_store import OpenSearchPromptStore
 from app.core.stores.resources.base_resource_store import BaseResourceStore
 from app.core.stores.resources.duckdb_resource_store import DuckdbResourceStore
 from app.core.stores.resources.opensearch_resource_store import OpenSearchResourceStore
@@ -163,7 +160,6 @@ class ApplicationContext:
     _vector_store_instance: Optional[BaseVectoreStore] = None
     _metadata_store_instance: Optional[BaseMetadataStore] = None
     _tag_store_instance: Optional[BaseTagStore] = None
-    _prompt_store_instance: Optional[BasePromptStore] = None
     _resource_store_instance: Optional[BaseResourceStore] = None
     _tabular_store_instance: Optional[Union[DuckDBTableStore, SQLTableStore]] = None
     _catalog_store_instance: Optional[BaseCatalogStore] = None
@@ -518,31 +514,6 @@ class ApplicationContext:
         else:
             raise ValueError("Unsupported sessions storage backend")
         return self._tag_store_instance
-
-    def get_prompt_store(self) -> BasePromptStore:
-        if self._prompt_store_instance is not None:
-            return self._prompt_store_instance
-
-        store_config = get_configuration().storage.prompt_store
-        if isinstance(store_config, DuckdbStoreConfig):
-            db_path = Path(store_config.duckdb_path).expanduser()
-            self._prompt_store_instance = DuckdbPromptStore(db_path)
-        elif isinstance(store_config, OpenSearchIndexConfig):
-            opensearch_config = get_configuration().storage.opensearch
-            password = opensearch_config.password
-            if not password:
-                raise ValueError("Missing OpenSearch credentials: OPENSEARCH_PASSWORD")
-            self._prompt_store_instance = OpenSearchPromptStore(
-                host=opensearch_config.host,
-                username=opensearch_config.username,
-                password=password,
-                secure=opensearch_config.secure,
-                verify_certs=opensearch_config.verify_certs,
-                index=store_config.index,
-            )
-        else:
-            raise ValueError(f"Unsupported tag storage backend: {store_config.type}")
-        return self._prompt_store_instance
 
     def get_resource_store(self) -> BaseResourceStore:
         if self._resource_store_instance is not None:
