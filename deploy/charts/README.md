@@ -60,9 +60,9 @@ Overload the file `fred/values.yaml`
 ```
 cd deploy/charts
 
-helm upgrade -i knowledge-flow-backend ./knowledge-flow-backend/ -n dev
+helm upgrade -i fred ./fred/ -n dev
 OR
-helm upgrade -i knowledge-flow-backend ./knowledge-flow-backend/ -n dev --values ./knowledge-flow-custom.yaml
+helm upgrade -i fred ./fred/ -n dev --values ./fred-custom.yaml
 ```
 
 ## Access
