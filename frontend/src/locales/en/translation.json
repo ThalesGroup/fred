@@ -106,19 +106,6 @@
     }
   },
   "settings": {
-    "profile": {
-      "title": "Profile",
-      "tooltip": {
-        "intro": "Custom profiles allow you to personalize and improve your interactions with the assistants.",
-        "uses": "Unlike one-time file uploads, a profile is reusable across multiple conversations and can contain:",
-        "example1": "Information about a client or project",
-        "example2": "Reference documents (PDF, Word, Excel...)",
-        "example3": "Technical specifications"
-      },
-      "add": "Add new profiles",
-      "select": "Select a profile...",
-      "none": "None"
-    },
     "assistants": "Assistants",
     "conversations": "Conversations",
     "newConversation": "New conversation",
@@ -200,17 +187,7 @@
       "title": "Token information",
       "none": "No token available"
     },
-    "language": "Interface language",
-    "chat": {
-      "searchPlaceholder": "Search chat profiles...",
-      "noProfiles": "No profiles found.",
-      "dialogTitle": "Chat profile",
-      "drawerTitle": "Profile description",
-      "noDescription": "No description available.",
-      "updateError": "Unable to update profile",
-      "deleteError": "Unable to delete profile",
-      "reloadError": "Unable to reload profile"
-    }
+    "language": "Interface language"
   },
   "knowledge": {
     "title": "Knowledge Hub",
@@ -245,8 +222,6 @@
     "cancel": "Cancel",
     "save": "Save",
     "saving": "Saving...",
-    "librariesView": "Libraries",
-    "promptView": "Prompts",
     "documentsView": "Documents",
     "removeSuccess": "Documents Removed",
     "removedDocuments": "{{count}} document(s) removed from library",
@@ -271,7 +246,9 @@
     "createSuccess": "Created",
     "createDetail": "{{typeOne, capitalize}} added to the library.",
     "removeSuccess": "Removed",
-    "removeDetail": "{{typeOne, capitalize}} removed from the library."
+    "removeDetail": "{{typeOne, capitalize}} removed from the library.",
+    "collapseAll": "Collapse all",
+    "expandAll": "Expand all"
   },
   "documentTable": {
     "selectedCount": "{{count}} selected",
@@ -291,11 +268,6 @@
     "no": "No",
     "librairies": "Librairies",
     "nowSearchable": "Now searchable"
-  },
-  "promptTable": {
-    "name": "name",
-    "content": "content",
-    "actions": "Actions"
   },
   "documentDrawerTable": {
     "deleteFile": "Delete file"
@@ -321,18 +293,6 @@
     "createLibrary": "Create Document Library",
     "collapseAll": "Collapse all",
     "expandAll": "Expand all"
-  },
-  "promptLibrariesList": {
-    "libraryName": "Library Name",
-    "prompts": "Prompts",
-    "lastUpdate": "Last Update",
-    "actions": "Actions",
-    "delete": "Delete",
-    "noLibrariesFound": "No prompt libraries found.",
-    "noLibrariesFoundDescription": "Get started by creating your first prompt library to organize and manage your prompts.",
-    "documentCountSingular": "{{count}} prompts",
-    "documentCountPlural": "{{count}} prompts",
-    "createLibrary": "Create Prompt Library"
   },
   "libraryCreateDrawer": {
     "title": "Create New Library",

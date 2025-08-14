@@ -171,7 +171,7 @@ export default function DocumentLibraryList() {
             disabled={!selectedFolder} // disable if no folder selected
             sx={{ borderRadius: "8px" }}
           >
-            {t("documentLirbrary.uploadInLibrary")}
+            {t("documentLibrary.uploadInLibrary")}
           </Button>
         </Box>
       </Box>
