@@ -52,8 +52,11 @@ Overload the file `fred/values.yaml`
 
 ```
 # Pay attention to the example file
-- custom-values-examples/fred-custom.yaml
+- custom-values-examples/custom-fred.yaml
 ```
+
+Note :
+if `applications.agentic-backend.configuration.storage.*_store.type` OR `applications.knowledge-flow-backend.configuration.storage.*_store.type` are valued with `opensearch`, it will trigger the creation of indexes.
 
 # Deploy Fred
 
