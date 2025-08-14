@@ -40,8 +40,12 @@ class JiraExpert(AgentFlow):
     tag: str = "jira operator"  # Défini au niveau de la classe
 
     def __init__(self, agent_settings: AgentSettings):
-        self.current_date = datetime.now().strftime("%Y-%m-%d")
         self.agent_settings = agent_settings
+        self.name = agent_settings.name
+        self.nickname = agent_settings.nickname or agent_settings.name
+        self.role = agent_settings.role
+        self.description = agent_settings.description
+        self.current_date = datetime.now().strftime("%Y-%m-%d")
         self.model = get_model(self.agent_settings.model)
         self.mcp_client = get_mcp_client_for_agent(self.agent_settings)
         self.toolkit = JiraExpertToolkit(self.mcp_client)

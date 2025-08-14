@@ -1,4 +1,10 @@
 {
+  "resource": {
+    "kind": {
+      "prompt":   { "one": "prompt",   "other": "prompts" },
+      "template": { "one": "modèle", "other": "modèles" }
+    }
+  },
   "validation": {
     "required": "Champ requis",
     "invalid_url": "URL invalide",
@@ -100,19 +106,6 @@
     }
   },
   "settings": {
-    "profile": {
-      "title": "Profil",
-      "tooltip": {
-        "intro": "Les profils personnalisés permettent d’adapter et d’améliorer vos interactions avec les assistants.",
-        "uses": "Contrairement aux fichiers envoyés ponctuellement, un profil est réutilisable sur plusieurs conversations et peut contenir :",
-        "example1": "Des informations sur un client ou un projet",
-        "example2": "Des documents de référence (PDF, Word, Excel...)",
-        "example3": "Des spécifications techniques"
-      },
-      "add": "Ajouter un nouveau profil",
-      "select": "Sélectionner un profil...",
-      "none": "Aucun"
-    },
     "assistants": "Assistants",
     "conversations": "Conversations",
     "newConversation": "Nouvelle conversation",
@@ -194,23 +187,14 @@
       "title": "Informations du token",
       "none": "Aucun token disponible"
     },
-    "language": "Langue de l'interface",
-    "chat": {
-      "searchPlaceholder": "Rechercher des profils...",
-      "noProfiles": "Aucun profil trouvé.",
-      "dialogTitle": "Profil de chat",
-      "drawerTitle": "Description du profil",
-      "noDescription": "Aucune description disponible.",
-      "updateError": "Impossible de mettre à jour le profil",
-      "deleteError": "Impossible de supprimer le profil",
-      "reloadError": "Impossible de recharger le profil"
-    }
+    "language": "Langue de l'interface"
   },
   "knowledge": {
     "title": "Centre de connaissances",
     "description": "Gérez vos bibliothèques de documents et de prompts",
     "viewSelector": {
       "libraries": "Bibliothèques",
+       "templates": "Modèles",
       "prompts": "Prompts",
       "documents": "Documents",
       "operations": "Opérations"
@@ -238,8 +222,6 @@
     "cancel": "Annuler",
     "save": "Enregistrer",
     "saving": "Enregistrement en cours...",
-    "librariesView": "Bibliothèques",
-    "promptView": "Prompts",
     "documentsView": "Documents",
     "removeSuccess": "Documents supprimés",
     "removedDocuments": "{{count}} document(s) supprimé(s) de la bibliothèque",
@@ -251,20 +233,20 @@
     "uploadFirstDocument": "Ajouter votre premier document",
     "preview": "Preview"
   },
-  "promptLibrary": {
-    "title": "Bibliothèque de prompts",
+  "resourceLibrary": {
+    "title": "{{typePlural}}",
+    "createLibrary": "Créer une bibliothèque",
+    "createResource": "Créer un {{typeOne}}",
+    "importResource": "Importer un {{typeOne}} depuis un fichier",
     "folders": "Dossiers",
-    "edit": "Editer le prompt",
-    "description": "Accédez à la bibliothèque de prompts",
-    "uploadInLibrary": "Ajouter un prompt à la bibliothèque",
-    "prompts": "{{count}} prompt(s)",
-    "noPrompt": "Aucun prompt trouvé",
-    "addPrompt": "Ajouter un prompt",
-    "emptyLibraryTitle": "Aucun prompt dans cette bibliothèque",
-    "emptyLibraryDescription": "Cette bibliothèque est vide. Ajoutez votre premier prompt pour le rendre disponible à vos assistants IA.",
-    "uploadFirstDocument": "Ajouter votre premier prompt",
-    "removeFromLibrary": "Supprimer de la bibliothèque",
-    "preview": "Preview"
+    "loadingLibraries": "Chargement des bibliothèques…",
+    "failedToLoad": "Échec du chargement des bibliothèques.",
+    "createSuccess": "Créé",
+    "createDetail": "{{typeOne | capitalize}} ajouté à la bibliothèque.",
+    "removeSuccess": "Supprimé",
+    "removeDetail": "{{typeOne | capitalize}} supprimé de la bibliothèque.",
+    "collapseAll": "Tout réduire",
+    "expandAll": "Tout développer"
   },
   "documentTable": {
     "selectedCount": "{{count}} sélectionné(s)",
@@ -284,11 +266,6 @@
     "no": "Non",
     "librairies": "Bibliothèques",
     "nowSearchable": "Maintenant cherchable"
-  },
-  "promptTable": {
-    "name": "nom",
-    "content": "contenu",
-    "actions": "Actions"
   },
   "documentDrawerTable": {
     "deleteFile": "Supprimer le fichier"
@@ -314,18 +291,6 @@
     "createLibrary": "Créer une bibliothèque de documents",
     "collapseAll": "Tout réduire",
     "expandAll": "Tout développer"
-  },
-  "promptLibrariesList": {
-    "libraryName": "Nom de la bibliothèque",
-    "prompts": "Prompts",
-    "lastUpdate": "Dernière mise à jour",
-    "actions": "Actions",
-    "delete": "Supprimer",
-    "noLibrariesFound": "Aucune bibliothèque de prompts trouvée.",
-    "noLibrariesFoundDescription": "Commencez par créer votre première bibliothèque pour organiser et gérer vos prompts.",
-    "documentCountSingular": "{{count}} prompt",
-    "documentCountPlural": "{{count}} prompts",
-    "createLibrary": "Créer une bibliothèque de prompts"
   },
   "libraryCreateDrawer": {
     "title": "Créer une nouvelle bibliothèque",

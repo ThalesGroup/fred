@@ -111,6 +111,10 @@ storage:
     type: "opensearch"
     index: prompt-index
 
+  resource_store:
+    type: "opensearch"
+    index: resource-index
+
   tag_store:
     type: "opensearch"
     index: tag-index

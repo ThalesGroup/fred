@@ -252,8 +252,12 @@ const ChatBot = ({
     }
 
     // Add selected prompt libraries to runtime context
-    if (content.promptLibraryIds && content.promptLibraryIds.length) {
-      runtimeContext.selected_prompt_libraries_ids = content.promptLibraryIds;
+    if (content.promptResourceIds && content.promptResourceIds.length) {
+      runtimeContext.selected_prompt_ids = content.promptResourceIds;
+    }
+    // Add selected prompt libraries to runtime context
+    if (content.templateResourceIds && content.templateResourceIds.length) {
+      runtimeContext.selected_template_ids = content.templateResourceIds;
     }
 
     if (content.files && content.files.length > 0) {

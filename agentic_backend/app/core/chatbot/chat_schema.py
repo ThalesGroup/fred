@@ -116,6 +116,7 @@ class FinalEvent(BaseModel):
 class ErrorEvent(BaseModel):
     type: Literal["error"]
     content: str
+    session_id: Optional[str] = None
 
 
 # --- Union for WebSocket response ---
