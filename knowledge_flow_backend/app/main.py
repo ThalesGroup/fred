@@ -156,7 +156,15 @@ def create_app() -> FastAPI:
         describe_full_response_schema=True,
     )
     mcp_code.mount(mount_path="/mcp_code")
-
+    mcp_resources = FastApiMCP(
+        app,
+        name="Knowledge Flow resource MCP",
+        description="MCP server for Knowledge Flow resources features",
+        include_tags=["Resources"],
+        describe_all_responses=True,
+        describe_full_response_schema=True,
+    )
+    mcp_resources.mount(mount_path="/mcp_resource")
     return app
 
 

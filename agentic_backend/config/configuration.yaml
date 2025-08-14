@@ -23,7 +23,7 @@ app:
     client_id: "app"
     keycloak_url: "http://app-keycloak:8080/realms/app"
     authorized_origins:
-    -  "http://localhost:5173"
+      - "http://localhost:5173"
 
 frontend_settings:
   security:
@@ -31,7 +31,7 @@ frontend_settings:
     client_id: "app"
     keycloak_url: "http://app-keycloak:8080/realms/app"
     authorized_origins:
-    -  "http://localhost:5173"
+      - "http://localhost:5173"
   feature_flags:
     # If true activate the backend and frontend modules in charge of K8
     # and frugality monitoring
@@ -45,8 +45,8 @@ ai:
   knowledge_flow_url: "http://localhost:8111/knowledge-flow/v1"
   # Timeout settings for the client
   timeout:
-    connect: 5  # Time to wait for a connection in seconds
-    read: 15    # Time to wait for a response in seconds
+    connect: 5 # Time to wait for a connection in seconds
+    read: 15 # Time to wait for a response in seconds
   default_model:
     # Required in .env:
     # - OPENAI_API_KEY
@@ -118,7 +118,19 @@ ai:
         chunk_overlap: 64
         knowledge_flow_url: "http://localhost:8111/knowledge-flow/v1"
       model: {}
-
+    - name: "ContentGeneratorExpert"
+      role: "Content generator expert"
+      description: >
+        This agent is able to generate some content based on some template he manages 
+        to get from the knowledge-flow backend
+      class_path: "app.agents.content_generator.content_generator_expert.ContentGeneratorExpert"
+      enabled: false
+      mcp_servers:
+        - name: knowledge-flow-mcp-server
+          transport: sse
+          url: http://localhost:8111/mcp_resource
+          sse_read_timeout: 2000
+      model: {}
 storage:
   postgres:
     host: localhost
@@ -147,5 +159,3 @@ storage:
   history_store:
     type: "duckdb"
     duckdb_path: "~/.fred/agentic/history.duckdb"
-
-
