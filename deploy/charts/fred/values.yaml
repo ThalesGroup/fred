@@ -1,4 +1,4 @@
-# values.yaml unifié corrigé
+# Unified values.yaml
 
 global:
   kubeconfig: ""
@@ -6,6 +6,7 @@ global:
 applications:
 
   agentic-backend:
+    enabled: true
     applicationName: agentic-backend
     deployment:
       enabled: true
@@ -255,6 +256,7 @@ applications:
       OPENAI_API_KEY: ""
       OPENSEARCH_PASSWORD: ""
   fred-frontend:
+    enabled: true
     applicationName: fred-frontend
     deployment:
       enabled: true
@@ -366,6 +368,7 @@ applications:
         confidential-port: 0
 
   knowledge-flow-backend:
+    enabled: true
     applicationName: knowledge-flow-backend
     deployment:
       enabled: true
