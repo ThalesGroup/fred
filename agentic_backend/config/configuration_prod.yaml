@@ -42,6 +42,7 @@ frontend_settings:
     logoName: "fred"
 
 ai:
+  knowledge_flow_url: "http://localhost:8111/knowledge-flow/v1"
   # Timeout settings for the client
   timeout:
     connect: 5  # Time to wait for a connection in seconds

@@ -28,9 +28,9 @@ class MCPAgentRequest(BaseAgentRequest):
     name: str
     base_prompt: str
     mcp_servers: List[MCPServerConfiguration]
-    role: Optional[str] = None
+    role: str
     nickname: Optional[str] = None
-    description: Optional[str] = None
+    description: str
     icon: Optional[str] = None
     categories: Optional[List[str]] = None
     tag: Optional[str] = None

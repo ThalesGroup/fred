@@ -6,16 +6,16 @@ import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import EventAvailableIcon from "@mui/icons-material/EventAvailable";
 import dayjs from "dayjs";
 import { useTranslation } from "react-i18next";
-import { Prompt } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { Resource } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 
 export type PromptRowCompactProps = {
-  prompt: Prompt;
-  onPreview?: (p: Prompt) => void;
-  onEdit?: (p: Prompt) => void;
-  onRemoveFromLibrary?: (p: Prompt) => void; // caller decides library/tag context
+  resource: Resource;
+  onPreview?: (p: Resource) => void;
+  onEdit?: (p: Resource) => void;
+  onRemoveFromLibrary?: (p: Resource) => void; // caller decides library/tag context
 };
 
-export function PromptRowCompact({ prompt, onPreview, onEdit, onRemoveFromLibrary }: PromptRowCompactProps) {
+export function ResourceRowCompact({ resource: prompt, onPreview, onEdit, onRemoveFromLibrary }: PromptRowCompactProps) {
   const { t } = useTranslation();
   const fmt = (d?: string) => (d ? dayjs(d).format("DD/MM/YYYY") : "-");
 
@@ -53,14 +53,14 @@ export function PromptRowCompact({ prompt, onPreview, onEdit, onRemoveFromLibrar
       {/* Right: actions */}
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, flexShrink: 0, ml: 2 }}>
         {onPreview && (
-          <Tooltip title={t("documentTable.preview")}>
+          <Tooltip title={t("resourceLibrary.preview")}>
             <IconButton size="small" onClick={() => onPreview(prompt)}>
               <VisibilityOutlinedIcon fontSize="inherit" />
             </IconButton>
           </Tooltip>
         )}
         {onEdit && (
-          <Tooltip title={t("promptLibrary.edit")}>
+          <Tooltip title={t("resourceLibrary.edit")}>
             <IconButton size="small" onClick={() => onEdit(prompt)}>
               <EditOutlinedIcon fontSize="inherit" />
             </IconButton>

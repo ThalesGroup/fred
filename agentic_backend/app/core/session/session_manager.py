@@ -22,10 +22,10 @@ from pathlib import Path
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple, Union, cast
 from uuid import uuid4
 
-import requests
 from fastapi import UploadFile
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from langgraph.graph.state import CompiledStateGraph
+from langchain_core.runnables import RunnableConfig
 
 from app.application_context import (
     get_configuration,
@@ -105,20 +105,6 @@ class SessionManager:
 
         return None
 
-    def get_chat_profile_data(
-        self,
-        chat_profile_id: str,
-        knowledge_base_url: str = "http://localhost:8111/knowledge-flow/v1",
-    ) -> dict:
-        try:
-            response = requests.get(
-                f"{knowledge_base_url}/chatProfiles/{chat_profile_id}", timeout=5
-            )
-            response.raise_for_status()
-            return response.json()
-        except requests.RequestException as e:
-            raise RuntimeError(f"Failed to fetch chat profile {chat_profile_id}: {e}")
-
     def _get_or_create_session(
         self, user_id: str, query: str, session_id: Optional[str]
     ) -> Tuple[SessionSchema, bool]:
@@ -165,14 +151,13 @@ class SessionManager:
         session_id: str,
         message: str,
         agent_name: str,
-        chat_profile_id: Optional[str] = None,
         runtime_context: Optional[RuntimeContext] = None,
     ) -> Tuple[SessionSchema, List[ChatMessagePayload]]:
         logger.info(
-            f"chat_ask_websocket called with user_id: {user_id}, session_id: {session_id}, message: {message}, agent_name: {agent_name}, chat_profile_id: {chat_profile_id}"
+            f"chat_ask_websocket called with user_id: {user_id}, session_id: {session_id}, message: {message}, agent_name: {agent_name}, runtime_context: {runtime_context}"
         )
 
-        session, history, agent, is_new_session = self._prepare_session_and_history(
+        session, history, agent, _is_new_session = self._prepare_session_and_history(
             user_id=user_id,
             session_id=session_id,
             message=message,
@@ -183,41 +168,6 @@ class SessionManager:
         base_rank = len(history)
 
         injected_payload = None
-
-        # 🔁 Inject profile context if provided
-        if chat_profile_id:
-            try:
-                profile_data = self.get_chat_profile_data(chat_profile_id)
-                title = profile_data.get("title", "")
-                description = profile_data.get("description", "")
-                markdown = profile_data.get("markdown", "")
-                full_context = f"## {title}\n\n{description}\n\n{markdown}"
-
-                profile_message = AIMessage(
-                    content=full_context,
-                    response_metadata={"injected": True, "origin": "chat_profile"},
-                )
-                history.insert(0, profile_message)
-
-                injected_payload = ChatMessagePayload(
-                    exchange_id=str(uuid4()),
-                    type="ai",
-                    sender="assistant",
-                    content=full_context,
-                    timestamp=datetime.now().isoformat(),
-                    session_id=session.id,
-                    rank=base_rank,  # injected context comes before user message
-                    metadata={"injected": True, "origin": "chat_profile"},
-                    subtype="injected_context",
-                    user_id=user_id,
-                )
-
-                logger.info(
-                    f"[PROFILE CONTEXT INJECTED] Profile {chat_profile_id} injected successfully."
-                )
-
-            except Exception as e:
-                logger.error(f"Failed to inject chat profile context: {e}")
 
         # 🕐 Generate timestamp and extract metadata
         timestamp = datetime.now().isoformat()
@@ -391,36 +341,49 @@ class SessionManager:
             input_messages: List of Human/AI messages.
             session_id: Current session ID (used as thread ID).
             callback: A function that takes a `dict` and handles the streamed message.
-            exchange_id:  the ID of the exchange, used to identify the messages part of a single request-replies group.
-            config: Optional LangGraph config dict override.
+            exchange_id: the ID of the exchange, used to identify the messages part of a single request-replies group.
 
         Returns:
-            The final AIMessage.
+            The collected AI/system messages as ChatMessagePayloads.
         """
-
-        config = {
+        config: RunnableConfig = {
             "configurable": {"thread_id": session_id},
             "recursion_limit": self.recursion_limit,
         }
         all_payloads: list[ChatMessagePayload] = []
         try:
             async for event in compiled_graph.astream(
-                {"messages": input_messages}, config=config, stream_mode="updates"
+                {"messages": input_messages},
+                config=config,
+                stream_mode="updates",
             ):
-                # LangGraph returns events like {'end': {'messages': [...]}} or {'next': {...}}
+                # Skip any preflight update entirely
+                if "preflight" in event:
+                    continue
+
+                # LangGraph returns events like {'expert': {'messages': [...]}} or {'end': None}
                 key = next(iter(event))
-                message_block = event[key].get("messages", [])
+                payload = event[key]
+
+                # Only process dict payloads with a "messages" field
+                if not isinstance(payload, dict):
+                    continue
+
+                message_block = payload.get("messages", []) or []
+                if not message_block:
+                    continue
+
                 for i, message in enumerate(message_block):
                     raw_metadata = getattr(message, "response_metadata", {}) or {}
                     cleaned_metadata = clean_agent_metadata(raw_metadata)
                     token_usage = getattr(message, "usage_metadata", {}) or {}
                     cleaned_metadata["token_usage"] = clean_token_usage(token_usage)
-                    # If LangChain returns type='tool', force subtype to 'tool_result'
-                    # subtype = self._infer_message_subtype(cleaned_metadata)
+
                     subtype = self._infer_message_subtype(
                         cleaned_metadata,
                         message.type if isinstance(message, BaseMessage) else None,
                     )
+
                     enriched = ChatMessagePayload(
                         exchange_id=exchange_id,
                         type=message.type,
@@ -436,18 +399,7 @@ class SessionManager:
                         user_id=user_id,
                     )
 
-                    all_payloads.append(enriched)  # ✅ collect all messages
-                    logger.info(
-                        "[STREAMED] session_id=%s exchange_id=%s type=%s | subtype=%s | fred.task=%s",
-                        enriched.session_id,
-                        enriched.exchange_id,
-                        enriched.type,
-                        enriched.subtype,
-                        enriched.metadata.get("fred", {}).get("task")
-                        if isinstance(enriched.metadata.get("fred"), dict)
-                        else None,
-                    )
-
+                    all_payloads.append(enriched)
                     result = callback(enriched.model_dump())
                     if asyncio.iscoroutine(result):
                         await result

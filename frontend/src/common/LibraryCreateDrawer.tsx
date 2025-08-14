@@ -13,7 +13,7 @@ interface LibraryCreateDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   onLibraryCreated?: () => void;
-  mode: "documents" | "prompts";
+  mode: TagType;
   /** Parent folder as a path like "thales/six" or "/" or undefined */
   currentPath?: string;
 }
@@ -43,7 +43,6 @@ export const LibraryCreateDrawer: React.FC<LibraryCreateDrawerProps> = ({
 
   // Normalize once per render; safe for passing to API
   const parentPath = useMemo(() => normalizePathForApi(currentPath), [currentPath]);
-  const asTagType: TagType = mode === "documents" ? "document" : "prompt";
 
   const handleClose = () => {
     setName("");
@@ -79,7 +78,7 @@ export const LibraryCreateDrawer: React.FC<LibraryCreateDrawerProps> = ({
         name: trimmed,
         path: parentPath, // ✅ always normalized (null at root)
         description: description.trim() || null,
-        type: asTagType,
+        type: mode ,
         item_ids: [] as string[],
       };
 

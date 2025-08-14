@@ -79,7 +79,7 @@ def app_context(monkeypatch, fake_embedder):
                 host="http://localhost:9200",
                 username="admin",
             ),
-            prompt_store=duckdb,
+            resource_store=duckdb,
             tag_store=duckdb,
             metadata_store=duckdb,
             catalog_store=duckdb,

@@ -9,7 +9,7 @@ import {
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { TagType } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
-import { LibrariesSelectionTreeCard } from "../documents/libraries/DocumentLibrariesChatSelectionCard";
+import { ChatDocumentLibrariesSelectionCard } from "./ChatDocumentLibrariesSelectionCard";
 
 export interface ChatLibrariesSelectionProps {
   selectedLibrariesIds: string[];
@@ -67,7 +67,7 @@ export function ChatLibrariesSelection({
           },
         }}
       >
-        <LibrariesSelectionTreeCard
+        <ChatDocumentLibrariesSelectionCard
           selectedLibrariesIds={selectedLibrariesIds}
           setSelectedLibrariesIds={setSelectedLibrariesIds}
           libraryType={libraryType}

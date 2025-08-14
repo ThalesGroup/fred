@@ -111,7 +111,6 @@ class ChatbotController:
                     session_id=event.session_id,
                     message=event.message,
                     agent_name=event.agent_name,
-                    chat_profile_id=event.chat_profile_id,
                     runtime_context=event.runtime_context,
                 )
 
@@ -158,7 +157,6 @@ class ChatbotController:
                         session_id=event.session_id,
                         message=event.message,
                         agent_name=event.agent_name,
-                        chat_profile_id=event.chat_profile_id,
                         runtime_context=event.runtime_context,
                     )
 
@@ -208,10 +206,9 @@ class ChatbotController:
                         ) = await self.session_manager.chat_ask_websocket(
                             callback=websocket_callback,
                             user_id=client_event.user_id,
-                            session_id=client_event.session_id,
+                            session_id=client_event.session_id or "unknown-session",
                             message=client_event.message,
                             agent_name=client_event.agent_name,
-                            chat_profile_id=client_event.chat_profile_id,
                             runtime_context=client_event.runtime_context,
                         )
                         await websocket.send_text(

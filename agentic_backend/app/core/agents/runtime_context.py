@@ -26,7 +26,8 @@ class RuntimeContext(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     selected_document_libraries_ids: list[str] | None = None
-    selected_prompt_libraries_ids: list[str] | None = None
+    selected_prompt_ids: list[str] | None = None
+    selected_template_ids: list[str] | None = None
 
 
 # Type alias for context provider functions
@@ -38,3 +39,17 @@ def get_document_libraries_ids(context: RuntimeContext | None) -> list[str] | No
     if not context:
         return None
     return context.selected_document_libraries_ids
+
+
+def get_prompt_libraries_ids(context: RuntimeContext | None) -> list[str] | None:
+    """Helper to extract prompt library IDs from context."""
+    if not context:
+        return None
+    return context.selected_prompt_ids
+
+
+def get_template_libraries_ids(context: RuntimeContext | None) -> list[str] | None:
+    """Helper to extract template library IDs from context."""
+    if not context:
+        return None
+    return context.selected_template_ids

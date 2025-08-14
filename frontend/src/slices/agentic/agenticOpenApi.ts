@@ -255,9 +255,9 @@ export type McpAgentRequest = {
   name: string;
   base_prompt: string;
   mcp_servers: McpServerConfiguration[];
-  role?: string | null;
+  role: string;
   nickname?: string | null;
-  description?: string | null;
+  description: string;
   icon?: string | null;
   categories?: string[] | null;
   tag?: string | null;
@@ -317,7 +317,8 @@ export type FinalEvent = {
 };
 export type RuntimeContext = {
   selected_document_libraries_ids?: string[] | null;
-  selected_prompt_libraries_ids?: string[] | null;
+  selected_prompt_ids?: string[] | null;
+  selected_template_ids?: string[] | null;
   [key: string]: any;
 };
 export type ChatAskInput = {
@@ -325,7 +326,6 @@ export type ChatAskInput = {
   session_id?: string | null;
   message: string;
   agent_name: string;
-  chat_profile_id?: string | null;
   runtime_context?: RuntimeContext | null;
 };
 export type SessionWithFiles = {

@@ -246,7 +246,7 @@ export default function DocumentLibraryList() {
         onLibraryCreated={async () => {
           await refetch();
         }}
-        mode="documents"
+        mode="document" // always create document libraries
         currentPath={selectedFolder} // undefined for root-level creation
       />
     </Box>
