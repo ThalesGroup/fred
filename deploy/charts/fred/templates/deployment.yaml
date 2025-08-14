@@ -31,7 +31,7 @@ spec:
         configmap.configurations.checksum: "{{ .app.configuration | join "," | sha256sum }}"
         {{- end }}
         {{- if .app.kubeconfig.enabled }}
-        configmap.kubeconfig.checksum: "{{ .root.kubeconfig | join "," | sha256sum }}"
+        configmap.kubeconfig.checksum: "{{ .root.Values.global.kubeconfig | join "," | sha256sum }}"
         {{- end }}
         # END - Force refresh of the deployment when configmap is changed
       labels:

@@ -1,0 +1,182 @@
+{{- define "common-library.job-opensearch-index-creation" }}
+
+{{- $needsOpensearch := dict "value" false }}
+{{- range $name, $store := .app.configuration.storage }}
+  {{- if and (hasSuffix "_store" $name) (eq $store.type "opensearch") }}
+    {{- $_ := set $needsOpensearch "value" true }}
+  {{- end }}
+{{- end }}
+
+{{- if $needsOpensearch.value }}
+
+{{- $osHost := .app.configuration.storage.opensearch.host }}
+{{- $osUser := .app.configuration.storage.opensearch.username }}
+{{- $osPass := .app.dotenv.OPENSEARCH_PASSWORD }}
+
+---
+
+#TODO : Ugly to embed scripts here; should be in a toolbox image + standard job template
+#       and configurations moved to values.yaml
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: "{{ .app.applicationName }}-opensearch-scripts"
+  namespace: {{ $.root.Release.Namespace }}
+data:
+  wait_for_os_init.sh: |
+    #!/bin/sh
+    CLUSTER_NAME=$1
+    TIMEOUT=120
+    CURL_CMD="curl ${CLUSTER_NAME}/_cluster/health --insecure --silent --user {{ $osUser }}:{{ $osPass }} --request GET"
+
+    echo "Waiting for OpenSearch initialization..."
+
+    elapsed_time=0
+    while output=$($CURL_CMD); [[ -z "$output" || "$output" == *"OpenSearch Security not initialized"* ]]
+    do
+        if [ $elapsed_time -ge $TIMEOUT ]
+        then
+            echo "Timeout reached (${TIMEOUT}s): OpenSearch is not ready yet"
+            exit 1
+        fi
+        printf "."
+        sleep 1
+        elapsed_time=$((elapsed_time + 1))
+    done
+    echo "OpenSearch is ready and secured"
+
+  create_indice.sh: |
+    #!/bin/sh
+    CLUSTER_NAME=$1
+    INDEX_NAME=$2
+
+    echo "Creating index: $INDEX_NAME"
+    if ! curl -v ${CLUSTER_NAME}/$INDEX_NAME \
+        --fail \
+        --insecure \
+        --silent \
+        --user {{ $osUser }}:{{ $osPass }}
+    then
+        curl -v ${CLUSTER_NAME}/$INDEX_NAME \
+            --insecure \
+            --silent \
+            --user {{ $osUser }}:{{ $osPass }} \
+            --request PUT \
+            --data-binary @$(dirname $0)/mapping.json \
+            --header "Content-Type: application/json"
+    fi
+
+  mapping.json: |
+    {
+      "settings": {
+        "number_of_shards": 1,
+        "number_of_replicas": 1,
+        "knn.algo_param": {
+          "ef_search": "512"
+        },  
+        "knn": "true"
+      },
+      "mappings": {
+        "properties": {
+          "metadata": {
+            "properties": {
+              "my_field_1": {
+                "type": "text",
+                "fields": {
+                  "keyword": {
+                    "type": "keyword",
+                    "ignore_above": 256
+                  }
+                }
+              },
+              "my_field_2": {
+                "type": "text",
+                "fields": {
+                  "keyword": {
+                    "type": "keyword",
+                    "ignore_above": 256
+                  }
+                }
+              },
+              "my_field_3": {
+                "type": "text",
+                "fields": {
+                  "keyword": {
+                    "type": "keyword",
+                    "ignore_above": 256
+                  }
+                }
+              }
+            }
+          },
+          "text": {
+            "type": "text",
+            "fields": {
+              "keyword": {
+                "type": "keyword",
+                "ignore_above": 256
+              }
+            }
+          },
+          "vector_field": {
+            "type": "knn_vector",
+            "dimension": 1536,
+            "method": {
+              "engine": "nmslib",
+              "space_type": "l2",
+              "name": "hnsw",
+              "parameters": {
+                "ef_construction": 512,
+                "m": 16
+              }
+            }
+          }
+        }
+      }
+    }
+
+
+
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "{{ .app.applicationName }}-opensearch-index-creation"
+  namespace: {{ $.root.Release.Namespace }}
+  labels:
+    app: {{ .app.applicationName }}
+spec:
+  backoffLimit: 1
+  template:
+    metadata:
+      labels:
+        app: {{ .app.applicationName }}
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: opensearch-init
+          image: {{ .root.Values.global.create_index.image | default "alpine:3.22" }}
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              apk add curl
+              /app/wait_for_os_init.sh {{ $osHost }}
+{{- range $name, $store := .app.configuration.storage }}
+{{- if and (hasSuffix "_store" $name) (eq $store.type "opensearch") }}
+              /app/create_indice.sh {{ $osHost }} {{ $store.index }}
+{{- end }}
+{{- end }}
+          volumeMounts:
+            - name: opensearch-scripts
+              mountPath: /app
+              readOnly: true
+      volumes:
+        - name: opensearch-scripts
+          configMap:
+            name: "{{ .app.applicationName }}-opensearch-scripts"
+            defaultMode: 0755
+{{- end }}
+{{ end -}}

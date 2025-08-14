@@ -9,4 +9,6 @@
   {{- include "common-library.configmap-backend" $ctx }}
   {{- include "common-library.deployment" $ctx }}
   {{- include "common-library.secrets-env" $ctx }}
+  {{- include "common-library.job" $ctx }}
+  {{- include "common-library.job-opensearch-index-creation" $ctx }}
 {{- end }}
