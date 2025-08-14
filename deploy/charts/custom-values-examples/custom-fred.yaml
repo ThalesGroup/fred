@@ -19,3 +19,71 @@ global:
         user:
           client-certificate-data: LS0*******
           client-key-data: LS0*******
+
+
+applications:
+  agentic-backend:
+    configuration:
+      storage:
+
+        opensearch:
+          host: https://opensearch:9200
+          secure: true
+          verify_certs: false
+          username: admin
+
+        feedback_store:
+          type: "opensearch"
+          index: feedback-index
+
+        agent_store:
+          type: "opensearch"
+          index: agent-index
+
+        session_store:
+          type: "opensearch"
+          index: session-index
+
+        history_store:
+          type: "opensearch"
+          index: history-index
+
+    dotenv:
+      OPENSEARCH_PASSWORD: "tobedefined"
+
+  knowledge-flow-backend:
+    configuration:
+
+      storage:
+        opensearch:
+          host: https://opensearch:9200
+          secure: true
+          verify_certs: false
+          username: admin
+
+        tabular_store:
+          type: "duckdb"
+          duckdb_path: "~/.fred/knowledge-flow/tabular.duckdb"
+
+        catalog_store:
+          type: "opensearch"
+          index: catalog-index
+
+        prompt_store:
+          type: "opensearch"
+          index: prompt-index
+
+        tag_store:
+          type: "opensearch"
+          index: tag-index
+
+        metadata_store:
+          type: "opensearch"
+          index: metadata-index
+
+        vector_store:
+          type: opensearch
+          index: vector-index-ada002
+
+    dotenv:
+      OPENSEARCH_PASSWORD: "tobedefined"
