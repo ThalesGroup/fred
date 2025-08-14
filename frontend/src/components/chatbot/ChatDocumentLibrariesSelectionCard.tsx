@@ -7,13 +7,9 @@ import { TreeItem } from "@mui/x-tree-view/TreeItem";
 import KeyboardArrowRightIcon from "@mui/icons-material/KeyboardArrowRight";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import { useTranslation } from "react-i18next";
-import {
-  TagType,
-  TagWithItemsId,
-  useListAllTagsKnowledgeFlowV1TagsGetQuery,
-} from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { TagType, TagWithItemsId, useListAllTagsKnowledgeFlowV1TagsGetQuery } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 
-export interface LibrariesSelectionTreeCardProps {
+export interface ChatDocumentLibrariesSelectionCardProps {
   selectedLibrariesIds: string[];
   setSelectedLibrariesIds: (ids: string[]) => void;
   libraryType: TagType;
@@ -94,11 +90,11 @@ function collectAllKeys(n: TagNode, acc: string[] = []): string[] {
   return acc;
 }
 
-export function LibrariesSelectionTreeCard({
+export function ChatDocumentLibrariesSelectionCard({
   selectedLibrariesIds,
   setSelectedLibrariesIds,
   libraryType,
-}: LibrariesSelectionTreeCardProps) {
+}: ChatDocumentLibrariesSelectionCardProps) {
    
   const theme = useTheme();
   const { t } = useTranslation();

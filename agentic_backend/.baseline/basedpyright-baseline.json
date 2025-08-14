@@ -34,16 +34,6 @@
                 }
             }
         ],
-        "./app/agents/generalist/generalist_expert.py": [
-            {
-                "code": "reportOptionalMemberAccess",
-                "range": {
-                    "startColumn": 36,
-                    "endColumn": 43,
-                    "lineCount": 1
-                }
-            }
-        ],
         "./app/agents/jira/jira_expert.py": [
             {
                 "code": "reportArgumentType",
@@ -798,38 +788,6 @@
                     "endColumn": 51,
                     "lineCount": 1
                 }
-            },
-            {
-                "code": "reportCallIssue",
-                "range": {
-                    "startColumn": 24,
-                    "endColumn": 34,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportArgumentType",
-                "range": {
-                    "startColumn": 39,
-                    "endColumn": 62,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportCallIssue",
-                "range": {
-                    "startColumn": 67,
-                    "endColumn": 77,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportCallIssue",
-                "range": {
-                    "startColumn": 32,
-                    "endColumn": 42,
-                    "lineCount": 1
-                }
             }
         ],
         "./app/core/model/azure_apim_model.py": [
@@ -976,14 +934,6 @@
             {
                 "code": "reportArgumentType",
                 "range": {
-                    "startColumn": 53,
-                    "endColumn": 59,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportArgumentType",
-                "range": {
                     "startColumn": 29,
                     "endColumn": 41,
                     "lineCount": 1
@@ -1002,54 +952,6 @@
                 "range": {
                     "startColumn": 32,
                     "endColumn": 39,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportOptionalMemberAccess",
-                "range": {
-                    "startColumn": 42,
-                    "endColumn": 45,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportAttributeAccessIssue",
-                "range": {
-                    "startColumn": 58,
-                    "endColumn": 61,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportAttributeAccessIssue",
-                "range": {
-                    "startColumn": 58,
-                    "endColumn": 61,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportAttributeAccessIssue",
-                "range": {
-                    "startColumn": 58,
-                    "endColumn": 61,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportAttributeAccessIssue",
-                "range": {
-                    "startColumn": 58,
-                    "endColumn": 61,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportOptionalMemberAccess",
-                "range": {
-                    "startColumn": 56,
-                    "endColumn": 59,
                     "lineCount": 1
                 }
             },

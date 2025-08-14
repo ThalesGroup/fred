@@ -35,7 +35,7 @@ def build_resource_from_create(payload: ResourceCreate, library_tag_id: str, use
 
     schema = header.get("schema")
     if not schema:
-        schema = {} 
+        schema = {}
     elif not isinstance(schema, dict):
         raise ValueError("Missing or invalid 'schema' in header.")
 

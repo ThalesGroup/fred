@@ -13,13 +13,16 @@
 # limitations under the License.
 
 import logging
-from typing import Optional
+from typing import List, Optional, Sequence
 
 from IPython.display import Image
 from langchain_core.tools import BaseToolkit
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph.state import CompiledStateGraph, StateGraph
 
+from app.application_context import get_knowledge_flow_base_url
+from langchain_core.messages import SystemMessage, BaseMessage
+from app.core.agents.agent_state import Prepared, resolve_prepared
 from app.core.agents.runtime_context import RuntimeContext
 
 logger = logging.getLogger(__name__)
@@ -138,6 +141,49 @@ class AgentFlow:
         self.compiled_graph: Optional[CompiledStateGraph] = None
         self.toolkit = toolkit
         self.runtime_context: Optional[RuntimeContext] = None
+
+    def use_fred_prompts(self, messages: Sequence[BaseMessage]) -> List[BaseMessage]:
+        """
+        Apply the prompts/templates the user picked in the Fred UI to this turn as ONE system message.
+
+        What you get
+        - End-to-end prompt management: respects the user's selections from the chat UI.
+        - Order preserved: prompts/templates are combined in the same order the user chose.
+        - Consistent formatting: merged into a single SystemMessage, followed by the agent's base prompt.
+        - Server-side control: fetched and composed on the server for auditability and safety.
+
+        When to use
+        - Any agent that should honor the user's prompt/template selections from the Fred UI.
+
+        Guarantees
+        - If nothing is selected: returns `messages` unchanged.
+        - If selections exist: prepends one `SystemMessage` built from the UI selections + this agent's `base_prompt`.
+        - No custom graph/state required; this is an opt-in helper.
+
+        Args:
+            messages: The conversation messages to send to the model.
+
+        Returns:
+            A new list of messages (possibly with a leading `SystemMessage`).
+        """
+        sys_text = self._compose_fred_system_text().strip()
+        if not sys_text:
+            return list(messages)
+        return [SystemMessage(content=sys_text), *messages]
+
+    def _compose_fred_system_text(self) -> str:
+        """
+        Internal: builds the system text from (a) selected Fred resources and
+        (b) this agent’s base_prompt, preserving order and keeping it in one message.
+        """
+        ctx = self.get_runtime_context() or RuntimeContext()
+        prepared: Prepared = resolve_prepared(ctx, get_knowledge_flow_base_url())
+
+        pre_text = (prepared.prompt_text or "").strip()
+        base_text = (self.base_prompt or "").strip()
+        if pre_text and base_text:
+            return f"{pre_text}\n\n{base_text}"
+        return pre_text or base_text
 
     def get_compiled_graph(self) -> CompiledStateGraph:
         """

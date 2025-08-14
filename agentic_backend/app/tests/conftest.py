@@ -73,6 +73,7 @@ def minimal_generalist_config() -> Configuration:
             ),
         ),
         ai=AIConfig(
+            knowledge_flow_url="http://localhost:8000/agentic/v1",
             timeout=TimeoutSettings(connect=5, read=15),
             default_model=ModelConfiguration(
                 provider="openai",

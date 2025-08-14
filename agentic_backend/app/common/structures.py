@@ -98,6 +98,10 @@ class AgentSettings(BaseModel):
 
 
 class AIConfig(BaseModel):
+    knowledge_flow_url: str = Field(
+        ...,
+        description="URL of the Knowledge Flow backend.",
+    )
     timeout: TimeoutSettings = Field(
         ..., description="Timeout settings for the AI client."
     )
