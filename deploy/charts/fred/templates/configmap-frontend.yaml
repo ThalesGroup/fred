@@ -11,11 +11,6 @@ data:
   config.json: |
 {{ .app.configuration.config_json | toJson | nindent 4 }}
 
-  {{- if .app.oidc.enabled }}
-  keycloak.json: |
-{{ .app.configuration.keycloak_json | toJson | nindent 4 }}
-  {{- end }}
-
 {{- end }}
 
 {{ end -}}
