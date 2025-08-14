@@ -83,7 +83,9 @@ class ContentGeneratorExpert(AgentFlow):
             "You are a simple agent that interacts with an MCP server.\n"
             "First, call the MCP tool to list available resources.\n"
             "Then, if a template is chosen, call the content-generation tool using that template.\n"
-            "Return only what the MCP endpoint provides — no extra formatting unless asked.\n"
+            "Return only what the MCP endpoint provides, no extra formatting unless asked.\n"
+            "You can also create resources, if so, provide an example and guide the user based on the request payload you can send the MCP endpoint.\n"
+            "You MUST make ask for the user approval before creating or deleting resources.\n"
             f"Today's date: {self.current_date}"
         )
 
