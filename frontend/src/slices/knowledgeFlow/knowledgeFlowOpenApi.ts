@@ -396,33 +396,74 @@ export type ScheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPostApiResponse =
 export type ScheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPostApiArg = {
   processDocumentsRequest: ProcessDocumentsRequest;
 };
-export type SourceType = "push" | "pull";
-export type DocumentMetadata = {
+export type Identity = {
+  /** Original file name incl. extension */
   document_name: string;
+  /** Stable unique id across the system */
   document_uid: string;
-  /** When the document was added to the system */
-  date_added_to_kb?: string;
-  /** True if the system can download or access the original file again */
-  retrievable?: boolean;
-  /** Tag identifying the pull source (e.g., 'local-docs', 'contracts-git') */
-  source_tag?: string | null;
-  /** Path or URI to the original pull file */
-  pull_location?: string | null;
-  source_type: SourceType;
-  /** User-assigned tags */
-  tags?: string[] | null;
+  /** Human-friendly title for UI */
   title?: string | null;
   author?: string | null;
   created?: string | null;
   modified?: string | null;
   last_modified_by?: string | null;
-  category?: string | null;
-  subject?: string | null;
-  keywords?: string | null;
-  /** Status of each well-defined processing stage */
-  processing_stages?: {
-    [key: string]: "not_started" | "in_progress" | "done" | "failed";
+};
+export type SourceType = "push" | "pull";
+export type SourceInfo = {
+  source_type: SourceType;
+  /** Repository/connector id, e.g. 'uploads', 'github' */
+  source_tag?: string | null;
+  /** Path or URI to the original pull file */
+  pull_location?: string | null;
+  /** True if raw file can be re-fetched */
+  retrievable?: boolean;
+  /** When the document was added to the system */
+  date_added_to_kb?: string;
+};
+export type FileType = "pdf" | "docx" | "pptx" | "xlsx" | "csv" | "md" | "html" | "txt" | "other";
+export type FileInfo = {
+  file_type?: FileType;
+  mime_type?: string | null;
+  file_size_bytes?: number | null;
+  page_count?: number | null;
+  row_count?: number | null;
+  sha256?: string | null;
+  md5?: string | null;
+  language?: string | null;
+};
+export type Tagging = {
+  /** Stable tag IDs (UUIDs) */
+  tag_ids?: string[];
+  /** Display names for chips */
+  tag_names?: string[];
+  /** Optional canonical breadcrumb path, e.g. 'Thales/Sales/HR' */
+  library_path?: string | null;
+  /** Last segment of library_path */
+  library_folder?: string | null;
+};
+export type AccessInfo = {
+  license?: string | null;
+  confidential?: boolean;
+  acl?: string[];
+};
+export type ProcessingStatus = "not_started" | "in_progress" | "done" | "failed";
+export type Processing = {
+  stages?: {
+    [key: string]: ProcessingStatus;
   };
+  errors?: {
+    [key: string]: string;
+  };
+};
+export type DocumentMetadata = {
+  identity: Identity;
+  source: SourceInfo;
+  file?: FileInfo;
+  tags?: Tagging;
+  access?: AccessInfo;
+  processing?: Processing;
+  preview_url?: string | null;
+  viewer_url?: string | null;
 };
 export type ValidationError = {
   loc: (string | number)[];

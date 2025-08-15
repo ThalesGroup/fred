@@ -93,11 +93,11 @@ class IngestionService:
 
         # Step 2: enrich/clean metadata
         if source_config:
-            metadata.source_type = SourceType(source_config.type)
+            metadata.source.source_type = SourceType(source_config.type)
 
         # If this is a pull file, preserve the path
         if source_config and source_config.type == "pull":
-            metadata.pull_location = str(file_path.name)
+            metadata.source.pull_location = str(file_path.name)
 
         # Clean string fields like "None" to actual None
         for field in ["title", "category", "subject", "keywords"]:

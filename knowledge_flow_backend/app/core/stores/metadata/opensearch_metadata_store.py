@@ -1,23 +1,24 @@
-# Copyright Thales 2025
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# app/core/stores/metadata/opensearch_metadata_store.py
 
 import logging
-from typing import List, Optional
+from typing import List, Optional, Dict, Tuple, Any
+
 from opensearchpy import OpenSearch, RequestsHttpConnection, OpenSearchException
 from pydantic import ValidationError
 
-from app.common.document_structures import DocumentMetadata
+from app.common.document_structures import (
+    DocumentMetadata,
+    Identity,
+    SourceInfo,
+    FileInfo,
+    Tagging,
+    AccessInfo,
+    Processing,
+    ProcessingStage,
+    ProcessingStatus,
+    SourceType,
+    FileType,
+)
 from app.core.stores.metadata.base_metadata_store import (
     BaseMetadataStore,
     MetadataDeserializationError,
@@ -26,55 +27,50 @@ from app.core.stores.metadata.base_metadata_store import (
 logger = logging.getLogger(__name__)
 
 # ==============================================================================
-# METADATA_INDEX_MAPPING
+# METADATA_INDEX_MAPPING (flat fields for DocumentMetadata v2)
 # ==============================================================================
-# This mapping defines the OpenSearch schema used for storing DocumentMetadata.
-#
-# ⚠️ WARNING: This mapping is embedded directly in code and applied when the
-# OpenSearchMetadataStore is initialized, if the index does not already exist.
-#
-# ✅ This approach works well for local development and lightweight deployments.
-# ❗ In production environments, it is recommended to pre-create indices using
-# provisioning tools (Terraform, Ansible, OpenSearch Dashboards, etc.) so you
-# can control:
-#   - number_of_shards / number_of_replicas
-#   - refresh interval
-#   - ILM policies
-#   - index templates and mappings evolution
-#
-# 🛠️ If needed, you can extend this dictionary to include full "settings":
-# {
-#     "settings": {
-#         "number_of_shards": 1,
-#         "number_of_replicas": 0,
-#         "refresh_interval": "1s"
-#     },
-#     "mappings": { ... }
-# }
-#
-# Note: Fields like 'document_name' are stored both as full text (for search)
-# and as 'keyword' (for exact match filters). The 'processing_stages' object
-# is partially structured, but allows new stage keys thanks to `dynamic: true`.
-# ==============================================================================
-
 METADATA_INDEX_MAPPING = {
     "mappings": {
         "properties": {
-            "document_uid": {"type": "keyword"},
-            "document_name": {"type": "text", "fields": {"keyword": {"type": "keyword", "ignore_above": 256}}},
-            "date_added_to_kb": {"type": "date"},
-            "source_tag": {"type": "keyword"},
-            "tags": {"type": "keyword"},
-            "retrievable": {"type": "boolean"},
-            "processing_stages": {
-                "type": "object",
-                "properties": {
-                    "VECTORIZED": {"type": "keyword"},
-                    "OCR_DONE": {"type": "keyword"},
-                    "INGESTED": {"type": "keyword"},
-                },
-                "dynamic": True,
-            },
+            # identity
+            "document_uid":      {"type": "keyword"},
+            "document_name":     {"type": "text", "fields": {"keyword": {"type": "keyword", "ignore_above": 256}}},
+            "title":             {"type": "text", "fields": {"keyword": {"type": "keyword", "ignore_above": 256}}},
+            "author":            {"type": "keyword"},
+            "created":           {"type": "date"},
+            "modified":          {"type": "date"},
+            "last_modified_by":  {"type": "keyword"},
+
+            # source
+            "source_type":       {"type": "keyword"},
+            "source_tag":        {"type": "keyword"},
+            "pull_location":     {"type": "keyword"},
+            "retrievable":       {"type": "boolean"},
+            "date_added_to_kb":  {"type": "date"},
+
+            # file
+            "file_type":         {"type": "keyword"},
+            "mime_type":         {"type": "keyword"},
+            "file_size_bytes":   {"type": "long"},
+            "page_count":        {"type": "integer"},
+            "row_count":         {"type": "integer"},
+            "sha256":            {"type": "keyword"},
+            "language":          {"type": "keyword"},
+
+            # tags / folders
+            "tag_ids":           {"type": "keyword"},
+            "tag_names":         {"type": "keyword"},
+            "library_path":      {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
+            "library_folder":    {"type": "keyword"},
+
+            # access
+            "license":           {"type": "keyword"},
+            "confidential":      {"type": "boolean"},
+            "acl":               {"type": "keyword"},
+
+            # processing (ops)
+            "processing_stages": {"type": "object", "dynamic": True},
+            "processing_errors": {"type": "object", "dynamic": True}
         }
     }
 }
@@ -82,31 +78,8 @@ METADATA_INDEX_MAPPING = {
 
 class OpenSearchMetadataStore(BaseMetadataStore):
     """
-    OpenSearch-based implementation of the metadata store.
-
-    Required OpenSearch mapping for 'metadata-index':
-
-    {
-      "mappings": {
-        "properties": {
-          "document_uid":     { "type": "keyword" },
-          "document_name":    { "type": "text", "fields": { "keyword": { "type": "keyword", "ignore_above": 256 } } },
-          "date_added_to_kb": { "type": "date" },
-          "source_tag":       { "type": "keyword" },
-          "tags":             { "type": "keyword" },
-          "retrievable":      { "type": "boolean" },
-          "processing_stages": {
-            "type": "object",
-            "properties": {
-              "VECTORIZED": { "type": "keyword" },
-              "OCR_DONE":   { "type": "keyword" },
-              "INGESTED":   { "type": "keyword" }
-            },
-            "dynamic": true
-          }
-        }
-      }
-    }
+    OpenSearch-based implementation of the metadata store (flat fields persisted).
+    Auto-creates the index with METADATA_INDEX_MAPPING when missing.
     """
 
     def __init__(
@@ -129,62 +102,258 @@ class OpenSearchMetadataStore(BaseMetadataStore):
 
         if not self.client.indices.exists(index=self.metadata_index_name):
             self.client.indices.create(index=self.metadata_index_name, body=METADATA_INDEX_MAPPING)
-            logger.info(f"Opensearch index '{index}' created.")
+            logger.info(f"OpenSearch index '{index}' created.")
         else:
-            logger.warning(f"Opensearch index '{index}' already exists.")
+            logger.info(f"OpenSearch index '{index}' already exists.")
+
+    # ---------- (de)serialization ----------
+
+    @staticmethod
+    def _serialize(md: DocumentMetadata) -> Dict[str, Any]:
+        missing: list[tuple[str, str]] = []
+        if not md.identity.document_uid:   missing.append(("identity.document_uid", "document UID"))
+        if not md.identity.document_name:  missing.append(("identity.document_name", "document name"))
+        if not md.source.date_added_to_kb: missing.append(("source.date_added_to_kb", "date added to KB"))
+        if not md.source.source_type:      missing.append(("source.source_type", "source type"))
+        if missing:
+            labels = ", ".join(lbl for _, lbl in missing)
+            raise MetadataDeserializationError(f"Cannot serialize metadata: missing {labels}")
+
+        """Flatten DocumentMetadata v2 into top-level dict that matches index mapping."""
+        stages = {k.value: v.value for k, v in md.processing.stages.items()}
+        errors = {k.value: v for k, v in md.processing.errors.items()}
+
+        return {
+            # identity
+            "document_uid": md.identity.document_uid,
+            "document_name": md.identity.document_name,
+            "title": md.identity.title,
+            "author": md.identity.author,
+            "created": md.identity.created,
+            "modified": md.identity.modified,
+            "last_modified_by": md.identity.last_modified_by,
+
+            # source
+            "source_type": md.source.source_type.value,
+            "source_tag": md.source.source_tag,
+            "pull_location": md.source.pull_location,
+            "retrievable": md.source.retrievable,
+            "date_added_to_kb": md.source.date_added_to_kb,
+
+            # file
+            "file_type": (md.file.file_type.value if md.file.file_type else FileType.OTHER.value),
+            "mime_type": md.file.mime_type,
+            "file_size_bytes": md.file.file_size_bytes,
+            "page_count": md.file.page_count,
+            "row_count": md.file.row_count,
+            "sha256": md.file.sha256,
+            "language": md.file.language,
+
+            # tags / folders
+            "tag_ids": md.tags.tag_ids,
+            "tag_names": md.tags.tag_names,
+            "library_path": md.tags.library_path,
+            "library_folder": md.tags.library_folder,
+
+            # access
+            "license": md.access.license,
+            "confidential": md.access.confidential,
+            "acl": md.access.acl,
+
+            # processing (ops)
+            "processing_stages": stages,
+            "processing_errors": errors,
+        }
+
+    @staticmethod
+    def _deserialize(src: Dict[str, Any]) -> DocumentMetadata:
+        """Rebuild nested DocumentMetadata v2 from flat dict."""
+        try:
+            
+            if not src.get("document_uid"):
+                raise MetadataDeserializationError("Missing 'document_uid' in OpenSearch source")
+            if not src.get("document_name"):
+                raise MetadataDeserializationError("Missing 'document_name' in OpenSearch source")
+            if not src.get("date_added_to_kb"):
+                raise MetadataDeserializationError("Missing 'date_added_to_kb' in OpenSearch source")
+
+            identity = Identity(
+                document_uid=src["document_uid"],
+                document_name=src["document_name"],
+                title=src.get("title"),
+                author=src.get("author"),
+                created=src.get("created"),
+                modified=src.get("modified"),
+                last_modified_by=src.get("last_modified_by"),
+            )
+            source = SourceInfo(
+                source_type=SourceType(src.get("source_type")) if src.get("source_type") else SourceType.PUSH,
+                source_tag=src.get("source_tag"),
+                pull_location=src.get("pull_location"),
+                retrievable=bool(src.get("retrievable")) if src.get("retrievable") is not None else False,
+                date_added_to_kb=src["date_added_to_kb"],
+            )
+            file = FileInfo(
+                file_type=FileType(src.get("file_type")) if src.get("file_type") else FileType.OTHER,
+                mime_type=src.get("mime_type"),
+                file_size_bytes=src.get("file_size_bytes"),
+                page_count=src.get("page_count"),
+                row_count=src.get("row_count"),
+                sha256=src.get("sha256"),
+                language=src.get("language"),
+            )
+            tags = Tagging(
+                tag_ids=list(src.get("tag_ids") or []),
+                tag_names=list(src.get("tag_names") or []),
+                library_path=src.get("library_path"),
+                library_folder=src.get("library_folder"),
+            )
+            access = AccessInfo(
+                license=src.get("license"),
+                confidential=bool(src.get("confidential")) if src.get("confidential") is not None else False,
+                acl=list(src.get("acl") or []),
+            )
+
+            stages_raw: Dict[str, str] = src.get("processing_stages") or {}
+            errors_raw: Dict[str, str] = src.get("processing_errors") or {}
+
+            stages: Dict[ProcessingStage, ProcessingStatus] = {}
+            for k, v in stages_raw.items():
+                try:
+                    stages[ProcessingStage(k)] = ProcessingStatus(v)
+                except Exception:
+                    # tolerate unknowns
+                    continue
+
+            processing = Processing(
+                stages=stages,
+                errors={
+                    ProcessingStage(k): v
+                    for k, v in errors_raw.items()
+                    if k in stages_raw and v is not None
+                },
+            )
+
+            return DocumentMetadata(
+                identity=identity,
+                source=source,
+                file=file,
+                tags=tags,
+                access=access,
+                processing=processing,
+            )
+        except ValidationError as e:
+            raise MetadataDeserializationError(f"Invalid metadata structure: {e}") from e
+
+    # ---------- reads ----------
 
     def get_metadata_by_uid(self, document_uid: str) -> Optional[DocumentMetadata]:
-        """
-        Retrieve metadata for a document by its unique identifier (UID).
-        Returns None if the document does not exist.
-        """
         if not document_uid:
             raise ValueError("Document UID must be provided.")
         try:
-            response = self.client.get(index=self.metadata_index_name, id=document_uid)
-            if not response.get("found"):
+            resp = self.client.get(index=self.metadata_index_name, id=document_uid)
+            if not resp.get("found"):
                 return None
-            source = response["_source"]
+            source = resp["_source"]
         except Exception as e:
             logger.error(f"OpenSearch request failed for UID '{document_uid}': {e}")
             raise
-
         try:
-            return DocumentMetadata(**source)
+            return self._deserialize(source)
         except Exception as e:
             logger.error(f"Deserialization failed for UID '{document_uid}': {e}")
             raise MetadataDeserializationError from e
 
     def get_all_metadata(self, filters: dict) -> List[DocumentMetadata]:
-        """
-        Retrieve all metadata documents that match the given filters.
-        Filters should be a dictionary where keys are field names and values are the filter values.
-        Example: {"source_tag": "local-docs", "category": "reports"}
-        """
         try:
-            must_clauses = self._build_must_clauses(filters)
-            query = {"match_all": {}} if not must_clauses else {"bool": {"must": must_clauses}}
-
-            response = self.client.search(
-                params={"size": 10000},
-                index=self.metadata_index_name,
-                body={"query": query},
-            )
-            hits = response["hits"]["hits"]
+            must = self._build_must_clauses(filters)
+            query = {"match_all": {}} if not must else {"bool": {"must": must}}
+            resp = self.client.search(index=self.metadata_index_name, body={"query": query}, params={"size": 10000})
+            hits = resp["hits"]["hits"]
         except Exception as e:
             logger.error(f"OpenSearch search failed with filters {filters}: {e}")
             raise
 
-        results = []
+        out: List[DocumentMetadata] = []
         for h in hits:
             try:
-                results.append(DocumentMetadata(**h["_source"]))
+                out.append(self._deserialize(h["_source"]))
             except Exception as e:
                 logger.warning(f"Deserialization failed for doc {h.get('_id')}: {e}")
+        return out
+
+    def list_by_source_tag(self, source_tag: str) -> List[DocumentMetadata]:
+        try:
+            query = {"query": {"term": {"source_tag": {"value": source_tag}}}}
+            resp = self.client.search(index=self.metadata_index_name, body=query, params={"size": 10000})
+            hits = resp["hits"]["hits"]
+        except Exception as e:
+            logger.error(f"OpenSearch query failed for source_tag='{source_tag}': {e}")
+            raise
+
+        results: List[DocumentMetadata] = []
+        errors = 0
+        for h in hits:
+            try:
+                results.append(self._deserialize(h["_source"]))
+            except ValidationError as e:
+                errors += 1
+                doc_id = h.get("_id", "<unknown>")
+                logger.warning(f"[Deserialization error] Skipping document '{doc_id}': {e}")
+        if errors > 0:
+            logger.warning(f"{errors} documents failed to deserialize in list_by_source_tag('{source_tag}').")
         return results
 
+    def get_metadata_in_tag(self, tag_id: str) -> List[DocumentMetadata]:
+        if not tag_id:
+            raise ValueError("Tag ID must be provided.")
+        try:
+            query = {"query": {"term": {"tag_ids": tag_id}}}
+            resp = self.client.search(index=self.metadata_index_name, body=query, params={"size": 10000})
+            hits = resp["hits"]["hits"]
+        except Exception as e:
+            logger.error(f"OpenSearch query failed for tag '{tag_id}': {e}")
+            raise
+        try:
+            return [self._deserialize(hit["_source"]) for hit in hits]
+        except Exception as e:
+            logger.error(f"Deserialization failed for results tagged '{tag_id}': {e}")
+            raise MetadataDeserializationError from e
+
+    # ---------- writes ----------
+
+    def save_metadata(self, metadata: DocumentMetadata) -> None:
+        uid = metadata.identity.document_uid
+        if not uid:
+            raise ValueError("Missing 'document_uid' in metadata.")
+        body = self._serialize(metadata)
+        try:
+            self.client.index(index=self.metadata_index_name, id=uid, body=body)
+            logger.info(f"[METADATA] Indexed document with UID '{uid}' into '{self.metadata_index_name}'.")
+        except OpenSearchException as e:
+            logger.error(f"Failed to index metadata for UID '{uid}': {e}")
+            raise RuntimeError(f"Failed to index metadata: {e}") from e
+
+    def delete_metadata(self, document_uid: str) -> None:
+        try:
+            self.client.delete(index=self.metadata_index_name, id=document_uid)
+            logger.info(f"Deleted metadata UID '{document_uid}' from index '{self.metadata_index_name}'.")
+        except Exception as e:
+            logger.error(f"Failed to delete metadata UID '{document_uid}': {e}")
+            raise
+
+    def clear(self) -> None:
+        try:
+            self.client.delete_by_query(index=self.metadata_index_name, body={"query": {"match_all": {}}})
+            logger.info(f"Cleared all documents from '{self.metadata_index_name}'.")
+        except Exception as e:
+            logger.error(f"Failed to clear metadata store: {e}")
+            raise
+
+    # ---------- helpers ----------
+
     def _build_must_clauses(self, filters_dict: dict) -> List[dict]:
-        must = []
+        must: List[dict] = []
 
         def flatten(prefix: str, val):
             if isinstance(val, dict):
@@ -201,93 +370,4 @@ class OpenSearchMetadataStore(BaseMetadataStore):
                 must.append({"terms": {field: value}})
             else:
                 must.append({"term": {field: value}})
-
         return must
-
-    def list_by_source_tag(self, source_tag: str) -> List[DocumentMetadata]:
-        """
-        List all metadata documents that match a specific source tag.
-        """
-        try:
-            query = {"query": {"term": {"source_tag": {"value": source_tag}}}}
-
-            response = self.client.search(index=self.metadata_index_name, body=query, params={"size": 10000})
-            hits = response["hits"]["hits"]
-        except Exception as e:
-            logger.error(f"OpenSearch query failed for source_tag='{source_tag}': {e}")
-            raise
-
-        results = []
-        errors = 0
-        for h in hits:
-            try:
-                results.append(DocumentMetadata(**h["_source"]))
-            except ValidationError as e:
-                errors += 1
-                doc_id = h.get("_id", "<unknown>")
-                logger.warning(f"[Deserialization error] Skipping document '{doc_id}': {e}")
-
-        if errors > 0:
-            logger.warning(f"{errors} documents failed to deserialize in list_by_source_tag('{source_tag}').")
-
-        return results
-
-    def save_metadata(self, metadata: DocumentMetadata) -> None:
-        """
-        Index the metadata into OpenSearch by document UID.
-        Overwrites any existing document with the same UID.
-        """
-        if not metadata.document_uid:
-            raise ValueError("Missing 'document_uid' in metadata.")
-
-        try:
-            self.client.index(
-                index=self.metadata_index_name,
-                id=metadata.document_uid,
-                body=metadata.model_dump(),
-            )
-            logger.info(f"[METADATA] Indexed document with UID '{metadata.document_uid}' into '{self.metadata_index_name}'.")
-        except OpenSearchException as e:
-            logger.error(f"❌ Failed to index metadata for UID '{metadata.document_uid}': {e}")
-            raise RuntimeError(f"Failed to index metadata: {e}") from e
-
-    def delete_metadata(self, document_uid: str) -> None:
-        """
-        Delete the metadata document identified by its UID.
-        Returns True if deletion succeeded, False otherwise.
-        """
-        try:
-            self.client.delete(index=self.metadata_index_name, id=document_uid)
-            logger.info(f"✅ Deleted metadata UID '{document_uid}' from index '{self.metadata_index_name}'.")
-        except Exception as e:
-            logger.error(f"❌ Failed to delete metadata UID '{document_uid}': {e}")
-            raise
-
-    def get_metadata_in_tag(self, tag_id: str) -> List[DocumentMetadata]:
-        """
-        Return all metadata entries where 'tags' contains the specified tag_id.
-        """
-        if not tag_id:
-            raise ValueError("Tag ID must be provided.")
-
-        try:
-            query = {"query": {"term": {"tags": tag_id}}}
-            response = self.client.search(index=self.metadata_index_name, body=query, params={"size": 10000})
-            hits = response["hits"]["hits"]
-        except Exception as e:
-            logger.error(f"OpenSearch query failed for tag '{tag_id}': {e}")
-            raise
-
-        try:
-            return [DocumentMetadata(**hit["_source"]) for hit in hits]
-        except Exception as e:
-            logger.error(f"Deserialization failed for results tagged '{tag_id}': {e}")
-            raise MetadataDeserializationError from e
-
-    def clear(self) -> None:
-        try:
-            self.client.delete_by_query(index=self.metadata_index_name, body={"query": {"match_all": {}}})
-            logger.info(f"Cleared all documents from '{self.metadata_index_name}'")
-        except Exception as e:
-            logger.error(f"❌ Failed to clear metadata store: {e}")
-            raise

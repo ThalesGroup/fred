@@ -187,19 +187,6 @@ class TagService:
         else:
             raise ValueError(f"Unsupported tag type: {tag.type}")
 
-        # Rename / move
-        new_name = tag_data.name
-        new_path = getattr(tag_data, "path", None)
-        norm_path = self._normalize_path(new_path)
-
-        new_full_path = self._compose_full_path(norm_path, new_name)
-        old_full_path = self._full_path_of(tag)
-        if new_full_path != old_full_path:
-            self._ensure_unique_full_path(owner_id=tag.owner_id, tag_type=tag.type, full_path=new_full_path, exclude_tag_id=tag.id)
-
-        tag.name = new_name
-        tag.path = norm_path
-        tag.description = tag_data.description
         tag.updated_at = datetime.now()
         updated_tag = self._tag_store.update_tag_by_id(tag_id, tag)
 

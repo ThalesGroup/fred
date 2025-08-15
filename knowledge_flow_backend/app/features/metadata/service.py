@@ -84,13 +84,15 @@ class MetadataService:
     def add_tag_id_to_document(self, metadata: DocumentMetadata, new_tag_id: str, modified_by: str) -> None:
         try:
             if metadata.tags is None:
-                metadata.tags = []
+                raise MetadataUpdateError("DocumentMetadata.tags is not initialized")
 
             # Avoid duplicate tags
-            if new_tag_id not in metadata.tags:
-                metadata.tags.append(new_tag_id)
-                metadata.modified = datetime.now(timezone.utc)
-                metadata.last_modified_by = modified_by
+            tag_ids = metadata.tags.tag_ids or []
+            if new_tag_id not in tag_ids:
+                tag_ids.append(new_tag_id)
+                metadata.tags.tag_ids = tag_ids
+                metadata.identity.modified = datetime.now(timezone.utc)
+                metadata.identity.last_modified_by = modified_by
                 self.metadata_store.save_metadata(metadata)
                 logger.info(f"[METADATA] Added tag '{new_tag_id}' to document '{metadata.document_name}' by '{modified_by}'")
             else:
@@ -102,19 +104,20 @@ class MetadataService:
 
     def remove_tag_id_from_document(self, metadata: DocumentMetadata, tag_id_to_remove: str, modified_by: str) -> None:
         try:
-            if not metadata.tags or tag_id_to_remove not in metadata.tags:
+            if not metadata.tags or not metadata.tags.tag_ids or tag_id_to_remove not in metadata.tags.tag_ids:
                 logger.info(f"[METADATA] Tag '{tag_id_to_remove}' not found on document '{metadata.document_name}' — nothing to remove.")
                 return
 
             # Remove tag
-            metadata.tags.remove(tag_id_to_remove)
+            new_ids = [t for t in metadata.tags.tag_ids if t != tag_id_to_remove]
+            metadata.tags.tag_ids = new_ids
 
-            if not metadata.tags:
+            if not new_ids:
                 self.metadata_store.delete_metadata(metadata.document_uid)
                 logger.info(f"[METADATA] Deleted document '{metadata.document_name}' because no tags remain (last removed by '{modified_by}')")
             else:
-                metadata.modified = datetime.now(timezone.utc)
-                metadata.last_modified_by = modified_by
+                metadata.identity.modified = datetime.now(timezone.utc)
+                metadata.identity.last_modified_by = modified_by
                 self.metadata_store.save_metadata(metadata)
                 logger.info(f"[METADATA] Removed tag '{tag_id_to_remove}' from document '{metadata.document_name}' by '{modified_by}'")
 
@@ -131,9 +134,9 @@ class MetadataService:
             if not metadata:
                 raise MetadataNotFound(f"Document '{document_uid}' not found.")
 
-            metadata.retrievable = value
-            metadata.modified = datetime.now(timezone.utc)
-            metadata.last_modified_by = modified_by
+            metadata.source.retrievable = value
+            metadata.identity.modified = datetime.now(timezone.utc)
+            metadata.identity.last_modified_by = modified_by
 
             self.metadata_store.save_metadata(metadata)
             logger.info(f"[METADATA] Set retrievable={value} for document '{document_uid}' by '{modified_by}'")
@@ -153,7 +156,7 @@ class MetadataService:
 
             # Update tag timestamps for any tags assigned to this document
             if metadata.tags:
-                self._update_tag_timestamps(metadata.tags)
+                self._update_tag_timestamps(metadata.tags.tag_ids)
 
         except Exception as e:
             logger.error(f"Error saving metadata for {metadata.document_uid}: {e}")
@@ -166,7 +169,7 @@ class MetadataService:
         try:
             # Get old tags from current document metadata
             old_document = self.get_document_metadata(document_uid)
-            old_tags = old_document.tags or []
+            old_tags = (old_document.tags.tag_ids if old_document.tags else []) or []
 
             # Find tags that were added or removed
             old_tags_set = set(old_tags)

@@ -114,7 +114,7 @@ class BaseEmbeddingModel(Embeddings, ABC):
     """
 
     @abstractmethod
-    def embed_documents(self, documents: List[Document]) -> List[dict]:
+    def embed_documents(self, texts: List[str]) -> List[List[float]]:
         """
         Embed a list of documents into vectors.
         Returns a list of { 'embedding': List[float], 'document': Document }
