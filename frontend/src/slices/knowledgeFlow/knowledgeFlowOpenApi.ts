@@ -383,7 +383,7 @@ export type DeleteResourceKnowledgeFlowV1ResourcesResourceIdDeleteApiResponse =
 export type DeleteResourceKnowledgeFlowV1ResourcesResourceIdDeleteApiArg = {
   resourceId: string;
 };
-export type SearchDocumentsUsingVectorizationApiResponse = /** status 200 Successful Response */ DocumentSource[];
+export type SearchDocumentsUsingVectorizationApiResponse = /** status 200 Successful Response */ VectorSearchHit[];
 export type SearchDocumentsUsingVectorizationApiArg = {
   searchRequest: SearchRequest;
 };
@@ -436,10 +436,6 @@ export type Tagging = {
   tag_ids?: string[];
   /** Display names for chips */
   tag_names?: string[];
-  /** Optional canonical breadcrumb path, e.g. 'Thales/Sales/HR' */
-  library_path?: string | null;
-  /** Last segment of library_path */
-  library_folder?: string | null;
 };
 export type AccessInfo = {
   license?: string | null;
@@ -464,6 +460,10 @@ export type DocumentMetadata = {
   processing?: Processing;
   preview_url?: string | null;
   viewer_url?: string | null;
+  /** Processor-specific additional attributes (namespaced keys). */
+  extensions?: {
+    [key: string]: any;
+  } | null;
 };
 export type ValidationError = {
   loc: (string | number)[];
@@ -592,30 +592,36 @@ export type ResourceUpdate = {
   description?: string | null;
   labels?: string[] | null;
 };
-export type DocumentSource = {
+export type VectorSearchHit = {
   content: string;
-  file_path: string;
-  file_name: string;
-  page: number | null;
+  page?: number | null;
+  section?: string | null;
+  viewer_fragment?: string | null;
+  /** Document UID */
   uid: string;
-  modified?: string | null;
   title: string;
-  author: string;
-  created: string;
-  type: string;
-  /** Similarity score returned by the vector store (e.g., cosine distance). */
+  author?: string | null;
+  created?: string | null;
+  modified?: string | null;
+  file_name?: string | null;
+  file_path?: string | null;
+  repository?: string | null;
+  pull_location?: string | null;
+  language?: string | null;
+  mime_type?: string | null;
+  /** File type/category */
+  type?: string | null;
+  tag_ids?: string[];
+  tag_names?: string[];
+  license?: string | null;
+  confidential?: boolean | null;
+  /** Similarity score from vector search */
   score: number;
-  /** Rank of the document among the retrieved results. */
   rank?: number | null;
-  /** Identifier of the embedding model used. */
   embedding_model?: string | null;
-  /** Name of the vector index used for retrieval. */
   vector_index?: string | null;
-  /** Approximate token count of the content. */
   token_count?: number | null;
-  /** Timestamp when the document was retrieved. */
   retrieved_at?: string | null;
-  /** Session or trace ID for auditability. */
   retrieval_session_id?: string | null;
 };
 export type SearchRequest = {

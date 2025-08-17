@@ -59,9 +59,6 @@ METADATA_INDEX_MAPPING = {
 
             # tags / folders
             "tag_ids":           {"type": "keyword"},
-            "tag_names":         {"type": "keyword"},
-            "library_path":      {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
-            "library_folder":    {"type": "keyword"},
 
             # access
             "license":           {"type": "keyword"},
@@ -70,7 +67,9 @@ METADATA_INDEX_MAPPING = {
 
             # processing (ops)
             "processing_stages": {"type": "object", "dynamic": True},
-            "processing_errors": {"type": "object", "dynamic": True}
+            "processing_errors": {"type": "object", "dynamic": True},
+            # processor specific fields
+            "extensions": {"type": "object", "enabled": False},
         }
     }
 }
@@ -151,9 +150,6 @@ class OpenSearchMetadataStore(BaseMetadataStore):
 
             # tags / folders
             "tag_ids": md.tags.tag_ids,
-            "tag_names": md.tags.tag_names,
-            "library_path": md.tags.library_path,
-            "library_folder": md.tags.library_folder,
 
             # access
             "license": md.access.license,
@@ -163,6 +159,8 @@ class OpenSearchMetadataStore(BaseMetadataStore):
             # processing (ops)
             "processing_stages": stages,
             "processing_errors": errors,
+            # extensions
+            "extensions": md.extensions or {},
         }
 
     @staticmethod
@@ -204,9 +202,6 @@ class OpenSearchMetadataStore(BaseMetadataStore):
             )
             tags = Tagging(
                 tag_ids=list(src.get("tag_ids") or []),
-                tag_names=list(src.get("tag_names") or []),
-                library_path=src.get("library_path"),
-                library_folder=src.get("library_folder"),
             )
             access = AccessInfo(
                 license=src.get("license"),
@@ -241,6 +236,7 @@ class OpenSearchMetadataStore(BaseMetadataStore):
                 tags=tags,
                 access=access,
                 processing=processing,
+                extensions=src.get("extensions") or None, 
             )
         except ValidationError as e:
             raise MetadataDeserializationError(f"Invalid metadata structure: {e}") from e

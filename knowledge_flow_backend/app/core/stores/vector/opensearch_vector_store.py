@@ -87,6 +87,24 @@ class OpenSearchVectorStoreAdapter(BaseVectoreStore):
         dummy_vector = self.embedding_model.embed_query("dummy")
         return len(dummy_vector)
 
+    def delete_vectors(self, document_uid: str) -> None:
+        try:
+            client = self.opensearch_vector_search.client
+            body = {
+                    "query": {
+                        "term": {"metadata.document_uid": {"value": document_uid}}
+                    }
+            }
+            resp = client.delete_by_query(
+                    index=self.vector_index,
+                    body=body,
+            )
+            deleted = int(resp.get("deleted", 0))
+            logger.info(f"✅ Deleted {deleted} vector chunks for document_uid={document_uid}.")
+        except Exception:
+            logger.exception(f"❌ Failed to delete vectors for document_uid={document_uid}.")
+            raise RuntimeError("Failed to delete vectors from OpenSearch.")
+
     def add_documents(self, documents: List[Document]) -> None:
         try:
             self.opensearch_vector_search.add_documents(documents)

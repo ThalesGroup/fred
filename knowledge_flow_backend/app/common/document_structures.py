@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set
 
 from pydantic import BaseModel, Field, HttpUrl, field_validator, model_validator
 
@@ -111,10 +111,6 @@ class Tagging(BaseModel):
     """
     tag_ids: List[str] = Field(default_factory=list, description="Stable tag IDs (UUIDs)")
     tag_names: List[str] = Field(default_factory=list, description="Display names for chips")
-    library_path: Optional[str] = Field(
-        default=None, description="Optional canonical breadcrumb path, e.g. 'Thales/Sales/HR'"
-    )
-    library_folder: Optional[str] = Field(default=None, description="Last segment of library_path")
 
     @field_validator("tag_ids", "tag_names")
     @classmethod
@@ -128,19 +124,7 @@ class Tagging(BaseModel):
                 seen.add(x)
         return out
 
-    @field_validator("library_path")
-    @classmethod
-    def normalize_path(cls, v: Optional[str]) -> Optional[str]:
-        if not v:
-            return None
-        segs = [s.strip() for s in v.split("/") if s.strip()]
-        return "/".join(segs) or None
 
-    @model_validator(mode="after")
-    def fill_folder_from_path(self):
-        if self.library_path and not self.library_folder:
-            self.library_folder = self.library_path.split("/")[-1]
-        return self
 
 
 class AccessInfo(BaseModel):
@@ -187,6 +171,10 @@ class DocumentMetadata(BaseModel):
     preview_url: Optional[HttpUrl] = None
     viewer_url: Optional[HttpUrl] = None
 
+    extensions: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Processor-specific additional attributes (namespaced keys)."
+    )
     # ---- Convenience passthroughs (compat with v1) ----
     @property
     def document_name(self) -> str: return self.identity.document_name

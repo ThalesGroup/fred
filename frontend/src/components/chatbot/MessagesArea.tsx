@@ -1,58 +1,79 @@
 // Copyright Thales 2025
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// ...
 
 import React, { memo, useEffect, useRef, useState } from "react";
 import Message from "./MessageCard.tsx";
 import Thoughts from "./Thoughts.tsx";
-import { AgenticFlow } from "../../pages/Chat.tsx";
 import Sources from "./Sources.tsx";
-import { ChatMessagePayload, FredMetadata } from "../../slices/chatApiStructures.ts";
+import { AgenticFlow } from "../../pages/Chat.tsx";
+import { ChatMessagePayload } from "../../slices/agentic/agenticOpenApi.ts";
 
-function Area({
-  messages,
-  agenticFlows,
-  currentAgenticFlow,
-}: {
+type Props = {
   messages: ChatMessagePayload[];
   agenticFlows: AgenticFlow[];
   currentAgenticFlow: AgenticFlow;
-}) {
-  // Reference for the message container
-  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+};
 
+function Area({ messages, agenticFlows, currentAgenticFlow }: Props) {
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const [events, setEvents] = useState<React.ReactNode[]>([]);
 
-  // Function to scroll to the bottom of the messages
-  //TODO - Fix the timeout issue
-  const scrollToBottom = () => {
-    if (messagesEndRef.current) {
-      setTimeout(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-      }, 300); // Adjust the timeout as needed
-    }
+  // Add a helper to find the scrollable container (the parent Grid2 with overflowY: "scroll")
+function getScrollableParent(el: HTMLElement | null): HTMLElement | null {
+  let node: HTMLElement | null = el;
+  while (node) {
+    const style = window.getComputedStyle(node);
+    const oy = style.overflowY;
+    if (oy === "auto" || oy === "scroll") return node;
+    node = node.parentElement;
+  }
+  return null;
+}
+
+function isNearBottom(container: HTMLElement, threshold = 96): boolean {
+  const { scrollTop, scrollHeight, clientHeight } = container;
+  return scrollHeight - (scrollTop + clientHeight) <= threshold;
+}
+
+const scrollToBottomIfSticking = () => {
+  if (!messagesEndRef.current) return;
+  const scrollable = getScrollableParent(messagesEndRef.current);
+  if (!scrollable) return;
+
+  if (isNearBottom(scrollable)) {
+    // Only auto-scroll if the user is already near the bottom
+    setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    }, 50);
+  }
+};
+
+
+  // Helper: resolve agentic flow for a message using new schema
+  const resolveAgenticFlow = (msg: ChatMessagePayload): AgenticFlow => {
+    const agentName = msg.metadata?.agent_name ?? currentAgenticFlow.name;
+    return agenticFlows.find((flow) => flow.name === agentName) ?? currentAgenticFlow;
   };
 
-  // Automatically scroll to the bottom when messages update
-  useEffect(() => {
-    const sorted = [...messages].sort((a, b) => a.rank - b.rank);
-    const grouped = new Map<string, ChatMessagePayload[]>();
+  // Helper: resolve task name from new schema
+  const getTaskName = (msg: ChatMessagePayload): string => {
+    // new schema: metadata.fred?.task (kept generic on backend)
+    const task = (msg.metadata?.fred as Record<string, any> | undefined)?.task;
+    if (typeof task === "string" && task.trim().length > 0) return task.trim();
+    return "Task";
+  };
 
+  useEffect(() => {
+    // We expect messages already sorted by `rank` from ChatBot; still sort defensively
+    const sorted = [...messages].sort((a, b) => a.rank - b.rank);
+
+    // Group by (session_id, exchange_id)
+    const grouped = new Map<string, ChatMessagePayload[]>();
     for (const msg of sorted) {
       const key = `${msg.session_id}-${msg.exchange_id}`;
-      if (!grouped.has(key)) {
-        grouped.set(key, []);
-      }
+      if (!grouped.has(key)) grouped.set(key, []);
       grouped.get(key)!.push(msg);
     }
 
@@ -61,55 +82,55 @@ function Area({
     for (const [, group] of grouped.entries()) {
       const thoughtsByTask: Record<string, ChatMessagePayload[]> = {};
       let userMessage: ChatMessagePayload | undefined;
-      let finalMessages: ChatMessagePayload[] = [];
-      let otherMessages: ChatMessagePayload[] = [];
+      const finalMessages: ChatMessagePayload[] = [];
+      const otherMessages: ChatMessagePayload[] = [];
 
       for (const msg of group) {
-        const { session_id, exchange_id, rank, type, subtype, sender, content } = msg;
-        const task = (msg.metadata?.fred as FredMetadata)?.task || "Task";
-
-        console.groupCollapsed(
-          `%c📦 Message %s | %s-%s | rank=%d | subtype=%s | task=%s`,
-          "color: gray",
-          session_id,
-          exchange_id,
-          type,
-          rank,
-          subtype || "–",
-          task,
-        );
-        console.log("Sender:", sender);
-        console.log("Content preview:", content?.slice(0, 3000));
-        console.log("Metadata:", msg.metadata);
-        console.groupEnd();
+        const { type, subtype } = msg;
 
         if (type === "human") {
-          console.log("👉 Classified as: USER");
           userMessage = msg;
-        } else if (["plan", "execution", "thought", "tool_result"].includes(subtype || "")) {
+          continue;
+        }
+
+        if (subtype === "injected_context") {
+          // hide backend-injected context from the main flow
+          continue;
+        }
+
+        // Intermediate messages: plan / execution / thought / tool_result (and "final" with a task)
+        const isThoughty =
+          subtype === "plan" ||
+          subtype === "execution" ||
+          subtype === "thought" ||
+          subtype === "tool_result";
+
+        if (isThoughty) {
+          const task = getTaskName(msg);
           if (!thoughtsByTask[task]) thoughtsByTask[task] = [];
           thoughtsByTask[task].push(msg);
-          console.log("🧠 Classified as: THOUGHT under task:", task);
-        } else if (subtype === "final") {
-          if (msg.metadata?.fred?.task) {
-            // Intermediate result for a task — belongs inside the Thoughts block
+          continue;
+        }
+
+        if (subtype === "final") {
+          const hasTask = Boolean((msg.metadata?.fred as Record<string, any> | undefined)?.task);
+          if (hasTask) {
+            // treat task-scoped final as part of thoughts accordion
+            const task = getTaskName(msg);
             if (!thoughtsByTask[task]) thoughtsByTask[task] = [];
             thoughtsByTask[task].push(msg);
-            console.log("🧠 Classified as: INTERMEDIATE FINAL in task:", task);
           } else {
-            // Only top-level final message goes as standalone
+            // top-level final → standalone answer card
             finalMessages.push(msg);
-            console.log("✅ Classified as: FINAL RESPONSE");
           }
-        } else if (msg.subtype === "injected_context") {
-          console.log("⏭️ Skipping injected context message");
           continue;
-        } else {
-          otherMessages.push(msg);
-          console.warn("⚠️ Classified as: OTHER (fallback)");
         }
+
+        // Fallback bucket (rare)
+        otherMessages.push(msg);
       }
 
+      // Render user message (right side)
       if (userMessage) {
         elements.push(
           <Message
@@ -125,13 +146,20 @@ function Area({
         );
       }
 
+      // Render grouped thoughts (accordion), if any
       if (Object.keys(thoughtsByTask).length > 0) {
         elements.push(
-          <Thoughts key={`thoughts-${group[0].exchange_id}`} messages={thoughtsByTask} isOpenByDefault={true} />,
+          <Thoughts
+            key={`thoughts-${group[0].session_id}-${group[0].exchange_id}`}
+            messages={thoughtsByTask}
+            isOpenByDefault={true}
+          />,
         );
       }
+
+      // Render any "other" messages (rare fallback)
       for (const msg of otherMessages) {
-        const agenticFlow = agenticFlows.find((flow) => flow.name === msg.metadata?.agentic_flow);
+        const agenticFlow = resolveAgenticFlow(msg);
         const sources = msg.metadata?.sources;
         elements.push(
           <React.Fragment key={`msg-${msg.session_id}-${msg.exchange_id}-${msg.rank}`}>
@@ -149,8 +177,9 @@ function Area({
         );
       }
 
+      // Render top-level finals (left side, sources expanded)
       for (const msg of finalMessages) {
-        const agenticFlow = agenticFlows.find((flow) => flow.name === msg.metadata?.agentic_flow);
+        const agenticFlow = resolveAgenticFlow(msg);
         const sources = msg.metadata?.sources;
         elements.push(
           <React.Fragment key={`final-${msg.session_id}-${msg.exchange_id}-${msg.rank}`}>
@@ -170,53 +199,18 @@ function Area({
     }
 
     setEvents(elements);
-  }, [messages]);
+  }, [messages, agenticFlows, currentAgenticFlow]);
 
   useEffect(() => {
-    scrollToBottom();
+    scrollToBottomIfSticking();
   }, [messages]);
 
   return (
     <div>
       {events}
       <div ref={messagesEndRef} />
-      {/* Debug output: display the raw messages JSON */}
-      {/*  <pre>{JSON.stringify(messages, null, 2)}</pre> */}
     </div>
   );
 }
 
-/*
-  ────────────────────────────────────────────────────────────────────────
-  🧠 Message Grouping Logic (for Thoughts, Plans, Tool Results, etc.)
-  ────────────────────────────────────────────────────────────────────────
-
-  This section transforms the flat list of ChatMessagePayloads into a mix of:
-
-    1. Individual messages — like user inputs and final assistant responses
-    2. Grouped messages — sequences of related assistant thoughts, plans, tool outputs,
-       etc., grouped by `fred.task` and rendered together using the <Thoughts> component
-
-  Each "group" is represented in this format:
-      {
-        "Analyze Data": [
-          { subtype: "plan", content: "1. Parse CSV\n2. Summarize values" },
-          { subtype: "execution", content: "Parsing CSV complete" },
-          { subtype: "tool_result", content: "Found 4 columns, 200 rows" }
-        ]
-      }
-
-  These grouped entries are pushed into the `elements[]` array and detected by checking
-  if the object does **not** have a `.type` field (i.e., it's not a regular message).
-  We render them using <Thoughts messages={...} />.
-
-  The grouping rules are based on the `subtype` field of each message:
-    - "plan" starts a group if following a user message
-    - "thought", "execution", "tool_result" are added to the current group if it's open
-    - Otherwise, they start a new group under their task
-    - All other messages are treated as individual and rendered with <Message />
-
-  This design allows the UI to cleanly separate final answers from intermediate reasoning.
-
-*/
 export const MessagesArea = memo(Area);

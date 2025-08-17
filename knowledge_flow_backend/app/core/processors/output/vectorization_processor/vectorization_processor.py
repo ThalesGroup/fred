@@ -13,16 +13,32 @@
 # limitations under the License.
 
 import logging
-from typing import override
+from typing import Optional, override
 from langchain.schema.document import Document
 
 from app.application_context import ApplicationContext
 from app.common.document_structures import DocumentMetadata, ProcessingStage
-from app.common.vectorization_utils import load_langchain_doc_from_metadata
+from app.common.vectorization_utils import flat_metadata_from, load_langchain_doc_from_metadata, sanitize_chunk_metadata
 from app.core.processors.output.base_output_processor import BaseOutputProcessor, VectorProcessingError
 
 logger = logging.getLogger(__name__)
 
+_ALLOWED_CHUNK_KEYS = {
+    "page", "page_start", "page_end",
+    "char_start", "char_end",
+    "viewer_fragment",
+    "original_doc_length", "chunk_id",
+    "section",
+}
+_HEADER_KEYS = ("Header 1", "Header 2", "Header 3", "Header 4", "Header 5", "Header 6")
+
+def _as_int(v) -> Optional[int]:
+    try:
+        if v is None: return None
+        if isinstance(v, bool): return int(v)
+        return int(str(v).strip())
+    except Exception:
+        return None
 
 class VectorizationProcessor(BaseOutputProcessor):
     """
@@ -40,7 +56,7 @@ class VectorizationProcessor(BaseOutputProcessor):
         self.embedder = self.context.get_embedder()
         logger.info(f"🧠 Embedder initialized: {self.embedder.__class__.__name__}")
 
-        self.vector_store = self.context.get_vector_store(self.embedder)
+        self.vector_store = self.context.get_create_vector_store(self.embedder)
         logger.info(f"🗃️ Vector store initialized: {self.vector_store.__class__.__name__}")
 
         self.metadata_store = ApplicationContext.get_instance().get_metadata_store()
@@ -59,17 +75,29 @@ class VectorizationProcessor(BaseOutputProcessor):
             chunks = self.splitter.split(document)
             logger.info(f"Document split into {len(chunks)} chunks.")
 
-            # 3. Embed the chunks
-            # embedded_chunks = embedder.embed_documents(chunks)
-            # logger.info(f"{len(embedded_chunks)} chunks embedded.")
-
-            # 4. Check if document already exists
+            # 3. Check if document already exists
             document_uid = metadata.document_uid
             if document_uid is None:
                 raise ValueError("Metadata must contain a 'document_uid'.")
 
-            # 5. Store embeddings
+            # Build the constant base metadata once (flat projection)
+            base_flat = flat_metadata_from(metadata)
+
+            for i, doc in enumerate(chunks):
+                raw_meta = doc.metadata or {}
+                clean_chunk_meta, dropped = sanitize_chunk_metadata(raw_meta)
+
+                if dropped:
+                    logger.debug(f"[Chunk {i}] dropped meta keys: {dropped}")
+
+                doc.metadata = {**base_flat, **clean_chunk_meta}
+                logger.debug(
+                    f"[Chunk {i}] preview={doc.page_content[:100]!r} meta_keys={list(doc.metadata.keys())}"
+                )
+
+            # 4. Store embeddings
             try:
+                
                 for i, doc in enumerate(chunks):
                     logger.debug(f"[Chunk {i}] Document content preview: {doc.page_content[:100]!r} | Metadata: {doc.metadata}")
                 result = self.vector_store.add_documents(chunks)

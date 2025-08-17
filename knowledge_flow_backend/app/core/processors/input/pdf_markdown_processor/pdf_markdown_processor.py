@@ -52,26 +52,32 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
 
     def extract_file_metadata(self, file_path: Path) -> dict:
         """Extracts metadata from the PDF file."""
-        metadata = {"document_name": file_path.name}
         try:
             with open(file_path, "rb") as f:
                 reader = pypdf.PdfReader(f)
                 info = reader.metadata or {}
 
-                metadata.update(
-                    {
-                        "title": info.title.strip() if info.title else "Unknown",
-                        "author": info.author.strip() if info.author else "Unknown",
-                        "subject": info.subject.strip() if info.subject else "Unknown",
-                        "num_pages": len(reader.pages),
+                return {
+                    # Identity-level fields
+                    "title": info.get("/Title") or None,
+                    "author": info.get("/Author") or None,
+                    "document_name": file_path.name,
+
+                    # File-level fields
+                    "page_count": len(reader.pages),
+
+                    # Extras — preserved but not polluting core schema
+                    "extras": {
+                        "pdf.subject": info.get("/Subject") or None,
+                        "pdf.producer": info.get("/Producer") or None,
+                        "pdf.creator": info.get("/Creator") or None,
                     }
-                )
+                }
         except Exception as e:
             logger.error(f"Error extracting metadata from PDF: {e}")
-            metadata["error"] = str(e)
-        return metadata
+            return {"document_name": file_path.name, "error": str(e)}
 
-    def convert_file_to_markdown(self, input_doc_path: Path, output_dir: Path, document_uid: str | None) -> dict:
+    def convert_file_to_markdown(self, file_path: Path, output_dir: Path, document_uid: str | None) -> dict:
         output_markdown_path = output_dir / "output.md"
         try:
             # Initialize the DocumentConverter with PDF format options
@@ -88,7 +94,7 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
             converter = DocumentConverter(format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options)})
 
             # Convert the PDF document to a Document object
-            result = converter.convert(input_doc_path)
+            result = converter.convert(file_path)
             doc = result.document
 
             # Extract the pictures descriptions from the document

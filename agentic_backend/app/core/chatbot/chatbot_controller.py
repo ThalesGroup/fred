@@ -12,15 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import json
 import logging
 from enum import Enum
-from typing import Dict, List
+from typing import Dict, List, Literal, Type, Union
 
 from fastapi import (
     APIRouter,
-    Body,
     Depends,
+    FastAPI,
     File,
     Form,
     HTTPException,
@@ -29,29 +28,71 @@ from fastapi import (
     WebSocket,
     WebSocketDisconnect,
 )
-from fastapi.responses import JSONResponse, StreamingResponse
-from fred_core import KeycloakUser, get_current_user
+
+from fred_core import KeycloakUser, get_current_user, VectorSearchHit
+from pydantic import BaseModel, Field
 from starlette.websockets import WebSocketState
 
 from app.application_context import get_configuration
 from app.common.utils import log_exception
 from app.core.agents.agent_manager import AgentManager
+from app.core.agents.runtime_context import RuntimeContext
 from app.core.agents.structures import AgenticFlow
 from app.core.chatbot.chat_schema import (
+    ChatMessageMetadata,
     ChatMessagePayload,
+    ChatTokenUsage,
     ErrorEvent,
     FinalEvent,
+    SessionSchema,
     SessionWithFiles,
     StreamEvent,
 )
-from app.core.chatbot.chatbot_error import ChatBotError
 from app.core.chatbot.chatbot_message import ChatAskInput
-from app.core.chatbot.metric_structures import MetricsResponse
+from app.core.chatbot.metric_structures import MetricsBucket, MetricsResponse
 from app.core.session.session_manager import SessionManager
 
 logger = logging.getLogger(__name__)
 
+# ------------- Echo types (one endpoint to reference them all) -------------
 
+# Union of every schema you want exposed to the UI codegen
+EchoPayload = Union[
+    ChatMessagePayload,
+    ChatAskInput,
+    StreamEvent,
+    FinalEvent,
+    ErrorEvent,
+    ChatMessageMetadata,
+    ChatTokenUsage,
+    SessionSchema,
+    SessionWithFiles,
+    MetricsResponse,
+    MetricsBucket,
+    VectorSearchHit,
+    RuntimeContext,
+]
+
+# Keep a 'kind' so the UI can switch on it easily (not required for OpenAPI, but handy)
+class EchoEnvelope(BaseModel):
+    kind: Literal[
+        "ChatMessagePayload",
+        "StreamEvent",
+        "FinalEvent",
+        "ErrorEvent",
+        "ChatMessageMetadata",
+        "ChatTokenUsage",
+        "SessionSchema",
+        "SessionWithFiles",
+        "MetricsResponse",
+        "MetricsBucket",
+        "VectorSearchHit",
+        "RuntimeContext",
+    ]
+    payload: EchoPayload = Field(..., description="Schema payload being echoed")
+
+
+    
 class ChatbotController:
     """
     This controller is responsible for handling the UI HTTP endpoints and
@@ -67,6 +108,17 @@ class ChatbotController:
         self.agent_manager = agent_manager
         self.session_manager = session_manager
         fastapi_tags: list[str | Enum] = ["Frontend"]
+
+
+        @app.post(
+            "/schemas/echo",
+            tags=["Schemas"],
+            summary="Echo a schema (schema anchor for codegen)",
+            response_model=EchoEnvelope,
+        )
+        def echo_schema(envelope: EchoEnvelope) -> EchoEnvelope:
+            # No logic; this endpoint exists so OpenAPI references every payload schema above.
+            return envelope
 
         @app.get(
             "/config/frontend_settings",
@@ -87,169 +139,52 @@ class ChatbotController:
         ) -> List[AgenticFlow]:
             return self.agent_manager.get_agentic_flows()
 
-        @app.post(
-            "/chatbot/query",
-            description="Send a chatbot query via REST (testing or fallback)",
-            summary="Chatbot query via REST",
-            tags=fastapi_tags,
-            response_model=FinalEvent,
-        )
-        @app.post("/chatbot/query", tags=fastapi_tags, response_model=FinalEvent)
-        async def chatbot_query(
-            event: ChatAskInput = Body(...),
-            user: KeycloakUser = Depends(get_current_user),
-        ):
-            try:
-                streamed_messages = []
-
-                async def capture_callback(msg: dict):
-                    streamed_messages.append(ChatMessagePayload(**msg))
-
-                session, messages = await self.session_manager.chat_ask_websocket(
-                    callback=capture_callback,
-                    user_id=user.uid,
-                    session_id=event.session_id,
-                    message=event.message,
-                    agent_name=event.agent_name,
-                    runtime_context=event.runtime_context,
-                )
-
-                return FinalEvent(
-                    type="final", messages=streamed_messages, session=session
-                )
-            except Exception as e:
-                summary = log_exception(e, "Error processing chatbot REST query")
-                return JSONResponse(
-                    status_code=500,
-                    content=ChatBotError(
-                        content=summary,
-                        session_id=event.session_id or "unknown-session",
-                    ).model_dump(),
-                )
-
-        @app.post(
-            "/chatbot/query/stream", tags=fastapi_tags, response_class=StreamingResponse
-        )
-        async def chatbot_query_stream(
-            event: ChatAskInput = Body(...),
-            user: KeycloakUser = Depends(get_current_user),
-        ):
-            async def event_stream():
-                try:
-                    streamed_messages: List[ChatMessagePayload] = []
-
-                    async def callback(msg: dict):
-                        payload = ChatMessagePayload(**msg)
-                        streamed_messages.append(payload)
-                        yield (
-                            json.dumps(
-                                StreamEvent(type="stream", message=payload).model_dump()
-                            )
-                            + "\n"
-                        )
-
-                    (
-                        session,
-                        final_messages,
-                    ) = await self.session_manager.chat_ask_websocket(
-                        callback=callback,
-                        user_id=user.uid,
-                        session_id=event.session_id,
-                        message=event.message,
-                        agent_name=event.agent_name,
-                        runtime_context=event.runtime_context,
-                    )
-
-                    yield (
-                        json.dumps(
-                            FinalEvent(
-                                type="final", messages=final_messages, session=session
-                            ).model_dump()
-                        )
-                        + "\n"
-                    )
-
-                except Exception as e:
-                    error = ErrorEvent(
-                        type="error",
-                        content=str(e),
-                        session_id=event.session_id or "unknown-session",
-                    )
-                    yield json.dumps(error.model_dump()) + "\n"
-
-            return StreamingResponse(event_stream(), media_type="application/json")
-
         @app.websocket("/chatbot/query/ws")
         async def websocket_chatbot_question(websocket: WebSocket):
-            """
-            WebSocket endpoint to handle chatbot queries.
-            """
             await websocket.accept()
             try:
                 while True:
                     client_request = None
                     try:
-                        # Receive the prompt from the client
                         client_request = await websocket.receive_json()
                         client_event = ChatAskInput(**client_request)
 
                         async def websocket_callback(msg: dict):
-                            await websocket.send_json(
-                                StreamEvent(
-                                    type="stream", message=ChatMessagePayload(**msg)
-                                ).model_dump()
-                            )
+                            event = StreamEvent(type="stream", message=ChatMessagePayload(**msg))
+                            await websocket.send_text(event.model_dump_json())
 
-                        (
-                            session,
-                            messages,
-                        ) = await self.session_manager.chat_ask_websocket(
+                        session, messages = await self.session_manager.chat_ask_websocket(
                             callback=websocket_callback,
                             user_id=client_event.user_id,
                             session_id=client_event.session_id or "unknown-session",
                             message=client_event.message,
                             agent_name=client_event.agent_name,
                             runtime_context=client_event.runtime_context,
+                            client_exchange_id=client_event.client_exchange_id,
                         )
+
                         await websocket.send_text(
-                            FinalEvent(
-                                type="final", messages=messages, session=session
-                            ).model_dump_json()
+                            FinalEvent(type="final", messages=messages, session=session).model_dump_json()
                         )
+
                     except WebSocketDisconnect:
                         logger.debug("Client disconnected from chatbot WebSocket")
                         break
                     except Exception as e:
-                        summary = log_exception(
-                            e, "INTERNAL Error processing chatbot client query"
-                        )
-                        session_id = (
-                            client_request.get("session_id", "unknown-session")
-                            if client_request
-                            else "unknown-session"
-                        )
+                        summary = log_exception(e, "INTERNAL Error processing chatbot client query")
+                        session_id = client_request.get("session_id", "unknown-session") if client_request else "unknown-session"
                         if websocket.client_state == WebSocketState.CONNECTED:
                             await websocket.send_text(
-                                ErrorEvent(
-                                    type="error", content=summary, session_id=session_id
-                                ).model_dump_json()
+                                ErrorEvent(type="error", content=summary, session_id=session_id).model_dump_json()
                             )
                         else:
                             logger.error("[🔌 WebSocket] Connection closed by client.")
                             break
             except Exception as e:
-                summary = log_exception(
-                    e, "EXTERNAL Error processing chatbot client query"
-                )
+                summary = log_exception(e, "EXTERNAL Error processing chatbot client query")
                 if websocket.client_state == WebSocketState.CONNECTED:
                     await websocket.send_text(
-                        json.dumps(
-                            ErrorEvent(
-                                type="error",
-                                content=summary,
-                                session_id="unknown-session",
-                            ).model_dump_json()
-                        )
+                        ErrorEvent(type="error", content=summary, session_id="unknown-session").model_dump_json()
                     )
 
         @app.get(

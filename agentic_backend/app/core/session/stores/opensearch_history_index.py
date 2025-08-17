@@ -1,16 +1,7 @@
 # Copyright Thales 2025
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# ...
 
 from datetime import timezone
 import logging
@@ -23,6 +14,7 @@ from app.core.chatbot.metric_structures import MetricsBucket, MetricsResponse
 from app.core.session.stores.base_history_store import BaseHistoryStore
 from app.core.chatbot.chat_schema import (
     ChatMessagePayload,
+    MessageType,
 )
 from app.core.session.stores.utils import flatten_message, truncate_datetime
 from fred_core import ThreadSafeLRUCache
@@ -34,7 +26,28 @@ logger = logging.getLogger(__name__)
 # ==============================================================================
 # This mapping defines the schema used for chat messages (ChatMessagePayload).
 # We optimize for analytics (aggregation, filtering) and full-text search.
+# We now add a nested `blocks` field to persist the rich message structure.
 # ==============================================================================
+
+BLOCKS_MAPPING = {
+    "type": "nested",
+    "dynamic": False,
+    "properties": {
+        # Common discriminator
+        "type": {"type": "keyword"},
+
+        # TextBlock
+        "text": {"type": "text"},
+
+        # ToolResultBlock
+        "name": {"type": "keyword"},
+        "content": {"type": "text"},
+
+        # ImageUrlBlock
+        "url": {"type": "keyword"},
+        "alt": {"type": "text"},
+    },
+}
 
 MAPPING = {
     "settings": {
@@ -49,10 +62,12 @@ MAPPING = {
             "type": {"type": "keyword"},
             "sender": {"type": "keyword"},
             "content": {"type": "text"},
+            "blocks": BLOCKS_MAPPING,
             "timestamp": {"type": "date"},
             "session_id": {"type": "keyword"},
             "rank": {"type": "integer"},
             "subtype": {"type": "keyword"},
+            # Metadata stays dynamic to allow growth (model, token_usage, sources…)
             "metadata": {"type": "object", "dynamic": True},
         }
     },
@@ -78,11 +93,32 @@ class OpensearchHistoryIndex(BaseHistoryStore):
         )
         self._cache = ThreadSafeLRUCache[str, List[ChatMessagePayload]](max_size=1000)
         self.index = index
+
         if not self.client.indices.exists(index=index):
             self.client.indices.create(index=index, body=MAPPING)
             logger.info(f"OpenSearch index '{index}' created with mapping.")
         else:
             logger.info(f"OpenSearch index '{index}' already exists.")
+            # Safe additive mapping update: ensure `blocks` exists
+            try:
+                current = self.client.indices.get_mapping(index=index)
+                props = (
+                    current.get(index, {})
+                    .get("mappings", {})
+                    .get("properties", {})
+                )
+                if "blocks" not in props:
+                    self.client.indices.put_mapping(
+                        index=index,
+                        body={"properties": {"blocks": BLOCKS_MAPPING}},
+                    )
+                    logger.info("Added 'blocks' mapping to existing index '%s'.", index)
+            except Exception as e:
+                logger.warning(
+                    "Could not update mapping to add 'blocks' on index '%s': %s",
+                    index,
+                    e,
+                )
 
     def save(
         self, session_id: str, messages: List[ChatMessagePayload], user_id: str
@@ -90,11 +126,15 @@ class OpensearchHistoryIndex(BaseHistoryStore):
         try:
             for msg in messages:
                 logger.info(
-                    f"[OpenSearch SAVE] session={session_id} sender={msg.sender} rank={msg.rank} subtype={msg.subtype} content='{msg.content[:50]}...'"
+                    "[OpenSearch SAVE] session=%s sender=%s rank=%s subtype=%s content='%s...'",
+                    session_id,
+                    msg.sender,
+                    msg.rank,
+                    msg.subtype,
+                    (msg.content or "")[:50],
                 )
-
                 if msg.rank is None:
-                    logger.warning(f"[OpenSearch WARNING] Message missing rank: {msg}")
+                    logger.warning("[OpenSearch WARNING] Message missing rank: %s", msg)
 
             actions = [
                 {
@@ -105,18 +145,22 @@ class OpensearchHistoryIndex(BaseHistoryStore):
                 }
                 for i, message in enumerate(messages)
             ]
-            bodies = [msg.model_dump() for msg in messages]
+            # Use mode="json" + exclude_none to serialize datetimes and omit nulls;
+            # Pydantic will include `blocks` if present (list) and already JSON-native.
+            bodies = [msg.model_dump(mode="json", exclude_none=True) for msg in messages]
             bulk_body = [entry for pair in zip(actions, bodies) for entry in pair]
 
             # OpenSearch Bulk API
             self.client.bulk(body=bulk_body)
-            # append to the cached entry if any
+
+            # Append to the cached entry if any (simple concat; caller usually appends chronologically)
             existing = self._cache.get(session_id) or []
-            updated = existing + messages  # naive append
+            updated = existing + messages
             self._cache.set(session_id, updated)
-            logger.info(f"Saved {len(messages)} messages for session {session_id}")
+
+            logger.info("Saved %d messages for session %s", len(messages), session_id)
         except Exception as e:
-            logger.error(f"Failed to save messages for session {session_id}: {e}")
+            logger.error("Failed to save messages for session %s: %s", session_id, e)
             raise
 
     def get(
@@ -125,8 +169,9 @@ class OpensearchHistoryIndex(BaseHistoryStore):
     ) -> List[ChatMessagePayload]:
         try:
             if cached := self._cache.get(session_id):
-                logger.debug(f"[TAPROMPTGS] Cache hit for tag '{session_id}'")
+                logger.debug("[HistoryIndex] Cache hit for session '%s'", session_id)
                 return cached
+
             query = {
                 "query": {"term": {"session_id.keyword": {"value": session_id}}},
                 "sort": [{"rank": {"order": "asc", "unmapped_type": "integer"}}],
@@ -137,19 +182,22 @@ class OpensearchHistoryIndex(BaseHistoryStore):
             )
             hits = response["hits"]["hits"]
             logger.info(
-                f"[OpenSearch GET] Loaded {len(hits)} messages for session {session_id}"
+                "[OpenSearch GET] Loaded %d messages for session %s",
+                len(hits),
+                session_id,
             )
             for h in hits:
-                msg = h["_source"]
+                src = h["_source"]
                 logger.info(
-                    f"[OpenSearch GET] rank={msg.get('rank')} sender={msg.get('sender')} content='{msg.get('content', '')[:50]}...'"
+                    "[OpenSearch GET] rank=%s sender=%s content='%s...'",
+                    src.get("rank"),
+                    src.get("sender"),
+                    (src.get("content") or "")[:50],
                 )
 
-            return [
-                ChatMessagePayload(**hit["_source"]) for hit in response["hits"]["hits"]
-            ]
+            return [ChatMessagePayload(**hit["_source"]) for hit in hits]
         except Exception as e:
-            logger.error(f"Failed to retrieve messages for session {session_id}: {e}")
+            logger.error("Failed to retrieve messages for session %s: %s", session_id, e)
             return []
 
     def get_metrics(
@@ -179,14 +227,17 @@ class OpensearchHistoryIndex(BaseHistoryStore):
 
             response = self.client.search(index=self.index, body=query)
             hits = response["hits"]["hits"]
+
             # 2. Filter and flatten AI messages
             flattened = []
             for hit in hits:
                 msg = ChatMessagePayload(**hit["_source"])
-                if msg.type != "ai":
+                # use equality, not identity
+                if msg.type != MessageType.ai:
                     continue
                 flat = flatten_message(msg)
-                flat["_datetime"] = isoparse(flat["timestamp"])
+                # msg.timestamp is already a datetime (Pydantic)
+                flat["_datetime"] = msg.timestamp
                 flat["_bucket"] = truncate_datetime(flat["_datetime"], precision)
                 flattened.append(flat)
 
@@ -199,23 +250,19 @@ class OpensearchHistoryIndex(BaseHistoryStore):
             # 4. Aggregate
             buckets = []
             logger.debug(
-                f"[metrics] Running OpenSearch query on index '{self.index}' with range: {start} to {end}, precision={precision}"
+                "[metrics] Running OpenSearch query on index '%s' with range: %s to %s, precision=%s",
+                self.index, start, end, precision
             )
-            logger.debug(f"[metrics] Query body: {query}")
-            logger.debug(f"[metrics] Found {len(hits)} hits between {start} and {end}")
-            logger.debug(
-                f"[metrics] Truncated into {len(grouped)} groups based on precision={precision}"
-            )
+            logger.debug("[metrics] Found %d hits between %s and %s", len(hits), start, end)
+            logger.debug("[metrics] Truncated into %d groups", len(grouped))
 
             for key, group in grouped.items():
                 bucket_time = key[0]
                 group_fields = {field: value for field, value in zip(groupby, key[1:])}
-                aggs = {}
+                aggs: Dict[str, float | List[float]] = {}
 
                 for field, ops in agg_mapping.items():
-                    values = [
-                        row.get(field) for row in group if row.get(field) is not None
-                    ]
+                    values = [row.get(field) for row in group if row.get(field) is not None]
                     if not values:
                         continue
                     for op in ops:
@@ -229,7 +276,8 @@ class OpensearchHistoryIndex(BaseHistoryStore):
                             case "mean":
                                 aggs[field + "_mean"] = mean(values)
                             case "values":
-                                aggs[field + "_values"] = values
+                                # store numeric series (as-is)
+                                aggs[field + "_values"] = values  # type: ignore[assignment]
                             case _:
                                 raise ValueError(f"Unsupported aggregation op: {op}")
 
@@ -250,5 +298,5 @@ class OpensearchHistoryIndex(BaseHistoryStore):
             return MetricsResponse(precision=precision, buckets=buckets)
 
         except Exception as e:
-            logger.error(f"Failed to compute metrics: {e}")
+            logger.error("Failed to compute metrics: %s", e)
             return MetricsResponse(precision=precision, buckets=[])

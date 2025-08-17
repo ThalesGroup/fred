@@ -3,6 +3,7 @@
 import hashlib
 import logging
 from abc import ABC, abstractmethod
+import mimetypes
 from pathlib import Path
 from typing import Any, Dict
 
@@ -18,6 +19,7 @@ from app.common.document_structures import (
     SourceType,
 )
 from app.common.source_utils import resolve_source_type
+from app.core.processors.input.common.enrichment import normalize_enrichment
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +52,42 @@ class BaseInputProcessor(ABC):
             "txt": FileType.TXT,
         }.get(ext, FileType.OTHER)
     
+    @staticmethod
+    def _hash_file(path: Path, algo: str) -> str | None:
+        h = hashlib.new(algo)
+        try:
+            with path.open("rb") as f:
+                for chunk in iter(lambda: f.read(1024 * 1024), b""):
+                    h.update(chunk)
+            return h.hexdigest()
+        except Exception:
+            return None
+
+    @staticmethod
+    def _probe_file_info(path: Path) -> tuple[int | None, str | None, str | None, str | None]:
+        """
+        Returns (size_bytes, mime_type, sha256, md5) using only local filesystem.
+        - size: Path.stat()
+        - mime: mimetypes.guess_type
+        - hashes: streamed (1MB chunks)
+        """
+        size = None
+        mime = None
+        sha256 = None
+        md5 = None
+        try:
+            size = path.stat().st_size
+        except Exception:
+            pass
+        try:
+            mime, _ = mimetypes.guess_type(str(path))
+        except Exception:
+            pass
+        # hashes may be useful later (dedupe, integrity). They’re cheap to compute once here.
+        sha256 = BaseInputProcessor._hash_file(path, "sha256")
+        md5 = BaseInputProcessor._hash_file(path, "md5")
+        return size, mime, sha256, md5
+    
     def _add_common_metadata(
         self, file_path: Path, tags: list[str], source_tag: str
     ) -> DocumentMetadata:
@@ -64,15 +102,18 @@ class BaseInputProcessor(ABC):
             document_uid=document_uid,
             title=file_path.stem,  # Using the file name without extension as a default title
         )
-
+        size, mime, sha256, md5 = self._probe_file_info(file_path)
         file = FileInfo(
-            # Keep it simple; exact FileType is optional here
             file_type=self._ext_to_filetype(file_path.name),  # Pydantic will coerce unknown -> "other"
+            mime_type=mime,
+            file_size_bytes=size,
+            sha256=sha256,
+            md5=md5,
         )
 
+        # use the tag store to fetch the tag and get its name
         tags_block = Tagging(
             tag_ids=tags or [],
-            # tag_names can be filled later by a service if you want; not required here
         )
 
         source = SourceInfo(
@@ -121,16 +162,11 @@ class BaseInputProcessor(ABC):
         if "pull_location" in enrichment and enrichment["pull_location"] is not None:
             meta.source.pull_location = enrichment["pull_location"]
 
-        # Tags (optional): allow either ids or names; dedupe is inside Tagging
+        # Tags: allow either ids or names; dedupe is inside Tagging
         if "tag_ids" in enrichment and enrichment["tag_ids"] is not None:
             meta.tags.tag_ids = list(enrichment["tag_ids"])
         if "tag_names" in enrichment and enrichment["tag_names"] is not None:
             meta.tags.tag_names = list(enrichment["tag_names"])
-        if "library_path" in enrichment and enrichment["library_path"] is not None:
-            meta.tags.library_path = enrichment["library_path"]
-            # library_folder will auto-fill from path (Tagging validator), but accept explicit override:
-            if "library_folder" in enrichment and enrichment["library_folder"] is not None:
-                meta.tags.library_folder = enrichment["library_folder"]
 
         # Access (optional)
         if "license" in enrichment and enrichment["license"] is not None:
@@ -139,6 +175,12 @@ class BaseInputProcessor(ABC):
             meta.access.confidential = bool(enrichment["confidential"])
         if "acl" in enrichment and enrichment["acl"] is not None:
             meta.access.acl = list(enrichment["acl"])
+
+        if "extras" in enrichment and enrichment["extras"]:
+            # Merge (last writer wins); drop None values to keep it tidy
+            clean = {k: v for k, v in enrichment["extras"].items() if v is not None}
+            if clean:
+                meta.extensions = {**(meta.extensions or {}), **clean}
 
     # ---------- public API ----------
 
@@ -150,7 +192,8 @@ class BaseInputProcessor(ABC):
         base_metadata = self._add_common_metadata(file_path, tags, source_tag)
 
         # 2) Extract enrichment (title, author, created, sizes, etc.)
-        enrichment = self.extract_file_metadata(file_path) or {}
+        enrichment_raw = self.extract_file_metadata(file_path) or {}
+        enrichment = normalize_enrichment(enrichment_raw)
 
         # 3) Apply enrichment onto the nested model (no dict merges)
         self._apply_enrichment(base_metadata, enrichment)

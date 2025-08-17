@@ -1,43 +1,47 @@
 // Copyright Thales 2025
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// ...
 
 import ArticleOutlinedIcon from "@mui/icons-material/ArticleOutlined";
 import { Box, Tooltip, Typography } from "@mui/material";
-import { ChatSource } from "../../slices/chatApiStructures.ts";
+import { VectorSearchHit } from "../../slices/agentic/agenticOpenApi.ts"; // ✅ new schema
 import { useDocumentViewer } from "../../common/useDocumentViewer.tsx";
 
 interface SourceCardProps {
-  documentId: string; // Unique identifier for the document
-  sources: ChatSource[]; // Part of document used to answer
+  /** Document UID (group key) */
+  documentId: string;
+  /** All passages from this document that were used */
+  hits: VectorSearchHit[];
 }
 
-export const SourceCard = ({ documentId, sources }: SourceCardProps) => {
+export const SourceCard = ({ documentId, hits }: SourceCardProps) => {
   const { openDocument } = useDocumentViewer();
-  
-  if (!sources || sources.length === 0) {
-    return null;
-  }
+
+  if (!hits || hits.length === 0) return null;
+
+  // Prefer a readable label: title → file_name → documentId
+  const label =
+    hits[0]?.title?.trim() ||
+    hits[0]?.file_name?.trim() ||
+    documentId;
 
   const handleOpenDocument = () => {
+    // Prefer precomputed viewer_fragment, otherwise the raw content
+    const snippets = hits
+      .map((h) => h.viewer_fragment || h.content)
+      .filter((s): s is string => Boolean(s && s.trim().length > 0));
+
     openDocument(
       { document_uid: documentId },
-      { chunksToHighlight: sources.map((source) => source.content) }
+      { chunksToHighlight: snippets }
     );
   };
 
+  const partsCount = hits.length;
+
   return (
-    <Tooltip title={`${sources.length} part(s) of this document were used to answer`}>
+    <Tooltip title={`${partsCount} part${partsCount > 1 ? "s" : ""} of this document were used`}>
       <Box
         flex={1}
         display="flex"
@@ -59,8 +63,9 @@ export const SourceCard = ({ documentId, sources }: SourceCardProps) => {
         <Typography
           sx={{ fontSize: "0.85rem", color: "text.secondary", cursor: "pointer" }}
           onClick={handleOpenDocument}
+          title={label}
         >
-          {sources[0].file_name}
+          {label}
         </Typography>
       </Box>
     </Tooltip>

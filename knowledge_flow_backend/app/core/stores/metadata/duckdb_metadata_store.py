@@ -64,9 +64,6 @@ class DuckdbMetadataStore(BaseMetadataStore):
 
                     -- tags / folders
                     tag_ids JSON,
-                    tag_names JSON,
-                    library_path TEXT,
-                    library_folder TEXT,
 
                     -- access
                     license TEXT,
@@ -76,6 +73,7 @@ class DuckdbMetadataStore(BaseMetadataStore):
                     -- processing (dev/ops convenience)
                     processing_stages JSON,   -- { "raw": "done", ... }
                     processing_errors JSON    -- { "raw": "err msg", ... }
+                    extensions JSON
                 )
                 """
             )
@@ -116,9 +114,6 @@ class DuckdbMetadataStore(BaseMetadataStore):
 
             # tags / folders
             json.dumps(md.tags.tag_ids or []),
-            json.dumps(md.tags.tag_names or []),
-            md.tags.library_path,
-            md.tags.library_folder,
 
             # access
             md.access.license,
@@ -128,6 +123,7 @@ class DuckdbMetadataStore(BaseMetadataStore):
             # processing
             json.dumps(stages),
             json.dumps(errors),
+            json.dumps(md.extensions) if md.extensions else "{}", 
         )
 
     @staticmethod
@@ -163,22 +159,18 @@ class DuckdbMetadataStore(BaseMetadataStore):
             )
             # tags
             tag_ids = json.loads(row[19]) if row[19] else []
-            tag_names = json.loads(row[20]) if row[20] else []
             tags = Tagging(
                 tag_ids=tag_ids,
-                tag_names=tag_names,
-                library_path=row[21],
-                library_folder=row[22],
             )
             # access
             access = AccessInfo(
-                license=row[23],
-                confidential=bool(row[24]) if row[24] is not None else False,
-                acl=json.loads(row[25]) if row[25] else [],
+                license=row[20],
+                confidential=bool(row[21]) if row[21] is not None else False,
+                acl=json.loads(row[22]) if row[22] else [],
             )
             # processing
-            stages_raw: Dict[str, str] = json.loads(row[26]) if row[26] else {}
-            errors_raw: Dict[str, str] = json.loads(row[27]) if row[27] else {}
+            stages_raw: Dict[str, str] = json.loads(row[23]) if row[23] else {}
+            errors_raw: Dict[str, str] = json.loads(row[24]) if row[24] else {}
 
             stages: Dict[ProcessingStage, ProcessingStatus] = {}
             for k, v in stages_raw.items():
@@ -200,7 +192,7 @@ class DuckdbMetadataStore(BaseMetadataStore):
                         continue
 
             proc = Processing(stages=stages, errors=proc_errors)
-
+            extensions=json.loads(row[18]) if row[25] else None
             return DocumentMetadata(
                 identity=identity,
                 source=source,
@@ -208,6 +200,7 @@ class DuckdbMetadataStore(BaseMetadataStore):
                 tags=tags,
                 access=access,
                 processing=proc,
+                extensions=extensions
             )
         except ValidationError as e:
             raise MetadataDeserializationError(f"Invalid metadata structure for document {row[0]}: {e}")
@@ -267,8 +260,7 @@ class DuckdbMetadataStore(BaseMetadataStore):
                     ?, ?, ?, ?, ?,
                     ?, ?, ?, ?, ?, ?, ?,
                     ?, ?, ?, ?,
-                    ?, ?, ?,
-                    ?, ?
+                    ?, ?, ?
                 )
                 """,
                 self._serialize(metadata),

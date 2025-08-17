@@ -1,33 +1,31 @@
 // Copyright Thales 2025
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// ...
 
 import { Box, Grid2, Tooltip, Typography, useTheme } from "@mui/material";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { v4 as uuidv4 } from "uuid"; // If not already imported
+import { v4 as uuidv4 } from "uuid";
 import { getConfig } from "../../common/config.tsx";
 import DotsLoader from "../../common/DotsLoader.tsx";
 import { usePostTranscribeAudioMutation } from "../../frugalit/slices/api.tsx";
 import { AgenticFlow } from "../../pages/Chat.tsx";
 import { KeyCloakService } from "../../security/KeycloakService.ts";
-import { ChatAskInput, RuntimeContext } from "../../slices/agentic/agenticOpenApi.ts";
-import { useGetChatBotMessagesMutation } from "../../slices/chatApi.tsx";
-import { ChatMessagePayload, FinalEvent, SessionSchema, StreamEvent } from "../../slices/chatApiStructures.ts";
+import {
+  ChatAskInput,
+  ChatMessagePayload,
+  FinalEvent,
+  RuntimeContext,
+  SessionSchema,
+  StreamEvent,
+  useLazyGetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetQuery,
+} from "../../slices/agentic/agenticOpenApi.ts";
 import { getAgentBadge } from "../../utils/avatar.tsx";
 import { useToast } from "../ToastProvider.tsx";
 import { MessagesArea } from "./MessagesArea.tsx";
 import UserInput, { UserInputContent } from "./UserInput.tsx";
+import { keyOf, mergeAuthoritative, sortMessages, toWsUrl, upsertOne } from "./ChatBotUtils.tsx";
 
 export interface ChatBotError {
   session_id: string | null;
@@ -35,7 +33,7 @@ export interface ChatBotError {
 }
 
 interface TranscriptionResponse {
-  text?: string; // 'text' might be optional
+  text?: string;
 }
 
 export interface ChatBotProps {
@@ -60,18 +58,21 @@ const ChatBot = ({
 
   const { showInfo, showError } = useToast();
   const webSocketRef = useRef<WebSocket | null>(null);
-  const [getChatBotMessages] = useGetChatBotMessagesMutation();
   const [postTranscribeAudio] = usePostTranscribeAudioMutation();
   const [webSocket, setWebSocket] = useState<WebSocket | null>(null);
 
+  // Lazy messages fetcher
+  const [fetchHistory] =
+    useLazyGetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetQuery();
+
   const [messages, setMessages] = useState<ChatMessagePayload[]>([]);
   const messagesRef = useRef<ChatMessagePayload[]>([]);
-  // Append new messages to the state
+
+  // State mutators that keep the ref in sync (prevents stale closures)
   const addMessage = (msg: ChatMessagePayload) => {
     messagesRef.current = [...messagesRef.current, msg];
     setMessages(messagesRef.current);
   };
-  // Update existing messages in the state. This resets the messagesRef to the new state
   const setAllMessages = (msgs: ChatMessagePayload[]) => {
     messagesRef.current = msgs;
     setMessages(msgs);
@@ -83,7 +84,7 @@ const ChatBot = ({
     const current = webSocketRef.current;
 
     if (current && current.readyState === WebSocket.OPEN) {
-      return webSocketRef.current;
+      return current;
     }
     if (current && (current.readyState === WebSocket.CLOSING || current.readyState === WebSocket.CLOSED)) {
       console.warn("[🔄 ChatBot] WebSocket was closed or closing. Resetting...");
@@ -92,56 +93,72 @@ const ChatBot = ({
     console.debug("[📩 ChatBot] initiate new connection:");
 
     return new Promise((resolve, reject) => {
-      const wsUrl = `${getConfig().backend_url_api || "ws://localhost"}/agentic/v1/chatbot/query/ws`;
+      const wsUrl = toWsUrl(getConfig().backend_url_api, "/agentic/v1/chatbot/query/ws");
       const socket = new WebSocket(wsUrl);
 
       socket.onopen = () => {
         console.log("[✅ ChatBot] WebSocket connected");
         webSocketRef.current = socket;
-        setMessages([]); // reset temporary buffer
+        setWebSocket(socket); // ensure unmount cleanup closes the right instance
         resolve(socket);
       };
 
       socket.onmessage = (event) => {
         try {
           const response = JSON.parse(event.data);
+
           switch (response.type) {
             case "stream": {
               const streamed = response as StreamEvent;
-              const msg = streamed.message;
+              const msg = streamed.message as ChatMessagePayload;
+
+              // Ignore streams for another session than the one being viewed
+              if (currentChatBotSession?.id && msg.session_id !== currentChatBotSession.id) {
+                console.warn("Ignoring stream for another session:", msg.session_id);
+                break;
+              }
+
+              // Upsert streamed message and keep order stable
+              messagesRef.current = upsertOne(messagesRef.current, msg);
+              setMessages(messagesRef.current);
+
               console.log(
-                `STREAM ${msg.session_id}-${msg.exchange_id}- ${msg.rank} content: ${msg.content.slice(0, 50)}...`,
+                `STREAM ${msg.session_id}-${msg.exchange_id}-${msg.rank} : ${msg.content?.slice(0, 80)}...`,
               );
-              addMessage(msg);
               break;
             }
+
             case "final": {
               const finalEvent = response as FinalEvent;
-              const streamedKeys = new Set(
-                messagesRef.current.map((m) => `${m.session_id}-${m.exchange_id}-${m.rank}`),
-              );
-              const finalKeys = new Set(finalEvent.messages.map((m) => `${m.session_id}-${m.exchange_id}-${m.rank}`));
 
+              // Debug summary (optional)
+              const streamedKeys = new Set(messagesRef.current.map((m) => keyOf(m)));
+              const finalKeys = new Set(finalEvent.messages.map((m) => keyOf(m)));
               const missing = [...finalKeys].filter((k) => !streamedKeys.has(k));
               const unexpected = [...streamedKeys].filter((k) => !finalKeys.has(k));
-
               console.log("[FINAL EVENT SUMMARY]");
-              console.log("→ Messages in streamed but missing from final:", unexpected);
-              console.log("→ Messages in final but not in streamed:", missing);
+              console.log("→ in streamed but not final:", unexpected);
+              console.log("→ in final but not streamed:", missing);
 
-              console.log("FinalEvent messages:", finalEvent.messages);
-              if (response.session.id !== currentChatBotSession?.id) {
-                onUpdateOrAddSession(response.session);
+              // Merge authoritative finals (includes citations/metadata)
+              messagesRef.current = mergeAuthoritative(messagesRef.current, finalEvent.messages);
+              setMessages(messagesRef.current);
+
+              // If backend created/switched session, accept it
+              if (finalEvent.session.id !== currentChatBotSession?.id) {
+                onUpdateOrAddSession(finalEvent.session);
               }
               setWaitResponse(false);
               break;
             }
+
             case "error": {
               showError({ summary: "Error", detail: response.content });
               console.error("[RCV ERROR ChatBot] WebSocket error:", response);
               setWaitResponse(false);
               break;
             }
+
             default: {
               console.warn("[⚠️ ChatBot] Unknown message type:", response.type);
               showError({
@@ -153,23 +170,16 @@ const ChatBot = ({
             }
           }
         } catch (err) {
-          // Only close on fatal parsing error
           console.error("[❌ ChatBot] Failed to parse message:", err);
-          showError({
-            summary: "Parsing Error",
-            detail: "Assistant response could not be processed.",
-          });
+          showError({ summary: "Parsing Error", detail: "Assistant response could not be processed." });
           setWaitResponse(false);
-          socket.close(); // ✅ Close only if the message is unreadable
+          socket.close(); // Close only if the payload is unreadable
         }
       };
 
       socket.onerror = (err) => {
         console.error("[❌ ChatBot] WebSocket error:", err);
-        showError({
-          summary: "Connection Error",
-          detail: "Chat connection failed.",
-        });
+        showError({ summary: "Connection Error", detail: "Chat connection failed." });
         setWaitResponse(false);
         reject(err);
       };
@@ -183,19 +193,17 @@ const ChatBot = ({
 
   // Close the WebSocket connection when the component unmounts
   useEffect(() => {
-    let socket: WebSocket | null = webSocket; // Track the current instance
+    const socket: WebSocket | null = webSocket;
     return () => {
       if (socket && socket.readyState === WebSocket.OPEN) {
-        showInfo({
-          summary: "Closed",
-          detail: "Chat connection closed after unmount.",
-        });
+        showInfo({ summary: "Closed", detail: "Chat connection closed after unmount." });
         console.debug("Closing WebSocket before unmounting...");
         socket.close();
       }
       setWebSocket(null);
     };
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // mount/unmount
 
   // Set up the WebSocket connection when the component mounts
   useEffect(() => {
@@ -206,65 +214,68 @@ const ChatBot = ({
       }
       webSocketRef.current = null;
     };
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // mount/unmount
 
-  // Fetch messages from the server when the session changes. In particular, when the user selects a new session in the sidebar
-  // or when the user starts a new conversation.
+  // Fetch messages from the server when the session changes
   useEffect(() => {
-    if (currentChatBotSession?.id) {
-      // 👇 Reset internal buffer as well.
-      setAllMessages([]);
-      getChatBotMessages({ session_id: currentChatBotSession.id }).then((response) => {
-        if (response.data) {
-          const serverMessages = response.data as ChatMessagePayload[];
-          console.group(`[📥 ChatBot] Loaded messages for session: ${currentChatBotSession.id}`);
-          console.log(`Total: ${serverMessages.length}`);
-          for (const msg of serverMessages) {
-            console.log({
-              id: msg.exchange_id, // Unique identifier for the message
-              type: msg.type, // e.g. "human", "assistant", "system"
-              subtype: msg.subtype, // e.g. "thought", "execution", "tool_result"
-              sender: msg.sender, // e.g. "user", "assistant"
-              task: msg.metadata?.fred?.task || null,
-              content: msg.content?.slice(0, 120),
-            });
-          }
-          console.groupEnd();
-          setAllMessages(serverMessages);
-        }
-      });
-    }
-  }, [currentChatBotSession?.id]);
+    const id = currentChatBotSession?.id;
+    if (!id) return;
 
-  // Catch the user input
+    // Clear view while fetching the authoritative history
+    setAllMessages([]);
+
+    fetchHistory({ sessionId: id })
+      .unwrap()
+      .then((serverMessages) => {
+        console.group(`[📥 ChatBot] Loaded messages for session: ${id}`);
+        console.log(`Total: ${serverMessages.length}`);
+        for (const msg of serverMessages) {
+          console.log({
+            id: msg.exchange_id,
+            type: msg.type,
+            subtype: msg.subtype,
+            sender: msg.sender,
+            task: msg.metadata?.fred?.task || null,
+            content: msg.content?.slice(0, 120),
+          });
+        }
+        console.groupEnd();
+
+        // Normalize order using the same sorter as stream/final
+        setAllMessages(sortMessages(serverMessages));
+      })
+      .catch((e) => {
+        console.error("[❌ ChatBot] Failed to load messages:", e);
+      });
+  }, [currentChatBotSession?.id, fetchHistory]);
+
+  // Handle user input (text/audio/files)
   const handleSend = async (content: UserInputContent) => {
-    // Currently the logic is to send the first non-null content in the order of text, audio and file
     const userId = KeyCloakService.GetUserId();
     const sessionId = currentChatBotSession?.id;
     const agentName = currentAgenticFlow.name;
 
-    // Init runtime context (arguments passed to agents)
+    // Init runtime context
     const runtimeContext: RuntimeContext = { ...baseRuntimeContext };
 
-    // Add selected document libraries to runtime context
-    if (content.documentLibraryIds && content.documentLibraryIds.length) {
+    // Add selected libraries/templates
+    if (content.documentLibraryIds?.length) {
       runtimeContext.selected_document_libraries_ids = content.documentLibraryIds;
     }
-
-    // Add selected prompt libraries to runtime context
-    if (content.promptResourceIds && content.promptResourceIds.length) {
+    if (content.promptResourceIds?.length) {
       runtimeContext.selected_prompt_ids = content.promptResourceIds;
     }
-    // Add selected prompt libraries to runtime context
-    if (content.templateResourceIds && content.templateResourceIds.length) {
+    if (content.templateResourceIds?.length) {
       runtimeContext.selected_template_ids = content.templateResourceIds;
     }
 
-    if (content.files && content.files.length > 0) {
+    // Files upload
+    if (content.files?.length) {
       for (const file of content.files) {
         const formData = new FormData();
         formData.append("user_id", userId);
-        formData.append("session_id", sessionId || ""); // "" if undefined
+        formData.append("session_id", sessionId || "");
         formData.append("agent_name", agentName);
         formData.append("file", file);
 
@@ -274,7 +285,7 @@ const ChatBot = ({
             body: formData,
           });
 
-          if (!response.ok) {
+        if (!response.ok) {
             showError({
               summary: "File Upload Error",
               detail: `Failed to upload ${file.name}: ${response.statusText}`,
@@ -284,16 +295,10 @@ const ChatBot = ({
 
           const result = await response.json();
           console.log("✅ Uploaded file:", result);
-          showInfo({
-            summary: "File Upload",
-            detail: `File ${file.name} uploaded successfully.`,
-          });
+          showInfo({ summary: "File Upload", detail: `File ${file.name} uploaded successfully.` });
         } catch (err) {
           console.error("❌ File upload failed:", err);
-          showError({
-            summary: "File Upload Error",
-            detail: (err as Error).message,
-          });
+          showError({ summary: "File Upload Error", detail: (err as Error).message });
         }
       }
     }
@@ -302,9 +307,7 @@ const ChatBot = ({
       queryChatBot(content.text.trim(), undefined, runtimeContext);
     } else if (content.audio) {
       setWaitResponse(true);
-      const audioFile: File = new File([content.audio], "audio.mp3", {
-        type: content.audio.type,
-      });
+      const audioFile: File = new File([content.audio], "audio.mp3", { type: content.audio.type });
       postTranscribeAudio({ file: audioFile }).then((response) => {
         if (response.data) {
           const message: TranscriptionResponse = response.data as TranscriptionResponse;
@@ -319,75 +322,27 @@ const ChatBot = ({
   };
 
   /**
-   * 🔄 Send a new user message to the chatbot agent.
-   *
-   * This function:
-   *  1. Builds a `ChatMessagePayload` for the user input (with correct rank and session ID).
-   *  2. Adds it to the local message list (immediate UI feedback).
-   *  3. Sends the message over WebSocket to trigger agent response.
-   *
-   * Why is this important?
-   * - Ensures the user's message is rendered in correct order (via `rank`).
-   * - Handles file uploads and voice input separately (not covered here).
-   * - Provides a smooth chat experience with real-time streaming via WebSocket.
+   * Send a new user message to the chatbot agent.
+   * Backend is authoritative: we DO NOT add an optimistic user bubble.
+   * The server streams the authoritative user message first.
    */
   const queryChatBot = async (input: string, agent?: AgenticFlow, runtimeContext?: RuntimeContext) => {
     console.log(`[📤 ChatBot] Sending message: ${input}`);
-    const timestamp = new Date().toISOString();
 
-    /**
-     * Compute the next rank for a new user message in the current session.
-     *
-     * 💡 Why do we need this?
-     * In our design, each message in a session has:
-     *    - a session_id (conversation)
-     *    - an exchange_id (question-response block)
-     *    - a rank (order of messages within that session)
-     *
-     * The `rank` determines **display order** in the UI.
-     * If we don't assign a correct rank when a user asks a new question,
-     * the message might appear out of order (e.g., at the top or bottom).
-     *
-     * 🧠 Our rule:
-     *     → When sending a new user message (starting a new exchange),
-     *       we assign it the next available rank: (max existing rank + 1)
-     *
-     * This ensures all messages are sorted consistently from top to bottom.
-     */
-    const getNextRankForNewMessage = (): number => {
-      const currentSessionId = currentChatBotSession?.id;
-      if (!currentSessionId) return 1;
-
-      const ranks = messagesRef.current
-        .filter((m) => m.session_id === currentSessionId && typeof m.rank === "number" && m.rank >= 0)
-        .map((m) => m.rank);
-
-      return ranks.length ? Math.max(...ranks) + 1 : 1;
-    };
-
-    const next_rank = getNextRankForNewMessage();
-    const userMessage: ChatMessagePayload = {
-      exchange_id: uuidv4(),
-      type: "human",
-      sender: "user",
-      content: input,
-      timestamp,
-      session_id: currentChatBotSession?.id || "unknown",
-      rank: next_rank,
-      subtype: "final", // Default to final for user messages
-      metadata: {},
-    };
-    addMessage(userMessage);
-
-    console.log("[📤 ChatBot] About to send, session_id =", currentChatBotSession?.id);
-    console.log("[📤 ChatBot] Runtime context:", runtimeContext);
-    const event: ChatAskInput = {
-      user_id: KeyCloakService.GetUserId(), // todo: front should not send used id, this is a security problem. Backend should infer it from the JTW token
+    const eventBase: ChatAskInput = {
+      user_id: KeyCloakService.GetUserId(), // TODO: backend should infer from JWT; front sends for now
       message: input,
       agent_name: agent ? agent.name : currentAgenticFlow.name,
       session_id: currentChatBotSession?.id,
       runtime_context: runtimeContext,
     };
+
+    // Add only the client-side correlation id for this exchange.
+    // Remove the cast once your OpenAPI types include client_exchange_id.
+    const event = {
+      ...eventBase,
+      client_exchange_id: uuidv4(),
+    } as ChatAskInput;
 
     try {
       const socket = await setupWebSocket();
@@ -401,10 +356,7 @@ const ChatBot = ({
       }
     } catch (err) {
       console.error("[❌ ChatBot] Failed to send message:", err);
-      showError({
-        summary: "Connection Error",
-        detail: "Could not send your message — connection failed.",
-      });
+      showError({ summary: "Connection Error", detail: "Could not send your message — connection failed." });
       setWaitResponse(false);
     }
   };
@@ -415,12 +367,13 @@ const ChatBot = ({
       setAllMessages([]);
     }
     console.log("isCreatingNewConversation", isCreatingNewConversation);
-  }, [isCreatingNewConversation]);
+  }, [isCreatingNewConversation, currentChatBotSession]);
 
   const outputTokenCounts: number =
     messages && messages.length
       ? messages.reduce((sum, msg) => sum + (msg.metadata?.token_usage?.output_tokens || 0), 0)
       : 0;
+
   const inputTokenCounts: number =
     messages && messages.length
       ? messages.reduce((sum, msg) => sum + (msg.metadata?.token_usage?.input_tokens || 0), 0)
@@ -470,7 +423,7 @@ const ChatBot = ({
           </Box>
         )}
 
-        {/* Ongoing conversation: has messages OR no messages yet (we are fetching them) but not creating new conversation */}
+        {/* Ongoing conversation */}
         {(messages.length > 0 || !isCreatingNewConversation) && (
           <>
             {/* Chatbot messages area */}
@@ -511,7 +464,7 @@ const ChatBot = ({
               />
             </Grid2>
 
-            {/* Conversatiom tokens count */}
+            {/* Conversation tokens count */}
             <Grid2 container width="100%" display="fex" justifyContent="flex-end" marginTop={0.5}>
               <Tooltip
                 title={t("chatbot.tooltip.tokenUsage", {

@@ -25,9 +25,8 @@ import { getAgentBadge } from "../../utils/avatar.tsx";
 import { FeedbackDialog } from "../../frugalit/component/FeedbackDialog.tsx";
 import { useToast } from "../ToastProvider.tsx";
 import { extractHttpErrorMessage } from "../../utils/extractHttpErrorMessage.tsx";
-import { ChatMessagePayload } from "../../slices/chatApiStructures.ts";
 import CustomMarkdownRenderer from "../markdown/CustomMarkdownRenderer.tsx";
-import { usePostFeedbackAgenticV1ChatbotFeedbackPostMutation } from "../../slices/agentic/agenticOpenApi.ts";
+import { ChatMessagePayload, usePostFeedbackAgenticV1ChatbotFeedbackPostMutation } from "../../slices/agentic/agenticOpenApi.ts";
 
 export default function Message({
   message,

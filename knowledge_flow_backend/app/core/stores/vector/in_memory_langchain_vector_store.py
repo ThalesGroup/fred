@@ -84,3 +84,7 @@ class InMemoryLangchainVectorStore(BaseVectoreStore):
             enriched.append((doc, score))
 
         return enriched
+
+    def delete_vectors(self, document_uid: str) -> None:
+        """Delete the vectors associated with a document."""
+        pass

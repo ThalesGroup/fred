@@ -139,6 +139,11 @@ class BaseVectoreStore(ABC):
         pass
 
     @abstractmethod
+    def delete_vectors(self, document_uid: str) -> None:
+        """Delete the vectors associated with a document."""
+        pass
+
+    @abstractmethod
     def similarity_search_with_score(self, query: str, k: int = 5, documents_ids: Iterable[str] | None = None) -> List[Tuple[Document, float]]:
         """
         Perform a similarity search on the vector store.

@@ -35,8 +35,8 @@ import { useEffect, useState } from "react";
 import { getAgentBadge } from "../../utils/avatar.tsx";
 import React from "react";
 import { StyledMenu } from "../../utils/styledMenu.tsx";
-import { SessionSchema } from "../../slices/chatApiStructures.ts";
 import { useTranslation } from "react-i18next";
+import { SessionSchema } from "../../slices/agentic/agenticOpenApi.ts";
 
 export const Settings = ({
   sessions,
