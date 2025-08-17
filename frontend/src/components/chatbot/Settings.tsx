@@ -30,13 +30,12 @@ import {
 import AddIcon from "@mui/icons-material/Add";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import MoreHorizIcon from "@mui/icons-material/MoreHoriz";
-import { AgenticFlow } from "../../pages/Chat.tsx";
 import { useEffect, useState } from "react";
 import { getAgentBadge } from "../../utils/avatar.tsx";
 import React from "react";
 import { StyledMenu } from "../../utils/styledMenu.tsx";
 import { useTranslation } from "react-i18next";
-import { SessionSchema } from "../../slices/agentic/agenticOpenApi.ts";
+import { AgenticFlow, SessionSchema } from "../../slices/agentic/agenticOpenApi.ts";
 
 export const Settings = ({
   sessions,
