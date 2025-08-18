@@ -1,7 +1,7 @@
 # app/core/stores/metadata/opensearch_metadata_store.py
 
 import logging
-from typing import List, Optional, Dict, Tuple, Any
+from typing import List, Optional, Dict, Any
 
 from opensearchpy import OpenSearch, RequestsHttpConnection, OpenSearchException
 from pydantic import ValidationError
@@ -33,38 +33,33 @@ METADATA_INDEX_MAPPING = {
     "mappings": {
         "properties": {
             # identity
-            "document_uid":      {"type": "keyword"},
-            "document_name":     {"type": "text", "fields": {"keyword": {"type": "keyword", "ignore_above": 256}}},
-            "title":             {"type": "text", "fields": {"keyword": {"type": "keyword", "ignore_above": 256}}},
-            "author":            {"type": "keyword"},
-            "created":           {"type": "date"},
-            "modified":          {"type": "date"},
-            "last_modified_by":  {"type": "keyword"},
-
+            "document_uid": {"type": "keyword"},
+            "document_name": {"type": "text", "fields": {"keyword": {"type": "keyword", "ignore_above": 256}}},
+            "title": {"type": "text", "fields": {"keyword": {"type": "keyword", "ignore_above": 256}}},
+            "author": {"type": "keyword"},
+            "created": {"type": "date"},
+            "modified": {"type": "date"},
+            "last_modified_by": {"type": "keyword"},
             # source
-            "source_type":       {"type": "keyword"},
-            "source_tag":        {"type": "keyword"},
-            "pull_location":     {"type": "keyword"},
-            "retrievable":       {"type": "boolean"},
-            "date_added_to_kb":  {"type": "date"},
-
+            "source_type": {"type": "keyword"},
+            "source_tag": {"type": "keyword"},
+            "pull_location": {"type": "keyword"},
+            "retrievable": {"type": "boolean"},
+            "date_added_to_kb": {"type": "date"},
             # file
-            "file_type":         {"type": "keyword"},
-            "mime_type":         {"type": "keyword"},
-            "file_size_bytes":   {"type": "long"},
-            "page_count":        {"type": "integer"},
-            "row_count":         {"type": "integer"},
-            "sha256":            {"type": "keyword"},
-            "language":          {"type": "keyword"},
-
+            "file_type": {"type": "keyword"},
+            "mime_type": {"type": "keyword"},
+            "file_size_bytes": {"type": "long"},
+            "page_count": {"type": "integer"},
+            "row_count": {"type": "integer"},
+            "sha256": {"type": "keyword"},
+            "language": {"type": "keyword"},
             # tags / folders
-            "tag_ids":           {"type": "keyword"},
-
+            "tag_ids": {"type": "keyword"},
             # access
-            "license":           {"type": "keyword"},
-            "confidential":      {"type": "boolean"},
-            "acl":               {"type": "keyword"},
-
+            "license": {"type": "keyword"},
+            "confidential": {"type": "boolean"},
+            "acl": {"type": "keyword"},
             # processing (ops)
             "processing_stages": {"type": "object", "dynamic": True},
             "processing_errors": {"type": "object", "dynamic": True},
@@ -110,10 +105,14 @@ class OpenSearchMetadataStore(BaseMetadataStore):
     @staticmethod
     def _serialize(md: DocumentMetadata) -> Dict[str, Any]:
         missing: list[tuple[str, str]] = []
-        if not md.identity.document_uid:   missing.append(("identity.document_uid", "document UID"))
-        if not md.identity.document_name:  missing.append(("identity.document_name", "document name"))
-        if not md.source.date_added_to_kb: missing.append(("source.date_added_to_kb", "date added to KB"))
-        if not md.source.source_type:      missing.append(("source.source_type", "source type"))
+        if not md.identity.document_uid:
+            missing.append(("identity.document_uid", "document UID"))
+        if not md.identity.document_name:
+            missing.append(("identity.document_name", "document name"))
+        if not md.source.date_added_to_kb:
+            missing.append(("source.date_added_to_kb", "date added to KB"))
+        if not md.source.source_type:
+            missing.append(("source.source_type", "source type"))
         if missing:
             labels = ", ".join(lbl for _, lbl in missing)
             raise MetadataDeserializationError(f"Cannot serialize metadata: missing {labels}")
@@ -131,14 +130,12 @@ class OpenSearchMetadataStore(BaseMetadataStore):
             "created": md.identity.created,
             "modified": md.identity.modified,
             "last_modified_by": md.identity.last_modified_by,
-
             # source
             "source_type": md.source.source_type.value,
             "source_tag": md.source.source_tag,
             "pull_location": md.source.pull_location,
             "retrievable": md.source.retrievable,
             "date_added_to_kb": md.source.date_added_to_kb,
-
             # file
             "file_type": (md.file.file_type.value if md.file.file_type else FileType.OTHER.value),
             "mime_type": md.file.mime_type,
@@ -147,15 +144,12 @@ class OpenSearchMetadataStore(BaseMetadataStore):
             "row_count": md.file.row_count,
             "sha256": md.file.sha256,
             "language": md.file.language,
-
             # tags / folders
             "tag_ids": md.tags.tag_ids,
-
             # access
             "license": md.access.license,
             "confidential": md.access.confidential,
             "acl": md.access.acl,
-
             # processing (ops)
             "processing_stages": stages,
             "processing_errors": errors,
@@ -167,7 +161,6 @@ class OpenSearchMetadataStore(BaseMetadataStore):
     def _deserialize(src: Dict[str, Any]) -> DocumentMetadata:
         """Rebuild nested DocumentMetadata v2 from flat dict."""
         try:
-            
             if not src.get("document_uid"):
                 raise MetadataDeserializationError("Missing 'document_uid' in OpenSearch source")
             if not src.get("document_name"):
@@ -218,15 +211,12 @@ class OpenSearchMetadataStore(BaseMetadataStore):
                     stages[ProcessingStage(k)] = ProcessingStatus(v)
                 except Exception:
                     # tolerate unknowns
+                    logger.warning(f"Failed to process stage {k}: {v}")
                     continue
 
             processing = Processing(
                 stages=stages,
-                errors={
-                    ProcessingStage(k): v
-                    for k, v in errors_raw.items()
-                    if k in stages_raw and v is not None
-                },
+                errors={ProcessingStage(k): v for k, v in errors_raw.items() if k in stages_raw and v is not None},
             )
 
             return DocumentMetadata(
@@ -236,7 +226,7 @@ class OpenSearchMetadataStore(BaseMetadataStore):
                 tags=tags,
                 access=access,
                 processing=processing,
-                extensions=src.get("extensions") or None, 
+                extensions=src.get("extensions") or None,
             )
         except ValidationError as e:
             raise MetadataDeserializationError(f"Invalid metadata structure: {e}") from e

@@ -2,15 +2,22 @@
 from typing import List, Optional
 from fred_core import VectorSearchHit
 
-def sort_hits(hits: List[VectorSearchHit]) -> List[VectorSearchHit]:
-    # rank first (None -> huge), then score desc
-    return sorted(hits, key=lambda h: ((h.rank if h.rank is not None else 1_000_000), -(h.score or 0.0)))
-
-def trim_snippet(text: Optional[str], limit: int) -> str:
+def trim_snippet(text: Optional[str], limit: int = 500) -> str:
     if not text:
         return ""
     t = text.strip()
     return t if len(t) <= limit else (t[:limit] + "…")
+
+def sort_hits(hits: List[VectorSearchHit]) -> List[VectorSearchHit]:
+    # By explicit rank (None -> very large), then score desc
+    return sorted(hits, key=lambda h: ((h.rank if h.rank is not None else 1_000_000), -(h.score or 0.0)))
+
+def ensure_ranks(hits: List[VectorSearchHit]) -> None:
+    i = 1
+    for h in hits:
+        if h.rank is None:
+            h.rank = i
+        i += 1
 
 def format_sources_for_prompt(hits: List[VectorSearchHit], snippet_chars: int = 500) -> str:
     lines: List[str] = []
@@ -26,16 +33,14 @@ def format_sources_for_prompt(hits: List[VectorSearchHit], snippet_chars: int = 
             label_bits.append(f"({h.file_name})")
         if h.tag_names:
             label_bits.append(f"tags: {', '.join(h.tag_names)}")
-        label = " — ".join(label_bits) if label_bits else h.uid
 
-        # Prefer explicit rank if present; otherwise use 1-based index later in the agent.
-        n = f"[{h.rank}]" if h.rank is not None else "[?]"
+        label = " — ".join(label_bits) if label_bits else h.uid
         snippet = trim_snippet(h.content, snippet_chars)
-        lines.append(f"{n} {label}\n{snippet}")
+        n = h.rank if h.rank is not None else "?"
+        lines.append(f"[{n}] {label}\n{snippet}")
     return "\n\n".join(lines)
 
 def attach_sources_to_llm_response(answer, hits: List[VectorSearchHit]) -> None:
-    # Works with LangChain message objects that expose response_metadata
     meta = getattr(answer, "response_metadata", None)
     if meta is None:
         return

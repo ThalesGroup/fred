@@ -16,10 +16,8 @@ import logging
 from datetime import datetime
 from typing import List, Optional, Dict, Any, cast
 
-import requests
-from requests import Response
 from langchain.prompts import ChatPromptTemplate
-from langchain_core.messages import AIMessage, SystemMessage
+from langchain_core.messages import AIMessage, SystemMessage, HumanMessage
 from langgraph.graph import END, StateGraph
 import json
 
@@ -31,11 +29,13 @@ from app.agents.rags.structures import (
     RagGraphState,
     RephraseQueryOutput,
 )
+from app.common.rags_client import VectorSearchClient
+from app.common.rags_utils import attach_sources_to_llm_response
 from app.common.structures import AgentSettings
 from app.core.agents.flow import AgentFlow
 from app.core.agents.runtime_context import get_document_libraries_ids
-from app.core.chatbot.chat_schema import ChatSource
 from app.core.model.model_factory import get_model
+from fred_core import VectorSearchHit
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +76,7 @@ class RicoProExpert(AgentFlow):
 
     async def async_init(self):
         self.model = get_model(self.agent_settings.model)
+        self.search_client = VectorSearchClient(self.knowledge_flow_url, timeout_s=10)
         self.base_prompt = self._generate_prompt()
         self._graph = self._build_graph()
 
@@ -153,15 +154,8 @@ class RicoProExpert(AgentFlow):
 
     # Nodes
     async def _retrieve(self, state: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Retrieve documents from vector search API based on the question in the state.
-
-        Args:
-            state (Dict[str, Any]): Current graph state
-
-        Returns:
-            Dict[str, Any]: Updated state
-        """
+        if self.model is None:
+            raise RuntimeError("Model is not initialized. Did you forget to call async_init()?")
         question: Optional[str] = state.get("question")
         if not question and state.get("messages"):
             question = state["messages"][-1].content
@@ -174,32 +168,23 @@ class RicoProExpert(AgentFlow):
         try:
             logger.info(f"📥 Retrieving with question: {question} | top_k: {top_k}")
 
-            request_data = {"query": question, "top_k": top_k}
+            tags = get_document_libraries_ids(self.get_runtime_context())
+            if tags:
+                logger.info(f"RagsExpert filtering by libraries: {tags}")
 
-            # Add tags from runtime context if available
-            library_ids = get_document_libraries_ids(self.get_runtime_context())
-            if library_ids:
-                request_data["tags"] = library_ids
-                logger.info(f"RagsExpert filtering by libraries: {library_ids}")
-
-            response: Response = requests.post(
-                f"{self.knowledge_flow_url}/vector/search",
-                json=request_data,
-                timeout=60,
+            # shared client returns List[VectorSearchHit]
+            hits: List[VectorSearchHit] = self.search_client.search(
+                query=question or "",
+                top_k=top_k or self.TOP_K,
+                tags=tags,
             )
-            response.raise_for_status()
-            documents_data = response.json()
+            if not hits:
+                warn = f"I couldn't find any relevant documents for “{question}”. Try rephrasing?"
+                return {"messages": [await self.model.ainvoke([HumanMessage(content=warn)])]}
+            
+            logger.info(f"✅ Retrieved {len(hits)} documents.")
 
-            documents: List = []
-            for document in documents_data:
-                if "uid" in document and "document_uid" not in document:
-                    document["document_uid"] = document["uid"]
-                doc_source = DocumentSource(**document)
-                documents.append(doc_source)
-
-            logger.info(f"✅ Retrieved {len(documents)} documents.")
-
-            serializable_documents = [document.model_dump() for document in documents]
+            serializable_documents = [d.model_dump() for d in hits]
             message: SystemMessage = SystemMessage(
                 content=json.dumps(serializable_documents),
                 response_metadata={
@@ -213,7 +198,7 @@ class RicoProExpert(AgentFlow):
 
             return {
                 "messages": [message],
-                "documents": documents,
+                "documents": hits,
                 "question": question,
                 "top_k": top_k,
             }
@@ -240,7 +225,7 @@ class RicoProExpert(AgentFlow):
             Dict[str, Any]: Updated state
         """
         question: str = state["question"]
-        documents: Optional[List[DocumentSource]] = state["documents"]
+        documents: Optional[List[VectorSearchHit]] = state["documents"]
 
         system = """
         You are a grader assessing relevance of a retrieved document to a user question.
@@ -249,13 +234,13 @@ class RicoProExpert(AgentFlow):
         Give a binary score 'yes' or 'no' score to indicate whether the document is relevant to the question.
         """
 
-        filtered_docs: List[DocumentSource] = []
-        irrelevant_documents: List[DocumentSource] = (
+        filtered_docs: List[VectorSearchHit] = []
+        irrelevant_documents: List[VectorSearchHit] = (
             state.get("irrelevant_documents") or []
         )
 
         irrelevant_contents = {doc.content for doc in irrelevant_documents}
-        grade_documents: List[DocumentSource] = []
+        grade_documents: List[VectorSearchHit] = []
         for document in documents or []:
             if document.content not in irrelevant_contents:
                 grade_documents.append(document)
@@ -311,16 +296,11 @@ class RicoProExpert(AgentFlow):
     async def _generate(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """
         Generate an answer to the question using retrieved documents.
-
-        Args:
-            state (Dict[str, Any]): Current graph state
-
-        Returns:
-            Dict[str, Any]: Updated state
         """
         question: str = state["question"]
-        documents: List[DocumentSource] = state["documents"]
+        documents: List[VectorSearchHit] = state["documents"]  # ← switched type
 
+        # Keep the same context formatting you already had
         documents_str: str = "\n".join(
             f"Source file: {document.file_name}\nPage: {document.page}\nContent: {document.content}\n"
             for document in documents
@@ -330,7 +310,7 @@ class RicoProExpert(AgentFlow):
             """
             You are an assistant that answers questions based on retrieved documents. 
             Use the following documents to support your response with citations :
-             
+            
             {context}
             
             Question: {question}
@@ -341,46 +321,21 @@ class RicoProExpert(AgentFlow):
             raise ValueError("model is None")
 
         chain = prompt | self.model
-
         response = await chain.ainvoke({"context": documents_str, "question": question})
 
-        sources: List[ChatSource] = []
-        for document in documents:
-            sources.append(
-                ChatSource(
-                    document_uid=getattr(
-                        document,
-                        "document_uid",
-                        getattr(document, "uid", "unknown"),
-                    ),
-                    file_name=document.file_name,
-                    title=document.title,
-                    author=document.author,
-                    content=document.content,
-                    created=document.created,
-                    modified=document.modified or "",
-                    type=document.type,
-                    score=document.score,
-                )
-            )
-
-        response.response_metadata.update(
-            {"sources": [s.model_dump() for s in sources]}
-        )
+        # Attach full VectorSearchHit metadata for the UI (replaces legacy ChatSource)
+        attach_sources_to_llm_response(response, documents)
 
         message: SystemMessage = SystemMessage(
             content=response.content,
             response_metadata={
                 "thought": True,
-                "fred": {
-                    "node": "generate",
-                    "task": "Generating an answer to the question",
-                },
+                "fred": {"node": "generate", "task": "Generating an answer to the question"},
             },
         )
 
         return {"messages": [message], "generation": response}
-
+    
     async def _rephrase_query(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """
         Rephrase the input question to improve retrieval effectiveness.

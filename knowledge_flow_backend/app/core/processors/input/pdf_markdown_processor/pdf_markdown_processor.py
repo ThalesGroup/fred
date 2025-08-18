@@ -62,16 +62,14 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
                     "title": info.get("/Title") or None,
                     "author": info.get("/Author") or None,
                     "document_name": file_path.name,
-
                     # File-level fields
                     "page_count": len(reader.pages),
-
                     # Extras — preserved but not polluting core schema
                     "extras": {
                         "pdf.subject": info.get("/Subject") or None,
                         "pdf.producer": info.get("/Producer") or None,
                         "pdf.creator": info.get("/Creator") or None,
-                    }
+                    },
                 }
         except Exception as e:
             logger.error(f"Error extracting metadata from PDF: {e}")

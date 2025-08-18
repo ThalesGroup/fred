@@ -412,7 +412,6 @@ class ApplicationContext:
         else:
             raise ValueError(f"Unsupported embedding backend: {backend_type}")
 
-
     def get_vector_store(self) -> BaseVectoreStore:
         """
         Vector Store Factory
@@ -420,7 +419,7 @@ class ApplicationContext:
         if self._vector_store_instance is not None:
             return self._vector_store_instance
         raise ValueError("Vector store is not initialized. Use get_create_vector_store() instead.")
-    
+
     def get_create_vector_store(self, embedding_model: BaseEmbeddingModel) -> BaseVectoreStore:
         """
         Vector Store Factory

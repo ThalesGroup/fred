@@ -51,7 +51,7 @@ class BaseInputProcessor(ABC):
             "htm": FileType.HTML,
             "txt": FileType.TXT,
         }.get(ext, FileType.OTHER)
-    
+
     @staticmethod
     def _hash_file(path: Path, algo: str) -> str | None:
         h = hashlib.new(algo)
@@ -78,19 +78,19 @@ class BaseInputProcessor(ABC):
         try:
             size = path.stat().st_size
         except Exception:
+            logger.warning(f"Failed to get size for {path}. File may not exist or is inaccessible.")
             pass
         try:
             mime, _ = mimetypes.guess_type(str(path))
         except Exception:
+            logger.warning(f"Failed to guess MIME type for {path}. Using None.")
             pass
         # hashes may be useful later (dedupe, integrity). They’re cheap to compute once here.
         sha256 = BaseInputProcessor._hash_file(path, "sha256")
         md5 = BaseInputProcessor._hash_file(path, "md5")
         return size, mime, sha256, md5
-    
-    def _add_common_metadata(
-        self, file_path: Path, tags: list[str], source_tag: str
-    ) -> DocumentMetadata:
+
+    def _add_common_metadata(self, file_path: Path, tags: list[str], source_tag: str) -> DocumentMetadata:
         """
         Build the v2 nested DocumentMetadata with the minimal facts we know now.
         """

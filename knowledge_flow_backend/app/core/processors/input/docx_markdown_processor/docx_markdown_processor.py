@@ -50,7 +50,6 @@ class DocxMarkdownProcessor(BaseMarkdownProcessor):
                 "created": cp.created if isinstance(cp.created, datetime) else None,
                 "modified": cp.modified if isinstance(cp.modified, datetime) else None,
                 "last_modified_by": cp.last_modified_by or None,
-
                 # optional extras (kept out of vector index; good for UI/analytics)
                 "extras": {
                     "docx.core.category": cp.category or None,

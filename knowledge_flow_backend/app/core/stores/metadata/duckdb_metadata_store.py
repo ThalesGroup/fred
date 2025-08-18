@@ -1,6 +1,7 @@
 import json
+import logging
 from pathlib import Path
-from typing import List, Any, Dict, Tuple
+from typing import List, Dict, Tuple
 from pydantic import ValidationError
 
 from fred_core.store.duckdb_store import DuckDBTableStore
@@ -18,6 +19,8 @@ from app.common.document_structures import (
     SourceType,
     FileType,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class DuckdbMetadataStore(BaseMetadataStore):
@@ -71,8 +74,8 @@ class DuckdbMetadataStore(BaseMetadataStore):
                     acl JSON,
 
                     -- processing (dev/ops convenience)
-                    processing_stages JSON,   -- { "raw": "done", ... }
-                    processing_errors JSON    -- { "raw": "err msg", ... }
+                    processing_stages JSON,   -- {"raw": "done", ... }
+                    processing_errors JSON    -- {"raw": "err msg", ... }
                     extensions JSON
                 )
                 """
@@ -95,14 +98,12 @@ class DuckdbMetadataStore(BaseMetadataStore):
             md.identity.created,
             md.identity.modified,
             md.identity.last_modified_by,
-
             # source
             md.source.source_type.value,
             md.source.source_tag,
             md.source.pull_location,
             md.source.retrievable,
             md.source.date_added_to_kb,
-
             # file
             (md.file.file_type.value if md.file.file_type else FileType.OTHER.value),
             md.file.mime_type,
@@ -111,19 +112,16 @@ class DuckdbMetadataStore(BaseMetadataStore):
             md.file.row_count,
             md.file.sha256,
             md.file.language,
-
             # tags / folders
             json.dumps(md.tags.tag_ids or []),
-
             # access
             md.access.license,
             md.access.confidential,
             json.dumps(md.access.acl or []),
-
             # processing
             json.dumps(stages),
             json.dumps(errors),
-            json.dumps(md.extensions) if md.extensions else "{}", 
+            json.dumps(md.extensions) if md.extensions else "{}",
         )
 
     @staticmethod
@@ -178,6 +176,7 @@ class DuckdbMetadataStore(BaseMetadataStore):
                 try:
                     stages[ProcessingStage(k)] = ProcessingStatus(v)
                 except Exception:
+                    logger.warning(f"Failed to process stage {k}: {v}")
                     continue
 
             proc_errors: Dict[ProcessingStage, str] = {}
@@ -189,19 +188,12 @@ class DuckdbMetadataStore(BaseMetadataStore):
                         if error_val is not None:
                             proc_errors[stage] = error_val
                     except Exception:
+                        logger.warning(f"Failed to process error for stage {k}: {errors_raw.get(k)}")
                         continue
 
             proc = Processing(stages=stages, errors=proc_errors)
-            extensions=json.loads(row[18]) if row[25] else None
-            return DocumentMetadata(
-                identity=identity,
-                source=source,
-                file=file,
-                tags=tags,
-                access=access,
-                processing=proc,
-                extensions=extensions
-            )
+            extensions = json.loads(row[18]) if row[25] else None
+            return DocumentMetadata(identity=identity, source=source, file=file, tags=tags, access=access, processing=proc, extensions=extensions)
         except ValidationError as e:
             raise MetadataDeserializationError(f"Invalid metadata structure for document {row[0]}: {e}")
 
@@ -231,18 +223,12 @@ class DuckdbMetadataStore(BaseMetadataStore):
 
     def get_metadata_by_uid(self, document_uid: str) -> DocumentMetadata | None:
         with self.store._connect() as conn:
-            row = conn.execute(
-                f"SELECT * FROM {self._table()} WHERE document_uid = ?",
-                [document_uid]
-            ).fetchone()
+            row = conn.execute(f"SELECT * FROM {self._table()} WHERE document_uid = ?", [document_uid]).fetchone()
         return self._deserialize(row) if row else None
 
     def list_by_source_tag(self, source_tag: str) -> List[DocumentMetadata]:
         with self.store._connect() as conn:
-            rows = conn.execute(
-                f"SELECT * FROM {self._table()} WHERE source_tag = ?",
-                [source_tag]
-            ).fetchall()
+            rows = conn.execute(f"SELECT * FROM {self._table()} WHERE source_tag = ?", [source_tag]).fetchall()
         return [self._deserialize(r) for r in rows]
 
     # ---------- mutations ----------
@@ -268,10 +254,7 @@ class DuckdbMetadataStore(BaseMetadataStore):
 
     def delete_metadata(self, document_uid: str) -> None:
         with self.store._connect() as conn:
-            result = conn.execute(
-                f"DELETE FROM {self._table()} WHERE document_uid = ?",
-                [document_uid]
-            )
+            result = conn.execute(f"DELETE FROM {self._table()} WHERE document_uid = ?", [document_uid])
         if result.rowcount == 0:
             raise ValueError(f"No document found with UID {document_uid}")
 

@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from typing import List, Optional, Set, Tuple
 
 from fred_core import KeycloakUser
-from fred_core import VectorSearchHit 
+from fred_core import VectorSearchHit
 from langchain.schema.document import Document
 
 from app.application_context import ApplicationContext
@@ -27,9 +27,7 @@ class VectorSearchService:
         self.vector_store = ctx.get_create_vector_store(self.embedder)
         self.tag_service = TagService()
 
-    def _collect_document_ids_from_tags(
-        self, tags_ids: Optional[List[str]], user: KeycloakUser
-    ) -> Optional[Set[str]]:
+    def _collect_document_ids_from_tags(self, tags_ids: Optional[List[str]], user: KeycloakUser) -> Optional[Set[str]]:
         if not tags_ids:
             return None
         doc_ids: Set[str] = set()
@@ -54,9 +52,7 @@ class VectorSearchService:
                 logger.debug("Could not resolve tag name for id=%s", tid)
         return names
 
-    def _to_hit(
-        self, doc: Document, score: float, rank: int, user: KeycloakUser
-    ) -> VectorSearchHit:
+    def _to_hit(self, doc: Document, score: float, rank: int, user: KeycloakUser) -> VectorSearchHit:
         md = doc.metadata or {}
 
         # Pull both ids and names (UI displays names; filters might use ids)
@@ -70,14 +66,12 @@ class VectorSearchService:
             page=md.get("page"),
             section=md.get("section"),
             viewer_fragment=md.get("viewer_fragment"),
-
             # identity
             uid=md.get("document_uid") or "Unknown",
             title=md.get("title") or md.get("document_name") or "Unknown",
             author=md.get("author"),
             created=md.get("created"),
             modified=md.get("modified"),
-
             # file/source
             file_name=md.get("document_name"),
             file_path=md.get("source") or md.get("file_path"),
@@ -86,15 +80,12 @@ class VectorSearchService:
             language=md.get("language"),
             mime_type=md.get("mime_type"),
             type=md.get("type") or "document",
-
             # tags
             tag_ids=tag_ids,
             tag_names=tag_names,
-
             # access (if you indexed them)
             license=md.get("license"),
             confidential=md.get("confidential"),
-
             # metrics & provenance
             score=score,
             rank=rank,
@@ -115,19 +106,11 @@ class VectorSearchService:
         # TODO auth: ensure user may query across requested tags/documents
         documents_ids = self._collect_document_ids_from_tags(tags_ids, user)
 
-        logger.debug(
-            "similarity_search question=%r k=%d doc_filter_count=%s",
-            question, k, (len(documents_ids) if documents_ids else None)
-        )
+        logger.debug("similarity_search question=%r k=%d doc_filter_count=%s", question, k, (len(documents_ids) if documents_ids else None))
 
         # vector_store returns List[Tuple[Document, float]]
-        pairs: List[Tuple[Document, float]] = self.vector_store.similarity_search_with_score(
-            question, k=k, documents_ids=documents_ids
-        )
+        pairs: List[Tuple[Document, float]] = self.vector_store.similarity_search_with_score(question, k=k, documents_ids=documents_ids)
 
         # Convert + enrich for UI/agents
-        hits: List[VectorSearchHit] = [
-            self._to_hit(doc, score, rank, user)
-            for rank, (doc, score) in enumerate(pairs, start=1)
-        ]
+        hits: List[VectorSearchHit] = [self._to_hit(doc, score, rank, user) for rank, (doc, score) in enumerate(pairs, start=1)]
         return hits

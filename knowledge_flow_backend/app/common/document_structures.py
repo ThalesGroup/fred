@@ -16,11 +16,11 @@ class SourceType(str, Enum):
 
 
 class ProcessingStage(str, Enum):
-    RAW_AVAILABLE = "raw"          # raw file can be downloaded
-    PREVIEW_READY = "preview"      # e.g., Markdown or DataFrame generated
-    VECTORIZED = "vector"          # content chunked and embedded
-    SQL_INDEXED = "sql"            # content indexed into SQL backend
-    MCP_SYNCED = "mcp"             # content synced to external system
+    RAW_AVAILABLE = "raw"  # raw file can be downloaded
+    PREVIEW_READY = "preview"  # e.g., Markdown or DataFrame generated
+    VECTORIZED = "vector"  # content chunked and embedded
+    SQL_INDEXED = "sql"  # content indexed into SQL backend
+    MCP_SYNCED = "mcp"  # content synced to external system
 
 
 class FileType(str, Enum):
@@ -75,11 +75,11 @@ class FileInfo(BaseModel):
     file_type: FileType = FileType.OTHER
     mime_type: Optional[str] = None
     file_size_bytes: Optional[int] = None
-    page_count: Optional[int] = None     # PDFs/slides
-    row_count: Optional[int] = None      # tables/csv
+    page_count: Optional[int] = None  # PDFs/slides
+    row_count: Optional[int] = None  # tables/csv
     sha256: Optional[str] = None
     md5: Optional[str] = None
-    language: Optional[str] = None       # ISO code like 'fr', 'en'
+    language: Optional[str] = None  # ISO code like 'fr', 'en'
 
     @model_validator(mode="after")
     def infer_file_type(self):
@@ -109,6 +109,7 @@ class Tagging(BaseModel):
     REBAC-ready: store stable tag ids and display names.
     Optionally store one canonical breadcrumb path for the UI.
     """
+
     tag_ids: List[str] = Field(default_factory=list, description="Stable tag IDs (UUIDs)")
     tag_names: List[str] = Field(default_factory=list, description="Display names for chips")
 
@@ -125,8 +126,6 @@ class Tagging(BaseModel):
         return out
 
 
-
-
 class AccessInfo(BaseModel):
     license: Optional[str] = None
     confidential: bool = False
@@ -136,6 +135,7 @@ class AccessInfo(BaseModel):
 
 class Processing(BaseModel):
     """Typed processing status per stage (+ optional error messages)."""
+
     stages: Dict[ProcessingStage, ProcessingStatus] = Field(default_factory=dict)
     errors: Dict[ProcessingStage, str] = Field(default_factory=dict)
 
@@ -171,36 +171,56 @@ class DocumentMetadata(BaseModel):
     preview_url: Optional[HttpUrl] = None
     viewer_url: Optional[HttpUrl] = None
 
-    extensions: Optional[Dict[str, Any]] = Field(
-        default=None,
-        description="Processor-specific additional attributes (namespaced keys)."
-    )
+    extensions: Optional[Dict[str, Any]] = Field(default=None, description="Processor-specific additional attributes (namespaced keys).")
+
     # ---- Convenience passthroughs (compat with v1) ----
     @property
-    def document_name(self) -> str: return self.identity.document_name
-    @property
-    def document_uid(self) -> str: return self.identity.document_uid
-    @property
-    def title(self) -> Optional[str]: return self.identity.title
-    @property
-    def author(self) -> Optional[str]: return self.identity.author
-    @property
-    def created(self) -> Optional[datetime]: return self.identity.created
-    @property
-    def modified(self) -> Optional[datetime]: return self.identity.modified
-    @property
-    def last_modified_by(self) -> Optional[str]: return self.identity.last_modified_by
+    def document_name(self) -> str:
+        return self.identity.document_name
 
     @property
-    def date_added_to_kb(self) -> datetime: return self.source.date_added_to_kb
+    def document_uid(self) -> str:
+        return self.identity.document_uid
+
     @property
-    def source_tag(self) -> Optional[str]: return self.source.source_tag
+    def title(self) -> Optional[str]:
+        return self.identity.title
+
     @property
-    def pull_location(self) -> Optional[str]: return self.source.pull_location
+    def author(self) -> Optional[str]:
+        return self.identity.author
+
     @property
-    def source_type(self) -> SourceType: return self.source.source_type
+    def created(self) -> Optional[datetime]:
+        return self.identity.created
+
     @property
-    def retrievable(self) -> bool: return self.source.retrievable
+    def modified(self) -> Optional[datetime]:
+        return self.identity.modified
+
+    @property
+    def last_modified_by(self) -> Optional[str]:
+        return self.identity.last_modified_by
+
+    @property
+    def date_added_to_kb(self) -> datetime:
+        return self.source.date_added_to_kb
+
+    @property
+    def source_tag(self) -> Optional[str]:
+        return self.source.source_tag
+
+    @property
+    def pull_location(self) -> Optional[str]:
+        return self.source.pull_location
+
+    @property
+    def source_type(self) -> SourceType:
+        return self.source.source_type
+
+    @property
+    def retrievable(self) -> bool:
+        return self.source.retrievable
 
     # ---- Small helpers ----
     def mark_stage_done(self, stage: ProcessingStage) -> None:

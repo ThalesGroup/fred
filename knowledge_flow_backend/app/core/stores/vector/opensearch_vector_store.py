@@ -90,14 +90,10 @@ class OpenSearchVectorStoreAdapter(BaseVectoreStore):
     def delete_vectors(self, document_uid: str) -> None:
         try:
             client = self.opensearch_vector_search.client
-            body = {
-                    "query": {
-                        "term": {"metadata.document_uid": {"value": document_uid}}
-                    }
-            }
+            body = {"query": {"term": {"metadata.document_uid": {"value": document_uid}}}}
             resp = client.delete_by_query(
-                    index=self.vector_index,
-                    body=body,
+                index=self.vector_index,
+                body=body,
             )
             deleted = int(resp.get("deleted", 0))
             logger.info(f"✅ Deleted {deleted} vector chunks for document_uid={document_uid}.")

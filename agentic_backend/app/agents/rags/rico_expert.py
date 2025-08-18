@@ -1,17 +1,15 @@
-# Copyright Thales 2025
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# ...
-
+# app/agents/rags/rico_expert.py
 import logging
 from datetime import datetime
-from typing import Any, Dict, List
+from typing import List
 
-import requests
 from langchain_core.messages import HumanMessage
 from langgraph.graph import END, START, MessagesState, StateGraph
 
 from fred_core import VectorSearchHit
+from app.common.rags_client import VectorSearchClient
+from app.common.rags_prompt import build_rag_prompt, rag_preamble
+from app.common.rags_utils import attach_sources_to_llm_response, ensure_ranks, format_sources_for_prompt, sort_hits
 from app.common.structures import AgentSettings
 from app.core.agents.flow import AgentFlow
 from app.core.agents.runtime_context import get_document_libraries_ids
@@ -19,15 +17,7 @@ from app.core.model.model_factory import get_model
 
 logger = logging.getLogger(__name__)
 
-
 class RicoExpert(AgentFlow):
-    """
-    RAGs Expert:
-    - Queries Knowledge Flow vector search
-    - Builds a citation-friendly prompt with ranked sources
-    - Returns LLM answer + rich sources metadata for the UI
-    """
-
     name: str = "RicoExpert"
     role: str = "Rags Expert"
     nickname: str = "Rico"
@@ -51,10 +41,13 @@ class RicoExpert(AgentFlow):
         self.base_prompt = ""
         self._graph = None
         self.tag = agent_settings.tag or "rags"
+        
 
     async def async_init(self):
         self.model = get_model(self.agent_settings.model)
-        self.base_prompt = self._generate_prompt()
+        self.search_client = VectorSearchClient(self.knowledge_flow_url, timeout_s=10)
+        # Use shared preamble util
+        self.base_prompt = rag_preamble(self.current_date)
         self._graph = self._build_graph()
 
         super().__init__(
@@ -69,15 +62,6 @@ class RicoExpert(AgentFlow):
             tag=self.tag,
         )
 
-    def _generate_prompt(self) -> str:
-        # Keep this short; we’ll append the dynamic sources per question.
-        return (
-            "You are an assistant that answers questions strictly based on the retrieved document chunks. "
-            "Always cite your claims using bracketed numeric markers like [1], [2], etc., matching the provided sources list. "
-            "Be concise, factual, and avoid speculation. If evidence is weak or missing, say so.\n"
-            f"Current date: {self.current_date}.\n"
-        )
-
     def _build_graph(self) -> StateGraph:
         builder = StateGraph(MessagesState)
         builder.add_node("reasoner", self._run_reasoning_step)
@@ -85,92 +69,41 @@ class RicoExpert(AgentFlow):
         builder.add_edge("reasoner", END)
         return builder
 
-    @staticmethod
-    def _format_sources_for_prompt(hits: List[VectorSearchHit]) -> str:
-        """
-        Turn hits into a numbered list of short source entries
-        that the model can cite as [1], [2], ...
-        """
-        lines: List[str] = []
-        for h in hits:
-            # Build a compact, readable label per hit
-            label_bits = []
-            if h.title:
-                label_bits.append(h.title)
-            if h.section:
-                label_bits.append(f"§ {h.section}")
-            if h.page is not None:
-                label_bits.append(f"p.{h.page}")
-            if h.file_name:
-                label_bits.append(f"({h.file_name})")
-            if h.tag_names:
-                label_bits.append(f"tags: {', '.join(h.tag_names)}")
-
-            label = " — ".join(label_bits) if label_bits else h.uid
-            # Include a short content snippet to steer the model
-            snippet = (h.content or "").strip()
-            if len(snippet) > 500:
-                snippet = snippet[:500] + "…"
-
-            lines.append(f"[{h.rank}] {label}\n{snippet}")
-        return "\n\n".join(lines)
-
     async def _run_reasoning_step(self, state: MessagesState):
         if self.model is None:
-            raise RuntimeError(
-                "Model is not initialized. Did you forget to call async_init()?"
-            )
+            raise RuntimeError("Model is not initialized. Did you forget to call async_init()?")
 
         msg = state["messages"][-1]
         if not isinstance(msg.content, str):
-            raise TypeError(
-                f"Expected string content, got: {type(msg.content).__name__}"
-            )
+            raise TypeError(f"Expected string content, got: {type(msg.content).__name__}")
         question = msg.content
 
         try:
-            # 1) Build search request
-            request_data: Dict[str, Any] = {"query": question, "top_k": 3}
+            # Build search args
+            top_k = 3
+            tags = get_document_libraries_ids(self.get_runtime_context())
 
-            library_ids = get_document_libraries_ids(self.get_runtime_context())
-            if library_ids:
-                request_data["tags"] = library_ids
-                logger.info("RicoExpert filtering by libraries: %s", library_ids)
-
-            # 2) Call Knowledge Flow vector search
-            resp = requests.post(
-                f"{self.knowledge_flow_url}/vector/search",
-                json=request_data,
-                timeout=10,
+            # 1) Vector search via client
+            hits: List[VectorSearchHit] = self.search_client.search(
+                query=question, top_k=top_k, tags=tags
             )
-            resp.raise_for_status()
-            raw = resp.json()  # expect a list of VectorSearchHit-like dicts
+            if not hits:
+                warn = f"I couldn't find any relevant documents for “{question}”. Try rephrasing?"
+                return {"messages": [await self.model.ainvoke([HumanMessage(content=warn)])]}
 
-            if not raw:
-                msg = f"I couldn't find any relevant documents for “{question}”. Try rephrasing?"
-                return {
-                    "messages": [await self.model.ainvoke([HumanMessage(content=msg)])]
-                }
+            # 2) Deterministic ordering + fill ranks
+            hits = sort_hits(hits)
+            ensure_ranks(hits)
 
-            # 3) Parse + sort by rank just in case
-            hits: List[VectorSearchHit] = [VectorSearchHit(**d) for d in raw]
-            hits.sort(key=lambda h: (h.rank or 1_000_000, -h.score))
+            # 3) Prompt build with shared utils
+            sources_block = format_sources_for_prompt(hits, snippet_chars=500)
+            prompt = build_rag_prompt(self.base_prompt, question, sources_block)
 
-            # 4) Build a clear, citation-friendly prompt
-            sources_block = self._format_sources_for_prompt(hits)
-            prompt = (
-                f"{self.base_prompt}\n"
-                "Use ONLY the sources below. When you state a fact, append a citation like [1] or [1][2]. "
-                "If the sources disagree, say so briefly.\n\n"
-                f"Question:\n{question}\n\n"
-                f"Sources:\n{sources_block}\n"
-            )
-
-            # 5) Ask the model
+            # 4) Ask the model
             answer = await self.model.ainvoke([HumanMessage(content=prompt)])
 
-            # 6) Attach rich sources metadata for the UI
-            answer.response_metadata["sources"] = [h.model_dump() for h in hits]
+            # 5) Attach rich sources metadata for the UI
+            attach_sources_to_llm_response(answer, hits)
 
             return {"messages": [answer]}
 

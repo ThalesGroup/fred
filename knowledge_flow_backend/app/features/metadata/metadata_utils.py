@@ -40,16 +40,16 @@ def file_entry_to_metadata(entry: PullFileEntry, source_tag: str) -> DocumentMet
     identity = Identity(
         document_uid=uid,
         document_name=name,
-        title=Path(name).stem,   # safe default for UI
-        modified=ts,             # created unknown -> leave None
+        title=Path(name).stem,  # safe default for UI
+        modified=ts,  # created unknown -> leave None
     )
 
     source = SourceInfo(
         source_type=SourceType.PULL,
         source_tag=source_tag,
-        pull_location=entry.path,      # relative path within the source
-        retrievable=False,             # keep behavior consistent with your previous code
-        date_added_to_kb=ts,           # first time we saw it in catalog
+        pull_location=entry.path,  # relative path within the source
+        retrievable=False,  # keep behavior consistent with your previous code
+        date_added_to_kb=ts,  # first time we saw it in catalog
     )
 
     file = FileInfo(

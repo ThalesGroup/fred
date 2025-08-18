@@ -6,6 +6,7 @@ from typing import Dict, Any, List, Tuple, Optional
 import logging
 
 from app.common.document_structures import DocumentMetadata
+
 logger = logging.getLogger(__name__)
 
 
@@ -41,12 +42,10 @@ def flat_metadata_from(md: DocumentMetadata) -> dict:
         "created": md.identity.created,
         "modified": md.identity.modified,
         "last_modified_by": md.identity.last_modified_by,
-
         # --- source ---
         "repository": md.source.source_tag,
         "pull_location": md.source.pull_location,
         "date_added_to_kb": md.source.date_added_to_kb,
-
         # --- file ---
         "type": (md.file.file_type.value if md.file.file_type else None),
         "mime_type": md.file.mime_type,
@@ -55,10 +54,8 @@ def flat_metadata_from(md: DocumentMetadata) -> dict:
         "row_count": md.file.row_count,
         "sha256": md.file.sha256,
         "language": md.file.language,
-
         # --- tags / folders ---
         "tag_ids": md.tags.tag_ids,
-
         # --- access control ---
         "license": md.access.license,
         "confidential": md.access.confidential,
@@ -97,10 +94,14 @@ def load_langchain_doc_from_metadata(file_path: str, metadata: DocumentMetadata)
 # WHY: splitters produce lots of noisy, tool-specific metadata that we don’t want
 # to leak into the index (bounding boxes, parser internals, temp paths).
 _ALLOWED_CHUNK_KEYS = {
-    "page", "page_start", "page_end",
-    "char_start", "char_end",
+    "page",
+    "page_start",
+    "page_end",
+    "char_start",
+    "char_end",
     "viewer_fragment",
-    "original_doc_length", "chunk_id",
+    "original_doc_length",
+    "chunk_id",
     "section",
 }
 
@@ -113,8 +114,10 @@ def _as_int(v) -> Optional[int]:
     # WHY: ensure all positional markers (page, char offsets) are numeric
     # so OpenSearch mappings stay consistent (int not string).
     try:
-        if v is None: return None
-        if isinstance(v, bool): return int(v)  # avoid True/False creeping in
+        if v is None:
+            return None
+        if isinstance(v, bool):
+            return int(v)  # avoid True/False creeping in
         return int(str(v).strip())
     except Exception:
         return None
@@ -162,7 +165,7 @@ def sanitize_chunk_metadata(raw: Dict[str, Any]) -> Tuple[Dict[str, Any], List[s
         >>> dropped
         ["bbox", "tmp_path"]
 
-         
+
     RESULT:
       - Stable, predictable chunk metadata ready for storage in vector DB.
       - Dropped keys list provides visibility into unexpected splitter behavior.
