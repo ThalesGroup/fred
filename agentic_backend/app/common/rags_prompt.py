@@ -1,6 +1,7 @@
 # app/core/rag/rag_prompt.py
 from datetime import datetime
 
+
 def rag_preamble(now: str | None = None) -> str:
     now = now or datetime.now().strftime("%Y-%m-%d")
     return (
@@ -9,6 +10,7 @@ def rag_preamble(now: str | None = None) -> str:
         "Be concise, factual, and avoid speculation. If evidence is weak or missing, say so.\n"
         f"Current date: {now}.\n"
     )
+
 
 def build_rag_prompt(preamble: str, question: str, sources_block: str) -> str:
     return (

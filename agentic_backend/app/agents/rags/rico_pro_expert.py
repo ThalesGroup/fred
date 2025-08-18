@@ -135,7 +135,9 @@ class RicoProExpert(AgentFlow):
 
     async def _retrieve(self, state: Dict[str, Any]) -> Dict[str, Any]:
         if self.model is None:
-            raise RuntimeError("Model is not initialized. Did you forget to call async_init()?")
+            raise RuntimeError(
+                "Model is not initialized. Did you forget to call async_init()?"
+            )
 
         question: Optional[str] = state.get("question")
         if not question and state.get("messages"):
@@ -160,7 +162,9 @@ class RicoProExpert(AgentFlow):
             )
             if not hits:
                 warn = f"I couldn't find any relevant documents for “{question}”. Try rephrasing?"
-                return {"messages": [await self.model.ainvoke([HumanMessage(content=warn)])]}
+                return {
+                    "messages": [await self.model.ainvoke([HumanMessage(content=warn)])]
+                }
 
             logger.info(f"✅ Retrieved {len(hits)} hits")
 
@@ -185,7 +189,9 @@ class RicoProExpert(AgentFlow):
             logger.exception("Failed to retrieve documents: %s", e)
             return {
                 "messages": [
-                    SystemMessage(content="An error occurred while retrieving documents. Please try again later.")
+                    SystemMessage(
+                        content="An error occurred while retrieving documents. Please try again later."
+                    )
                 ]
             }
 
@@ -201,7 +207,9 @@ class RicoProExpert(AgentFlow):
         )
 
         filtered_docs: List[VectorSearchHit] = []
-        irrelevant_documents: List[VectorSearchHit] = state.get("irrelevant_documents") or []
+        irrelevant_documents: List[VectorSearchHit] = (
+            state.get("irrelevant_documents") or []
+        )
 
         irrelevant_contents = {doc.content for doc in irrelevant_documents}
         grade_documents: List[VectorSearchHit] = [
@@ -212,15 +220,22 @@ class RicoProExpert(AgentFlow):
             grade_prompt = ChatPromptTemplate.from_messages(
                 [
                     ("system", system),
-                    ("human", "Retrieved document:\n\n{document}\n\nUser question:\n\n{question}"),
+                    (
+                        "human",
+                        "Retrieved document:\n\n{document}\n\nUser question:\n\n{question}",
+                    ),
                 ]
             )
 
             if self.model is None:
                 raise ValueError("model is None")
 
-            chain = grade_prompt | self.model.with_structured_output(GradeDocumentsOutput)
-            llm_response = await chain.ainvoke({"question": question, "document": document.content})
+            chain = grade_prompt | self.model.with_structured_output(
+                GradeDocumentsOutput
+            )
+            llm_response = await chain.ainvoke(
+                {"question": question, "document": document.content}
+            )
             score = cast(GradeDocumentsOutput, llm_response)
 
             if score.binary_score == "yes":
@@ -233,7 +248,10 @@ class RicoProExpert(AgentFlow):
             content=json.dumps(serializable),
             response_metadata={
                 "thought": True,
-                "fred": {"node": "grade_documents", "task": "filter relevant documents"},
+                "fred": {
+                    "node": "grade_documents",
+                    "task": "filter relevant documents",
+                },
                 "sources": serializable,
             },
         )
@@ -271,7 +289,10 @@ class RicoProExpert(AgentFlow):
             raise ValueError("model is None")
 
         chain = prompt | self.model
-        response: AIMessage = await chain.ainvoke({"context": context, "question": question})
+        response = await chain.ainvoke(
+            {"context": context, "question": question}
+        )
+        response = cast(AIMessage, response)
 
         # attach VectorSearchHit for UI (your helper already supports it)
         attach_sources_to_llm_response(response, documents)
@@ -297,7 +318,10 @@ class RicoProExpert(AgentFlow):
         rewrite_prompt = ChatPromptTemplate.from_messages(
             [
                 ("system", system),
-                ("human", "Initial question:\n\n{question}\n\nProduce an improved version."),
+                (
+                    "human",
+                    "Initial question:\n\n{question}\n\nProduce an improved version.",
+                ),
             ]
         )
 
@@ -308,11 +332,19 @@ class RicoProExpert(AgentFlow):
         llm_response = await chain.ainvoke({"question": question})
         better = cast(RephraseQueryOutput, llm_response)
 
-        logger.info("Rephrased question: %r -> %r (retry=%d)", question, better.rephrase_query, retry_count)
+        logger.info(
+            "Rephrased question: %r -> %r (retry=%d)",
+            question,
+            better.rephrase_query,
+            retry_count,
+        )
 
         message = SystemMessage(
             content=better.rephrase_query,
-            response_metadata={"thought": True, "fred": {"node": "rephrase_query", "task": "query rewriting"}},
+            response_metadata={
+                "thought": True,
+                "fred": {"node": "rephrase_query", "task": "query rewriting"},
+            },
         )
 
         return {
@@ -326,7 +358,10 @@ class RicoProExpert(AgentFlow):
 
         message = SystemMessage(
             content=generation.content,
-            response_metadata={"thought": True, "fred": {"node": "finalize_success", "task": "deliver answer"}},
+            response_metadata={
+                "thought": True,
+                "fred": {"node": "finalize_success", "task": "deliver answer"},
+            },
         )
 
         return {
@@ -344,18 +379,23 @@ class RicoProExpert(AgentFlow):
         generation: Optional[AIMessage] = state.get("generation")
         content = generation.content if generation is not None else ""
 
-        msg = "The agent was unable to generate a satisfactory response to your question."
+        msg = (
+            "The agent was unable to generate a satisfactory response to your question."
+        )
         if generation:
             msg += " Here is the latest response:"
 
         message = SystemMessage(
             content=content,
-            response_metadata={"thought": True, "fred": {"node": "finalize_failure", "task": "unsatisfactory answer"}},
+            response_metadata={
+                "thought": True,
+                "fred": {"node": "finalize_failure", "task": "unsatisfactory answer"},
+            },
         )
 
         messages = [message, SystemMessage(content=msg)]
         if generation is not None:
-            messages.append(generation)
+            messages.append(SystemMessage(content=generation.content, response_metadata=getattr(generation, "response_metadata", None)))
 
         return {
             "messages": messages,
@@ -391,14 +431,19 @@ class RicoProExpert(AgentFlow):
             "Return a binary 'yes' or 'no'."
         )
         answer_prompt = ChatPromptTemplate.from_messages(
-            [("system", system), ("human", "Question:\n\n{question}\n\nAnswer:\n\n{generation}")]
+            [
+                ("system", system),
+                ("human", "Question:\n\n{question}\n\nAnswer:\n\n{generation}"),
+            ]
         )
 
         if self.model is None:
             raise ValueError("model is None")
 
         grader = answer_prompt | self.model.with_structured_output(GradeAnswerOutput)
-        llm_response = await grader.ainvoke({"question": question, "generation": generation.content})
+        llm_response = await grader.ainvoke(
+            {"question": question, "generation": generation.content}
+        )
         grade = cast(GradeAnswerOutput, llm_response)
 
         if grade.binary_score == "yes":

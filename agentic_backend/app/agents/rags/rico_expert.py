@@ -9,13 +9,19 @@ from langgraph.graph import END, START, MessagesState, StateGraph
 from fred_core import VectorSearchHit
 from app.common.rags_client import VectorSearchClient
 from app.common.rags_prompt import build_rag_prompt, rag_preamble
-from app.common.rags_utils import attach_sources_to_llm_response, ensure_ranks, format_sources_for_prompt, sort_hits
+from app.common.rags_utils import (
+    attach_sources_to_llm_response,
+    ensure_ranks,
+    format_sources_for_prompt,
+    sort_hits,
+)
 from app.common.structures import AgentSettings
 from app.core.agents.flow import AgentFlow
 from app.core.agents.runtime_context import get_document_libraries_ids
 from app.core.model.model_factory import get_model
 
 logger = logging.getLogger(__name__)
+
 
 class RicoExpert(AgentFlow):
     name: str = "RicoExpert"
@@ -41,7 +47,6 @@ class RicoExpert(AgentFlow):
         self.base_prompt = ""
         self._graph = None
         self.tag = agent_settings.tag or "rags"
-        
 
     async def async_init(self):
         self.model = get_model(self.agent_settings.model)
@@ -71,11 +76,15 @@ class RicoExpert(AgentFlow):
 
     async def _run_reasoning_step(self, state: MessagesState):
         if self.model is None:
-            raise RuntimeError("Model is not initialized. Did you forget to call async_init()?")
+            raise RuntimeError(
+                "Model is not initialized. Did you forget to call async_init()?"
+            )
 
         msg = state["messages"][-1]
         if not isinstance(msg.content, str):
-            raise TypeError(f"Expected string content, got: {type(msg.content).__name__}")
+            raise TypeError(
+                f"Expected string content, got: {type(msg.content).__name__}"
+            )
         question = msg.content
 
         try:
@@ -89,7 +98,9 @@ class RicoExpert(AgentFlow):
             )
             if not hits:
                 warn = f"I couldn't find any relevant documents for “{question}”. Try rephrasing?"
-                return {"messages": [await self.model.ainvoke([HumanMessage(content=warn)])]}
+                return {
+                    "messages": [await self.model.ainvoke([HumanMessage(content=warn)])]
+                }
 
             # 2) Deterministic ordering + fill ranks
             hits = sort_hits(hits)

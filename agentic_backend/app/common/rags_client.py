@@ -8,6 +8,7 @@ from fred_core import VectorSearchHit
 
 _HITS = TypeAdapter(List[VectorSearchHit])
 
+
 def _session_with_retries() -> requests.Session:
     s = requests.Session()
     retry = Retry(
@@ -21,8 +22,14 @@ def _session_with_retries() -> requests.Session:
     s.mount("https://", HTTPAdapter(max_retries=retry))
     return s
 
+
 class VectorSearchClient:
-    def __init__(self, base_url: str, timeout_s: int = 10, session: Optional[requests.Session] = None):
+    def __init__(
+        self,
+        base_url: str,
+        timeout_s: int = 10,
+        session: Optional[requests.Session] = None,
+    ):
         self.base_url = base_url.rstrip("/")
         self.timeout_s = timeout_s
         self.session = session or _session_with_retries()
@@ -41,7 +48,9 @@ class VectorSearchClient:
         if payload_overrides:
             payload.update(payload_overrides)
 
-        r = self.session.post(f"{self.base_url}/vector/search", json=payload, timeout=self.timeout_s)
+        r = self.session.post(
+            f"{self.base_url}/vector/search", json=payload, timeout=self.timeout_s
+        )
         r.raise_for_status()
         raw = r.json()
         if not isinstance(raw, Iterable):

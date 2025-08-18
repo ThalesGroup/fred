@@ -2,6 +2,7 @@
 from pydantic import BaseModel, Field
 from typing import List, Optional
 
+
 class RagSettings(BaseModel):
     knowledge_flow_url: str = Field(default="http://localhost:8111/knowledge-flow/v1")
     top_k: int = 3

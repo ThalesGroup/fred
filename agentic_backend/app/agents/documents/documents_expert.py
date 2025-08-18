@@ -56,7 +56,9 @@ class Dominic(AgentFlow):
         self.base_prompt = self._generate_prompt()
 
         # Typed adapter for validating tool outputs into List[VectorSearchHit]
-        self._hits_adapter: TypeAdapter[List[VectorSearchHit]] = TypeAdapter(List[VectorSearchHit])
+        self._hits_adapter: TypeAdapter[List[VectorSearchHit]] = TypeAdapter(
+            List[VectorSearchHit]
+        )
 
     async def async_init(self):
         # Model + MCP tools
@@ -64,7 +66,9 @@ class Dominic(AgentFlow):
         self.mcp_client = await get_mcp_client_for_agent(self.agent_settings)
 
         # Provide runtime-context provider so the toolkit can pass tags, etc., to the MCP server
-        self.toolkit = DocumentsToolkit(self.mcp_client, lambda: self.get_runtime_context())
+        self.toolkit = DocumentsToolkit(
+            self.mcp_client, lambda: self.get_runtime_context()
+        )
         self.model = self.model.bind_tools(self.toolkit.get_tools())
 
         # Build graph
@@ -96,7 +100,9 @@ class Dominic(AgentFlow):
         builder = StateGraph(MessagesState)
         builder.add_node("reasoner", self.reasoner)
 
-        assert self.toolkit is not None, "Toolkit must be initialized before building graph"
+        assert self.toolkit is not None, (
+            "Toolkit must be initialized before building graph"
+        )
         builder.add_node("tools", ToolNode(self.toolkit.get_tools()))
 
         builder.add_edge(START, "reasoner")
@@ -111,8 +117,10 @@ class Dominic(AgentFlow):
         we parse ToolMessage payloads (JSON array) as List[VectorSearchHit] and attach to metadata.
         """
         if self.model is None:
-            raise RuntimeError("Model is not initialized. Did you forget to call async_init()?")
-        
+            raise RuntimeError(
+                "Model is not initialized. Did you forget to call async_init()?"
+            )
+
         try:
             response = self.model.invoke([self.base_prompt] + state["messages"])
 
@@ -120,34 +128,57 @@ class Dominic(AgentFlow):
             saw_tool_msg = False
 
             for msg in state["messages"]:
-                if isinstance(msg, ToolMessage) and getattr(msg, "name", "") == "search_documents_using_vectorization":
+                if (
+                    isinstance(msg, ToolMessage)
+                    and getattr(msg, "name", "")
+                    == "search_documents_using_vectorization"
+                ):
                     saw_tool_msg = True
 
                     # Minimal parse: accept list/dict directly, else parse JSON string
-                    data = msg.content if isinstance(msg.content, (list, dict)) else json.loads(msg.content)
+                    data = (
+                        msg.content
+                        if isinstance(msg.content, (list, dict))
+                        else json.loads(msg.content)
+                    )
 
                     try:
-                        hits = self._hits_adapter.validate_python(data)  # List[VectorSearchHit]
+                        hits = self._hits_adapter.validate_python(
+                            data
+                        )  # List[VectorSearchHit]
                         collected_hits.extend(hits)
                     except ValidationError as ve:
-                        logger.error("Dominic: tool payload failed VectorSearchHit validation: %s", ve)
-                        
+                        logger.error(
+                            "Dominic: tool payload failed VectorSearchHit validation: %s",
+                            ve,
+                        )
+
             if saw_tool_msg and not collected_hits:
                 ai_message = await self.model.ainvoke(
-                    [HumanMessage(content="I tried to retrieve documents but couldn't process the results. Please try again.")]
+                    [
+                        HumanMessage(
+                            content="I tried to retrieve documents but couldn't process the results. Please try again."
+                        )
+                    ]
                 )
                 return {"messages": [ai_message]}
 
             if collected_hits:
                 existing = response.response_metadata.get("sources", [])
-                response.response_metadata["sources"] = existing + [h.model_dump() for h in collected_hits]
+                response.response_metadata["sources"] = existing + [
+                    h.model_dump() for h in collected_hits
+                ]
 
             return {"messages": [response]}
 
         except Exception as e:
             logger.exception("Dominic: unexpected error: %s", e)
             error_message = await self.model.ainvoke(
-                [HumanMessage(content="An error occurred while processing your request. Please try again later.")]
+                [
+                    HumanMessage(
+                        content="An error occurred while processing your request. Please try again later."
+                    )
+                ]
             )
             return {"messages": [error_message]}
 
