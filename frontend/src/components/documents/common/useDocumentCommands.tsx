@@ -46,13 +46,13 @@ export function useDocumentCommands({ refetchTags, refetchDocs }: DocumentRefres
     async (doc: DocumentMetadata) => {
       try {
         await updateRetrievable({
-          documentUid: doc.document_uid,
-          retrievable: !doc.retrievable,
+          documentUid: doc.identity.document_uid,
+          retrievable: !doc.source.retrievable,
         }).unwrap();
         await refresh();
         showSuccess?.({
           summary: t("validation.updated") || "Updated",
-          detail: !doc.retrievable
+          detail: !doc.source.retrievable
             ? t("documentTable.nowSearchable") || "Document is now searchable."
             : t("documentTable.nowExcluded") || "Document is now excluded from search.",
         });
@@ -69,7 +69,7 @@ export function useDocumentCommands({ refetchTags, refetchDocs }: DocumentRefres
   const removeFromLibrary = useCallback(
     async (doc: DocumentMetadata, tag: TagWithItemsId) => {
       try {
-        const newItemIds = (tag.item_ids || []).filter((id) => id !== doc.document_uid);
+        const newItemIds = (tag.item_ids || []).filter((id) => id !== doc.identity.document_uid);
         await updateTag({
           tagId: tag.id,
           tagUpdate: {

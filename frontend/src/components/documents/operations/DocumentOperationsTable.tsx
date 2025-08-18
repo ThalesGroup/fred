@@ -92,7 +92,8 @@ export const DocumentOperationsTable: React.FC<DocumentOperationsTableProps> = (
 
   // Internal state management
   const [selectedFiles, setSelectedFiles] = useState<DocumentMetadata[]>([]);
-  const [sortBy, setSortBy] = useState<keyof DocumentMetadata>("date_added_to_kb");
+  // Use a string type for sortBy to allow custom keys
+  const [sortBy, setSortBy] = useState<string>("date_added_to_kb");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
   const [tagsById, setTagsById] = useState<Record<string, TagWithItemsId>>({});
 
@@ -108,7 +109,7 @@ export const DocumentOperationsTable: React.FC<DocumentOperationsTableProps> = (
 
     const allTagIds = new Set<string>();
     files.forEach((file) => {
-      file.tags?.forEach((tagId) => allTagIds.add(tagId));
+      file.tags.tag_ids?.forEach((tagId) => allTagIds.add(tagId));
     });
 
     const fetchTags = async () => {
@@ -152,8 +153,8 @@ export const DocumentOperationsTable: React.FC<DocumentOperationsTableProps> = (
   // Internal handlers
   const handleToggleSelect = (file: DocumentMetadata) => {
     setSelectedFiles((prev) =>
-      prev.some((f) => f.document_uid === file.document_uid)
-        ? prev.filter((f) => f.document_uid !== file.document_uid)
+      prev.some((f) => f.identity.document_uid === file.identity.document_uid)
+        ? prev.filter((f) => f.identity.document_uid !== file.identity.document_uid)
         : [...prev, file],
     );
   };
@@ -165,13 +166,13 @@ export const DocumentOperationsTable: React.FC<DocumentOperationsTableProps> = (
   const handleToggleRetrievable = async (file: DocumentMetadata) => {
     try {
       await updateDocumentRetrievable({
-        document_uid: file.document_uid,
-        retrievable: !file.retrievable,
+        document_uid: file.identity.document_uid,
+        retrievable: !file.source.retrievable,
       }).unwrap();
 
       showInfo({
         summary: "Updated",
-        detail: `"${file.document_name}" is now ${!file.retrievable ? "searchable" : "excluded from search"}.`,
+        detail: `"${file.identity.document_name}" is now ${!file.source.retrievable ? "searchable" : "excluded from search"}.`,
       });
 
       onRefreshData?.();
@@ -217,7 +218,7 @@ export const DocumentOperationsTable: React.FC<DocumentOperationsTableProps> = (
     [bulkActionsWithDefault, setSelectedFiles, onRefreshData],
   );
 
-  const handleSortChange = (column: keyof DocumentMetadata) => {
+  const handleSortChange = (column: string) => {
     if (sortBy === column) {
       setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
     } else {
@@ -288,11 +289,11 @@ export const DocumentOperationsTable: React.FC<DocumentOperationsTableProps> = (
           </TableHead>
           <TableBody>
             {sortedFiles.map((file) => (
-              <React.Fragment key={file.document_uid}>
+              <React.Fragment key={file.identity.document_uid}>
                 <TableRow hover>
                   <TableCell padding="checkbox">
                     <Checkbox
-                      checked={selectedFiles.some((f) => f.document_uid === file.document_uid)}
+                      checked={selectedFiles.some((f) => f.identity.document_uid === file.identity.document_uid)}
                       onChange={() => handleToggleSelect(file)}
                     />
                   </TableCell>
@@ -305,19 +306,19 @@ export const DocumentOperationsTable: React.FC<DocumentOperationsTableProps> = (
                         onClick={() => nameClickActionWithDefault?.(file)}
                         sx={{ cursor: nameClickActionWithDefault ? "pointer" : "default" }}
                       >
-                        {getDocumentIcon(file.document_name)}
+                        {getDocumentIcon(file.identity.document_name)}
                         <Typography variant="body2" noWrap>
-                          {file.document_name}
+                          {file.identity.document_name}
                         </Typography>
                       </Box>
                     </TableCell>
                   )}
                   {columns.dateAdded && (
                     <TableCell>
-                      <Tooltip title={file.date_added_to_kb}>
+                      <Tooltip title={file.source.date_added_to_kb}>
                         <Typography variant="body2">
                           <EventAvailableIcon fontSize="small" sx={{ mr: 0.5 }} />
-                          {formatDate(file.date_added_to_kb)}
+                          {formatDate(file.source.date_added_to_kb)}
                         </Typography>
                       </Tooltip>
                     </TableCell>
@@ -325,7 +326,7 @@ export const DocumentOperationsTable: React.FC<DocumentOperationsTableProps> = (
                   {columns.librairies && (
                     <TableCell>
                       <Box display="flex" flexWrap="wrap" gap={0.5}>
-                        {file.tags?.map((tagId) => {
+                        {file.tags.tag_ids?.map((tagId) => {
                           const tag = tagsById[tagId];
                           const tagName = tag?.name || tagId;
 
@@ -342,7 +343,7 @@ export const DocumentOperationsTable: React.FC<DocumentOperationsTableProps> = (
                     <TableCell>
                       <Box display="flex" flexWrap="wrap" gap={0.5}>
                         {DOCUMENT_PROCESSING_STAGES.map((stage) => {
-                          const status = file.processing_stages?.[stage] ?? "not_started";
+                          const status = file.processing.stages?.[stage] ?? "not_started";
 
                           const statusStyleMap: Record<string, { bgColor: string; color: string }> = {
                             done: {
@@ -397,7 +398,7 @@ export const DocumentOperationsTable: React.FC<DocumentOperationsTableProps> = (
                   {columns.retrievable && (
                     <TableCell>
                       {(() => {
-                        const isRetrievable = file.retrievable;
+                        const isRetrievable = file.source.retrievable;
 
                         return (
                           <Chip

@@ -41,19 +41,24 @@ class DocxMarkdownProcessor(BaseMarkdownProcessor):
 
     def extract_file_metadata(self, file_path: Path) -> dict:
         try:
-            doc = Document(file_path)
+            doc = Document(str(file_path))
+            cp = doc.core_properties
             return {
-                "title": default_or_unknown(doc.core_properties.title),
-                "author": default_or_unknown(doc.core_properties.author),
-                "created": (doc.core_properties.created.isoformat() if isinstance(doc.core_properties.created, datetime) else "Non disponible"),
-                "modified": (doc.core_properties.modified.isoformat() if isinstance(doc.core_properties.modified, datetime) else "Non disponible"),
-                "last_modified_by": default_or_unknown(doc.core_properties.last_modified_by),
-                "category": default_or_unknown(doc.core_properties.category),
-                "subject": default_or_unknown(doc.core_properties.subject),
-                "keywords": default_or_unknown(doc.core_properties.keywords),
+                # identity
+                "title": cp.title or None,
+                "author": cp.author or None,
+                "created": cp.created if isinstance(cp.created, datetime) else None,
+                "modified": cp.modified if isinstance(cp.modified, datetime) else None,
+                "last_modified_by": cp.last_modified_by or None,
+                # optional extras (kept out of vector index; good for UI/analytics)
+                "extras": {
+                    "docx.core.category": cp.category or None,
+                    "docx.core.subject": cp.subject or None,
+                    "docx.core.keywords": cp.keywords or None,
+                },
             }
         except Exception as e:
-            logger.error(f"Erreur lors de l'extraction des métadonnées pour {file_path}: {e}")
+            logger.error(f"Error extracting metadata for {file_path}: {e}")
             return {"document_name": file_path.name, "error": str(e)}
 
     def convert_file_to_markdown(self, file_path: Path, output_dir: Path, document_uid: str | None) -> dict:

@@ -62,7 +62,7 @@ export function DocumentRowCompact({
           overflow: "hidden",
         }}
       >
-        {getDocumentIcon(doc.document_name) || <InsertDriveFileOutlinedIcon fontSize="small" />}
+        {getDocumentIcon(doc.identity.document_name) || <InsertDriveFileOutlinedIcon fontSize="small" />}
 
         <Typography
           variant="body2"
@@ -75,7 +75,7 @@ export function DocumentRowCompact({
           }}
           onClick={() => onPreview?.(doc)}
         >
-          {doc.title || doc.document_name || doc.document_uid}
+          {doc.identity.document_name || doc.identity.document_uid}
         </Typography>
       </Box>
 
@@ -91,7 +91,7 @@ export function DocumentRowCompact({
         {/* Status */}
         <Box sx={{ display: "flex", gap: 0.5 }}>
           {DOCUMENT_PROCESSING_STAGES.map((stage) => {
-            const status = doc.processing_stages?.[stage] ?? "not_started";
+            const status = doc.processing.stages?.[stage] ?? "not_started";
             const statusStyleMap: Record<string, { bgColor: string; color: string }> = {
               done: { bgColor: "#c8e6c9", color: "#2e7d32" },
               in_progress: { bgColor: "#fff9c4", color: "#f9a825" },
@@ -129,16 +129,16 @@ export function DocumentRowCompact({
         </Box>
 
         {/* Date */}
-        <Tooltip title={doc.date_added_to_kb}>
+        <Tooltip title={doc.source.date_added_to_kb}>
           <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
             <EventAvailableIcon fontSize="inherit" />
             <Typography variant="caption" noWrap>
-              {formatDate(doc.date_added_to_kb)}
+              {formatDate(doc.source.date_added_to_kb)}
             </Typography>
           </Box>
         </Tooltip>
         {/* Searchable */}
-        <Tooltip title={doc.retrievable ? "Make excluded" : "Make searchable"}>
+        <Tooltip title={doc.source.retrievable ? "Make excluded" : "Make searchable"}>
           <span>
             {" "}
             {/* needed so Tooltip works when the button is disabled */}
@@ -152,11 +152,11 @@ export function DocumentRowCompact({
               sx={{
                 width: 28,
                 height: 28,
-                color: doc.retrievable ? "success.main" : "error.main",
+                color: doc.source.retrievable ? "success.main" : "error.main",
                 ...(!canToggle && { color: "action.disabled" }), // optional: match disabled look
               }}
             >
-              {doc.retrievable ? <SearchIcon fontSize="small" /> : <SearchOffIcon fontSize="small" />}
+              {doc.source.retrievable ? <SearchIcon fontSize="small" /> : <SearchOffIcon fontSize="small" />}
             </IconButton>
           </span>
         </Tooltip>

@@ -412,27 +412,17 @@ class ApplicationContext:
         else:
             raise ValueError(f"Unsupported embedding backend: {backend_type}")
 
-    def get_vector_store(self, embedding_model: BaseEmbeddingModel) -> BaseVectoreStore:
+    def get_vector_store(self) -> BaseVectoreStore:
         """
         Vector Store Factory
-        ---------------
+        """
+        if self._vector_store_instance is not None:
+            return self._vector_store_instance
+        raise ValueError("Vector store is not initialized. Use get_create_vector_store() instead.")
 
-        This method creates a vector store instance based on the configuration.
-
-        Usage:
-
-            # In your main service (example)
-            embedder = application_context.get_embedder()
-
-            # Used in your business logic
-            embedded_chunks = embedder.embed_documents(documents)
-
-            # When building a vector store
-            vector_store = application_context.get_vector_store(embedder)
-
-            # Now you can add embeddings into the vector store
-            vector_store.add_embeddings(embedded_chunks)
-
+    def get_create_vector_store(self, embedding_model: BaseEmbeddingModel) -> BaseVectoreStore:
+        """
+        Vector Store Factory
         """
         if self._vector_store_instance is not None:
             return self._vector_store_instance
