@@ -166,6 +166,12 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/knowledge-flow/v1/tags/${queryArg.tagId}`, method: "DELETE" }),
     }),
+    getCreateResSchemaKnowledgeFlowV1ResourcesSchemaGet: build.query<
+      GetCreateResSchemaKnowledgeFlowV1ResourcesSchemaGetApiResponse,
+      GetCreateResSchemaKnowledgeFlowV1ResourcesSchemaGetApiArg
+    >({
+      query: () => ({ url: `/knowledge-flow/v1/resources/schema` }),
+    }),
     createResourceKnowledgeFlowV1ResourcesPost: build.mutation<
       CreateResourceKnowledgeFlowV1ResourcesPostApiResponse,
       CreateResourceKnowledgeFlowV1ResourcesPostApiArg
@@ -355,6 +361,10 @@ export type DeleteTagKnowledgeFlowV1TagsTagIdDeleteApiResponse = unknown;
 export type DeleteTagKnowledgeFlowV1TagsTagIdDeleteApiArg = {
   tagId: string;
 };
+export type GetCreateResSchemaKnowledgeFlowV1ResourcesSchemaGetApiResponse = /** status 200 Successful Response */ {
+  [key: string]: any;
+};
+export type GetCreateResSchemaKnowledgeFlowV1ResourcesSchemaGetApiArg = void;
 export type CreateResourceKnowledgeFlowV1ResourcesPostApiResponse = /** status 201 Successful Response */ Resource;
 export type CreateResourceKnowledgeFlowV1ResourcesPostApiArg = {
   /** Library tag id to attach this resource to */
@@ -677,6 +687,8 @@ export const {
   useLazyGetTagKnowledgeFlowV1TagsTagIdGetQuery,
   useUpdateTagKnowledgeFlowV1TagsTagIdPutMutation,
   useDeleteTagKnowledgeFlowV1TagsTagIdDeleteMutation,
+  useGetCreateResSchemaKnowledgeFlowV1ResourcesSchemaGetQuery,
+  useLazyGetCreateResSchemaKnowledgeFlowV1ResourcesSchemaGetQuery,
   useCreateResourceKnowledgeFlowV1ResourcesPostMutation,
   useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery,
   useLazyListResourcesByKindKnowledgeFlowV1ResourcesGetQuery,
