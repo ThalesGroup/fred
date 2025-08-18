@@ -1,0 +1,58 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "agentic-backend-dev",
+      "type": "shell",
+      "command": "make run",
+      "options": { "cwd": "${workspaceFolder}/agentic_backend" },
+      "problemMatcher": []
+    },
+    {
+      "label": "agentic-backend-prod",
+      "type": "shell",
+      "command": "make run-prod",
+      "options": { "cwd": "${workspaceFolder}/agentic_backend" },
+      "problemMatcher": []
+    },
+    {
+      "label": "knowledge-flow-backend-dev",
+      "type": "shell",
+      "command": "make run",
+      "options": { "cwd": "${workspaceFolder}/knowledge_flow_backend" },
+      "problemMatcher": []
+    },
+    {
+      "label": "knowledge-flow-backend-prod",
+      "type": "shell",
+      "command": "make run-prod",
+      "options": { "cwd": "${workspaceFolder}/knowledge_flow_backend" },
+      "problemMatcher": []
+    },
+    {
+      "label": "frontend",
+      "type": "shell",
+      "command": "make run",
+      "options": { "cwd": "${workspaceFolder}/frontend" },
+      "problemMatcher": []
+    },
+    {
+      "label": "run-all-dev",
+      "dependsOn": [
+        "knowledge-flow-backend-dev",
+        "agentic-backend-dev",
+        "frontend"
+      ],
+      "dependsOrder": "parallel"
+    },
+    {
+      "label": "run-all-prod",
+      "dependsOn": [
+        "knowledge-flow-backend-prod",
+        "agentic-backend-prod",
+        "frontend"
+      ],
+      "dependsOrder": "parallel"
+    }
+  ]
+}
