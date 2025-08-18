@@ -15,15 +15,15 @@
 import logging
 from typing import List, Optional, Sequence, Literal
 
-from app.core.agents.agent_state import all_resource_ids_by_kind, _fetch_body
 from IPython.display import Image
 from langchain_core.tools import BaseToolkit
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph.state import CompiledStateGraph, StateGraph
+from langchain_core.messages import SystemMessage, BaseMessage
 
 from app.application_context import get_knowledge_flow_base_url
-from langchain_core.messages import SystemMessage, BaseMessage
 from app.core.agents.runtime_context import RuntimeContext
+from app.core.agents.agent_state import resource_texts_by_kind
 
 logger = logging.getLogger(__name__)
 
@@ -165,7 +165,6 @@ class AgentFlow:
             return list(messages)
         return [SystemMessage(content=sys_text), *messages]
 
-
     def _compose_fred_resource_text(self, kind: str = "all") -> str:
         """
         Compose system text from prompts, templates, or both (depending on `kind`).
@@ -174,28 +173,22 @@ class AgentFlow:
         ctx = self.get_runtime_context() or RuntimeContext()
         kf_base = get_knowledge_flow_base_url()
 
-        # Fetch resource IDs grouped by kind
-        resources_by_kind = all_resource_ids_by_kind(ctx)
+        # Fetch prepared resource texts (already resolved + cleaned in agent_state)
+        resources_by_kind = resource_texts_by_kind(ctx, kf_base)
 
         if kind != "all":
-            # Only keep the requested kind
-            resources_by_kind = {kind: resources_by_kind.get(kind, [])}
+            # Restrict to one kind only
+            resources_by_kind = {
+                kind: resources_by_kind.get(kind, "")
+            }
 
         parts = []
+        for k, text in resources_by_kind.items():
+            if text:
+                parts.append(f"{k}:")
+                parts.append(text)
 
-        # Loop over each kind to fetch and label content
-        for k, rids in resources_by_kind.items():
-            bodies = []
-            for rid in rids:
-                body = _fetch_body(kf_base, rid)
-                if body:
-                    bodies.append(body.strip())
-
-            if bodies:
-                parts.append(f"{k}:")  # Heading label (e.g. "prompts:", "templates:")
-                parts.extend(bodies)
-
-        # Append the agent's base prompt at the end
+        # Append the agent's base prompt
         if self.base_prompt and self.base_prompt.strip():
             parts.append(self.base_prompt.strip())
 

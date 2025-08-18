@@ -57,6 +57,30 @@ def _fetch_body(kf_base: str, rid: str, timeout: float = 8.0) -> Optional[str]:
     except Exception:
         return None
 
+def fetch_resource_bodies(kf_base: str, rids: list[str]) -> list[str]:
+    """
+    Public helper: fetch the body content for a list of resource IDs.
+    Skips missing/invalid resources.
+    """
+    bodies = []
+    for rid in rids:
+        body = _fetch_body(kf_base, rid)
+        if body:
+            bodies.append(body.strip())
+    return bodies
+
+def resource_texts_by_kind(ctx: RuntimeContext, kf_base: str) -> dict[str, str]:
+    """
+    Return resource texts grouped by kind, concatenated and stripped.
+    """
+    resources = all_resource_ids_by_kind(ctx)
+    result = {}
+    for kind, rids in resources.items():
+        bodies = fetch_resource_bodies(kf_base, rids)
+        if bodies:
+            result[kind] = "\n\n".join(bodies)
+    return result
+
 def resolve_prepared(ctx: RuntimeContext, kf_base: str) -> Prepared:
     # 1) Document libraries for RAG scoping
     doc_tags = list(get_document_libraries_ids(ctx) or [])
