@@ -35,6 +35,30 @@ from fred_core import KPIWriter, KPIActor
 
 logger = logging.getLogger(__name__)
 
+_ALLOWED_CHUNK_KEYS = {
+    "page",
+    "page_start",
+    "page_end",
+    "char_start",
+    "char_end",
+    "viewer_fragment",
+    "original_doc_length",
+    "chunk_id",
+    "section",
+}
+_HEADER_KEYS = ("Header 1", "Header 2", "Header 3", "Header 4", "Header 5", "Header 6")
+
+
+def _as_int(v) -> Optional[int]:
+    try:
+        if v is None:
+            return None
+        if isinstance(v, bool):
+            return int(v)
+        return int(str(v).strip())
+    except Exception:
+        return None
+
 
 class VectorizationProcessor(BaseOutputProcessor):
     """

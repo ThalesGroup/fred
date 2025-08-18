@@ -87,6 +87,7 @@ function Area({ messages, agenticFlows, currentAgenticFlow }: Props) {
         others.push(msg);
       }
 
+      // Render user message (right side)
       if (userMessage) {
         elements.push(
           <Message
