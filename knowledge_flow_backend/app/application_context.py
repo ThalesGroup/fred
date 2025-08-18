@@ -24,7 +24,7 @@ from app.core.stores.content.base_content_loader import BaseContentLoader
 from app.core.stores.content.filesystem_content_loader import FileSystemContentLoader
 from app.core.stores.content.minio_content_loader import MinioContentLoader
 from fred_core.store.duckdb_store import DuckDBTableStore
-from fred_core.store.sql_store import SQLTableStore, create_empty_duckdb_store
+from fred_core.store.sql_store import SQLTableStore
 from app.common.structures import (
     Configuration,
     InMemoryVectorStorage,
@@ -172,7 +172,8 @@ class ApplicationContext:
     _kpi_store_instance: Optional[BaseKPIStore] = None
     _opensearch_client: Optional[OpenSearch] = None
     _resource_store_instance: Optional[BaseResourceStore] = None
-    _tabular_store_instance: Optional[Union[DuckDBTableStore, SQLTableStore]] = None
+    _tabular_read_and_write_store_instance: Optional[SQLTableStore] = None
+    _tabular_read_only_store_instance: Optional[SQLTableStore] = None
     _catalog_store_instance: Optional[BaseCatalogStore] = None
     _file_store_instance: Optional[BaseFileStore] = None
     _kpi_writer: Optional[KPIWriter] = None
@@ -586,31 +587,41 @@ class ApplicationContext:
         else:
             raise ValueError(f"Unsupported tag storage backend: {store_config.type}")
         return self._resource_store_instance
+    
+    def get_read_write_store(self):
+        if hasattr(self, "_tabular_read_and_write_store_instance") and self._tabular_read_and_write_store_instance is not None:
+            return self._tabular_read_and_write_store_instance
 
-    def get_tabular_store(self):
-        if hasattr(self, "_tabular_store_instance") and self._tabular_store_instance is not None:
-            return self._tabular_store_instance
-
-        store_config = get_configuration().storage.tabular_store
-
-        if store_config is None:
-            logger.warning("No tabular store configured")
-            self._tabular_store_instance = create_empty_duckdb_store()
-
+        store_config = get_configuration().storage.tabular_stores.get("read_write")
+        if store_config:
+            try:
+                self._tabular_read_and_write_store_instance = SQLTableStore(driver=store_config.driver, path=Path(store_config.path).expanduser())
+                logger.info(f"Connected to read and write tabular store with dirver: {store_config.driver} and path: {store_config.path}")
+            except Exception as e:
+                logger.error(f"Failed to create/connect base duckdb store: {e}")
+                raise
         else:
-            if store_config.type == "duckdb":
-                db_path = Path(store_config.duckdb_path).expanduser()
-                self._tabular_store_instance = DuckDBTableStore(db_path, prefix="tabular_")
+            raise ValueError("No tabular store configuration found")
 
-            elif store_config.type == "sql":
-                if store_config.path:
-                    path = Path(store_config.path)
-                    self._tabular_store_instance = SQLTableStore(driver=store_config.driver, path=path)
+        return self._tabular_read_and_write_store_instance
+    
+    def get_read_only_store(self):
+        if hasattr(self, "_tabular_read_only_store_instance") and self._tabular_read_only_store_instance is not None:
+            return self._tabular_read_only_store_instance
 
-            else:
-                raise ValueError("Unsupported tabular storage backend")
+        store_config = get_configuration().storage.tabular_stores.read_only
+        if store_config:
+            try:
+                self._tabular_read_only_store_instance = SQLTableStore(driver=store_config.driver, path=Path(store_config.path).expanduser())
+                logger.info(f"Connected to read only tabular store with dirver: {store_config.driver} and path: {store_config.path}")
+            except Exception as e:
+                logger.error(f"Failed to create/connect base duckdb store: {e}")
+                raise
+        else:
+            raise ValueError("No tabular store configuration found")
 
-        return self._tabular_store_instance
+        return self._tabular_read_only_store_instance
+    
 
     def get_catalog_store(self) -> BaseCatalogStore:
         """

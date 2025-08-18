@@ -18,6 +18,7 @@ from datetime import datetime
 from typing import List
 
 from app.application_context import ApplicationContext
+from fred_core.store.sql_store import SQLTableStore
 from app.features.tabular.structures import (
     TabularColumnSchema,
     TabularDatasetMetadata,
@@ -27,12 +28,15 @@ from app.features.tabular.structures import (
 )
 from app.features.tabular.utils import extract_safe_sql_query
 
+
 logger = logging.getLogger(__name__)
 
 
 class TabularService:
-    def __init__(self):
-        self.tabular_store = ApplicationContext.get_instance().get_tabular_store()
+    def __init__(self, tabular_store: SQLTableStore):
+        if tabular_store is None:
+            raise ValueError("tabular_store must be provided")
+        self.tabular_store = tabular_store
 
     def _sanitize_table_name(self, name: str) -> str:
         return name.replace("-", "_")
@@ -111,7 +115,7 @@ class TabularService:
 
         return responses
 
-    def query(self, document_name: str, request: RawSQLRequest) -> TabularQueryResponse:
+    def safe_query(self, document_name: str, request: RawSQLRequest) -> TabularQueryResponse:
         sql = request.query
 
         if not isinstance(sql, str):
@@ -130,7 +134,28 @@ class TabularService:
         if not has_limit:
             sql = sql.rstrip(";") + " LIMIT 20"
 
-        logger.info(f"🧠 Final SQL executed: {sql}")
+        logger.info(f"Final SQL executed: {sql}")
+
+        try:
+            if self.tabular_store is None:
+                raise RuntimeError("tabular_store is not initialized")
+            df = self.tabular_store.execute_sql_query(sql)
+            rows = df.to_dict(orient="records")
+            return TabularQueryResponse(sql_query=sql, rows=rows, error=None)
+        except Exception as e:
+            logger.error(f"Error during query execution: {e}", exc_info=True)
+            return TabularQueryResponse(sql_query=sql, rows=[], error=str(e))
+        
+    def query(self, document_name: str, request: RawSQLRequest) -> TabularQueryResponse:
+        sql = request.query
+
+        if not isinstance(sql, str):
+            raise TypeError("Expected request.query to be a string")
+
+        if not sql.strip():
+            raise ValueError("Empty SQL string provided")
+
+        logger.info(f"Final SQL executed: {sql}")
 
         try:
             if self.tabular_store is None:

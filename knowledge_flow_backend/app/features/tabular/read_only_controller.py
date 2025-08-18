@@ -6,11 +6,12 @@ from fastapi import APIRouter, HTTPException
 from app.features.tabular.service import TabularService
 from app.features.tabular.structures import RawSQLRequest, TabularQueryResponse, TabularSchemaResponse
 from app.features.tabular.utils import extract_safe_sql_query
+from app.application_context import ApplicationContext
 
 logger = logging.getLogger(__name__)
 
 
-class TabularController:
+class ReadOnlyTabularController:
     """
     Lightweight API controller to expose tabular tools to LLM agents:
       - List available tables
@@ -19,11 +20,12 @@ class TabularController:
     """
 
     def __init__(self, router: APIRouter):
-        self.service = TabularService()
+        ctx = ApplicationContext.get_instance()
+        self.service = TabularService(ctx.get_read_only_store())
         self._register_routes(router)
 
     def _register_routes(self, router: APIRouter):
-        @router.get("/tabular/tables", response_model=List[str], tags=["Tabular"], operation_id="list_table_names", summary="List all available table names")
+        @router.get("/tabular_read_only/tables", response_model=List[str], tags=["Tabular"], operation_id="list_table_names", summary="List all available table names")
         async def list_tables():
             logger.info("Listing all available table names")
             try:
@@ -34,7 +36,7 @@ class TabularController:
                 logger.exception("Failed to list table names")
                 raise HTTPException(status_code=500, detail=str(e))
 
-        @router.get("/tabular/schemas", response_model=List[TabularSchemaResponse], tags=["Tabular"], operation_id="get_all_schemas", summary="Get schemas for all available tables")
+        @router.get("/tabular_read_only/schemas", response_model=List[TabularSchemaResponse], tags=["Tabular"], operation_id="get_all_schemas", summary="Get schemas for all available tables")
         async def get_schemas():
             logger.info("Fetching schemas for all datasets")
             try:
@@ -44,7 +46,7 @@ class TabularController:
                 raise HTTPException(status_code=500, detail=str(e))
 
         @router.post(
-            "/tabular/sql",
+            "/tabular_read_only/sql",
             response_model=TabularQueryResponse,
             tags=["Tabular"],
             operation_id="raw_sql_query",

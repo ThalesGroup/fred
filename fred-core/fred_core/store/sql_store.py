@@ -35,10 +35,10 @@ class SQLTableStore:
 
         except OperationalError as oe:
             msg = (
-                f"\n❌ Could not connect to the database.\n"
-                f"🔗 URI: {self.dsn}\n"
-                f"💥 Error: {oe.orig}\n"
-                f"📌 Check that:\n"
+                f"\nCould not connect to the database.\n"
+                f"URI: {self.dsn}\n"
+                f"Error: {oe.orig}\n"
+                f"Check that:\n"
                 f"  - The database server is running\n"
                 f"  - The host/port is correct\n"
                 f"  - Credentials are valid\n"
@@ -49,9 +49,9 @@ class SQLTableStore:
 
         except SQLAlchemyError as e:
             msg = (
-                f"\n❌ Unexpected error while connecting to the database.\n"
-                f"🔗 URI: {self.dsn}\n"
-                f"💥 Error: {str(e)}"
+                f"\nUnexpected error while connecting to the database.\n"
+                f"URI: {self.dsn}\n"
+                f"Error: {str(e)}"
             )
             logger.error(msg)
             raise RuntimeError(msg) from e
@@ -155,14 +155,3 @@ class SQLTableStore:
             )
 
         return pd.read_sql(text(sql), self.engine)
-
-
-def create_empty_duckdb_store() -> SQLTableStore:
-    db_path = (Path(tempfile.gettempdir()) / "empty_fallback.duckdb").resolve()
-    db_path.parent.mkdir(parents=True, exist_ok=True)
-    if db_path.exists():
-        logger.info(f"Creating new DuckDB file at {db_path}")
-        duckdb.connect(db_path).close()
-
-    logger.warning(f"Using an empty fallback DuckDB SQLTableStore with path: {db_path}")
-    return SQLTableStore(driver="duckdb", path=db_path)
