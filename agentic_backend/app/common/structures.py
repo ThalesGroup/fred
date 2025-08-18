@@ -81,7 +81,7 @@ class RecursionConfig(BaseModel):
 
 class AgentSettings(BaseModel):
     type: Literal["mcp", "custom", "leader"] = "custom"
-    name: str
+    name: str  # a unique name
     class_path: Optional[str] = None
     enabled: bool = True
     categories: List[str] = Field(default_factory=list)
@@ -90,14 +90,18 @@ class AgentSettings(BaseModel):
     tag: Optional[str] = None
     mcp_servers: Optional[List[MCPServerConfiguration]] = Field(default_factory=list)
     max_steps: Optional[int] = 10
-    description: Optional[str] = None
+    description: str
     base_prompt: Optional[str] = None
-    nickname: Optional[str] = None
-    role: Optional[str] = None
+    nickname: Optional[str] = None  # only used for UIs defaulting to name
+    role: str
     icon: Optional[str] = None
 
 
 class AIConfig(BaseModel):
+    knowledge_flow_url: str = Field(
+        ...,
+        description="URL of the Knowledge Flow backend.",
+    )
     timeout: TimeoutSettings = Field(
         ..., description="Timeout settings for the AI client."
     )

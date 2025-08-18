@@ -67,6 +67,10 @@ def get_session_store() -> BaseSessionStore:
     return get_app_context().get_session_store()
 
 
+def get_knowledge_flow_base_url() -> str:
+    return get_app_context().get_knowledge_flow_base_url()
+
+
 def get_history_store() -> BaseHistoryStore:
     return get_app_context().get_history_store()
 
@@ -224,6 +228,12 @@ class ApplicationContext:
         """
         merged_model = self._merge_with_default_model(agent_settings.model)
         return agent_settings.model_copy(update={"model": merged_model})
+
+    def get_knowledge_flow_base_url(self) -> str:
+        """
+        Retrieves the base URL for the knowledge flow service.
+        """
+        return self.configuration.ai.knowledge_flow_url
 
     # --- AI Models ---
 

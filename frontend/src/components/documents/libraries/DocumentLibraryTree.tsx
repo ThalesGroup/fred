@@ -48,7 +48,7 @@ export function DocumentLibraryTree({
       const isSelected = selectedFolder === c.full;
       // Documents belonging directly to this folder (i.e., matching this folder's own tag id)
       const docsInFolder = documents.filter((doc) =>
-        doc.tags?.some((tagId) => c.tagsHere?.some((t) => t.id === tagId)),
+        doc.tags.tag_ids?.some((tagId) => c.tagsHere?.some((t) => t.id === tagId)),
       );
 
       return (
@@ -87,8 +87,8 @@ export function DocumentLibraryTree({
           {/* Documents inside this folder */}
           {docsInFolder.map((doc) => (
             <TreeItem
-              key={doc.document_uid}
-              itemId={doc.document_uid}
+              key={doc.identity.document_uid}
+              itemId={doc.identity.document_uid}
               label={
                 <Box
                   sx={{
@@ -108,9 +108,10 @@ export function DocumentLibraryTree({
                   <DocumentRowCompact
                     doc={doc}
                     onPreview={(d) => onPreview(d)}
-                    onRemoveFromLibrary={() => {
+                    onRemoveFromLibrary={(d) => {
+                      console.log("Remove from library:", d);
                       const tag = c.tagsHere?.[0];
-                      if (tag) onRemoveFromLibrary(doc, tag);
+                      if (tag) onRemoveFromLibrary(d, tag);
                     }}
                     onToggleRetrievable={(d) => onToggleRetrievable(d)}
                   />

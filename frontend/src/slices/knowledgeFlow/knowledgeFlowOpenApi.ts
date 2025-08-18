@@ -166,33 +166,51 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/knowledge-flow/v1/tags/${queryArg.tagId}`, method: "DELETE" }),
     }),
-    searchPromptsKnowledgeFlowV1PromptsSearchPost: build.mutation<
-      SearchPromptsKnowledgeFlowV1PromptsSearchPostApiResponse,
-      SearchPromptsKnowledgeFlowV1PromptsSearchPostApiArg
-    >({
-      query: (queryArg) => ({ url: `/knowledge-flow/v1/prompts/search`, method: "POST", body: queryArg.filters }),
-    }),
-    getPromptKnowledgeFlowV1PromptsPromptIdGet: build.query<
-      GetPromptKnowledgeFlowV1PromptsPromptIdGetApiResponse,
-      GetPromptKnowledgeFlowV1PromptsPromptIdGetApiArg
-    >({
-      query: (queryArg) => ({ url: `/knowledge-flow/v1/prompts/${queryArg.promptId}` }),
-    }),
-    updatePromptKnowledgeFlowV1PromptsPromptIdPut: build.mutation<
-      UpdatePromptKnowledgeFlowV1PromptsPromptIdPutApiResponse,
-      UpdatePromptKnowledgeFlowV1PromptsPromptIdPutApiArg
+    createResourceKnowledgeFlowV1ResourcesPost: build.mutation<
+      CreateResourceKnowledgeFlowV1ResourcesPostApiResponse,
+      CreateResourceKnowledgeFlowV1ResourcesPostApiArg
     >({
       query: (queryArg) => ({
-        url: `/knowledge-flow/v1/prompts/${queryArg.promptId}`,
-        method: "PUT",
-        body: queryArg.prompt,
+        url: `/knowledge-flow/v1/resources`,
+        method: "POST",
+        body: queryArg.resourceCreate,
+        params: {
+          library_tag_id: queryArg.libraryTagId,
+        },
       }),
     }),
-    createPromptKnowledgeFlowV1PromptsPost: build.mutation<
-      CreatePromptKnowledgeFlowV1PromptsPostApiResponse,
-      CreatePromptKnowledgeFlowV1PromptsPostApiArg
+    listResourcesByKindKnowledgeFlowV1ResourcesGet: build.query<
+      ListResourcesByKindKnowledgeFlowV1ResourcesGetApiResponse,
+      ListResourcesByKindKnowledgeFlowV1ResourcesGetApiArg
     >({
-      query: (queryArg) => ({ url: `/knowledge-flow/v1/prompts`, method: "POST", body: queryArg.prompt }),
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/resources`,
+        params: {
+          kind: queryArg.kind,
+        },
+      }),
+    }),
+    updateResourceKnowledgeFlowV1ResourcesResourceIdPut: build.mutation<
+      UpdateResourceKnowledgeFlowV1ResourcesResourceIdPutApiResponse,
+      UpdateResourceKnowledgeFlowV1ResourcesResourceIdPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/resources/${queryArg.resourceId}`,
+        method: "PUT",
+        body: queryArg.resourceUpdate,
+      }),
+    }),
+    getResourceKnowledgeFlowV1ResourcesResourceIdGet: build.query<
+      GetResourceKnowledgeFlowV1ResourcesResourceIdGetApiResponse,
+      GetResourceKnowledgeFlowV1ResourcesResourceIdGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/resources/${queryArg.resourceId}` }),
+    }),
+    deleteResourceKnowledgeFlowV1ResourcesResourceIdDelete: build.mutation<
+      DeleteResourceKnowledgeFlowV1ResourcesResourceIdDeleteApiResponse,
+      DeleteResourceKnowledgeFlowV1ResourcesResourceIdDeleteApiArg
+    >({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/resources/${queryArg.resourceId}`, method: "DELETE" }),
     }),
     searchDocumentsUsingVectorization: build.mutation<
       SearchDocumentsUsingVectorizationApiResponse,
@@ -337,26 +355,35 @@ export type DeleteTagKnowledgeFlowV1TagsTagIdDeleteApiResponse = unknown;
 export type DeleteTagKnowledgeFlowV1TagsTagIdDeleteApiArg = {
   tagId: string;
 };
-export type SearchPromptsKnowledgeFlowV1PromptsSearchPostApiResponse = /** status 200 Successful Response */ Prompt[];
-export type SearchPromptsKnowledgeFlowV1PromptsSearchPostApiArg = {
-  filters: {
-    [key: string]: any;
-  };
+export type CreateResourceKnowledgeFlowV1ResourcesPostApiResponse = /** status 201 Successful Response */ Resource;
+export type CreateResourceKnowledgeFlowV1ResourcesPostApiArg = {
+  /** Library tag id to attach this resource to */
+  libraryTagId: string;
+  resourceCreate: ResourceCreate;
 };
-export type GetPromptKnowledgeFlowV1PromptsPromptIdGetApiResponse = /** status 200 Successful Response */ Prompt;
-export type GetPromptKnowledgeFlowV1PromptsPromptIdGetApiArg = {
-  promptId: string;
+export type ListResourcesByKindKnowledgeFlowV1ResourcesGetApiResponse =
+  /** status 200 Successful Response */ Resource[];
+export type ListResourcesByKindKnowledgeFlowV1ResourcesGetApiArg = {
+  /** prompt | template */
+  kind: ResourceKind;
 };
-export type UpdatePromptKnowledgeFlowV1PromptsPromptIdPutApiResponse = /** status 200 Successful Response */ Prompt;
-export type UpdatePromptKnowledgeFlowV1PromptsPromptIdPutApiArg = {
-  promptId: string;
-  prompt: Prompt;
+export type UpdateResourceKnowledgeFlowV1ResourcesResourceIdPutApiResponse =
+  /** status 200 Successful Response */ Resource;
+export type UpdateResourceKnowledgeFlowV1ResourcesResourceIdPutApiArg = {
+  resourceId: string;
+  resourceUpdate: ResourceUpdate;
 };
-export type CreatePromptKnowledgeFlowV1PromptsPostApiResponse = /** status 200 Successful Response */ TagWithItemsId;
-export type CreatePromptKnowledgeFlowV1PromptsPostApiArg = {
-  prompt: Prompt;
+export type GetResourceKnowledgeFlowV1ResourcesResourceIdGetApiResponse =
+  /** status 200 Successful Response */ Resource;
+export type GetResourceKnowledgeFlowV1ResourcesResourceIdGetApiArg = {
+  resourceId: string;
 };
-export type SearchDocumentsUsingVectorizationApiResponse = /** status 200 Successful Response */ DocumentSource[];
+export type DeleteResourceKnowledgeFlowV1ResourcesResourceIdDeleteApiResponse =
+  /** status 200 Successful Response */ any;
+export type DeleteResourceKnowledgeFlowV1ResourcesResourceIdDeleteApiArg = {
+  resourceId: string;
+};
+export type SearchDocumentsUsingVectorizationApiResponse = /** status 200 Successful Response */ VectorSearchHit[];
 export type SearchDocumentsUsingVectorizationApiArg = {
   searchRequest: SearchRequest;
 };
@@ -369,33 +396,74 @@ export type ScheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPostApiResponse =
 export type ScheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPostApiArg = {
   processDocumentsRequest: ProcessDocumentsRequest;
 };
-export type SourceType = "push" | "pull";
-export type DocumentMetadata = {
+export type Identity = {
+  /** Original file name incl. extension */
   document_name: string;
+  /** Stable unique id across the system */
   document_uid: string;
-  /** When the document was added to the system */
-  date_added_to_kb?: string;
-  /** True if the system can download or access the original file again */
-  retrievable?: boolean;
-  /** Tag identifying the pull source (e.g., 'local-docs', 'contracts-git') */
-  source_tag?: string | null;
-  /** Path or URI to the original pull file */
-  pull_location?: string | null;
-  source_type: SourceType;
-  /** User-assigned tags */
-  tags?: string[] | null;
+  /** Human-friendly title for UI */
   title?: string | null;
   author?: string | null;
   created?: string | null;
   modified?: string | null;
   last_modified_by?: string | null;
-  category?: string | null;
-  subject?: string | null;
-  keywords?: string | null;
-  /** Status of each well-defined processing stage */
-  processing_stages?: {
-    [key: string]: "not_started" | "in_progress" | "done" | "failed";
+};
+export type SourceType = "push" | "pull";
+export type SourceInfo = {
+  source_type: SourceType;
+  /** Repository/connector id, e.g. 'uploads', 'github' */
+  source_tag?: string | null;
+  /** Path or URI to the original pull file */
+  pull_location?: string | null;
+  /** True if raw file can be re-fetched */
+  retrievable?: boolean;
+  /** When the document was added to the system */
+  date_added_to_kb?: string;
+};
+export type FileType = "pdf" | "docx" | "pptx" | "xlsx" | "csv" | "md" | "html" | "txt" | "other";
+export type FileInfo = {
+  file_type?: FileType;
+  mime_type?: string | null;
+  file_size_bytes?: number | null;
+  page_count?: number | null;
+  row_count?: number | null;
+  sha256?: string | null;
+  md5?: string | null;
+  language?: string | null;
+};
+export type Tagging = {
+  /** Stable tag IDs (UUIDs) */
+  tag_ids?: string[];
+  /** Display names for chips */
+  tag_names?: string[];
+};
+export type AccessInfo = {
+  license?: string | null;
+  confidential?: boolean;
+  acl?: string[];
+};
+export type ProcessingStatus = "not_started" | "in_progress" | "done" | "failed";
+export type Processing = {
+  stages?: {
+    [key: string]: ProcessingStatus;
   };
+  errors?: {
+    [key: string]: string;
+  };
+};
+export type DocumentMetadata = {
+  identity: Identity;
+  source: SourceInfo;
+  file?: FileInfo;
+  tags?: Tagging;
+  access?: AccessInfo;
+  processing?: Processing;
+  preview_url?: string | null;
+  viewer_url?: string | null;
+  /** Processor-specific additional attributes (namespaced keys). */
+  extensions?: {
+    [key: string]: any;
+  } | null;
 };
 export type ValidationError = {
   loc: (string | number)[];
@@ -469,7 +537,7 @@ export type TabularQueryResponse = {
 export type RawSqlRequest = {
   query: string;
 };
-export type TagType = "document" | "prompt";
+export type TagType = "document" | "prompt" | "template";
 export type TagWithItemsId = {
   id: string;
   created_at: string;
@@ -495,40 +563,65 @@ export type TagUpdate = {
   type: TagType;
   item_ids?: string[];
 };
-export type Prompt = {
+export type ResourceKind = "prompt" | "template";
+export type Resource = {
   id: string;
-  name: string;
-  content: string;
+  kind: ResourceKind;
+  version: string;
+  name?: string | null;
   description?: string | null;
-  tags: string[];
-  owner_id: string;
+  labels?: string[] | null;
+  author: string;
   created_at: string;
   updated_at: string;
-};
-export type DocumentSource = {
+  /** Raw YAML text or other content */
   content: string;
-  file_path: string;
-  file_name: string;
-  page: number | null;
+  /** List of tags associated with the resource */
+  library_tags: string[];
+};
+export type ResourceCreate = {
+  kind: ResourceKind;
+  content: string;
+  name?: string | null;
+  description?: string | null;
+  labels?: string[] | null;
+};
+export type ResourceUpdate = {
+  content?: string | null;
+  name?: string | null;
+  description?: string | null;
+  labels?: string[] | null;
+};
+export type VectorSearchHit = {
+  content: string;
+  page?: number | null;
+  section?: string | null;
+  viewer_fragment?: string | null;
+  /** Document UID */
   uid: string;
-  modified?: string | null;
   title: string;
-  author: string;
-  created: string;
-  type: string;
-  /** Similarity score returned by the vector store (e.g., cosine distance). */
+  author?: string | null;
+  created?: string | null;
+  modified?: string | null;
+  file_name?: string | null;
+  file_path?: string | null;
+  repository?: string | null;
+  pull_location?: string | null;
+  language?: string | null;
+  mime_type?: string | null;
+  /** File type/category */
+  type?: string | null;
+  tag_ids?: string[];
+  tag_names?: string[];
+  license?: string | null;
+  confidential?: boolean | null;
+  /** Similarity score from vector search */
   score: number;
-  /** Rank of the document among the retrieved results. */
   rank?: number | null;
-  /** Identifier of the embedding model used. */
   embedding_model?: string | null;
-  /** Name of the vector index used for retrieval. */
   vector_index?: string | null;
-  /** Approximate token count of the content. */
   token_count?: number | null;
-  /** Timestamp when the document was retrieved. */
   retrieved_at?: string | null;
-  /** Session or trace ID for auditability. */
   retrieval_session_id?: string | null;
 };
 export type SearchRequest = {
@@ -584,11 +677,13 @@ export const {
   useLazyGetTagKnowledgeFlowV1TagsTagIdGetQuery,
   useUpdateTagKnowledgeFlowV1TagsTagIdPutMutation,
   useDeleteTagKnowledgeFlowV1TagsTagIdDeleteMutation,
-  useSearchPromptsKnowledgeFlowV1PromptsSearchPostMutation,
-  useGetPromptKnowledgeFlowV1PromptsPromptIdGetQuery,
-  useLazyGetPromptKnowledgeFlowV1PromptsPromptIdGetQuery,
-  useUpdatePromptKnowledgeFlowV1PromptsPromptIdPutMutation,
-  useCreatePromptKnowledgeFlowV1PromptsPostMutation,
+  useCreateResourceKnowledgeFlowV1ResourcesPostMutation,
+  useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery,
+  useLazyListResourcesByKindKnowledgeFlowV1ResourcesGetQuery,
+  useUpdateResourceKnowledgeFlowV1ResourcesResourceIdPutMutation,
+  useGetResourceKnowledgeFlowV1ResourcesResourceIdGetQuery,
+  useLazyGetResourceKnowledgeFlowV1ResourcesResourceIdGetQuery,
+  useDeleteResourceKnowledgeFlowV1ResourcesResourceIdDeleteMutation,
   useSearchDocumentsUsingVectorizationMutation,
   useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation,
   useScheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPostMutation,

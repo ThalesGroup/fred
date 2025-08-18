@@ -49,10 +49,10 @@ export const useDocumentActions = (onRefreshData?: () => void) => {
 
   // const handleDelete = async (file: DocumentMetadata) => {
   //   try {
-  //     await deleteDocument(file.document_uid).unwrap();
+  //     await deleteDocument(file.identity.document_uid).unwrap();
   //     showInfo({
   //       summary: "Delete Success",
-  //       detail: `${file.document_name} deleted`,
+  //       detail: `${file.identity.document_name} deleted`,
   //       duration: 3000,
   //     });
   //     onRefreshData?.();
@@ -71,10 +71,10 @@ export const useDocumentActions = (onRefreshData?: () => void) => {
 
   //   for (const file of files) {
   //     try {
-  //       await deleteDocument(file.document_uid).unwrap();
+  //       await deleteDocument(file.identity.document_uid).unwrap();
   //       successCount++;
   //     } catch (error) {
-  //       failedFiles.push(file.document_name);
+  //       failedFiles.push(file.identity.document_name);
   //     }
   //   }
 
@@ -98,9 +98,9 @@ export const useDocumentActions = (onRefreshData?: () => void) => {
 
   const handleDownload = async (file: DocumentMetadata) => {
     try {
-      const { data: blob } = await triggerDownload({ document_uid: file.document_uid });
+      const { data: blob } = await triggerDownload({ document_uid: file.identity.document_uid });
       if (blob) {
-        downloadFile(blob, file.document_name || "document");
+        downloadFile(blob, file.identity.document_name || "document");
       }
     } catch (err) {
       showError({
@@ -118,8 +118,8 @@ export const useDocumentActions = (onRefreshData?: () => void) => {
 
   const handleDocumentPreview = async (file: DocumentMetadata) => {
     openDocument({
-      document_uid: file.document_uid,
-      file_name: file.document_name,
+      document_uid: file.identity.document_uid,
+      file_name: file.identity.document_name,
     });
   };
 
@@ -127,13 +127,13 @@ export const useDocumentActions = (onRefreshData?: () => void) => {
     try {
       const payload: ProcessDocumentsRequest = {
         files: files.map((f) => {
-          const isPull = f.source_type === "pull";
+          const isPull = f.source.source_type === "pull";
           return {
-            source_tag: f.source_tag,
-            document_uid: isPull ? undefined : f.document_uid,
-            external_path: isPull ? (f.pull_location ?? undefined) : undefined,
-            tags: f.tags || [],
-            display_name: f.document_name,
+            source_tag: f.source.source_tag,
+            document_uid: isPull ? undefined : f.identity.document_uid,
+            external_path: isPull ? (f.source.pull_location ?? undefined) : undefined,
+            tags: f.tags.tag_ids || [],
+            display_name: f.identity.document_name,
           };
         }),
         pipeline_name: "manual_ui_async",
@@ -156,13 +156,13 @@ export const useDocumentActions = (onRefreshData?: () => void) => {
     try {
       const payload: ProcessDocumentsRequest = {
         files: files.map((f) => {
-          const isPull = f.source_type === "pull";
+          const isPull = f.source.source_type === "pull";
           return {
-            source_tag: f.source_tag,
-            document_uid: isPull ? undefined : f.document_uid,
-            external_path: isPull ? (f.pull_location ?? undefined) : undefined,
-            tags: f.tags || [],
-            display_name: f.document_name,
+            source_tag: f.source.source_tag,
+            document_uid: isPull ? undefined : f.identity.document_uid,
+            external_path: isPull ? (f.source.pull_location ?? undefined) : undefined,
+            tags: f.tags.tag_ids || [],
+            display_name: f.identity.document_name,
           };
         }),
         pipeline_name: "manual_ui_async",

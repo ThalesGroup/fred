@@ -186,24 +186,6 @@
                 }
             }
         ],
-        "./app/common/document_structures.py": [
-            {
-                "code": "reportArgumentType",
-                "range": {
-                    "startColumn": 8,
-                    "endColumn": 37,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportArgumentType",
-                "range": {
-                    "startColumn": 8,
-                    "endColumn": 37,
-                    "lineCount": 1
-                }
-            }
-        ],
         "./app/common/utils.py": [
             {
                 "code": "reportAttributeAccessIssue",
@@ -218,16 +200,6 @@
                 "range": {
                     "startColumn": 38,
                     "endColumn": 47,
-                    "lineCount": 1
-                }
-            }
-        ],
-        "./app/core/processors/input/common/base_input_processor.py": [
-            {
-                "code": "reportReturnType",
-                "range": {
-                    "startColumn": 54,
-                    "endColumn": 58,
                     "lineCount": 1
                 }
             }
@@ -248,16 +220,6 @@
                 "range": {
                     "startColumn": 24,
                     "endColumn": 49,
-                    "lineCount": 1
-                }
-            }
-        ],
-        "./app/core/processors/input/docx_markdown_processor/docx_markdown_processor.py": [
-            {
-                "code": "reportArgumentType",
-                "range": {
-                    "startColumn": 27,
-                    "endColumn": 36,
                     "lineCount": 1
                 }
             }
@@ -286,78 +248,6 @@
                 "range": {
                     "startColumn": 35,
                     "endColumn": 47,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportCallIssue",
-                "range": {
-                    "startColumn": 16,
-                    "endColumn": 17,
-                    "lineCount": 8
-                }
-            },
-            {
-                "code": "reportArgumentType",
-                "range": {
-                    "startColumn": 20,
-                    "endColumn": 21,
-                    "lineCount": 6
-                }
-            },
-            {
-                "code": "reportAttributeAccessIssue",
-                "range": {
-                    "startColumn": 38,
-                    "endColumn": 43,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportAttributeAccessIssue",
-                "range": {
-                    "startColumn": 60,
-                    "endColumn": 65,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportAttributeAccessIssue",
-                "range": {
-                    "startColumn": 39,
-                    "endColumn": 45,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportAttributeAccessIssue",
-                "range": {
-                    "startColumn": 62,
-                    "endColumn": 68,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportAttributeAccessIssue",
-                "range": {
-                    "startColumn": 40,
-                    "endColumn": 47,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportAttributeAccessIssue",
-                "range": {
-                    "startColumn": 64,
-                    "endColumn": 71,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportIncompatibleMethodOverride",
-                "range": {
-                    "startColumn": 8,
-                    "endColumn": 32,
                     "lineCount": 1
                 }
             },
@@ -428,16 +318,6 @@
                 "range": {
                     "startColumn": 19,
                     "endColumn": 65,
-                    "lineCount": 1
-                }
-            }
-        ],
-        "./app/core/stores/vector/base_vector_store.py": [
-            {
-                "code": "reportIncompatibleMethodOverride",
-                "range": {
-                    "startColumn": 8,
-                    "endColumn": 23,
                     "lineCount": 1
                 }
             }

@@ -1,0 +1,20 @@
+id: cir-summary
+version: v1
+kind: template
+name: "CIR – Synthèse"
+description: "Résumé du Crédit d'Impôt Recherche pour une période fiscale."
+format: markdown
+tags: [CIR, finance, reports, family:reports]   # <- if you still want “family”-like grouping, use a tag
+input_schema:
+  type: object
+  required: [company_name, fiscal_year, rd_expenses_eur, eligible_rate]
+  properties:
+    company_name: { type: string, title: Company Name }
+    fiscal_year:  { type: string,  title: Fiscal Year (YYYY) }
+    rd_expenses_eur: { type: number, title: R&D Expenses (EUR) }
+    eligible_rate:   { type: number, title: Eligible Rate (0..1) }
+    notes:           { type: string, title: Notes (optional) }
+---
+# Crédit d'Impôt Recherche – Synthèse
+**Entreprise :** {company_name}
+...

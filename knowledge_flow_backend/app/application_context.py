@@ -31,6 +31,7 @@ from app.common.structures import (
     Configuration,
     InMemoryVectorStorage,
     FileSystemPullSource,
+    LocalContentStorageConfig,
     MinioPullSource,
     MinioStorageConfig,
     WeaviateVectorStorage,
@@ -45,6 +46,9 @@ from app.core.stores.content.filesystem_content_store import FileSystemContentSt
 from app.core.stores.content.minio_content_store import MinioStorageBackend
 from app.core.stores.catalog.base_catalog_store import BaseCatalogStore
 from app.core.stores.catalog.duckdb_catalog_store import DuckdbCatalogStore
+from app.core.stores.files.base_file_store import BaseFileStore
+from app.core.stores.files.local_file_store import LocalFileStore
+from app.core.stores.files.minio_file_store import MinioFileStore
 from app.core.stores.metadata.duckdb_metadata_store import DuckdbMetadataStore
 from langchain_openai import OpenAIEmbeddings, AzureOpenAIEmbeddings
 from langchain_ollama import OllamaEmbeddings
@@ -55,9 +59,9 @@ from app.core.processors.output.vectorization_processor.azure_apim_embedder impo
 from app.core.processors.output.vectorization_processor.embedder import Embedder
 from app.core.stores.metadata.base_metadata_store import BaseMetadataStore
 from app.core.stores.metadata.opensearch_metadata_store import OpenSearchMetadataStore
-from app.core.stores.prompts.base_prompt_store import BasePromptStore
-from app.core.stores.prompts.duckdb_prompt_store import DuckdbPromptStore
-from app.core.stores.prompts.opensearch_prompt_store import OpenSearchPromptStore
+from app.core.stores.resources.base_resource_store import BaseResourceStore
+from app.core.stores.resources.duckdb_resource_store import DuckdbResourceStore
+from app.core.stores.resources.opensearch_resource_store import OpenSearchResourceStore
 from app.core.stores.tags.base_tag_store import BaseTagStore
 from app.core.stores.tags.duckdb_tag_store import DuckdbTagStore
 from app.core.stores.tags.opensearch_tags_store import OpenSearchTagStore
@@ -156,9 +160,10 @@ class ApplicationContext:
     _vector_store_instance: Optional[BaseVectoreStore] = None
     _metadata_store_instance: Optional[BaseMetadataStore] = None
     _tag_store_instance: Optional[BaseTagStore] = None
-    _prompt_store_instance: Optional[BasePromptStore] = None
+    _resource_store_instance: Optional[BaseResourceStore] = None
     _tabular_store_instance: Optional[Union[DuckDBTableStore, SQLTableStore]] = None
     _catalog_store_instance: Optional[BaseCatalogStore] = None
+    _file_store_instance: Optional[BaseFileStore] = None
 
     def __init__(self, configuration: Configuration):
         # Allow reuse if already initialized with same config
@@ -334,11 +339,34 @@ class ApplicationContext:
         backend_type = config.type
 
         if isinstance(config, MinioStorageConfig):
-            return MinioStorageBackend(endpoint=config.endpoint, access_key=config.access_key, secret_key=config.secret_key, bucket_name=config.bucket_name, secure=config.secure)
-        elif backend_type == "local":
-            return FileSystemContentStore(Path(config.root_path).expanduser())
+            bucket = f"{config.bucket_name}-documents"
+            return MinioStorageBackend(endpoint=config.endpoint, access_key=config.access_key, secret_key=config.secret_key, bucket_name=bucket, secure=config.secure)
+        elif isinstance(config, LocalContentStorageConfig):
+            root = Path(config.root_path).expanduser() / "documents"
+            return FileSystemContentStore(Path(root).expanduser())
         else:
             raise ValueError(f"Unsupported storage backend: {backend_type}")
+
+    def get_file_store(self) -> BaseFileStore:
+        """
+        Return a simple file store.
+        Returns:
+            BaseContentStore: An instance of the storage backend.
+        """
+        # Get the singleton application context and configuration
+        if self._file_store_instance:
+            return self._file_store_instance
+
+        config = ApplicationContext.get_instance().get_config().content_storage
+        backend_type = config.type
+
+        if isinstance(config, MinioStorageConfig):
+            self._file_store_instance = MinioFileStore(endpoint=config.endpoint, access_key=config.access_key, secret_key=config.secret_key, bucket_name=config.bucket_name, secure=config.secure)
+        elif isinstance(config, LocalContentStorageConfig):
+            self._file_store_instance = LocalFileStore(Path(config.root_path).expanduser())
+        else:
+            raise ValueError(f"Unsupported file backend: {backend_type}")
+        return self._file_store_instance
 
     def get_embedder(self) -> BaseEmbeddingModel:
         """
@@ -391,27 +419,17 @@ class ApplicationContext:
         else:
             raise ValueError(f"Unsupported embedding backend: {backend_type}")
 
-    def get_vector_store(self, embedding_model: BaseEmbeddingModel) -> BaseVectoreStore:
+    def get_vector_store(self) -> BaseVectoreStore:
         """
         Vector Store Factory
-        ---------------
+        """
+        if self._vector_store_instance is not None:
+            return self._vector_store_instance
+        raise ValueError("Vector store is not initialized. Use get_create_vector_store() instead.")
 
-        This method creates a vector store instance based on the configuration.
-
-        Usage:
-
-            # In your main service (example)
-            embedder = application_context.get_embedder()
-
-            # Used in your business logic
-            embedded_chunks = embedder.embed_documents(documents)
-
-            # When building a vector store
-            vector_store = application_context.get_vector_store(embedder)
-
-            # Now you can add embeddings into the vector store
-            vector_store.add_embeddings(embedded_chunks)
-
+    def get_create_vector_store(self, embedding_model: BaseEmbeddingModel) -> BaseVectoreStore:
+        """
+        Vector Store Factory
         """
         if self._vector_store_instance is not None:
             return self._vector_store_instance
@@ -494,20 +512,20 @@ class ApplicationContext:
             raise ValueError("Unsupported sessions storage backend")
         return self._tag_store_instance
 
-    def get_prompt_store(self) -> BasePromptStore:
-        if self._prompt_store_instance is not None:
-            return self._prompt_store_instance
+    def get_resource_store(self) -> BaseResourceStore:
+        if self._resource_store_instance is not None:
+            return self._resource_store_instance
 
-        store_config = get_configuration().storage.prompt_store
+        store_config = get_configuration().storage.resource_store
         if isinstance(store_config, DuckdbStoreConfig):
             db_path = Path(store_config.duckdb_path).expanduser()
-            self._prompt_store_instance = DuckdbPromptStore(db_path)
+            self._resource_store_instance = DuckdbResourceStore(db_path)
         elif isinstance(store_config, OpenSearchIndexConfig):
             opensearch_config = get_configuration().storage.opensearch
             password = opensearch_config.password
             if not password:
                 raise ValueError("Missing OpenSearch credentials: OPENSEARCH_PASSWORD")
-            self._prompt_store_instance = OpenSearchPromptStore(
+            self._resource_store_instance = OpenSearchResourceStore(
                 host=opensearch_config.host,
                 username=opensearch_config.username,
                 password=password,
@@ -517,7 +535,7 @@ class ApplicationContext:
             )
         else:
             raise ValueError(f"Unsupported tag storage backend: {store_config.type}")
-        return self._prompt_store_instance
+        return self._resource_store_instance
 
     def get_tabular_store(self):
         if hasattr(self, "_tabular_store_instance") and self._tabular_store_instance is not None:
@@ -679,9 +697,9 @@ class ApplicationContext:
         if isinstance(self.configuration.storage.catalog_store, DuckdbStoreConfig):
             logger.info(f"     ↳ DB Path: {self.configuration.storage.catalog_store.duckdb_path}")
 
-        logger.info(f"  📂 Prompt storage backend: {self.configuration.storage.prompt_store.type}")
-        if isinstance(self.configuration.storage.prompt_store, DuckdbStoreConfig):
-            logger.info(f"     ↳ DB Path: {self.configuration.storage.prompt_store.duckdb_path}")
+        logger.info(f"  📂 Resource storage backend: {self.configuration.storage.resource_store.type}")
+        if isinstance(self.configuration.storage.resource_store, DuckdbStoreConfig):
+            logger.info(f"     ↳ DB Path: {self.configuration.storage.resource_store.duckdb_path}")
 
         logger.info(f"  📂 Tag storage backend: {self.configuration.storage.tag_store.type}")
         if isinstance(self.configuration.storage.tag_store, DuckdbStoreConfig):

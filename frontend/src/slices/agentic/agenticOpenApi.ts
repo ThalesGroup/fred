@@ -47,6 +47,12 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/agentic/v1/agents/${queryArg.name}`, method: "DELETE" }),
     }),
+    echoSchemaAgenticV1SchemasEchoPost: build.mutation<
+      EchoSchemaAgenticV1SchemasEchoPostApiResponse,
+      EchoSchemaAgenticV1SchemasEchoPostApiArg
+    >({
+      query: (queryArg) => ({ url: `/agentic/v1/schemas/echo`, method: "POST", body: queryArg.echoEnvelopeInput }),
+    }),
     getFrontendConfigAgenticV1ConfigFrontendSettingsGet: build.query<
       GetFrontendConfigAgenticV1ConfigFrontendSettingsGetApiResponse,
       GetFrontendConfigAgenticV1ConfigFrontendSettingsGetApiArg
@@ -58,18 +64,6 @@ const injectedRtkApi = api.injectEndpoints({
       GetAgenticFlowsAgenticV1ChatbotAgenticflowsGetApiArg
     >({
       query: () => ({ url: `/agentic/v1/chatbot/agenticflows` }),
-    }),
-    chatbotQueryAgenticV1ChatbotQueryPost: build.mutation<
-      ChatbotQueryAgenticV1ChatbotQueryPostApiResponse,
-      ChatbotQueryAgenticV1ChatbotQueryPostApiArg
-    >({
-      query: (queryArg) => ({ url: `/agentic/v1/chatbot/query`, method: "POST", body: queryArg.chatAskInput }),
-    }),
-    chatbotQueryStreamAgenticV1ChatbotQueryStreamPost: build.mutation<
-      ChatbotQueryStreamAgenticV1ChatbotQueryStreamPostApiResponse,
-      ChatbotQueryStreamAgenticV1ChatbotQueryStreamPostApiArg
-    >({
-      query: (queryArg) => ({ url: `/agentic/v1/chatbot/query/stream`, method: "POST", body: queryArg.chatAskInput }),
     }),
     getSessionsAgenticV1ChatbotSessionsGet: build.query<
       GetSessionsAgenticV1ChatbotSessionsGetApiResponse,
@@ -150,19 +144,15 @@ export type DeleteAgentAgenticV1AgentsNameDeleteApiResponse = /** status 200 Suc
 export type DeleteAgentAgenticV1AgentsNameDeleteApiArg = {
   name: string;
 };
+export type EchoSchemaAgenticV1SchemasEchoPostApiResponse = /** status 200 Successful Response */ EchoEnvelope;
+export type EchoSchemaAgenticV1SchemasEchoPostApiArg = {
+  echoEnvelopeInput: EchoEnvelope2;
+};
 export type GetFrontendConfigAgenticV1ConfigFrontendSettingsGetApiResponse = /** status 200 Successful Response */ any;
 export type GetFrontendConfigAgenticV1ConfigFrontendSettingsGetApiArg = void;
 export type GetAgenticFlowsAgenticV1ChatbotAgenticflowsGetApiResponse =
   /** status 200 Successful Response */ AgenticFlow[];
 export type GetAgenticFlowsAgenticV1ChatbotAgenticflowsGetApiArg = void;
-export type ChatbotQueryAgenticV1ChatbotQueryPostApiResponse = /** status 200 Successful Response */ FinalEvent;
-export type ChatbotQueryAgenticV1ChatbotQueryPostApiArg = {
-  chatAskInput: ChatAskInput;
-};
-export type ChatbotQueryStreamAgenticV1ChatbotQueryStreamPostApiResponse = unknown;
-export type ChatbotQueryStreamAgenticV1ChatbotQueryStreamPostApiArg = {
-  chatAskInput: ChatAskInput;
-};
 export type GetSessionsAgenticV1ChatbotSessionsGetApiResponse =
   /** status 200 Successful Response */ SessionWithFiles[];
 export type GetSessionsAgenticV1ChatbotSessionsGetApiArg = void;
@@ -255,12 +245,297 @@ export type McpAgentRequest = {
   name: string;
   base_prompt: string;
   mcp_servers: McpServerConfiguration[];
-  role?: string | null;
+  role: string;
   nickname?: string | null;
-  description?: string | null;
+  description: string;
   icon?: string | null;
   categories?: string[] | null;
   tag?: string | null;
+};
+export type MessageType = "human" | "ai" | "system" | "tool";
+export type Sender = "user" | "assistant" | "system";
+export type CodeBlock = {
+  type?: "code";
+  language?: string | null;
+  code: string;
+};
+export type ImageUrlBlock = {
+  type?: "image_url";
+  url: string;
+  alt?: string | null;
+};
+export type TextBlock = {
+  type?: "text";
+  text: string;
+};
+export type ToolResultBlock = {
+  type?: "tool_result";
+  name: string;
+  content: string;
+  ok?: boolean | null;
+  latency_ms?: number | null;
+};
+export type ChatTokenUsage = {
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+};
+export type VectorSearchHit = {
+  content: string;
+  page?: number | null;
+  section?: string | null;
+  viewer_fragment?: string | null;
+  /** Document UID */
+  uid: string;
+  title: string;
+  author?: string | null;
+  created?: string | null;
+  modified?: string | null;
+  file_name?: string | null;
+  file_path?: string | null;
+  repository?: string | null;
+  pull_location?: string | null;
+  language?: string | null;
+  mime_type?: string | null;
+  /** File type/category */
+  type?: string | null;
+  tag_ids?: string[];
+  tag_names?: string[];
+  license?: string | null;
+  confidential?: boolean | null;
+  /** Similarity score from vector search */
+  score: number;
+  rank?: number | null;
+  embedding_model?: string | null;
+  vector_index?: string | null;
+  token_count?: number | null;
+  retrieved_at?: string | null;
+  retrieval_session_id?: string | null;
+};
+export type FinishReason = "stop" | "length" | "content_filter" | "tool_calls" | "cancelled" | "other";
+export type ToolCall = {
+  name: string;
+  args?: {
+    [key: string]: any;
+  } | null;
+  result_preview?: string | null;
+  error?: string | null;
+  latency_ms?: number | null;
+};
+export type ChatMessageMetadata = {
+  model?: string | null;
+  token_usage?: ChatTokenUsage | null;
+  sources?: VectorSearchHit[];
+  latency_seconds?: number | null;
+  agent_name?: string | null;
+  finish_reason?: FinishReason | null;
+  fred?: {
+    [key: string]: any;
+  } | null;
+  thought?:
+    | string
+    | {
+        [key: string]: any;
+      }
+    | null;
+  tool_call?: ToolCall | null;
+  extras?: {
+    [key: string]: any;
+  };
+};
+export type MessageSubtype =
+  | "final"
+  | "thought"
+  | "tool_result"
+  | "plan"
+  | "execution"
+  | "observation"
+  | "error"
+  | "injected_context";
+export type ChatMessagePayload = {
+  /** Unique ID for this question/reply exchange */
+  exchange_id: string;
+  user_id: string;
+  type: MessageType;
+  sender: Sender;
+  content: string;
+  blocks?:
+    | (
+        | ({
+            type: "code";
+          } & CodeBlock)
+        | ({
+            type: "image_url";
+          } & ImageUrlBlock)
+        | ({
+            type: "text";
+          } & TextBlock)
+        | ({
+            type: "tool_result";
+          } & ToolResultBlock)
+      )[]
+    | null;
+  timestamp: string;
+  /** Conversation ID */
+  session_id: string;
+  /** Monotonic message index within the session */
+  rank: number;
+  metadata?: ChatMessageMetadata;
+  subtype?: MessageSubtype | null;
+};
+export type RuntimeContext = {
+  selected_document_libraries_ids?: string[] | null;
+  selected_prompt_ids?: string[] | null;
+  selected_template_ids?: string[] | null;
+  [key: string]: any;
+};
+export type ChatAskInput = {
+  user_id: string;
+  session_id?: string | null;
+  message: string;
+  agent_name: string;
+  runtime_context?: RuntimeContext | null;
+  client_exchange_id?: string | null;
+};
+export type StreamEvent = {
+  type?: "stream";
+  message: ChatMessagePayload;
+};
+export type SessionSchema = {
+  id: string;
+  user_id: string;
+  title: string;
+  updated_at: string;
+};
+export type FinalEvent = {
+  type?: "final";
+  messages: ChatMessagePayload[];
+  session: SessionSchema;
+};
+export type ErrorEvent = {
+  type?: "error";
+  content: string;
+  session_id?: string | null;
+};
+export type SessionWithFiles = {
+  id: string;
+  user_id: string;
+  title: string;
+  updated_at: string;
+  file_names?: string[];
+};
+export type MetricsBucket = {
+  timestamp: string;
+  group: {
+    [key: string]: any;
+  };
+  aggregations: {
+    [key: string]: number | number[];
+  };
+};
+export type MetricsResponse = {
+  precision: string;
+  buckets: MetricsBucket[];
+};
+export type EchoEnvelope = {
+  kind:
+    | "ChatMessagePayload"
+    | "StreamEvent"
+    | "FinalEvent"
+    | "ErrorEvent"
+    | "ChatMessageMetadata"
+    | "ChatTokenUsage"
+    | "SessionSchema"
+    | "SessionWithFiles"
+    | "MetricsResponse"
+    | "MetricsBucket"
+    | "VectorSearchHit"
+    | "RuntimeContext";
+  /** Schema payload being echoed */
+  payload:
+    | ChatMessagePayload
+    | ChatAskInput
+    | StreamEvent
+    | FinalEvent
+    | ErrorEvent
+    | ChatMessageMetadata
+    | ChatTokenUsage
+    | SessionSchema
+    | SessionWithFiles
+    | MetricsResponse
+    | MetricsBucket
+    | VectorSearchHit
+    | RuntimeContext;
+};
+export type ChatMessagePayload2 = {
+  /** Unique ID for this question/reply exchange */
+  exchange_id: string;
+  user_id: string;
+  type: MessageType;
+  sender: Sender;
+  content: string;
+  blocks?:
+    | (
+        | ({
+            type: "code";
+          } & CodeBlock)
+        | ({
+            type: "image_url";
+          } & ImageUrlBlock)
+        | ({
+            type: "text";
+          } & TextBlock)
+        | ({
+            type: "tool_result";
+          } & ToolResultBlock)
+      )[]
+    | null;
+  timestamp: string;
+  /** Conversation ID */
+  session_id: string;
+  /** Monotonic message index within the session */
+  rank: number;
+  metadata?: ChatMessageMetadata;
+  subtype?: MessageSubtype | null;
+};
+export type StreamEvent2 = {
+  type?: "stream";
+  message: ChatMessagePayload2;
+};
+export type FinalEvent2 = {
+  type?: "final";
+  messages: ChatMessagePayload2[];
+  session: SessionSchema;
+};
+export type EchoEnvelope2 = {
+  kind:
+    | "ChatMessagePayload"
+    | "StreamEvent"
+    | "FinalEvent"
+    | "ErrorEvent"
+    | "ChatMessageMetadata"
+    | "ChatTokenUsage"
+    | "SessionSchema"
+    | "SessionWithFiles"
+    | "MetricsResponse"
+    | "MetricsBucket"
+    | "VectorSearchHit"
+    | "RuntimeContext";
+  /** Schema payload being echoed */
+  payload:
+    | ChatMessagePayload2
+    | ChatAskInput
+    | StreamEvent2
+    | FinalEvent2
+    | ErrorEvent
+    | ChatMessageMetadata
+    | ChatTokenUsage
+    | SessionSchema
+    | SessionWithFiles
+    | MetricsResponse
+    | MetricsBucket
+    | VectorSearchHit
+    | RuntimeContext;
 };
 export type AgenticFlow = {
   /** Name of the agentic flow */
@@ -278,81 +553,11 @@ export type AgenticFlow = {
   /** Human-readable tag of the agentic flow */
   tag: string | null;
 };
-export type ChatMessagePayload = {
-  /** Unique ID for the current question repsonse(s) exchange */
-  exchange_id: string;
-  user_id: string;
-  type: "human" | "ai" | "system" | "tool";
-  sender: "user" | "assistant" | "system";
-  content: string;
-  timestamp: string;
-  /** Unique ID for the conversation */
-  session_id: string;
-  /** Monotonically increasing index of the message within the session */
-  rank: number;
-  metadata?: {
-    [key: string]:
-      | string
-      | number
-      | number
-      | {
-          [key: string]: any;
-        }
-      | any[];
-  } | null;
-  subtype?:
-    | ("final" | "thought" | "tool_result" | "plan" | "execution" | "observation" | "error" | "injected_context")
-    | null;
-};
-export type SessionSchema = {
-  id: string;
-  user_id: string;
-  title: string;
-  updated_at: string;
-};
-export type FinalEvent = {
-  type: "final";
-  messages: ChatMessagePayload[];
-  session: SessionSchema;
-};
-export type RuntimeContext = {
-  selected_document_libraries_ids?: string[] | null;
-  selected_prompt_libraries_ids?: string[] | null;
-  [key: string]: any;
-};
-export type ChatAskInput = {
-  user_id: string;
-  session_id?: string | null;
-  message: string;
-  agent_name: string;
-  chat_profile_id?: string | null;
-  runtime_context?: RuntimeContext | null;
-};
-export type SessionWithFiles = {
-  id: string;
-  user_id: string;
-  title: string;
-  updated_at: string;
-  file_names?: string[];
-};
 export type BodyUploadFileAgenticV1ChatbotUploadPost = {
   user_id: string;
   session_id: string;
   agent_name: string;
   file: Blob;
-};
-export type MetricsBucket = {
-  timestamp: string;
-  group: {
-    [key: string]: any;
-  };
-  aggregations: {
-    [key: string]: number | number[];
-  };
-};
-export type MetricsResponse = {
-  precision: string;
-  buckets: MetricsBucket[];
 };
 export const {
   useGetFeedbackAgenticV1ChatbotFeedbackGetQuery,
@@ -363,12 +568,11 @@ export const {
   useCreateAgentAgenticV1AgentsCreatePostMutation,
   useUpdateAgentAgenticV1AgentsNamePutMutation,
   useDeleteAgentAgenticV1AgentsNameDeleteMutation,
+  useEchoSchemaAgenticV1SchemasEchoPostMutation,
   useGetFrontendConfigAgenticV1ConfigFrontendSettingsGetQuery,
   useLazyGetFrontendConfigAgenticV1ConfigFrontendSettingsGetQuery,
   useGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery,
   useLazyGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery,
-  useChatbotQueryAgenticV1ChatbotQueryPostMutation,
-  useChatbotQueryStreamAgenticV1ChatbotQueryStreamPostMutation,
   useGetSessionsAgenticV1ChatbotSessionsGetQuery,
   useLazyGetSessionsAgenticV1ChatbotSessionsGetQuery,
   useGetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetQuery,

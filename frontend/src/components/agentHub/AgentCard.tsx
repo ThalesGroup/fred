@@ -8,14 +8,14 @@ import DeleteIcon from "@mui/icons-material/Delete";
 
 import { getAgentBadge } from "../../utils/avatar";
 import { useTranslation } from "react-i18next";
-import { Agent } from "../../slices/chatApiStructures";
+import { AgenticFlow } from "../../slices/agentic/agenticOpenApi";
 
 interface AgentCardProps {
-  agent: Agent;
+  agent: AgenticFlow;
   isFavorite: boolean;
   onToggleFavorite: (name: string) => void;
   onDelete: (name: string) => void;
-  allAgents: Agent[];
+  allAgents: AgenticFlow[];
 }
 export const AgentCard = ({
   agent,

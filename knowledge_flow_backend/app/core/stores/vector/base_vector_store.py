@@ -114,7 +114,7 @@ class BaseEmbeddingModel(Embeddings, ABC):
     """
 
     @abstractmethod
-    def embed_documents(self, documents: List[Document]) -> List[dict]:
+    def embed_documents(self, texts: List[str]) -> List[List[float]]:
         """
         Embed a list of documents into vectors.
         Returns a list of { 'embedding': List[float], 'document': Document }
@@ -136,6 +136,11 @@ class BaseVectoreStore(ABC):
     @abstractmethod
     def add_documents(self, documents: List[Document]) -> None:
         """Store the documents in a vector database."""
+        pass
+
+    @abstractmethod
+    def delete_vectors(self, document_uid: str) -> None:
+        """Delete the vectors associated with a document."""
         pass
 
     @abstractmethod

@@ -1,11 +1,14 @@
-# values.yaml unifié corrigé
+# Unified values.yaml
 
 global:
   kubeconfig: ""
+  create_index:
+    image: "alpine:3.22"
 
 applications:
 
   agentic-backend:
+    enabled: true
     applicationName: agentic-backend
     deployment:
       enabled: true
@@ -119,15 +122,14 @@ applications:
           client_id: "app"
           keycloak_url: "http://app-keycloak:8080/realms/app"
           authorized_origins:
-          -  "http://localhost:5173"
-
+            -  "http://localhost:5173"
       frontend_settings:
         security:
           enabled: false
           client_id: "app"
           keycloak_url: "http://app-keycloak:8080/realms/app"
           authorized_origins:
-          -  "http://localhost:5173"
+            -  "http://localhost:5173"
         feature_flags:
           # If true activate the backend and frontend modules in charge of K8
           # and frugality monitoring
@@ -136,7 +138,6 @@ applications:
           enableElecWarfare: false
         properties:
           logoName: "fred"
-
       ai:
         # Timeout settings for the client
         timeout:
@@ -213,37 +214,29 @@ applications:
               chunk_overlap: 64
               knowledge_flow_url: "http://localhost:8111/knowledge-flow/v1"
             model: {}
-
       storage:
         postgres:
           host: localhost
           port: 5432
           database: fred
           username: admin
-
         opensearch:
           host: https://localhost:9200
           secure: true
           verify_certs: false
           username: admin
-
         feedback_store:
           type: "duckdb"
           duckdb_path: "~/.fred/agentic/feedback.duckdb"
-
         agent_store:
           type: "duckdb"
           duckdb_path: "~/.fred/agentic/agent.duckdb"
-
         session_store:
           type: "duckdb"
           duckdb_path: "~/.fred/agentic/session.duckdb"
-
         history_store:
           type: "duckdb"
           duckdb_path: "~/.fred/agentic/history.duckdb"
-
-
     dotenv:
       AZURE_TENANT_ID: ""  
       AZURE_CLIENT_ID: ""  
@@ -254,7 +247,9 @@ applications:
       AZURE_OPENAI_API_KEY: ""
       OPENAI_API_KEY: ""
       OPENSEARCH_PASSWORD: ""
+
   fred-frontend:
+    enabled: true
     applicationName: fred-frontend
     deployment:
       enabled: true
@@ -348,24 +343,14 @@ applications:
     configuration_type:
       frontend: true
       backend: false
-    oidc:
-      enabled: true
     configuration:
       config_json:
-        backendUrlApi: "https://agentic-backend.dev.fred.thalesgroup.com"
-        backendUrlKnowledge: "https://knowledge-flow-backend.dev.fred.thalesgroup.com"
-        websocketUrl: "ws://agentic-backend.dev.fred.thalesgroup.com/fred/chatbot/query"
-      keycloak_json:
-        realm: "fred"               # OIDC realm
-        auth-server-url: "https://idp.dev.fred.thalesgroup.com/"
-        resource: "app"             # OIDC Client ID
-        ssl-required: "external"
-        verify-token-audience: true
-        public-client: true
-        use-resource-role-mappings: true
-        confidential-port: 0
+        backend_url_api: "https://agentic-backend.dev.fred.thalesgroup.com"
+        backend_url_knowledge: "https://knowledge-flow-backend.dev.fred.thalesgroup.com"
+        websocket_url: "ws://agentic-backend.dev.fred.thalesgroup.com/fred/chatbot/query"
 
   knowledge-flow-backend:
+    enabled: true
     applicationName: knowledge-flow-backend
     deployment:
       enabled: true
@@ -479,13 +464,11 @@ applications:
           client_id: "app"
           authorized_origins:
             - "http://localhost:5173"
-
       security:
         enabled: false
         keycloak_url: "http://fred-keycloak:8080/realms/fred"
         authorized_origins:
           - "http://localhost:5173"
-
       scheduler:
         enabled: true
         backend: "temporal"
@@ -495,7 +478,6 @@ applications:
           task_queue: "ingestion"
           workflow_prefix: "pipeline"
           connect_timeout_seconds: 5
-
       input_processors:
         - prefix: ".pdf"
           class_path: app.core.processors.input.pdf_markdown_processor.openai_pdf_markdown_processor.OpenaiPdfMarkdownProcessor
@@ -517,35 +499,31 @@ applications:
       content_storage:
         type: local
         root_path: ~/.fred/knowledge-flow/content-store
-
       document_sources:
         fred:
           type: push
           description: "Documents manually uploaded by users"
-
         local:
           type: pull
           provider: local_path
           base_path: ~/Documents/Fred
           description: "Personal local documents available for pull-mode ingestion"
-
       embedding:
         type: "openai"
-
       storage:
         postgres:
           host: localhost
           port: 5432
           database: fred
           username: admin
-
         opensearch:
           host: https://localhost:9200
           secure: true
           verify_certs: false
           username: admin
-
         tabular_store:
+          type: "duckdb"
+          duckdb_path: "~/.fred/knowledge-flow/tabular.duckdb"
           # Local DB 
           # type: "sql"
           # driver: "duckdb"
@@ -557,28 +535,20 @@ applications:
           # database: "test_db_postgre_sql"
           # username: "my_username" # Overrides the one specified as "SQL_USERNAME" in the .env file
           # password: "my_password" # Overrides the one specified as "SQL_PASSWORD" in the .env file
-
-        
-
         catalog_store:
           type: "duckdb"
           duckdb_path: "~/.fred/knowledge-flow/catalog.duckdb"
-
         prompt_store:
           type: "duckdb"
           duckdb_path: "~/.fred/knowledge-flow/prompt.duckdb"
-
         tag_store:
           type: "duckdb"
           duckdb_path: "~/.fred/knowledge-flow/tag.duckdb"
-
         metadata_store:
           type: "duckdb"
           duckdb_path: "~/.fred/knowledge-flow/metadata.duckdb"
-
         vector_store:
           type: in_memory
-
     dotenv:
       AZURE_TENANT_ID: ""
       AZURE_CLIENT_ID: ""

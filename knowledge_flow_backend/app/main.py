@@ -25,9 +25,9 @@ from rich.logging import RichHandler
 from dotenv import load_dotenv
 
 from app.features.catalog.controller import CatalogController
-from app.features.prompts.controller import PromptController
 from app.features.pull.controller import PullDocumentController
 from app.features.pull.service import PullDocumentService
+from app.features.resources.controller import ResourceController
 from app.features.scheduler.controller import SchedulerController
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -110,7 +110,7 @@ def create_app() -> FastAPI:
     TabularController(router)
     # CodeSearchController(router)
     TagController(router)
-    PromptController(router)
+    ResourceController(router)
     VectorSearchController(router)
 
     if configuration.scheduler.enabled:
@@ -138,6 +138,15 @@ def create_app() -> FastAPI:
         describe_full_response_schema=True,
     )
     mcp_text.mount(mount_path="/mcp_text")
+    mcp_template = FastApiMCP(
+        app,
+        name="Knowledge Flow Text MCP",
+        description="MCP server for Knowledge Flow Text",
+        include_tags=["Vector Search"],
+        describe_all_responses=True,
+        describe_full_response_schema=True,
+    )
+    mcp_template.mount(mount_path="/mcp_template")
     mcp_code = FastApiMCP(
         app,
         name="Knowledge Flow Code MCP",

@@ -1,95 +1,190 @@
-# Copyright Thales 2025
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# chat_schema.py
 
-from typing import Literal, Optional, List, Dict, Union
+from __future__ import annotations
+from enum import Enum
+from typing import Any, Dict, List, Optional, Union, Annotated, Literal
 from datetime import datetime
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict, ValidationError
+
+from fred_core import VectorSearchHit
 
 
-# --- Base Token Usage ---
+# ---------- Enums for clarity ----------
+class MessageType(str, Enum):
+    human = "human"
+    ai = "ai"
+    system = "system"
+    tool = "tool"
+
+
+class Sender(str, Enum):
+    user = "user"
+    assistant = "assistant"
+    system = "system"
+
+
+class MessageSubtype(str, Enum):
+    final = "final"
+    thought = "thought"
+    tool_result = "tool_result"
+    plan = "plan"
+    execution = "execution"
+    observation = "observation"
+    error = "error"
+    injected_context = "injected_context"
+
+
+class FinishReason(str, Enum):
+    stop = "stop"
+    length = "length"
+    content_filter = "content_filter"
+    tool_calls = "tool_calls"
+    cancelled = "cancelled"
+    other = "other"
+
+
+class ToolResultBlock(BaseModel):
+    type: Literal["tool_result"] = "tool_result"
+    name: str
+    content: str  # final string, even if tool gave JSON (stringify on server)
+    ok: Optional[bool] = None
+    latency_ms: Optional[int] = None
+
+
+class TextBlock(BaseModel):
+    type: Literal["text"] = "text"
+    text: str
+
+
+class CodeBlock(BaseModel):
+    type: Literal["code"] = "code"
+    language: Optional[str] = None
+    code: str
+
+
+class ImageUrlBlock(BaseModel):
+    type: Literal["image_url"] = "image_url"
+    url: str
+    alt: Optional[str] = None
+
+
+MessageBlock = Annotated[
+    Union[TextBlock, ToolResultBlock, CodeBlock, ImageUrlBlock],
+    Field(discriminator="type"),
+]
+
+
+# ---------- Token usage ----------
 class ChatTokenUsage(BaseModel):
     input_tokens: int
     output_tokens: int
     total_tokens: int
 
 
-# --- Source document info ---
-class ChatSource(BaseModel):
-    document_uid: str
-    file_name: str
-    title: str
-    author: str
-    content: str
-    created: str
-    type: str
-    modified: str
-    score: float
+# ---------- Tool calls ----------
 
 
-# --- Unified message structure ---
+class ToolCall(BaseModel):
+    name: str
+    args: Optional[Dict[str, Any]] = None
+    result_preview: Optional[str] = None
+    error: Optional[str] = None
+    latency_ms: Optional[int] = None
+
+
+# ---------- Strongly-typed metadata ----------
+class ChatMessageMetadata(BaseModel):
+    """
+    A typed container for message metadata sent to the UI.
+    Add new first-class fields here as your UI needs them.
+    Unknown keys go into `extras` by design (no surprises).
+    """
+
+    model_config = ConfigDict(extra="forbid")  # prevent silent schema drift
+
+    # Common
+    model: Optional[str] = None
+    token_usage: Optional[ChatTokenUsage] = None
+    sources: List[VectorSearchHit] = Field(default_factory=list)
+
+    # Helpful details
+    latency_seconds: Optional[float] = None
+    agent_name: Optional[str] = None
+    finish_reason: Optional[FinishReason] = None
+
+    # Domain-specific passthroughs
+    fred: Optional[Dict[str, Any]] = None
+    thought: Optional[Union[str, Dict[str, Any]]] = None
+    tool_call: Optional[ToolCall] = None
+
+    # Future-proof escape hatch
+    extras: Dict[str, Any] = Field(default_factory=dict)
+
+    def merge_extras(self, **kwargs) -> None:
+        self.extras.update({k: v for k, v in kwargs.items() if v is not None})
+
+
+# ---------- Unified message ----------
 class ChatMessagePayload(BaseModel):
     exchange_id: str = Field(
-        ..., description="Unique ID for the current question repsonse(s) exchange"
+        ..., description="Unique ID for this question/reply exchange"
     )
     user_id: str
-    type: Literal["human", "ai", "system", "tool"]
-    sender: Literal["user", "assistant", "system"]
+    type: MessageType
+    sender: Sender
     content: str
-    timestamp: str
-    session_id: str = Field(..., description="Unique ID for the conversation")
-    rank: int = Field(
-        ...,
-        description="Monotonically increasing index of the message within the session",
-    )
-    metadata: Optional[Dict[str, Union[str, int, float, dict, list]]] = Field(
-        default_factory=dict
-    )
-    subtype: Optional[
-        Literal[
-            "final",
-            "thought",
-            "tool_result",
-            "plan",
-            "execution",
-            "observation",
-            "error",
-            "injected_context",
-        ]
-    ] = None
+    blocks: Optional[List[MessageBlock]] = None
+    timestamp: datetime  # serializes to ISO-8601; strings are accepted and parsed
+    session_id: str = Field(..., description="Conversation ID")
+    rank: int = Field(..., description="Monotonic message index within the session")
+    metadata: ChatMessageMetadata = Field(default_factory=ChatMessageMetadata)
+    subtype: Optional[MessageSubtype] = None
 
+    # Convenience helper for incremental population
     def with_metadata(
         self,
         model: Optional[str] = None,
         token_usage: Optional[ChatTokenUsage] = None,
-        sources: Optional[List[ChatSource]] = None,
+        sources: Optional[List[Union[VectorSearchHit, dict]]] = None,
         latency_seconds: Optional[float] = None,
         agent_name: Optional[str] = None,
-        **extra,
+        finish_reason: Optional[FinishReason] = None,
+        fred: Optional[Dict[str, Any]] = None,
+        thought: Optional[Union[str, Dict[str, Any]]] = None,
+        **extras,
     ) -> "ChatMessagePayload":
-        if model:
-            self.metadata["model"] = model
-        if token_usage:
-            self.metadata["token_usage"] = token_usage.model_dump()
+        if model is not None:
+            self.metadata.model = model
+        if token_usage is not None:
+            self.metadata.token_usage = token_usage
         if sources:
-            self.metadata["sources"] = [
-                s if isinstance(s, dict) else s.model_dump() for s in sources
-            ]
-        self.metadata.update(extra)
+            normalized: List[VectorSearchHit] = []
+            for s in sources:
+                if isinstance(s, VectorSearchHit):
+                    normalized.append(s)
+                elif isinstance(s, dict):
+                    try:
+                        normalized.append(VectorSearchHit.model_validate(s))
+                    except ValidationError:
+                        # If a hit doesn't validate, keep it in extras rather than crashing
+                        extras.setdefault("invalid_sources", []).append(s)
+            self.metadata.sources = normalized
+        if latency_seconds is not None:
+            self.metadata.latency_seconds = latency_seconds
+        if agent_name is not None:
+            self.metadata.agent_name = agent_name
+        if finish_reason is not None:
+            self.metadata.finish_reason = finish_reason
+        if fred is not None:
+            self.metadata.fred = fred
+        if thought is not None:
+            self.metadata.thought = thought
+        if extras:
+            self.metadata.merge_extras(**extras)
         return self
 
 
-# --- Session structure ---
+# ---------- Session ----------
 class SessionSchema(BaseModel):
     id: str
     user_id: str
@@ -98,76 +193,76 @@ class SessionSchema(BaseModel):
 
 
 class SessionWithFiles(SessionSchema):
-    file_names: list[str] = []
+    file_names: List[str] = []
 
 
-# --- Event wrappers ---
+# ---------- Events (discriminated union) ----------
 class StreamEvent(BaseModel):
-    type: Literal["stream"]
+    type: Literal["stream"] = "stream"
     message: ChatMessagePayload
 
 
 class FinalEvent(BaseModel):
-    type: Literal["final"]
+    type: Literal["final"] = "final"
     messages: List[ChatMessagePayload]
     session: SessionSchema
 
 
 class ErrorEvent(BaseModel):
-    type: Literal["error"]
+    type: Literal["error"] = "error"
     content: str
+    session_id: Optional[str] = None
 
 
-# --- Union for WebSocket response ---
-ChatEvent = Union[StreamEvent, FinalEvent, ErrorEvent]
+ChatEvent = Annotated[
+    Union[StreamEvent, FinalEvent, ErrorEvent], Field(discriminator="type")
+]
 
 
-def clean_token_usage(raw: dict) -> dict:
+# ---------- Utilities ----------
+def clean_token_usage(raw: dict) -> ChatTokenUsage:
     """
-    Clean a raw token usage dictionary:
-    - Always keep input_tokens, output_tokens, total_tokens.
-    - Include any other key from raw only if its value is not zero
-      (or if it's a nested dict with non-zero items).
+    Normalize an LLM token-usage dict into our typed model.
+    Unknown keys are ignored; zeros are fine.
     """
-    result = {}
-
-    # Always keep the main 3 keys
-    for key in ["input_tokens", "output_tokens", "total_tokens"]:
-        result[key] = raw.get(key, 0)
-
-    # Add other keys if they have non-zero content
-    for key, value in raw.items():
-        if key in result:
-            continue
-        if isinstance(value, dict):
-            # Filter sub-dict
-            filtered = {k: v for k, v in value.items() if v != 0}
-            if filtered:
-                result[key] = filtered
-        else:
-            if value != 0:
-                result[key] = value
-
-    return result
+    return ChatTokenUsage(
+        input_tokens=int(raw.get("input_tokens", 0) or 0),
+        output_tokens=int(raw.get("output_tokens", 0) or 0),
+        total_tokens=int(raw.get("total_tokens", 0) or 0),
+    )
 
 
-def clean_agent_metadata(raw: dict) -> dict:
-    """Extract only the relevant and safe metadata fields for ChatMessagePayload."""
-    cleaned = {}
+def clean_agent_metadata(raw: dict) -> ChatMessageMetadata:
+    """
+    Convert a raw LLM response_metadata dict into ChatMessageMetadata.
+    Validates sources as VectorSearchHit; non-conforming entries are placed in extras.
+    """
+    meta = ChatMessageMetadata()
 
-    if model := raw.get("model_name"):
-        cleaned["model"] = model
+    if m := raw.get("model_name"):
+        meta.model = m
+    if fr := raw.get("finish_reason"):
+        try:
+            meta.finish_reason = FinishReason(str(fr))
+        except ValueError:
+            meta.finish_reason = FinishReason.other
+    if fu := raw.get("fred"):
+        meta.fred = fu
+    if th := raw.get("thought"):
+        meta.thought = th
 
-    if finish_reason := raw.get("finish_reason"):
-        cleaned["finish_reason"] = finish_reason
+    # Normalize sources
+    invalid: List[Any] = []
+    for s in raw.get("sources") or []:
+        if isinstance(s, VectorSearchHit):
+            meta.sources.append(s)
+        elif isinstance(s, dict):
+            try:
+                meta.sources.append(VectorSearchHit.model_validate(s))
+            except ValidationError:
+                invalid.append(s)
+        # else: silently ignore unexpected types
+    if invalid:
+        meta.extras["invalid_sources"] = invalid
 
-    if sources := raw.get("sources"):
-        cleaned["sources"] = sources
-
-    if fred := raw.get("fred"):
-        cleaned["fred"] = fred
-
-    if raw.get("thought") is not None:
-        cleaned["thought"] = raw["thought"]
-
-    return cleaned
+    return meta

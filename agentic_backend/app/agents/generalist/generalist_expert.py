@@ -16,7 +16,6 @@ import logging
 from datetime import datetime
 
 from langgraph.graph import START, END, MessagesState, StateGraph
-from langchain_core.messages import SystemMessage
 
 from app.common.structures import AgentSettings
 from app.core.model.model_factory import get_model
@@ -32,17 +31,20 @@ class GeneralistExpert(AgentFlow):
     """
 
     # Class-level metadata
-    name: str = "GeneralistExpert"
-    role: str = "Generalist Expert"
-    nickname: str = "Georges"
-    description: str = (
-        "Provides guidance on a wide range of topics without deep specialization."
-    )
+    name: str
+    role: str
+    nickname: str
+    description: str
     icon: str = "generalist_agent"
     tag: str = "Generalist"
 
     def __init__(self, agent_settings: AgentSettings):
         self.agent_settings = agent_settings
+        self.name = agent_settings.name
+        self.nickname = agent_settings.nickname or agent_settings.name
+        self.role = agent_settings.role
+        self.description = agent_settings.description
+        self.current_date = datetime.now().strftime("%Y-%m-%d")
         self.categories = agent_settings.categories or ["General"]
         self.model = None  # Will be set in async_init
         self.base_prompt = ""  # Will be set in async_init
@@ -85,6 +87,7 @@ class GeneralistExpert(AgentFlow):
         return builder
 
     async def reasoner(self, state: MessagesState):
-        prompt = SystemMessage(content=self.base_prompt)
-        response = await self.model.ainvoke([prompt] + state["messages"])
+        messages = self.use_fred_prompts(state["messages"])
+        assert self.model is not None
+        response = await self.model.ainvoke(messages)
         return {"messages": [response]}

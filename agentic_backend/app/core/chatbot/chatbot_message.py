@@ -29,9 +29,6 @@ class ChatBotEventConfiguration(BaseModel):
     agentic_flow: Optional[AgenticFlow] = Field(
         default=None, description="The agentic flow of the chatbot"
     )
-    cluster_name: Optional[str] = Field(
-        default=None, description="The cluster name of the chatbot"
-    )
 
 
 class ChatAskInput(BaseModel):
@@ -39,8 +36,8 @@ class ChatAskInput(BaseModel):
     session_id: Optional[str] = None
     message: str
     agent_name: str
-    chat_profile_id: Optional[str] = None
     runtime_context: Optional[RuntimeContext] = None
+    client_exchange_id: str | None = None
 
 
 class ChatBotEvent(BaseModel):

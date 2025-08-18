@@ -23,7 +23,7 @@ class MCPAgent(AgentFlow):
         self.name = agent_settings.name
         self.base_prompt = agent_settings.base_prompt
         self.role = agent_settings.role or "Agent using external MCP tools"
-        self.nickname = agent_settings.nickname
+        self.nickname = agent_settings.nickname or agent_settings.name
         self.description = (
             agent_settings.description
             or "Agent dynamically created to use MCP-based tools."
@@ -66,12 +66,14 @@ class MCPAgent(AgentFlow):
 
     async def reasoner(self, state: MessagesState):
         try:
+            assert self.model
             response = await self.model.ainvoke(
                 [self.build_base_prompt()] + state["messages"]
             )
             return {"messages": [response]}
         except Exception:
             logger.exception(f"Error in MCPAgent.reasoner for agent {self.name}")
+            assert self.model
             fallback = await self.model.ainvoke(
                 [HumanMessage(content="An error occurred.")]
             )

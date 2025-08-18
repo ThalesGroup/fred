@@ -23,14 +23,16 @@ import Chip from "@mui/material/Chip";
 import React, { useRef, useState } from "react";
 import AudioController from "./AudioController.tsx";
 import AudioRecorder from "./AudioRecorder.tsx";
-import { ChatLibrariesSelection } from "./ChatLibrariesSelection";
+import { ChatResourcesSelection } from "./ChatResourcesSelection.tsx";
+import { ChatLibrariesSelection } from "./ChatDocumentLibrariesSelection.tsx";
 
 export interface UserInputContent {
   text?: string;
   audio?: Blob;
   files?: File[];
   documentLibraryIds?: string[];
-  promptLibraryIds?: string[];
+  promptResourceIds?: string[];
+  templateResourceIds?: string[];
 }
 
 export default function UserInput({
@@ -59,7 +61,8 @@ export default function UserInput({
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [filesBlob, setFilesBlob] = useState<File[] | null>(null);
   const [selectedDocumentLibrariesIds, setSelectedDocumentLibrariesIds] = useState<string[]>([]);
-  const [selectedPromptLibrariesIds, setSelectedPromptLibrariesIds] = useState<string[]>([]);
+  const [selectedPromptResourceIds, setSelectedPromptResourceIds] = useState<string[]>([]);
+  const [selectedTemplateResourceIds, setSelectedTemplateResourceIds] = useState<string[]>([]);
 
   const handleKeyDown = (event: React.KeyboardEvent) => {
     if (event.key === "Enter") {
@@ -82,13 +85,15 @@ export default function UserInput({
     console.log("Audio blob : ", audioBlob);
     console.log("Files blob : ", filesBlob);
     console.log("Selected document libraries : ", selectedDocumentLibrariesIds);
-    console.log("Selected prompt libraries : ", selectedPromptLibrariesIds);
+    console.log("Selected prompt resources : ", selectedPromptResourceIds);
+    console.log("Selected template resources : ", selectedTemplateResourceIds);
     onSend({
       text: userInput,
       audio: audioBlob,
       files: filesBlob,
       documentLibraryIds: selectedDocumentLibrariesIds,
-      promptLibraryIds: selectedPromptLibrariesIds,
+      promptResourceIds: selectedPromptResourceIds,
+      templateResourceIds: selectedTemplateResourceIds,
     });
     setUserInput("");
     setAudioBlob(null);
@@ -305,10 +310,15 @@ export default function UserInput({
                 libraryType="document"
               />
               {/* Chat Libraries Selection */}
-              <ChatLibrariesSelection
-                selectedLibrariesIds={selectedPromptLibrariesIds}
-                setSelectedLibrariesIds={setSelectedPromptLibrariesIds}
+              <ChatResourcesSelection
                 libraryType="prompt"
+                selectedResourceIds={selectedPromptResourceIds}
+                setSelectedResourceIds={setSelectedPromptResourceIds}
+              />
+              <ChatResourcesSelection
+                libraryType="template"
+                selectedResourceIds={selectedTemplateResourceIds}
+                setSelectedResourceIds={setSelectedTemplateResourceIds}
               />
 
               {/* Audio Record Button */}

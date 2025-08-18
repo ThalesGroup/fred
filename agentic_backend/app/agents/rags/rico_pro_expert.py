@@ -1,56 +1,45 @@
 # Copyright Thales 2025
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# Licensed under the Apache License, Version 2.0
 
+import json
 import logging
 from datetime import datetime
-from typing import List, Optional, Dict, Any, cast
+from typing import Any, Dict, List, Optional, cast
 
-import requests
-from requests import Response
 from langchain.prompts import ChatPromptTemplate
-from langchain_core.messages import AIMessage, SystemMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langgraph.graph import END, StateGraph
-import json
 
-
-from app.common.document_source import DocumentSource
+from fred_core import VectorSearchHit
 from app.agents.rags.structures import (
-    GradeDocumentsOutput,
     GradeAnswerOutput,
+    GradeDocumentsOutput,
     RagGraphState,
     RephraseQueryOutput,
 )
-from app.common.structures import AgentSettings
+from app.common.rags_client import VectorSearchClient
+from app.common.rags_utils import attach_sources_to_llm_response
 from app.core.agents.flow import AgentFlow
 from app.core.agents.runtime_context import get_document_libraries_ids
-from app.core.chatbot.chat_schema import ChatSource
 from app.core.model.model_factory import get_model
+from app.common.structures import AgentSettings
 
 logger = logging.getLogger(__name__)
 
 
 class RicoProExpert(AgentFlow):
     """
-    An expert agent that searches and analyzes documents to answer user questions.
-    This agent uses a vector search service using the knowledge-flow search REST API to find relevant documents and generates
-    responses based on the document content. This design is simple and straightworward.
+    A pragmatic RAG agent that:
+      1) retrieves chunks (VectorSearchHit) via knowledge-flow REST,
+      2) filters them with a simple relevance grader,
+      3) generates a cited answer,
+      4) retries with query rephrasing if needed.
     """
 
     TOP_K = 5
 
-    name: str = "RicoProExpert"
-    role: str = "Rags Expert"
+    name: str
+    role: str
     nickname: str = "Rico Pro"
     description: str
     icon: str = "rags_agent"
@@ -59,26 +48,27 @@ class RicoProExpert(AgentFlow):
 
     def __init__(self, agent_settings: AgentSettings):
         self.agent_settings = agent_settings
+        self.name = agent_settings.name
+        self.nickname = agent_settings.nickname or agent_settings.name
+        self.role = agent_settings.role
+        self.description = agent_settings.description
+        self.current_date = datetime.now().strftime("%Y-%m-%d")
+        self.categories = agent_settings.categories or ["General"]
         self.knowledge_flow_url = agent_settings.settings.get(
             "knowledge_flow_url", "http://localhost:8111/knowledge-flow/v1"
         )
-        self.current_date = datetime.now().strftime("%Y-%m-%d")
+
         self.model = None
         self.base_prompt = ""
         self._graph = None
+
+        # sane defaults
         self.categories = agent_settings.categories or ["Documentation"]
         self.tag = agent_settings.tag or "rags"
-        if not agent_settings.description:
-            self.description = "Analyzes and grades documents in multiple steps to generate precise, well-sourced answers."
-        else:
-            self.description = agent_settings.description
-        if not agent_settings.role:
-            self.role = "Rags Expert"
-        else:
-            self.description = agent_settings.role
 
     async def async_init(self):
         self.model = get_model(self.agent_settings.model)
+        self.search_client = VectorSearchClient(self.knowledge_flow_url, timeout_s=10)
         self.base_prompt = self._generate_prompt()
         self._graph = self._build_graph()
 
@@ -94,31 +84,18 @@ class RicoProExpert(AgentFlow):
             tag=self.tag,
         )
 
+    # ---------- prompt ----------
+
     def _generate_prompt(self) -> str:
-        """
-        Generate the base prompt for the rags expert agent.
+        return (
+            "You analyze retrieved document parts and answer the user's question. "
+            "Always include citations when you use documents. "
+            f"Current date: {self.current_date}."
+        )
 
-        Returns:
-            str: The base prompt for the agent.
-        """
-
-        return f"""
-        You are responsible for analyzing document parts and answering questions based on them.
-        Whenever you reference a document part, provide citations.
-        The current date is {self.current_date}.
-        """
+    # ---------- graph ----------
 
     def _build_graph(self) -> StateGraph:
-        """
-        Build and configure the state graph for the agent's workflow.
-
-        Defines nodes for retrieval, document grading, generation, query rephrasing,
-        and success/failure finalization, along with conditional transitions
-        controlling the flow between these steps.
-
-        Returns:
-            StateGraph: The configured state graph instance.
-        """
         builder = StateGraph(RagGraphState)
 
         builder.add_node("retrieve", self._retrieve)
@@ -154,74 +131,62 @@ class RicoProExpert(AgentFlow):
 
         return builder
 
-    # Nodes
+    # ---------- nodes ----------
+
     async def _retrieve(self, state: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Retrieve documents from vector search API based on the question in the state.
+        if self.model is None:
+            raise RuntimeError(
+                "Model is not initialized. Did you forget to call async_init()?"
+            )
 
-        Args:
-            state (Dict[str, Any]): Current graph state
-
-        Returns:
-            Dict[str, Any]: Updated state
-        """
         question: Optional[str] = state.get("question")
         if not question and state.get("messages"):
             question = state["messages"][-1].content
 
-        top_k: Optional[int] = state.get("top_k", self.TOP_K)
-        retry_count: Optional[int] = state.get("retry_count", 0)
-        if retry_count and retry_count > 0:
+        top_k: int = int(state.get("top_k", self.TOP_K) or self.TOP_K)
+        retry_count: int = int(state.get("retry_count", 0) or 0)
+        if retry_count > 0:
             top_k = self.TOP_K + 3 * retry_count
 
         try:
-            logger.info(f"📥 Retrieving with question: {question} | top_k: {top_k}")
+            logger.info(f"📥 Retrieving with question={question!r} top_k={top_k}")
 
-            request_data = {"query": question, "top_k": top_k}
+            tags = get_document_libraries_ids(self.get_runtime_context())
+            if tags:
+                logger.info(f"RicoPro filtering by libraries: {tags}")
 
-            # Add tags from runtime context if available
-            library_ids = get_document_libraries_ids(self.get_runtime_context())
-            if library_ids:
-                request_data["tags"] = library_ids
-                logger.info(f"RagsExpert filtering by libraries: {library_ids}")
-
-            response: Response = requests.post(
-                f"{self.knowledge_flow_url}/vector/search",
-                json=request_data,
-                timeout=60,
+            hits: List[VectorSearchHit] = self.search_client.search(
+                query=question or "",
+                top_k=top_k,
+                tags=tags,
             )
-            response.raise_for_status()
-            documents_data = response.json()
+            if not hits:
+                warn = f"I couldn't find any relevant documents for “{question}”. Try rephrasing?"
+                return {
+                    "messages": [await self.model.ainvoke([HumanMessage(content=warn)])]
+                }
 
-            documents: List = []
-            for document in documents_data:
-                if "uid" in document and "document_uid" not in document:
-                    document["document_uid"] = document["uid"]
-                doc_source = DocumentSource(**document)
-                documents.append(doc_source)
+            logger.info(f"✅ Retrieved {len(hits)} hits")
 
-            logger.info(f"✅ Retrieved {len(documents)} documents.")
-
-            serializable_documents = [document.model_dump() for document in documents]
-            message: SystemMessage = SystemMessage(
-                content=json.dumps(serializable_documents),
+            serializable = [d.model_dump() for d in hits]
+            message = SystemMessage(
+                content=json.dumps(serializable),
                 response_metadata={
                     "thought": True,
-                    "fred": {
-                        "node": "retrieve",
-                        "task": "Retrieval of documents by similarity search",
-                    },
+                    "fred": {"node": "retrieve", "task": "vector search retrieval"},
+                    "sources": serializable,  # so your UI can show them in the step
                 },
             )
 
             return {
                 "messages": [message],
-                "documents": documents,
+                "documents": hits,
+                "sources": hits,  # keep for convenience
                 "question": question,
                 "top_k": top_k,
             }
         except Exception as e:
-            logger.exception(f"Failed to retrieve documents: {e}")
+            logger.exception("Failed to retrieve documents: %s", e)
             return {
                 "messages": [
                     SystemMessage(
@@ -231,45 +196,33 @@ class RicoProExpert(AgentFlow):
             }
 
     async def _grade_documents(self, state: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Grades the relevance of retrieved documents against the user question,
-        filtering out irrelevant documents based on a binary 'yes' or 'no' score
-        from a grader model.
-
-        Args:
-            state (Dict[str, Any]): Current graph state
-
-        Returns:
-            Dict[str, Any]: Updated state
-        """
         question: str = state["question"]
-        documents: Optional[List[DocumentSource]] = state["documents"]
+        documents: Optional[List[VectorSearchHit]] = state.get("documents")
 
-        system = """
-        You are a grader assessing relevance of a retrieved document to a user question.
-        It does not need to be a stringent test. The goal is to filter out erroneous retrievals.
-        If the document contains keyword(s) or semantic meaning related to the user question, grade it as relevant.
-        Give a binary score 'yes' or 'no' score to indicate whether the document is relevant to the question.
-        """
+        system = (
+            "You are a grader assessing the relevance of a retrieved document to a user question. "
+            "It does not need to be stringent; goal is to filter out obviously wrong results. "
+            "If the document contains keywords or semantic meaning related to the question, grade it 'yes'. "
+            "Return a binary 'yes' or 'no'."
+        )
 
-        filtered_docs: List[DocumentSource] = []
-        irrelevant_documents: List[DocumentSource] = (
+        filtered_docs: List[VectorSearchHit] = []
+        irrelevant_documents: List[VectorSearchHit] = (
             state.get("irrelevant_documents") or []
         )
 
         irrelevant_contents = {doc.content for doc in irrelevant_documents}
-        grade_documents: List[DocumentSource] = []
-        for document in documents or []:
-            if document.content not in irrelevant_contents:
-                grade_documents.append(document)
+        grade_documents: List[VectorSearchHit] = [
+            d for d in (documents or []) if d.content not in irrelevant_contents
+        ]
 
-        for document in grade_documents or []:
-            grade_prompt: ChatPromptTemplate = ChatPromptTemplate.from_messages(
+        for document in grade_documents:
+            grade_prompt = ChatPromptTemplate.from_messages(
                 [
                     ("system", system),
                     (
                         "human",
-                        "Retrieved document: \n\n {document} \n\n User question: {question}",
+                        "Retrieved document:\n\n{document}\n\nUser question:\n\n{question}",
                     ),
                 ]
             )
@@ -280,7 +233,6 @@ class RicoProExpert(AgentFlow):
             chain = grade_prompt | self.model.with_structured_output(
                 GradeDocumentsOutput
             )
-
             llm_response = await chain.ainvoke(
                 {"question": question, "document": document.content}
             )
@@ -291,122 +243,84 @@ class RicoProExpert(AgentFlow):
             else:
                 irrelevant_documents.append(document)
 
-        serializable_documents = [document.model_dump() for document in filtered_docs]
-        message: SystemMessage = SystemMessage(
-            content=json.dumps(serializable_documents),
+        serializable = [d.model_dump() for d in filtered_docs]
+        message = SystemMessage(
+            content=json.dumps(serializable),
             response_metadata={
                 "thought": True,
                 "fred": {
                     "node": "grade_documents",
-                    "task": "Assess if the documents are relevant and filter them",
+                    "task": "filter relevant documents",
                 },
+                "sources": serializable,
             },
         )
 
-        logger.info(f"✅ {len(filtered_docs)} documents are relevant.")
+        logger.info(f"✅ {len(filtered_docs)} documents are relevant")
 
         return {
             "messages": [message],
             "documents": filtered_docs,
             "irrelevant_documents": irrelevant_documents,
+            "sources": filtered_docs,
         }
 
     async def _generate(self, state: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Generate an answer to the question using retrieved documents.
-
-        Args:
-            state (Dict[str, Any]): Current graph state
-
-        Returns:
-            Dict[str, Any]: Updated state
-        """
         question: str = state["question"]
-        documents: List[DocumentSource] = state["documents"]
+        documents: List[VectorSearchHit] = state["documents"]
 
-        documents_str: str = "\n".join(
-            f"Source file: {document.file_name}\nPage: {document.page}\nContent: {document.content}\n"
-            for document in documents
+        # Simple context format with per-chunk provenance
+        context = "\n".join(
+            (
+                f"Source file: {d.file_name or d.title}"
+                f"\nPage: {d.page if d.page is not None else 'n/a'}"
+                f"\nContent: {d.content}\n"
+            )
+            for d in documents
         )
 
-        prompt: ChatPromptTemplate = ChatPromptTemplate.from_template(
-            """
-            You are an assistant that answers questions based on retrieved documents. 
-            Use the following documents to support your response with citations :
-             
-            {context}
-            
-            Question: {question}
-            """
+        prompt = ChatPromptTemplate.from_template(
+            "You are an assistant that answers questions based on retrieved documents.\n"
+            "Use the documents to support your response with citations.\n\n"
+            "{context}\n\nQuestion: {question}"
         )
 
         if self.model is None:
             raise ValueError("model is None")
 
         chain = prompt | self.model
-
-        response = await chain.ainvoke({"context": documents_str, "question": question})
-
-        sources: List[ChatSource] = []
-        for document in documents:
-            sources.append(
-                ChatSource(
-                    document_uid=getattr(
-                        document,
-                        "document_uid",
-                        getattr(document, "uid", "unknown"),
-                    ),
-                    file_name=document.file_name,
-                    title=document.title,
-                    author=document.author,
-                    content=document.content,
-                    created=document.created,
-                    modified=document.modified or "",
-                    type=document.type,
-                    score=document.score,
-                )
-            )
-
-        response.response_metadata.update(
-            {"sources": [s.model_dump() for s in sources]}
+        response = await chain.ainvoke(
+            {"context": context, "question": question}
         )
+        response = cast(AIMessage, response)
 
-        message: SystemMessage = SystemMessage(
+        # attach VectorSearchHit for UI (your helper already supports it)
+        attach_sources_to_llm_response(response, documents)
+
+        message = SystemMessage(
             content=response.content,
             response_metadata={
                 "thought": True,
-                "fred": {
-                    "node": "generate",
-                    "task": "Generating an answer to the question",
-                },
+                "fred": {"node": "generate", "task": "compose final answer"},
+                "sources": [d.model_dump() for d in documents],
             },
         )
-
-        return {"messages": [message], "generation": response}
+        return {"messages": [message], "generation": response, "sources": documents}
 
     async def _rephrase_query(self, state: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Rephrase the input question to improve retrieval effectiveness.
-
-        Args:
-            state (Dict[str, Any]): Current graph state
-
-        Returns:
-            Dict[str, Any]: Updated state
-        """
         question: str = state["question"]
-        retry_count: int = state.get("retry_count", 0) + 1
+        retry_count: int = int(state.get("retry_count", 0) or 0) + 1
 
-        system = """
-        You are a question re-writer that converts an input question to a better version that is optimized for vectorstore retrieval. 
-        Look at the input and try to reason about the underlying semantic intent / meaning.
-        """
-        rewrite_prompt: ChatPromptTemplate = ChatPromptTemplate.from_messages(
+        system = (
+            "You are a question re-writer that converts an input question into a better "
+            "version optimized for vector retrieval. Preserve the language of the input."
+        )
+        rewrite_prompt = ChatPromptTemplate.from_messages(
             [
                 ("system", system),
                 (
                     "human",
-                    "Here is the initial question: \n\n {question} \n\n Formulate an improved question. Use the same language as the question to answer.",
+                    "Initial question:\n\n{question}\n\nProduce an improved version.",
                 ),
             ]
         )
@@ -415,54 +329,43 @@ class RicoProExpert(AgentFlow):
             raise ValueError("model is None")
 
         chain = rewrite_prompt | self.model.with_structured_output(RephraseQueryOutput)
-
         llm_response = await chain.ainvoke({"question": question})
-        better_question = cast(RephraseQueryOutput, llm_response)
+        better = cast(RephraseQueryOutput, llm_response)
 
-        logger.info(f"The question has been rephrased : {question}")
-        logger.info(f"The new question : {better_question.rephrase_query}")
-        logger.info(f"Retry count : {retry_count}")
+        logger.info(
+            "Rephrased question: %r -> %r (retry=%d)",
+            question,
+            better.rephrase_query,
+            retry_count,
+        )
 
-        message: SystemMessage = SystemMessage(
-            content=better_question.rephrase_query,
+        message = SystemMessage(
+            content=better.rephrase_query,
             response_metadata={
                 "thought": True,
-                "fred": {
-                    "node": "rephrase_query",
-                    "task": "Rephrasing the question",
-                },
+                "fred": {"node": "rephrase_query", "task": "query rewriting"},
             },
         )
 
         return {
             "messages": [message],
-            "question": better_question.rephrase_query,
+            "question": better.rephrase_query,
             "retry_count": retry_count,
         }
 
     async def _finalize_success(self, state: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Reset state after successful completion.
+        generation: AIMessage = state["generation"]
 
-        Args:
-            state (Dict[str, Any]): Current graph state
-
-        Returns:
-            Dict[str, Any]: Updated state
-        """
-        message: SystemMessage = SystemMessage(
-            content=state["generation"].content,
+        message = SystemMessage(
+            content=generation.content,
             response_metadata={
                 "thought": True,
-                "fred": {
-                    "node": "finalize_success",
-                    "task": "Sending a relevant response",
-                },
+                "fred": {"node": "finalize_success", "task": "deliver answer"},
             },
         )
 
         return {
-            "messages": [message, state["generation"]],
+            "messages": [message, generation],
             "question": "",
             "documents": [],
             "top_k": self.TOP_K,
@@ -473,40 +376,26 @@ class RicoProExpert(AgentFlow):
         }
 
     async def _finalize_failure(self, state: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Reset state after failure with an error message.
+        generation: Optional[AIMessage] = state.get("generation")
+        content = generation.content if generation is not None else ""
 
-        Args:
-            state (Dict[str, Any]): Current graph state
-
-        Returns:
-            Dict[str, Any]: Updated state
-        """
-        generation = state.get("generation")
-        content: str = generation.content if generation is not None else ""
-        system_message: str = (
+        msg = (
             "The agent was unable to generate a satisfactory response to your question."
         )
         if generation:
-            system_message += " Here is the latest response :"
-        message: SystemMessage = SystemMessage(
+            msg += " Here is the latest response:"
+
+        message = SystemMessage(
             content=content,
             response_metadata={
                 "thought": True,
-                "fred": {
-                    "node": "finalize_failure",
-                    "task": "The response generated do not answer the question.",
-                },
+                "fred": {"node": "finalize_failure", "task": "unsatisfactory answer"},
             },
         )
-        messages = [
-            message,
-            SystemMessage(
-                content=system_message,
-            ),
-        ]
+
+        messages = [message, SystemMessage(content=msg)]
         if generation is not None:
-            messages.append(generation)
+            messages.append(SystemMessage(content=generation.content, response_metadata=getattr(generation, "response_metadata", None)))
 
         return {
             "messages": messages,
@@ -519,21 +408,11 @@ class RicoProExpert(AgentFlow):
             "irrelevant_documents": [],
         }
 
-    # Edges
+    # ---------- edges ----------
+
     async def _decide_to_generate(self, state: Dict[str, Any]) -> str:
-        """
-        Decide next step based on document availability and retry count
-
-        Args:
-            state (Dict[str, Any]): Current graph state
-
-        Returns:
-            - "abort" if retry_count exceeds 2.
-            - "rephrase_query" if no documents were retrieved.
-            - "generate" otherwise.
-        """
-        documents: Optional[List[DocumentSource]] = state["documents"]
-        retry_count: int = state.get("retry_count", 0)
+        documents: Optional[List[VectorSearchHit]] = state.get("documents")
+        retry_count: int = int(state.get("retry_count", 0) or 0)
 
         if retry_count > 2:
             return "abort"
@@ -543,50 +422,30 @@ class RicoProExpert(AgentFlow):
             return "generate"
 
     async def _grade_generation(self, state: Dict[str, Any]) -> str:
-        """
-        Assess whether the generated answer satisfactorily addresses the user's question.
-
-        Uses a grading prompt to classify the answer as either 'yes' (resolves the question)
-        or 'no' (does not resolve). Based on the grade and retry count, returns a decision
-        string for the graph flow.
-
-        Args:
-            state (Dict[str, Any]): Current graph state
-
-        Returns:
-            - "useful" if the answer resolves the question,
-            - "not useful" if it doesn't but retry limit not reached,
-            - "abort" if it doesn't and retry limit (>= 2) is reached.
-        """
         question: str = state["question"]
         generation: AIMessage = state["generation"]
-        retry_count: int = state.get("retry_count", 0)
+        retry_count: int = int(state.get("retry_count", 0) or 0)
 
-        system = """
-        You are a grader assessing whether an answer addresses / resolves a question.
-        Give a binary score 'yes' or 'no'. 'yes' means that the answer resolves the question.
-        """
-        answer_prompt: ChatPromptTemplate = ChatPromptTemplate.from_messages(
+        system = (
+            "You are a grader assessing whether an answer resolves a question. "
+            "Return a binary 'yes' or 'no'."
+        )
+        answer_prompt = ChatPromptTemplate.from_messages(
             [
                 ("system", system),
-                (
-                    "human",
-                    "User question: \n\n {question} \n\n LLM generation: {generation}",
-                ),
+                ("human", "Question:\n\n{question}\n\nAnswer:\n\n{generation}"),
             ]
         )
 
         if self.model is None:
             raise ValueError("model is None")
 
-        answer_grader = answer_prompt | self.model.with_structured_output(
-            GradeAnswerOutput
-        )
-        llm_response = await answer_grader.ainvoke(
+        grader = answer_prompt | self.model.with_structured_output(GradeAnswerOutput)
+        llm_response = await grader.ainvoke(
             {"question": question, "generation": generation.content}
         )
-
         grade = cast(GradeAnswerOutput, llm_response)
+
         if grade.binary_score == "yes":
             return "useful"
         elif retry_count >= 2:

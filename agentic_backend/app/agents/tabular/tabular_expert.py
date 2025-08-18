@@ -36,18 +36,17 @@ class TabularExpert(AgentFlow):
     This agent uses MCP tools to list, inspect, and query structured data like CSV or Excel.
     """
 
-    name: str = "TabularExpert"
-    role: str = "Tabular Data Expert"
+    name: str
+    role: str
     nickname: str = "Tessa"
-    description: str = (
-        "An agent specialized in analyzing structured tabular data (e.g., CSV, XLSX)."
-    )
+    description: str
     icon: str = "tabulat_agent"
     categories: list[str] = ["tabular", "sql"]
     tag: str = "data"
 
     def __init__(self, agent_settings: AgentSettings):
         self.agent_settings = agent_settings
+        self.name = agent_settings.name
         self.current_date = datetime.now().strftime("%Y-%m-%d")
         self.model = None
         self.mcp_client = None
@@ -56,6 +55,8 @@ class TabularExpert(AgentFlow):
         self._graph = None
         self.categories = agent_settings.categories or ["tabular"]
         self.tag = agent_settings.tag or "data"
+        self.description = agent_settings.description
+        self.role = agent_settings.role
 
     async def async_init(self):
         self.model = get_model(self.agent_settings.model)
@@ -125,7 +126,11 @@ class TabularExpert(AgentFlow):
                 if isinstance(msg, ToolMessage):
                     try:
                         datasets = json.loads(msg.content)
-                        summaries = self._extract_dataset_summaries(datasets)
+                        summaries = (
+                            self._extract_dataset_summaries_from_get_schema_reponse(
+                                datasets
+                            )
+                        )
                         if summaries:
                             response.content += (
                                 "\n\n### Available Datasets:\n" + "\n".join(summaries)
@@ -146,14 +151,22 @@ class TabularExpert(AgentFlow):
             )
             return {"messages": [fallback]}
 
-    def _extract_dataset_summaries(self, data: list[dict]) -> list[str]:
+    def _extract_dataset_summaries_from_get_schema_reponse(
+        self, data: list[dict]
+    ) -> list[str]:
         summaries = []
         for entry in data:
-            try:
-                title = entry.get("document_name", "Untitled")
-                uid = entry.get("document_uid", "")
-                rows = entry.get("row_count", "?")
-                summaries.append(f"- **{title}** (`{uid}`), {rows} rows")
-            except Exception as e:
-                logger.warning(f"Failed to summarize dataset entry: {e}")
+            if isinstance(entry, dict) and {
+                "document_name",
+                "columns",
+                "row_count",
+            }.issubset(entry.keys()):
+                try:
+                    title = entry.get("document_name", "Untitled")
+                    uid = entry.get("document_uid", "")
+                    rows = entry.get("row_count", "?")
+                    summaries.append(f"- **{title}** (`{uid}`), {rows} rows")
+                except Exception as e:
+                    logger.warning(f"Failed to summarize dataset entry: {e}")
+
         return summaries
