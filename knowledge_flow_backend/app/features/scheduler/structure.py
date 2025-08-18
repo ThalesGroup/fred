@@ -19,7 +19,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 import hashlib
 
-from app.common.document_structures import DocumentMetadata, SourceType
+from app.common.document_structures import AccessInfo, DocumentMetadata, FileInfo, Identity, Processing, SourceInfo, SourceType, Tagging
 from app.core.stores.catalog.base_catalog_store import PullFileEntry
 
 
@@ -56,22 +56,69 @@ class FileToProcess(BaseModel):
         )
 
     def to_virtual_metadata(self) -> DocumentMetadata:
+        """
+        Build a v2 DocumentMetadata stub for a *pull* file.
+        This is 'virtual' because the raw file isn't in our content store yet.
+        """
         if not self.is_pull():
             raise ValueError("Virtual metadata can only be generated for pull files")
+
         assert self.external_path, "Pull files must have an external path"
+        name = Path(self.external_path).name
+
+        # Use modified time if available; otherwise set to epoch (UTC)
         modified_dt = datetime.fromtimestamp(self.modified_time or 0, tz=timezone.utc)
 
-        return DocumentMetadata(
-            document_name=Path(self.external_path).name,
-            document_uid=self.document_uid or f"pull-{self.source_tag}-{self.hash}",
-            date_added_to_kb=modified_dt,
-            retrievable=False,
+        # Stable UID for pull sources. Keep your existing convention if other systems depend on it.
+        uid = self.document_uid or f"pull-{self.source_tag}-{self.hash or hashlib.sha256(self.external_path.encode()).hexdigest()}"
+
+        # Identity block
+        identity = Identity(
+            document_name=name,
+            document_uid=uid,
+            title=self.display_name or None,
+            created=None,
+            modified=modified_dt,
+            last_modified_by=None,
+        )
+
+        # Source block
+        source = SourceInfo(
+            source_type=SourceType.PULL,
             source_tag=self.source_tag,
             pull_location=self.external_path,
-            source_type=SourceType.PULL,
-            processing_stages={},
-            modified=modified_dt,
-            tags=self.tags,
+            retrievable=False,  # not fetched into our store yet
+            date_added_to_kb=modified_dt,  # use fs timestamp as best proxy
+        )
+
+        # File block (best-effort; we don't know the MIME here)
+        file_info = FileInfo(
+            file_size_bytes=self.size,
+            mime_type=None,
+            page_count=None,
+            row_count=None,
+            sha256=self.hash,  # if provided by catalog
+            md5=None,
+            language=None,
+        )
+
+        # Tags: assuming incoming `tags` are display names.
+        # If they are tag IDs in your system, assign them to `tag_ids=` instead.
+        tagging = Tagging(tag_names=list(self.tags))
+
+        # Empty processing status; you can mark phases as you progress.
+        processing = Processing()  # stages={}, errors={}
+
+        return DocumentMetadata(
+            identity=identity,
+            source=source,
+            file=file_info,
+            tags=tagging,
+            processing=processing,
+            access=AccessInfo(),  # default AccessInfo() will be created by the model
+            preview_url=None,
+            viewer_url=None,
+            extensions=None,
         )
 
 

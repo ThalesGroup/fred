@@ -21,7 +21,7 @@ class CodeSearchService:
     def __init__(self):
         context = ApplicationContext.get_instance()
         embedder = context.get_embedder()
-        self.vector_store = context.get_vector_store(embedder)
+        self.vector_store = context.get_create_vector_store(embedder)
 
     def similarity_search_with_score(self, query: str, k: int = 10):
         return self.vector_store.similarity_search_with_score(query, k=k)

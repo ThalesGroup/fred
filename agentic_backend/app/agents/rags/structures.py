@@ -13,11 +13,10 @@
 # limitations under the License.
 
 from langgraph.graph import MessagesState
-from app.core.chatbot.chat_schema import ChatSource
 from typing import List, Optional
-from app.common.document_source import DocumentSource
 from pydantic.v1 import BaseModel
 from langchain_core.messages import AIMessage
+from fred_core import VectorSearchHit
 
 
 class RagGraphState(MessagesState):
@@ -29,20 +28,20 @@ class RagGraphState(MessagesState):
     Attributes:
         question (Optional[str]): The user question to be answered.
         generation (Optional[AIMessage]): The latest AI-generated response.
-        documents (Optional[List[DocumentSource]]): List of retrieved documents relevant to the question.
-        sources (Optional[List[ChatSource]]): Metadata or source references for retrieved documents.
+        documents (Optional[List[VectorSearchHit]]): List of retrieved documents relevant to the question.
+        sources (Optional[List[VectorSearchHit]]): Metadata or source references for retrieved documents.
         retry_count (Optional[int]): Number of retries attempted in the generation process.
         top_k (Optional[int]): Number of top documents to retrieve from the vector store.
-        irrelevant_documents (Optional[List[DocumentSource]]): List of irrelevant documents.
+        irrelevant_documents (Optional[List[VectorSearchHit]]): List of irrelevant documents.
     """
 
     question: Optional[str]
     generation: Optional[AIMessage]
-    documents: Optional[List[DocumentSource]]
-    sources: Optional[List[ChatSource]]
+    documents: Optional[List[VectorSearchHit]]
+    sources: Optional[List[VectorSearchHit]]
     retry_count: Optional[int]
     top_k: Optional[int]
-    irrelevant_documents: Optional[List[DocumentSource]]
+    irrelevant_documents: Optional[List[VectorSearchHit]]
 
 
 class GradeDocumentsOutput(BaseModel):

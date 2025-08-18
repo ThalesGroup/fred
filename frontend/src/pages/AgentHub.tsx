@@ -22,23 +22,41 @@ import StarIcon from "@mui/icons-material/Star";
 import Grid2 from "@mui/material/Grid2";
 import LocalOfferIcon from "@mui/icons-material/LocalOffer";
 import { LoadingSpinner } from "../utils/loadingSpinner";
-import { useDeleteAgentMutation, useGetChatBotAgenticFlowsMutation } from "../slices/chatApi";
 import { TopBar } from "../common/TopBar";
 import { AgentCard } from "../components/agentHub/AgentCard";
 import { CreateAgentModal } from "../components/agentHub/CreateAgentModal";
-import { Agent } from "../slices/chatApiStructures";
 import { useConfirmationDialog } from "../components/ConfirmationDialogProvider";
+
+// 🔁 OpenAPI-generated hooks
+import { AgenticFlow, GetAgenticFlowsAgenticV1ChatbotAgenticflowsGetApiResponse, useDeleteAgentAgenticV1AgentsNameDeleteMutation, useLazyGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery } from "../slices/agentic/agenticOpenApi";
 
 interface AgentCategory {
   name: string;
   isTag?: boolean;
 }
 
-const extractUniqueTags = (agents: Agent[]): string[] => {
+const extractUniqueTags = (agents: AgenticFlow[]): string[] => {
   return agents
-    .map((a) => a.tags)
+    .map((a) => a.tag || "") // keep backward compatibility
     .filter((t) => t && t.trim() !== "")
     .filter((tag, index, self) => self.indexOf(tag) === index);
+};
+
+// Map backend AgenticFlow → UI Agent (keeps both tag/tags for compatibility)
+const mapFlowsToAgents = (
+  flows: GetAgenticFlowsAgenticV1ChatbotAgenticflowsGetApiResponse
+): AgenticFlow[] => {
+  return (flows || []).map((f) => ({
+    name: f.name,
+    role: f.role,
+    nickname: f.nickname ?? undefined,
+    description: f.description,
+    icon: f.icon ?? undefined,
+    experts: f.experts ?? undefined,
+    tag: f.tag ?? undefined,
+    // keep .tags for legacy helpers/components that still read it
+    tags: f.tag ?? undefined,
+  })) as AgenticFlow[];
 };
 
 const ActionButton = ({
@@ -73,7 +91,7 @@ const ActionButton = ({
 export const AgentHub = () => {
   const theme = useTheme();
   const { t } = useTranslation();
-  const [agenticFlows, setAgenticFlows] = useState<Agent[]>([]);
+  const [agenticFlows, setAgenticFlows] = useState<AgenticFlow[]>([]);
   const [tabValue, setTabValue] = useState(0);
   const [showElements, setShowElements] = useState(false);
   const [favoriteAgents, setFavoriteAgents] = useState<string[]>([]);
@@ -82,8 +100,9 @@ export const AgentHub = () => {
   const handleOpenCreateAgent = () => setIsCreateModalOpen(true);
   const handleCloseCreateAgent = () => setIsCreateModalOpen(false);
 
-  const [getAgenticFlows, { isLoading }] = useGetChatBotAgenticFlowsMutation();
-  const [deleteAgent] = useDeleteAgentMutation();
+  // 🔁 NEW hooks
+  const [triggerGetFlows, { isFetching }] = useLazyGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery();
+  const [deleteAgent] = useDeleteAgentAgenticV1AgentsNameDeleteMutation();
   const { showConfirmationDialog } = useConfirmationDialog();
 
   const handleDeleteAgent = (name: string) => {
@@ -92,7 +111,7 @@ export const AgentHub = () => {
       message: t("agentHub.confirmDeleteMessage", { name }),
       onConfirm: async () => {
         try {
-          await deleteAgent(name).unwrap();
+          await deleteAgent({ name }).unwrap(); // 🔁 signature changed
           fetchAgents();
         } catch (error) {
           console.error("Failed to delete agent:", error);
@@ -100,11 +119,14 @@ export const AgentHub = () => {
       },
     });
   };
+
   const fetchAgents = async () => {
     try {
-      const response = await getAgenticFlows().unwrap();
-      setAgenticFlows(response);
-      const tags = extractUniqueTags(response);
+      const flows = await triggerGetFlows().unwrap(); // 🔁 lazy query trigger
+      const mapped = mapFlowsToAgents(flows);
+      setAgenticFlows(mapped);
+
+      const tags = extractUniqueTags(mapped);
       const updatedCategories = [
         { name: "all" },
         { name: "favorites" },
@@ -124,6 +146,7 @@ export const AgentHub = () => {
   useEffect(() => {
     setShowElements(true);
     fetchAgents();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleTabChange = (_event: SyntheticEvent, newValue: number) => {
@@ -135,7 +158,7 @@ export const AgentHub = () => {
     if (tabValue === 1) return agenticFlows.filter((a) => favoriteAgents.includes(a.name));
     if (categories.length > 2 && tabValue >= 2) {
       const tagName = categories[tabValue].name;
-      return agenticFlows.filter((a) => a.tag === tagName);
+      return agenticFlows.filter((a) => (a.tag) === tagName);
     }
     return agenticFlows;
   }, [tabValue, agenticFlows, favoriteAgents, categories]);
@@ -201,7 +224,7 @@ export const AgentHub = () => {
                       {category.isTag && (
                         <Chip
                           size="small"
-                          label={agenticFlows.filter((a) => a.tag === category.name).length}
+                          label={agenticFlows.filter((a) => (a.tag) === category.name).length}
                           sx={{
                             ml: 1,
                             height: 20,
@@ -226,7 +249,7 @@ export const AgentHub = () => {
             elevation={2}
             sx={{ p: 3, borderRadius: 4, mb: 3, minHeight: "500px", border: `1px solid ${theme.palette.divider}` }}
           >
-            {isLoading ? (
+            {isFetching ? (
               <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
                 <LoadingSpinner />
               </Box>
@@ -299,7 +322,7 @@ export const AgentHub = () => {
                     onClose={handleCloseCreateAgent}
                     onCreated={() => {
                       handleCloseCreateAgent();
-                      fetchAgents(); // optionally refresh agents
+                      fetchAgents(); // refresh agents
                     }}
                   />
                 )}
