@@ -22,7 +22,7 @@ from app.common.structures import AgentSettings
 from app.core.agents.flow import AgentFlow
 from app.core.model.model_factory import get_model
 
-from langchain_core.messages import HumanMessage, ToolMessage, SystemMessage
+from langchain_core.messages import SystemMessage
 from langgraph.constants import START
 from langgraph.graph import MessagesState, StateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
@@ -79,44 +79,48 @@ class ContentGeneratorExpert(AgentFlow):
         )
 
     def _generate_prompt(self) -> str:
-        return (
-            "You are a simple agent that interacts with an MCP server.\n"
-            "First, call the MCP tool to list available resources.\n"
-            "Then, if a template is chosen, call the content-generation tool using that template.\n"
-            "Return only what the MCP endpoint provides, no extra formatting unless asked.\n"
-            "You can also create resources, if so, provide an example and guide the user based on the request payload you can send the MCP endpoint.\n"
-            "You ABSOLUTELY MUST ask for the user's approval before creating or deleting resources.\n"
-            "Before sending any value to the MCP endpoint, ensure it is properly formatted: "
-            "if it contains a resource file, split it into a YAML header (dict) and body (str)"
-            "according to one of the supported schema which you must get from the MCP server\n"
-            "Before sending any value to the MCP endpoint, ensure it is properly formatted: "
-            "if it contains a resource file, split it into a YAML header (dict) and body (str) "
-            "according to one of the supported forms:\n"
-            "1) Header first, then a single line '---' separator, then body\n"
-            "   id: ...\n"
-            "   version: v1\n"
-            "   kind: template\n"
-            "   ---\n"
-            "   <body>\n"
-            "2) Classic front-matter with opening and closing '---'\n"
-            "   ---\n"
-            "   id: ...\n"
-            "   version: v1\n"
-            "   kind: template\n"
-            "   ---\n"
-            "   <body>\n"
-            "The parts that will be templated are put between brackets such as \\{name\\}.\n"
-            "When creating a template, make sure the content contains words between brackets so we know this is a valid template\n"
-            "If there are no words in between brackets, let the user know and DO NOT proceed to template creation if not explicitely asked by the user"
+        return  (
+            "You are an agent that interacts with an MCP server.\n"
+            "You manage two types of resources with the same format:\n"
+            "1. Templates: content must contain variables in braces { } to be filled.\n"
+            "2. Prompts: static content to modify agent behavior (no variables required).\n"
+            "\n"
+            "RESOURCE FORMAT IS CRITICAL:\n"
+            "- You MUST split content into a YAML header and body before sending to the MCP endpoint.\n"
+            "- The separator '---' between header and body is REQUIRED.\n"
+            "- Supported formats:\n"
+            "  1) Header first, then a single '---', then body:\n"
+            "       id: ...\n"
+            "       version: v1\n"
+            "       kind: template|prompt\n"
+            "       ---\n"
+            "       <body>\n"
+            "  2) Front-matter style with opening and closing '---':\n"
+            "       ---\n"
+            "       id: ...\n"
+            "       version: v1\n"
+            "       kind: template|prompt\n"
+            "       ---\n"
+            "       <body>\n"
+            "- FAILURE TO FOLLOW THIS FORMAT WILL RESULT IN REJECTION BY THE MCP SERVER.\n"
+            "\n"
+            "Rules:\n"
+            "- Ask for user approval before creating or deleting resources.\n"
+            "- Do not proceed with template creation if it contains no variables, unless explicitly requested.\n"
+            "- Ensure the resource is associated with an existing library_tag.\n"
+            "- Only list resources if explicitly asked.\n"
+            "- Provide guidance/examples for creation based on user input.\n"
+            "- Return only the raw output from the MCP endpoint unless formatting is requested.\n"
+            "- Always wait for user input specifying the resource to create.\n"
             f"Today's date: {self.current_date}"
-        )
-
+)
 
     async def _reasoner(self, state: MessagesState):
         """
         Send user request to the model with the base prompt so it calls MCP tools directly.
         """
-        response = await self.model.ainvoke([self.base_prompt] + state["messages"])
+        messages = self.use_fred_prompts([SystemMessage(content=self.base_prompt)] + state["messages"])
+        response = await self.model.ainvoke(messages)
         return {"messages": [response]}
 
 

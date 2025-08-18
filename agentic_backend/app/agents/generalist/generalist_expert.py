@@ -87,7 +87,7 @@ class GeneralistExpert(AgentFlow):
         return builder
 
     async def reasoner(self, state: MessagesState):
-        messages = self.use_fred_resources([SystemMessage(content=self.base_prompt)] + state["messages"])
+        messages = self.use_fred_prompts([SystemMessage(content=self.base_prompt)] + state["messages"])
         assert self.model is not None
         response = await self.model.ainvoke(messages)
         return {"messages": [response]}
