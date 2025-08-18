@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import logging
-from typing import List, Optional, Sequence
+from typing import List, Optional, Sequence, Literal
 
 from app.core.agents.agent_state import all_resource_ids_by_kind, _fetch_body
 from IPython.display import Image
@@ -144,27 +144,32 @@ class AgentFlow:
 
     def use_fred_resources(
         self,
-        messages: Sequence[BaseMessage]
+        messages: Sequence[BaseMessage],
+        kind: Literal["prompts", "templates", "all"] = "all",
     ) -> List[BaseMessage]:
         """
-        Apply all Fred resources (prompts + templates) as ONE labeled system message.
+        Apply Fred resources (prompts, templates, or both) as ONE labeled system message.
 
         Args:
             messages: Existing conversation messages.
+            kind: Which resources to include:
+                - "prompts"   → only prompts
+                - "templates" → only templates
+                - "all"       → both prompts and templates
 
         Returns:
             New list of messages with a single SystemMessage prepended if resources exist.
         """
-        sys_text = self._compose_fred_resource_text().strip()
+        sys_text = self._compose_fred_resource_text(kind).strip()
         if not sys_text:
             return list(messages)
         return [SystemMessage(content=sys_text), *messages]
 
 
-    def _compose_fred_resource_text(self) -> str:
+    def _compose_fred_resource_text(self, kind: str = "all") -> str:
         """
-        Compose system text from all prompts and templates, preserving order
-        and labeling each section. Appends this agent's base_prompt at the end.
+        Compose system text from prompts, templates, or both (depending on `kind`).
+        Preserves order and labels each section. Appends this agent's base_prompt at the end.
         """
         ctx = self.get_runtime_context() or RuntimeContext()
         kf_base = get_knowledge_flow_base_url()
@@ -172,10 +177,14 @@ class AgentFlow:
         # Fetch resource IDs grouped by kind
         resources_by_kind = all_resource_ids_by_kind(ctx)
 
+        if kind != "all":
+            # Only keep the requested kind
+            resources_by_kind = {kind: resources_by_kind.get(kind, [])}
+
         parts = []
 
         # Loop over each kind to fetch and label content
-        for kind, rids in resources_by_kind.items():
+        for k, rids in resources_by_kind.items():
             bodies = []
             for rid in rids:
                 body = _fetch_body(kf_base, rid)
@@ -183,7 +192,7 @@ class AgentFlow:
                     bodies.append(body.strip())
 
             if bodies:
-                parts.append(f"{kind}:")  # Heading
+                parts.append(f"{k}:")  # Heading label (e.g. "prompts:", "templates:")
                 parts.extend(bodies)
 
         # Append the agent's base prompt at the end
