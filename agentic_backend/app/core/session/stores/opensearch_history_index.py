@@ -6,7 +6,6 @@
 from datetime import timezone
 import logging
 from typing import List, Dict
-from dateutil.parser import isoparse
 from collections import defaultdict
 from statistics import mean
 from opensearchpy import OpenSearch, RequestsHttpConnection
@@ -35,14 +34,11 @@ BLOCKS_MAPPING = {
     "properties": {
         # Common discriminator
         "type": {"type": "keyword"},
-
         # TextBlock
         "text": {"type": "text"},
-
         # ToolResultBlock
         "name": {"type": "keyword"},
         "content": {"type": "text"},
-
         # ImageUrlBlock
         "url": {"type": "keyword"},
         "alt": {"type": "text"},
@@ -102,11 +98,7 @@ class OpensearchHistoryIndex(BaseHistoryStore):
             # Safe additive mapping update: ensure `blocks` exists
             try:
                 current = self.client.indices.get_mapping(index=index)
-                props = (
-                    current.get(index, {})
-                    .get("mappings", {})
-                    .get("properties", {})
-                )
+                props = current.get(index, {}).get("mappings", {}).get("properties", {})
                 if "blocks" not in props:
                     self.client.indices.put_mapping(
                         index=index,
@@ -147,7 +139,9 @@ class OpensearchHistoryIndex(BaseHistoryStore):
             ]
             # Use mode="json" + exclude_none to serialize datetimes and omit nulls;
             # Pydantic will include `blocks` if present (list) and already JSON-native.
-            bodies = [msg.model_dump(mode="json", exclude_none=True) for msg in messages]
+            bodies = [
+                msg.model_dump(mode="json", exclude_none=True) for msg in messages
+            ]
             bulk_body = [entry for pair in zip(actions, bodies) for entry in pair]
 
             # OpenSearch Bulk API
@@ -197,7 +191,9 @@ class OpensearchHistoryIndex(BaseHistoryStore):
 
             return [ChatMessagePayload(**hit["_source"]) for hit in hits]
         except Exception as e:
-            logger.error("Failed to retrieve messages for session %s: %s", session_id, e)
+            logger.error(
+                "Failed to retrieve messages for session %s: %s", session_id, e
+            )
             return []
 
     def get_metrics(
@@ -251,9 +247,14 @@ class OpensearchHistoryIndex(BaseHistoryStore):
             buckets = []
             logger.debug(
                 "[metrics] Running OpenSearch query on index '%s' with range: %s to %s, precision=%s",
-                self.index, start, end, precision
+                self.index,
+                start,
+                end,
+                precision,
             )
-            logger.debug("[metrics] Found %d hits between %s and %s", len(hits), start, end)
+            logger.debug(
+                "[metrics] Found %d hits between %s and %s", len(hits), start, end
+            )
             logger.debug("[metrics] Truncated into %d groups", len(grouped))
 
             for key, group in grouped.items():
@@ -262,7 +263,9 @@ class OpensearchHistoryIndex(BaseHistoryStore):
                 aggs: Dict[str, float | List[float]] = {}
 
                 for field, ops in agg_mapping.items():
-                    values = [row.get(field) for row in group if row.get(field) is not None]
+                    values = [
+                        row.get(field) for row in group if row.get(field) is not None
+                    ]
                     if not values:
                         continue
                     for op in ops:

@@ -16,10 +16,12 @@ class MessageType(str, Enum):
     system = "system"
     tool = "tool"
 
+
 class Sender(str, Enum):
     user = "user"
     assistant = "assistant"
     system = "system"
+
 
 class MessageSubtype(str, Enum):
     final = "final"
@@ -31,6 +33,7 @@ class MessageSubtype(str, Enum):
     error = "error"
     injected_context = "injected_context"
 
+
 class FinishReason(str, Enum):
     stop = "stop"
     length = "length"
@@ -39,31 +42,37 @@ class FinishReason(str, Enum):
     cancelled = "cancelled"
     other = "other"
 
+
 class ToolResultBlock(BaseModel):
     type: Literal["tool_result"] = "tool_result"
     name: str
-    content: str           # final string, even if tool gave JSON (stringify on server)
+    content: str  # final string, even if tool gave JSON (stringify on server)
     ok: Optional[bool] = None
     latency_ms: Optional[int] = None
+
 
 class TextBlock(BaseModel):
     type: Literal["text"] = "text"
     text: str
+
 
 class CodeBlock(BaseModel):
     type: Literal["code"] = "code"
     language: Optional[str] = None
     code: str
 
+
 class ImageUrlBlock(BaseModel):
     type: Literal["image_url"] = "image_url"
     url: str
     alt: Optional[str] = None
 
+
 MessageBlock = Annotated[
     Union[TextBlock, ToolResultBlock, CodeBlock, ImageUrlBlock],
     Field(discriminator="type"),
 ]
+
 
 # ---------- Token usage ----------
 class ChatTokenUsage(BaseModel):
@@ -71,7 +80,9 @@ class ChatTokenUsage(BaseModel):
     output_tokens: int
     total_tokens: int
 
+
 # ---------- Tool calls ----------
+
 
 class ToolCall(BaseModel):
     name: str
@@ -80,6 +91,7 @@ class ToolCall(BaseModel):
     error: Optional[str] = None
     latency_ms: Optional[int] = None
 
+
 # ---------- Strongly-typed metadata ----------
 class ChatMessageMetadata(BaseModel):
     """
@@ -87,6 +99,7 @@ class ChatMessageMetadata(BaseModel):
     Add new first-class fields here as your UI needs them.
     Unknown keys go into `extras` by design (no surprises).
     """
+
     model_config = ConfigDict(extra="forbid")  # prevent silent schema drift
 
     # Common
@@ -113,7 +126,9 @@ class ChatMessageMetadata(BaseModel):
 
 # ---------- Unified message ----------
 class ChatMessagePayload(BaseModel):
-    exchange_id: str = Field(..., description="Unique ID for this question/reply exchange")
+    exchange_id: str = Field(
+        ..., description="Unique ID for this question/reply exchange"
+    )
     user_id: str
     type: MessageType
     sender: Sender
@@ -176,6 +191,7 @@ class SessionSchema(BaseModel):
     title: str
     updated_at: datetime
 
+
 class SessionWithFiles(SessionSchema):
     file_names: List[str] = []
 
@@ -185,17 +201,22 @@ class StreamEvent(BaseModel):
     type: Literal["stream"] = "stream"
     message: ChatMessagePayload
 
+
 class FinalEvent(BaseModel):
     type: Literal["final"] = "final"
     messages: List[ChatMessagePayload]
     session: SessionSchema
+
 
 class ErrorEvent(BaseModel):
     type: Literal["error"] = "error"
     content: str
     session_id: Optional[str] = None
 
-ChatEvent = Annotated[Union[StreamEvent, FinalEvent, ErrorEvent], Field(discriminator="type")]
+
+ChatEvent = Annotated[
+    Union[StreamEvent, FinalEvent, ErrorEvent], Field(discriminator="type")
+]
 
 
 # ---------- Utilities ----------
@@ -232,7 +253,7 @@ def clean_agent_metadata(raw: dict) -> ChatMessageMetadata:
 
     # Normalize sources
     invalid: List[Any] = []
-    for s in (raw.get("sources") or []):
+    for s in raw.get("sources") or []:
         if isinstance(s, VectorSearchHit):
             meta.sources.append(s)
         elif isinstance(s, dict):

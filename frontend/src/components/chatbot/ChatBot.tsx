@@ -10,9 +10,9 @@ import { v4 as uuidv4 } from "uuid";
 import { getConfig } from "../../common/config.tsx";
 import DotsLoader from "../../common/DotsLoader.tsx";
 import { usePostTranscribeAudioMutation } from "../../frugalit/slices/api.tsx";
-import { AgenticFlow } from "../../pages/Chat.tsx";
 import { KeyCloakService } from "../../security/KeycloakService.ts";
 import {
+  AgenticFlow,
   ChatAskInput,
   ChatMessagePayload,
   FinalEvent,
@@ -69,10 +69,6 @@ const ChatBot = ({
   const messagesRef = useRef<ChatMessagePayload[]>([]);
 
   // State mutators that keep the ref in sync (prevents stale closures)
-  const addMessage = (msg: ChatMessagePayload) => {
-    messagesRef.current = [...messagesRef.current, msg];
-    setMessages(messagesRef.current);
-  };
   const setAllMessages = (msgs: ChatMessagePayload[]) => {
     messagesRef.current = msgs;
     setMessages(msgs);

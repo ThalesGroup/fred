@@ -48,11 +48,13 @@ def flatten_message(msg: ChatMessagePayload) -> Dict[str, Any]:
     - Metadata -> flattened core fields (+ token usage + sources_count)
     """
     flat: Dict[str, Any] = {
-        "timestamp": msg.timestamp.isoformat(),                         # datetime -> str
+        "timestamp": msg.timestamp.isoformat(),  # datetime -> str
         "session_id": msg.session_id,
         "exchange_id": msg.exchange_id,
         "type": (msg.type.value if hasattr(msg.type, "value") else str(msg.type)),
-        "sender": (msg.sender.value if hasattr(msg.sender, "value") else str(msg.sender)),
+        "sender": (
+            msg.sender.value if hasattr(msg.sender, "value") else str(msg.sender)
+        ),
         "rank": msg.rank,
         "subtype": (msg.subtype.value if msg.subtype else None),
     }

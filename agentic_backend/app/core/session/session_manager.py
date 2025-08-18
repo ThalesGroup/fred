@@ -9,7 +9,7 @@ import tempfile
 from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple, Union, cast
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple, Union
 from uuid import uuid4
 
 from fastapi import UploadFile
@@ -109,8 +109,8 @@ class SessionManager:
 
         # 1) User message (always final)
         #    - We generate both 'content' (string) and 'blocks' (structured).
-        user_blocks = coerce_blocks(message)          # -> [TextBlock(text=...)]
-        user_content = coerce_content(message)        # -> string flattening of blocks
+        user_blocks = coerce_blocks(message)  # -> [TextBlock(text=...)]
+        user_content = coerce_content(message)  # -> string flattening of blocks
 
         user_payload = ChatMessagePayload(
             exchange_id=exchange_id,
@@ -275,8 +275,10 @@ class SessionManager:
                 # ---- Content & blocks ----
                 # LangChain may give str or list-of-blocks in msg.content.
                 raw_content: Any = getattr(msg, "content", "")
-                blocks = coerce_blocks(raw_content)          # -> List[MessageBlock]
-                content_str = coerce_content(raw_content)    # -> String for indexing/previews
+                blocks = coerce_blocks(raw_content)  # -> List[MessageBlock]
+                content_str = coerce_content(
+                    raw_content
+                )  # -> String for indexing/previews
 
                 # ---- Core typing & subtype ----
                 mtype_str: str = getattr(msg, "type", "ai")  # "ai" | "system" | "tool"
@@ -286,11 +288,11 @@ class SessionManager:
                 enriched = ChatMessagePayload(
                     exchange_id=exchange_id,
                     type=mtype_enum,
-                    sender=coerce_sender(msg),     # "assistant" | "system"
+                    sender=coerce_sender(msg),  # "assistant" | "system"
                     content=content_str,
                     blocks=blocks or None,
                     timestamp=utcnow_dt(),
-                    rank=base_rank + 1 + seq,       # strictly increasing
+                    rank=base_rank + 1 + seq,  # strictly increasing
                     session_id=session_id,
                     metadata=md,
                     subtype=subtype,

@@ -1,7 +1,6 @@
 # langchain_to_payload_utils.py
 
 from collections import defaultdict
-import datetime
 import json
 import logging
 from typing import Any, Dict, Iterable, List, Optional
@@ -28,6 +27,7 @@ logger = logging.getLogger(__name__)
 
 # ---------- Finish reason ----------
 
+
 def coerce_finish_reason(val: Any) -> Optional[FinishReason]:
     if not isinstance(val, str):
         return None
@@ -41,6 +41,7 @@ def coerce_finish_reason(val: Any) -> Optional[FinishReason]:
 
 
 # ---------- Token usage ----------
+
 
 def coerce_token_usage(usage_raw: Any) -> Optional[ChatTokenUsage]:
     """
@@ -73,6 +74,7 @@ def coerce_token_usage(usage_raw: Any) -> Optional[ChatTokenUsage]:
 
 # ---------- Sources ----------
 
+
 def coerce_sources(raw: Any) -> List[VectorSearchHit]:
     """Coerce a raw list of dicts/instances to typed VectorSearchHit list."""
     if not isinstance(raw, list):
@@ -85,12 +87,13 @@ def coerce_sources(raw: Any) -> List[VectorSearchHit]:
             try:
                 out.append(VectorSearchHit.model_validate(item))
             except Exception:
-                # if one fails, skip rather than crash
+                logger.warning("Failed to validate VectorSearchHit", exc_info=True)
                 continue
     return out
 
 
 # ---------- Tool calls ----------
+
 
 def _parse_json_or_str(s: Any) -> Any:
     if not isinstance(s, str):
@@ -125,6 +128,7 @@ def extract_tool_call(message: Any) -> Optional[Dict[str, Any]]:
 
 # ---------- Sender / Message type ----------
 
+
 def coerce_sender(msg: BaseMessage) -> Sender:
     # Map LangChain message classes to your Sender enum
     if isinstance(msg, AIMessage):
@@ -136,6 +140,7 @@ def coerce_sender(msg: BaseMessage) -> Sender:
 
 
 # ---------- Blocks & content ----------
+
 
 def coerce_blocks(raw: Any) -> List[MessageBlock]:
     """
@@ -199,6 +204,7 @@ def coerce_content(raw: Any) -> str:
 
 # ---------- Subtype inference ----------
 
+
 def infer_subtype(
     finish_reason: Optional[FinishReason],
     mtype: MessageType,
@@ -250,11 +256,7 @@ def enrich_chat_message_payloads_with_latencies(
     # Compute latencies per exchange
     for ex_id, group in by_exchange.items():
         # Sort stably by (rank, timestamp)
-        group.sort(
-            key=lambda x: (
-                x.rank,
-                x.timestamp)
-        )
+        group.sort(key=lambda x: (x.rank, x.timestamp))
 
         # For every step after the first, compute latency to previous step
         for i in range(1, len(group)):
@@ -262,12 +264,15 @@ def enrich_chat_message_payloads_with_latencies(
             curr_msg = group[i]
 
             try:
-                prev_dt = prev_msg.timestamp 
-                curr_dt = curr_msg.timestamp 
+                prev_dt = prev_msg.timestamp
+                curr_dt = curr_msg.timestamp
             except Exception as e:
                 logger.error(
                     "[MetricStore] Timestamp parsing failed for exchange_id %s, ranks %s→%s: %s",
-                    ex_id, prev_msg.rank, curr_msg.rank, e,
+                    ex_id,
+                    prev_msg.rank,
+                    curr_msg.rank,
+                    e,
                 )
                 continue
 
@@ -276,11 +281,15 @@ def enrich_chat_message_payloads_with_latencies(
             if latency < 0:
                 logger.warning(
                     "[MetricStore] Negative latency in exchange_id %s between ranks %s and %s",
-                    ex_id, prev_msg.rank, curr_msg.rank,
+                    ex_id,
+                    prev_msg.rank,
+                    curr_msg.rank,
                 )
 
             # Ensure metadata exists (pydantic provides default, but be safe)
-            if curr_msg.metadata is None or not isinstance(curr_msg.metadata, ChatMessageMetadata):
+            if curr_msg.metadata is None or not isinstance(
+                curr_msg.metadata, ChatMessageMetadata
+            ):
                 curr_msg.metadata = ChatMessageMetadata()
 
             # Record rounded latency; keep raw sign (don’t clamp) so anomalies are visible

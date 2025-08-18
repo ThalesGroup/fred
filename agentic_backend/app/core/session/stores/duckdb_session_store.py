@@ -44,7 +44,9 @@ class DuckdbSessionStore(BaseSessionStore):
                 )
             """)
             # Optional index for faster list-by-user
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_sessions_user_updated ON sessions(user_id, updated_at)")
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_sessions_user_updated ON sessions(user_id, updated_at)"
+            )
 
     def save(self, session: SessionSchema) -> None:
         with self.store._connect() as conn:
@@ -67,7 +69,10 @@ class DuckdbSessionStore(BaseSessionStore):
                 (user_id,),
             ).fetchall()
         # Pydantic will parse ISO strings into datetime for updated_at
-        return [SessionSchema(id=r[0], user_id=r[1], title=r[2], updated_at=r[3]) for r in rows]
+        return [
+            SessionSchema(id=r[0], user_id=r[1], title=r[2], updated_at=r[3])
+            for r in rows
+        ]
 
     def get(self, session_id: str) -> Optional[SessionSchema]:
         with self.store._connect() as conn:

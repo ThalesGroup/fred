@@ -14,12 +14,11 @@
 
 import logging
 from enum import Enum
-from typing import Dict, List, Literal, Type, Union
+from typing import Dict, List, Literal, Union
 
 from fastapi import (
     APIRouter,
     Depends,
-    FastAPI,
     File,
     Form,
     HTTPException,
@@ -73,6 +72,7 @@ EchoPayload = Union[
     RuntimeContext,
 ]
 
+
 # Keep a 'kind' so the UI can switch on it easily (not required for OpenAPI, but handy)
 class EchoEnvelope(BaseModel):
     kind: Literal[
@@ -92,7 +92,6 @@ class EchoEnvelope(BaseModel):
     payload: EchoPayload = Field(..., description="Schema payload being echoed")
 
 
-    
 class ChatbotController:
     """
     This controller is responsible for handling the UI HTTP endpoints and
@@ -108,7 +107,6 @@ class ChatbotController:
         self.agent_manager = agent_manager
         self.session_manager = session_manager
         fastapi_tags: list[str | Enum] = ["Frontend"]
-
 
         @app.post(
             "/schemas/echo",
@@ -150,10 +148,15 @@ class ChatbotController:
                         client_event = ChatAskInput(**client_request)
 
                         async def websocket_callback(msg: dict):
-                            event = StreamEvent(type="stream", message=ChatMessagePayload(**msg))
+                            event = StreamEvent(
+                                type="stream", message=ChatMessagePayload(**msg)
+                            )
                             await websocket.send_text(event.model_dump_json())
 
-                        session, messages = await self.session_manager.chat_ask_websocket(
+                        (
+                            session,
+                            messages,
+                        ) = await self.session_manager.chat_ask_websocket(
                             callback=websocket_callback,
                             user_id=client_event.user_id,
                             session_id=client_event.session_id or "unknown-session",
@@ -164,27 +167,41 @@ class ChatbotController:
                         )
 
                         await websocket.send_text(
-                            FinalEvent(type="final", messages=messages, session=session).model_dump_json()
+                            FinalEvent(
+                                type="final", messages=messages, session=session
+                            ).model_dump_json()
                         )
 
                     except WebSocketDisconnect:
                         logger.debug("Client disconnected from chatbot WebSocket")
                         break
                     except Exception as e:
-                        summary = log_exception(e, "INTERNAL Error processing chatbot client query")
-                        session_id = client_request.get("session_id", "unknown-session") if client_request else "unknown-session"
+                        summary = log_exception(
+                            e, "INTERNAL Error processing chatbot client query"
+                        )
+                        session_id = (
+                            client_request.get("session_id", "unknown-session")
+                            if client_request
+                            else "unknown-session"
+                        )
                         if websocket.client_state == WebSocketState.CONNECTED:
                             await websocket.send_text(
-                                ErrorEvent(type="error", content=summary, session_id=session_id).model_dump_json()
+                                ErrorEvent(
+                                    type="error", content=summary, session_id=session_id
+                                ).model_dump_json()
                             )
                         else:
                             logger.error("[🔌 WebSocket] Connection closed by client.")
                             break
             except Exception as e:
-                summary = log_exception(e, "EXTERNAL Error processing chatbot client query")
+                summary = log_exception(
+                    e, "EXTERNAL Error processing chatbot client query"
+                )
                 if websocket.client_state == WebSocketState.CONNECTED:
                     await websocket.send_text(
-                        ErrorEvent(type="error", content=summary, session_id="unknown-session").model_dump_json()
+                        ErrorEvent(
+                            type="error", content=summary, session_id="unknown-session"
+                        ).model_dump_json()
                     )
 
         @app.get(

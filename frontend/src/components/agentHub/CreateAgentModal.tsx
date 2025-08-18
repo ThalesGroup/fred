@@ -4,9 +4,17 @@
 // ...
 
 import {
-  Dialog, DialogTitle, DialogContent, DialogActions,
-  TextField, Button, MenuItem, IconButton, Box,
-  Chip, Typography,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
+  Button,
+  MenuItem,
+  IconButton,
+  Box,
+  Chip,
+  Typography,
   ChipProps,
 } from "@mui/material";
 import Grid2 from "@mui/material/Grid2";
@@ -26,8 +34,13 @@ import { useForm, Controller, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useState } from "react";
-import { createAgentSchema } from "./agentSchema";
-import { CreateAgentAgenticV1AgentsCreatePostApiArg, McpAgentRequest, McpServerConfiguration, useCreateAgentAgenticV1AgentsCreatePostMutation } from "../../slices/agentic/agenticOpenApi";
+import {
+  CreateAgentAgenticV1AgentsCreatePostApiArg,
+  McpAgentRequest,
+  McpServerConfiguration,
+  useCreateAgentAgenticV1AgentsCreatePostMutation,
+} from "../../slices/agentic/agenticOpenApi";
+import { AGENT_TYPES, createAgentSchema, MCP_TRANSPORTS } from "./agentSchema";
 
 interface CreateAgentModalProps {
   open: boolean;
@@ -72,44 +85,44 @@ export const CreateAgentModal = ({ open, onClose, onCreated }: CreateAgentModalP
     name: "mcp_servers",
   });
 
-const onSubmit = async (data: z.infer<typeof schema>) => {
-  try {
-    const req: McpAgentRequest = {
-      agent_type: "mcp",
-      name: data.name,
-      role: data.role,
-      description: data.description,
-      base_prompt: data.base_prompt, // guaranteed by schema
+  const onSubmit = async (data: z.infer<typeof schema>) => {
+    try {
+      const req: McpAgentRequest = {
+        agent_type: "mcp",
+        name: data.name,
+        role: data.role,
+        description: data.description,
+        base_prompt: data.base_prompt, // guaranteed by schema
 
-      // normalize each server to the OpenAPI nullable fields
-      mcp_servers: data.mcp_servers.map<McpServerConfiguration>((s) => ({
-        name: s.name,
-        url: s.url,                    // API allows string | null — we send string
-        transport: s.transport,        // API allows string | null — we send string
-        sse_read_timeout: s.sse_read_timeout ?? null,
-        command: null,
-        args: null,
-        env: null,
-      })),
+        // normalize each server to the OpenAPI nullable fields
+        mcp_servers: data.mcp_servers.map<McpServerConfiguration>((s) => ({
+          name: s.name,
+          url: s.url, // API allows string | null — we send string
+          transport: s.transport, // API allows string | null — we send string
+          sse_read_timeout: s.sse_read_timeout ?? null,
+          command: null,
+          args: null,
+          env: null,
+        })),
 
-      nickname: data.nickname || null,
-      icon: data.icon || null,
-      categories: data.categories?.length ? data.categories : null,
-      tag: null,
-    };
+        nickname: data.nickname || null,
+        icon: data.icon || null,
+        categories: data.categories?.length ? data.categories : null,
+        tag: null,
+      };
 
-    const arg: CreateAgentAgenticV1AgentsCreatePostApiArg = { req };
-    await createAgent(arg).unwrap();
-    onCreated();
-    reset();
-  } catch (error: any) {
-    console.error("Error creating agent:", error);
-    showError({
-      summary: t("agentHub.errors.creationFailedSummary"),
-      detail: error?.data?.detail || t("agentHub.errors.creationFailedDetailFallback"),
-    });
-  }
-};
+      const arg: CreateAgentAgenticV1AgentsCreatePostApiArg = { req };
+      await createAgent(arg).unwrap();
+      onCreated();
+      reset();
+    } catch (error: any) {
+      console.error("Error creating agent:", error);
+      showError({
+        summary: t("agentHub.errors.creationFailedSummary"),
+        detail: error?.data?.detail || t("agentHub.errors.creationFailedDetailFallback"),
+      });
+    }
+  };
   const tags = watch("categories") || [];
   const agentType = watch("agent_type");
 
@@ -119,22 +132,28 @@ const onSubmit = async (data: z.infer<typeof schema>) => {
   };
 
   const TAG_GROUPS = {
-    function: { tags: ["qa", "search", "audit", "dashboard", "monitoring", "retrieval", "forecasting", "summarization"], color: "success" },
-    domain: { tags: ["ops", "security", "management", "finance", "legal", "compliance", "team", "data", "devops"], color: "warning" },
+    function: {
+      tags: ["qa", "search", "audit", "dashboard", "monitoring", "retrieval", "forecasting", "summarization"],
+      color: "success",
+    },
+    domain: {
+      tags: ["ops", "security", "management", "finance", "legal", "compliance", "team", "data", "devops"],
+      color: "warning",
+    },
     behavior: { tags: ["expert", "planner", "tooluser", "chatbot", "sandbox"], color: "secondary" },
   } as const;
 
   type TagColor = Exclude<ChipProps["color"], undefined>;
 
-const getTagColor = (tag: string): TagColor => {
-  for (const group of Object.values(TAG_GROUPS)) {
-    // widen the literal tuple to a normal readonly string[]
-    if ((group.tags as readonly string[]).includes(tag)) {
-      return group.color as TagColor;
+  const getTagColor = (tag: string): TagColor => {
+    for (const group of Object.values(TAG_GROUPS)) {
+      // widen the literal tuple to a normal readonly string[]
+      if ((group.tags as readonly string[]).includes(tag)) {
+        return group.color as TagColor;
+      }
     }
-  }
-  return "primary";
-};
+    return "primary";
+  };
   const iconOptions = [
     { label: "Robot", icon: <RobotIcon fontSize="small" /> },
     { label: "Chip", icon: <ChipIcon fontSize="small" /> },
@@ -174,13 +193,7 @@ const getTagColor = (tag: string): TagColor => {
               </Typography>
               <Box display="flex" flexWrap="wrap" gap={1} mb={2}>
                 {tags.map((tag) => (
-                  <Chip
-                    key={tag}
-                    label={tag}
-                    size="small"
-                    color={getTagColor(tag)}
-                    onDelete={() => toggleTag(tag)}
-                  />
+                  <Chip key={tag} label={tag} size="small" color={getTagColor(tag)} onDelete={() => toggleTag(tag)} />
                 ))}
               </Box>
               <Grid2 container spacing={2} sx={{ pl: 3 }}>
@@ -189,13 +202,26 @@ const getTagColor = (tag: string): TagColor => {
                     disableGutters
                     square
                     sx={{
-                      height: 40, minHeight: 40, border: 1, borderColor: "divider", position: "relative",
+                      height: 40,
+                      minHeight: 40,
+                      border: 1,
+                      borderColor: "divider",
+                      position: "relative",
                       "& .MuiAccordionSummary-root": { minHeight: 40, padding: "0 8px" },
                       "& .MuiAccordionSummary-content": { margin: 0 },
                       "& .MuiAccordionDetails-root": {
-                        position: "absolute", top: 40, left: 0, width: "100%", zIndex: 10,
-                        bgcolor: "background.paper", boxShadow: 3, border: 1, borderTop: "none",
-                        maxHeight: 200, overflowY: "auto", p: 1,
+                        position: "absolute",
+                        top: 40,
+                        left: 0,
+                        width: "100%",
+                        zIndex: 10,
+                        bgcolor: "background.paper",
+                        boxShadow: 3,
+                        border: 1,
+                        borderTop: "none",
+                        maxHeight: 200,
+                        overflowY: "auto",
+                        p: 1,
                       },
                     }}
                   >
@@ -216,7 +242,7 @@ const getTagColor = (tag: string): TagColor => {
                               variant={tags.includes(tag) ? "filled" : "outlined"}
                               onClick={() => toggleTag(tag)}
                             />
-                          ))
+                          )),
                         )}
                       </Box>
                     </AccordionDetails>
@@ -267,9 +293,19 @@ const getTagColor = (tag: string): TagColor => {
                 name="agent_type"
                 control={control}
                 render={({ field }) => (
-                  <TextField select fullWidth size="small" label={t("agentHub.fields.agent_type")} {...field}>
-                    {schema.shape.agent_type.options.map((type) => (
-                      <MenuItem key={type} value={type}>{type}</MenuItem>
+                  <TextField
+                    select
+                    fullWidth
+                    size="small"
+                    label={t("agentHub.fields.agent_type")}
+                    {...field}
+                    // optional: make it read-only since it's a literal
+                    disabled
+                  >
+                    {AGENT_TYPES.map((type) => (
+                      <MenuItem key={type} value={type}>
+                        {type}
+                      </MenuItem>
                     ))}
                   </TextField>
                 )}
@@ -284,7 +320,10 @@ const getTagColor = (tag: string): TagColor => {
                   <TextField select fullWidth size="small" label={t("agentHub.fields.icon")} {...field}>
                     {iconOptions.map(({ label, icon }) => (
                       <MenuItem key={label} value={label}>
-                        <Box display="flex" alignItems="center" gap={1}>{icon}{label}</Box>
+                        <Box display="flex" alignItems="center" gap={1}>
+                          {icon}
+                          {label}
+                        </Box>
                       </MenuItem>
                     ))}
                   </TextField>
@@ -348,7 +387,7 @@ const getTagColor = (tag: string): TagColor => {
                             helperText={errors.mcp_servers?.[index]?.transport?.message}
                             {...field}
                           >
-                            {(schema.shape.mcp_servers.unwrap() as z.ZodArray<any>).element.shape.transport.options.map((opt: string) => (
+                            {MCP_TRANSPORTS.map((opt) => (
                               <MenuItem key={opt} value={opt}>
                                 {opt}
                               </MenuItem>

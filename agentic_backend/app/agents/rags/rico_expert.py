@@ -95,11 +95,16 @@ class RicoExpert(AgentFlow):
         for h in hits:
             # Build a compact, readable label per hit
             label_bits = []
-            if h.title: label_bits.append(h.title)
-            if h.section: label_bits.append(f"§ {h.section}")
-            if h.page is not None: label_bits.append(f"p.{h.page}")
-            if h.file_name: label_bits.append(f"({h.file_name})")
-            if h.tag_names: label_bits.append(f"tags: {', '.join(h.tag_names)}")
+            if h.title:
+                label_bits.append(h.title)
+            if h.section:
+                label_bits.append(f"§ {h.section}")
+            if h.page is not None:
+                label_bits.append(f"p.{h.page}")
+            if h.file_name:
+                label_bits.append(f"({h.file_name})")
+            if h.tag_names:
+                label_bits.append(f"tags: {', '.join(h.tag_names)}")
 
             label = " — ".join(label_bits) if label_bits else h.uid
             # Include a short content snippet to steer the model
@@ -112,11 +117,15 @@ class RicoExpert(AgentFlow):
 
     async def _run_reasoning_step(self, state: MessagesState):
         if self.model is None:
-            raise RuntimeError("Model is not initialized. Did you forget to call async_init()?")
+            raise RuntimeError(
+                "Model is not initialized. Did you forget to call async_init()?"
+            )
 
         msg = state["messages"][-1]
         if not isinstance(msg.content, str):
-            raise TypeError(f"Expected string content, got: {type(msg.content).__name__}")
+            raise TypeError(
+                f"Expected string content, got: {type(msg.content).__name__}"
+            )
         question = msg.content
 
         try:
@@ -139,7 +148,9 @@ class RicoExpert(AgentFlow):
 
             if not raw:
                 msg = f"I couldn't find any relevant documents for “{question}”. Try rephrasing?"
-                return {"messages": [await self.model.ainvoke([HumanMessage(content=msg)])]}
+                return {
+                    "messages": [await self.model.ainvoke([HumanMessage(content=msg)])]
+                }
 
             # 3) Parse + sort by rank just in case
             hits: List[VectorSearchHit] = [VectorSearchHit(**d) for d in raw]
@@ -160,7 +171,6 @@ class RicoExpert(AgentFlow):
 
             # 6) Attach rich sources metadata for the UI
             answer.response_metadata["sources"] = [h.model_dump() for h in hits]
-
 
             return {"messages": [answer]}
 

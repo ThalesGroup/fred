@@ -8,7 +8,11 @@ from typing import Any, List, Dict
 from pydantic import ValidationError
 
 from app.core.chatbot.metric_structures import MetricsBucket, MetricsResponse
-from app.core.chatbot.chat_schema import ChatMessagePayload, ChatMessageMetadata, MessageType
+from app.core.chatbot.chat_schema import (
+    ChatMessagePayload,
+    ChatMessageMetadata,
+    MessageType,
+)
 from app.core.session.stores.base_history_store import BaseHistoryStore
 from app.core.session.stores.utils import flatten_message, truncate_datetime
 from fred_core.store.duckdb_store import DuckDBTableStore
@@ -29,6 +33,7 @@ def _enum_val(x):
     """Return enum.value or the original if not an enum/None."""
     return getattr(x, "value", x)
 
+
 def _as_metadata(v: Any) -> ChatMessageMetadata:
     if isinstance(v, ChatMessageMetadata):
         return v
@@ -38,8 +43,10 @@ def _as_metadata(v: Any) -> ChatMessageMetadata:
         except ValidationError:
             # keep unknown keys in extras, don’t crash
             return ChatMessageMetadata(extras=v)
-        
+
     return ChatMessageMetadata()
+
+
 class DuckdbHistoryStore(BaseHistoryStore):
     def __init__(self, db_path):
         self.store = DuckDBTableStore(prefix="history_", db_path=db_path)
@@ -62,8 +69,12 @@ class DuckdbHistoryStore(BaseHistoryStore):
                     PRIMARY KEY (session_id, rank)
                 )
             """)
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_msgs_user_time ON messages(user_id, timestamp)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_msgs_session ON messages(session_id)")
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_msgs_user_time ON messages(user_id, timestamp)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_msgs_session ON messages(session_id)"
+            )
 
     def save(
         self, session_id: str, messages: List[ChatMessagePayload], user_id: str
@@ -116,8 +127,8 @@ class DuckdbHistoryStore(BaseHistoryStore):
                     ChatMessagePayload(
                         user_id=row[0],
                         rank=row[1],
-                        timestamp=row[2],              # Pydantic parses ISO string -> datetime
-                        type=row[3],                    # Pydantic parses to MessageType
+                        timestamp=row[2],  # Pydantic parses ISO string -> datetime
+                        type=row[3],  # Pydantic parses to MessageType
                         sender=row[4],
                         exchange_id=row[5],
                         content=row[6],
@@ -159,7 +170,7 @@ class DuckdbHistoryStore(BaseHistoryStore):
                     session_id=row[0],
                     user_id=row[1],
                     rank=row[2],
-                    timestamp=row[3],          # parsed to datetime by Pydantic
+                    timestamp=row[3],  # parsed to datetime by Pydantic
                     type=row[4],
                     sender=row[5],
                     exchange_id=row[6],
@@ -201,7 +212,9 @@ class DuckdbHistoryStore(BaseHistoryStore):
             aggs: Dict[str, float | List[float]] = {}
 
             for field, ops in agg_mapping.items():
-                raw_values = [row.get(field) for row in group if row.get(field) is not None]
+                raw_values = [
+                    row.get(field) for row in group if row.get(field) is not None
+                ]
 
                 # Coerce to floats and drop non-numerics to satisfy the type
                 num_values: List[float] = []
@@ -223,7 +236,9 @@ class DuckdbHistoryStore(BaseHistoryStore):
                         case "max":
                             aggs[f"{field}_max"] = float(max(num_values))
                         case "mean":
-                            aggs[f"{field}_mean"] = float(sum(num_values) / len(num_values))
+                            aggs[f"{field}_mean"] = float(
+                                sum(num_values) / len(num_values)
+                            )
                         case "values":
                             # ensure a List[float], not List[object]
                             aggs[f"{field}_values"] = list(num_values)

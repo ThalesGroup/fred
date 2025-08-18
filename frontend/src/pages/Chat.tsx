@@ -5,7 +5,7 @@
 
 import { Grid2 } from "@mui/material";
 import "dayjs/locale/en-gb";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import LoadingWithProgress from "../components/LoadingWithProgress.tsx";

@@ -20,13 +20,12 @@ import RateReviewIcon from "@mui/icons-material/RateReview";
 import VolumeUpIcon from "@mui/icons-material/VolumeUp";
 import ClearIcon from "@mui/icons-material/Clear";
 import { usePostSpeechTextMutation } from "../../frugalit/slices/api.tsx";
-import { AgenticFlow } from "../../pages/Chat.tsx";
 import { getAgentBadge } from "../../utils/avatar.tsx";
 import { FeedbackDialog } from "../../frugalit/component/FeedbackDialog.tsx";
 import { useToast } from "../ToastProvider.tsx";
 import { extractHttpErrorMessage } from "../../utils/extractHttpErrorMessage.tsx";
 import CustomMarkdownRenderer from "../markdown/CustomMarkdownRenderer.tsx";
-import { ChatMessagePayload, usePostFeedbackAgenticV1ChatbotFeedbackPostMutation } from "../../slices/agentic/agenticOpenApi.ts";
+import { AgenticFlow, ChatMessagePayload, usePostFeedbackAgenticV1ChatbotFeedbackPostMutation } from "../../slices/agentic/agenticOpenApi.ts";
 
 export default function Message({
   message,

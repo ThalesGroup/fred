@@ -7,8 +7,7 @@ import React, { memo, useEffect, useRef, useState } from "react";
 import Message from "./MessageCard.tsx";
 import Thoughts from "./Thoughts.tsx";
 import Sources from "./Sources.tsx";
-import { AgenticFlow } from "../../pages/Chat.tsx";
-import { ChatMessagePayload } from "../../slices/agentic/agenticOpenApi.ts";
+import { AgenticFlow, ChatMessagePayload } from "../../slices/agentic/agenticOpenApi.ts";
 
 type Props = {
   messages: ChatMessagePayload[];
