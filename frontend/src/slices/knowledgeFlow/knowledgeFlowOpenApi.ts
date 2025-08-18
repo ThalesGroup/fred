@@ -383,7 +383,7 @@ export type DeleteResourceKnowledgeFlowV1ResourcesResourceIdDeleteApiResponse =
 export type DeleteResourceKnowledgeFlowV1ResourcesResourceIdDeleteApiArg = {
   resourceId: string;
 };
-export type SearchDocumentsUsingVectorizationApiResponse = /** status 200 Successful Response */ DocumentSource[];
+export type SearchDocumentsUsingVectorizationApiResponse = /** status 200 Successful Response */ VectorSearchHit[];
 export type SearchDocumentsUsingVectorizationApiArg = {
   searchRequest: SearchRequest;
 };
@@ -396,33 +396,74 @@ export type ScheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPostApiResponse =
 export type ScheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPostApiArg = {
   processDocumentsRequest: ProcessDocumentsRequest;
 };
-export type SourceType = "push" | "pull";
-export type DocumentMetadata = {
+export type Identity = {
+  /** Original file name incl. extension */
   document_name: string;
+  /** Stable unique id across the system */
   document_uid: string;
-  /** When the document was added to the system */
-  date_added_to_kb?: string;
-  /** True if the system can download or access the original file again */
-  retrievable?: boolean;
-  /** Tag identifying the pull source (e.g., 'local-docs', 'contracts-git') */
-  source_tag?: string | null;
-  /** Path or URI to the original pull file */
-  pull_location?: string | null;
-  source_type: SourceType;
-  /** User-assigned tags */
-  tags?: string[] | null;
+  /** Human-friendly title for UI */
   title?: string | null;
   author?: string | null;
   created?: string | null;
   modified?: string | null;
   last_modified_by?: string | null;
-  category?: string | null;
-  subject?: string | null;
-  keywords?: string | null;
-  /** Status of each well-defined processing stage */
-  processing_stages?: {
-    [key: string]: "not_started" | "in_progress" | "done" | "failed";
+};
+export type SourceType = "push" | "pull";
+export type SourceInfo = {
+  source_type: SourceType;
+  /** Repository/connector id, e.g. 'uploads', 'github' */
+  source_tag?: string | null;
+  /** Path or URI to the original pull file */
+  pull_location?: string | null;
+  /** True if raw file can be re-fetched */
+  retrievable?: boolean;
+  /** When the document was added to the system */
+  date_added_to_kb?: string;
+};
+export type FileType = "pdf" | "docx" | "pptx" | "xlsx" | "csv" | "md" | "html" | "txt" | "other";
+export type FileInfo = {
+  file_type?: FileType;
+  mime_type?: string | null;
+  file_size_bytes?: number | null;
+  page_count?: number | null;
+  row_count?: number | null;
+  sha256?: string | null;
+  md5?: string | null;
+  language?: string | null;
+};
+export type Tagging = {
+  /** Stable tag IDs (UUIDs) */
+  tag_ids?: string[];
+  /** Display names for chips */
+  tag_names?: string[];
+};
+export type AccessInfo = {
+  license?: string | null;
+  confidential?: boolean;
+  acl?: string[];
+};
+export type ProcessingStatus = "not_started" | "in_progress" | "done" | "failed";
+export type Processing = {
+  stages?: {
+    [key: string]: ProcessingStatus;
   };
+  errors?: {
+    [key: string]: string;
+  };
+};
+export type DocumentMetadata = {
+  identity: Identity;
+  source: SourceInfo;
+  file?: FileInfo;
+  tags?: Tagging;
+  access?: AccessInfo;
+  processing?: Processing;
+  preview_url?: string | null;
+  viewer_url?: string | null;
+  /** Processor-specific additional attributes (namespaced keys). */
+  extensions?: {
+    [key: string]: any;
+  } | null;
 };
 export type ValidationError = {
   loc: (string | number)[];
@@ -551,30 +592,36 @@ export type ResourceUpdate = {
   description?: string | null;
   labels?: string[] | null;
 };
-export type DocumentSource = {
+export type VectorSearchHit = {
   content: string;
-  file_path: string;
-  file_name: string;
-  page: number | null;
+  page?: number | null;
+  section?: string | null;
+  viewer_fragment?: string | null;
+  /** Document UID */
   uid: string;
-  modified?: string | null;
   title: string;
-  author: string;
-  created: string;
-  type: string;
-  /** Similarity score returned by the vector store (e.g., cosine distance). */
+  author?: string | null;
+  created?: string | null;
+  modified?: string | null;
+  file_name?: string | null;
+  file_path?: string | null;
+  repository?: string | null;
+  pull_location?: string | null;
+  language?: string | null;
+  mime_type?: string | null;
+  /** File type/category */
+  type?: string | null;
+  tag_ids?: string[];
+  tag_names?: string[];
+  license?: string | null;
+  confidential?: boolean | null;
+  /** Similarity score from vector search */
   score: number;
-  /** Rank of the document among the retrieved results. */
   rank?: number | null;
-  /** Identifier of the embedding model used. */
   embedding_model?: string | null;
-  /** Name of the vector index used for retrieval. */
   vector_index?: string | null;
-  /** Approximate token count of the content. */
   token_count?: number | null;
-  /** Timestamp when the document was retrieved. */
   retrieved_at?: string | null;
-  /** Session or trace ID for auditability. */
   retrieval_session_id?: string | null;
 };
 export type SearchRequest = {

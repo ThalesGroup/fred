@@ -37,6 +37,7 @@ class ChatAskInput(BaseModel):
     message: str
     agent_name: str
     runtime_context: Optional[RuntimeContext] = None
+    client_exchange_id: str | None = None
 
 
 class ChatBotEvent(BaseModel):

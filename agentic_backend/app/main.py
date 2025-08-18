@@ -118,7 +118,6 @@ def create_app() -> FastAPI:
     ChatbotController(
         router, session_manager=session_manager, agent_manager=agent_manager
     )
-
     app.include_router(router)
     logger.info("🧩 All controllers registered.")
     return app

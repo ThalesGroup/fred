@@ -1,16 +1,7 @@
 // Copyright Thales 2025
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// ...
 
 import Editor from "@monaco-editor/react";
 import EmojiObjectsIcon from "@mui/icons-material/EmojiObjects";
@@ -27,10 +18,17 @@ import {
 } from "@mui/lab";
 import { Box, Fade, Grid2, IconButton, Modal, Tooltip, Typography } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
-import { useState } from "react";
-import { ChatMessagePayload } from "../../slices/chatApiStructures.ts";
+import { useMemo, useState } from "react";
 import FoldableChatSection from "./FoldableChatSection";
+import { ChatMessagePayload } from "../../slices/agentic/agenticOpenApi";
 
+/**
+ * Thoughts
+ * Renders a timeline of grouped intermediate messages (plan, thought, execution, tool_result)
+ * plus task-scoped finals. Provides two modals:
+ *  - Full reasoning path (non-tool + tool mixed, readable)
+ *  - Tools usage details (only tool messages)
+ */
 export default function Thoughts({
   messages,
   isOpenByDefault = false,
@@ -42,59 +40,107 @@ export default function Thoughts({
 
   const [thoughtsDetails, setThoughtsDetails] = useState<string>("");
   const [modalThoughtsDetails, setModalThoughtsDetails] = useState<boolean>(false);
-  console.log("Thoughts component received messages:", messages);
 
-  const handleOpenModalThoughtsToolDetails = (messages: ChatMessagePayload[]) => {
-    let content = "";
-    // Add expert name from the first message
-    if (messages.length > 0) {
-      const agentic_flow = messages[0].metadata?.fred?.agentic_flow;
-      if (agentic_flow) {
-        content += `# Responses from ${agentic_flow} \n \n`;
-      }
+  // Precompute a list to know whether any group has a tool message (for showing the wrench icon).
+  const groupsHaveTools = useMemo(() => {
+    const map: Record<string, boolean> = {};
+    for (const [task, msgs] of Object.entries(messages)) {
+      map[task] = msgs.some((m) => m.type === "tool" || m.subtype === "tool_result");
     }
-    for (const message of messages) {
-      if (message.type == "tool") {
-        // Add a markdown block delimiter for each message
-        content += message.content + "\n" + "\n";
-        // Display tool
-      }
-    }
+    return map;
+  }, [messages]);
+
+  const openModal = (content: string) => {
     setThoughtsDetails(content);
     setModalThoughtsDetails(true);
   };
+  const closeModal = () => setModalThoughtsDetails(false);
 
-  const handleOpenModalThoughtsDetails = (messages: ChatMessagePayload[]) => {
-    let content = "";
-    // Add expert name from the first message
-    if (messages.length > 0) {
-      const agentic_flow = messages[0].metadata?.fred?.agentic_flow;
-      if (agentic_flow) {
-        content += `# Responses from ${agentic_flow} \n \n`;
-        content += "---" + "\n";
-      }
-    }
-    for (const message of messages) {
-      if (message.type !== "tool") {
-        // Add a markdown block delimiter for each message
-        content += message.content + "\n" + "\n";
-        // Display tool
+  // ---- Builders for modal content (plain text / markdown-ish) ----------------
+
+  const summarizeToolCall = (m: ChatMessagePayload) => {
+    const tc = m.metadata?.tool_call;
+    if (!tc) return "";
+    const argPreview =
+      tc.args && Object.keys(tc.args).length > 0
+        ? `args: ${JSON.stringify(tc.args, null, 2)}\n`
+        : "";
+    const preview = tc.result_preview ? `preview: ${tc.result_preview}\n` : "";
+    const latency = typeof tc.latency_ms === "number" ? `latency: ${tc.latency_ms}ms\n` : "";
+    const err = tc.error ? `error: ${tc.error}\n` : "";
+    return `tool: ${tc.name}\n${argPreview}${preview}${latency}${err}`.trim();
+  };
+
+  const headerForGroup = (groupMsgs: ChatMessagePayload[]) => {
+    const agentName =
+      groupMsgs[0]?.metadata?.agent_name ??
+      (typeof groupMsgs[0]?.metadata?.fred?.agentic_flow === "string"
+        ? // backward-compat if server still populates it
+          (groupMsgs[0]?.metadata?.fred as any).agentic_flow
+        : undefined) ??
+      "Agent";
+    return `# Responses from ${agentName}\n\n`;
+  };
+
+  // Full reasoning path (mix of all messages in the group)
+  const buildReasoningContent = (groupMsgs: ChatMessagePayload[]) => {
+    let content = headerForGroup(groupMsgs);
+    content += "---\n";
+    for (const m of groupMsgs) {
+      const subtype = m.subtype ?? "—";
+      const ts = m.timestamp ? new Date(m.timestamp).toLocaleString() : "";
+      // Choose a readable title per message
+      const title =
+        m.type === "tool"
+          ? `Tool call (${m.metadata?.tool_call?.name ?? "tool"})`
+          : `Step: ${subtype}`;
+
+      content += `## ${title}\n`;
+      if (ts) content += `*${ts}*\n`;
+
+      if (m.type === "tool") {
+        // Show tool metadata, then the tool output/content
+        const tc = summarizeToolCall(m);
+        if (tc) content += tc + "\n\n";
+        if (m.content?.trim()) {
+          content += "```\n" + m.content.trim() + "\n```\n\n";
+        }
       } else {
-        // In the case of a tool message,
-        // format the Markdown content to display the tool name and the tool content
-        const toolName = message.metadata?.name || "Tool";
-        content += "Tool calling (" + toolName + ")\n" + "\n";
-        //TODO <pre> html component is not displayed well
-        content += message.content + "\n" + "\n";
+        // For non-tool messages, just show their content
+        if (m.content?.trim()) {
+          content += m.content.trim() + "\n\n";
+        }
       }
-      content += "---" + "\n";
+      content += "---\n";
     }
-    setThoughtsDetails(content);
-    setModalThoughtsDetails(true);
+    return content;
   };
-  const handleCloseModalThoughtsDetails = () => {
-    setModalThoughtsDetails(false);
+
+  // Only tool messages (tool inputs/outputs)
+  const buildToolsOnlyContent = (groupMsgs: ChatMessagePayload[]) => {
+    const toolMsgs = groupMsgs.filter((m) => m.type === "tool" || m.subtype === "tool_result");
+    let content = headerForGroup(groupMsgs);
+    if (toolMsgs.length === 0) {
+      content += "_No tools were invoked in this group._\n";
+      return content;
+    }
+    for (const m of toolMsgs) {
+      const ts = m.timestamp ? new Date(m.timestamp).toLocaleString() : "";
+      const title = `Tool: ${m.metadata?.tool_call?.name ?? "tool"}`;
+      content += `## ${title}\n`;
+      if (ts) content += `*${ts}*\n`;
+      const tc = summarizeToolCall(m);
+      if (tc) content += tc + "\n\n";
+      if (m.content?.trim()) {
+        content += "```\n" + m.content.trim() + "\n```\n\n";
+      }
+      content += "---\n";
+    }
+    return content;
   };
+
+  // ---------------------------------------------------------------------------
+
   return (
     <>
       {Object.keys(messages).length > 0 && (
@@ -108,13 +154,15 @@ export default function Thoughts({
               margin: "0px",
             }}
           >
-            {Object.entries(messages).map(([key, msgs], index) => {
+            {Object.entries(messages).map(([taskName, msgs], index, arr) => {
+              const hasTools = groupsHaveTools[taskName];
+              const isLast = index === arr.length - 1;
+
               return (
                 <TimelineItem
-                  key={`thought-${key}-${index}`}
-                  // key={index}
+                  key={`thought-${taskName}-${index}`}
                   style={{
-                    minHeight: index < Object.keys(messages).length - 1 ? "60px" : "0px",
+                    minHeight: !isLast ? "60px" : "0px",
                   }}
                 >
                   <TimelineSeparator>
@@ -123,13 +171,15 @@ export default function Thoughts({
                         backgroundColor: theme.palette.primary.main,
                       }}
                     />
-                    {index < Object.keys(messages).length - 1 && <TimelineConnector />}
+                    {!isLast && <TimelineConnector />}
                   </TimelineSeparator>
+
                   <TimelineContent>
                     <Grid2 container display="flex" flexDirection="row">
                       <Grid2 size={11}>
-                        <Typography variant="body2">{key}</Typography>
+                        <Typography variant="body2">{taskName}</Typography>
                       </Grid2>
+
                       <Grid2
                         size={1}
                         display="flex"
@@ -141,27 +191,19 @@ export default function Thoughts({
                         <Tooltip title={"View the reasoning path"}>
                           <IconButton
                             aria-label="View details"
-                            style={{
-                              color: theme.palette.primary.main,
-                              padding: 0,
-                            }}
-                            onClick={() => handleOpenModalThoughtsDetails(msgs)}
+                            style={{ color: theme.palette.primary.main, padding: 0 }}
+                            onClick={() => openModal(buildReasoningContent(msgs))}
                           >
                             <PsychologyAltIcon color="primary" sx={{ fontSize: "1.8rem" }} />
                           </IconButton>
                         </Tooltip>
-                        {/* Display the tool icon if thoughts include a tool message */}
-                        {msgs.filter((thought) => thought.type === "tool").length > 0 && (
+
+                        {hasTools && (
                           <Tooltip title={"View the tools used and their results"}>
                             <IconButton
                               aria-label="View tools usage"
-                              style={{
-                                color: theme.palette.warning.main,
-                                padding: 0,
-                              }}
-                              onClick={() =>
-                                handleOpenModalThoughtsToolDetails(msgs.filter((thought) => thought.type === "tool"))
-                              }
+                              style={{ color: theme.palette.warning.main, padding: 0 }}
+                              onClick={() => openModal(buildToolsOnlyContent(msgs))}
                             >
                               <WebhookIcon color="primary" sx={{ fontSize: "1.8rem" }} />
                             </IconButton>
@@ -177,7 +219,7 @@ export default function Thoughts({
         </FoldableChatSection>
       )}
 
-      <Modal open={modalThoughtsDetails} onClose={handleCloseModalThoughtsDetails}>
+      <Modal open={modalThoughtsDetails} onClose={closeModal}>
         <Fade in={modalThoughtsDetails} timeout={100}>
           <Box
             sx={{
@@ -185,11 +227,7 @@ export default function Thoughts({
               top: "50%",
               left: { xs: "calc(50% + 40px)", md: "calc(50% + 80px)" },
               transform: "translate(-50%, -50%)",
-              width: {
-                xs: "calc(100% - 140px)",
-                md: "calc(80% - 140px)",
-                lg: "calc(55% - 140px)",
-              },
+              width: { xs: "calc(100% - 140px)", md: "calc(80% - 140px)", lg: "calc(55% - 140px)" },
               maxHeight: "80vh",
               bgcolor: "background.paper",
               color: "text.primary",
@@ -199,7 +237,7 @@ export default function Thoughts({
               flexDirection: "column",
               scrollBehavior: "smooth",
               scrollbarWidth: "10px",
-              boxShadow: 48, // Adds MUI elevation
+              boxShadow: 48,
               overflowY: "auto",
             }}
           >
@@ -207,8 +245,8 @@ export default function Thoughts({
               <Editor
                 theme={theme.palette.mode === "dark" ? "vs-dark" : "vs"}
                 height="100vh"
-                defaultLanguage="json"
-                options={{ readOnly: true }}
+                defaultLanguage="markdown"
+                options={{ readOnly: true, wordWrap: "on", minimap: { enabled: false } }}
                 defaultValue={thoughtsDetails}
               />
             )}
