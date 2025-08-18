@@ -9,7 +9,7 @@ from app.application_context import ApplicationContext
 logger = logging.getLogger(__name__)
 
 
-class TabularController:
+class ReadOnlyTabularController:
     """
     API controller to expose tabular tools (read and write) for multiple databases.
     """
