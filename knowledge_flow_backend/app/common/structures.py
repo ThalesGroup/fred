@@ -278,10 +278,12 @@ class StorageConfig(BaseModel):
     tabular_store: Optional[StoreConfig] = Field(default=None, description="Optional tabular store")
     vector_store: VectorStorageConfig
 
+class AudioSettings(BaseModel):
+    whisper_model_size: str = "base"
 
 class Configuration(BaseModel):
     app: AppConfig
-
+    audio: Optional[AudioSettings] = AudioSettings()
     input_processors: List[ProcessorConfig]
     output_processors: Optional[List[ProcessorConfig]] = None
     content_storage: ContentStorageConfig = Field(..., description="Content Storage configuration")
