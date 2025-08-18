@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import logging
-from typing import List, Optional, Sequence, Literal
+from typing import List, Optional, Sequence
 
 from IPython.display import Image
 from langchain_core.tools import BaseToolkit
