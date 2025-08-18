@@ -173,7 +173,7 @@ class AgentFlow:
     def _compose_fred_system_text(self) -> str:
         """
         Internal: builds the system text from (a) selected Fred resources and
-        (b) this agent’s base_prompt, preserving order and keeping it in one message.
+        (b) this agent's base_prompt, preserving order and keeping it in one message.
         """
         ctx = self.get_runtime_context() or RuntimeContext()
         prepared: Prepared = resolve_prepared(ctx, get_knowledge_flow_base_url())
@@ -183,35 +183,6 @@ class AgentFlow:
         if pre_text and base_text:
             return f"{pre_text}\n\n{base_text}"
         return pre_text or base_text
-
-    def _compose_fred_resource_text(self, kind: str = "all") -> str:
-        """
-        Compose system text from prompts, templates, or both (depending on `kind`).
-        Preserves order and labels each section. Appends this agent's base_prompt at the end.
-        """
-        ctx = self.get_runtime_context() or RuntimeContext()
-        kf_base = get_knowledge_flow_base_url()
-
-        # Fetch prepared resource texts (already resolved + cleaned in agent_state)
-        resources_by_kind = resource_texts_by_kind(ctx, kf_base)
-
-        if kind != "all":
-            # Restrict to one kind only
-            resources_by_kind = {
-                kind: resources_by_kind.get(kind, "")
-            }
-
-        parts = []
-        for k, text in resources_by_kind.items():
-            if text:
-                parts.append(f"{k}:")
-                parts.append(text)
-
-        # Append the agent's base prompt
-        if self.base_prompt and self.base_prompt.strip():
-            parts.append(self.base_prompt.strip())
-
-        return "\n\n".join(parts)
 
     def get_compiled_graph(self) -> CompiledStateGraph:
         """

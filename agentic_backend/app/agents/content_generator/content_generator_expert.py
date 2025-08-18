@@ -112,6 +112,7 @@ class ContentGeneratorExpert(AgentFlow):
             "- Provide guidance/examples for creation based on user input.\n"
             "- Return only the raw output from the MCP endpoint unless formatting is requested.\n"
             "- Always wait for user input specifying the resource to create.\n"
+            "- Generate a 10 characters alphanumerical value as the resource unique identifier when you create it.\n"
             f"Today's date: {self.current_date}"
 )
 
