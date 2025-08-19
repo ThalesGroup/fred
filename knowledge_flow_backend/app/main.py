@@ -42,7 +42,7 @@ from app.common.utils import parse_server_configuration
 from app.features.content.controller import ContentController
 from app.features.metadata.controller import MetadataController
 from app.features.tabular.read_only_controller import ReadOnlyTabularController
-from app.features.tabular.read_write_controller import ReadWriteTabularController
+from app.features.tabular.controller import TabularController
 from app.features.tag.controller import TagController
 from app.features.vector_search.controller import VectorSearchController
 from app.features.ingestion.controller import IngestionController
@@ -110,8 +110,7 @@ def create_app() -> FastAPI:
     PullDocumentController(router, pull_document_service)
     ContentController(router)
     IngestionController(router)
-    # ReadOnlyTabularController(router)
-    ReadWriteTabularController(router)
+    TabularController(router)
     # CodeSearchController(router)
     TagController(router)
     ResourceController(router)
