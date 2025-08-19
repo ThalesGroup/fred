@@ -1,4 +1,18 @@
-# app/agents/rags/rico_expert.py
+# Copyright Thales 2025
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
 import logging
 from datetime import datetime
 from typing import List
@@ -8,7 +22,6 @@ from langgraph.graph import END, START, MessagesState, StateGraph
 
 from fred_core import VectorSearchHit
 from app.common.rags_client import VectorSearchClient
-from app.common.rags_prompt import build_rag_prompt, rag_preamble
 from app.common.rags_utils import (
     attach_sources_to_llm_response,
     ensure_ranks,
@@ -21,6 +34,25 @@ from app.core.agents.runtime_context import get_document_libraries_ids
 from app.core.model.model_factory import get_model
 
 logger = logging.getLogger(__name__)
+
+def rag_preamble(now: str | None = None) -> str:
+    now = now or datetime.now().strftime("%Y-%m-%d")
+    return (
+        "You are an assistant that answers questions strictly based on the retrieved document chunks. "
+        "Always cite your claims using bracketed numeric markers like [1], [2], etc., matching the provided sources list. "
+        "Be concise, factual, and avoid speculation. If evidence is weak or missing, say so.\n"
+        f"Current date: {now}.\n"
+    )
+
+
+def build_rag_prompt(preamble: str, question: str, sources_block: str) -> str:
+    return (
+        f"{preamble}\n"
+        "Use ONLY the sources below. When you state a fact, append a citation like [1] or [1][2]. "
+        "If the sources disagree, say so briefly.\n\n"
+        f"Question:\n{question}\n\n"
+        f"Sources:\n{sources_block}\n"
+    )
 
 
 class RicoExpert(AgentFlow):

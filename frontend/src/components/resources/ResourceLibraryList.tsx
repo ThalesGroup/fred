@@ -7,12 +7,24 @@ import FolderOutlinedIcon from "@mui/icons-material/FolderOutlined";
 import UploadIcon from "@mui/icons-material/Upload";
 import UnfoldMoreIcon from "@mui/icons-material/UnfoldMore";
 import UnfoldLessIcon from "@mui/icons-material/UnfoldLess";
-import { Box, Breadcrumbs, Button, Card, Chip, Link, Typography, IconButton, Tooltip } from "@mui/material";
+import {
+  Box,
+  Breadcrumbs,
+  Button,
+  Card,
+  Chip,
+  Link,
+  Typography,
+  IconButton,
+  Tooltip,
+  TextField,
+} from "@mui/material";
 import {
   useListAllTagsKnowledgeFlowV1TagsGetQuery,
   ResourceKind,
   useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery,
   Resource,
+  TagWithItemsId,
 } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { buildTree, TagNode, findNode } from "../tags/tagTree";
 import { useTranslation } from "react-i18next";
@@ -23,6 +35,8 @@ import { PromptEditorModal } from "./PromptEditorModal";
 import { TemplateEditorModal } from "./TemplateEditorModal";
 import { ResourcePreviewModal } from "./ResourcePreviewModal";
 import { ResourceImportDrawer } from "./ResourceImportDrawer";
+import { useConfirmationDialog } from "../ConfirmationDialogProvider";
+import { useTagCommands } from "../../common/useTagCommands";
 
 /** Small i18n helper */
 const useKindLabels = (kind: "prompt" | "template") => {
@@ -33,11 +47,39 @@ const useKindLabels = (kind: "prompt" | "template") => {
   };
 };
 
+/** Helpers mirroring documents */
+const getResourceTagIds = (r: Resource): string[] => {
+  // Accept several shapes, stay defensive
+  // - r.tag_ids: string[]
+  // - r.tags: Array<{ id: string } | string>
+  // - r.labels: Record<string, string>  (ignored here)
+  const fromTagIds = (r as any).tag_ids;
+  if (Array.isArray(fromTagIds)) return fromTagIds as string[];
+  const fromTags = (r as any).tags;
+  if (Array.isArray(fromTags)) {
+    return fromTags.map((t: any) => (typeof t === "string" ? t : t?.id)).filter(Boolean);
+  }
+  return [];
+};
+
+const matchesResourceByName = (r: Resource, q: string) => {
+  const name = r.name ?? "";
+  const desc = r.description ?? "";
+  const query = q.toLowerCase();
+  return name.toLowerCase().includes(query) || desc.toLowerCase().includes(query);
+};
+
+const resHasAnyTag = (r: Resource, tagIds: string[]) => {
+  const ids = getResourceTagIds(r);
+  return ids.some((id) => tagIds.includes(id));
+};
+
 type Props = { kind: ResourceKind };
 
 export default function ResourceLibraryList({ kind }: Props) {
   const { t } = useTranslation();
   const { one: typeOne, other: typePlural } = useKindLabels(kind);
+  const { showConfirmationDialog } = useConfirmationDialog();
 
   /** ---------------- State ---------------- */
   const [expanded, setExpanded] = React.useState<string[]>([]);
@@ -47,6 +89,13 @@ export default function ResourceLibraryList({ kind }: Props) {
   const [uploadTargetTagId, setUploadTargetTagId] = React.useState<string | null>(null);
   const [previewing, setPreviewing] = React.useState<Resource | null>(null);
   const [editing, setEditing] = React.useState<Resource | null>(null);
+
+  // NEW: search + multi-select (mirrors Documents)
+  const [query, setQuery] = React.useState<string>("");
+  // map: resourceId -> TagWithItemsId (the library tag in which it was selected)
+  const [selectedItems, setSelectedItems] = React.useState<Record<string, TagWithItemsId>>({});
+  const selectedCount = React.useMemo(() => Object.keys(selectedItems).length, [selectedItems]);
+  const clearSelection = React.useCallback(() => setSelectedItems({}), []);
 
   /** ---------------- Data fetching ---------------- */
   // 1) Tags for this kind (prompt | template)
@@ -62,9 +111,7 @@ export default function ResourceLibraryList({ kind }: Props) {
 
   // 2) All resources of this kind
   const { data: allResources = [], refetch: refetchResources } = useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery(
-    {
-      kind,
-    },
+    { kind },
   );
 
   // 3) Build tree
@@ -110,6 +157,78 @@ export default function ResourceLibraryList({ kind }: Props) {
     setUploadTargetTagId(firstTagId);
     setIsImportOpen(true);
   };
+
+  /** ---------------- NEW: search & auto-expand on matches ---------------- */
+  const filteredResources = React.useMemo<Resource[]>(() => {
+    const q = query.trim();
+    if (!q) return allResources;
+    return allResources.filter((r) => matchesResourceByName(r, q));
+  }, [allResources, query]);
+
+  React.useEffect(() => {
+    if (!tree) return;
+    const q = query.trim();
+    if (!q) return;
+
+    const nextExpanded = new Set<string>();
+
+    const nodeHasMatch = (n: TagNode): boolean => {
+      const hereTagIds = (n.tagsHere ?? []).map((t) => t.id);
+      const hereMatch = filteredResources.some((r) => resHasAnyTag(r, hereTagIds));
+      const childMatch = Array.from(n.children.values()).map(nodeHasMatch).some(Boolean);
+      const has = hereMatch || childMatch;
+      if (has && n.full !== tree.full) nextExpanded.add(n.full);
+      return has;
+    };
+
+    nodeHasMatch(tree);
+    setExpanded(Array.from(nextExpanded));
+  }, [tree, query, filteredResources]);
+
+  /** ---------------- NEW: delete support (single + bulk) ---------------- */
+  const removeOneWithConfirm = React.useCallback(
+    (res: Resource, tag: TagWithItemsId) => {
+      const name = res.name || String(res.id);
+      showConfirmationDialog({
+        title: t("resourceLibrary.confirmRemoveTitle") || "Remove from library?",
+        message:
+          t("resourceLibrary.confirmRemoveMessage", { res: name, folder: tag.name }) ||
+          `Remove “${name}” from “${tag.name}”? This does not delete the original resource.`,
+        onConfirm: () => {
+          void removeFromLibrary(res, tag);
+        },
+      });
+    },
+    [showConfirmationDialog, removeFromLibrary, t],
+  );
+
+  const bulkRemoveFromLibrary = React.useCallback(() => {
+    const entries = Object.entries(selectedItems);
+    if (entries.length === 0) return;
+
+    showConfirmationDialog({
+      title: t("resourceLibrary.confirmBulkRemoveTitle") || "Remove selected?",
+      message:
+        t("resourceLibrary.confirmBulkRemoveMessage", { count: entries.length }) ||
+        `Remove ${entries.length} selected item(s) from their libraries? This does not delete originals.`,
+      onConfirm: async () => {
+        const byId = new Map<string | number, Resource>(allResources.map((r) => [r.id, r]));
+        for (const [resId, tag] of entries) {
+          const res = byId.get(resId) || byId.get(Number(resId));
+          if (!res) continue;
+          // eslint-disable-next-line no-await-in-loop
+          await removeFromLibrary(res, tag);
+        }
+        setSelectedItems({});
+      },
+    });
+  }, [selectedItems, allResources, removeFromLibrary, showConfirmationDialog, t]);
+
+  const { confirmDeleteFolder } = useTagCommands({
+    refetchTags,
+    refetchDocs: refetchResources, // reuse for resources
+  });
+
   /** ---------------- Handlers ---------------- */
   const handleOpenCreate = React.useCallback(() => {
     if (!selectedFolder) return;
@@ -137,8 +256,8 @@ export default function ResourceLibraryList({ kind }: Props) {
   /** ---------------- Render ---------------- */
   return (
     <Box display="flex" flexDirection="column" gap={2}>
-      {/* Top toolbar */}
-      <Box display="flex" alignItems="center" justifyContent="space-between">
+      {/* Top toolbar (mirrors Documents — now includes search) */}
+      <Box display="flex" alignItems="center" justifyContent="space-between" gap={2} flexWrap="wrap">
         <Breadcrumbs>
           <Chip
             label={t("resourceLibrary.title", { typePlural })}
@@ -153,6 +272,15 @@ export default function ResourceLibraryList({ kind }: Props) {
             </Link>
           ))}
         </Breadcrumbs>
+
+        {/* Search */}
+        <TextField
+          size="small"
+          placeholder={t("resourceLibrary.searchPlaceholder") || "Search resources…"}
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          sx={{ minWidth: 260 }}
+        />
 
         <Box display="flex" gap={1}>
           <Button
@@ -177,6 +305,21 @@ export default function ResourceLibraryList({ kind }: Props) {
           </Button>
         </Box>
       </Box>
+
+      {/* NEW: Bulk actions bar (mirrors Documents) */}
+      {selectedCount > 0 && (
+        <Card sx={{ p: 1, borderRadius: 2, display: "flex", alignItems: "center", gap: 2 }}>
+          <Typography variant="body2">
+            {selectedCount} {t("resourceLibrary.selected") || "selected"}
+          </Typography>
+          <Button size="small" variant="outlined" onClick={clearSelection}>
+            {t("resourceLibrary.clearSelection") || "Clear selection"}
+          </Button>
+          <Button size="small" variant="contained" color="error" onClick={bulkRemoveFromLibrary}>
+            {t("resourceLibrary.bulkRemoveFromLibrary") || "Remove from library"}
+          </Button>
+        </Card>
+      )}
 
       {/* Loading & error */}
       {isLoading && (
@@ -217,10 +360,14 @@ export default function ResourceLibraryList({ kind }: Props) {
               selectedFolder={selectedFolder}
               setSelectedFolder={setSelectedFolder}
               getChildren={getChildren}
-              resources={allResources}
-              onRemoveFromLibrary={removeFromLibrary}
-              onPreview={handlePreview} // ← pass down
-              onEdit={handleEdit} // ← pass down
+              resources={filteredResources}
+              onRemoveFromLibrary={removeOneWithConfirm} // NEW: confirm wrapper
+              onPreview={handlePreview}
+              onEdit={handleEdit}
+              // NEW: selection + folder deletion
+              selectedItems={selectedItems}
+              setSelectedItems={setSelectedItems}
+              onDeleteFolder={confirmDeleteFolder}
             />
           </Box>
         </Card>
@@ -231,20 +378,22 @@ export default function ResourceLibraryList({ kind }: Props) {
         <TemplateEditorModal
           isOpen={openCreateResource}
           onClose={() => setOpenCreateResource(false)}
-          onSave={(payload) => {
+          onSave={async (payload) => {
             if (!uploadTargetTagId) return;
-            createResource(payload, uploadTargetTagId);
+            await createResource(payload, uploadTargetTagId);
             setOpenCreateResource(false);
+            await Promise.all([refetchTags(), refetchResources()]);
           }}
         />
       ) : (
         <PromptEditorModal
           isOpen={openCreateResource}
           onClose={() => setOpenCreateResource(false)}
-          onSave={(payload) => {
+          onSave={async (payload) => {
             if (!uploadTargetTagId) return;
-            createResource(payload, uploadTargetTagId);
+            await createResource(payload, uploadTargetTagId);
             setOpenCreateResource(false);
+            await Promise.all([refetchTags(), refetchResources()]);
           }}
         />
       )}
@@ -252,7 +401,7 @@ export default function ResourceLibraryList({ kind }: Props) {
       {/* Preview modal */}
       <ResourcePreviewModal open={!!previewing} resource={previewing} onClose={() => setPreviewing(null)} />
 
-      {/* Edit modals (use same UIs; they pass-through YAML if present) */}
+      {/* Edit modals (pass-through YAML if present) */}
       {editing &&
         (kind === "template" ? (
           <TemplateEditorModal
@@ -261,7 +410,6 @@ export default function ResourceLibraryList({ kind }: Props) {
             initial={{
               name: editing.name ?? "",
               description: editing.description ?? "",
-              // Pass YAML to body; modal will detect YAML and keep it intact
               body: editing.content,
             }}
             onSave={async (payload) => {
@@ -272,6 +420,7 @@ export default function ResourceLibraryList({ kind }: Props) {
                 labels: payload.labels,
               });
               setEditing(null);
+              await Promise.all([refetchTags(), refetchResources()]);
             }}
           />
         ) : (
@@ -282,7 +431,7 @@ export default function ResourceLibraryList({ kind }: Props) {
               {
                 name: editing.name ?? "",
                 description: editing.description ?? "",
-                yaml: editing.content, // the prompt modal accepts yaml/body similarly
+                yaml: editing.content,
               } as any
             }
             onSave={async (payload) => {
@@ -293,21 +442,23 @@ export default function ResourceLibraryList({ kind }: Props) {
                 labels: payload.labels,
               });
               setEditing(null);
+              await Promise.all([refetchTags(), refetchResources()]);
             }}
           />
         ))}
 
+      {/* Import drawer */}
       <ResourceImportDrawer
         kind={kind}
         isOpen={isImportOpen}
         onClose={() => setIsImportOpen(false)}
         onImportComplete={() => {
-          // refresh lists after import
           refetchTags();
           refetchResources();
         }}
         libraryTagId={uploadTargetTagId}
       />
+
       {/* Create-library drawer */}
       <LibraryCreateDrawer
         isOpen={isCreateDrawerOpen}
