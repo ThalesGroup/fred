@@ -12,7 +12,8 @@
     "timeout_min": "Doit être ≥ 0",
     "invalid_type": "Type invalide",
     "updated": "Mis à jour",
-    "error": "Erreur"
+    "error": "Erreur",
+     "deleted": "Supprimé"
   },
   "sidebar": {
     "cluster": "Cluster",
@@ -234,7 +235,17 @@
     "preview": "Aperçu",
     "selected": "Sélectionné",
     "clearSelection": "Effacer la sélection",
-    "bulkRemove": "Supprimer les documents sélectionnés"
+    "bulkRemove": "Supprimer les documents sélectionnés",
+    "confirmRemoveTitle": "Supprimer de la bibliothèque ?",
+    "confirmRemoveMessage": "Supprimer « {{doc}} » de « {{folder}} » ?",
+    "confirmBulkRemoveTitle": "Supprimer la sélection ?",
+    "confirmBulkRemoveMessage": "Supprimer {{count}} document(s) de leurs bibliothèques ?",
+    "bulkRemoveFromLibrary": "Supprimer de la bibliothèque",
+    "removedOneDocument": "Document supprimé de la bibliothèque.",
+    "confirmDeleteFolderTitle": "Supprimer le dossier ?",
+    "confirmDeleteFolderMessage": "Supprimer le dossier vide « {{name}} » ?",
+    "folderDeleted": "Dossier supprimé",
+    "deleteFolder": "Supprimer le dossier"
   },
   "resourceLibrary": {
     "title": "{{typePlural}}",
@@ -249,7 +260,9 @@
     "removeSuccess": "Supprimé",
     "removeDetail": "{{typeOne | capitalize}} supprimé de la bibliothèque.",
     "collapseAll": "Tout réduire",
-    "expandAll": "Tout développer"
+    "expandAll": "Tout développer",
+    "folderDeleteSuccess": "Dossier supprimé",
+    "folderDeleteDetail": "Le dossier « {{name}} » a été supprimé."
   },
   "documentTable": {
     "selectedCount": "{{count}} sélectionné(s)",
@@ -268,7 +281,8 @@
     "yes": "Oui",
     "no": "Non",
     "librairies": "Bibliothèques",
-    "nowSearchable": "Maintenant cherchable"
+    "nowSearchable": "Maintenant cherchable",
+    "nowExcluded": "Désormais exclu de la recherche"
   },
   "documentDrawerTable": {
     "deleteFile": "Supprimer le fichier"

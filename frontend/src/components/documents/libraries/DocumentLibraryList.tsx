@@ -118,7 +118,7 @@ export default function DocumentLibraryList() {
     const nodeHasMatch = (n: TagNode): boolean => {
       const hereTagIds = (n.tagsHere ?? []).map((t) => t.id);
       const hereMatch = filteredDocs.some((d) => docHasAnyTag(d, hereTagIds));
-      const childMatch = Array.from(n.children.values()).some(nodeHasMatch);
+      const childMatch = Array.from(n.children.values()).map(nodeHasMatch).some(Boolean);
       const has = hereMatch || childMatch;
       if (has && n.full !== tree.full) nextExpanded.add(n.full);
       return has;
