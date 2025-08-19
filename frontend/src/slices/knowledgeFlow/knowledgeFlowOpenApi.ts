@@ -185,13 +185,14 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
-    listResourcesByKindKnowledgeFlowV1ResourcesGet: build.query<
-      ListResourcesByKindKnowledgeFlowV1ResourcesGetApiResponse,
-      ListResourcesByKindKnowledgeFlowV1ResourcesGetApiArg
+    listResourcesKnowledgeFlowV1ResourcesGet: build.query<
+      ListResourcesKnowledgeFlowV1ResourcesGetApiResponse,
+      ListResourcesKnowledgeFlowV1ResourcesGetApiArg
     >({
       query: (queryArg) => ({
         url: `/knowledge-flow/v1/resources`,
         params: {
+          tags: queryArg.tags,
           kind: queryArg.kind,
         },
       }),
@@ -371,11 +372,12 @@ export type CreateResourceKnowledgeFlowV1ResourcesPostApiArg = {
   libraryTagId: string;
   resourceCreate: ResourceCreate;
 };
-export type ListResourcesByKindKnowledgeFlowV1ResourcesGetApiResponse =
-  /** status 200 Successful Response */ Resource[];
-export type ListResourcesByKindKnowledgeFlowV1ResourcesGetApiArg = {
+export type ListResourcesKnowledgeFlowV1ResourcesGetApiResponse = /** status 200 Successful Response */ Resource[];
+export type ListResourcesKnowledgeFlowV1ResourcesGetApiArg = {
+  /** List of tags to filter by */
+  tags: string[];
   /** prompt | template */
-  kind: ResourceKind;
+  kind?: ResourceKind | null;
 };
 export type UpdateResourceKnowledgeFlowV1ResourcesResourceIdPutApiResponse =
   /** status 200 Successful Response */ Resource;
@@ -701,8 +703,8 @@ export const {
   useGetCreateResSchemaKnowledgeFlowV1ResourcesSchemaGetQuery,
   useLazyGetCreateResSchemaKnowledgeFlowV1ResourcesSchemaGetQuery,
   useCreateResourceKnowledgeFlowV1ResourcesPostMutation,
-  useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery,
-  useLazyListResourcesByKindKnowledgeFlowV1ResourcesGetQuery,
+  useListResourcesKnowledgeFlowV1ResourcesGetQuery,
+  useLazyListResourcesKnowledgeFlowV1ResourcesGetQuery,
   useUpdateResourceKnowledgeFlowV1ResourcesResourceIdPutMutation,
   useGetResourceKnowledgeFlowV1ResourcesResourceIdGetQuery,
   useLazyGetResourceKnowledgeFlowV1ResourcesResourceIdGetQuery,
