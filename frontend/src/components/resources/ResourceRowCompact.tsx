@@ -4,20 +4,27 @@ import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import EventAvailableIcon from "@mui/icons-material/EventAvailable";
+import InsertDriveFileOutlinedIcon from "@mui/icons-material/InsertDriveFileOutlined"; // optional visual parity
 import dayjs from "dayjs";
 import { useTranslation } from "react-i18next";
 import { Resource } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 
-export type PromptRowCompactProps = {
+export type ResourceRowCompactProps = {
   resource: Resource;
   onPreview?: (p: Resource) => void;
   onEdit?: (p: Resource) => void;
   onRemoveFromLibrary?: (p: Resource) => void; // caller decides library/tag context
 };
 
-export function ResourceRowCompact({ resource: prompt, onPreview, onEdit, onRemoveFromLibrary }: PromptRowCompactProps) {
+export function ResourceRowCompact({
+  resource: prompt,
+  onPreview,
+  onEdit,
+  onRemoveFromLibrary,
+}: ResourceRowCompactProps) {
   const { t } = useTranslation();
   const fmt = (d?: string) => (d ? dayjs(d).format("DD/MM/YYYY") : "-");
+  const displayName = prompt.name || String(prompt.id);
 
   return (
     <Box
@@ -30,19 +37,20 @@ export function ResourceRowCompact({ resource: prompt, onPreview, onEdit, onRemo
         "&:hover": { bgcolor: "action.hover" },
       }}
     >
-      {/* Left: name */}
+      {/* Left: icon + name (parity with DocumentRowCompact) */}
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, flex: 1, minWidth: 0, overflow: "hidden" }}>
+        <InsertDriveFileOutlinedIcon fontSize="small" />
         <Typography
           variant="body2"
           noWrap
           sx={{ maxWidth: "60%", cursor: onPreview ? "pointer" : "default" }}
           onClick={() => onPreview?.(prompt)}
         >
-          {prompt.name}
+          {displayName}
         </Typography>
       </Box>
 
-      {/* Middle: updated date */}
+      {/* Middle: updated date (parity with document date pill) */}
       <Tooltip title={prompt.updated_at || ""}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, flexShrink: 0 }}>
           <EventAvailableIcon fontSize="inherit" />
@@ -54,21 +62,21 @@ export function ResourceRowCompact({ resource: prompt, onPreview, onEdit, onRemo
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, flexShrink: 0, ml: 2 }}>
         {onPreview && (
           <Tooltip title={t("resourceLibrary.preview")}>
-            <IconButton size="small" onClick={() => onPreview(prompt)}>
+            <IconButton size="small" onClick={() => onPreview(prompt)} aria-label="preview">
               <VisibilityOutlinedIcon fontSize="inherit" />
             </IconButton>
           </Tooltip>
         )}
         {onEdit && (
           <Tooltip title={t("resourceLibrary.edit")}>
-            <IconButton size="small" onClick={() => onEdit(prompt)}>
+            <IconButton size="small" onClick={() => onEdit(prompt)} aria-label="edit">
               <EditOutlinedIcon fontSize="inherit" />
             </IconButton>
           </Tooltip>
         )}
         {onRemoveFromLibrary && (
-          <Tooltip title={t("documentLibrary.removeFromLibrary")}>
-            <IconButton size="small" onClick={() => onRemoveFromLibrary(prompt)}>
+          <Tooltip title={t("resourceLibrary.removeFromLibrary")}>
+            <IconButton size="small" onClick={() => onRemoveFromLibrary(prompt)} aria-label="remove-from-library">
               <DeleteOutlineIcon fontSize="inherit" />
             </IconButton>
           </Tooltip>
