@@ -301,6 +301,11 @@ export type VectorSearchHit = {
   type?: string | null;
   tag_ids?: string[];
   tag_names?: string[];
+  tag_full_paths?: string[];
+  preview_url?: string | null;
+  preview_at_url?: string | null;
+  repo_url?: string | null;
+  citation_url?: string | null;
   license?: string | null;
   confidential?: boolean | null;
   /** Similarity score from vector search */

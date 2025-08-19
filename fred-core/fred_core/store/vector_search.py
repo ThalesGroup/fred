@@ -29,6 +29,13 @@ class VectorSearchHit(BaseModel):
     # Tags (UI wants *names*; keep ids too for filters)
     tag_ids: List[str] = []
     tag_names: List[str] = []
+    tag_full_paths: List[str] = []
+
+    # Link fields (internal viewers / external)
+    preview_url: Optional[str] = None       # e.g., "/documents/{uid}"
+    preview_at_url: Optional[str] = None    # e.g., "/documents/{uid}#{viewer_fragment}"
+    repo_url: Optional[str] = None          # e.g., "https://git/.../blob/ref/path#Lx-Ly"
+    citation_url: Optional[str] = None      # e.g., "/documents/{uid}#chunk={chunk_id}"
 
     # Access (optional, forward-looking)
     license: Optional[str] = None
