@@ -125,10 +125,19 @@ class ContentGeneratorExpert(AgentFlow):
         """
         Send user request to the model with the base prompt so it calls MCP tools directly.
         """
-        template_tags = get_template_libraries_ids(self.get_runtime_context())
-        selected_templates = self.search_client.list_resources(kind=ResourceKind.TEMPLATE, tags=template_tags)
-        # @TODO find out what to do with this list of templates (selected_templates)
-        messages = self.use_fred_prompts([SystemMessage(content=self.base_prompt)] + state["messages"])
+        template_tags = get_template_libraries_ids(self.get_runtime_context()) or []
+
+        selected_templates = []
+        if template_tags:
+            selected_templates = self.search_client.list_resources(
+                kind=ResourceKind.TEMPLATE,
+                tags=template_tags,
+            )
+            # @TODO find out what to do with this list of templates (selected_templates)
+
+        messages = self.use_fred_prompts(
+            [SystemMessage(content=self.base_prompt)] + state["messages"]
+        )
         assert self.model is not None
         response = await self.model.ainvoke(messages)
         return {"messages": [response]}

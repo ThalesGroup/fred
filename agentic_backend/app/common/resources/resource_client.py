@@ -51,12 +51,17 @@ class ResourceClient:
         self,
         *,
         kind: Optional[ResourceKind] = None,
-        tags: Optional[Sequence[str]] = None,
+        tags: Sequence[str] = [],
         payload_overrides: Optional[Dict[str, Any]] = None,
     ) -> List[Resource]:
         """
-        Fetch resources from the API, optionally filtered by kind and tags.
+        Fetch resources from the API, filtered by kind and tags.
+
+        NOTE: tags are mandatory. An empty list will raise a ValueError.
         """
+        if not tags:
+            raise ValueError("tags must be provided and cannot be empty")
+
         payload: Dict[str, Any] = {}
         if kind:
             payload["kind"] = kind.value if isinstance(kind, ResourceKind) else kind
@@ -65,7 +70,9 @@ class ResourceClient:
         if payload_overrides:
             payload.update(payload_overrides)
 
-        r = self.session.get(f"{self.base_url}/resources", params=payload, timeout=self.timeout_s)
+        r = self.session.get(
+            f"{self.base_url}/resources", params=payload, timeout=self.timeout_s
+        )
         r.raise_for_status()
         raw = r.json()
         if not isinstance(raw, Iterable):

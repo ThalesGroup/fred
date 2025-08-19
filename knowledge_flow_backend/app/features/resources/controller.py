@@ -125,15 +125,16 @@ class ResourceController:
             tags=["Resources"],
             response_model=List[Resource],
             response_model_exclude_none=True,
-            summary="List all resources, optionally filtered by kind or tags.",
+            summary="List all resources, filtered by kind and tags.",
         )
         async def list_resources(
+            tags: Annotated[List[str], Query(description="List of tags to filter by")],
             kind: Annotated[Optional[ResourceKind], Query(description="prompt | template")] = None,
-            tags: Annotated[Optional[List[str]], Query(description="List of tags to filter by")] = None,
             user: KeycloakUser = Depends(get_current_user),
         ) -> List[Resource]:
             """
-            Returns all resources. You can optionally filter by kind and/or by tags.
+            Returns all resources filtered by kind and tags.
+            NOTE: `tags` is mandatory.
             """
             try:
                 return self.service.list_resources(kind=kind, tags=tags)
