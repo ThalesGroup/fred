@@ -116,13 +116,23 @@ const injectedRtkApi = api.injectEndpoints({
       }),
     }),
     listTableNames: build.query<ListTableNamesApiResponse, ListTableNamesApiArg>({
-      query: () => ({ url: `/knowledge-flow/v1/tabular/tables` }),
+      query: () => ({ url: `/knowledge-flow/v1/tabular_read_write/tables` }),
     }),
     getAllSchemas: build.query<GetAllSchemasApiResponse, GetAllSchemasApiArg>({
-      query: () => ({ url: `/knowledge-flow/v1/tabular/schemas` }),
+      query: () => ({ url: `/knowledge-flow/v1/tabular_read_write/schemas` }),
     }),
     rawSqlQuery: build.mutation<RawSqlQueryApiResponse, RawSqlQueryApiArg>({
-      query: (queryArg) => ({ url: `/knowledge-flow/v1/tabular/sql`, method: "POST", body: queryArg.rawSqlRequest }),
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/tabular_read_write/sql`,
+        method: "POST",
+        body: queryArg.rawSqlRequest,
+      }),
+    }),
+    deleteTable: build.mutation<DeleteTableApiResponse, DeleteTableApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/tabular_read_write/tables/${queryArg.tableName}`,
+        method: "DELETE",
+      }),
     }),
     listAllTagsKnowledgeFlowV1TagsGet: build.query<
       ListAllTagsKnowledgeFlowV1TagsGetApiResponse,
@@ -389,6 +399,10 @@ export type GetAllSchemasApiArg = void;
 export type RawSqlQueryApiResponse = /** status 200 Successful Response */ TabularQueryResponse;
 export type RawSqlQueryApiArg = {
   rawSqlRequest: RawSqlRequest;
+};
+export type DeleteTableApiResponse = unknown;
+export type DeleteTableApiArg = {
+  tableName: string;
 };
 export type ListAllTagsKnowledgeFlowV1TagsGetApiResponse = /** status 200 Successful Response */ TagWithItemsId[];
 export type ListAllTagsKnowledgeFlowV1TagsGetApiArg = {
@@ -855,6 +869,7 @@ export const {
   useGetAllSchemasQuery,
   useLazyGetAllSchemasQuery,
   useRawSqlQueryMutation,
+  useDeleteTableMutation,
   useListAllTagsKnowledgeFlowV1TagsGetQuery,
   useLazyListAllTagsKnowledgeFlowV1TagsGetQuery,
   useCreateTagKnowledgeFlowV1TagsPostMutation,

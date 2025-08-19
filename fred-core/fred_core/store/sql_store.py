@@ -8,7 +8,7 @@ from pathlib import Path
 import sqlparse
 from sqlparse.sql import Identifier, IdentifierList
 from sqlparse.tokens import Keyword, Whitespace, Punctuation
-import duckdb
+
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +57,6 @@ class SQLTableStore:
             raise RuntimeError(msg) from e
 
     def _validate_table_name(self, table_name: str):
-        """Vérifie que la table existe réellement dans la DB."""
         valid_tables = inspect(self.engine).get_table_names()
         if table_name not in valid_tables:
             raise ValueError(f"Invalid or unauthorized table name: {table_name}")
@@ -72,8 +71,7 @@ class SQLTableStore:
 
     def delete_table(self, table_name: str):
         self._validate_table_name(table_name)
-        with self.engine.connect() as conn:
-            # On quote le nom pour éviter injection
+        with self.engine.begin() as conn:
             conn.execute(text(f'DROP TABLE IF EXISTS "{table_name}"'))
             logger.info(f"Deleted table '{table_name}'")
 
@@ -139,19 +137,21 @@ class SQLTableStore:
 
     def execute_sql_query(self, sql: str) -> pd.DataFrame:
         """Execute with a basic allowlist: only tables from FROM/JOIN/UPDATE/INTO are validated."""
+        # try:
+        #     referenced = self._extract_tables_from_query(sql)
+        # except Exception as e:
+        #     logger.warning(f"Table extraction failed ({e}). Skipping validation for this query.")
+        #     referenced = set()
+
+        # valid = set(self.list_tables())
+        # unauthorized = {t for t in referenced if t not in valid}
+        # if unauthorized:
+        #     raise ValueError(f"Unauthorized table(s) in query: {', '.join(sorted(unauthorized))}")
+
         try:
-            referenced = self._extract_tables_from_query(sql)
+            with self.engine.begin() as conn:
+                df = pd.read_sql(text(sql), conn)
+                return df
         except Exception as e:
-            logger.warning(
-                f"Table extraction failed ({e}). Skipping validation for this query."
-            )
-            referenced = set()
-
-        valid = set(self.list_tables())
-        unauthorized = {t for t in referenced if t not in valid}
-        if unauthorized:
-            raise ValueError(
-                f"Unauthorized table(s) in query: {', '.join(sorted(unauthorized))}"
-            )
-
-        return pd.read_sql(text(sql), self.engine)
+            logger.error(f"Error executing read/write query: {e}")
+            raise

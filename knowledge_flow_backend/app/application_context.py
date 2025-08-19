@@ -588,7 +588,7 @@ class ApplicationContext:
             raise ValueError(f"Unsupported tag storage backend: {store_config.type}")
         return self._resource_store_instance
     
-    def get_read_write_store(self):
+    def get_read_write_store(self) -> SQLTableStore:
         if hasattr(self, "_tabular_read_and_write_store_instance") and self._tabular_read_and_write_store_instance is not None:
             return self._tabular_read_and_write_store_instance
 
@@ -605,7 +605,7 @@ class ApplicationContext:
 
         return self._tabular_read_and_write_store_instance
     
-    def get_read_only_store(self):
+    def get_read_only_store(self) -> SQLTableStore:
         if hasattr(self, "_tabular_read_only_store_instance") and self._tabular_read_only_store_instance is not None:
             return self._tabular_read_only_store_instance
 

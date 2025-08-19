@@ -17,7 +17,6 @@ import re
 from datetime import datetime
 from typing import List
 
-from app.application_context import ApplicationContext
 from fred_core.store.sql_store import SQLTableStore
 from app.features.tabular.structures import (
     TabularColumnSchema,
@@ -114,37 +113,6 @@ class TabularService:
                 continue
 
         return responses
-
-    def safe_query(self, document_name: str, request: RawSQLRequest) -> TabularQueryResponse:
-        sql = request.query
-
-        if not isinstance(sql, str):
-            raise TypeError("Expected request.query to be a string")
-
-        if not sql.strip():
-            raise ValueError("Empty SQL string provided")
-
-        sql = extract_safe_sql_query(sql.strip())
-
-        if not isinstance(sql, str):
-            raise TypeError("extract_safe_sql_query did not return a string")
-
-        has_limit = re.search(r"\bLIMIT\b\s+\d+", sql, re.IGNORECASE) is not None
-
-        if not has_limit:
-            sql = sql.rstrip(";") + " LIMIT 20"
-
-        logger.info(f"Final SQL executed: {sql}")
-
-        try:
-            if self.tabular_store is None:
-                raise RuntimeError("tabular_store is not initialized")
-            df = self.tabular_store.execute_sql_query(sql)
-            rows = df.to_dict(orient="records")
-            return TabularQueryResponse(sql_query=sql, rows=rows, error=None)
-        except Exception as e:
-            logger.error(f"Error during query execution: {e}", exc_info=True)
-            return TabularQueryResponse(sql_query=sql, rows=[], error=str(e))
         
     def query(self, document_name: str, request: RawSQLRequest) -> TabularQueryResponse:
         sql = request.query

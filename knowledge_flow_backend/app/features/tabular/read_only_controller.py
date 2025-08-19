@@ -25,7 +25,7 @@ class ReadOnlyTabularController:
         self._register_routes(router)
 
     def _register_routes(self, router: APIRouter):
-        @router.get("/tabular_read_only/tables", response_model=List[str], tags=["Tabular"], operation_id="list_table_names", summary="List all available table names")
+        @router.get("/tabular_read_only/tables", response_model=List[str], tags=["Tabular (ReadOnly)"], operation_id="list_table_names", summary="List all available table names")
         async def list_tables():
             logger.info("Listing all available table names")
             try:
@@ -36,7 +36,7 @@ class ReadOnlyTabularController:
                 logger.exception("Failed to list table names")
                 raise HTTPException(status_code=500, detail=str(e))
 
-        @router.get("/tabular_read_only/schemas", response_model=List[TabularSchemaResponse], tags=["Tabular"], operation_id="get_all_schemas", summary="Get schemas for all available tables")
+        @router.get("/tabular_read_only/schemas", response_model=List[TabularSchemaResponse], tags=["Tabular (ReadOnly)"], operation_id="get_all_schemas", summary="Get schemas for all available tables")
         async def get_schemas():
             logger.info("Fetching schemas for all datasets")
             try:
@@ -48,16 +48,16 @@ class ReadOnlyTabularController:
         @router.post(
             "/tabular_read_only/sql",
             response_model=TabularQueryResponse,
-            tags=["Tabular"],
+            tags=["Tabular (ReadOnly)"],
             operation_id="raw_sql_query",
-            summary="Execute raw SQL query directly",
-            description="Submit a raw SQL string. Use this with caution: the query is executed directly.",
+            summary="Execute a SQL query if it's considered safe (no table modifications)",
+            description="Submit a SQL string which will be evaluated and executed if considered safe.",
         )
         async def raw_sql_query(request: RawSQLRequest):
             try:
                 sql = extract_safe_sql_query(request.query)
-                logger.info(f"Executing raw SQL: {sql}")
-                return self.service.query(document_name="raw_sql", request=RawSQLRequest(query=sql))
+                logger.info(f"Executing SQL: {sql}")
+                return self.service.query(document_name="safe_sql", request=RawSQLRequest(query=sql))
 
             except PermissionError as e:
                 logger.warning(f"Forbidden SQL query attempt: {e}")
