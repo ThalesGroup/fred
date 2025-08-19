@@ -95,18 +95,19 @@ export function DocumentLibraryTree({
       if (!tag) return;
 
       const subtree = docsInSubtree(node, documents, getChildren);
-      if (subtree.length === 0) return;
+      const eligible = subtree.filter((d) => (d.tags?.tag_ids ?? []).includes(tag.id));
+      if (eligible.length === 0) return;
 
       setSelectedDocs((prev) => {
-        const anySelectedHere = subtree.some((d) => prev[d.identity.document_uid]?.id === tag.id);
+        const anySelectedHere = eligible.some((d) => prev[d.identity.document_uid]?.id === tag.id);
         const next = { ...prev };
         if (anySelectedHere) {
-          subtree.forEach((d) => {
+          eligible.forEach((d) => {
             const id = d.identity.document_uid;
             if (next[id]?.id === tag.id) delete next[id];
           });
         } else {
-          subtree.forEach((d) => {
+          eligible.forEach((d) => {
             next[d.identity.document_uid] = tag;
           });
         }
@@ -127,11 +128,10 @@ export function DocumentLibraryTree({
 
       // Folder tri-state against THIS folder’s tag.
       const subtree = docsInSubtree(c, documents, getChildren);
-      const totalForTag = folderTag
-        ? subtree.filter((d) => (d.tags?.tag_ids ?? []).includes(folderTag.id)).length
-        : 0;
+      const eligibleDocs = folderTag ? subtree.filter((d) => (d.tags?.tag_ids ?? []).includes(folderTag.id)) : [];
+      const totalForTag = eligibleDocs.length;
       const selectedForTag = folderTag
-        ? subtree.filter((d) => selectedDocs[d.identity.document_uid]?.id === folderTag.id).length
+        ? eligibleDocs.filter((d) => selectedDocs[d.identity.document_uid]?.id === folderTag.id).length
         : 0;
 
       const folderChecked = totalForTag > 0 && selectedForTag === totalForTag;
