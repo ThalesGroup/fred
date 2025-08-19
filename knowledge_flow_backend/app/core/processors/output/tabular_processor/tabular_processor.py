@@ -43,7 +43,8 @@ class TabularProcessor(BaseOutputProcessor):
 
     def __init__(self):
         self.context = ApplicationContext.get_instance()
-        self.read_write_tabular_store = self.context.get_read_write_store()
+        stores, store_modes = self.context.get_all_tabular_stores()
+        self.base_tabular_store = stores["base_database"]
         logger.info("Initializing TabularPipeline")
 
     def process(self, file_path: str, metadata: DocumentMetadata) -> DocumentMetadata:
@@ -72,9 +73,9 @@ class TabularProcessor(BaseOutputProcessor):
 
             # 3. save the document into the selected tabular storage
             try:
-                if self.read_write_tabular_store is None:
+                if self.base_tabular_store is None:
                     raise RuntimeError("tabular_store is not initialized")
-                result = self.read_write_tabular_store.save_table(document_name, df)
+                result = self.base_tabular_store.save_table(document_name, df)
                 logger.debug(f"Document added to Tabular Store: {result}")
             except Exception as e:
                 logger.exception("Failed to add documents to Tabular Storage")

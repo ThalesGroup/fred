@@ -115,22 +115,25 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.bodyProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPost,
       }),
     }),
+    listTabularDatabases: build.query<ListTabularDatabasesApiResponse, ListTabularDatabasesApiArg>({
+      query: () => ({ url: `/knowledge-flow/v1/tabular/databases` }),
+    }),
     listTableNames: build.query<ListTableNamesApiResponse, ListTableNamesApiArg>({
-      query: () => ({ url: `/knowledge-flow/v1/tabular_read_write/tables` }),
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/tabular/${queryArg.dbName}/tables` }),
     }),
     getAllSchemas: build.query<GetAllSchemasApiResponse, GetAllSchemasApiArg>({
-      query: () => ({ url: `/knowledge-flow/v1/tabular_read_write/schemas` }),
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/tabular/${queryArg.dbName}/schemas` }),
     }),
     rawSqlQuery: build.mutation<RawSqlQueryApiResponse, RawSqlQueryApiArg>({
       query: (queryArg) => ({
-        url: `/knowledge-flow/v1/tabular_read_write/sql`,
+        url: `/knowledge-flow/v1/tabular/${queryArg.dbName}/sql`,
         method: "POST",
         body: queryArg.rawSqlRequest,
       }),
     }),
     deleteTable: build.mutation<DeleteTableApiResponse, DeleteTableApiArg>({
       query: (queryArg) => ({
-        url: `/knowledge-flow/v1/tabular_read_write/tables/${queryArg.tableName}`,
+        url: `/knowledge-flow/v1/tabular/${queryArg.dbName}/tables/${queryArg.tableName}`,
         method: "DELETE",
       }),
     }),
@@ -392,16 +395,29 @@ export type ProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPostApiResp
 export type ProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPostApiArg = {
   bodyProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPost: BodyProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPost;
 };
+export type ListTabularDatabasesApiResponse = /** status 200 Successful Response */ string[];
+export type ListTabularDatabasesApiArg = void;
 export type ListTableNamesApiResponse = /** status 200 Successful Response */ string[];
-export type ListTableNamesApiArg = void;
+export type ListTableNamesApiArg = {
+  /** Name of the tabular database */
+  dbName: string;
+};
 export type GetAllSchemasApiResponse = /** status 200 Successful Response */ TabularSchemaResponse[];
-export type GetAllSchemasApiArg = void;
+export type GetAllSchemasApiArg = {
+  /** Name of the tabular database */
+  dbName: string;
+};
 export type RawSqlQueryApiResponse = /** status 200 Successful Response */ TabularQueryResponse;
 export type RawSqlQueryApiArg = {
+  /** Name of the tabular database */
+  dbName: string;
   rawSqlRequest: RawSqlRequest;
 };
 export type DeleteTableApiResponse = unknown;
 export type DeleteTableApiArg = {
+  /** Name of the tabular database */
+  dbName: string;
+  /** Table name to delete */
   tableName: string;
 };
 export type ListAllTagsKnowledgeFlowV1TagsGetApiResponse = /** status 200 Successful Response */ TagWithItemsId[];
@@ -652,6 +668,7 @@ export type TabularSchemaResponse = {
   row_count?: number | null;
 };
 export type TabularQueryResponse = {
+  db_name: string;
   sql_query: string;
   rows?:
     | {
@@ -864,6 +881,8 @@ export const {
   useLazyDownloadDocumentKnowledgeFlowV1RawContentDocumentUidGetQuery,
   useUploadDocumentsSyncKnowledgeFlowV1UploadDocumentsPostMutation,
   useProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPostMutation,
+  useListTabularDatabasesQuery,
+  useLazyListTabularDatabasesQuery,
   useListTableNamesQuery,
   useLazyListTableNamesQuery,
   useGetAllSchemasQuery,

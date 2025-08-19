@@ -16,15 +16,15 @@ import importlib
 import logging
 import os
 from pathlib import Path
-from typing import Dict, Type, Union, Optional
+from typing import Dict, Type, Union, Optional, Literal
 from fred_core import LogStoreConfig, OpenSearchIndexConfig, DuckdbStoreConfig, OpenSearchKPIStore, BaseKPIStore, KpiLogStore
 from opensearchpy import OpenSearch, RequestsHttpConnection
 from app.core.stores.catalog.opensearch_catalog_store import OpenSearchCatalogStore
 from app.core.stores.content.base_content_loader import BaseContentLoader
 from app.core.stores.content.filesystem_content_loader import FileSystemContentLoader
 from app.core.stores.content.minio_content_loader import MinioContentLoader
-from fred_core.store.duckdb_store import DuckDBTableStore
 from fred_core.store.sql_store import SQLTableStore
+from fred_core.common.structures import SQLStorageConfig
 from app.common.structures import (
     Configuration,
     InMemoryVectorStorage,
@@ -172,8 +172,8 @@ class ApplicationContext:
     _kpi_store_instance: Optional[BaseKPIStore] = None
     _opensearch_client: Optional[OpenSearch] = None
     _resource_store_instance: Optional[BaseResourceStore] = None
-    _tabular_read_and_write_store_instance: Optional[SQLTableStore] = None
-    _tabular_read_only_store_instance: Optional[SQLTableStore] = None
+    _all_tabular_stores: Optional[Dict[str, SQLTableStore]] = None
+    _all_tabular_stores_modes: Optional[Dict[str, Literal['read_only', 'read_and_write']]] = None
     _catalog_store_instance: Optional[BaseCatalogStore] = None
     _file_store_instance: Optional[BaseFileStore] = None
     _kpi_writer: Optional[KPIWriter] = None
@@ -588,39 +588,26 @@ class ApplicationContext:
             raise ValueError(f"Unsupported tag storage backend: {store_config.type}")
         return self._resource_store_instance
     
-    def get_read_write_store(self) -> SQLTableStore:
-        if hasattr(self, "_tabular_read_and_write_store_instance") and self._tabular_read_and_write_store_instance is not None:
-            return self._tabular_read_and_write_store_instance
+    def get_all_tabular_stores(self) -> tuple[dict[str, SQLTableStore], dict[str, Literal['read_only', 'read_and_write']]]:
 
-        store_config = get_configuration().storage.tabular_stores.get("read_write")
-        if store_config:
-            try:
-                self._tabular_read_and_write_store_instance = SQLTableStore(driver=store_config.driver, path=Path(store_config.path).expanduser())
-                logger.info(f"Connected to read and write tabular store with dirver: {store_config.driver} and path: {store_config.path}")
-            except Exception as e:
-                logger.error(f"Failed to create/connect base duckdb store: {e}")
-                raise
-        else:
-            raise ValueError("No tabular store configuration found")
+        if self._all_tabular_stores and self._all_tabular_stores_modes :
+            return self._all_tabular_stores, self._all_tabular_stores_modes
+        
+        config_map = get_configuration().storage.tabular_stores or {}
+        stores = {}
+        store_modes = {}
 
-        return self._tabular_read_and_write_store_instance
-    
-    def get_read_only_store(self) -> SQLTableStore:
-        if hasattr(self, "_tabular_read_only_store_instance") and self._tabular_read_only_store_instance is not None:
-            return self._tabular_read_only_store_instance
-
-        store_config = get_configuration().storage.tabular_stores.read_only
-        if store_config:
-            try:
-                self._tabular_read_only_store_instance = SQLTableStore(driver=store_config.driver, path=Path(store_config.path).expanduser())
-                logger.info(f"Connected to read only tabular store with dirver: {store_config.driver} and path: {store_config.path}")
-            except Exception as e:
-                logger.error(f"Failed to create/connect base duckdb store: {e}")
-                raise
-        else:
-            raise ValueError("No tabular store configuration found")
-
-        return self._tabular_read_only_store_instance
+        for name, cfg in config_map.items():
+            if isinstance(cfg, SQLStorageConfig):
+                try:
+                    store = SQLTableStore(driver=cfg.driver, path=Path(cfg.path))
+                    stores[name] = store
+                    store_modes[name] = cfg.mode
+                    logger.info(f"[{name}] Connected to {cfg.driver} ({cfg.mode}) at {cfg.path}")
+                except Exception as e:
+                    logger.warning(f"[{name}] Failed to connect to {cfg.driver}: {e}")
+        self._all_tabular_stores, self._all_tabular_stores_modes = stores, store_modes
+        return self._all_tabular_stores, self._all_tabular_stores_modes
     
 
     def get_catalog_store(self) -> BaseCatalogStore:

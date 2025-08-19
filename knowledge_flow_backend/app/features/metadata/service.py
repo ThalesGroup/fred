@@ -46,7 +46,8 @@ class MetadataService:
         self.metadata_store = ApplicationContext.get_instance().get_metadata_store()
         self.catalog_store = ApplicationContext.get_instance().get_catalog_store()
         self.vector_store = None
-        self.read_write_tabular_store = ApplicationContext.get_instance().get_read_write_store()
+        stores, store_modes = ApplicationContext.get_instance().get_all_tabular_stores()
+        self.base_tabular_store = stores["base_database"]
 
     def get_documents_metadata(self, filters_dict: dict) -> list[DocumentMetadata]:
         try:
@@ -124,7 +125,7 @@ class MetadataService:
                 # Try deleting associated tabular table
                 table_name = metadata.document_name.rsplit(".", 1)[0]
                 try:
-                    self.read_write_tabular_store.delete_table(table_name)
+                    self.base_tabular_store.delete_table(table_name)
                     logger.info(f"[TABULAR] Deleted SQL table '{table_name}' linked to '{metadata.document_name}'")
                 except Exception as e:
                     logger.warning(f"[TABULAR] Could not delete SQL table '{table_name}' — {e}")
