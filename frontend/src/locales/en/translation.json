@@ -231,7 +231,10 @@
     "emptyLibraryTitle": "No documents in this library",
     "emptyLibraryDescription": "This library is empty. Add your first documents to make them available to your AI assistants.",
     "uploadFirstDocument": "Add your first document",
-    "preview": "Preview"
+    "preview": "Preview",
+    "selected": "Selected",
+    "clearSelection": "Clear selection",
+    "bulkRemove": "Remove selected documents"
   },
   "resourceLibrary": {
     "title": "{{typePlural}}",

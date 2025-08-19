@@ -231,7 +231,10 @@
     "emptyLibraryTitle": "Aucun document dans cette bibliothèque",
     "emptyLibraryDescription": "Cette bibliothèque est vide. Commencez par ajouter votre premier document pour le rendre consultable par vos assistants IA.",
     "uploadFirstDocument": "Ajouter votre premier document",
-    "preview": "Preview"
+    "preview": "Aperçu",
+    "selected": "Sélectionné",
+    "clearSelection": "Effacer la sélection",
+    "bulkRemove": "Supprimer les documents sélectionnés"
   },
   "resourceLibrary": {
     "title": "{{typePlural}}",
