@@ -1,4 +1,16 @@
-# app/features/resource/service.py
+# Copyright Thales 2025
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 from datetime import datetime, timezone
 import logging
@@ -39,8 +51,29 @@ class ResourceService:
     def get(self, *, resource_id: str, user) -> Resource:
         return self._resource_store.get_resource_by_id(resource_id)
 
-    def list_resources_by_kind(self, *, kind: ResourceKind) -> list[Resource]:
-        return self._resource_store.get_all_resources(kind=kind)
+    def list_resources(self, *, kind: ResourceKind | None = None, tags: list[str] | None = None) -> list[Resource]:
+            """
+            List resources, optionally filtered by kind and/or tags.
+
+            - kind: Optional ResourceKind filter.
+            - tags: Optional list of tag IDs. Resources must have at least one of these tags.
+            """
+            if kind is not None:
+                resources = self._resource_store.get_all_resources(kind=kind)
+            else:
+                # If kind is not specified, fetch all kinds
+                resources = []
+                for k in ResourceKind:
+                    resources.extend(self._resource_store.get_all_resources(kind=k))
+
+            if tags:
+                # Keep only resources that have at least one of the requested tags
+                resources = [
+                    res for res in resources
+                    if any(tag in res.library_tags for tag in tags)
+                ]
+
+            return resources
 
     def delete(self, *, resource_id: str) -> None:
         self._resource_store.delete_resource(resource_id=resource_id)
