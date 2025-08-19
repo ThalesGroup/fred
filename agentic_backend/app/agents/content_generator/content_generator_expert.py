@@ -20,6 +20,7 @@ from app.common.mcp_utils import get_mcp_client_for_agent
 from app.common.structures import AgentSettings
 from app.core.agents.flow import AgentFlow
 from app.core.agents.runtime_context import get_template_libraries_ids
+from app.application_context import get_knowledge_flow_base_url
 from app.core.model.model_factory import get_model
 from app.common.resources.resource_client import ResourceClient
 from app.common.resources.structures import ResourceKind
@@ -55,9 +56,6 @@ class ContentGeneratorExpert(AgentFlow):
         self.base_prompt = self._generate_prompt()
         self._graph = None
         self.categories = agent_settings.categories or self.categories
-        self.knowledge_flow_url = agent_settings.settings.get(
-            "knowledge_flow_url", "http://localhost:8111/knowledge-flow/v1"
-        )
         self.tag = agent_settings.tag or self.tag
         self.description = agent_settings.description
         self.role = agent_settings.role
@@ -66,7 +64,7 @@ class ContentGeneratorExpert(AgentFlow):
         self.model = get_model(self.agent_settings.model)
         self.mcp_client = await get_mcp_client_for_agent(self.agent_settings)
         self.toolkit = ContentGeneratorToolkit(self.mcp_client)
-        self.search_client = ResourceClient(self.knowledge_flow_url, timeout_s=10)
+        self.search_client = ResourceClient(get_knowledge_flow_base_url(), timeout_s=10)
         self.model = self.model.bind_tools(self.toolkit.get_tools())
         self._graph = self._build_graph()
 
@@ -133,7 +131,6 @@ class ContentGeneratorExpert(AgentFlow):
                 kind=ResourceKind.TEMPLATE,
                 tags=template_tags,
             )
-            # @TODO find out what to do with this list of templates (selected_templates)
         
         system_messages = [SystemMessage(content=self.base_prompt)]
 
