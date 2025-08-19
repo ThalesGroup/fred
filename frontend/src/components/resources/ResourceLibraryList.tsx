@@ -1,42 +1,42 @@
 // ResourceLibraryList.tsx
 // Copyright Thales 2025
 
-import * as React from "react";
 import AddIcon from "@mui/icons-material/Add";
 import FolderOutlinedIcon from "@mui/icons-material/FolderOutlined";
-import UploadIcon from "@mui/icons-material/Upload";
-import UnfoldMoreIcon from "@mui/icons-material/UnfoldMore";
 import UnfoldLessIcon from "@mui/icons-material/UnfoldLess";
+import UnfoldMoreIcon from "@mui/icons-material/UnfoldMore";
+import UploadIcon from "@mui/icons-material/Upload";
 import {
   Box,
   Breadcrumbs,
   Button,
   Card,
   Chip,
-  Link,
-  Typography,
   IconButton,
-  Tooltip,
+  Link,
   TextField,
+  Tooltip,
+  Typography,
 } from "@mui/material";
-import {
-  useListAllTagsKnowledgeFlowV1TagsGetQuery,
-  ResourceKind,
-  useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery,
-  Resource,
-  TagWithItemsId,
-} from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
-import { buildTree, TagNode, findNode } from "../tags/tagTree";
+import * as React from "react";
 import { useTranslation } from "react-i18next";
-import { useResourceCommands } from "./useResourceCommands";
-import { ResourceLibraryTree } from "./ResourceLibraryTree";
 import { LibraryCreateDrawer } from "../../common/LibraryCreateDrawer";
-import { PromptEditorModal } from "./PromptEditorModal";
-import { TemplateEditorModal } from "./TemplateEditorModal";
-import { ResourcePreviewModal } from "./ResourcePreviewModal";
-import { ResourceImportDrawer } from "./ResourceImportDrawer";
-import { useConfirmationDialog } from "../ConfirmationDialogProvider";
 import { useTagCommands } from "../../common/useTagCommands";
+import {
+  Resource,
+  ResourceKind,
+  TagWithItemsId,
+  useListAllTagsKnowledgeFlowV1TagsGetQuery,
+  useListResourcesKnowledgeFlowV1ResourcesGetQuery,
+} from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { useConfirmationDialog } from "../ConfirmationDialogProvider";
+import { buildTree, findNode, TagNode } from "../tags/tagTree";
+import { PromptEditorModal } from "./PromptEditorModal";
+import { ResourceImportDrawer } from "./ResourceImportDrawer";
+import { ResourceLibraryTree } from "./ResourceLibraryTree";
+import { ResourcePreviewModal } from "./ResourcePreviewModal";
+import { TemplateEditorModal } from "./TemplateEditorModal";
+import { useResourceCommands } from "./useResourceCommands";
 
 /** Small i18n helper */
 const useKindLabels = (kind: "prompt" | "template") => {
@@ -110,9 +110,10 @@ export default function ResourceLibraryList({ kind }: Props) {
   );
 
   // 2) All resources of this kind
-  const { data: allResources = [], refetch: refetchResources } = useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery(
-    { kind },
-  );
+  const { data: allResources = [], refetch: refetchResources } = useListResourcesKnowledgeFlowV1ResourcesGetQuery({
+    kind,
+    tags: undefined,
+  });
 
   // 3) Build tree
   const tree = React.useMemo<TagNode | null>(() => (allTags ? buildTree(allTags) : null), [allTags]);
