@@ -120,6 +120,7 @@ class ContentGeneratorExpert(AgentFlow):
         Send user request to the model with the base prompt so it calls MCP tools directly.
         """
         messages = self.use_fred_prompts([SystemMessage(content=self.base_prompt)] + state["messages"])
+        assert self.model is not None
         response = await self.model.ainvoke(messages)
         return {"messages": [response]}
 
