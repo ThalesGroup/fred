@@ -134,10 +134,14 @@ class ContentGeneratorExpert(AgentFlow):
                 tags=template_tags,
             )
             # @TODO find out what to do with this list of templates (selected_templates)
+        
+        system_messages = [SystemMessage(content=self.base_prompt)]
 
-        messages = self.use_fred_prompts(
-            [SystemMessage(content=self.base_prompt)] + state["messages"]
-        )
+        if selected_templates:
+            templates_info = f"The templates you have at your disposal are: {selected_templates}"
+            system_messages.append(SystemMessage(content=templates_info))
+
+        messages = self.use_fred_prompts(system_messages + state["messages"])
         assert self.model is not None
         response = await self.model.ainvoke(messages)
         return {"messages": [response]}
