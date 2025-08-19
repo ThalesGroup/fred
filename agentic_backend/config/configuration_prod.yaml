@@ -130,6 +130,8 @@ ai:
           transport: sse
           url: http://localhost:8111/mcp_resource
           sse_read_timeout: 2000
+      settings:
+        knowledge_flow_url: "http://localhost:8111/knowledge-flow/v1"
       model: {}
 
 storage:
