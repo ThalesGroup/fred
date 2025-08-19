@@ -419,6 +419,12 @@ export type SourceInfo = {
   retrievable?: boolean;
   /** When the document was added to the system */
   date_added_to_kb?: string;
+  /** Web base of the repository, e.g. https://git/org/repo */
+  repository_web?: string | null;
+  /** Commit SHA or branch used when pulling */
+  repo_ref?: string | null;
+  /** Path within the repository (POSIX style) */
+  file_path?: string | null;
 };
 export type FileType = "pdf" | "docx" | "pptx" | "xlsx" | "csv" | "md" | "html" | "txt" | "other";
 export type FileInfo = {
@@ -613,6 +619,11 @@ export type VectorSearchHit = {
   type?: string | null;
   tag_ids?: string[];
   tag_names?: string[];
+  tag_full_paths?: string[];
+  preview_url?: string | null;
+  preview_at_url?: string | null;
+  repo_url?: string | null;
+  citation_url?: string | null;
   license?: string | null;
   confidential?: boolean | null;
   /** Similarity score from vector search */

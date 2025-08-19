@@ -37,28 +37,47 @@ class VectorSearchService:
             doc_ids.update(tag.item_ids or [])
         return doc_ids
 
-    def _tag_names_from_ids(self, tag_ids: List[str], user: KeycloakUser) -> List[str]:
+    def _tags_meta_from_ids(self, tag_ids: List[str], user: KeycloakUser) -> tuple[list[str], list[str]]:
         if not tag_ids:
-            return []
-        # Provide a bulk method in TagService if you don't have one yet.
-        names: List[str] = []
+            return [], []
+        names, full_paths = [], []
         for tid in tag_ids:
             try:
-                t = self.tag_service.get_tag_for_user(tid, user)
-                if t and t.name:
-                    names.append(t.name)
-            except Exception:
-                # non-fatal: missing tag or no access
-                logger.debug("Could not resolve tag name for id=%s", tid)
-        return names
+                tag = self.tag_service.get_tag_for_user(tid, user)
+                if not tag:
+                    continue
+                names.append(tag.name)
+                full_paths.append(tag.full_path)
+            except Exception as e:
+                logger.debug("Could not resolve tag id=%s: %s", tid, e)
+        return names, full_paths
 
     def _to_hit(self, doc: Document, score: float, rank: int, user: KeycloakUser) -> VectorSearchHit:
         md = doc.metadata or {}
 
         # Pull both ids and names (UI displays names; filters might use ids)
         tag_ids = md.get("tag_ids") or []
-        tag_names = self._tag_names_from_ids(tag_ids, user)
+        tag_names, tag_full_paths = self._tags_meta_from_ids(tag_ids, user)
+        uid = md.get("document_uid") or "Unknown"
+        vf = md.get("viewer_fragment")
+        preview_url = f"/documents/{uid}"
+        preview_at_url = f"{preview_url}#{vf}" if vf else preview_url
 
+        # optional repo link if you have these fields in flat metadata
+        web = md.get("repository_web")
+        ref = md.get("repo_ref") or md.get("commit") or md.get("branch")
+        path = md.get("file_path")
+        L1, L2 = md.get("line_start"), md.get("line_end")
+
+        if web and ref and path:
+            repo_url = f"{web}/blob/{ref}/{path}"
+            if L1 and L2:
+                repo_url += f"#L{L1}-L{L2}"
+        else:
+            repo_url = None
+
+        chunk_id = md.get("chunk_id")
+        citation_url = f"{preview_url}#chunk={chunk_id}" if chunk_id else preview_at_url
         # Build VectorSearchHit — keep keys aligned with your flat metadata contract
         return VectorSearchHit(
             # content/chunk
@@ -67,7 +86,7 @@ class VectorSearchService:
             section=md.get("section"),
             viewer_fragment=md.get("viewer_fragment"),
             # identity
-            uid=md.get("document_uid") or "Unknown",
+            uid=uid,
             title=md.get("title") or md.get("document_name") or "Unknown",
             author=md.get("author"),
             created=md.get("created"),
@@ -83,6 +102,12 @@ class VectorSearchService:
             # tags
             tag_ids=tag_ids,
             tag_names=tag_names,
+            tag_full_paths=tag_full_paths,
+            # link fields
+            preview_url=preview_url,
+            preview_at_url=preview_at_url,
+            repo_url=repo_url,
+            citation_url=citation_url,
             # access (if you indexed them)
             license=md.get("license"),
             confidential=md.get("confidential"),

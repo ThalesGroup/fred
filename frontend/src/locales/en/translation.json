@@ -12,7 +12,8 @@
     "timeout_min": "Must be ≥ 0",
     "invalid_type": "Invalid Type",
     "updated": "Updated",
-    "error": "Error"
+    "error": "Error",
+    "deleted": "Deleted"
   },
   "sidebar": {
     "cluster": "Cluster",
@@ -231,7 +232,21 @@
     "emptyLibraryTitle": "No documents in this library",
     "emptyLibraryDescription": "This library is empty. Add your first documents to make them available to your AI assistants.",
     "uploadFirstDocument": "Add your first document",
-    "preview": "Preview"
+    "preview": "Preview",
+    "selected": "Selected",
+    "clearSelection": "Clear selection",
+    "bulkRemove": "Remove selected documents",
+    "confirmRemoveTitle": "Remove from library?",
+    "confirmRemoveMessage": "Remove « {{doc}} » from « {{folder}} »?",
+    "confirmBulkRemoveTitle": "Remove selection?",
+    "confirmBulkRemoveMessage": "Remove {{count}} document(s) from their libraries?",
+    "bulkRemoveFromLibrary": "Remove from library",
+    "removedOneDocument": "Document removed from library.",
+    "confirmDeleteFolderTitle": "Delete folder?",
+    "confirmDeleteFolderMessage": "Delete empty folder « {{name}} »?",
+    "folderDeleted": "Folder deleted",
+    "deleteFolder": "Delete folder"
+
   },
   "resourceLibrary": {
     "title": "{{typePlural}}",
@@ -248,7 +263,9 @@
     "removeSuccess": "Removed",
     "removeDetail": "{{typeOne, capitalize}} removed from the library.",
     "collapseAll": "Collapse all",
-    "expandAll": "Expand all"
+    "expandAll": "Expand all",
+    "folderDeleteSuccess": "Folder deleted",
+    "folderDeleteDetail": "The folder « {{name}} » has been deleted."
   },
   "documentTable": {
     "selectedCount": "{{count}} selected",
@@ -267,7 +284,8 @@
     "yes": "Yes",
     "no": "No",
     "librairies": "Librairies",
-    "nowSearchable": "Now searchable"
+    "nowSearchable": "Now searchable",
+    "nowExcluded": "Now excluded"
   },
   "documentDrawerTable": {
     "deleteFile": "Delete file"

@@ -22,7 +22,7 @@ import dateparser
 
 from app.application_context import ApplicationContext
 from app.common.document_structures import DocumentMetadata, ProcessingStage
-from app.common.vectorization_utils import load_langchain_doc_from_metadata
+from app.core.processors.output.vectorization_processor.vectorization_utils import load_langchain_doc_from_metadata
 from app.core.processors.output.base_output_processor import BaseOutputProcessor, TabularProcessingError
 
 logger = logging.getLogger(__name__)
