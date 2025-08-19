@@ -27,16 +27,31 @@ from app.common.structures import AgentSettings
 logger = logging.getLogger(__name__)
 
 
+def _chunk_key(d: VectorSearchHit) -> str:
+    """
+    Build a stable, collision-resistant key for a chunk based on its document ID + locators.
+    Works even if some fields are missing; keeps Rico Pro grading/dedup deterministic.
+    """
+    uid = getattr(d, "document_uid", None) or getattr(d, "uid", "") or ""
+    page = getattr(d, "page", "")
+    start = getattr(d, "char_start", "")
+    end = getattr(d, "char_end", "")
+    # Fallbacks to reduce accidental collisions for stores without char spans
+    heading = getattr(d, "heading_slug", "") or getattr(d, "heading", "") or ""
+    return f"{uid}|p={page}|cs={start}|ce={end}|h={heading}"
+
+
 class RicoProExpert(AgentFlow):
     """
     A pragmatic RAG agent that:
       1) retrieves chunks (VectorSearchHit) via knowledge-flow REST,
-      2) filters them with a simple relevance grader,
+      2) filters them with a permissive relevance grader,
       3) generates a cited answer,
       4) retries with query rephrasing if needed.
     """
 
     TOP_K = 5
+    MIN_DOCS = 3  # minimum number of docs we'll try to keep for generation
 
     name: str
     role: str
@@ -149,11 +164,11 @@ class RicoProExpert(AgentFlow):
             top_k = self.TOP_K + 3 * retry_count
 
         try:
-            logger.info(f"📥 Retrieving with question={question!r} top_k={top_k}")
+            logger.info("📥 Retrieving with question=%r top_k=%d", question, top_k)
 
             tags = get_document_libraries_ids(self.get_runtime_context())
             if tags:
-                logger.info(f"RicoPro filtering by libraries: {tags}")
+                logger.info("RicoPro filtering by libraries: %s", tags)
 
             hits: List[VectorSearchHit] = self.search_client.search(
                 query=question or "",
@@ -166,13 +181,13 @@ class RicoProExpert(AgentFlow):
                     "messages": [await self.model.ainvoke([HumanMessage(content=warn)])]
                 }
 
-            logger.info(f"✅ Retrieved {len(hits)} hits")
+            logger.info("✅ Retrieved %d hits", len(hits))
 
             serializable = [d.model_dump() for d in hits]
             message = SystemMessage(
                 content=json.dumps(serializable),
                 response_metadata={
-                    "thought": True,
+                    "thought": "retrieve",
                     "fred": {"node": "retrieve", "task": "vector search retrieval"},
                     "sources": serializable,  # so your UI can show them in the step
                 },
@@ -184,6 +199,7 @@ class RicoProExpert(AgentFlow):
                 "sources": hits,  # keep for convenience
                 "question": question,
                 "top_k": top_k,
+                "retry_count": retry_count,
             }
         except Exception as e:
             logger.exception("Failed to retrieve documents: %s", e)
@@ -199,11 +215,13 @@ class RicoProExpert(AgentFlow):
         question: str = state["question"]
         documents: Optional[List[VectorSearchHit]] = state.get("documents")
 
+        # Permissive, generic grader. Keep candidates unless clearly off-topic.
         system = (
-            "You are a grader assessing the relevance of a retrieved document to a user question. "
-            "It does not need to be stringent; goal is to filter out obviously wrong results. "
-            "If the document contains keywords or semantic meaning related to the question, grade it 'yes'. "
-            "Return a binary 'yes' or 'no'."
+            "You are a permissive relevance grader for retrieval-augmented generation.\n"
+            "- Return 'yes' unless the document is clearly off-topic for the question.\n"
+            "- Consider shared keywords, entities, acronyms, or overlapping semantics as relevant.\n"
+            "- Minor mismatches or partial overlaps should still be 'yes'.\n"
+            "Return strictly as JSON matching the schema: {{\"binary_score\": \"yes\" | \"no\"}}."
         )
 
         filtered_docs: List[VectorSearchHit] = []
@@ -211,9 +229,10 @@ class RicoProExpert(AgentFlow):
             state.get("irrelevant_documents") or []
         )
 
-        irrelevant_contents = {doc.content for doc in irrelevant_documents}
+        # Avoid false dedup across retries by using a stable chunk key.
+        irrelevant_keys = {_chunk_key(doc) for doc in irrelevant_documents}
         grade_documents: List[VectorSearchHit] = [
-            d for d in (documents or []) if d.content not in irrelevant_contents
+            d for d in (documents or []) if _chunk_key(d) not in irrelevant_keys
         ]
 
         for document in grade_documents:
@@ -222,32 +241,58 @@ class RicoProExpert(AgentFlow):
                     ("system", system),
                     (
                         "human",
-                        "Retrieved document:\n\n{document}\n\nUser question:\n\n{question}",
+                        "Document to assess:\n\n{document}\n\nUser question:\n\n{question}",
                     ),
                 ]
             )
-
             if self.model is None:
                 raise ValueError("model is None")
+
+            # Enrich the grader input with lightweight provenance.
+            doc_for_grader = (
+                f"Title: {document.title or document.file_name}\n"
+                f"Page: {getattr(document, 'page', 'n/a')}\n"
+                f"Content:\n{document.content}"
+            )
 
             chain = grade_prompt | self.model.with_structured_output(
                 GradeDocumentsOutput
             )
             llm_response = await chain.ainvoke(
-                {"question": question, "document": document.content}
+                {"question": question, "document": doc_for_grader}
             )
             score = cast(GradeDocumentsOutput, llm_response)
 
-            if score.binary_score == "yes":
+            logger.debug(
+                "Grade for %s (p=%s): %s",
+                document.file_name or document.title,
+                getattr(document, "page", None),
+                getattr(score, "binary_score", None),
+            )
+
+            if str(score.binary_score).lower() == "yes":
                 filtered_docs.append(document)
             else:
                 irrelevant_documents.append(document)
+
+        # Failsafe: ensure we keep at least MIN_DOCS (like Rico plain keeps 3).
+        if (len(filtered_docs) == 0) and documents:
+            filtered_docs = documents[: self.MIN_DOCS]
+        elif 0 < len(filtered_docs) < self.MIN_DOCS and documents:
+            # top-up with earliest originals not already kept
+            seen = {_chunk_key(d) for d in filtered_docs}
+            for d in documents:
+                if len(filtered_docs) >= self.MIN_DOCS:
+                    break
+                if _chunk_key(d) not in seen:
+                    filtered_docs.append(d)
+                    seen.add(_chunk_key(d))
 
         serializable = [d.model_dump() for d in filtered_docs]
         message = SystemMessage(
             content=json.dumps(serializable),
             response_metadata={
-                "thought": True,
+                "thought": "grade_documents",
                 "fred": {
                     "node": "grade_documents",
                     "task": "filter relevant documents",
@@ -256,7 +301,7 @@ class RicoProExpert(AgentFlow):
             },
         )
 
-        logger.info(f"✅ {len(filtered_docs)} documents are relevant")
+        logger.info("✅ %d documents are relevant (of %d)", len(filtered_docs), len(documents or []))
 
         return {
             "messages": [message],
@@ -273,7 +318,7 @@ class RicoProExpert(AgentFlow):
         context = "\n".join(
             (
                 f"Source file: {d.file_name or d.title}"
-                f"\nPage: {d.page if d.page is not None else 'n/a'}"
+                f"\nPage: {d.page if getattr(d, 'page', None) is not None else 'n/a'}"
                 f"\nContent: {d.content}\n"
             )
             for d in documents
@@ -298,7 +343,7 @@ class RicoProExpert(AgentFlow):
         message = SystemMessage(
             content=response.content,
             response_metadata={
-                "thought": True,
+                "thought": "generate",
                 "fred": {"node": "generate", "task": "compose final answer"},
                 "sources": [d.model_dump() for d in documents],
             },
@@ -340,7 +385,7 @@ class RicoProExpert(AgentFlow):
         message = SystemMessage(
             content=better.rephrase_query,
             response_metadata={
-                "thought": True,
+                "thought": "rephrase_query",
                 "fred": {"node": "rephrase_query", "task": "query rewriting"},
             },
         )
@@ -357,7 +402,7 @@ class RicoProExpert(AgentFlow):
         message = SystemMessage(
             content=generation.content,
             response_metadata={
-                "thought": True,
+                "thought": "finalize_success",
                 "fred": {"node": "finalize_success", "task": "deliver answer"},
             },
         )
@@ -386,7 +431,7 @@ class RicoProExpert(AgentFlow):
         message = SystemMessage(
             content=content,
             response_metadata={
-                "thought": True,
+                "thought": "finalize_failure",
                 "fred": {"node": "finalize_failure", "task": "unsatisfactory answer"},
             },
         )
@@ -449,7 +494,7 @@ class RicoProExpert(AgentFlow):
         )
         grade = cast(GradeAnswerOutput, llm_response)
 
-        if grade.binary_score == "yes":
+        if str(grade.binary_score).lower() == "yes":
             return "useful"
         elif retry_count >= 2:
             return "abort"

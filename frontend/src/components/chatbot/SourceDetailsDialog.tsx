@@ -62,11 +62,13 @@ export function SourceDetailsDialog({
       .map(h => h.viewer_fragment || h.content)
       .filter((s): s is string => !!(s && s.trim()));
     openDocument({ document_uid: documentId }, { chunksToHighlight: chunks });
+    onClose();
   };
 
   const openSingle = (h: VectorSearchHit) => {
     const chunk = h.viewer_fragment || h.content || "";
     openDocument({ document_uid: documentId }, { chunksToHighlight: [chunk] });
+    onClose();
   };
 
   const externalUrl = pickFirstUrl([pull, repo, filePath]);
