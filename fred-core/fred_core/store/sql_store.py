@@ -155,3 +155,13 @@ class SQLTableStore:
         except Exception as e:
             logger.error(f"Error executing read/write query: {e}")
             raise
+
+    def execute_update_query(self, sql: str):
+        try:
+            with self.engine.begin() as conn:
+                conn.execute(text(sql))
+        except Exception as e:
+            logger.error(f"Error executing read/write query: {e}")
+            raise
+
+        

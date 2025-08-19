@@ -114,16 +114,19 @@ class TabularService:
         if not sql:
             raise ValueError("Empty SQL string provided")
 
-        # Vérifie si c’est une requête d'écriture
-        is_write = bool(re.match(r"^(insert|update|delete|drop|create|alter)", sql, re.IGNORECASE))
-        if is_write:
-            self._check_write_allowed(db_name)  # interdit si en read_only
-
-        logger.info(f"[{db_name}] Executing SQL: {sql}")
         try:
-            df = store.execute_sql_query(sql)
-            rows = df.to_dict(orient="records")
+            is_write = bool(re.match(r"^(insert|update|delete|drop|create|alter)", sql, re.IGNORECASE))
+            if is_write:
+                self._check_write_allowed(db_name)
+                logger.info(f"[{db_name}] Executing SQL: {sql}")
+                store.execute_update_query(sql)
+                rows = []
+            else:
+                logger.info(f"[{db_name}] Executing SQL: {sql}")
+                df = store.execute_sql_query(sql)
+                rows = df.to_dict(orient="records")
             return TabularQueryResponse(db_name=db_name, sql_query=sql, rows=rows, error=None)
+            
         except Exception as e:
             logger.error(f"[{db_name}] Error during query execution: {e}", exc_info=True)
             return TabularQueryResponse(db_name=db_name, sql_query=sql, rows=[], error=str(e))

@@ -600,10 +600,11 @@ class ApplicationContext:
         for name, cfg in config_map.items():
             if isinstance(cfg, SQLStorageConfig):
                 try:
+                    database_name = cfg.database
                     store = SQLTableStore(driver=cfg.driver, path=Path(cfg.path))
-                    stores[name] = store
-                    store_modes[name] = cfg.mode
-                    logger.info(f"[{name}] Connected to {cfg.driver} ({cfg.mode}) at {cfg.path}")
+                    stores[database_name] = store
+                    store_modes[database_name] = cfg.mode
+                    logger.info(f"[{database_name}] Connected to {cfg.driver} ({cfg.mode}) at {cfg.path}")
                 except Exception as e:
                     logger.warning(f"[{name}] Failed to connect to {cfg.driver}: {e}")
         self._all_tabular_stores, self._all_tabular_stores_modes = stores, store_modes
