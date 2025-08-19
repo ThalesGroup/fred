@@ -7,7 +7,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 
-from pydantic import AnyHttpUrl, BaseModel, Field, HttpUrl, field_validator, model_validator
+from pydantic import AnyHttpUrl, BaseModel, Field, field_validator, model_validator
 
 
 class SourceType(str, Enum):
@@ -59,7 +59,7 @@ class Identity(BaseModel):
         if v.tzinfo is None:
             return v.replace(tzinfo=timezone.utc)
         return v
-    
+
     @property
     def stem(self) -> str:
         return Path(self.document_name).stem
@@ -73,7 +73,7 @@ class SourceInfo(BaseModel):
     source_type: SourceType
     source_tag: Optional[str] = Field(None, description="Repository/connector id, e.g. 'uploads', 'github'")
     pull_location: Optional[str] = Field(None, description="Path or URI to the original pull file")
-    
+
     retrievable: bool = Field(default=False, description="True if raw file can be re-fetched")
     date_added_to_kb: datetime = Field(
         default_factory=lambda: datetime.now(tz=timezone.utc),
@@ -82,12 +82,8 @@ class SourceInfo(BaseModel):
     repository_web: Optional[AnyHttpUrl] = Field(  # AnyHttpUrl allows http/https + custom ports
         default=None, description="Web base of the repository, e.g. https://git/org/repo"
     )
-    repo_ref: Optional[str] = Field(
-        default=None, description="Commit SHA or branch used when pulling"
-    )
-    file_path: Optional[str] = Field(
-        default=None, description="Path within the repository (POSIX style)"
-    )
+    repo_ref: Optional[str] = Field(default=None, description="Commit SHA or branch used when pulling")
+    file_path: Optional[str] = Field(default=None, description="Path within the repository (POSIX style)")
 
 
 class FileInfo(BaseModel):
@@ -178,7 +174,7 @@ class DocumentMetadata(BaseModel):
     identity: Identity
     source: SourceInfo
     file: FileInfo = Field(default_factory=FileInfo)
-    
+
     # === Business & Access ===
     tags: Tagging = Field(default_factory=Tagging)
     access: AccessInfo = Field(default_factory=AccessInfo)

@@ -78,7 +78,7 @@ class VectorSearchService:
 
         chunk_id = md.get("chunk_id")
         citation_url = f"{preview_url}#chunk={chunk_id}" if chunk_id else preview_at_url
-            # Build VectorSearchHit — keep keys aligned with your flat metadata contract
+        # Build VectorSearchHit — keep keys aligned with your flat metadata contract
         return VectorSearchHit(
             # content/chunk
             content=doc.page_content,

@@ -289,9 +289,7 @@ class RicoProExpert(AgentFlow):
             raise ValueError("model is None")
 
         chain = prompt | self.model
-        response = await chain.ainvoke(
-            {"context": context, "question": question}
-        )
+        response = await chain.ainvoke({"context": context, "question": question})
         response = cast(AIMessage, response)
 
         # attach VectorSearchHit for UI (your helper already supports it)
@@ -395,7 +393,12 @@ class RicoProExpert(AgentFlow):
 
         messages = [message, SystemMessage(content=msg)]
         if generation is not None:
-            messages.append(SystemMessage(content=generation.content, response_metadata=getattr(generation, "response_metadata", None)))
+            messages.append(
+                SystemMessage(
+                    content=generation.content,
+                    response_metadata=getattr(generation, "response_metadata", None),
+                )
+            )
 
         return {
             "messages": messages,

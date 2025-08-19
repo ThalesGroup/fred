@@ -1,14 +1,31 @@
 # app/common/vectorization_utils.py
 
-from hashlib import sha1
 from pathlib import Path
 from langchain.schema.document import Document
 from typing import Dict, Any, List, Tuple
 import logging
+import hashlib
 
 from app.common.document_structures import DocumentMetadata
 
 logger = logging.getLogger(__name__)
+
+
+def _stable_id16_from_str(key: str) -> str:
+    """
+    Return a stable 16-hex-character identifier derived from `key`.
+    Not used for any security decision. We use SHA-1 with
+    `usedforsecurity=False` when available to satisfy Bandit/FIPS.
+    """
+    try:
+        # Some builds (e.g., FIPS-enabled) support `usedforsecurity`.
+        h = hashlib.new("sha1", usedforsecurity=False)  # type: ignore[call-arg]
+    except TypeError:
+        # `usedforsecurity` not supported on this Python/OpenSSL build.
+        # This usage is non-security; suppress Bandit warning.
+        h = hashlib.new("sha1")  # nosec B324
+    h.update(key.encode("utf-8"))
+    return h.hexdigest()[:16]
 
 
 def flat_metadata_from(md: DocumentMetadata) -> dict:
@@ -68,7 +85,6 @@ def flat_metadata_from(md: DocumentMetadata) -> dict:
     }
 
 
-
 def load_langchain_doc_from_metadata(file_path: str, metadata: DocumentMetadata) -> Document:
     """
     WHY:
@@ -98,9 +114,12 @@ def load_langchain_doc_from_metadata(file_path: str, metadata: DocumentMetadata)
 
 # --- keep only what we index ---
 _ALLOWED_CHUNK_KEYS = {
-    "chunk_index", "chunk_uid",
-    "char_start", "char_end",
-    "heading_slug", "viewer_fragment",
+    "chunk_index",
+    "chunk_uid",
+    "char_start",
+    "char_end",
+    "heading_slug",
+    "viewer_fragment",
     "original_doc_length",
     "section",
 }
@@ -108,6 +127,7 @@ _ALLOWED_CHUNK_KEYS = {
 _INT_KEYS = {"chunk_index", "char_start", "char_end", "original_doc_length"}
 
 _HEADER_KEYS = ("Header 1", "Header 2", "Header 3", "Header 4", "Header 5", "Header 6")
+
 
 def _as_int(v):
     try:
@@ -119,6 +139,7 @@ def _as_int(v):
     except Exception:
         return None
 
+
 def _build_viewer_fragment(proj):
     if proj.get("viewer_fragment"):
         return proj["viewer_fragment"]
@@ -129,6 +150,7 @@ def _build_viewer_fragment(proj):
     if cs is not None and ce is not None:
         return f"sel={cs}-{ce}"
     return None
+
 
 def make_chunk_uid(document_uid: str, anchors: dict) -> str:
     """
@@ -143,7 +165,8 @@ def make_chunk_uid(document_uid: str, anchors: dict) -> str:
         f"idx={anchors.get('chunk_index')}",
         f"hs={anchors.get('heading_slug')}",
     ]
-    return sha1("|".join(map(str, parts)).encode("utf-8")).hexdigest()[:16]
+    return _stable_id16_from_str("|".join(map(str, parts)))
+
 
 def sanitize_chunk_metadata(raw: Dict[str, Any]) -> Tuple[Dict[str, Any], List[str]]:
     dropped: List[str] = []
@@ -178,9 +201,10 @@ def sanitize_chunk_metadata(raw: Dict[str, Any]) -> Tuple[Dict[str, Any], List[s
     proj = {k: v for k, v in proj.items() if v not in (None, "", [])}
     return proj, dropped
 
+
 def make_stable_chunk_id(base_flat: Dict[str, Any], proj: Dict[str, Any]) -> str:
     """Stable id based on uid + anchors; avoids changing when chunk indices shift."""
-    uid = (base_flat.get("document_uid") or "unknown")
+    uid = base_flat.get("document_uid") or "unknown"
     # Use only anchor-ish fields so re-chunking with same spans keeps the id
     parts = [
         uid,
@@ -192,4 +216,4 @@ def make_stable_chunk_id(base_flat: Dict[str, Any], proj: Dict[str, Any]) -> str
         f"hs={proj.get('heading_slug')}",
     ]
     key = "|".join(str(x) for x in parts)
-    return sha1(key.encode("utf-8")).hexdigest()[:16]
+    return _stable_id16_from_str(key)

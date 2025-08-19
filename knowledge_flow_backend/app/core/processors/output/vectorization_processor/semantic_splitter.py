@@ -23,11 +23,13 @@ logger = logging.getLogger(__name__)
 
 _WS_CLASS = r"[ \t\r\n\u00A0]+"  # space, tabs, CR/LF, NBSP
 
+
 def _short(s: str, n: int = 160) -> str:
     """Short, visible snippet for logs (make whitespace visible)."""
     s = s.replace("\n", "⏎").replace("\r", "␍").replace("\t", "⟶")
-    s = s.replace("\u00A0", "⍽")  # NBSP made visible
+    s = s.replace("\u00a0", "⍽")  # NBSP made visible
     return (s[:n] + "…") if len(s) > n else s
+
 
 def _build_ws_tolerant_pattern(needle: str) -> str:
     """Turn needle into a regex: collapse any whitespace runs to [_WS_CLASS]+."""
@@ -35,7 +37,7 @@ def _build_ws_tolerant_pattern(needle: str) -> str:
     in_ws = False
     for ch in needle:
         # treat ordinary and non-breaking spaces as whitespace
-        if ch in (" ", "\t", "\r", "\n", "\x0b", "\x0c", "\u00A0"):
+        if ch in (" ", "\t", "\r", "\n", "\x0b", "\x0c", "\u00a0"):
             if not in_ws:
                 parts.append(f"(?:{_WS_CLASS})")
                 in_ws = True
@@ -199,22 +201,13 @@ class SemanticSplitter(BaseTextSplitter):
                 else:
                     cursor = idx + len(txt)
 
-                logger.info(
-                    "anchor ok  | chunk=%d len=%d idx=%d cursor->%d fallback=%s preview=%r",
-                    i, len(txt), idx, cursor, fb, _short(txt)
-                )
+                logger.info("anchor ok  | chunk=%d len=%d idx=%d cursor->%d fallback=%s preview=%r", i, len(txt), idx, cursor, fb, _short(txt))
             else:
                 # Diagnostics for misses
-                window = text_with_placeholders[cursor: cursor + max(0, len(txt) + 200)]
-                logger.info(
-                    "anchor miss| chunk=%d len=%d cursor=%d needle=%r haystack_win=%r",
-                    i, len(txt), cursor, _short(txt), _short(window)
-                )
+                window = text_with_placeholders[cursor : cursor + max(0, len(txt) + 200)]
+                logger.info("anchor miss| chunk=%d len=%d cursor=%d needle=%r haystack_win=%r", i, len(txt), cursor, _short(txt), _short(window))
 
-        logger.info(
-            "Anchoring summary: %d/%d chunks anchored (fallback used on %d).",
-            ok, total, used_fb
-        )
+        logger.info("Anchoring summary: %d/%d chunks anchored (fallback used on %d).", ok, total, used_fb)
 
         # 4. Reinsert tables
         final_chunks = []
