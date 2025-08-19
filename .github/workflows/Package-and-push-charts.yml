@@ -19,15 +19,9 @@ jobs:
       # matrix will trigger the creation of a different parallel job for each case
       matrix:
         include:
-          - name: agentic-backend
-            chart_path: ./deploy/charts/agentic-backend
-            registry_name: agentic-backend
-          - name: knowledge-flow-backend
-            chart_path: ./deploy/charts/knowledge-flow-backend
-            registry_name: knowledge-flow-backend
-          - name: frontend
-            chart_path: ./deploy/charts/frontend
-            registry_name: frontend
+          - name: fred
+            chart_path: ./deploy/charts/fred
+            registry_name: fred
 
     # what each job will play
 
