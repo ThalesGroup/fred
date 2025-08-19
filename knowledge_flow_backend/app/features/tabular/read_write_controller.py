@@ -55,7 +55,7 @@ class ReadWriteTabularController:
         )
         async def raw_sql_query(request: RawSQLRequest):
             try:
-                sql = extract_safe_sql_query(request.query)
+                sql = request.query
                 logger.info(f"Executing raw SQL: {sql}")
                 return self.service.query(document_name="raw_sql", request=RawSQLRequest(query=sql))
 
@@ -66,3 +66,30 @@ class ReadWriteTabularController:
             except Exception:
                 logger.exception("Raw SQL execution failed")
                 raise HTTPException(status_code=500, detail="Internal server error")
+            
+        @router.delete(
+            "/tabular_read_write/tables/{table_name}",
+            status_code=204,
+            tags=["Tabular"],
+            operation_id="delete_table",
+            summary="Delete a table",
+            description="Delete a specific table from the read-write tabular store. Use with caution."
+        )
+        async def delete_table(table_name: str):
+            logger.info(f"Deleting table: {table_name}")
+            try:
+                if self.service.tabular_store is None:
+                    raise RuntimeError("tabular_store is not initialized")
+
+                if not table_name.isidentifier():
+                    raise HTTPException(status_code=400, detail="Invalid table name")
+
+                self.service.tabular_store.delete_table(table_name)
+                logger.info(f"Table '{table_name}' deleted successfully.")
+            except ValueError as ve:
+                logger.warning(f"Validation error while deleting table: {ve}")
+                raise HTTPException(status_code=400, detail=str(ve))
+            except Exception as e:
+                logger.exception(f"Failed to delete table: {e}")
+                raise HTTPException(status_code=500, detail=str(e))
+
