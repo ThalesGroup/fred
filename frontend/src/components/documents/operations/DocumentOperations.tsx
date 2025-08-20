@@ -42,10 +42,12 @@ import RefreshIcon from "@mui/icons-material/Refresh";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { KeyCloakService } from "../../../security/KeycloakService";
-import { DOCUMENT_PROCESSING_STAGES, useRescanCatalogSourceMutation } from "../../../slices/documentApi";
 import {
+  DOCUMENT_PROCESSING_STAGES,
   DocumentMetadata,
+  RescanCatalogSourceKnowledgeFlowV1PullCatalogRescanSourceTagPostApiArg,
   useBrowseDocumentsKnowledgeFlowV1DocumentsBrowsePostMutation,
+  useRescanCatalogSourceKnowledgeFlowV1PullCatalogRescanSourceTagPostMutation,
 } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { EmptyState } from "../../EmptyState";
 import { TableSkeleton } from "../../TableSkeleton";
@@ -67,7 +69,7 @@ export const DocumentOperations = ({}: DocumentsViewProps) => {
   const { tags: allDocumentLibraries } = useDocumentTags();
   const tagMap = new Map(allDocumentLibraries.map((tag) => [tag.id, tag.name]));
 
-  const [rescanCatalogSource] = useRescanCatalogSourceMutation();
+  const [rescanCatalogSource] = useRescanCatalogSourceKnowledgeFlowV1PullCatalogRescanSourceTagPostMutation();
 
   // UI States
   const [documentsPerPage, setDocumentsPerPage] = useState(20);
@@ -100,13 +102,17 @@ export const DocumentOperations = ({}: DocumentsViewProps) => {
   const handleRefreshPullSource = async () => {
     if (!selectedSourceTag) return;
     try {
-      await rescanCatalogSource(selectedSourceTag).unwrap();
+      const args: RescanCatalogSourceKnowledgeFlowV1PullCatalogRescanSourceTagPostApiArg = {
+        sourceTag: selectedSourceTag,
+      };
+      await rescanCatalogSource(args).unwrap();
       await fetchFiles(); // Re-fetch after refresh
-    } catch (err) {
+    } catch (err: any) {
       console.error("Refresh failed:", err);
       showError({
         summary: t("documentLibrary.refreshFailed"),
-        detail: err?.data?.detail || err.message || "Unknown error occurred while refreshing.",
+        detail:
+          err?.data?.detail || err?.message || "Unknown error occurred while refreshing.",
       });
     }
   };

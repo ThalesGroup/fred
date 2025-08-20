@@ -14,13 +14,15 @@
 
 import { useTranslation } from "react-i18next";
 import {
+  DocumentMetadata,
+  DownloadDocumentKnowledgeFlowV1RawContentDocumentUidGetApiArg,
+  ProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostApiArg,
+  ScheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPostApiArg,
   ProcessDocumentsRequest,
-  // useDeleteDocumentMutation,
-  useLazyGetDocumentRawContentQuery,
-  useProcessDocumentsMutation,
-  useScheduleDocumentsMutation,
-} from "../../../slices/documentApi";
-import { DocumentMetadata } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+  useLazyDownloadDocumentKnowledgeFlowV1RawContentDocumentUidGetQuery,
+  useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation,
+  useScheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPostMutation,
+} from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { downloadFile } from "../../../utils/downloadUtils";
 import { useToast } from "../../ToastProvider";
 import {
@@ -40,72 +42,26 @@ export const useDocumentActions = (onRefreshData?: () => void) => {
   const { t } = useTranslation();
   const { showInfo, showError } = useToast();
   const { openDocument } = useDocumentViewer();
-  console.log("useDocumentActions with to review", onRefreshData)
+  console.log("useDocumentActions with to review", onRefreshData);
+
   // API hooks
-  // const [deleteDocument] = useDeleteDocumentMutation();
-  const [triggerDownload] = useLazyGetDocumentRawContentQuery();
-  const [processDocuments] = useProcessDocumentsMutation();
-  const [scheduleDocuments] = useScheduleDocumentsMutation();
-
-  // const handleDelete = async (file: DocumentMetadata) => {
-  //   try {
-  //     await deleteDocument(file.identity.document_uid).unwrap();
-  //     showInfo({
-  //       summary: "Delete Success",
-  //       detail: `${file.identity.document_name} deleted`,
-  //       duration: 3000,
-  //     });
-  //     onRefreshData?.();
-  //   } catch (error) {
-  //     showError({
-  //       summary: "Delete Failed",
-  //       detail: `Could not delete document: ${error?.data?.detail || error.message}`,
-  //     });
-  //     throw error;
-  //   }
-  // };
-
-  // const handleBulkDelete = async (files: DocumentMetadata[]) => {
-  //   let successCount = 0;
-  //   let failedFiles: string[] = [];
-
-  //   for (const file of files) {
-  //     try {
-  //       await deleteDocument(file.identity.document_uid).unwrap();
-  //       successCount++;
-  //     } catch (error) {
-  //       failedFiles.push(file.identity.document_name);
-  //     }
-  //   }
-
-  //   if (successCount > 0) {
-  //     showInfo({
-  //       summary: "Delete Success",
-  //       detail: `${successCount} document${successCount > 1 ? "s" : ""} deleted`,
-  //       duration: 3000,
-  //     });
-  //   }
-
-  //   if (failedFiles.length > 0) {
-  //     showError({
-  //       summary: "Delete Failed",
-  //       detail: `Failed to delete: ${failedFiles.join(", ")}`,
-  //     });
-  //   }
-
-  //   onRefreshData?.();
-  // };
+  const [triggerDownload] =
+    useLazyDownloadDocumentKnowledgeFlowV1RawContentDocumentUidGetQuery();
+  const [processDocuments] =
+    useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation();
+  const [scheduleDocuments] =
+    useScheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPostMutation();
 
   const handleDownload = async (file: DocumentMetadata) => {
     try {
-      const { data: blob } = await triggerDownload({ document_uid: file.identity.document_uid });
-      if (blob) {
-        downloadFile(blob, file.identity.document_name || "document");
-      }
-    } catch (err) {
+      const args: DownloadDocumentKnowledgeFlowV1RawContentDocumentUidGetApiArg =
+        { documentUid: file.identity.document_uid };
+      const blob = await triggerDownload(args).unwrap();
+      downloadFile(blob, file.identity.document_name ?? "document");
+    } catch (err: any) {
       showError({
         summary: "Download failed",
-        detail: `Could not download document: ${err?.data?.detail || err.message}`,
+        detail: `Could not download document: ${err?.data?.detail ?? err.message}`,
       });
     }
   };
@@ -131,7 +87,7 @@ export const useDocumentActions = (onRefreshData?: () => void) => {
           return {
             source_tag: f.source.source_tag,
             document_uid: isPull ? undefined : f.identity.document_uid,
-            external_path: isPull ? (f.source.pull_location ?? undefined) : undefined,
+            external_path: isPull ? f.source.pull_location ?? undefined : undefined,
             tags: f.tags.tag_ids || [],
             display_name: f.identity.document_name,
           };
@@ -139,19 +95,24 @@ export const useDocumentActions = (onRefreshData?: () => void) => {
         pipeline_name: "manual_ui_async",
       };
 
-      const result = await scheduleDocuments(payload).unwrap();
+      const args: ScheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPostApiArg = {
+        processDocumentsRequest: payload,
+      };
+
+      const result = await scheduleDocuments(args).unwrap();
 
       showInfo({
         summary: "Processing started",
         detail: `Workflow ${result.workflow_id} submitted`,
       });
-    } catch (error) {
+    } catch (error: any) {
       showError({
         summary: "Processing Failed",
-        detail: error?.data?.detail || error.message,
+        detail: error?.data?.detail ?? error.message,
       });
     }
   };
+
   const handleProcess = async (files: DocumentMetadata[]) => {
     try {
       const payload: ProcessDocumentsRequest = {
@@ -160,7 +121,7 @@ export const useDocumentActions = (onRefreshData?: () => void) => {
           return {
             source_tag: f.source.source_tag,
             document_uid: isPull ? undefined : f.identity.document_uid,
-            external_path: isPull ? (f.source.pull_location ?? undefined) : undefined,
+            external_path: isPull ? f.source.pull_location ?? undefined : undefined,
             tags: f.tags.tag_ids || [],
             display_name: f.identity.document_name,
           };
@@ -168,16 +129,20 @@ export const useDocumentActions = (onRefreshData?: () => void) => {
         pipeline_name: "manual_ui_async",
       };
 
-      const result = await processDocuments(payload).unwrap();
+      const args: ProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostApiArg = {
+        processDocumentsRequest: payload,
+      };
+
+      const result = await processDocuments(args).unwrap();
 
       showInfo({
         summary: "Processing started",
         detail: `Workflow ${result.workflow_id} submitted`,
       });
-    } catch (error) {
+    } catch (error: any) {
       showError({
         summary: "Processing Failed",
-        detail: error?.data?.detail || error.message,
+        detail: error?.data?.detail ?? error.message,
       });
     }
   };

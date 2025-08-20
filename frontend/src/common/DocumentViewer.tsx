@@ -16,8 +16,8 @@ import CloseIcon from "@mui/icons-material/Close";
 import DownloadIcon from "@mui/icons-material/Download";
 import { AppBar, Box, CircularProgress, IconButton, Toolbar, Typography } from "@mui/material";
 import { useEffect, useState } from "react";
-import { useGetDocumentMarkdownPreviewMutation } from "../slices/documentApi.tsx";
 import MarkdownRendererWithHighlights, { HighlightedPart } from "../components/markdown/MarkdownRendererWithHighlights.tsx";
+import { GetMarkdownPreviewKnowledgeFlowV1MarkdownDocumentUidGetApiArg, useLazyGetMarkdownPreviewKnowledgeFlowV1MarkdownDocumentUidGetQuery } from "../slices/knowledgeFlow/knowledgeFlowOpenApi.ts";
 
 // Props definition for the DocumentViewer component
 interface DocumentViewerProps {
@@ -52,7 +52,7 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
 }) => {
   const [docContent, setDocContent] = useState<string>(""); // Parsed document content (decoded)
   const [isLoadingDoc, setIsLoadingDoc] = useState<boolean>(false); // Internal loading state
-  const [getFullDocument] = useGetDocumentMarkdownPreviewMutation(); // API call to fetch full document
+  const [getFullDocument] = useLazyGetMarkdownPreviewKnowledgeFlowV1MarkdownDocumentUidGetQuery(); // API call to fetch full document
 
   // Compute chunk parts to highlight in the document
   const highlightedPartsFromExtracts = chunksToHighlight.map((chunk) => {
@@ -78,11 +78,14 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
         // If content and file_url are missing, try fetching full document
         if (!content && !fileUrl) {
           console.log("[DocumentViewer] fetching from API via document_uid:", doc.document_uid);
-          const response = await getFullDocument({
-            document_uid: doc.document_uid,
-          }).unwrap();
-          console.log("[DocumentViewer] GOT :", response);
-          content = response.content;
+        
+          const args: GetMarkdownPreviewKnowledgeFlowV1MarkdownDocumentUidGetApiArg = {
+            documentUid: doc.document_uid,
+          };
+        
+          const { content: fetched } = await getFullDocument(args).unwrap();
+          console.log("[DocumentViewer] GOT :", fetched?.slice?.(0, 120), "…");
+          content = fetched;
         }
 
         // Try decoding embedded content

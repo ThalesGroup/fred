@@ -31,12 +31,15 @@ import {
 import dayjs from "dayjs";
 import React, { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { DOCUMENT_PROCESSING_STAGES, useUpdateDocumentRetrievableMutation } from "../../../slices/documentApi";
+
 import {
+  DOCUMENT_PROCESSING_STAGES,
   DocumentMetadata,
   TagType,
   TagWithItemsId,
+  UpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutApiArg,
   useLazyGetTagKnowledgeFlowV1TagsTagIdGetQuery,
+  useUpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutMutation,
 } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { useToast } from "../../ToastProvider";
 import { CustomRowAction, DocumentTableRowActionsMenu } from "./DocumentOperationsTableRowActionsMenu";
@@ -98,7 +101,7 @@ export const DocumentOperationsTable: React.FC<DocumentOperationsTableProps> = (
   const [tagsById, setTagsById] = useState<Record<string, TagWithItemsId>>({});
 
   // API hooks
-  const [updateDocumentRetrievable] = useUpdateDocumentRetrievableMutation();
+  const [updateDocumentRetrievable] = useUpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutMutation();
   const [getTag] = useLazyGetTagKnowledgeFlowV1TagsTagIdGetQuery();
 
   const allSelected = selectedFiles.length === files.length && files.length > 0;
@@ -165,22 +168,26 @@ export const DocumentOperationsTable: React.FC<DocumentOperationsTableProps> = (
 
   const handleToggleRetrievable = async (file: DocumentMetadata) => {
     try {
-      await updateDocumentRetrievable({
-        document_uid: file.identity.document_uid,
+      const args: UpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutApiArg = {
+        documentUid: file.identity.document_uid,
         retrievable: !file.source.retrievable,
-      }).unwrap();
-
+      };
+  
+      await updateDocumentRetrievable(args).unwrap();
+  
       showInfo({
         summary: "Updated",
-        detail: `"${file.identity.document_name}" is now ${!file.source.retrievable ? "searchable" : "excluded from search"}.`,
+        detail: `"${file.identity.document_name}" is now ${
+          !file.source.retrievable ? "searchable" : "excluded from search"
+        }.`,
       });
-
+  
       onRefreshData?.();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Update failed:", error);
       showError({
         summary: "Error updating document",
-        detail: error?.data?.detail || error.message,
+        detail: error?.data?.detail ?? error.message,
       });
     }
   };
