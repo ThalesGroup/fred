@@ -1,13 +1,9 @@
-// Copyright Thales 2025
-// Licensed under the Apache License, Version 2.0
-
-import React, { memo, useEffect, useMemo, useRef } from "react";
+import React, { memo, useMemo, useLayoutEffect, useRef, useEffect } from "react";
 import Message from "./MessageCard";
 import Sources from "./Sources";
-import { AgenticFlow, ChatMessage } from "../../slices/agentic/agenticOpenApi";
-import { getExtras, hasNonEmptyText, isToolCall, isToolResult, toolId } from "./ChatBotUtils";
-import TraceDetailsDialog from "./TraceDetailDialog";
 import ReasoningTraceAccordion from "./TraceAccordion";
+import { AgenticFlow, ChatMessage } from "../../slices/agentic/agenticOpenApi";
+import { getExtras, hasNonEmptyText } from "./ChatBotUtils";
 
 type Props = {
   messages: ChatMessage[];
@@ -16,50 +12,24 @@ type Props = {
 };
 
 function Area({ messages, agenticFlows, currentAgenticFlow }: Props) {
+  // ⬇️ Old-pattern: bottom anchor we scroll into view after render
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
-  // state for the details dialog
-  const [openStep, setOpenStep] = React.useState<ChatMessage | undefined>(undefined);
-
-  // Find the scrollable container (parent Grid2 with overflowY: "scroll")
-  function getScrollableParent(el: HTMLElement | null): HTMLElement | null {
-    let node: HTMLElement | null = el;
-    while (node) {
-      const style = window.getComputedStyle(node);
-      const oy = style.overflowY;
-      if (oy === "auto" || oy === "scroll") return node;
-      node = node.parentElement;
-    }
-    return null;
-  }
-
-  function isNearBottom(container: HTMLElement, threshold = 96): boolean {
-    const { scrollTop, scrollHeight, clientHeight } = container;
-    return scrollHeight - (scrollTop + clientHeight) <= threshold;
-  }
-
-  const scrollToBottomIfSticking = () => {
-    if (!messagesEndRef.current) return;
-    const scrollable = getScrollableParent(messagesEndRef.current);
-    if (!scrollable) return;
-
-    if (isNearBottom(scrollable)) {
-      setTimeout(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-      }, 50);
-    }
-  };
-
+  const scrollToBottom = () => {
+        if (messagesEndRef.current) {
+            setTimeout(() => {
+                messagesEndRef.current?.scrollIntoView({behavior: 'smooth'});
+            }, 300); // Adjust the timeout as needed
+        }
+    };
   const resolveAgenticFlow = (msg: ChatMessage): AgenticFlow => {
     const agentName = msg.metadata?.agent_name ?? currentAgenticFlow.name;
     return agenticFlows.find((flow) => flow.name === agentName) ?? currentAgenticFlow;
   };
 
   const content = useMemo(() => {
-    // 1) stable order (you already sorted by rank; keep it)
     const sorted = [...messages].sort((a, b) => a.rank - b.rank);
 
-    // 2) group by (session_id, exchange_id)
     const grouped = new Map<string, ChatMessage[]>();
     for (const msg of sorted) {
       const key = `${msg.session_id}-${msg.exchange_id}`;
@@ -70,24 +40,18 @@ function Area({ messages, agenticFlows, currentAgenticFlow }: Props) {
     const elements: React.ReactNode[] = [];
 
     for (const [, group] of grouped.entries()) {
-      // Per-exchange working state
-      const toolPairs: Record<string, { call?: ChatMessage; result?: ChatMessage }> = {};
       const reasoningSteps: ChatMessage[] = [];
       const finals: ChatMessage[] = [];
       const others: ChatMessage[] = [];
-
       let userMessage: ChatMessage | undefined;
-      let keptSources: any[] | undefined; // authoritative list from grade_documents
+      let keptSources: any[] | undefined;
 
-      // 3) first pass: collect, pair, and detect kept sources
       for (const msg of group) {
-        // (a) user bubble
         if (msg.role === "user" && msg.channel === "final") {
           userMessage = msg;
           continue;
         }
 
-        // (b) skip blank observations (no text AND no sources)
         if (
           msg.channel === "observation" &&
           !hasNonEmptyText(msg) &&
@@ -96,24 +60,9 @@ function Area({ messages, agenticFlows, currentAgenticFlow }: Props) {
           continue;
         }
 
-        // (c) kept sources from grading (authoritative)
         const extras = getExtras(msg);
-        if (
-          extras?.node === "grade_documents" &&
-          Array.isArray(msg.metadata?.sources) &&
-          msg.metadata!.sources!.length
-        ) {
+        if (extras?.node === "grade_documents" && Array.isArray(msg.metadata?.sources) && msg.metadata!.sources!.length) {
           keptSources = msg.metadata!.sources as any[];
-        }
-
-        // (d) tool pairing
-        if (isToolCall(msg)) {
-          const id = toolId(msg);
-          if (id) toolPairs[id] = { ...(toolPairs[id] || {}), call: msg };
-        }
-        if (isToolResult(msg)) {
-          const id = toolId(msg);
-          if (id) toolPairs[id] = { ...(toolPairs[id] || {}), result: msg };
         }
 
         const TRACE_CHANNELS = [
@@ -127,20 +76,17 @@ function Area({ messages, agenticFlows, currentAgenticFlow }: Props) {
         ] as const;
         if (TRACE_CHANNELS.includes(msg.channel as any)) {
           reasoningSteps.push(msg);
-          continue; // prevent them entering "others"
+          continue;
         }
 
-        // (f) finals
         if (msg.role === "assistant" && msg.channel === "final") {
           finals.push(msg);
           continue;
         }
 
-        // (g) everything else
         others.push(msg);
       }
 
-      // 4) render user bubble (right)
       if (userMessage) {
         elements.push(
           <Message
@@ -156,48 +102,35 @@ function Area({ messages, agenticFlows, currentAgenticFlow }: Props) {
         );
       }
 
-      // 5) Reasoning accordion (grouped by task label if you like; here we just pass flat list)
       if (reasoningSteps.length) {
         elements.push(
-  <ReasoningTraceAccordion
-      key={`trace-${group[0].session_id}-${group[0].exchange_id}`}
-      steps={reasoningSteps}
-      isOpenByDefault
-      resolveAgent={resolveAgenticFlow}
-    />
-);
-        // elements.push(
-        //   <ReasoningTrace
-        //     key={`trace-${group[0].session_id}-${group[0].exchange_id}`}
-        //     messages={reasoningSteps} // ✅ pass the flat array
-        //     isOpenByDefault
-        //     resolveAgent={resolveAgenticFlow}
-        //   />,
-        // );
+          <ReasoningTraceAccordion
+            key={`trace-${group[0].session_id}-${group[0].exchange_id}`}
+            steps={reasoningSteps}
+            isOpenByDefault
+            resolveAgent={resolveAgenticFlow}
+          />,
+        );
       }
 
-      // 6) Tool call/result cards (in order of first appearance), live while waiting for result
-
-      // 7) Live sources panel: show as soon as keptSources exists (even before final)
       if (keptSources?.length && finals.length === 0) {
-  elements.push(
-    <Sources
-      key={`sources-${group[0].session_id}-${group[0].exchange_id}`}
-      sources={keptSources}
-      enableSources={true}
-      expandSources={false}
-    />,
-  );
-}
+        elements.push(
+          <Sources
+            key={`sources-${group[0].session_id}-${group[0].exchange_id}`}
+            sources={keptSources}
+            enableSources
+            expandSources={false}
+          />,
+        );
+      }
 
-      // 8) Other messages that slipped through (rare)
       for (const msg of others) {
         const agenticFlow = resolveAgenticFlow(msg);
         const inlineSrc = msg.metadata?.sources;
         elements.push(
           <React.Fragment key={`other-${msg.session_id}-${msg.exchange_id}-${msg.rank}`}>
             {!keptSources && inlineSrc?.length && (
-              <Sources sources={inlineSrc as any[]} enableSources={true} expandSources={false} />
+              <Sources sources={inlineSrc as any[]} enableSources expandSources={false} />
             )}
             <Message
               message={msg}
@@ -212,7 +145,6 @@ function Area({ messages, agenticFlows, currentAgenticFlow }: Props) {
         );
       }
 
-      // 9) Finals: prefer the keptSources; otherwise use final.metadata.sources
       for (const msg of finals) {
         const agenticFlow = resolveAgenticFlow(msg);
         const finalSources = keptSources ?? (msg.metadata?.sources as any[] | undefined);
@@ -222,8 +154,8 @@ function Area({ messages, agenticFlows, currentAgenticFlow }: Props) {
             <Sources
               key={`sources-final-${msg.session_id}-${msg.exchange_id}-${msg.rank}`}
               sources={finalSources}
-              enableSources={true}
-              expandSources={true}
+              enableSources
+              expandSources
             />,
           );
         }
@@ -246,20 +178,16 @@ function Area({ messages, agenticFlows, currentAgenticFlow }: Props) {
     return elements;
   }, [messages, agenticFlows, currentAgenticFlow]);
 
+  // Always scroll to bottom when content changes (new msg or loaded history)
   useEffect(() => {
-    scrollToBottomIfSticking();
-  }, [messages]);
+        scrollToBottom();
+    }, [messages]);
 
+  // Container + bottom anchor—no extra styling required here;
   return (
-    <div>
+    <div style={{ display: "flex", flexDirection: "column", flexGrow: 1 }}>
       {content}
-      <div ref={messagesEndRef} />
-      <TraceDetailsDialog
-      open={!!openStep}
-      step={openStep}
-      onClose={() => setOpenStep(undefined)}
-      resolveAgent={resolveAgenticFlow}
-    />
+      <div ref={messagesEndRef} style={{ height: '1px', marginTop: '8px' }} />
     </div>
   );
 }

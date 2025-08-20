@@ -54,8 +54,7 @@ function safeStringify(v: unknown, space = 2) {
 
 export default function ReasoningTraceAccordion({
   steps,
-  isOpenByDefault = true,
-  resolveAgent, // kept to preserve prop shape; not used in the drawer
+  isOpenByDefault = true, // kept to preserve prop shape; not used in the drawer
 }: Props) {
   const ordered = useMemo(
     () => [...steps]

@@ -18,8 +18,15 @@ from enum import Enum
 from typing import Dict, List, Literal, Union
 
 from fastapi import (
-    APIRouter, Depends, File, Form, HTTPException, Query,
-    UploadFile, WebSocket, WebSocketDisconnect,
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    UploadFile,
+    WebSocket,
+    WebSocketDisconnect,
 )
 from starlette.websockets import WebSocketState
 
@@ -31,7 +38,15 @@ from app.common.utils import log_exception
 from app.core.agents.agent_manager import AgentManager
 from app.core.agents.runtime_context import RuntimeContext
 from app.core.agents.structures import AgenticFlow
-from app.core.chatbot.chat_schema import ChatAskInput, ChatMessage, ErrorEvent, FinalEvent, SessionSchema, SessionWithFiles, StreamEvent
+from app.core.chatbot.chat_schema import (
+    ChatAskInput,
+    ChatMessage,
+    ErrorEvent,
+    FinalEvent,
+    SessionSchema,
+    SessionWithFiles,
+    StreamEvent,
+)
 from app.core.chatbot.metric_structures import MetricsBucket, MetricsResponse
 from app.core.session.session_manager import SessionManager
 
@@ -52,6 +67,7 @@ EchoPayload = Union[
     VectorSearchHit,
     RuntimeContext,
 ]
+
 
 class EchoEnvelope(BaseModel):
     kind: Literal[
@@ -112,7 +128,6 @@ class ChatbotController:
         async def websocket_chatbot_question(websocket: WebSocket):
             await websocket.accept()
             try:
-
                 while True:
                     client_request = None
                     try:
@@ -120,10 +135,15 @@ class ChatbotController:
                         ask = ChatAskInput(**client_request)
 
                         async def ws_callback(msg_dict: dict):
-                            event = StreamEvent(type="stream", message=ChatMessage(**msg_dict))
+                            event = StreamEvent(
+                                type="stream", message=ChatMessage(**msg_dict)
+                            )
                             await websocket.send_text(event.model_dump_json())
 
-                        session, final_messages = await self.session_manager.chat_ask_websocket(
+                        (
+                            session,
+                            final_messages,
+                        ) = await self.session_manager.chat_ask_websocket(
                             callback=ws_callback,
                             user_id=ask.user_id,
                             session_id=ask.session_id or "unknown-session",
@@ -134,27 +154,41 @@ class ChatbotController:
                         )
 
                         await websocket.send_text(
-                            FinalEvent(type="final", messages=final_messages, session=session).model_dump_json()
+                            FinalEvent(
+                                type="final", messages=final_messages, session=session
+                            ).model_dump_json()
                         )
 
                     except WebSocketDisconnect:
                         logger.debug("Client disconnected from chatbot WebSocket")
                         break
                     except Exception as e:
-                        summary = log_exception(e, "INTERNAL Error processing chatbot client query")
-                        session_id = (client_request.get("session_id", "unknown-session") if client_request else "unknown-session")
+                        summary = log_exception(
+                            e, "INTERNAL Error processing chatbot client query"
+                        )
+                        session_id = (
+                            client_request.get("session_id", "unknown-session")
+                            if client_request
+                            else "unknown-session"
+                        )
                         if websocket.client_state == WebSocketState.CONNECTED:
                             await websocket.send_text(
-                                ErrorEvent(type="error", content=summary, session_id=session_id).model_dump_json()
+                                ErrorEvent(
+                                    type="error", content=summary, session_id=session_id
+                                ).model_dump_json()
                             )
                         else:
                             logger.error("[🔌 WebSocket] Connection closed by client.")
                             break
             except Exception as e:
-                summary = log_exception(e, "EXTERNAL Error processing chatbot client query")
+                summary = log_exception(
+                    e, "EXTERNAL Error processing chatbot client query"
+                )
                 if websocket.client_state == WebSocketState.CONNECTED:
                     await websocket.send_text(
-                        ErrorEvent(type="error", content=summary, session_id="unknown-session").model_dump_json()
+                        ErrorEvent(
+                            type="error", content=summary, session_id="unknown-session"
+                        ).model_dump_json()
                     )
 
         @app.get(
@@ -204,7 +238,9 @@ class ChatbotController:
             agent_name: str = Form(...),
             file: UploadFile = File(...),
         ) -> dict:
-            return await self.session_manager.upload_file(user_id, session_id, agent_name, file)
+            return await self.session_manager.upload_file(
+                user_id, session_id, agent_name, file
+            )
 
         @app.get(
             "/metrics/chatbot/numerical",
@@ -224,12 +260,18 @@ class ChatbotController:
             agg_mapping: Dict[str, List[str]] = {}
             for item in agg:
                 if ":" not in item:
-                    raise HTTPException(400, detail=f"Invalid agg parameter format: {item}")
+                    raise HTTPException(
+                        400, detail=f"Invalid agg parameter format: {item}"
+                    )
                 field, op = item.split(":")
                 if op not in SUPPORTED_OPS:
                     raise HTTPException(400, detail=f"Unsupported aggregation op: {op}")
                 agg_mapping.setdefault(field, []).append(op)
             return self.session_manager.get_metrics(
-                start=start, end=end, precision=precision,
-                groupby=groupby, agg_mapping=agg_mapping, user_id=user.uid,
+                start=start,
+                end=end,
+                precision=precision,
+                groupby=groupby,
+                agg_mapping=agg_mapping,
+                user_id=user.uid,
             )

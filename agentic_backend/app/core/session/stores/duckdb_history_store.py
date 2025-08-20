@@ -32,6 +32,7 @@ MESSAGE_PART_ADAPTER = TypeAdapter(MessagePart)
 # list of parts
 MESSAGE_PARTS_ADAPTER = TypeAdapter(List[MessagePart])
 
+
 def _to_iso_utc(ts: datetime | str) -> str:
     """Normalize to ISO-8601 in UTC with 'Z' (DuckDB column is TEXT)."""
     if isinstance(ts, str):
@@ -92,9 +93,16 @@ class DuckdbHistoryStore(BaseHistoryStore):
         with self.store._connect() as conn:
             for i, msg in enumerate(messages):
                 parts_json = json.dumps(
-                    [p.model_dump(mode="json", exclude_none=True) for p in (msg.parts or [])]
+                    [
+                        p.model_dump(mode="json", exclude_none=True)
+                        for p in (msg.parts or [])
+                    ]
                 )
-                metadata_json = json.dumps(msg.metadata.model_dump(mode="json", exclude_none=True) if msg.metadata else {})
+                metadata_json = json.dumps(
+                    msg.metadata.model_dump(mode="json", exclude_none=True)
+                    if msg.metadata
+                    else {}
+                )
                 conn.execute(
                     """
                     INSERT OR REPLACE INTO messages (
@@ -133,7 +141,9 @@ class DuckdbHistoryStore(BaseHistoryStore):
             try:
                 parts_payload = json.loads(row[6]) if row[6] else []
                 # Pydantic will validate each part against the discriminator "type"
-                parts: List[MessagePart] = MESSAGE_PARTS_ADAPTER.validate_python(parts_payload)
+                parts: List[MessagePart] = MESSAGE_PARTS_ADAPTER.validate_python(
+                    parts_payload
+                )
 
                 md = _safe_md(json.loads(row[7]) if row[7] else {})
                 out.append(
@@ -141,8 +151,8 @@ class DuckdbHistoryStore(BaseHistoryStore):
                         session_id=session_id,
                         rank=row[1],
                         timestamp=row[2],  # Pydantic parses ISO string to datetime
-                        role=row[3],       # → Role enum
-                        channel=row[4],    # → Channel enum
+                        role=row[3],  # → Role enum
+                        channel=row[4],  # → Channel enum
                         exchange_id=row[5],
                         parts=parts,
                         metadata=md,
@@ -184,7 +194,9 @@ class DuckdbHistoryStore(BaseHistoryStore):
         for row in rows:
             try:
                 parts_payload = json.loads(row[7]) if row[7] else []
-                parts: List[MessagePart] = MESSAGE_PARTS_ADAPTER.validate_python(parts_payload)
+                parts: List[MessagePart] = MESSAGE_PARTS_ADAPTER.validate_python(
+                    parts_payload
+                )
                 md = _safe_md(json.loads(row[8]) if row[8] else {})
                 msg = ChatMessage(
                     session_id=row[0],
@@ -252,7 +264,9 @@ class DuckdbHistoryStore(BaseHistoryStore):
                         raise ValueError(f"Unsupported aggregation op: {op}")
 
             buckets.append(
-                MetricsBucket(timestamp=timestamp, group=group_values, aggregations=aggs)
+                MetricsBucket(
+                    timestamp=timestamp, group=group_values, aggregations=aggs
+                )
             )
         return MetricsResponse(precision=precision, buckets=buckets)
 

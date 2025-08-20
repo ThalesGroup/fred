@@ -37,6 +37,7 @@ from app.common.structures import AgentSettings
 
 logger = logging.getLogger(__name__)
 
+
 def mk_thought(*, label: str, node: str, task: str, content: str) -> AIMessage:
     """
     Emits an assistant-side 'thought' trace.
@@ -47,10 +48,11 @@ def mk_thought(*, label: str, node: str, task: str, content: str) -> AIMessage:
     return AIMessage(
         content="",  # content is unused for thought; we put text in metadata
         response_metadata={
-            "thought": content,           # <-- text the UI will render in Thoughts
+            "thought": content,  # <-- text the UI will render in Thoughts
             "extras": {"task": task, "node": node, "label": label},
         },
     )
+
 
 def mk_tool_call(*, call_id: str, name: str, args: Dict[str, Any]) -> AIMessage:
     """
@@ -59,13 +61,16 @@ def mk_tool_call(*, call_id: str, name: str, args: Dict[str, Any]) -> AIMessage:
     """
     return AIMessage(
         content="",
-        tool_calls=[{
-            "id": call_id,
-            "name": name,
-            "args": args,
-        }],
+        tool_calls=[
+            {
+                "id": call_id,
+                "name": name,
+                "args": args,
+            }
+        ],
         response_metadata={"extras": {"task": "retrieval", "node": name}},
     )
+
 
 def mk_tool_result(
     *,
@@ -84,9 +89,10 @@ def mk_tool_result(
     if ok is not None:
         md["ok"] = ok
     if sources:
-        md["sources"] = [s.model_dump() if hasattr(s, "model_dump") else s for s in sources]
+        md["sources"] = [
+            s.model_dump() if hasattr(s, "model_dump") else s for s in sources
+        ]
     return ToolMessage(content=content, tool_call_id=call_id, response_metadata=md)
-
 
 
 def _chunk_key(d: VectorSearchHit) -> str:
@@ -212,9 +218,13 @@ class RicoProExpert(AgentFlow):
 
     async def _retrieve(self, state: Dict[str, Any]) -> Dict[str, Any]:
         if self.model is None:
-            raise RuntimeError("Model is not initialized. Did you forget to call async_init()?")
+            raise RuntimeError(
+                "Model is not initialized. Did you forget to call async_init()?"
+            )
 
-        question: Optional[str] = state.get("question") or (state.get("messages") and state["messages"][-1].content)
+        question: Optional[str] = state.get("question") or (
+            state.get("messages") and state["messages"][-1].content
+        )
         top_k: int = int(state.get("top_k", self.TOP_K) or self.TOP_K)
         retry_count: int = int(state.get("retry_count", 0) or 0)
         if retry_count > 0:
@@ -222,20 +232,33 @@ class RicoProExpert(AgentFlow):
 
         try:
             tags = get_document_libraries_ids(self.get_runtime_context())
-            hits: List[VectorSearchHit] = self.search_client.search(query=question or "", top_k=top_k, tags=tags)
+            hits: List[VectorSearchHit] = self.search_client.search(
+                query=question or "", top_k=top_k, tags=tags
+            )
 
             if not hits:
                 warn = f"I couldn't find any relevant documents for “{question}”. Try rephrasing?"
                 return {
-                    "messages": [mk_thought(label="retrieve_none", node="retrieve", task="retrieval", content=warn)],
-                    "question": question,          # ✅ keep it
-                    "documents": [],               # ✅ explicit
+                    "messages": [
+                        mk_thought(
+                            label="retrieve_none",
+                            node="retrieve",
+                            task="retrieval",
+                            content=warn,
+                        )
+                    ],
+                    "question": question,  # ✅ keep it
+                    "documents": [],  # ✅ explicit
                     "sources": [],
                     "top_k": top_k,
                     "retry_count": retry_count,
                 }
             call_id = "tc_retrieve_1"
-            call_args = {"query": question, "top_k": top_k, **({"tags": tags} if tags else {})}
+            call_args = {
+                "query": question,
+                "top_k": top_k,
+                **({"tags": tags} if tags else {}),
+            }
             call_msg = mk_tool_call(call_id=call_id, name="retrieve", args=call_args)
 
             # 2) emit the tool result (tool/tool_result)
@@ -248,7 +271,9 @@ class RicoProExpert(AgentFlow):
                 sources=hits,  # will end up in metadata.sources for this step
             )
             # 3) add a small Thought so the accordion shows progress
-            thought_msg = mk_thought(label="retrieve", node="retrieve", task="retrieval", content=summary)
+            thought_msg = mk_thought(
+                label="retrieve", node="retrieve", task="retrieval", content=summary
+            )
 
             return {
                 "messages": [call_msg, result_msg, thought_msg],
@@ -260,8 +285,16 @@ class RicoProExpert(AgentFlow):
             }
         except Exception as e:
             logger.exception("Failed to retrieve documents: %s", e)
-            return {"messages": [mk_thought(label="retrieve_error", node="retrieve",
-                                                task="retrieval", content="Error during retrieval.")]}
+            return {
+                "messages": [
+                    mk_thought(
+                        label="retrieve_error",
+                        node="retrieve",
+                        task="retrieval",
+                        content="Error during retrieval.",
+                    )
+                ]
+            }
 
     async def _grade_documents(self, state: Dict[str, Any]) -> Dict[str, Any]:
         question: str = state["question"]
@@ -273,7 +306,7 @@ class RicoProExpert(AgentFlow):
             "- Return 'yes' unless the document is clearly off-topic for the question.\n"
             "- Consider shared keywords, entities, acronyms, or overlapping semantics as relevant.\n"
             "- Minor mismatches or partial overlaps should still be 'yes'.\n"
-            "Return strictly as JSON matching the schema: {{\"binary_score\": \"yes\" | \"no\"}}."
+            'Return strictly as JSON matching the schema: {{"binary_score": "yes" | "no"}}.'
         )
 
         filtered_docs: List[VectorSearchHit] = []
@@ -349,7 +382,7 @@ class RicoProExpert(AgentFlow):
             label="grade_documents",
             node="grade_documents",
             task="retrieval",
-            content=f"Kept {len(kept)} of {total} documents for answering."
+            content=f"Kept {len(kept)} of {total} documents for answering.",
         )
 
         # attach only the KEPT docs for the UI's Sources panel on this step
@@ -363,7 +396,6 @@ class RicoProExpert(AgentFlow):
             "irrelevant_documents": irrelevant_documents,
             "sources": kept,
         }
-
 
     async def _generate(self, state: Dict[str, Any]) -> Dict[str, Any]:
         question: str = state["question"]
@@ -391,12 +423,16 @@ class RicoProExpert(AgentFlow):
             content="Drafting an answer from selected documents…",
         )
 
-        response = await (prompt | self.model).ainvoke({"context": context, "question": question})
+        response = await (prompt | self.model).ainvoke(
+            {"context": context, "question": question}
+        )
         response = cast(AIMessage, response)
-        attach_sources_to_llm_response(response, documents)  # attaches metadata.sources to AIMessage
+        attach_sources_to_llm_response(
+            response, documents
+        )  # attaches metadata.sources to AIMessage
 
         return {"messages": [progress], "generation": response, "sources": documents}
-        
+
     async def _rephrase_query(self, state: Dict[str, Any]) -> Dict[str, Any]:
         question: str = state["question"]
         retry_count: int = int(state.get("retry_count", 0) or 0) + 1
@@ -446,7 +482,7 @@ class RicoProExpert(AgentFlow):
         generation: AIMessage = state["generation"]
 
         return {
-            "messages": [generation],    # type:"ai", subtype:"final" set downstream
+            "messages": [generation],  # type:"ai", subtype:"final" set downstream
             "question": "",
             "documents": [],
             "top_k": self.TOP_K,
@@ -470,8 +506,13 @@ class RicoProExpert(AgentFlow):
         # ensure it is converted to role=assistant, channel=final.
         return {
             "messages": [msg],
-            "question": "", "documents": [], "top_k": self.TOP_K,
-            "sources": [], "retry_count": 0, "generation": None, "irrelevant_documents": [],
+            "question": "",
+            "documents": [],
+            "top_k": self.TOP_K,
+            "sources": [],
+            "retry_count": 0,
+            "generation": None,
+            "irrelevant_documents": [],
         }
 
     # ---------- edges ----------

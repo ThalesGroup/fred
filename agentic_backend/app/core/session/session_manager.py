@@ -60,6 +60,7 @@ def utcnow_dt() -> datetime:
 
 # ---------------- helpers (v2-native, strongly typed) ----------------
 
+
 def _parts_from_raw_content(raw: Any) -> List[MessagePart]:
     """
     Convert LangChain/OpenAI-style content into v2 MessagePart models.
@@ -86,7 +87,11 @@ def _parts_from_raw_content(raw: Any) -> List[MessagePart]:
                     url = (itm.get("image_url") or {}).get("url")
                     if url:
                         parts.append(ImageUrlPart(url=url))
-                elif t == "input_text" and isinstance(itm.get("text"), str) and "\n" in itm["text"]:
+                elif (
+                    t == "input_text"
+                    and isinstance(itm.get("text"), str)
+                    and "\n" in itm["text"]
+                ):
                     parts.append(CodePart(code=itm["text"]))
         return parts
 
@@ -119,7 +124,7 @@ def _extract_tool_calls(msg: Any) -> List[dict]:
         return calls
 
     for i, c in enumerate(tc):
-        cid = c.get("id") or f"t{i+1}"
+        cid = c.get("id") or f"t{i + 1}"
         if "function" in c:
             fn = c["function"] or {}
             name = fn.get("name") or "unnamed"
@@ -166,6 +171,7 @@ def _coerce_finish_reason(val: Any) -> Optional[FinishReason]:
 
 # ---------------- SessionManager (v2) ----------------
 
+
 class SessionManager:
     """
     Manages user sessions and interactions with the chatbot using Chat Protocol v2.
@@ -199,12 +205,14 @@ class SessionManager:
             agent_name,
         )
 
-        session, history_msgs, agent, _is_new_session = self._prepare_session_and_history(
-            user_id=user_id,
-            session_id=session_id,
-            message=message,
-            agent_name=agent_name,
-            runtime_context=runtime_context,
+        session, history_msgs, agent, _is_new_session = (
+            self._prepare_session_and_history(
+                user_id=user_id,
+                session_id=session_id,
+                message=message,
+                agent_name=agent_name,
+                runtime_context=runtime_context,
+            )
         )
         exchange_id = client_exchange_id or str(uuid4())
 
@@ -257,28 +265,34 @@ class SessionManager:
     def _prepare_session_and_history(
         self,
         user_id: str,
-        session_id: Optional[str],
+        session_id: str | None,
         message: str,
         agent_name: str,
-        runtime_context: Optional[RuntimeContext] = None,
-    ) -> Tuple[SessionSchema, List[BaseMessage], AgentFlow, bool]:
+        runtime_context: RuntimeContext | None = None,
+    ) -> tuple[SessionSchema, list[BaseMessage], AgentFlow, bool]:
         session, is_new_session = self._get_or_create_session(
             user_id, message, session_id
         )
 
         # Rebuild minimal LangChain history (user/assistant/system only)
-        lc_history: List[BaseMessage] = []
+        lc_history: list[BaseMessage] = []
         for m in self.get_session_history(session.id, user_id):
             if m.role == Role.user:
                 lc_history.append(HumanMessage(_concat_text_parts(m.parts or [])))
             elif m.role == Role.assistant:
                 md = m.metadata.model_dump() if m.metadata else {}
-                lc_history.append(AIMessage(content=_concat_text_parts(m.parts or []), response_metadata=md))
+                lc_history.append(
+                    AIMessage(
+                        content=_concat_text_parts(m.parts or []), response_metadata=md
+                    )
+                )
             elif m.role == Role.system:
                 lc_history.append(SystemMessage(_concat_text_parts(m.parts or [])))
             # We ignore Role.tool in LC history; not needed for a fresh exchange.
 
-        agent = self.agent_manager.get_agent_instance(agent_name, runtime_context)
+        agent: AgentFlow = self.agent_manager.get_agent_instance(
+            agent_name, runtime_context
+        )
         return session, lc_history, agent, is_new_session
 
     def _get_or_create_session(
@@ -364,11 +378,13 @@ class SessionManager:
                             timestamp=utcnow_dt(),
                             role=Role.assistant,
                             channel=Channel.tool_call,
-                            parts=[ToolCallPart(
-                                call_id=tc["call_id"],
-                                name=tc["name"],
-                                args=tc["args"],
-                            )],
+                            parts=[
+                                ToolCallPart(
+                                    call_id=tc["call_id"],
+                                    name=tc["name"],
+                                    args=tc["args"],
+                                )
+                            ],
                             metadata=ChatMetadata(
                                 model=model_name,
                                 token_usage=token_usage,
@@ -385,7 +401,11 @@ class SessionManager:
 
                 # --- TOOL RESULT ---
                 if getattr(msg, "type", "") == "tool":
-                    call_id = getattr(msg, "tool_call_id", None) or raw_md.get("tool_call_id") or "t?"
+                    call_id = (
+                        getattr(msg, "tool_call_id", None)
+                        or raw_md.get("tool_call_id")
+                        or "t?"
+                    )
                     content_str = getattr(msg, "content", "")
                     if not isinstance(content_str, str):
                         content_str = json.dumps(content_str)
@@ -396,15 +416,19 @@ class SessionManager:
                         timestamp=utcnow_dt(),
                         role=Role.tool,
                         channel=Channel.tool_result,
-                        parts=[ToolResultPart(
-                            call_id=call_id,
-                            ok=True,
-                            latency_ms=raw_md.get("latency_ms"),
-                            content=content_str,
-                        )],
-                        metadata=ChatMetadata(agent_name=agent_name, 
-                                              extras=raw_md.get("extras") or {},
-                                              sources=raw_md.get("sources") or [],),
+                        parts=[
+                            ToolResultPart(
+                                call_id=call_id,
+                                ok=True,
+                                latency_ms=raw_md.get("latency_ms"),
+                                content=content_str,
+                            )
+                        ],
+                        metadata=ChatMetadata(
+                            agent_name=agent_name,
+                            extras=raw_md.get("extras") or {},
+                            sources=raw_md.get("sources") or [],
+                        ),
                     )
                     out.append(tr_msg)
                     seq += 1
@@ -421,8 +445,7 @@ class SessionManager:
                 }.get(lc_type, Role.assistant)
 
                 parts = _parts_from_raw_content(getattr(msg, "content", ""))
-                
-                
+
                 # Thought trace (optional)
                 if "thought" in raw_md:
                     thought_txt = raw_md["thought"]
@@ -437,7 +460,9 @@ class SessionManager:
                             role=Role.assistant,
                             channel=Channel.thought,
                             parts=[TextPart(text=str(thought_txt))],
-                            metadata=ChatMetadata(agent_name=agent_name, extras=raw_md.get("extras") or {}),
+                            metadata=ChatMetadata(
+                                agent_name=agent_name, extras=raw_md.get("extras") or {}
+                            ),
                         )
                         out.append(thought_msg)
                         seq += 1
@@ -445,7 +470,11 @@ class SessionManager:
 
                 # Channel selection
                 if role == Role.assistant:
-                    ch = Channel.final if (parts and not final_sent) else Channel.observation
+                    ch = (
+                        Channel.final
+                        if (parts and not final_sent)
+                        else Channel.observation
+                    )
                     if ch == Channel.final:
                         final_sent = True
                 elif role == Role.system:
@@ -454,9 +483,11 @@ class SessionManager:
                     ch = Channel.final
                 else:
                     ch = Channel.observation
-                
-                if role == "assistant" and ch == "observation":
-                    if not parts or all(p.type=="text" and not p.text.strip() for p in parts):
+
+                if role == Role.assistant and ch == Channel.observation:
+                    if not parts or all(
+                        p.type == "text" and not p.text.strip() for p in parts
+                    ):
                         continue  # skip sending this is a langgraph intermediary step message
 
                 msg_v2 = ChatMessage(
@@ -507,9 +538,7 @@ class SessionManager:
             )
         return enriched
 
-    def get_session_history(
-        self, session_id: str, user_id: str
-    ) -> List[ChatMessage]:
+    def get_session_history(self, session_id: str, user_id: str) -> List[ChatMessage]:
         return self.history_store.get(session_id) or []
 
     def get_session_temp_folder(self, session_id: str) -> Path:

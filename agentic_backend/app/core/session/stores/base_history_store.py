@@ -23,9 +23,7 @@ from app.core.chatbot.metric_structures import MetricsResponse
 
 class BaseHistoryStore(ABC):
     @abstractmethod
-    def save(
-        self, session_id: str, messages: List[ChatMessage], user_id: str
-    ) -> None:
+    def save(self, session_id: str, messages: List[ChatMessage], user_id: str) -> None:
         """Save a batch of messages to the session history."""
         pass
 

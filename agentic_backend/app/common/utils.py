@@ -156,7 +156,6 @@ def authorization_required(method):
     return wrapper
 
 
-
 def truncate_datetime(dt: datetime, precision: str) -> datetime:
     """
     Truncate a datetime to the start of the given precision.

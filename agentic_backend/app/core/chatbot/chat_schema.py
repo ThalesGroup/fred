@@ -33,13 +33,13 @@ class Role(str, Enum):
 
 class Channel(str, Enum):
     # UI-facing buckets
-    final = "final"           # the answer to display as the main assistant bubble
-    plan = "plan"             # planned steps
-    thought = "thought"       # high-level reasoning summary (safe/structured)
+    final = "final"  # the answer to display as the main assistant bubble
+    plan = "plan"  # planned steps
+    thought = "thought"  # high-level reasoning summary (safe/structured)
     observation = "observation"  # observations/logs, eg from tools, not the final
     tool_call = "tool_call"
     tool_result = "tool_result"
-    error = "error"           # agent-level error (transport errors use ErrorEvent)
+    error = "error"  # agent-level error (transport errors use ErrorEvent)
     system_note = "system_note"  # injected context, tips, etc.
 
 
@@ -118,6 +118,7 @@ class ChatMetadata(BaseModel):
 
 # ---------- Message ----------
 
+
 class ChatAskInput(BaseModel):
     user_id: str
     session_id: Optional[str] = None
@@ -135,6 +136,7 @@ class ChatMessage(BaseModel):
       - exactly one assistant/final per exchange_id
       - tool_call/tool_result are separate messages (not buried in blocks)
     """
+
     session_id: str
     exchange_id: str
     rank: int
@@ -193,9 +195,16 @@ def make_user_text(session_id, exchange_id, rank, text: str) -> ChatMessage:
         parts=[TextPart(text=text)],
     )
 
-def make_assistant_final(session_id, exchange_id, rank, parts: List[MessagePart],
-                         model: str, sources: List[VectorSearchHit],
-                         usage: ChatTokenUsage) -> ChatMessage:
+
+def make_assistant_final(
+    session_id,
+    exchange_id,
+    rank,
+    parts: List[MessagePart],
+    model: str,
+    sources: List[VectorSearchHit],
+    usage: ChatTokenUsage,
+) -> ChatMessage:
     return ChatMessage(
         session_id=session_id,
         exchange_id=exchange_id,
@@ -206,6 +215,7 @@ def make_assistant_final(session_id, exchange_id, rank, parts: List[MessagePart]
         parts=parts,
         metadata=ChatMetadata(model=model, token_usage=usage, sources=sources),
     )
+
 
 def make_tool_call(session_id, exchange_id, rank, call_id, name, args) -> ChatMessage:
     return ChatMessage(
@@ -218,7 +228,10 @@ def make_tool_call(session_id, exchange_id, rank, call_id, name, args) -> ChatMe
         parts=[ToolCallPart(call_id=call_id, name=name, args=args)],
     )
 
-def make_tool_result(session_id, exchange_id, rank, call_id, ok, ms, content) -> ChatMessage:
+
+def make_tool_result(
+    session_id, exchange_id, rank, call_id, ok, ms, content
+) -> ChatMessage:
     return ChatMessage(
         session_id=session_id,
         exchange_id=exchange_id,

@@ -12,9 +12,9 @@ from opensearchpy import OpenSearch, RequestsHttpConnection
 
 from app.common.utils import truncate_datetime
 from app.core.chatbot.chat_schema import (
+    Channel,
     ChatMessage,
     Role,
-    Channel,
 )
 from app.core.chatbot.metric_structures import MetricsBucket, MetricsResponse
 from app.core.session.stores.base_history_store import BaseHistoryStore
@@ -31,24 +31,19 @@ PARTS_MAPPING = {
     "dynamic": False,
     "properties": {
         "type": {"type": "keyword"},
-
         # TextPart
         "text": {"type": "text"},
-
         # CodePart
         "code": {"type": "text"},
         "language": {"type": "keyword"},
-
         # ImageUrlPart
         "url": {"type": "keyword"},
         "alt": {"type": "text"},
-
-        # ToolCallPart
+        # ToolCallPartx²
         "call_id": {"type": "keyword"},
         "name": {"type": "keyword"},
         # We stringify args in our messages anyway, but support text here
         "args": {"type": "text"},
-
         # ToolResultPart
         "ok": {"type": "boolean"},
         "latency_ms": {"type": "integer"},
@@ -70,14 +65,13 @@ MAPPING = {
             "user_id": {"type": "keyword"},
             "rank": {"type": "integer"},
             "timestamp": {"type": "date"},
-
             # Chat v2 typing
-            "role": {"type": "keyword"},     # user | assistant | tool | system
-            "channel": {"type": "keyword"},  # final | plan | thought | observation | tool_call | tool_result | error | system_note
-
+            "role": {"type": "keyword"},  # user | assistant | tool | system
+            "channel": {
+                "type": "keyword"
+            },  # final | plan | thought | observation | tool_call | tool_result | error | system_note
             # Rich content
             "parts": PARTS_MAPPING,
-
             # Metadata: keep lean, type the common fields, allow extension
             "metadata": {
                 "type": "object",
@@ -104,6 +98,22 @@ MAPPING = {
     },
 }
 
+def _merge_unique_by_key(existing: List[ChatMessage], new: List[ChatMessage]) -> List[ChatMessage]:
+    bucket: dict[tuple[str, int], ChatMessage] = {(m.exchange_id, m.rank): m for m in existing}
+    for m in new:
+        k = (m.exchange_id, m.rank)
+        if k not in bucket:
+            bucket[k] = m
+        else:
+            old = bucket[k]
+            take_new = (
+                (getattr(old, "channel", None) != Channel.final and m.channel == Channel.final)
+                or ((m.timestamp or "") > (old.timestamp or ""))
+            )
+            if take_new:
+                bucket[k] = m
+    # keep session order by rank for readability
+    return sorted(bucket.values(), key=lambda x: x.rank)
 
 class OpensearchHistoryIndex(BaseHistoryStore):
     """
@@ -146,10 +156,18 @@ class OpensearchHistoryIndex(BaseHistoryStore):
                 meta_props = props.get("metadata", {}).get("properties", {})
                 if "token_usage" not in meta_props:
                     patch.setdefault("metadata", {"type": "object", "properties": {}})
-                    patch["metadata"]["properties"]["token_usage"] = MAPPING["mappings"]["properties"]["metadata"]["properties"]["token_usage"]
+                    patch["metadata"]["properties"]["token_usage"] = MAPPING[
+                        "mappings"
+                    ]["properties"]["metadata"]["properties"]["token_usage"]
                 if patch:
-                    self.client.indices.put_mapping(index=index, body={"properties": patch})
-                    logger.info("Updated mapping for '%s' with: %s", index, ", ".join(patch.keys()))
+                    self.client.indices.put_mapping(
+                        index=index, body={"properties": patch}
+                    )
+                    logger.info(
+                        "Updated mapping for '%s' with: %s",
+                        index,
+                        ", ".join(patch.keys()),
+                    )
             except Exception as e:
                 logger.warning("Could not update mapping on index '%s': %s", index, e)
 
@@ -167,19 +185,24 @@ class OpensearchHistoryIndex(BaseHistoryStore):
                 preview = ""
                 try:
                     # derive preview from first text part if present
-                    for p in (msg.parts or []):
+                    for p in msg.parts or []:
                         if getattr(p, "type", None) == "text":
                             preview = (getattr(p, "text", "") or "")[:60]
                             break
                 except Exception:
-                    pass
+                    logger.exception("Failed to parse message from OpenSearch: %s", msg)
+                    raise
 
                 logger.debug(
                     "[OpenSearch SAVE] session=%s role=%s channel=%s rank=%s preview='%s'",
-                    session_id, msg.role, msg.channel, msg.rank, preview,
+                    session_id,
+                    msg.role,
+                    msg.channel,
+                    msg.rank,
+                    preview,
                 )
 
-                doc_id = f"{session_id}-{msg.rank or i}"
+                doc_id = f"{session_id}-{msg.exchange_id}-{msg.rank or i}"
                 actions.append({"index": {"_index": self.index, "_id": doc_id}})
                 bodies.append(msg.model_dump(mode="json", exclude_none=True))
 
@@ -189,7 +212,7 @@ class OpensearchHistoryIndex(BaseHistoryStore):
 
             # Cache append
             existing = self._cache.get(session_id) or []
-            updated = existing + messages
+            updated = _merge_unique_by_key(existing, messages)
             self._cache.set(session_id, updated)
 
             logger.info("Saved %d messages for session %s", len(messages), session_id)
@@ -204,19 +227,26 @@ class OpensearchHistoryIndex(BaseHistoryStore):
                 return cached
 
             query = {
-                "query": {"term": {"session_id.keyword": {"value": session_id}}},
+                "query": {"term": {"session_id": {"value": session_id}}},
                 "sort": [{"rank": {"order": "asc", "unmapped_type": "integer"}}],
                 "size": 10000,
             }
+
             response = self.client.search(index=self.index, body=query)
             hits = response.get("hits", {}).get("hits", [])
-            logger.info("[OpenSearch GET] Loaded %d messages for session %s", len(hits), session_id)
+            logger.info(
+                "[OpenSearch GET] Loaded %d messages for session %s",
+                len(hits),
+                session_id,
+            )
 
             messages = [ChatMessage(**hit["_source"]) for hit in hits]
             self._cache.set(session_id, messages)
             return messages
         except Exception as e:
-            logger.error("Failed to retrieve messages for session %s: %s", session_id, e)
+            logger.error(
+                "Failed to retrieve messages for session %s: %s", session_id, e
+            )
             return []
 
     # ----------------------------------------------------------------------
@@ -261,6 +291,7 @@ class OpensearchHistoryIndex(BaseHistoryStore):
                 try:
                     msg = ChatMessage(**src)
                 except Exception:
+                    logger.warning("Failed to parse message from OpenSearch: %s", src)
                     continue
                 if not (msg.role == Role.assistant and msg.channel == Channel.final):
                     continue
@@ -273,6 +304,7 @@ class OpensearchHistoryIndex(BaseHistoryStore):
 
             # 3) Group by (_bucket, *groupby_fields)
             from collections import defaultdict as _dd
+
             grouped = _dd(list)
             for row in rows:
                 key_vals = [row["_bucket"]]
@@ -285,9 +317,7 @@ class OpensearchHistoryIndex(BaseHistoryStore):
             buckets: List[MetricsBucket] = []
             for key, group in grouped.items():
                 bucket_time = key[0]
-                group_fields = {
-                    field: value for field, value in zip(groupby, key[1:])
-                }
+                group_fields = {field: value for field, value in zip(groupby, key[1:])}
                 aggs: Dict[str, float | List[float]] = {}
                 for field, ops in agg_mapping.items():
                     vals = [self._get_path(r, field) for r in group]

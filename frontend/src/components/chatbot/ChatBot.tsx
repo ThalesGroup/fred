@@ -4,7 +4,7 @@
 // ...
 
 import { Box, Grid2, Tooltip, Typography, useTheme } from "@mui/material";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useLayoutEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { v4 as uuidv4 } from "uuid";
 import { getConfig } from "../../common/config.tsx";
@@ -68,7 +68,7 @@ const ChatBot = ({
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const messagesRef = useRef<ChatMessage[]>([]);
 
-  // State mutators that keep the ref in sync (prevents stale closures)
+  // keep state + ref in sync
   const setAllMessages = (msgs: ChatMessage[]) => {
     messagesRef.current = msgs;
     setMessages(msgs);
@@ -76,15 +76,15 @@ const ChatBot = ({
 
   const [waitResponse, setWaitResponse] = useState<boolean>(false);
 
+  // === SINGLE scroll container ref (attach to the ONLY overflow element) ===
   const scrollerRef = useRef<HTMLDivElement>(null);
 
-const scrollToBottomIfNeeded = () => {
-  const el = scrollerRef.current;
-  if (!el) return;
-  const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
-  if (nearBottom) el.scrollTop = el.scrollHeight;
-};
-
+  // === Hard guarantee: snap to absolute bottom after render ===
+  useLayoutEffect(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }, [messages, currentChatBotSession?.id]);
 
   const setupWebSocket = async (): Promise<WebSocket | null> => {
     const current = webSocketRef.current;
@@ -127,29 +127,25 @@ const scrollToBottomIfNeeded = () => {
               // Upsert streamed message and keep order stable
               messagesRef.current = upsertOne(messagesRef.current, msg);
               setMessages(messagesRef.current);
-              scrollToBottomIfNeeded();
-              console.log("streaming next message", msg);
+              // ⛔ no scrolling logic here — the layout effect handles it post-render
               break;
             }
 
             case "final": {
               const finalEvent = response as FinalEvent;
 
-              // Debug summary (optional)
+              // Optional debug summary
               const streamedKeys = new Set(messagesRef.current.map((m) => keyOf(m)));
               const finalKeys = new Set(finalEvent.messages.map((m) => keyOf(m)));
               const missing = [...finalKeys].filter((k) => !streamedKeys.has(k));
               const unexpected = [...streamedKeys].filter((k) => !finalKeys.has(k));
-              console.log("[FINAL EVENT SUMMARY]");
-              console.log("→ response:", response);
-              console.log("→ in streamed but not final:", unexpected);
-              console.log("→ in final but not streamed:", missing);
+              console.log("[FINAL EVENT SUMMARY]", { missing, unexpected });
 
               // Merge authoritative finals (includes citations/metadata)
               messagesRef.current = mergeAuthoritative(messagesRef.current, finalEvent.messages);
               setMessages(messagesRef.current);
 
-              // If backend created/switched session, accept it
+              // Accept session update if backend created/switched it
               if (finalEvent.session.id !== currentChatBotSession?.id) {
                 onUpdateOrAddSession(finalEvent.session);
               }
@@ -222,26 +218,22 @@ const scrollToBottomIfNeeded = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // mount/unmount
 
-  // Fetch messages from the server when the session changes
+  // Fetch messages when the session changes
   useEffect(() => {
     const id = currentChatBotSession?.id;
     if (!id) return;
 
-    // Clear view while fetching the authoritative history
-    setAllMessages([]);
+    setAllMessages([]); // clear view while fetching
 
     fetchHistory({ sessionId: id })
       .unwrap()
       .then((serverMessages) => {
         console.group(`[📥 ChatBot] Loaded messages for session: ${id}`);
         console.log(`Total: ${serverMessages.length}`);
-        for (const msg of serverMessages) {
-          console.log(msg);
-        }
+        for (const msg of serverMessages) console.log(msg);
         console.groupEnd();
 
-        // Normalize order using the same sorter as stream/final
-        setAllMessages(sortMessages(serverMessages));
+        setAllMessages(sortMessages(serverMessages)); // layout effect will scroll
       })
       .catch((e) => {
         console.error("[❌ ChatBot] Failed to load messages:", e);
@@ -283,7 +275,7 @@ const scrollToBottomIfNeeded = () => {
             body: formData,
           });
 
-        if (!response.ok) {
+          if (!response.ok) {
             showError({
               summary: "File Upload Error",
               detail: `Failed to upload ${file.name}: ${response.statusText}`,
@@ -335,8 +327,6 @@ const scrollToBottomIfNeeded = () => {
       runtime_context: runtimeContext,
     };
 
-    // Add only the client-side correlation id for this exchange.
-    // Remove the cast once your OpenAPI types include client_exchange_id.
     const event = {
       ...eventBase,
       client_exchange_id: uuidv4(),
@@ -378,7 +368,7 @@ const scrollToBottomIfNeeded = () => {
       : 0;
 
   return (
-    <Box width={"100%"} height="100%" display="flex" flexDirection="column" alignItems="center">
+    <Box width={"100%"} height="100%" display="flex" flexDirection="column" alignItems="center" sx={{ minHeight: 0 }} >
       <Box
         width="80%"
         maxWidth="768px"
@@ -387,6 +377,7 @@ const scrollToBottomIfNeeded = () => {
         flexDirection="column"
         alignItems="center"
         paddingBottom={1}
+        sx={{ minHeight: 0, overflow: "hidden" }} 
       >
         {/* Conversation start: new conversation without message */}
         {isCreatingNewConversation && messages.length === 0 && (
@@ -433,7 +424,7 @@ const scrollToBottomIfNeeded = () => {
               width="100%"
               p={2}
               sx={{
-                overflowY: "scroll",
+                overflowY: "auto",
                 overflowX: "hidden",
                 scrollbarWidth: "none",
                 wordBreak: "break-word",

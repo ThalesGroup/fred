@@ -1,4 +1,4 @@
-import { ChatMessage, TextPart, ToolCallPart, ToolResultPart } from "../../slices/agentic/agenticOpenApi";
+import { ChatMessage } from "../../slices/agentic/agenticOpenApi";
 
 // Replace-or-insert one message, then keep array sorted by (rank asc, timestamp asc as tiebreaker)
 export const upsertOne = (all: ChatMessage[], m: ChatMessage) => {
