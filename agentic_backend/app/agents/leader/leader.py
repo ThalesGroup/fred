@@ -20,13 +20,31 @@ from app.agents.leader.structures.decision import ExecuteDecision, PlanDecision
 from app.agents.leader.structures.plan import Plan
 from app.agents.leader.structures.state import State
 from app.core.model.model_factory import get_model
-from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
-from langgraph.graph.state import END, START, CompiledStateGraph, StateGraph
+from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
+from langgraph.constants import END, START
+from langgraph.graph.state import CompiledStateGraph, StateGraph
 
 from app.core.agents.flow import AgentFlow, Flow
 
 logger = logging.getLogger(__name__)
 
+def _mk_thought(label: str, node: str, task: str, content: str) -> SystemMessage:
+    """Uniform 'thought' message the UI can render as a step."""
+    return SystemMessage(
+        content=content,
+        response_metadata={
+            "subtype": "thought",      # <-- your UI groups these as 'Task/Step'
+            "thought": label,          # e.g. "plan", "replan", "execute"
+            "fred": {"node": node, "task": task},
+        },
+    )
+
+def _ensure_metadata_dict(msg: BaseMessage) -> dict:
+    md = getattr(msg, "response_metadata", None) or {}
+    if not isinstance(md, dict):
+        md = {}
+    msg.response_metadata = md
+    return md
 
 class Leader(Flow):
     """
@@ -54,7 +72,6 @@ class Leader(Flow):
             graph=None,
         )
 
-        self.graph = None  # the graph is built only when we need it, after the method are available
         self.model = get_model(agent_settings.model)
         self.experts: dict[str, AgentFlow] = {}
         self.compiled_expert_graphs: dict[str, CompiledStateGraph] = {}
@@ -112,10 +129,12 @@ class Leader(Flow):
         Args:
             state: State of the agent.
         """
-        if len(state["progress"]) >= self.max_steps:
+        progress = state.get("progress") or []
+        max_steps = self.max_steps if self.max_steps is not None else 0
+        if len(progress) >= max_steps:
             logger.warning(f"Reached max_steps={self.max_steps}, forcing final answer.")
             return "validate"
-        if len(state["progress"]) == len(state["plan"].steps):
+        if len(progress) == len(state["plan"].steps):
             return "validate"
         return "execute"
 
@@ -126,7 +145,8 @@ class Leader(Flow):
         Args:
             state: State of the agent.
         """
-        if state["plan_decision"].action == "planning":
+        plan_decision = state.get("plan_decision")
+        if plan_decision is not None and getattr(plan_decision, "action", None) == "planning":
             return "planning"
 
         return "respond"
@@ -140,7 +160,7 @@ class Leader(Flow):
         """
 
         step_conclusions_str = ""
-        for _, step_responses in state["progress"]:
+        for _, step_responses in (state.get("progress") or []):
             step_conclusions_str += f"{step_responses[-1].content}\n"
 
         prompt = (
@@ -150,7 +170,7 @@ class Leader(Flow):
             f"{state['plan']}\n"
             f"For each step you came up with the following conclusions:\n"
             f"{step_conclusions_str}\n"
-            f"Given all these conclusions, what is your final answer to the quesion :"
+            f"Given all these conclusions, what is your final answer to the question :"
             f"{state['objective']}"
         )
 
@@ -158,6 +178,16 @@ class Leader(Flow):
         messages = [HumanMessage(content=prompt)]
 
         response = await self.model.ainvoke(messages)
+
+        # make sure response.response_metadata is a dict
+        md = _ensure_metadata_dict(response)
+        md.update({
+            "subtype": "final",
+            "fred": {
+                "node": "respond",
+                "task": "deliver final answer",
+            },
+        })
 
         return {
             "messages": [response],
@@ -183,14 +213,14 @@ class Leader(Flow):
         # Initialize initial_objective if it doesn't exist
         if "initial_objective" not in state:
             state["progress"] = []  # Clear previous progress
-            state["plan"] = None  # Reset the plan
+            state["plan"] = Plan(steps=[])  # Reset the plan to an empty Plan
             state["initial_objective"] = new_objective
 
         # Use the stored initial_objective for comparison
-        if state["initial_objective"].content != new_objective.content:
+        if state["initial_objective"] is None or state["initial_objective"].content != new_objective.content:
             logger.info("New initial objective detected. Resetting plan and progress.")
             state["progress"] = []  # Clear previous progress
-            state["plan"] = None  # Reset the plan
+            state["plan"] = Plan(steps=[])  # Reset the plan to an empty Plan
             state["initial_objective"] = new_objective
 
         # Then use state["initial_objective"] in your prompts instead of state["objective"]
@@ -199,12 +229,13 @@ class Leader(Flow):
         structured_model = self.model.with_structured_output(Plan)
 
         # If some progress has been made, the agent needs to come up with additional steps.
-        if "progress" in state and len(state["progress"]) > 0:
+        progress = state.get("progress") or []
+        if len(progress) > 0:
             objective = state["messages"][-1]
             current_plan = state["plan"]
 
             step_conclusions = []
-            for _, step_responses in state["progress"]:
+            for _, step_responses in progress:
                 step_conclusions.append(step_responses[-1])
 
             base_prompt = (
@@ -232,22 +263,21 @@ class Leader(Flow):
                 prompt = base_prompt
 
             messages = step_conclusions + [HumanMessage(content=prompt)]
-            re_plan: Plan = await structured_model.ainvoke(messages)
+            re_plan_result = await structured_model.ainvoke(messages)
+            re_plan: Plan = Plan.model_validate(re_plan_result) if not isinstance(re_plan_result, Plan) else re_plan_result
 
             # Add additional messages to the messages with metadata
             # Include the user and plan messages
             additional_messages: list[BaseMessage] = [
-                AIMessage(
+                # Keep the full plan in the content for traceability
+                _mk_thought(
+                    label="replan",
+                    node="replan",
+                    task="Refine the plan",
                     content=str(re_plan),
-                    response_metadata={
-                        "thought": True,
-                        "fred": {
-                            "node": "replan",
-                            "task": "Refine the plan",
-                        },
-                    },
                 )
             ]
+
 
             return {
                 "messages": additional_messages,
@@ -283,22 +313,20 @@ class Leader(Flow):
 
             messages = state["messages"] + [SystemMessage(content=prompt)]
 
-            new_plan: Plan = await structured_model.ainvoke(messages)
+            new_plan_result = await structured_model.ainvoke(messages)
+            new_plan: Plan = Plan.model_validate(new_plan_result) if not isinstance(new_plan_result, Plan) else new_plan_result
 
             # Add additional messages to the messages with metadata
             # Include the user and plan messages
             additional_messages: list[BaseMessage] = [
-                AIMessage(
+                _mk_thought(
+                    label="plan",
+                    node="plan",
+                    task="Define the plan",
                     content=str(new_plan),
-                    response_metadata={
-                        "thought": True,
-                        "fred": {
-                            "node": "plan",
-                            "task": "Define the plan",
-                        },
-                    },
-                ),
+                )
             ]
+
             return {
                 "messages": additional_messages,
                 "plan": new_plan,
@@ -323,8 +351,9 @@ class Leader(Flow):
         """
 
         # Get the task to execute
-        task = state["plan"].steps[len(state["progress"])]
-        task_number = len(state["progress"]) + 1
+        progress = state.get("progress") or []
+        task = state["plan"].steps[len(progress)]
+        task_number = len(progress) + 1
 
         if not self.experts or len(self.experts) == 0:
             raise ValueError("No experts available to execute the task.")
@@ -372,7 +401,7 @@ class Leader(Flow):
         )
 
         step_conclusions = []
-        for _, step_responses in state["progress"]:
+        for _, step_responses in (state.get("progress") or []):
             step_conclusions.append(step_responses[-1])
 
         messages = step_conclusions + [SystemMessage(content=task_job)]
@@ -380,6 +409,8 @@ class Leader(Flow):
 
         # Retrieve expert name and description
 
+        expert_name = selected_expert
+        expert_description = ""
         for expert in self.experts.values():  # Iterate over the AgentFlow instances
             if expert.name == expert_decision.expert:
                 expert_name = expert.name
@@ -392,18 +423,18 @@ class Leader(Flow):
         response_messages = response.get("messages", [])
         for message in response_messages:
             new_message: BaseMessage = message
-            new_message.response_metadata.update(
-                {
-                    "thought": True,
-                    "fred": {
-                        "node": "execute",
-                        "agentic_flow": expert_name,
-                        "expert_description": expert_description,
-                        "task_number": task_number,
-                        "task": task,
-                    },
-                }
-            )
+            md = _ensure_metadata_dict(new_message)  # guarantees a dict
+            md.update({
+                "subtype": "thought",
+                "thought": "execute",
+                "fred": {
+                    "node": "execute",
+                    "agentic_flow": expert_name,
+                    "expert_description": expert_description,
+                    "task_number": task_number,
+                    "task": task,
+                },
+            })
             additional_messages.append(new_message)
 
         return {
@@ -411,7 +442,7 @@ class Leader(Flow):
             "traces": [
                 f"Step {task_number} ({task}) assigned to {expert_name} and executed"
             ],
-            "progress": state["progress"] + [(task, response.get("messages", []))],
+            "progress": (state.get("progress") or []) + [(task, response.get("messages", []))],
         }
 
     async def validate(self, state: State):
@@ -421,7 +452,9 @@ class Leader(Flow):
         Args:
             state: State of the agent.
         """
-        if len(state["progress"]) >= self.max_steps:
+        progress = state.get("progress") or []
+        max_steps = self.max_steps if self.max_steps is not None else 0
+        if len(progress) >= max_steps and max_steps > 0:
             logger.warning(
                 f"Validation triggered by max_steps={self.max_steps} — skipping LLM validation and forcing respond."
             )
@@ -458,13 +491,18 @@ class Leader(Flow):
         ) """
 
         step_conclusions = []
-        for _, step_responses in state["progress"]:
+        for _, step_responses in (state.get("progress") or []):
             step_conclusions.append(step_responses[-1])
 
         messages = step_conclusions + [HumanMessage(content=prompt)]
 
         structured_model = self.model.with_structured_output(PlanDecision)
-        plan_decision: PlanDecision = await structured_model.ainvoke(messages)
+        plan_decision_result = await structured_model.ainvoke(messages)
+        plan_decision: PlanDecision = (
+            PlanDecision.model_validate(plan_decision_result)
+            if not isinstance(plan_decision_result, PlanDecision)
+            else plan_decision_result
+        )
 
         return {
             "plan_decision": plan_decision,

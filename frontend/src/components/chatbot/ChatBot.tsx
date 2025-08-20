@@ -14,7 +14,7 @@ import { KeyCloakService } from "../../security/KeycloakService.ts";
 import {
   AgenticFlow,
   ChatAskInput,
-  ChatMessagePayload,
+  ChatMessage,
   FinalEvent,
   RuntimeContext,
   SessionSchema,
@@ -65,16 +65,26 @@ const ChatBot = ({
   const [fetchHistory] =
     useLazyGetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetQuery();
 
-  const [messages, setMessages] = useState<ChatMessagePayload[]>([]);
-  const messagesRef = useRef<ChatMessagePayload[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const messagesRef = useRef<ChatMessage[]>([]);
 
   // State mutators that keep the ref in sync (prevents stale closures)
-  const setAllMessages = (msgs: ChatMessagePayload[]) => {
+  const setAllMessages = (msgs: ChatMessage[]) => {
     messagesRef.current = msgs;
     setMessages(msgs);
   };
 
   const [waitResponse, setWaitResponse] = useState<boolean>(false);
+
+  const scrollerRef = useRef<HTMLDivElement>(null);
+
+const scrollToBottomIfNeeded = () => {
+  const el = scrollerRef.current;
+  if (!el) return;
+  const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+  if (nearBottom) el.scrollTop = el.scrollHeight;
+};
+
 
   const setupWebSocket = async (): Promise<WebSocket | null> => {
     const current = webSocketRef.current;
@@ -106,7 +116,7 @@ const ChatBot = ({
           switch (response.type) {
             case "stream": {
               const streamed = response as StreamEvent;
-              const msg = streamed.message as ChatMessagePayload;
+              const msg = streamed.message as ChatMessage;
 
               // Ignore streams for another session than the one being viewed
               if (currentChatBotSession?.id && msg.session_id !== currentChatBotSession.id) {
@@ -117,10 +127,8 @@ const ChatBot = ({
               // Upsert streamed message and keep order stable
               messagesRef.current = upsertOne(messagesRef.current, msg);
               setMessages(messagesRef.current);
-
-              console.log(
-                `STREAM ${msg.session_id}-${msg.exchange_id}-${msg.rank} : ${msg.content?.slice(0, 80)}...`,
-              );
+              scrollToBottomIfNeeded();
+              console.log("streaming next message", msg);
               break;
             }
 
@@ -133,6 +141,7 @@ const ChatBot = ({
               const missing = [...finalKeys].filter((k) => !streamedKeys.has(k));
               const unexpected = [...streamedKeys].filter((k) => !finalKeys.has(k));
               console.log("[FINAL EVENT SUMMARY]");
+              console.log("→ response:", response);
               console.log("→ in streamed but not final:", unexpected);
               console.log("→ in final but not streamed:", missing);
 
@@ -227,14 +236,7 @@ const ChatBot = ({
         console.group(`[📥 ChatBot] Loaded messages for session: ${id}`);
         console.log(`Total: ${serverMessages.length}`);
         for (const msg of serverMessages) {
-          console.log({
-            id: msg.exchange_id,
-            type: msg.type,
-            subtype: msg.subtype,
-            sender: msg.sender,
-            task: msg.metadata?.fred?.task || null,
-            content: msg.content?.slice(0, 120),
-          });
+          console.log(msg);
         }
         console.groupEnd();
 
@@ -424,6 +426,7 @@ const ChatBot = ({
           <>
             {/* Chatbot messages area */}
             <Grid2
+              ref={scrollerRef}
               display="flex"
               flexDirection="column"
               flex="1"

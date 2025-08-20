@@ -1,37 +1,46 @@
-# chat_schema.py
+# Copyright Thales 2025
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 from __future__ import annotations
+from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional, Union, Annotated, Literal
-from datetime import datetime
-from pydantic import BaseModel, Field, ConfigDict, ValidationError
 
+from pydantic import BaseModel, Field, ConfigDict
 from fred_core import VectorSearchHit
 
-
-# ---------- Enums for clarity ----------
-class MessageType(str, Enum):
-    human = "human"
-    ai = "ai"
-    system = "system"
-    tool = "tool"
+from app.core.agents.runtime_context import RuntimeContext  # Unchanged, as requested
 
 
-class Sender(str, Enum):
+# ---------- Core enums ----------
+class Role(str, Enum):
     user = "user"
     assistant = "assistant"
+    tool = "tool"
     system = "system"
 
 
-class MessageSubtype(str, Enum):
-    final = "final"
-    thought = "thought"
+class Channel(str, Enum):
+    # UI-facing buckets
+    final = "final"           # the answer to display as the main assistant bubble
+    plan = "plan"             # planned steps
+    thought = "thought"       # high-level reasoning summary (safe/structured)
+    observation = "observation"  # observations/logs, eg from tools, not the final
+    tool_call = "tool_call"
     tool_result = "tool_result"
-    plan = "plan"
-    execution = "execution"
-    observation = "observation"
-    error = "error"
-    injected_context = "injected_context"
+    error = "error"           # agent-level error (transport errors use ErrorEvent)
+    system_note = "system_note"  # injected context, tips, etc.
 
 
 class FinishReason(str, Enum):
@@ -43,148 +52,102 @@ class FinishReason(str, Enum):
     other = "other"
 
 
-class ToolResultBlock(BaseModel):
-    type: Literal["tool_result"] = "tool_result"
-    name: str
-    content: str  # final string, even if tool gave JSON (stringify on server)
-    ok: Optional[bool] = None
-    latency_ms: Optional[int] = None
-
-
-class TextBlock(BaseModel):
+# ---------- Typed message parts ----------
+class TextPart(BaseModel):
     type: Literal["text"] = "text"
     text: str
 
 
-class CodeBlock(BaseModel):
+class CodePart(BaseModel):
     type: Literal["code"] = "code"
     language: Optional[str] = None
     code: str
 
 
-class ImageUrlBlock(BaseModel):
+class ImageUrlPart(BaseModel):
     type: Literal["image_url"] = "image_url"
     url: str
     alt: Optional[str] = None
 
 
-MessageBlock = Annotated[
-    Union[TextBlock, ToolResultBlock, CodeBlock, ImageUrlBlock],
+class ToolCallPart(BaseModel):
+    type: Literal["tool_call"] = "tool_call"
+    call_id: str
+    name: str
+    args: Dict[str, Any]
+
+
+class ToolResultPart(BaseModel):
+    type: Literal["tool_result"] = "tool_result"
+    call_id: str
+    ok: Optional[bool] = None
+    latency_ms: Optional[int] = None
+    # Always send a string; stringify JSON results server-side to avoid UI logic.
+    content: str
+
+
+MessagePart = Annotated[
+    Union[TextPart, CodePart, ImageUrlPart, ToolCallPart, ToolResultPart],
     Field(discriminator="type"),
 ]
 
 
 # ---------- Token usage ----------
 class ChatTokenUsage(BaseModel):
-    input_tokens: int
-    output_tokens: int
-    total_tokens: int
+    input_tokens: int = 0
+    output_tokens: int = 0
+    total_tokens: int = 0
 
 
-# ---------- Tool calls ----------
+# ---------- Message metadata (small, strong) ----------
+class ChatMetadata(BaseModel):
+    model_config = ConfigDict(extra="forbid")
 
-
-class ToolCall(BaseModel):
-    name: str
-    args: Optional[Dict[str, Any]] = None
-    result_preview: Optional[str] = None
-    error: Optional[str] = None
-    latency_ms: Optional[int] = None
-
-
-# ---------- Strongly-typed metadata ----------
-class ChatMessageMetadata(BaseModel):
-    """
-    A typed container for message metadata sent to the UI.
-    Add new first-class fields here as your UI needs them.
-    Unknown keys go into `extras` by design (no surprises).
-    """
-
-    model_config = ConfigDict(extra="forbid")  # prevent silent schema drift
-
-    # Common
     model: Optional[str] = None
     token_usage: Optional[ChatTokenUsage] = None
+    # Keep your VectorSearchHit untouched
     sources: List[VectorSearchHit] = Field(default_factory=list)
 
-    # Helpful details
-    latency_seconds: Optional[float] = None
     agent_name: Optional[str] = None
+    latency_ms: Optional[int] = None
     finish_reason: Optional[FinishReason] = None
 
-    # Domain-specific passthroughs
-    fred: Optional[Dict[str, Any]] = None
-    thought: Optional[Union[str, Dict[str, Any]]] = None
-    tool_call: Optional[ToolCall] = None
-
-    # Future-proof escape hatch
+    # Escape hatch for gradual rollout; UI should ignore this.
     extras: Dict[str, Any] = Field(default_factory=dict)
 
-    def merge_extras(self, **kwargs) -> None:
-        self.extras.update({k: v for k, v in kwargs.items() if v is not None})
 
+# ---------- Message ----------
 
-# ---------- Unified message ----------
-class ChatMessagePayload(BaseModel):
-    exchange_id: str = Field(
-        ..., description="Unique ID for this question/reply exchange"
-    )
+class ChatAskInput(BaseModel):
     user_id: str
-    type: MessageType
-    sender: Sender
-    content: str
-    blocks: Optional[List[MessageBlock]] = None
-    timestamp: datetime  # serializes to ISO-8601; strings are accepted and parsed
-    session_id: str = Field(..., description="Conversation ID")
-    rank: int = Field(..., description="Monotonic message index within the session")
-    metadata: ChatMessageMetadata = Field(default_factory=ChatMessageMetadata)
-    subtype: Optional[MessageSubtype] = None
-
-    # Convenience helper for incremental population
-    def with_metadata(
-        self,
-        model: Optional[str] = None,
-        token_usage: Optional[ChatTokenUsage] = None,
-        sources: Optional[List[Union[VectorSearchHit, dict]]] = None,
-        latency_seconds: Optional[float] = None,
-        agent_name: Optional[str] = None,
-        finish_reason: Optional[FinishReason] = None,
-        fred: Optional[Dict[str, Any]] = None,
-        thought: Optional[Union[str, Dict[str, Any]]] = None,
-        **extras,
-    ) -> "ChatMessagePayload":
-        if model is not None:
-            self.metadata.model = model
-        if token_usage is not None:
-            self.metadata.token_usage = token_usage
-        if sources:
-            normalized: List[VectorSearchHit] = []
-            for s in sources:
-                if isinstance(s, VectorSearchHit):
-                    normalized.append(s)
-                elif isinstance(s, dict):
-                    try:
-                        normalized.append(VectorSearchHit.model_validate(s))
-                    except ValidationError:
-                        # If a hit doesn't validate, keep it in extras rather than crashing
-                        extras.setdefault("invalid_sources", []).append(s)
-            self.metadata.sources = normalized
-        if latency_seconds is not None:
-            self.metadata.latency_seconds = latency_seconds
-        if agent_name is not None:
-            self.metadata.agent_name = agent_name
-        if finish_reason is not None:
-            self.metadata.finish_reason = finish_reason
-        if fred is not None:
-            self.metadata.fred = fred
-        if thought is not None:
-            self.metadata.thought = thought
-        if extras:
-            self.metadata.merge_extras(**extras)
-        return self
+    session_id: Optional[str] = None
+    message: str
+    agent_name: str
+    runtime_context: Optional[RuntimeContext] = None
+    client_exchange_id: str | None = None
 
 
-# ---------- Session ----------
+class ChatMessage(BaseModel):
+    """
+    The only thing the UI needs to render a conversation.
+    Invariants:
+      - rank strictly increases per session_id
+      - exactly one assistant/final per exchange_id
+      - tool_call/tool_result are separate messages (not buried in blocks)
+    """
+    session_id: str
+    exchange_id: str
+    rank: int
+    timestamp: datetime
+
+    role: Role
+    channel: Channel
+    parts: List[MessagePart]
+
+    metadata: ChatMetadata = Field(default_factory=ChatMetadata)
+
+
+# ---------- Sessions ----------
 class SessionSchema(BaseModel):
     id: str
     user_id: str
@@ -196,15 +159,15 @@ class SessionWithFiles(SessionSchema):
     file_names: List[str] = []
 
 
-# ---------- Events (discriminated union) ----------
+# ---------- Transport events ----------
 class StreamEvent(BaseModel):
     type: Literal["stream"] = "stream"
-    message: ChatMessagePayload
+    message: ChatMessage
 
 
 class FinalEvent(BaseModel):
     type: Literal["final"] = "final"
-    messages: List[ChatMessagePayload]
+    messages: List[ChatMessage]
     session: SessionSchema
 
 
@@ -219,50 +182,49 @@ ChatEvent = Annotated[
 ]
 
 
-# ---------- Utilities ----------
-def clean_token_usage(raw: dict) -> ChatTokenUsage:
-    """
-    Normalize an LLM token-usage dict into our typed model.
-    Unknown keys are ignored; zeros are fine.
-    """
-    return ChatTokenUsage(
-        input_tokens=int(raw.get("input_tokens", 0) or 0),
-        output_tokens=int(raw.get("output_tokens", 0) or 0),
-        total_tokens=int(raw.get("total_tokens", 0) or 0),
+def make_user_text(session_id, exchange_id, rank, text: str) -> ChatMessage:
+    return ChatMessage(
+        session_id=session_id,
+        exchange_id=exchange_id,
+        rank=rank,
+        timestamp=datetime.utcnow(),
+        role=Role.user,
+        channel=Channel.final,
+        parts=[TextPart(text=text)],
     )
 
+def make_assistant_final(session_id, exchange_id, rank, parts: List[MessagePart],
+                         model: str, sources: List[VectorSearchHit],
+                         usage: ChatTokenUsage) -> ChatMessage:
+    return ChatMessage(
+        session_id=session_id,
+        exchange_id=exchange_id,
+        rank=rank,
+        timestamp=datetime.utcnow(),
+        role=Role.assistant,
+        channel=Channel.final,
+        parts=parts,
+        metadata=ChatMetadata(model=model, token_usage=usage, sources=sources),
+    )
 
-def clean_agent_metadata(raw: dict) -> ChatMessageMetadata:
-    """
-    Convert a raw LLM response_metadata dict into ChatMessageMetadata.
-    Validates sources as VectorSearchHit; non-conforming entries are placed in extras.
-    """
-    meta = ChatMessageMetadata()
+def make_tool_call(session_id, exchange_id, rank, call_id, name, args) -> ChatMessage:
+    return ChatMessage(
+        session_id=session_id,
+        exchange_id=exchange_id,
+        rank=rank,
+        timestamp=datetime.utcnow(),
+        role=Role.assistant,
+        channel=Channel.tool_call,
+        parts=[ToolCallPart(call_id=call_id, name=name, args=args)],
+    )
 
-    if m := raw.get("model_name"):
-        meta.model = m
-    if fr := raw.get("finish_reason"):
-        try:
-            meta.finish_reason = FinishReason(str(fr))
-        except ValueError:
-            meta.finish_reason = FinishReason.other
-    if fu := raw.get("fred"):
-        meta.fred = fu
-    if th := raw.get("thought"):
-        meta.thought = th
-
-    # Normalize sources
-    invalid: List[Any] = []
-    for s in raw.get("sources") or []:
-        if isinstance(s, VectorSearchHit):
-            meta.sources.append(s)
-        elif isinstance(s, dict):
-            try:
-                meta.sources.append(VectorSearchHit.model_validate(s))
-            except ValidationError:
-                invalid.append(s)
-        # else: silently ignore unexpected types
-    if invalid:
-        meta.extras["invalid_sources"] = invalid
-
-    return meta
+def make_tool_result(session_id, exchange_id, rank, call_id, ok, ms, content) -> ChatMessage:
+    return ChatMessage(
+        session_id=session_id,
+        exchange_id=exchange_id,
+        rank=rank,
+        timestamp=datetime.utcnow(),
+        role=Role.tool,
+        channel=Channel.tool_result,
+        parts=[ToolResultPart(call_id=call_id, ok=ok, latency_ms=ms, content=content)],
+    )

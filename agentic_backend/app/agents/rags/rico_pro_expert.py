@@ -13,13 +13,12 @@
 # limitations under the License.
 
 
-import json
 import logging
 from datetime import datetime
 from typing import Any, Dict, List, Optional, cast
 
 from langchain.prompts import ChatPromptTemplate
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, ToolMessage
 from langgraph.graph import END, StateGraph
 
 from fred_core import VectorSearchHit
@@ -37,6 +36,57 @@ from app.core.model.model_factory import get_model
 from app.common.structures import AgentSettings
 
 logger = logging.getLogger(__name__)
+
+def mk_thought(*, label: str, node: str, task: str, content: str) -> AIMessage:
+    """
+    Emits an assistant-side 'thought' trace.
+    - UI shows this under the Thoughts accordion (channel=thought).
+    - The actual text to show must be in response_metadata['thought'].
+    - Any routing/context tags go under response_metadata['extras'].
+    """
+    return AIMessage(
+        content="",  # content is unused for thought; we put text in metadata
+        response_metadata={
+            "thought": content,           # <-- text the UI will render in Thoughts
+            "extras": {"task": task, "node": node, "label": label},
+        },
+    )
+
+def mk_tool_call(*, call_id: str, name: str, args: Dict[str, Any]) -> AIMessage:
+    """
+    Emits an OpenAI-style tool_call on the assistant role.
+    Your SessionManager will convert it to ChatMessage(role=assistant, channel=tool_call).
+    """
+    return AIMessage(
+        content="",
+        tool_calls=[{
+            "id": call_id,
+            "name": name,
+            "args": args,
+        }],
+        response_metadata={"extras": {"task": "retrieval", "node": name}},
+    )
+
+def mk_tool_result(
+    *,
+    call_id: str,
+    content: str,
+    ok: Optional[bool] = None,
+    latency_ms: Optional[int] = None,
+    extras: Optional[Dict[str, Any]] = None,
+    sources: Optional[list] = None,
+) -> ToolMessage:
+    md: Dict[str, Any] = {}
+    if extras:
+        md["extras"] = extras
+    if latency_ms is not None:
+        md["latency_ms"] = latency_ms
+    if ok is not None:
+        md["ok"] = ok
+    if sources:
+        md["sources"] = [s.model_dump() if hasattr(s, "model_dump") else s for s in sources]
+    return ToolMessage(content=content, tool_call_id=call_id, response_metadata=md)
+
 
 
 def _chunk_key(d: VectorSearchHit) -> str:
@@ -162,66 +212,56 @@ class RicoProExpert(AgentFlow):
 
     async def _retrieve(self, state: Dict[str, Any]) -> Dict[str, Any]:
         if self.model is None:
-            raise RuntimeError(
-                "Model is not initialized. Did you forget to call async_init()?"
-            )
+            raise RuntimeError("Model is not initialized. Did you forget to call async_init()?")
 
-        question: Optional[str] = state.get("question")
-        if not question and state.get("messages"):
-            question = state["messages"][-1].content
-
+        question: Optional[str] = state.get("question") or (state.get("messages") and state["messages"][-1].content)
         top_k: int = int(state.get("top_k", self.TOP_K) or self.TOP_K)
         retry_count: int = int(state.get("retry_count", 0) or 0)
         if retry_count > 0:
             top_k = self.TOP_K + 3 * retry_count
 
         try:
-            logger.info("📥 Retrieving with question=%r top_k=%d", question, top_k)
-
             tags = get_document_libraries_ids(self.get_runtime_context())
-            if tags:
-                logger.info("RicoPro filtering by libraries: %s", tags)
+            hits: List[VectorSearchHit] = self.search_client.search(query=question or "", top_k=top_k, tags=tags)
 
-            hits: List[VectorSearchHit] = self.search_client.search(
-                query=question or "",
-                top_k=top_k,
-                tags=tags,
-            )
             if not hits:
                 warn = f"I couldn't find any relevant documents for “{question}”. Try rephrasing?"
                 return {
-                    "messages": [await self.model.ainvoke([HumanMessage(content=warn)])]
+                    "messages": [mk_thought(label="retrieve_none", node="retrieve", task="retrieval", content=warn)],
+                    "question": question,          # ✅ keep it
+                    "documents": [],               # ✅ explicit
+                    "sources": [],
+                    "top_k": top_k,
+                    "retry_count": retry_count,
                 }
+            call_id = "tc_retrieve_1"
+            call_args = {"query": question, "top_k": top_k, **({"tags": tags} if tags else {})}
+            call_msg = mk_tool_call(call_id=call_id, name="retrieve", args=call_args)
 
-            logger.info("✅ Retrieved %d hits", len(hits))
-
-            serializable = [d.model_dump() for d in hits]
-            message = SystemMessage(
-                content=json.dumps(serializable),
-                response_metadata={
-                    "thought": "retrieve",
-                    "fred": {"node": "retrieve", "task": "vector search retrieval"},
-                    "sources": serializable,  # so your UI can show them in the step
-                },
+            # 2) emit the tool result (tool/tool_result)
+            summary = f"Retrieved {len(hits)} candidates."
+            result_msg = mk_tool_result(
+                call_id=call_id,
+                content=summary,
+                ok=True,
+                extras={"task": "retrieval", "node": "retrieve"},
+                sources=hits,  # will end up in metadata.sources for this step
             )
+            # 3) add a small Thought so the accordion shows progress
+            thought_msg = mk_thought(label="retrieve", node="retrieve", task="retrieval", content=summary)
 
             return {
-                "messages": [message],
+                "messages": [call_msg, result_msg, thought_msg],
                 "documents": hits,
-                "sources": hits,  # keep for convenience
+                "sources": hits,
                 "question": question,
                 "top_k": top_k,
                 "retry_count": retry_count,
             }
         except Exception as e:
             logger.exception("Failed to retrieve documents: %s", e)
-            return {
-                "messages": [
-                    SystemMessage(
-                        content="An error occurred while retrieving documents. Please try again later."
-                    )
-                ]
-            }
+            return {"messages": [mk_thought(label="retrieve_error", node="retrieve",
+                                                task="retrieval", content="Error during retrieval.")]}
 
     async def _grade_documents(self, state: Dict[str, Any]) -> Dict[str, Any]:
         question: str = state["question"]
@@ -300,39 +340,37 @@ class RicoProExpert(AgentFlow):
                     filtered_docs.append(d)
                     seen.add(_chunk_key(d))
 
-        serializable = [d.model_dump() for d in filtered_docs]
-        message = SystemMessage(
-            content=json.dumps(serializable),
-            response_metadata={
-                "thought": "grade_documents",
-                "fred": {
-                    "node": "grade_documents",
-                    "task": "filter relevant documents",
-                },
-                "sources": serializable,
-            },
+        kept = filtered_docs
+        total = len(documents or [])
+        logger.info("✅ %d documents are relevant (of %d)", len(kept), total)
+
+        # short, human-readable thought (so Thoughts accordion is clean)
+        message = mk_thought(
+            label="grade_documents",
+            node="grade_documents",
+            task="retrieval",
+            content=f"Kept {len(kept)} of {total} documents for answering."
         )
 
-        logger.info("✅ %d documents are relevant (of %d)", len(filtered_docs), len(documents or []))
+        # attach only the KEPT docs for the UI's Sources panel on this step
+        meta = getattr(message, "response_metadata", {}) or {}
+        meta["sources"] = [d.model_dump() for d in kept]
+        setattr(message, "response_metadata", meta)
 
         return {
             "messages": [message],
-            "documents": filtered_docs,
+            "documents": kept,
             "irrelevant_documents": irrelevant_documents,
-            "sources": filtered_docs,
+            "sources": kept,
         }
+
 
     async def _generate(self, state: Dict[str, Any]) -> Dict[str, Any]:
         question: str = state["question"]
         documents: List[VectorSearchHit] = state["documents"]
 
-        # Simple context format with per-chunk provenance
         context = "\n".join(
-            (
-                f"Source file: {d.file_name or d.title}"
-                f"\nPage: {d.page if getattr(d, 'page', None) is not None else 'n/a'}"
-                f"\nContent: {d.content}\n"
-            )
+            f"Source file: {d.file_name or d.title}\nPage: {getattr(d, 'page', 'n/a')}\nContent: {d.content}\n"
             for d in documents
         )
 
@@ -345,23 +383,20 @@ class RicoProExpert(AgentFlow):
         if self.model is None:
             raise ValueError("model is None")
 
-        chain = prompt | self.model
-        response = await chain.ainvoke({"context": context, "question": question})
-        response = cast(AIMessage, response)
-
-        # attach VectorSearchHit for UI (your helper already supports it)
-        attach_sources_to_llm_response(response, documents)
-
-        message = SystemMessage(
-            content=response.content,
-            response_metadata={
-                "thought": "generate",
-                "fred": {"node": "generate", "task": "compose final answer"},
-                "sources": [d.model_dump() for d in documents],
-            },
+        # Small progress thought (so UI can show a step)
+        progress = mk_thought(
+            label="generate",
+            node="generate",
+            task="answering",
+            content="Drafting an answer from selected documents…",
         )
-        return {"messages": [message], "generation": response, "sources": documents}
 
+        response = await (prompt | self.model).ainvoke({"context": context, "question": question})
+        response = cast(AIMessage, response)
+        attach_sources_to_llm_response(response, documents)  # attaches metadata.sources to AIMessage
+
+        return {"messages": [progress], "generation": response, "sources": documents}
+        
     async def _rephrase_query(self, state: Dict[str, Any]) -> Dict[str, Any]:
         question: str = state["question"]
         retry_count: int = int(state.get("retry_count", 0) or 0) + 1
@@ -394,12 +429,11 @@ class RicoProExpert(AgentFlow):
             retry_count,
         )
 
-        message = SystemMessage(
+        message = mk_thought(
+            label="rephrase_query",
+            node="rephrase_query",
+            task="query rewriting",
             content=better.rephrase_query,
-            response_metadata={
-                "thought": "rephrase_query",
-                "fred": {"node": "rephrase_query", "task": "query rewriting"},
-            },
         )
 
         return {
@@ -411,16 +445,8 @@ class RicoProExpert(AgentFlow):
     async def _finalize_success(self, state: Dict[str, Any]) -> Dict[str, Any]:
         generation: AIMessage = state["generation"]
 
-        message = SystemMessage(
-            content=generation.content,
-            response_metadata={
-                "thought": "finalize_success",
-                "fred": {"node": "finalize_success", "task": "deliver answer"},
-            },
-        )
-
         return {
-            "messages": [message, generation],
+            "messages": [generation],    # type:"ai", subtype:"final" set downstream
             "question": "",
             "documents": [],
             "top_k": self.TOP_K,
@@ -431,41 +457,21 @@ class RicoProExpert(AgentFlow):
         }
 
     async def _finalize_failure(self, state: Dict[str, Any]) -> Dict[str, Any]:
-        generation: Optional[AIMessage] = state.get("generation")
-        content = generation.content if generation is not None else ""
-
-        msg = (
-            "The agent was unable to generate a satisfactory response to your question."
-        )
-        if generation:
-            msg += " Here is the latest response:"
-
-        message = SystemMessage(
-            content=content,
+        explanation = "The agent was unable to generate a satisfactory response. I can rephrase the question and try again."
+        msg = AIMessage(
+            content=explanation,
             response_metadata={
-                "thought": "finalize_failure",
-                "fred": {"node": "finalize_failure", "task": "unsatisfactory answer"},
+                "extras": {"task": "answering", "node": "finalize_failure"},
+                "sources": [],  # optional
             },
         )
-
-        messages = [message, SystemMessage(content=msg)]
-        if generation is not None:
-            messages.append(
-                SystemMessage(
-                    content=generation.content,
-                    response_metadata=getattr(generation, "response_metadata", None),
-                )
-            )
-
+        # IMPORTANT: downstream needs channel="final"
+        # If your transport infers channel from where you put it,
+        # ensure it is converted to role=assistant, channel=final.
         return {
-            "messages": messages,
-            "question": "",
-            "documents": [],
-            "top_k": self.TOP_K,
-            "sources": [],
-            "retry_count": 0,
-            "generation": None,
-            "irrelevant_documents": [],
+            "messages": [msg],
+            "question": "", "documents": [], "top_k": self.TOP_K,
+            "sources": [], "retry_count": 0, "generation": None, "irrelevant_documents": [],
         }
 
     # ---------- edges ----------

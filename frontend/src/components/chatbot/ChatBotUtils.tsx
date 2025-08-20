@@ -1,10 +1,7 @@
-import { ChatMessagePayload } from "../../slices/agentic/agenticOpenApi";
-
-// Unique key for a message in a session
-export const keyOf = (m: ChatMessagePayload) => `${m.session_id}-${m.exchange_id}-${m.rank}`;
+import { ChatMessage } from "../../slices/agentic/agenticOpenApi";
 
 // Replace-or-insert one message, then keep array sorted by (rank asc, timestamp asc as tiebreaker)
-export const upsertOne = (all: ChatMessagePayload[], m: ChatMessagePayload) => {
+export const upsertOne = (all: ChatMessage[], m: ChatMessage) => {
   const k = keyOf(m);
   const idx = all.findIndex((x) => keyOf(x) === k);
   if (idx >= 0) {
@@ -15,7 +12,7 @@ export const upsertOne = (all: ChatMessagePayload[], m: ChatMessagePayload) => {
   return sortMessages([...all, m]);
 };
 
-export const sortMessages = (arr: ChatMessagePayload[]) =>
+export const sortMessages = (arr: ChatMessage[]) =>
   [...arr].sort((a, b) => {
     if (a.rank !== b.rank) return a.rank - b.rank;
     // tiebreaker to stabilize UI (handles multiple thought/tool_result with same rank)
@@ -24,7 +21,7 @@ export const sortMessages = (arr: ChatMessagePayload[]) =>
     return ta.localeCompare(tb);
   });
 
-export const mergeAuthoritative = (existing: ChatMessagePayload[], finals: ChatMessagePayload[]) => {
+export const mergeAuthoritative = (existing: ChatMessage[], finals: ChatMessage[]) => {
   // Build maps by key
   const map = new Map(existing.map((m) => [keyOf(m), m]));
   for (const f of finals) map.set(keyOf(f), f); // overwrite existing or insert new
@@ -38,3 +35,21 @@ export const toWsUrl = (base: string | undefined, path: string) => {
   if (url.protocol === "https:") url.protocol = "wss:";
   return url.toString();
 };
+
+
+export const keyOf = (m: ChatMessage) =>
+  `${m.session_id}|${m.exchange_id}|${m.rank}|${m.role}|${m.channel}`;
+
+export const isToolCall = (m: ChatMessage) =>
+  m.role === "assistant" && m.channel === "tool_call" && m.parts?.[0]?.type === "tool_call";
+
+export const isToolResult = (m: ChatMessage) =>
+  m.role === "tool" && m.channel === "tool_result" && m.parts?.[0]?.type === "tool_result";
+
+export const hasNonEmptyText = (m: ChatMessage) =>
+  (m.parts ?? []).some(p => p.type === "text" && p.text && p.text.trim().length > 0);
+
+export const getExtras = (m: ChatMessage) => m.metadata?.extras ?? {};
+
+export const toolId = (m: ChatMessage) =>
+  (m.parts?.[0] as any)?.call_id ?? (m.parts?.[0] as any)?.id ?? "";

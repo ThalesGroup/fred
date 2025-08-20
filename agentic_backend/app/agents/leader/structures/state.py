@@ -33,4 +33,4 @@ class State(MessagesState):
     expert_decision: Optional[ExecuteDecision]
     traces: Annotated[List[str], operator.add]
     objective: Optional[AnyMessage]
-    inital_objective: Optional[AnyMessage]
+    initial_objective: Optional[AnyMessage]
