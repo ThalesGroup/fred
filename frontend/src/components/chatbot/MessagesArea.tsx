@@ -3,10 +3,11 @@
 
 import React, { memo, useEffect, useMemo, useRef } from "react";
 import Message from "./MessageCard";
-import ReasoningTrace from "./ReasoningTrace";
 import Sources from "./Sources";
 import { AgenticFlow, ChatMessage } from "../../slices/agentic/agenticOpenApi";
 import { getExtras, hasNonEmptyText, isToolCall, isToolResult, toolId } from "./ChatBotUtils";
+import TraceDetailsDialog from "./TraceDetailDialog";
+import ReasoningTraceAccordion from "./TraceAccordion";
 
 type Props = {
   messages: ChatMessage[];
@@ -16,6 +17,9 @@ type Props = {
 
 function Area({ messages, agenticFlows, currentAgenticFlow }: Props) {
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+
+  // state for the details dialog
+  const [openStep, setOpenStep] = React.useState<ChatMessage | undefined>(undefined);
 
   // Find the scrollable container (parent Grid2 with overflowY: "scroll")
   function getScrollableParent(el: HTMLElement | null): HTMLElement | null {
@@ -155,14 +159,21 @@ function Area({ messages, agenticFlows, currentAgenticFlow }: Props) {
       // 5) Reasoning accordion (grouped by task label if you like; here we just pass flat list)
       if (reasoningSteps.length) {
         elements.push(
-          <ReasoningTrace
-            key={`trace-${group[0].session_id}-${group[0].exchange_id}`}
-            messages={reasoningSteps} // ✅ pass the flat array
-            isOpenByDefault
-            resolveAgent={resolveAgenticFlow}
-            // includeObservationsWithText           // optional toggle
-          />,
-        );
+  <ReasoningTraceAccordion
+      key={`trace-${group[0].session_id}-${group[0].exchange_id}`}
+      steps={reasoningSteps}
+      isOpenByDefault
+      resolveAgent={resolveAgenticFlow}
+    />
+);
+        // elements.push(
+        //   <ReasoningTrace
+        //     key={`trace-${group[0].session_id}-${group[0].exchange_id}`}
+        //     messages={reasoningSteps} // ✅ pass the flat array
+        //     isOpenByDefault
+        //     resolveAgent={resolveAgenticFlow}
+        //   />,
+        // );
       }
 
       // 6) Tool call/result cards (in order of first appearance), live while waiting for result
@@ -243,6 +254,12 @@ function Area({ messages, agenticFlows, currentAgenticFlow }: Props) {
     <div>
       {content}
       <div ref={messagesEndRef} />
+      <TraceDetailsDialog
+      open={!!openStep}
+      step={openStep}
+      onClose={() => setOpenStep(undefined)}
+      resolveAgent={resolveAgenticFlow}
+    />
     </div>
   );
 }
