@@ -1,9 +1,9 @@
 import React, { memo, useMemo, useRef, useEffect } from "react";
 import Message from "./MessageCard";
 import Sources from "./Sources";
-import ReasoningTraceAccordion from "./TraceAccordion";
 import { AgenticFlow, ChatMessage } from "../../slices/agentic/agenticOpenApi";
 import { getExtras, hasNonEmptyText } from "./ChatBotUtils";
+import ReasoningStepsAccordion from "./ReasoningStepsAccordion";
 
 type Props = {
   messages: ChatMessage[];
@@ -104,7 +104,7 @@ function Area({ messages, agenticFlows, currentAgenticFlow }: Props) {
 
       if (reasoningSteps.length) {
         elements.push(
-          <ReasoningTraceAccordion
+          <ReasoningStepsAccordion
             key={`trace-${group[0].session_id}-${group[0].exchange_id}`}
             steps={reasoningSteps}
             isOpenByDefault
