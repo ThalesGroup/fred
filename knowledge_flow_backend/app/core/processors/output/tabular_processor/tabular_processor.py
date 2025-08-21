@@ -44,7 +44,19 @@ class TabularProcessor(BaseOutputProcessor):
     def __init__(self):
         self.context = ApplicationContext.get_instance()
         stores, store_modes = self.context.get_all_tabular_stores()
-        self.base_tabular_store = stores["base_database"]
+        read_write_stores = {
+            name: stores[name] for name, mode in store_modes.items()
+            if mode == "read_and_write"
+        }
+        if "base_database" in read_write_stores:
+            self.base_tabular_store = stores["base_database"]
+        elif read_write_stores:
+            selected_name = next(iter(read_write_stores))
+            self.base_tabular_store = stores[selected_name]
+            print(f"[INFO] Store 'base_database' not found. We will use '{selected_name}' as fallback.")
+        else:
+            raise RuntimeError("No 'read_and_write' store available.")
+        
         logger.info("Initializing TabularPipeline")
 
     def process(self, file_path: str, metadata: DocumentMetadata) -> DocumentMetadata:
