@@ -31,11 +31,12 @@ import {
   createProcessAction,
   createScheduleAction,
 } from "../operations/DocumentOperationsActions";
+import { newUseDocumentViewer } from "../../../common/newUseDocumentViewer";
 
 export const useDocumentActions = (onRefreshData?: () => void) => {
   const { t } = useTranslation();
   const { showInfo, showError } = useToast();
-  const { openDocument } = useDocumentViewer();
+  const { openDocument } = newUseDocumentViewer();
   console.log("useDocumentActions with to review", onRefreshData);
 
   // API hooks

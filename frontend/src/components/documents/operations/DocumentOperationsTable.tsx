@@ -161,32 +161,6 @@ export const DocumentOperationsTable: React.FC<DocumentOperationsTableProps> = (
     setSelectedFiles(checked ? [...files] : []);
   };
 
-  const handleToggleRetrievable = async (file: DocumentMetadata) => {
-    try {
-      const args: UpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutApiArg = {
-        documentUid: file.identity.document_uid,
-        retrievable: !file.source.retrievable,
-      };
-  
-      await updateDocumentRetrievable(args).unwrap();
-  
-      showInfo({
-        summary: "Updated",
-        detail: `"${file.identity.document_name}" is now ${
-          !file.source.retrievable ? "searchable" : "excluded from search"
-        }.`,
-      });
-  
-      onRefreshData?.();
-    } catch (error: any) {
-      console.error("Update failed:", error);
-      showError({
-        summary: "Error updating document",
-        detail: error?.data?.detail ?? error.message,
-      });
-    }
-  };
-
   // If actions are undefined, use default actions from useDocumentActions
   const { defaultBulkActions, defaultRowActions } = useDocumentActions();
   const rowActionsWithDefault = rowActions === undefined ? defaultRowActions : rowActions;
