@@ -171,7 +171,7 @@ export const ResourceImportDrawer: React.FC<Props> = ({
         <Box display="flex" flexDirection="column" alignItems="center" justifyContent="center" height="100%" gap={1}>
           <UploadIcon sx={{ fontSize: 40, color: "text.secondary" }} />
           <Typography variant="body1" color="text.secondary">
-            {t("resourceLibrary.dropFiles") || "Drop files here or click to choose"}
+            {t("resourceLibrary.dropFiles", {typePlural: kind}) || "Drop files here or click to choose"}
           </Typography>
           <Typography variant="caption" color="text.secondary">
             .yaml, .yml, .md, .txt
@@ -189,7 +189,7 @@ export const ResourceImportDrawer: React.FC<Props> = ({
           ))
         ) : (
           <Typography variant="body2" color="text.secondary">
-            {t("resourceLibrary.noFiles") || "No files selected"}
+            {t("resourceLibrary.noFiles", {typeOne: kind}) || "No files selected"}
           </Typography>
         )}
       </Stack>
