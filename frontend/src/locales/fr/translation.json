@@ -266,7 +266,8 @@
     "searchPlaceholder":"Rechercher un(e) {{typeOne}}",
     "importDrawerTitle": "Importer un(e) {{typeOne}}",
     "dropFiles":"Deposez vos {{typePlural}} ici",
-    "noFiles": "Aucun(e) {{typeOne}} trouvé(e)"
+    "noFiles": "Aucun(e) {{typeOne}} trouvé(e)",
+    "import": "Importer"
 
   },
   "documentTable": {

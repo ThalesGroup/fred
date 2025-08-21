@@ -269,7 +269,8 @@
     "searchPlaceholder":"Search a {{typeOne}}",
     "importDrawerTitle": "Import {{typeOne}}",
     "dropFiles":"Drop your {{typePlural}} here",
-    "noFiles": "No {{typeOne}} found"
+    "noFiles": "No {{typeOne}} found",
+    "import": "Import"
   },
   "documentTable": {
     "selectedCount": "{{count}} selected",
