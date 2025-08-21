@@ -166,6 +166,12 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/knowledge-flow/v1/tags/${queryArg.tagId}`, method: "DELETE" }),
     }),
+    getCreateResSchemaKnowledgeFlowV1ResourcesSchemaGet: build.query<
+      GetCreateResSchemaKnowledgeFlowV1ResourcesSchemaGetApiResponse,
+      GetCreateResSchemaKnowledgeFlowV1ResourcesSchemaGetApiArg
+    >({
+      query: () => ({ url: `/knowledge-flow/v1/resources/schema` }),
+    }),
     createResourceKnowledgeFlowV1ResourcesPost: build.mutation<
       CreateResourceKnowledgeFlowV1ResourcesPostApiResponse,
       CreateResourceKnowledgeFlowV1ResourcesPostApiArg
@@ -305,7 +311,7 @@ export type DownloadDocumentMediaKnowledgeFlowV1MarkdownDocumentUidMediaMediaIdG
   mediaId: string;
 };
 export type DownloadDocumentKnowledgeFlowV1RawContentDocumentUidGetApiResponse =
-  /** status 200 Successful Response */ any;
+  /** status 200 Binary file stream */ any;
 export type DownloadDocumentKnowledgeFlowV1RawContentDocumentUidGetApiArg = {
   documentUid: string;
 };
@@ -355,6 +361,10 @@ export type DeleteTagKnowledgeFlowV1TagsTagIdDeleteApiResponse = unknown;
 export type DeleteTagKnowledgeFlowV1TagsTagIdDeleteApiArg = {
   tagId: string;
 };
+export type GetCreateResSchemaKnowledgeFlowV1ResourcesSchemaGetApiResponse = /** status 200 Successful Response */ {
+  [key: string]: any;
+};
+export type GetCreateResSchemaKnowledgeFlowV1ResourcesSchemaGetApiArg = void;
 export type CreateResourceKnowledgeFlowV1ResourcesPostApiResponse = /** status 201 Successful Response */ Resource;
 export type CreateResourceKnowledgeFlowV1ResourcesPostApiArg = {
   /** Library tag id to attach this resource to */
@@ -419,6 +429,12 @@ export type SourceInfo = {
   retrievable?: boolean;
   /** When the document was added to the system */
   date_added_to_kb?: string;
+  /** Web base of the repository, e.g. https://git/org/repo */
+  repository_web?: string | null;
+  /** Commit SHA or branch used when pulling */
+  repo_ref?: string | null;
+  /** Path within the repository (POSIX style) */
+  file_path?: string | null;
 };
 export type FileType = "pdf" | "docx" | "pptx" | "xlsx" | "csv" | "md" | "html" | "txt" | "other";
 export type FileInfo = {
@@ -613,6 +629,11 @@ export type VectorSearchHit = {
   type?: string | null;
   tag_ids?: string[];
   tag_names?: string[];
+  tag_full_paths?: string[];
+  preview_url?: string | null;
+  preview_at_url?: string | null;
+  repo_url?: string | null;
+  citation_url?: string | null;
   license?: string | null;
   confidential?: boolean | null;
   /** Similarity score from vector search */
@@ -678,6 +699,8 @@ export const {
   useLazyGetTagKnowledgeFlowV1TagsTagIdGetQuery,
   useUpdateTagKnowledgeFlowV1TagsTagIdPutMutation,
   useDeleteTagKnowledgeFlowV1TagsTagIdDeleteMutation,
+  useGetCreateResSchemaKnowledgeFlowV1ResourcesSchemaGetQuery,
+  useLazyGetCreateResSchemaKnowledgeFlowV1ResourcesSchemaGetQuery,
   useCreateResourceKnowledgeFlowV1ResourcesPostMutation,
   useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery,
   useLazyListResourcesByKindKnowledgeFlowV1ResourcesGetQuery,

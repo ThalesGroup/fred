@@ -23,6 +23,7 @@ import traceback
 import yaml
 from functools import wraps
 import inspect
+from datetime import datetime, timedelta, timezone
 
 logger = logging.getLogger(__name__)
 
@@ -153,3 +154,31 @@ def authorization_required(method):
         return method(self, *args, **kwargs)
 
     return wrapper
+
+
+def truncate_datetime(dt: datetime, precision: str) -> datetime:
+    """
+    Truncate a datetime to the start of the given precision.
+    Supported precisions: 'minute', 'hour', 'day', 'week', 'month'.
+    Always returns a timezone-aware UTC datetime.
+    """
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    else:
+        dt = dt.astimezone(timezone.utc)
+
+    match precision:
+        case "minute":
+            return dt.replace(second=0, microsecond=0)
+        case "hour":
+            return dt.replace(minute=0, second=0, microsecond=0)
+        case "day":
+            return dt.replace(hour=0, minute=0, second=0, microsecond=0)
+        case "week":
+            # ISO weeks: Monday is start of week
+            start_of_week = dt - timedelta(days=dt.weekday())
+            return start_of_week.replace(hour=0, minute=0, second=0, microsecond=0)
+        case "month":
+            return dt.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        case _:
+            raise ValueError(f"Unsupported precision: {precision}")

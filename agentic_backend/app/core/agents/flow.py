@@ -19,10 +19,9 @@ from IPython.display import Image
 from langchain_core.tools import BaseToolkit
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph.state import CompiledStateGraph, StateGraph
-
-from app.application_context import get_knowledge_flow_base_url
 from langchain_core.messages import SystemMessage, BaseMessage
 from app.core.agents.agent_state import Prepared, resolve_prepared
+from app.application_context import get_knowledge_flow_base_url
 from app.core.agents.runtime_context import RuntimeContext
 
 logger = logging.getLogger(__name__)
@@ -174,7 +173,7 @@ class AgentFlow:
     def _compose_fred_system_text(self) -> str:
         """
         Internal: builds the system text from (a) selected Fred resources and
-        (b) this agent’s base_prompt, preserving order and keeping it in one message.
+        (b) this agent's base_prompt, preserving order and keeping it in one message.
         """
         ctx = self.get_runtime_context() or RuntimeContext()
         prepared: Prepared = resolve_prepared(ctx, get_knowledge_flow_base_url())

@@ -13,7 +13,7 @@ import {
 } from "@mui/material";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import { VectorSearchHit } from "../../slices/agentic/agenticOpenApi";
-import { useDocumentViewer } from "../../common/useDocumentViewer";
+import { newUseDocumentViewer } from "../../common/newUseDocumentViewer";
 
 export function SourceDetailsDialog({
   open,
@@ -26,7 +26,7 @@ export function SourceDetailsDialog({
   documentId: string;
   hits: VectorSearchHit[];
 }) {
-  const { openDocument } = useDocumentViewer();
+  const { openDocument } = newUseDocumentViewer();
   if (!open) return null;
   if (!hits?.length) return null;
 
@@ -62,11 +62,13 @@ export function SourceDetailsDialog({
       .map(h => h.viewer_fragment || h.content)
       .filter((s): s is string => !!(s && s.trim()));
     openDocument({ document_uid: documentId }, { chunksToHighlight: chunks });
+    onClose();
   };
 
   const openSingle = (h: VectorSearchHit) => {
     const chunk = h.viewer_fragment || h.content || "";
     openDocument({ document_uid: documentId }, { chunksToHighlight: [chunk] });
+    onClose();
   };
 
   const externalUrl = pickFirstUrl([pull, repo, filePath]);

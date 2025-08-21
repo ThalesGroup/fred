@@ -2,12 +2,30 @@
 
 from pathlib import Path
 from langchain.schema.document import Document
-from typing import Dict, Any, List, Tuple, Optional
+from typing import Dict, Any, List, Tuple
 import logging
+import hashlib
 
 from app.common.document_structures import DocumentMetadata
 
 logger = logging.getLogger(__name__)
+
+
+def _stable_id16_from_str(key: str) -> str:
+    """
+    Return a stable 16-hex-character identifier derived from `key`.
+    Not used for any security decision. We use SHA-1 with
+    `usedforsecurity=False` when available to satisfy Bandit/FIPS.
+    """
+    try:
+        # Some builds (e.g., FIPS-enabled) support `usedforsecurity`.
+        h = hashlib.new("sha1", usedforsecurity=False)  # type: ignore[call-arg]
+    except TypeError:
+        # `usedforsecurity` not supported on this Python/OpenSSL build.
+        # This usage is non-security; suppress Bandit warning.
+        h = hashlib.new("sha1")  # nosec B324
+    h.update(key.encode("utf-8"))
+    return h.hexdigest()[:16]
 
 
 def flat_metadata_from(md: DocumentMetadata) -> dict:
@@ -46,6 +64,10 @@ def flat_metadata_from(md: DocumentMetadata) -> dict:
         "repository": md.source.source_tag,
         "pull_location": md.source.pull_location,
         "date_added_to_kb": md.source.date_added_to_kb,
+        # — provenance for repo_url
+        "repository_web": md.source.repository_web,
+        "repo_ref": md.source.repo_ref,
+        "file_path": md.source.file_path,
         # --- file ---
         "type": (md.file.file_type.value if md.file.file_type else None),
         "mime_type": md.file.mime_type,
@@ -59,7 +81,7 @@ def flat_metadata_from(md: DocumentMetadata) -> dict:
         # --- access control ---
         "license": md.access.license,
         "confidential": md.access.confidential,
-        "acl": md.access.acl,
+        "acl": md.access.acl,  # keep if you actively filter on it in search
     }
 
 
@@ -90,93 +112,69 @@ def load_langchain_doc_from_metadata(file_path: str, metadata: DocumentMetadata)
 
 # --- Chunk-level metadata hygiene ---
 
-# Only allow a controlled subset of keys to survive chunk-level metadata.
-# WHY: splitters produce lots of noisy, tool-specific metadata that we don’t want
-# to leak into the index (bounding boxes, parser internals, temp paths).
+# --- keep only what we index ---
 _ALLOWED_CHUNK_KEYS = {
-    "page",
-    "page_start",
-    "page_end",
+    "chunk_index",
+    "chunk_uid",
     "char_start",
     "char_end",
+    "heading_slug",
     "viewer_fragment",
     "original_doc_length",
-    "chunk_id",
     "section",
 }
 
-# Splitters may emit hierarchical headers (like "Header 1" … "Header 6").
-# We collapse these into a single `section` field for easier retrieval/filtering.
+_INT_KEYS = {"chunk_index", "char_start", "char_end", "original_doc_length"}
+
 _HEADER_KEYS = ("Header 1", "Header 2", "Header 3", "Header 4", "Header 5", "Header 6")
 
 
-def _as_int(v) -> Optional[int]:
-    # WHY: ensure all positional markers (page, char offsets) are numeric
-    # so OpenSearch mappings stay consistent (int not string).
+def _as_int(v):
     try:
         if v is None:
             return None
         if isinstance(v, bool):
-            return int(v)  # avoid True/False creeping in
+            return int(v)
         return int(str(v).strip())
     except Exception:
         return None
 
 
+def _build_viewer_fragment(proj):
+    if proj.get("viewer_fragment"):
+        return proj["viewer_fragment"]
+    slug = proj.get("heading_slug")
+    if slug:
+        return f"h={slug}"
+    cs, ce = proj.get("char_start"), proj.get("char_end")
+    if cs is not None and ce is not None:
+        return f"sel={cs}-{ce}"
+    return None
+
+
+def make_chunk_uid(document_uid: str, anchors: dict) -> str:
+    """
+    Stable id from doc uid + key anchors.
+    If char offsets are present, they dominate; otherwise fall back to index+slug.
+    """
+    uid = document_uid or "unknown"
+    parts = [
+        uid,
+        f"cs={anchors.get('char_start')}",
+        f"ce={anchors.get('char_end')}",
+        f"idx={anchors.get('chunk_index')}",
+        f"hs={anchors.get('heading_slug')}",
+    ]
+    return _stable_id16_from_str("|".join(map(str, parts)))
+
+
 def sanitize_chunk_metadata(raw: Dict[str, Any]) -> Tuple[Dict[str, Any], List[str]]:
-    """
-    WHY WE SANITIZE:
-      - Splitters (pdf, html, unstructured) generate many ad-hoc fields.
-      - If we index them blindly, the vector index schema becomes unstable,
-        queries slow down, and confidential/internal info may leak.
-      - By whitelisting, coercing, and dropping, we guarantee that every
-        chunk looks the same in the index.
-
-    STEPS:
-      1. Compute a synthetic `section` name from headers if available.
-         (WHY: makes retrieval explanations human-friendly: “Section: Intro / Methods”)
-      2. Keep only keys we explicitly allow (`_ALLOWED_CHUNK_KEYS`).
-      3. Inject computed `section` if it exists.
-      4. Coerce positional fields to integers (WHY: avoid mapping conflicts).
-      5. Drop None/empty fields (WHY: keep index lean).
-      6. Return (cleaned_metadata, dropped_keys) so developers can monitor
-         what was discarded — important for debugging and schema hygiene.
-
-    EXAMPLE:
-
-        >>> raw = {
-        ...     "page": "12",
-        ...     "Header 1": "Introduction",
-        ...     "Header 2": "Motivation",
-        ...     "bbox": [0, 0, 400, 200],  # noisy field from PDF parser
-        ...     "char_start": "340",
-        ...     "char_end": "520",
-        ...     "tmp_path": "/tmp/parser/foo",  # sensitive internal field
-        ... }
-
-        >>> clean, dropped = sanitize_chunk_metadata(raw)
-        >>> clean
-        {
-            "page": 12,
-            "char_start": 340,
-            "char_end": 520,
-            "section": "Introduction / Motivation"
-        }
-        >>> dropped
-        ["bbox", "tmp_path"]
-
-
-    RESULT:
-      - Stable, predictable chunk metadata ready for storage in vector DB.
-      - Dropped keys list provides visibility into unexpected splitter behavior.
-    """
     dropped: List[str] = []
 
-    # 1) build section from headers if available
+    # section from headers (nice for UX)
     headers = [str(raw.get(k)) for k in _HEADER_KEYS if raw.get(k) is not None]
     section = " / ".join(headers) if headers else (raw.get("section") or None)
 
-    # 2) project allowed keys
     proj: Dict[str, Any] = {}
     for k in list(raw.keys()):
         if k not in _ALLOWED_CHUNK_KEYS:
@@ -184,21 +182,38 @@ def sanitize_chunk_metadata(raw: Dict[str, Any]) -> Tuple[Dict[str, Any], List[s
             continue
         proj[k] = raw.get(k)
 
-    # 3) inject computed section if not set or empty
     if section:
         proj["section"] = section
 
-    # 4) type coercion
-    for k in ("page", "page_start", "page_end", "char_start", "char_end", "original_doc_length"):
+    for k in _INT_KEYS:
         if k in proj:
             iv = _as_int(proj[k])
             if iv is None:
-                dropped.append(k)  # bad type, drop field to avoid mapping issues
+                dropped.append(k)
                 proj.pop(k, None)
             else:
                 proj[k] = iv
 
-    # 5) drop None/empty
-    proj = {k: v for k, v in proj.items() if v not in (None, "", [])}
+    frag = _build_viewer_fragment(proj)
+    if frag:
+        proj["viewer_fragment"] = frag
 
+    proj = {k: v for k, v in proj.items() if v not in (None, "", [])}
     return proj, dropped
+
+
+def make_stable_chunk_id(base_flat: Dict[str, Any], proj: Dict[str, Any]) -> str:
+    """Stable id based on uid + anchors; avoids changing when chunk indices shift."""
+    uid = base_flat.get("document_uid") or "unknown"
+    # Use only anchor-ish fields so re-chunking with same spans keeps the id
+    parts = [
+        uid,
+        f"p={proj.get('page')}",
+        f"cs={proj.get('char_start')}",
+        f"ce={proj.get('char_end')}",
+        f"ls={proj.get('line_start')}",
+        f"le={proj.get('line_end')}",
+        f"hs={proj.get('heading_slug')}",
+    ]
+    key = "|".join(str(x) for x in parts)
+    return _stable_id16_from_str(key)

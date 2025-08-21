@@ -52,8 +52,26 @@ class ResourceController:
         self._register_routes(router, handle_exception)
 
     def _register_routes(self, router: APIRouter, handle_exception):
+        @router.get(
+            "/resources/schema",
+            tags=["Resources"],
+            response_model=dict,
+            summary="Get the JSON schema for the resource creation payload.",
+        )
+        async def get_create_res_schema(
+            user: KeycloakUser = Depends(get_current_user),
+        ) -> dict:
+            """
+            Returns the JSON schema for the ResourceCreate model.
+
+            This is useful for clients that need to dynamically build forms or validate data
+            before sending it to the 'Create a resource' endpoint.
+            """
+            return ResourceCreate.model_json_schema()
+
         @router.post(
             "/resources",
+            tags=["Resources"],
             response_model=Resource,
             response_model_exclude_none=True,
             status_code=status.HTTP_201_CREATED,
@@ -71,6 +89,7 @@ class ResourceController:
 
         @router.put(
             "/resources/{resource_id}",
+            tags=["Resources"],
             response_model=Resource,
             response_model_exclude_none=True,
             summary="Update a resource (content/metadata).",
@@ -87,6 +106,7 @@ class ResourceController:
 
         @router.get(
             "/resources/{resource_id}",
+            tags=["Resources"],
             response_model=Resource,
             response_model_exclude_none=True,
             summary="Get a resource by id.",
@@ -102,6 +122,7 @@ class ResourceController:
 
         @router.get(
             "/resources",
+            tags=["Resources"],
             response_model=List[Resource],
             response_model_exclude_none=True,
             summary="List all resources for a kind (prompt|template).",
@@ -117,6 +138,7 @@ class ResourceController:
 
         @router.delete(
             "/resources/{resource_id}",
+            tags=["Resources"],
             summary="Delete a resource by id.",
         )
         async def delete_resource(

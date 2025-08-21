@@ -29,12 +29,4 @@ class ExecuteDecision(BaseModel):
     """
 
     # Add your custom expert flows here to include them in Fred
-    expert: Literal[
-        "GeneralistExpert",
-        "DocumentsExpert",
-        "TechnicalKubernetesExpert",
-        "TheoreticalKubernetesExpert",
-        "KedaExpert",
-        "MonitoringExpert",
-        "K8SOperatorExpert",
-    ]
+    expert: str

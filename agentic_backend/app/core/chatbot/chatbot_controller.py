@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 import logging
 from enum import Enum
 from typing import Dict, List, Literal, Union
@@ -27,10 +28,10 @@ from fastapi import (
     WebSocket,
     WebSocketDisconnect,
 )
-
-from fred_core import KeycloakUser, get_current_user, VectorSearchHit
-from pydantic import BaseModel, Field
 from starlette.websockets import WebSocketState
+
+from pydantic import BaseModel, Field
+from fred_core import KeycloakUser, get_current_user, VectorSearchHit
 
 from app.application_context import get_configuration
 from app.common.utils import log_exception
@@ -38,32 +39,27 @@ from app.core.agents.agent_manager import AgentManager
 from app.core.agents.runtime_context import RuntimeContext
 from app.core.agents.structures import AgenticFlow
 from app.core.chatbot.chat_schema import (
-    ChatMessageMetadata,
-    ChatMessagePayload,
-    ChatTokenUsage,
+    ChatAskInput,
+    ChatMessage,
     ErrorEvent,
     FinalEvent,
     SessionSchema,
     SessionWithFiles,
     StreamEvent,
 )
-from app.core.chatbot.chatbot_message import ChatAskInput
 from app.core.chatbot.metric_structures import MetricsBucket, MetricsResponse
 from app.core.session.session_manager import SessionManager
 
 logger = logging.getLogger(__name__)
 
-# ------------- Echo types (one endpoint to reference them all) -------------
+# ---------------- Echo types for UI OpenAPI ----------------
 
-# Union of every schema you want exposed to the UI codegen
 EchoPayload = Union[
-    ChatMessagePayload,
+    ChatMessage,
     ChatAskInput,
     StreamEvent,
     FinalEvent,
     ErrorEvent,
-    ChatMessageMetadata,
-    ChatTokenUsage,
     SessionSchema,
     SessionWithFiles,
     MetricsResponse,
@@ -73,15 +69,12 @@ EchoPayload = Union[
 ]
 
 
-# Keep a 'kind' so the UI can switch on it easily (not required for OpenAPI, but handy)
 class EchoEnvelope(BaseModel):
     kind: Literal[
-        "ChatMessagePayload",
+        "ChatMessage",
         "StreamEvent",
         "FinalEvent",
         "ErrorEvent",
-        "ChatMessageMetadata",
-        "ChatTokenUsage",
         "SessionSchema",
         "SessionWithFiles",
         "MetricsResponse",
@@ -93,11 +86,6 @@ class EchoEnvelope(BaseModel):
 
 
 class ChatbotController:
-    """
-    This controller is responsible for handling the UI HTTP endpoints and
-    WebSocket endpoints.
-    """
-
     def __init__(
         self,
         app: APIRouter,
@@ -115,7 +103,6 @@ class ChatbotController:
             response_model=EchoEnvelope,
         )
         def echo_schema(envelope: EchoEnvelope) -> EchoEnvelope:
-            # No logic; this endpoint exists so OpenAPI references every payload schema above.
             return envelope
 
         @app.get(
@@ -145,30 +132,30 @@ class ChatbotController:
                     client_request = None
                     try:
                         client_request = await websocket.receive_json()
-                        client_event = ChatAskInput(**client_request)
+                        ask = ChatAskInput(**client_request)
 
-                        async def websocket_callback(msg: dict):
+                        async def ws_callback(msg_dict: dict):
                             event = StreamEvent(
-                                type="stream", message=ChatMessagePayload(**msg)
+                                type="stream", message=ChatMessage(**msg_dict)
                             )
                             await websocket.send_text(event.model_dump_json())
 
                         (
                             session,
-                            messages,
+                            final_messages,
                         ) = await self.session_manager.chat_ask_websocket(
-                            callback=websocket_callback,
-                            user_id=client_event.user_id,
-                            session_id=client_event.session_id or "unknown-session",
-                            message=client_event.message,
-                            agent_name=client_event.agent_name,
-                            runtime_context=client_event.runtime_context,
-                            client_exchange_id=client_event.client_exchange_id,
+                            callback=ws_callback,
+                            user_id=ask.user_id,
+                            session_id=ask.session_id or "unknown-session",
+                            message=ask.message,
+                            agent_name=ask.agent_name,
+                            runtime_context=ask.runtime_context,
+                            client_exchange_id=ask.client_exchange_id,
                         )
 
                         await websocket.send_text(
                             FinalEvent(
-                                type="final", messages=messages, session=session
+                                type="final", messages=final_messages, session=session
                             ).model_dump_json()
                         )
 
@@ -220,11 +207,11 @@ class ChatbotController:
             description="Get the history of a chatbot session.",
             summary="Get the history of a chatbot session.",
             tags=fastapi_tags,
-            response_model=List[ChatMessagePayload],
+            response_model=List[ChatMessage],
         )
         def get_session_history(
             session_id: str, user: KeycloakUser = Depends(get_current_user)
-        ) -> list[ChatMessagePayload]:
+        ) -> list[ChatMessage]:
             return self.session_manager.get_session_history(session_id, user.uid)
 
         @app.delete(
@@ -251,18 +238,6 @@ class ChatbotController:
             agent_name: str = Form(...),
             file: UploadFile = File(...),
         ) -> dict:
-            """
-            Upload a file to be attached to a chatbot conversation.
-
-            Args:
-                user_id (str): User ID.
-                session_id (str): Session ID.
-                agent_name (str): Agent name.
-                file (UploadFile): File to upload.
-
-            Returns:
-                dict: Response message.
-            """
             return await self.session_manager.upload_file(
                 user_id, session_id, agent_name, file
             )
@@ -283,7 +258,6 @@ class ChatbotController:
         ) -> MetricsResponse:
             SUPPORTED_OPS = {"mean", "sum", "min", "max", "values"}
             agg_mapping: Dict[str, List[str]] = {}
-
             for item in agg:
                 if ":" not in item:
                     raise HTTPException(
@@ -292,12 +266,7 @@ class ChatbotController:
                 field, op = item.split(":")
                 if op not in SUPPORTED_OPS:
                     raise HTTPException(400, detail=f"Unsupported aggregation op: {op}")
-                if field not in agg_mapping:
-                    agg_mapping[field] = []
-                agg_mapping[field].append(op)
-
-            logger.info(agg_mapping)
-
+                agg_mapping.setdefault(field, []).append(op)
             return self.session_manager.get_metrics(
                 start=start,
                 end=end,

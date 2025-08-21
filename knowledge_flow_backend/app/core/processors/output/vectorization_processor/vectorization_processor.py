@@ -13,39 +13,15 @@
 # limitations under the License.
 
 import logging
-from typing import Optional, override
+from typing import override
 from langchain.schema.document import Document
 
 from app.application_context import ApplicationContext
 from app.common.document_structures import DocumentMetadata, ProcessingStage
-from app.common.vectorization_utils import flat_metadata_from, load_langchain_doc_from_metadata, sanitize_chunk_metadata
 from app.core.processors.output.base_output_processor import BaseOutputProcessor, VectorProcessingError
+from app.core.processors.output.vectorization_processor.vectorization_utils import flat_metadata_from, load_langchain_doc_from_metadata, make_chunk_uid, sanitize_chunk_metadata
 
 logger = logging.getLogger(__name__)
-
-_ALLOWED_CHUNK_KEYS = {
-    "page",
-    "page_start",
-    "page_end",
-    "char_start",
-    "char_end",
-    "viewer_fragment",
-    "original_doc_length",
-    "chunk_id",
-    "section",
-}
-_HEADER_KEYS = ("Header 1", "Header 2", "Header 3", "Header 4", "Header 5", "Header 6")
-
-
-def _as_int(v) -> Optional[int]:
-    try:
-        if v is None:
-            return None
-        if isinstance(v, bool):
-            return int(v)
-        return int(str(v).strip())
-    except Exception:
-        return None
 
 
 class VectorizationProcessor(BaseOutputProcessor):
@@ -79,37 +55,58 @@ class VectorizationProcessor(BaseOutputProcessor):
             logger.debug(f"Document loaded: {document}")
             if not document:
                 raise ValueError("Document is empty or not loaded correctly.")
-            # 2. Split the document
+
+            # 2) Split
             chunks = self.splitter.split(document)
             logger.info(f"Document split into {len(chunks)} chunks.")
 
-            # 3. Check if document already exists
-            document_uid = metadata.document_uid
-            if document_uid is None:
-                raise ValueError("Metadata must contain a 'document_uid'.")
+            # 3) Ensure doc uid
+            if not isinstance(metadata.document_uid, str) or not metadata.document_uid:
+                raise ValueError("Metadata must contain a non-empty 'document_uid'.")
+            doc_uid = metadata.document_uid
 
-            # Build the constant base metadata once (flat projection)
+            # Build base metadata once and DROP Nones (important!)
             base_flat = flat_metadata_from(metadata)
+            base_flat = {k: v for k, v in base_flat.items() if v is not None}  # <-- added
 
             for i, doc in enumerate(chunks):
-                raw_meta = doc.metadata or {}
-                clean_chunk_meta, dropped = sanitize_chunk_metadata(raw_meta)
+                raw_meta = (doc.metadata or {}).copy()
 
-                if dropped:
-                    logger.debug(f"[Chunk {i}] dropped meta keys: {dropped}")
+                # Ensure anchors BEFORE sanitize
+                raw_meta["chunk_index"] = i
+                raw_meta.setdefault("original_doc_length", len(document.page_content))  # <-- added
 
-                doc.metadata = {**base_flat, **clean_chunk_meta}
-                logger.debug(f"[Chunk {i}] preview={doc.page_content[:100]!r} meta_keys={list(doc.metadata.keys())}")
+                # Stable id
+                raw_meta["chunk_uid"] = make_chunk_uid(doc_uid, {**raw_meta, "chunk_index": i})
 
-            # 4. Store embeddings
+                # Whitelist + coerce + derive viewer_fragment/section
+                clean, dropped = sanitize_chunk_metadata(raw_meta)
+
+                # Merge with doc-level metadata
+                doc.metadata = {**base_flat, **clean}
+
+                logger.debug(
+                    "[Chunk %d] preview=%r | idx=%s uid=%s cs=%s ce=%s section=%r dropped=%s",
+                    i,
+                    doc.page_content[:100],
+                    doc.metadata.get("chunk_index"),
+                    doc.metadata.get("chunk_uid"),
+                    doc.metadata.get("char_start"),
+                    doc.metadata.get("char_end"),
+                    doc.metadata.get("section"),
+                    dropped,
+                )
+
+            # 4) Store embeddings
             try:
                 for i, doc in enumerate(chunks):
-                    logger.debug(f"[Chunk {i}] Document content preview: {doc.page_content[:100]!r} | Metadata: {doc.metadata}")
+                    logger.debug("[Chunk %d] content=%r | meta=%s", i, doc.page_content[:100], doc.metadata)
                 result = self.vector_store.add_documents(chunks)
                 logger.debug(f"Documents added to Vector Store: {result}")
             except Exception as e:
-                logger.exception("Failed to add documents to Vectore Store")
-                raise VectorProcessingError("Failed to add documents to Vectore Store") from e
+                logger.exception("Failed to add documents to Vector Store")
+                raise VectorProcessingError("Failed to add documents to Vector Store") from e
+
             metadata.mark_stage_done(ProcessingStage.VECTORIZED)
             metadata.mark_retrievable()
             return metadata

@@ -26,17 +26,11 @@ import {
 import { downloadFile } from "../../../utils/downloadUtils";
 import { useToast } from "../../ToastProvider";
 import {
-  //createBulkDeleteAction,
-  createBulkDownloadAction,
   createBulkProcessSyncAction,
   createBulkScheduleAction,
-  //createDeleteAction,
-  createDownloadAction,
-  createPreviewAction,
   createProcessAction,
   createScheduleAction,
 } from "../operations/DocumentOperationsActions";
-import { useDocumentViewer } from "../../../common/useDocumentViewer";
 
 export const useDocumentActions = (onRefreshData?: () => void) => {
   const { t } = useTranslation();
@@ -149,30 +143,16 @@ export const useDocumentActions = (onRefreshData?: () => void) => {
 
   // Create default actions
   const defaultRowActions = [
-    createPreviewAction(handleDocumentPreview, t),
-    createDownloadAction(handleDownload, t),
-    //createDeleteAction(handleDelete, t),
     createProcessAction((file) => handleProcess([file]), t),
     createScheduleAction((file) => handleSchedule([file]), t),
   ];
 
   const defaultBulkActions = [
-    //createBulkDeleteAction(handleBulkDelete, t),
-    createBulkDownloadAction(handleBulkDownload, t),
     createBulkProcessSyncAction((files) => handleProcess(files), t),
     createBulkScheduleAction((file) => handleSchedule(file), t), // Optional if your library supports bulk createScheduleAction
   ];
 
   return {
-    // Individual handlers
-    //handleDelete,
-    //handleBulkDelete,
-    handleDownload,
-    handleBulkDownload,
-    handleDocumentPreview,
-    handleProcess,
-
-    // Pre-built action arrays
     defaultRowActions,
     defaultBulkActions,
   };

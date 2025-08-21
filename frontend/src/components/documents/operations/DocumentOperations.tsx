@@ -339,7 +339,6 @@ export const DocumentOperations = ({}: DocumentsViewProps) => {
 
             <DocumentOperationsTable
               files={allDocuments}
-              isAdmin={userInfo.canManageDocuments}
               onRefreshData={fetchFiles}
               showSelectionActions={true}
             />

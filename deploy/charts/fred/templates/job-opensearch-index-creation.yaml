@@ -7,7 +7,9 @@
   {{- end }}
 {{- end }}
 
-{{- if $needsOpensearch.value }}
+{{- $needsOpensearchValue := index $needsOpensearch "value" }} # we need needsOpensearchValue to make a comparison 
+{{- if and $needsOpensearchValue .root.Values.global.create_index.enabled }}
+
 
 {{- $osHost := .app.configuration.storage.opensearch.host }}
 {{- $osUser := .app.configuration.storage.opensearch.username }}
