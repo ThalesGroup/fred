@@ -39,7 +39,7 @@ import { useConfirmationDialog } from "../ConfirmationDialogProvider";
 import { useTagCommands } from "../../common/useTagCommands";
 
 /** Small i18n helper */
-const useKindLabels = (kind: "prompt" | "template") => {
+export const useKindLabels = (kind: "prompt" | "template") => {
   const { t } = useTranslation();
   return {
     one: t(`resource.kind.${kind}.one`),
@@ -276,7 +276,7 @@ export default function ResourceLibraryList({ kind }: Props) {
         {/* Search */}
         <TextField
           size="small"
-          placeholder={t("resourceLibrary.searchPlaceholder") || "Search resources…"}
+          placeholder={t("resourceLibrary.searchPlaceholder", {typeOne}) || "Search resources…"}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           sx={{ minWidth: 260 }}

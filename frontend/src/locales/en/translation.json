@@ -265,7 +265,11 @@
     "collapseAll": "Collapse all",
     "expandAll": "Expand all",
     "folderDeleteSuccess": "Folder deleted",
-    "folderDeleteDetail": "The folder « {{name}} » has been deleted."
+    "folderDeleteDetail": "The folder « {{name}} » has been deleted.",
+    "searchPlaceholder":"Search a {{typeOne}}",
+    "importDrawerTitle": "Import {{typeOne}}",
+    "dropFiles":"Drop your {{typePlural}} here",
+    "noFiles": "No {{typeOne}} found"
   },
   "documentTable": {
     "selectedCount": "{{count}} selected",

@@ -15,7 +15,7 @@
 import SaveIcon from "@mui/icons-material/Save";
 import UploadIcon from "@mui/icons-material/Upload";
 import { Box, Button, Drawer, FormControl, MenuItem, Paper, Select, Typography, useTheme } from "@mui/material";
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { useTranslation } from "react-i18next";
 import { streamUploadOrProcessDocument } from "../../../slices/streamDocumentUpload";
@@ -40,12 +40,15 @@ export const DocumentUploadDrawer: React.FC<DocumentUploadDrawerProps> = ({
   const { showError } = useToast();
   const theme = useTheme();
 
-  // Upload state
   const [uploadMode, setUploadMode] = useState<"upload" | "process">("process");
   const [tempFiles, setTempFiles] = useState<File[]>([]);
   const [uploadProgressSteps, setUploadProgressSteps] = useState<ProgressStep[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isHighlighted, setIsHighlighted] = useState(false);
+
+  const stepDelayMs = 180;
+  const closeExtraDelayMs = 500;
+  const displayIndexRef = useRef(0);
 
   const { getInputProps, open } = useDropzone({
     noClick: true,
@@ -60,37 +63,43 @@ export const DocumentUploadDrawer: React.FC<DocumentUploadDrawerProps> = ({
     setTempFiles(newFiles);
   };
 
-  const handleClose = () => {
+  const hardReset = () => {
     setTempFiles([]);
     setUploadProgressSteps([]);
     setIsLoading(false);
+    displayIndexRef.current = 0;
+  };
+
+  const handleClose = () => {
+    hardReset();
     onClose();
   };
 
   const handleAddFiles = async () => {
     setIsLoading(true);
     setUploadProgressSteps([]);
+    displayIndexRef.current = 0;
 
     try {
-      let uploadCount = 0;
       for (const file of tempFiles) {
         try {
           await streamUploadOrProcessDocument(
             file,
             uploadMode,
             (progress) => {
-              setUploadProgressSteps((prev) => [
-                ...prev,
-                {
-                  step: progress.step,
-                  status: progress.status,
-                  filename: file.name,
-                },
-              ]);
+              const step: ProgressStep = {
+                step: progress.step,
+                status: progress.status,
+                filename: file.name,
+              };
+              const delay = displayIndexRef.current * stepDelayMs;
+              displayIndexRef.current += 1;
+              window.setTimeout(() => {
+                setUploadProgressSteps((prev) => [...prev, step]);
+              }, delay);
             },
             metadata,
           );
-          uploadCount++;
         } catch (e) {
           console.error("Error uploading file:", e);
           showError({
@@ -108,15 +117,18 @@ export const DocumentUploadDrawer: React.FC<DocumentUploadDrawerProps> = ({
     } finally {
       setIsLoading(false);
       setTempFiles([]);
-      setUploadProgressSteps([]);
       onUploadComplete?.();
-      onClose();
+      const totalDelay = displayIndexRef.current * stepDelayMs + closeExtraDelayMs;
+      window.setTimeout(() => {
+        handleClose();
+      }, totalDelay);
     }
   };
 
   const handleOpenFileSelector = () => {
     setUploadProgressSteps([]);
     setTempFiles([]);
+    displayIndexRef.current = 0;
     open();
   };
 
