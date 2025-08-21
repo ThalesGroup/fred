@@ -25,10 +25,7 @@ export const Chat = () => {
   const cluster = searchParams.get("cluster") || undefined;
 
   // --- Queries (new OpenAPI hooks) ---
-  const {
-    data: flowsData,
-    isLoading: flowsLoading,
-  } = useGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery();
+  const { data: flowsData, isLoading: flowsLoading } = useGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery();
 
   const {
     data: sessionsData,
@@ -36,8 +33,7 @@ export const Chat = () => {
     refetch: refetchSessions,
   } = useGetSessionsAgenticV1ChatbotSessionsGetQuery();
 
-  const [deleteSession] =
-    useDeleteSessionAgenticV1ChatbotSessionSessionIdDeleteMutation();
+  const [deleteSession] = useDeleteSessionAgenticV1ChatbotSessionSessionIdDeleteMutation();
 
   // --- Local state (UI selection/persistence) ---
   const [agenticFlows, setAgenticFlows] = useState<AgenticFlow[]>([]);
@@ -128,12 +124,37 @@ export const Chat = () => {
     }
   };
 
+  useEffect(() => {
+    const onFocus = () => refetchSessions();
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") refetchSessions();
+    };
+
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibility);
+
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [refetchSessions]);
   // Upsert/replace session coming back from the chatbot “final” event
   const handleUpdateOrAddSession = (session: SessionSchema) => {
+    let wasNew = false;
+
     setChatBotSessions((prev) => {
       const exists = prev.some((s) => s.id === session.id);
+      wasNew = !exists;
+
       return exists ? prev.map((s) => (s.id === session.id ? session : s)) : [...prev, session];
     });
+
+    // If backend created a brand-new session, fetch the authoritative list once
+    if (wasNew) {
+      // fire-and-forget; sidebar ordering/metadata stay exact
+      refetchSessions();
+    }
+
     if (!currentChatBotSession || currentChatBotSession.id !== session.id) {
       handleSelectSession(session);
     }
