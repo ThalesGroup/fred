@@ -33,18 +33,16 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import {
-  DOCUMENT_PROCESSING_STAGES,
   DocumentMetadata,
   TagType,
   TagWithItemsId,
-  UpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutApiArg,
   useLazyGetTagKnowledgeFlowV1TagsTagIdGetQuery,
-  useUpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutMutation,
 } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { CustomRowAction, DocumentTableRowActionsMenu } from "./DocumentOperationsTableRowActionsMenu";
 import { CustomBulkAction, DocumentOperationsTableSelectionToolbar } from "./DocumentOperationsTableSelectionToolbar";
 import { useDocumentActions } from "../common/useDocumentActions";
 import { getDocumentIcon } from "../common/DocumentIcon";
+import { DOCUMENT_PROCESSING_STAGES } from "../../../utils/const";
 
 // Todo: use `DocumentMetadata` directly (as `DocumentMetadata` is auto-generated from OpenAPI spec)
 
@@ -96,7 +94,6 @@ export const DocumentOperationsTable: React.FC<DocumentOperationsTableProps> = (
   const [tagsById, setTagsById] = useState<Record<string, TagWithItemsId>>({});
 
   // API hooks
-  const [updateDocumentRetrievable] = useUpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutMutation();
   const [getTag] = useLazyGetTagKnowledgeFlowV1TagsTagIdGetQuery();
 
   const allSelected = selectedFiles.length === files.length && files.length > 0;

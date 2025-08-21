@@ -245,7 +245,8 @@
     "confirmDeleteFolderTitle": "Delete folder?",
     "confirmDeleteFolderMessage": "Delete empty folder « {{name}} »?",
     "folderDeleted": "Folder deleted",
-    "deleteFolder": "Delete folder"
+    "deleteFolder": "Delete folder",
+    "download": "Download"
 
   },
   "resourceLibrary": {

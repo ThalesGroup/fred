@@ -15,15 +15,12 @@
 import { useTranslation } from "react-i18next";
 import {
   DocumentMetadata,
-  DownloadDocumentKnowledgeFlowV1RawContentDocumentUidGetApiArg,
   ProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostApiArg,
   ScheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPostApiArg,
   ProcessDocumentsRequest,
-  useLazyDownloadDocumentKnowledgeFlowV1RawContentDocumentUidGetQuery,
   useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation,
   useScheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPostMutation,
 } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
-import { downloadFile } from "../../../utils/downloadUtils";
 import { useToast } from "../../ToastProvider";
 import {
   createBulkProcessSyncAction,
@@ -31,48 +28,17 @@ import {
   createProcessAction,
   createScheduleAction,
 } from "../operations/DocumentOperationsActions";
-import { newUseDocumentViewer } from "../../../common/newUseDocumentViewer";
 
 export const useDocumentActions = (onRefreshData?: () => void) => {
   const { t } = useTranslation();
-  const { showInfo, showError } = useToast();
-  const { openDocument } = newUseDocumentViewer();
-  console.log("useDocumentActions with to review", onRefreshData);
+  const { showInfo, showError } = useToast();  console.log("useDocumentActions with to review", onRefreshData);
 
   // API hooks
-  const [triggerDownload] =
-    useLazyDownloadDocumentKnowledgeFlowV1RawContentDocumentUidGetQuery();
+
   const [processDocuments] =
     useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation();
   const [scheduleDocuments] =
     useScheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPostMutation();
-
-  const handleDownload = async (file: DocumentMetadata) => {
-    try {
-      const args: DownloadDocumentKnowledgeFlowV1RawContentDocumentUidGetApiArg =
-        { documentUid: file.identity.document_uid };
-      const blob = await triggerDownload(args).unwrap();
-      downloadFile(blob, file.identity.document_name ?? "document");
-    } catch (err: any) {
-      showError({
-        summary: "Download failed",
-        detail: `Could not download document: ${err?.data?.detail ?? err.message}`,
-      });
-    }
-  };
-
-  const handleBulkDownload = async (files: DocumentMetadata[]) => {
-    for (const file of files) {
-      await handleDownload(file);
-    }
-  };
-
-  const handleDocumentPreview = async (file: DocumentMetadata) => {
-    openDocument({
-      document_uid: file.identity.document_uid,
-      file_name: file.identity.document_name,
-    });
-  };
 
   const handleSchedule = async (files: DocumentMetadata[]) => {
     try {

@@ -665,7 +665,6 @@ export type ProcessDocumentsRequest = {
   files: FileToProcess[];
   pipeline_name: string;
 };
-export const DOCUMENT_PROCESSING_STAGES = ["raw", "preview", "vector", "sql", "mcp"] as const;
 export const {
   useSearchDocumentMetadataKnowledgeFlowV1DocumentsMetadataSearchPostMutation,
   useGetDocumentMetadataKnowledgeFlowV1DocumentsMetadataDocumentUidGetQuery,

@@ -245,7 +245,8 @@
     "confirmDeleteFolderTitle": "Supprimer le dossier ?",
     "confirmDeleteFolderMessage": "Supprimer le dossier vide « {{name}} » ?",
     "folderDeleted": "Dossier supprimé",
-    "deleteFolder": "Supprimer le dossier"
+    "deleteFolder": "Supprimer le dossier",
+    "download": "Télécharger"
   },
   "resourceLibrary": {
     "title": "{{typePlural}}",

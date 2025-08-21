@@ -43,7 +43,6 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { KeyCloakService } from "../../../security/KeycloakService";
 import {
-  DOCUMENT_PROCESSING_STAGES,
   DocumentMetadata,
   RescanCatalogSourceKnowledgeFlowV1PullCatalogRescanSourceTagPostApiArg,
   useBrowseDocumentsKnowledgeFlowV1DocumentsBrowsePostMutation,
@@ -55,6 +54,7 @@ import { useToast } from "../../ToastProvider";
 import { DocumentOperationsTable } from "./DocumentOperationsTable";
 import { useDocumentSources } from "../../../hooks/useDocumentSources";
 import { useDocumentTags } from "../../../hooks/useDocumentTags";
+import { DOCUMENT_PROCESSING_STAGES } from "../../../utils/const";
 
 interface DocumentsViewProps {}
 
