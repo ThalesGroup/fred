@@ -3,18 +3,24 @@ import { Box, Chip, ListItemButton, Stack, Typography } from "@mui/material";
 import type { Channel, ChatMessage } from "../../slices/agentic/agenticOpenApi";
 import TerminalIcon from "@mui/icons-material/Terminal";
 
-const channelColor = (
-  c: Channel
-): "default" | "primary" | "secondary" | "error" | "info" | "success" | "warning" => {
+const channelColor = (c: Channel): "default" | "primary" | "secondary" | "error" | "info" | "success" | "warning" => {
   switch (c) {
-    case "plan":        return "info";
-    case "thought":     return "secondary";
-    case "observation": return "primary";
-    case "tool_call":   return "warning";
-    case "tool_result": return "success";
-    case "system_note": return "default";
-    case "error":       return "error";
-    default:            return "default";
+    case "plan":
+      return "info";
+    case "thought":
+      return "secondary";
+    case "observation":
+      return "primary";
+    case "tool_call":
+      return "warning";
+    case "tool_result":
+      return "success";
+    case "system_note":
+      return "default";
+    case "error":
+      return "error";
+    default:
+      return "default";
   }
 };
 
@@ -61,7 +67,10 @@ export default function ReasoningStepBadge({
           top: 0,
           bottom: 0,
           width: 2,
-          bgcolor: (t) => t.palette[color].main,
+          bgcolor: (t) =>
+            color === "default"
+              ? t.palette.divider // or t.palette.grey[400]
+              : t.palette[color].main,
           opacity: 0.35,
         },
         pl: 1.5,
@@ -84,24 +93,14 @@ export default function ReasoningStepBadge({
 
       {/* Content: chips left, text right */}
       <Box sx={{ minWidth: 0 }}>
-        <Stack
-          direction="row"
-          alignItems="center"
-          spacing={1}
-          sx={{ minWidth: 0 }}
-        >
+        <Stack direction="row" alignItems="center" spacing={1} sx={{ minWidth: 0 }}>
           {/* Chips group (left, can wrap within its own box if needed) */}
           <Box sx={{ display: "flex", gap: 0.75, flexWrap: "wrap", alignItems: "center" }}>
             <Chip label={chipChannel} size="small" variant="outlined" color={color} />
             {chipNode && <Chip label={chipNode} size="small" />}
             {chipTask && <Chip label={chipTask} size="small" />}
             {toolName && (
-              <Chip
-                icon={<TerminalIcon sx={{ fontSize: 16 }} />}
-                label={toolName}
-                size="small"
-                variant="outlined"
-              />
+              <Chip icon={<TerminalIcon sx={{ fontSize: 16 }} />} label={toolName} size="small" variant="outlined" />
             )}
             {m.channel === "tool_result" && typeof resultOk !== "undefined" && (
               <Chip
@@ -111,19 +110,13 @@ export default function ReasoningStepBadge({
                 variant={resultOk ? "outlined" : "filled"}
               />
             )}
-            {m.metadata?.agent_name && (
-              <Chip label={m.metadata.agent_name} size="small" variant="outlined" />
-            )}
+            {m.metadata?.agent_name && <Chip label={m.metadata.agent_name} size="small" variant="outlined" />}
           </Box>
 
           {/* Preview text (right, single line, ellipsis) */}
-            <Typography
-              variant="body2"
-              noWrap
-              sx={{ ml: "auto", minWidth: 0, flex: 1, textAlign: "right" }}
-            >
-              {primaryText}
-            </Typography>
+          <Typography variant="body2" noWrap sx={{ ml: "auto", minWidth: 0, flex: 1, textAlign: "right" }}>
+            {primaryText}
+          </Typography>
         </Stack>
       </Box>
     </ListItemButton>
