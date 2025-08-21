@@ -3,6 +3,7 @@
 global:
   kubeconfig: ""
   create_index:
+    enabled: true
     image: "alpine:3.22"
 
 applications:

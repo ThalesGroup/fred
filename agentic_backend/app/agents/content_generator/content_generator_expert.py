@@ -15,7 +15,9 @@
 import logging
 from datetime import datetime
 
-from app.agents.content_generator.content_generator_toolkit import ContentGeneratorToolkit
+from app.agents.content_generator.content_generator_toolkit import (
+    ContentGeneratorToolkit,
+)
 from app.common.mcp_utils import get_mcp_client_for_agent
 from app.common.structures import AgentSettings
 from app.core.agents.flow import AgentFlow
@@ -82,7 +84,7 @@ class ContentGeneratorExpert(AgentFlow):
         )
 
     def _generate_prompt(self) -> str:
-        return  (
+        return (
             "You are an agent that interacts with an MCP server.\n"
             "You manage two types of resources with the same format:\n"
             "1. Templates: content must contain variables in braces { } to be filled.\n"
@@ -117,7 +119,7 @@ class ContentGeneratorExpert(AgentFlow):
             "- Always wait for user input specifying the resource to create.\n"
             "- Generate a 10 characters alphanumerical value as the resource unique identifier when you create it.\n"
             f"Today's date: {self.current_date}"
-)
+        )
 
     async def _reasoner(self, state: MessagesState):
         """
@@ -142,7 +144,6 @@ class ContentGeneratorExpert(AgentFlow):
         assert self.model is not None
         response = await self.model.ainvoke(messages)
         return {"messages": [response]}
-
 
     def _build_graph(self):
         builder = StateGraph(MessagesState)

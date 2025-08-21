@@ -85,7 +85,7 @@ class VectorizationProcessor(BaseOutputProcessor):
                 # Merge with doc-level metadata
                 doc.metadata = {**base_flat, **clean}
 
-                logger.info(
+                logger.debug(
                     "[Chunk %d] preview=%r | idx=%s uid=%s cs=%s ce=%s section=%r dropped=%s",
                     i,
                     doc.page_content[:100],

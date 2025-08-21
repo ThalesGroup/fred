@@ -16,16 +16,14 @@ from typing import List, Dict
 from abc import ABC, abstractmethod
 
 from app.core.chatbot.chat_schema import (
-    ChatMessagePayload,
+    ChatMessage,
 )
 from app.core.chatbot.metric_structures import MetricsResponse
 
 
 class BaseHistoryStore(ABC):
     @abstractmethod
-    def save(
-        self, session_id: str, messages: List[ChatMessagePayload], user_id: str
-    ) -> None:
+    def save(self, session_id: str, messages: List[ChatMessage], user_id: str) -> None:
         """Save a batch of messages to the session history."""
         pass
 
@@ -33,7 +31,7 @@ class BaseHistoryStore(ABC):
     def get(
         self,
         session_id: str,
-    ) -> List[ChatMessagePayload]:
+    ) -> List[ChatMessage]:
         """Retrieve messages for a given session."""
         pass
 

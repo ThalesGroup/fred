@@ -65,6 +65,7 @@ interface DocumentLibraryTreeProps {
   getChildren: (n: TagNode) => TagNode[];
   documents: DocumentMetadata[];
   onPreview: (doc: DocumentMetadata) => void;
+  onDownload: (doc: DocumentMetadata) => void;
   onToggleRetrievable: (doc: DocumentMetadata) => void;
   onRemoveFromLibrary: (doc: DocumentMetadata, tag: TagWithItemsId) => void;
   onDeleteFolder?: (tag: TagWithItemsId) => void;
@@ -82,6 +83,7 @@ export function DocumentLibraryTree({
   getChildren,
   documents,
   onPreview,
+  onDownload,
   onToggleRetrievable,
   onRemoveFromLibrary,
   onDeleteFolder,
@@ -231,6 +233,7 @@ export function DocumentLibraryTree({
                     <DocumentRowCompact
                       doc={doc}
                       onPreview={onPreview}
+                      onDownload={onDownload}
                       onRemoveFromLibrary={(d) => tag && onRemoveFromLibrary(d, tag)}
                       onToggleRetrievable={onToggleRetrievable}
                     />

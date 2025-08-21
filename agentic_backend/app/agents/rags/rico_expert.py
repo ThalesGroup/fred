@@ -35,6 +35,7 @@ from app.core.model.model_factory import get_model
 
 logger = logging.getLogger(__name__)
 
+
 def rag_preamble(now: str | None = None) -> str:
     now = now or datetime.now().strftime("%Y-%m-%d")
     return (

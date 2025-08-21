@@ -157,7 +157,7 @@ export type GetSessionsAgenticV1ChatbotSessionsGetApiResponse =
   /** status 200 Successful Response */ SessionWithFiles[];
 export type GetSessionsAgenticV1ChatbotSessionsGetApiArg = void;
 export type GetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetApiResponse =
-  /** status 200 Successful Response */ ChatMessagePayload[];
+  /** status 200 Successful Response */ ChatMessage[];
 export type GetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetApiArg = {
   sessionId: string;
 };
@@ -252,33 +252,49 @@ export type McpAgentRequest = {
   categories?: string[] | null;
   tag?: string | null;
 };
-export type MessageType = "human" | "ai" | "system" | "tool";
-export type Sender = "user" | "assistant" | "system";
-export type CodeBlock = {
+export type Role = "user" | "assistant" | "tool" | "system";
+export type Channel =
+  | "final"
+  | "plan"
+  | "thought"
+  | "observation"
+  | "tool_call"
+  | "tool_result"
+  | "error"
+  | "system_note";
+export type CodePart = {
   type?: "code";
   language?: string | null;
   code: string;
 };
-export type ImageUrlBlock = {
+export type ImageUrlPart = {
   type?: "image_url";
   url: string;
   alt?: string | null;
 };
-export type TextBlock = {
+export type TextPart = {
   type?: "text";
   text: string;
 };
-export type ToolResultBlock = {
-  type?: "tool_result";
+export type ToolCallPart = {
+  type?: "tool_call";
+  call_id: string;
   name: string;
-  content: string;
+  args: {
+    [key: string]: any;
+  };
+};
+export type ToolResultPart = {
+  type?: "tool_result";
+  call_id: string;
   ok?: boolean | null;
   latency_ms?: number | null;
+  content: string;
 };
 export type ChatTokenUsage = {
-  input_tokens: number;
-  output_tokens: number;
-  total_tokens: number;
+  input_tokens?: number;
+  output_tokens?: number;
+  total_tokens?: number;
 };
 export type VectorSearchHit = {
   content: string;
@@ -318,75 +334,42 @@ export type VectorSearchHit = {
   retrieval_session_id?: string | null;
 };
 export type FinishReason = "stop" | "length" | "content_filter" | "tool_calls" | "cancelled" | "other";
-export type ToolCall = {
-  name: string;
-  args?: {
-    [key: string]: any;
-  } | null;
-  result_preview?: string | null;
-  error?: string | null;
-  latency_ms?: number | null;
-};
-export type ChatMessageMetadata = {
+export type ChatMetadata = {
   model?: string | null;
   token_usage?: ChatTokenUsage | null;
   sources?: VectorSearchHit[];
-  latency_seconds?: number | null;
   agent_name?: string | null;
+  latency_ms?: number | null;
   finish_reason?: FinishReason | null;
-  fred?: {
-    [key: string]: any;
-  } | null;
-  thought?:
-    | string
-    | {
-        [key: string]: any;
-      }
-    | null;
-  tool_call?: ToolCall | null;
   extras?: {
     [key: string]: any;
   };
 };
-export type MessageSubtype =
-  | "final"
-  | "thought"
-  | "tool_result"
-  | "plan"
-  | "execution"
-  | "observation"
-  | "error"
-  | "injected_context";
-export type ChatMessagePayload = {
-  /** Unique ID for this question/reply exchange */
-  exchange_id: string;
-  user_id: string;
-  type: MessageType;
-  sender: Sender;
-  content: string;
-  blocks?:
-    | (
-        | ({
-            type: "code";
-          } & CodeBlock)
-        | ({
-            type: "image_url";
-          } & ImageUrlBlock)
-        | ({
-            type: "text";
-          } & TextBlock)
-        | ({
-            type: "tool_result";
-          } & ToolResultBlock)
-      )[]
-    | null;
-  timestamp: string;
-  /** Conversation ID */
+export type ChatMessage = {
   session_id: string;
-  /** Monotonic message index within the session */
+  exchange_id: string;
   rank: number;
-  metadata?: ChatMessageMetadata;
-  subtype?: MessageSubtype | null;
+  timestamp: string;
+  role: Role;
+  channel: Channel;
+  parts: (
+    | ({
+        type: "code";
+      } & CodePart)
+    | ({
+        type: "image_url";
+      } & ImageUrlPart)
+    | ({
+        type: "text";
+      } & TextPart)
+    | ({
+        type: "tool_call";
+      } & ToolCallPart)
+    | ({
+        type: "tool_result";
+      } & ToolResultPart)
+  )[];
+  metadata?: ChatMetadata;
 };
 export type RuntimeContext = {
   selected_document_libraries_ids?: string[] | null;
@@ -404,7 +387,7 @@ export type ChatAskInput = {
 };
 export type StreamEvent = {
   type?: "stream";
-  message: ChatMessagePayload;
+  message: ChatMessage;
 };
 export type SessionSchema = {
   id: string;
@@ -414,7 +397,7 @@ export type SessionSchema = {
 };
 export type FinalEvent = {
   type?: "final";
-  messages: ChatMessagePayload[];
+  messages: ChatMessage[];
   session: SessionSchema;
 };
 export type ErrorEvent = {
@@ -444,12 +427,10 @@ export type MetricsResponse = {
 };
 export type EchoEnvelope = {
   kind:
-    | "ChatMessagePayload"
+    | "ChatMessage"
     | "StreamEvent"
     | "FinalEvent"
     | "ErrorEvent"
-    | "ChatMessageMetadata"
-    | "ChatTokenUsage"
     | "SessionSchema"
     | "SessionWithFiles"
     | "MetricsResponse"
@@ -458,13 +439,11 @@ export type EchoEnvelope = {
     | "RuntimeContext";
   /** Schema payload being echoed */
   payload:
-    | ChatMessagePayload
+    | ChatMessage
     | ChatAskInput
     | StreamEvent
     | FinalEvent
     | ErrorEvent
-    | ChatMessageMetadata
-    | ChatTokenUsage
     | SessionSchema
     | SessionWithFiles
     | MetricsResponse
@@ -472,54 +451,47 @@ export type EchoEnvelope = {
     | VectorSearchHit
     | RuntimeContext;
 };
-export type ChatMessagePayload2 = {
-  /** Unique ID for this question/reply exchange */
-  exchange_id: string;
-  user_id: string;
-  type: MessageType;
-  sender: Sender;
-  content: string;
-  blocks?:
-    | (
-        | ({
-            type: "code";
-          } & CodeBlock)
-        | ({
-            type: "image_url";
-          } & ImageUrlBlock)
-        | ({
-            type: "text";
-          } & TextBlock)
-        | ({
-            type: "tool_result";
-          } & ToolResultBlock)
-      )[]
-    | null;
-  timestamp: string;
-  /** Conversation ID */
+export type ChatMessage2 = {
   session_id: string;
-  /** Monotonic message index within the session */
+  exchange_id: string;
   rank: number;
-  metadata?: ChatMessageMetadata;
-  subtype?: MessageSubtype | null;
+  timestamp: string;
+  role: Role;
+  channel: Channel;
+  parts: (
+    | ({
+        type: "code";
+      } & CodePart)
+    | ({
+        type: "image_url";
+      } & ImageUrlPart)
+    | ({
+        type: "text";
+      } & TextPart)
+    | ({
+        type: "tool_call";
+      } & ToolCallPart)
+    | ({
+        type: "tool_result";
+      } & ToolResultPart)
+  )[];
+  metadata?: ChatMetadata;
 };
 export type StreamEvent2 = {
   type?: "stream";
-  message: ChatMessagePayload2;
+  message: ChatMessage2;
 };
 export type FinalEvent2 = {
   type?: "final";
-  messages: ChatMessagePayload2[];
+  messages: ChatMessage2[];
   session: SessionSchema;
 };
 export type EchoEnvelope2 = {
   kind:
-    | "ChatMessagePayload"
+    | "ChatMessage"
     | "StreamEvent"
     | "FinalEvent"
     | "ErrorEvent"
-    | "ChatMessageMetadata"
-    | "ChatTokenUsage"
     | "SessionSchema"
     | "SessionWithFiles"
     | "MetricsResponse"
@@ -528,13 +500,11 @@ export type EchoEnvelope2 = {
     | "RuntimeContext";
   /** Schema payload being echoed */
   payload:
-    | ChatMessagePayload2
+    | ChatMessage2
     | ChatAskInput
     | StreamEvent2
     | FinalEvent2
     | ErrorEvent
-    | ChatMessageMetadata
-    | ChatTokenUsage
     | SessionSchema
     | SessionWithFiles
     | MetricsResponse

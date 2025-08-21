@@ -45,7 +45,6 @@ export default function DocumentLibraryList() {
   const [isCreateDrawerOpen, setIsCreateDrawerOpen] = React.useState(false);
   const [openUploadDrawer, setOpenUploadDrawer] = React.useState(false);
   const [uploadTargetTagId, setUploadTargetTagId] = React.useState<string | null>(null);
-
   // Search + selection (docUid -> tag)
   const [query, setQuery] = React.useState<string>("");
   const [selectedDocs, setSelectedDocs] = React.useState<Record<string, TagWithItemsId>>({});
@@ -95,7 +94,7 @@ export default function DocumentLibraryList() {
   const allExpanded = React.useMemo(() => expanded.length > 0, [expanded]);
 
   /* ---------------- Commands ---------------- */
-  const { toggleRetrievable, removeFromLibrary, preview } = useDocumentCommands({
+  const { toggleRetrievable, removeFromLibrary, preview, download } = useDocumentCommands({
     refetchTags: refetch,
     refetchDocs: () => fetchAllDocuments({ filters: {} }),
   });
@@ -291,6 +290,7 @@ export default function DocumentLibraryList() {
               getChildren={getChildren}
               documents={filteredDocs}
               onPreview={preview}
+              onDownload={download} 
               onToggleRetrievable={toggleRetrievable}
               onRemoveFromLibrary={removeOneWithConfirm}
               selectedDocs={selectedDocs}

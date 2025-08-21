@@ -25,7 +25,13 @@ import { FeedbackDialog } from "../../frugalit/component/FeedbackDialog.tsx";
 import { useToast } from "../ToastProvider.tsx";
 import { extractHttpErrorMessage } from "../../utils/extractHttpErrorMessage.tsx";
 import CustomMarkdownRenderer from "../markdown/CustomMarkdownRenderer.tsx";
-import { AgenticFlow, ChatMessagePayload, usePostFeedbackAgenticV1ChatbotFeedbackPostMutation } from "../../slices/agentic/agenticOpenApi.ts";
+import {
+  AgenticFlow,
+  ChatMessage,
+  usePostFeedbackAgenticV1ChatbotFeedbackPostMutation,
+} from "../../slices/agentic/agenticOpenApi.ts";
+import { toCopyText, toMarkdown, toSpeechText } from "./messageParts.ts";
+import { getExtras, isToolCall, isToolResult } from "./ChatBotUtils.tsx";
 
 export default function Message({
   message,
@@ -35,14 +41,18 @@ export default function Message({
   enableThumbs = false,
   enableAudio = false,
   currentAgenticFlow,
+  pending = false, // NEW
+  showMetaChips = true, // NEW
 }: {
-  message: ChatMessagePayload;
+  message: ChatMessage;
   agenticFlow: AgenticFlow;
   side: string;
   enableCopy?: boolean;
   enableThumbs?: boolean;
   enableAudio?: boolean;
   currentAgenticFlow: AgenticFlow;
+  pending?: boolean; // NEW
+  showMetaChips?: boolean; // NEW
 }) {
   const theme = useTheme();
   const { showError, showInfo } = useToast(); // Use the toast hook
@@ -114,6 +124,9 @@ export default function Message({
       console.log("Copied to clipboard");
     });
   };
+  const extras = getExtras(message);
+  const isCall = isToolCall(message);
+  const isResult = isToolResult(message);
   return (
     <>
       <Grid2 container marginBottom={1}>
@@ -136,54 +149,75 @@ export default function Message({
                     flexDirection: "column",
                     backgroundColor:
                       side === "right" ? theme.palette.background.paper : theme.palette.background.default,
-                    padding: side === "right" ? "0.8em 16px 0 16px" : "0.8em 0 0 0", // consistent top padding, conditional horizontal
+                    padding: side === "right" ? "0.8em 16px 0 16px" : "0.8em 0 0 0",
                     marginTop: side === "right" ? 1 : 0,
                     borderRadius: 3,
                     wordBreak: "break-word",
                   }}
                 >
-                  <CustomMarkdownRenderer
-                    content={message.content as string}
-                    size="medium"
-                    //  enableEmojiSubstitution={side === "left"} // only apply for assistant replies
-                  />
+                  {/* Header: task chips + pending indicator for tool calls */}
+                  {(showMetaChips || isCall || isResult) && (
+                    <Box display="flex" alignItems="center" gap={1} px={side === "right" ? 0 : 1} pb={0.5}>
+                      {showMetaChips && extras?.task && (
+                        <Chip size="small" label={String(extras.task)} variant="outlined" />
+                      )}
+                      {showMetaChips && extras?.node && (
+                        <Chip size="small" label={String(extras.node)} variant="outlined" />
+                      )}
+                      {showMetaChips && extras?.label && (
+                        <Chip size="small" label={String(extras.label)} variant="outlined" />
+                      )}
+                      {isCall && pending && (
+                        <Typography fontSize=".8rem" sx={{ opacity: 0.7 }}>
+                          ⏳ waiting for result…
+                        </Typography>
+                      )}
+                      {isResult && (
+                        <Typography fontSize=".8rem" sx={{ opacity: 0.7 }}>
+                          ✅ tool result
+                        </Typography>
+                      )}
+                    </Box>
+                  )}
+
+                  {/* Main content */}
+                  {/* For tool_call, optionally show a compact args preview above the markdown */}
+                  {isCall && message.parts?.[0]?.type === "tool_call" && (
+                    <Box px={side === "right" ? 0 : 1} pb={0.5} sx={{ opacity: 0.8 }}>
+                      <Typography fontSize=".8rem">
+                        <b>{(message.parts[0] as any).name}</b>
+                        {": "}
+                        <code style={{ whiteSpace: "pre-wrap" }}>
+                          {JSON.stringify((message.parts[0] as any).args ?? {}, null, 0)}
+                        </code>
+                      </Typography>
+                    </Box>
+                  )}
+
+                  <CustomMarkdownRenderer content={toMarkdown(message.parts)} size="medium" />
                 </Box>
               </Grid2>
+
               {side === "left" ? (
                 <Grid2 size={12} display="flex" alignItems="center" gap={1} flexWrap="wrap">
                   {enableCopy && (
-                    <IconButton
-                      aria-label="delete"
-                      size="small"
-                      onClick={() => copyToClipboard(message.content as string)}
-                    >
+                    <IconButton size="small" onClick={() => copyToClipboard(toCopyText(message.parts))}>
                       <ContentCopyIcon fontSize="medium" color="inherit" />
                     </IconButton>
                   )}
+
                   {enableThumbs && (
-                    <>
-                      <IconButton
-                        aria-label="thumb up"
-                        size="small"
-                        onClick={() => {
-                          setFeedbackOpen(true);
-                        }}
-                      >
-                        <RateReviewIcon fontSize="medium" color="inherit" />
-                      </IconButton>
-                    </>
+                    <IconButton size="small" onClick={() => setFeedbackOpen(true)}>
+                      <RateReviewIcon fontSize="medium" color="inherit" />
+                    </IconButton>
                   )}
+
                   {enableAudio && (
                     <IconButton
-                      aria-label="up"
                       size="small"
-                      onClick={() => {
-                        if (audioToSpeech) {
-                          handleStopSpeaking();
-                        } else {
-                          handleStartSpeaking(message.content as string);
-                        }
-                      }}
+                      onClick={() =>
+                        audioToSpeech ? handleStopSpeaking() : handleStartSpeaking(toSpeechText(message.parts))
+                      }
                     >
                       {audioToSpeech ? (
                         <ClearIcon fontSize="medium" color="inherit" />
@@ -192,16 +226,19 @@ export default function Message({
                       )}
                     </IconButton>
                   )}
-                  {message.metadata && (
+
+                  {message.metadata?.token_usage && (
                     <Tooltip
-                      title={`This question used ${message.metadata.token_usage?.input_tokens} tokens and the response used ${message.metadata.token_usage?.output_tokens} tokens`}
+                      title={`In: ${message.metadata.token_usage?.input_tokens ?? 0} · Out: ${message.metadata.token_usage?.output_tokens ?? 0}`}
                       placement="top"
                     >
                       <Typography color={theme.palette.text.secondary} fontSize=".7rem" sx={{ wordBreak: "normal" }}>
-                        {message.metadata.token_usage?.output_tokens} tokens
+                        {message.metadata.token_usage?.output_tokens ?? 0} tokens
                       </Typography>
                     </Tooltip>
                   )}
+
+                  {/* Only show disclaimer on assistant-side */}
                   <Chip
                     label="AI content may be incorrect, please double-check responses"
                     size="small"
@@ -215,7 +252,7 @@ export default function Message({
                   />
                 </Grid2>
               ) : (
-                <Grid2 height="30px"></Grid2>
+                <Grid2 height="30px" />
               )}
             </>
           )}

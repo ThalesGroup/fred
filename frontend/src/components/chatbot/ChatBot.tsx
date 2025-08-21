@@ -4,7 +4,7 @@
 // ...
 
 import { Box, Grid2, Tooltip, Typography, useTheme } from "@mui/material";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useLayoutEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { v4 as uuidv4 } from "uuid";
 import { getConfig } from "../../common/config.tsx";
@@ -14,7 +14,7 @@ import { KeyCloakService } from "../../security/KeycloakService.ts";
 import {
   AgenticFlow,
   ChatAskInput,
-  ChatMessagePayload,
+  ChatMessage,
   FinalEvent,
   RuntimeContext,
   SessionSchema,
@@ -65,16 +65,26 @@ const ChatBot = ({
   const [fetchHistory] =
     useLazyGetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetQuery();
 
-  const [messages, setMessages] = useState<ChatMessagePayload[]>([]);
-  const messagesRef = useRef<ChatMessagePayload[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const messagesRef = useRef<ChatMessage[]>([]);
 
-  // State mutators that keep the ref in sync (prevents stale closures)
-  const setAllMessages = (msgs: ChatMessagePayload[]) => {
+  // keep state + ref in sync
+  const setAllMessages = (msgs: ChatMessage[]) => {
     messagesRef.current = msgs;
     setMessages(msgs);
   };
 
   const [waitResponse, setWaitResponse] = useState<boolean>(false);
+
+  // === SINGLE scroll container ref (attach to the ONLY overflow element) ===
+  const scrollerRef = useRef<HTMLDivElement>(null);
+
+  // === Hard guarantee: snap to absolute bottom after render ===
+  useLayoutEffect(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }, [messages, currentChatBotSession?.id]);
 
   const setupWebSocket = async (): Promise<WebSocket | null> => {
     const current = webSocketRef.current;
@@ -106,7 +116,7 @@ const ChatBot = ({
           switch (response.type) {
             case "stream": {
               const streamed = response as StreamEvent;
-              const msg = streamed.message as ChatMessagePayload;
+              const msg = streamed.message as ChatMessage;
 
               // Ignore streams for another session than the one being viewed
               if (currentChatBotSession?.id && msg.session_id !== currentChatBotSession.id) {
@@ -117,30 +127,25 @@ const ChatBot = ({
               // Upsert streamed message and keep order stable
               messagesRef.current = upsertOne(messagesRef.current, msg);
               setMessages(messagesRef.current);
-
-              console.log(
-                `STREAM ${msg.session_id}-${msg.exchange_id}-${msg.rank} : ${msg.content?.slice(0, 80)}...`,
-              );
+              // ⛔ no scrolling logic here — the layout effect handles it post-render
               break;
             }
 
             case "final": {
               const finalEvent = response as FinalEvent;
 
-              // Debug summary (optional)
+              // Optional debug summary
               const streamedKeys = new Set(messagesRef.current.map((m) => keyOf(m)));
               const finalKeys = new Set(finalEvent.messages.map((m) => keyOf(m)));
               const missing = [...finalKeys].filter((k) => !streamedKeys.has(k));
               const unexpected = [...streamedKeys].filter((k) => !finalKeys.has(k));
-              console.log("[FINAL EVENT SUMMARY]");
-              console.log("→ in streamed but not final:", unexpected);
-              console.log("→ in final but not streamed:", missing);
+              console.log("[FINAL EVENT SUMMARY]", { missing, unexpected });
 
               // Merge authoritative finals (includes citations/metadata)
               messagesRef.current = mergeAuthoritative(messagesRef.current, finalEvent.messages);
               setMessages(messagesRef.current);
 
-              // If backend created/switched session, accept it
+              // Accept session update if backend created/switched it
               if (finalEvent.session.id !== currentChatBotSession?.id) {
                 onUpdateOrAddSession(finalEvent.session);
               }
@@ -213,33 +218,22 @@ const ChatBot = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // mount/unmount
 
-  // Fetch messages from the server when the session changes
+  // Fetch messages when the session changes
   useEffect(() => {
     const id = currentChatBotSession?.id;
     if (!id) return;
 
-    // Clear view while fetching the authoritative history
-    setAllMessages([]);
+    setAllMessages([]); // clear view while fetching
 
     fetchHistory({ sessionId: id })
       .unwrap()
       .then((serverMessages) => {
         console.group(`[📥 ChatBot] Loaded messages for session: ${id}`);
         console.log(`Total: ${serverMessages.length}`);
-        for (const msg of serverMessages) {
-          console.log({
-            id: msg.exchange_id,
-            type: msg.type,
-            subtype: msg.subtype,
-            sender: msg.sender,
-            task: msg.metadata?.fred?.task || null,
-            content: msg.content?.slice(0, 120),
-          });
-        }
+        for (const msg of serverMessages) console.log(msg);
         console.groupEnd();
 
-        // Normalize order using the same sorter as stream/final
-        setAllMessages(sortMessages(serverMessages));
+        setAllMessages(sortMessages(serverMessages)); // layout effect will scroll
       })
       .catch((e) => {
         console.error("[❌ ChatBot] Failed to load messages:", e);
@@ -281,7 +275,7 @@ const ChatBot = ({
             body: formData,
           });
 
-        if (!response.ok) {
+          if (!response.ok) {
             showError({
               summary: "File Upload Error",
               detail: `Failed to upload ${file.name}: ${response.statusText}`,
@@ -333,8 +327,6 @@ const ChatBot = ({
       runtime_context: runtimeContext,
     };
 
-    // Add only the client-side correlation id for this exchange.
-    // Remove the cast once your OpenAPI types include client_exchange_id.
     const event = {
       ...eventBase,
       client_exchange_id: uuidv4(),
@@ -376,7 +368,7 @@ const ChatBot = ({
       : 0;
 
   return (
-    <Box width={"100%"} height="100%" display="flex" flexDirection="column" alignItems="center">
+    <Box width={"100%"} height="100%" display="flex" flexDirection="column" alignItems="center" sx={{ minHeight: 0 }} >
       <Box
         width="80%"
         maxWidth="768px"
@@ -385,6 +377,7 @@ const ChatBot = ({
         flexDirection="column"
         alignItems="center"
         paddingBottom={1}
+        sx={{ minHeight: 0, overflow: "hidden" }} 
       >
         {/* Conversation start: new conversation without message */}
         {isCreatingNewConversation && messages.length === 0 && (
@@ -424,13 +417,14 @@ const ChatBot = ({
           <>
             {/* Chatbot messages area */}
             <Grid2
+              ref={scrollerRef}
               display="flex"
               flexDirection="column"
               flex="1"
               width="100%"
               p={2}
               sx={{
-                overflowY: "scroll",
+                overflowY: "auto",
                 overflowX: "hidden",
                 scrollbarWidth: "none",
                 wordBreak: "break-word",
