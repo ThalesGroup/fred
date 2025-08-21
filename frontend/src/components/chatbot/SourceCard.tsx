@@ -5,7 +5,7 @@ import ArticleOutlinedIcon from "@mui/icons-material/ArticleOutlined";
 import ShieldIcon from "@mui/icons-material/Shield";
 import { Box, Chip, Tooltip, Typography } from "@mui/material";
 import { VectorSearchHit } from "../../slices/agentic/agenticOpenApi.ts";
-import { useDocumentViewer } from "../../common/useDocumentViewer.tsx";
+import { newUseDocumentViewer } from "../../common/newUseDocumentViewer.tsx";
 
 interface SourceCardProps {
   /** Document UID (group key) */
@@ -15,7 +15,7 @@ interface SourceCardProps {
 }
 
 export const SourceCard = ({ documentId, hits }: SourceCardProps) => {
-  const { openDocument } = useDocumentViewer();
+  const { openDocument } = newUseDocumentViewer();
 
   if (!hits || hits.length === 0) return null;
 

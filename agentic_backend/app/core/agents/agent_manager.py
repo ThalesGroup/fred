@@ -22,11 +22,12 @@ from typing import Callable, Dict, List, Type
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from tenacity import RetryError, retry, stop_after_delay, wait_fixed
 
+from app.agents.leader.leader import Leader
 from app.application_context import get_configuration
 from app.common.error import UnsupportedTransportError
 from app.common.structures import AgentSettings, Configuration
 from app.core.agents.agentic_flow import AgenticFlow
-from app.core.agents.flow import AgentFlow, Flow
+from app.core.agents.flow import AgentFlow
 from app.core.agents.runtime_context import RuntimeContext
 from app.core.agents.store.base_agent_store import BaseAgentStore
 
@@ -52,8 +53,8 @@ class AgentManager:
         self.config = get_configuration()
         self.store = store
 
-        self.agent_constructors: Dict[str, Callable[[], Flow]] = {}
-        self.agent_classes: Dict[str, Type[Flow]] = {}
+        self.agent_constructors: Dict[str, Callable[[], AgentFlow]] = {}
+        self.agent_classes: Dict[str, Type[AgentFlow]] = {}
         self.agent_settings: Dict[str, AgentSettings] = {}
         self.failed_agents: Dict[str, AgentSettings] = {}
         self._retry_task: asyncio.Task | None = None
@@ -91,7 +92,7 @@ class AgentManager:
             )
             return False
 
-        if not issubclass(cls, (Flow, AgentFlow)):
+        if not issubclass(cls, (AgentFlow)):
             logger.error(
                 f"Class '{agent_cfg.class_path}' is not a supported Flow or AgentFlow."
             )
@@ -128,7 +129,7 @@ class AgentManager:
             )
             return
 
-        if not issubclass(cls, (Flow, AgentFlow)):
+        if not issubclass(cls, (AgentFlow)):
             logger.error(
                 f"Class '{agent_cfg.class_path}' is not a supported Flow or AgentFlow."
             )
@@ -165,7 +166,7 @@ class AgentManager:
                 module = importlib.import_module(module_name)
                 cls = getattr(module, class_name)
 
-                if not issubclass(cls, (Flow, AgentFlow)):
+                if not issubclass(cls, (AgentFlow)):
                     logger.error(f"Class '{cls}' is not a supported Flow or AgentFlow.")
                     continue
 
@@ -178,14 +179,9 @@ class AgentManager:
                     agent_settings.name, instance, agent_settings
                 )
 
-                if isinstance(instance, AgentFlow):
-                    logger.info(
-                        f"✅ Loaded expert agent '{agent_settings.name}' ({agent_settings.class_path})"
-                    )
-                elif isinstance(instance, Flow):
-                    logger.info(
-                        f"✅ Loaded leader agent '{agent_settings.name}' ({agent_settings.class_path})"
-                    )
+                logger.info(
+                    f"✅ Loaded expert agent '{agent_settings.name}' ({agent_settings.class_path})"
+                )
 
             except Exception as e:
                 logger.exception(
@@ -203,10 +199,7 @@ class AgentManager:
                 continue
 
             leader_instance = self.get_agent_instance(leader_name)
-            if not hasattr(leader_instance, "add_expert"):
-                logger.warning(
-                    f"⚠️ Leader '{leader_name}' does not support expert injection (missing 'add_expert')."
-                )
+            if not isinstance(leader_instance, Leader):
                 continue
 
             for expert_name, expert_settings in self.agent_settings.items():
@@ -224,7 +217,7 @@ class AgentManager:
                 )
 
     def _register_loaded_agent(
-        self, name: str, instance: Flow, settings: AgentSettings
+        self, name: str, instance: AgentFlow, settings: AgentSettings
     ):
         """
         Internal helper: registers an already-initialized agent (typically at startup).
@@ -234,7 +227,7 @@ class AgentManager:
         self.agent_classes[name] = type(instance)
         self.agent_settings[name] = settings
 
-    def register_dynamic_agent(self, instance: Flow, settings: AgentSettings):
+    def register_dynamic_agent(self, instance: AgentFlow, settings: AgentSettings):
         """
         Public method to register a dynamically created agent (e.g., via POST /agents/create).
         This makes the agent immediately available in the running app (UI, routing, etc).
@@ -281,7 +274,7 @@ class AgentManager:
 
     def get_agent_instance(
         self, name: str, runtime_context: RuntimeContext | None = None
-    ) -> Flow:
+    ) -> AgentFlow:
         constructor = self.agent_constructors.get(name)
         if not constructor:
             raise ValueError(f"No agent constructor for '{name}'")
@@ -299,51 +292,11 @@ class AgentManager:
             raise ValueError(f"No agent settings for '{name}'")
         return settings
 
-    def get_agent_classes(self) -> Dict[str, Type[Flow]]:
+    def get_agent_classes(self) -> Dict[str, Type[AgentFlow]]:
         return self.agent_classes
 
     def get_enabled_agent_names(self) -> List[str]:
         return list(self.agent_constructors.keys())
-
-    def old_get_mcp_client(self, agent_name: str) -> MultiServerMCPClient:
-        """
-        Initializes and connects an MCP client based on the given agent's server list.
-        """
-        agent_settings = self.get_agent_settings(agent_name)
-
-        import asyncio
-
-        import nest_asyncio
-
-        nest_asyncio.apply()
-
-        client = MultiServerMCPClient()
-        loop = asyncio.get_event_loop()
-
-        async def connect_all():
-            exceptions = []
-            for server in agent_settings.mcp_servers:
-                if server.transport not in SUPPORTED_TRANSPORTS:
-                    raise UnsupportedTransportError(
-                        f"Unsupported transport: {server.transport}"
-                    )
-                try:
-                    await client.connect_to_server(
-                        server_name=server.name,
-                        url=server.url,
-                        transport=server.transport,
-                        command=server.command,
-                        args=server.args,
-                        env=server.env,
-                        sse_read_timeout=server.sse_read_timeout,
-                    )
-                except Exception as eg:
-                    exceptions.extend(getattr(eg, "exceptions", [eg]))
-            if exceptions:
-                raise ExceptionGroup("Some MCP connections failed", exceptions)
-
-        loop.run_until_complete(connect_all())
-        return client
 
     def get_mcp_client(self, agent_name: str) -> MultiServerMCPClient:
         agent_settings = self.get_agent_settings(agent_name)

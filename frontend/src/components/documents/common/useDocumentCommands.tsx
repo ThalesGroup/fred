@@ -23,6 +23,9 @@ import {
 } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { useToast } from "../../ToastProvider";
 import { useTranslation } from "react-i18next";
+import { newUseDocumentViewer } from "../../../common/newUseDocumentViewer";
+import { downloadFile } from "../../../utils/downloadUtils";
+import { useLazyDownloadRawContentBlobQuery } from "../../../slices/knowledgeFlow/knowledgeFlowApi.blob";
 
 type DocumentRefreshers = {
   refetchTags?: () => Promise<any>;
@@ -35,9 +38,11 @@ export function useDocumentCommands({ refetchTags, refetchDocs }: DocumentRefres
   const [] = useLazyGetTagKnowledgeFlowV1TagsTagIdGetQuery();
 
   const [updateTag] = useUpdateTagKnowledgeFlowV1TagsTagIdPutMutation();
-  const [updateRetrievable] = useUpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutMutation();
+  const [updateRetrievable] =
+    useUpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutMutation();
   const [fetchAllDocuments] = useSearchDocumentMetadataKnowledgeFlowV1DocumentsMetadataSearchPostMutation();
-
+  const { openDocument } = newUseDocumentViewer();
+  const [triggerDownloadBlob] = useLazyDownloadRawContentBlobQuery();
   const refresh = useCallback(async () => {
     await Promise.all([refetchTags?.(), refetchDocs ? refetchDocs() : fetchAllDocuments({ filters: {} })]);
   }, [refetchTags, refetchDocs, fetchAllDocuments]);
@@ -93,12 +98,42 @@ export function useDocumentCommands({ refetchTags, refetchDocs }: DocumentRefres
     },
     [updateTag, refresh, showSuccess, showError, t],
   );
-  // Keep preview as a “protocol”: the hook exposes an intent; the app decides how to show it.
-  const preview = useCallback((doc: DocumentMetadata) => {
-    // no-op default; consumers can replace with a drawer/modal or navigate
-    console.debug("preview(doc)", doc);
-  }, []);
+  const preview = useCallback(
+    (doc: DocumentMetadata) => {
+      const name = doc.identity.title || doc.identity.document_name || doc.identity.document_uid;
 
-  return { toggleRetrievable, removeFromLibrary, preview, refresh };
+      openDocument({
+        document_uid: doc.identity.document_uid,
+        file_name: name,
+      });
+    },
+    [openDocument],
+  );
+  const download = useCallback(async (doc: DocumentMetadata) => {
+  try {
+    console.log("Downloading document:", doc.identity.document_name);
+    // IMPORTANT: unwrap to get the Blob
+    const blob = await triggerDownloadBlob({
+      documentUid: doc.identity.document_uid,
+    }).unwrap();
+
+    console.log(
+      "Blob received?",
+      blob instanceof Blob,
+      blob.type,
+      blob.size
+    );
+
+    downloadFile(
+      blob,
+      doc.identity.document_name || doc.identity.document_uid
+    );
+  } catch (err: any) {
+    showError({
+      summary: "Download failed",
+      detail: `Could not download document: ${err?.data?.detail || err.message}`,
+    });
+  }
+}, [triggerDownloadBlob, showError]);
+  return { toggleRetrievable, removeFromLibrary, preview, refresh, download };
 }
-
