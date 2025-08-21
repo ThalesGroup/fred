@@ -1,4 +1,4 @@
-import React, { memo, useMemo, useLayoutEffect, useRef, useEffect } from "react";
+import React, { memo, useMemo, useRef, useEffect } from "react";
 import Message from "./MessageCard";
 import Sources from "./Sources";
 import ReasoningTraceAccordion from "./TraceAccordion";

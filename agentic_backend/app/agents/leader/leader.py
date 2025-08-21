@@ -20,7 +20,9 @@ from app.agents.leader.structures.decision import ExecuteDecision, PlanDecision
 logger = logging.getLogger(__name__)
 
 
-def mk_thought(*, label: str, node: str, task: str, content: str, extras: dict | None = None) -> AIMessage:
+def mk_thought(
+    *, label: str, node: str, task: str, content: str, extras: dict | None = None
+) -> AIMessage:
     """
     Emit an assistant-side 'thought' for the UI.
     UI renders response_metadata['thought'] under the Thoughts accordion.
@@ -39,6 +41,7 @@ def _ensure_metadata_dict(msg: BaseMessage) -> dict:
     msg.response_metadata = md
     return md
 
+
 def _normalize_choice(raw: str, options: list[str]) -> str | None:
     if not raw:
         return None
@@ -53,6 +56,7 @@ def _normalize_choice(raw: str, options: list[str]) -> str | None:
     # fuzzy (handles minor typos)
     match = get_close_matches(raw, options, n=1, cutoff=0.6)
     return match[0] if match else None
+
 
 class Leader(AgentFlow):
     """
@@ -94,7 +98,7 @@ class Leader(AgentFlow):
             description=self.description,
             icon=self.icon,
             graph=self._graph,
-            base_prompt="",                # add a base prompt later if you want
+            base_prompt="",  # add a base prompt later if you want
             categories=["orchestrator"],
             tag=self.tag,
         )
@@ -103,11 +107,15 @@ class Leader(AgentFlow):
     # Expert management
     # -------------------------
     def reset_experts(self) -> None:
-        logger.info("Resetting Fred experts. Previous experts: %s", list(self.experts.keys()))
+        logger.info(
+            "Resetting Fred experts. Previous experts: %s", list(self.experts.keys())
+        )
         self.experts = {}
         self.compiled_expert_graphs = {}
 
-    def add_expert(self, name: str, instance: AgentFlow, compiled_graph: CompiledStateGraph) -> None:
+    def add_expert(
+        self, name: str, instance: AgentFlow, compiled_graph: CompiledStateGraph
+    ) -> None:
         """Register an expert and its compiled graph."""
         self.experts[name] = instance
         self.compiled_expert_graphs[name] = compiled_graph
@@ -140,7 +148,9 @@ class Leader(AgentFlow):
         progress = state.get("progress") or []
         max_steps = self.max_steps if self.max_steps is not None else 0
         if max_steps and len(progress) >= max_steps:
-            logger.warning("Reached max_steps=%s, forcing final answer.", self.max_steps)
+            logger.warning(
+                "Reached max_steps=%s, forcing final answer.", self.max_steps
+            )
             return "validate"
         if len(progress) == len(state["plan"].steps):
             return "validate"
@@ -148,7 +158,10 @@ class Leader(AgentFlow):
 
     async def should_replan(self, state: State) -> Literal["respond", "planning"]:
         plan_decision = state.get("plan_decision")
-        if plan_decision is not None and getattr(plan_decision, "action", None) == "planning":
+        if (
+            plan_decision is not None
+            and getattr(plan_decision, "action", None) == "planning"
+        ):
             return "planning"
         return "respond"
 
@@ -182,17 +195,25 @@ class Leader(AgentFlow):
         response = await self.model.ainvoke([HumanMessage(content=prompt)])
         response = AIMessage(  # ensure assistant role, downstream sets channel="final"
             content=response.content,
-            response_metadata={"extras": {"node": "respond", "task": "deliver final answer"}},
+            response_metadata={
+                "extras": {"node": "respond", "task": "deliver final answer"}
+            },
         )
 
-        return {"messages": [progress_msg, response], "traces": ["Responded to the user."]}
+        return {
+            "messages": [progress_msg, response],
+            "traces": ["Responded to the user."],
+        }
 
     async def plan(self, state: State):
         if not self.model:
             raise ValueError("Model is not initialized. Call async_init first.")
 
         # Find last human message as new objective
-        new_objective = next((m for m in reversed(state["messages"]) if isinstance(m, HumanMessage)), None)
+        new_objective = next(
+            (m for m in reversed(state["messages"]) if isinstance(m, HumanMessage)),
+            None,
+        )
         if new_objective is None:
             raise ValueError("No human message found for objective.")
 
@@ -203,7 +224,10 @@ class Leader(AgentFlow):
             state["initial_objective"] = new_objective
 
         # Reset when the objective changes
-        if state["initial_objective"] is None or state["initial_objective"].content != new_objective.content:
+        if (
+            state["initial_objective"] is None
+            or state["initial_objective"].content != new_objective.content
+        ):
             logger.info("New initial objective detected. Resetting plan and progress.")
             state["progress"] = []
             state["plan"] = Plan(steps=[])
@@ -230,7 +254,9 @@ class Leader(AgentFlow):
             )
 
             if self.experts:
-                experts_list = "\n".join([str(expert) for expert in self.experts.values()])
+                experts_list = "\n".join(
+                    [str(expert) for expert in self.experts.values()]
+                )
                 prompt = (
                     f"{base_prompt}\nHere is a list of experts with the new plan:\n{experts_list}\n\n"
                     "Using their expertise, develop clear and simple additional steps. "
@@ -242,7 +268,11 @@ class Leader(AgentFlow):
 
             messages = step_conclusions + [HumanMessage(content=prompt)]
             re_plan_result = await structured_model.ainvoke(messages)
-            re_plan: Plan = re_plan_result if isinstance(re_plan_result, Plan) else Plan.model_validate(re_plan_result)
+            re_plan: Plan = (
+                re_plan_result
+                if isinstance(re_plan_result, Plan)
+                else Plan.model_validate(re_plan_result)
+            )
 
             thought = mk_thought(
                 label="replan",
@@ -270,7 +300,9 @@ class Leader(AgentFlow):
             )
 
             if self.experts:
-                experts_list = "\n".join([str(expert) for expert in self.experts.values()])
+                experts_list = "\n".join(
+                    [str(expert) for expert in self.experts.values()]
+                )
                 prompt = (
                     "Here is a list of experts that can help you with your question:\n"
                     f"{experts_list}\n\n"
@@ -284,7 +316,11 @@ class Leader(AgentFlow):
 
             messages = state["messages"] + [SystemMessage(content=prompt)]
             new_plan_result = await structured_model.ainvoke(messages)
-            new_plan: Plan = new_plan_result if isinstance(new_plan_result, Plan) else Plan.model_validate(new_plan_result)
+            new_plan: Plan = (
+                new_plan_result
+                if isinstance(new_plan_result, Plan)
+                else Plan.model_validate(new_plan_result)
+            )
 
             thought = mk_thought(
                 label="plan",
@@ -303,7 +339,16 @@ class Leader(AgentFlow):
 
     async def supervise(self, state: State):
         # Light progress marker for the UI
-        return {"messages": [mk_thought(label="supervise", node="supervise", task="orchestration", content="Supervising…")]}
+        return {
+            "messages": [
+                mk_thought(
+                    label="supervise",
+                    node="supervise",
+                    task="orchestration",
+                    content="Supervising…",
+                )
+            ]
+        }
 
     async def execute(self, state: State):
         if not self.model:
@@ -340,8 +385,12 @@ class Leader(AgentFlow):
         raw = await structured_model.ainvoke([HumanMessage(content=expert_prompt)])
 
         # normalize + validate
-        selected_raw = getattr(raw, "expert", None) or getattr(raw, "get", lambda *_: None)("expert")
-        selected_expert = _normalize_choice(selected_raw or "", list(self.experts.keys()))
+        selected_raw = getattr(raw, "expert", None) or getattr(
+            raw, "get", lambda *_: None
+        )("expert")
+        selected_expert = _normalize_choice(
+            selected_raw or "", list(self.experts.keys())
+        )
 
         decided = mk_thought(
             label="expert_selected",
@@ -351,10 +400,14 @@ class Leader(AgentFlow):
             extras={"expert": selected_expert, "step": task_number, "task": str(task)},
         )
 
-        logger.info("Fred selected expert: %s for step %s", selected_expert, task_number)
+        logger.info(
+            "Fred selected expert: %s for step %s", selected_expert, task_number
+        )
 
         if selected_expert not in self.experts:
-            logger.warning("Expert %s is no longer available. Replanning...", selected_expert)
+            logger.warning(
+                "Expert %s is no longer available. Replanning...", selected_expert
+            )
             # mark the failure as a thought for observability, then replan
             fail = mk_thought(
                 label="expert_missing",
@@ -369,7 +422,10 @@ class Leader(AgentFlow):
 
         compiled_expert_graph = self.compiled_expert_graphs.get(selected_expert)
         if not compiled_expert_graph:
-            logger.error("Expert %s missing compiled graph; triggering replanning.", selected_expert)
+            logger.error(
+                "Expert %s missing compiled graph; triggering replanning.",
+                selected_expert,
+            )
             fail = mk_thought(
                 label="expert_graph_missing",
                 node="execute",
@@ -415,8 +471,11 @@ class Leader(AgentFlow):
 
         return {
             "messages": additional_messages,
-            "traces": [f"Step {task_number} ({task}) assigned to {selected_expert} and executed"],
-            "progress": (state.get("progress") or []) + [(task, response.get("messages", []))],
+            "traces": [
+                f"Step {task_number} ({task}) assigned to {selected_expert} and executed"
+            ],
+            "progress": (state.get("progress") or [])
+            + [(task, response.get("messages", []))],
         }
 
     async def validate(self, state: State):
@@ -435,7 +494,11 @@ class Leader(AgentFlow):
                 task="gate",
                 content=f"Reached max_steps={self.max_steps}. Forcing final response.",
             )
-            return {"messages": [note], "plan_decision": PlanDecision(action="respond"), "traces": [f"Forced respond due to max_steps={self.max_steps}"]}
+            return {
+                "messages": [note],
+                "plan_decision": PlanDecision(action="respond"),
+                "traces": [f"Forced respond due to max_steps={self.max_steps}"],
+            }
 
         objective = state["messages"][0].content
         current_plan = state["plan"]
@@ -451,7 +514,12 @@ class Leader(AgentFlow):
             "If you are not absolutely sure more planning is needed, respond with 'respond'."
         )
 
-        progress_msg = mk_thought(label="validate", node="validate", task="gate", content="Validating whether to respond or replan…")
+        progress_msg = mk_thought(
+            label="validate",
+            node="validate",
+            task="gate",
+            content="Validating whether to respond or replan…",
+        )
 
         step_conclusions = [sr[-1] for _, sr in progress]
         messages = step_conclusions + [HumanMessage(content=prompt)]
@@ -459,7 +527,9 @@ class Leader(AgentFlow):
         structured_model = self.model.with_structured_output(PlanDecision)
         plan_decision_result = await structured_model.ainvoke(messages)
         plan_decision: PlanDecision = (
-            plan_decision_result if isinstance(plan_decision_result, PlanDecision) else PlanDecision.model_validate(plan_decision_result)
+            plan_decision_result
+            if isinstance(plan_decision_result, PlanDecision)
+            else PlanDecision.model_validate(plan_decision_result)
         )
 
         decided_msg = mk_thought(
@@ -469,4 +539,8 @@ class Leader(AgentFlow):
             content=f"Decision: {plan_decision.action}",
         )
 
-        return {"messages": [progress_msg, decided_msg], "plan_decision": plan_decision, "traces": [f"Evaluation done, status is {plan_decision}."]}
+        return {
+            "messages": [progress_msg, decided_msg],
+            "plan_decision": plan_decision,
+            "traces": [f"Evaluation done, status is {plan_decision}."],
+        }

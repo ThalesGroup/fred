@@ -14,7 +14,6 @@
 
 import { createApi } from "@reduxjs/toolkit/query/react";
 import { createDynamicBaseQuery } from "../common/dynamicBaseQuery.tsx";
-import { Metadata } from "../components/documents/operations/DocumentOperationsTable.tsx";
 
 export const DOCUMENT_PROCESSING_STAGES = ["raw", "preview", "vector", "sql", "mcp"] as const;
 export interface KnowledgeDocument {
@@ -82,12 +81,6 @@ export const documentApiSlice = createApi({
 export const { reducer: documentApiReducer, middleware: documenApiMiddleware } = documentApiSlice;
 const extendedDocumentApi = documentApiSlice.injectEndpoints({
   endpoints: (builder) => ({
-    getDocumentMarkdownPreview: builder.mutation<MarkdownDocumentPreview, { document_uid: string }>({
-      query: ({ document_uid }) => ({
-        url: `/knowledge-flow/v1/markdown/${document_uid}`,
-        method: "GET",
-      }),
-    }),
     getDocumentSources: builder.query<DocumentSourceInfo[], void>({
       query: () => ({
         url: `/knowledge-flow/v1/documents/sources`,
@@ -99,13 +92,6 @@ const extendedDocumentApi = documentApiSlice.injectEndpoints({
         url: `/knowledge-flow/v1/catalog/files`,
         method: "GET",
         params: { source_tag, offset, limit },
-      }),
-    }),
-    getDocumentRawContent: builder.query<Blob, { document_uid: string }>({
-      query: ({ document_uid }) => ({
-        url: `/knowledge-flow/v1/raw_content/${document_uid}`,
-        method: "GET",
-        responseHandler: async (response) => await response.blob(),
       }),
     }),
     processDocuments: builder.mutation<ProcessDocumentsResponse, ProcessDocumentsRequest>({
@@ -122,32 +108,6 @@ const extendedDocumentApi = documentApiSlice.injectEndpoints({
         body,
       }),
     }),
-    getDocumentMetadata: builder.mutation<Metadata, { document_uid: string }>({
-      query: ({ document_uid }) => ({
-        url: `/knowledge-flow/v1/document/${document_uid}`,
-        method: "GET",
-      }),
-    }),
-    browseDocuments: builder.mutation<
-      { documents: KnowledgeDocument[]; total: number },
-      {
-        source_tag: string;
-        filters?: Record<string, any>;
-        offset?: number;
-        limit?: number;
-      }
-    >({
-      query: ({ source_tag, filters = {}, offset = 0, limit = 100 }) => ({
-        url: "/knowledge-flow/v1/documents/browse",
-        method: "POST",
-        body: {
-          source_tag,
-          filters,
-          offset,
-          limit,
-        },
-      }),
-    }),
     rescanCatalogSource: builder.mutation<void, string>({
       query: (sourceTag) => ({
         url: `/knowledge-flow/v1/pull/catalog/rescan/${sourceTag}`,
@@ -155,32 +115,11 @@ const extendedDocumentApi = documentApiSlice.injectEndpoints({
         headers: { accept: "application/json" },
       }),
     }),
-    getDocumentsWithFilter: builder.mutation<{ documents: KnowledgeDocument[] }, Record<string, any>>({
-      query: (filters) => ({
-        url: `/knowledge-flow/v1/documents/metadata`, // Single endpoint
-        method: "POST",
-        body: filters ?? {}, // If filters are undefined, send empty object
-      }),
-    }),
-    updateDocumentRetrievable: builder.mutation<void, { document_uid: string; retrievable: boolean }>({
-      query: ({ document_uid, retrievable }) => ({
-        url: `/knowledge-flow/v1/document/${document_uid}`,
-        method: "PUT",
-        body: { retrievable },
-      }),
-    })
   }),
 });
 
 export const {
-  useGetDocumentMetadataMutation, // unused
-  useUpdateDocumentRetrievableMutation,
-  useGetDocumentsWithFilterMutation,
-  useGetDocumentMarkdownPreviewMutation,
-  useLazyGetDocumentRawContentQuery,
   useGetDocumentSourcesQuery,
-  useGetCatalogFilesQuery,
-  useBrowseDocumentsMutation,
   useProcessDocumentsMutation,
   useScheduleDocumentsMutation,
   useRescanCatalogSourceMutation,

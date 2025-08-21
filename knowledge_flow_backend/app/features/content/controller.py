@@ -157,29 +157,13 @@ class ContentController:
             "/raw_content/{document_uid}",
             tags=["Content"],
             summary="Download the original raw document content",
-            description="""
-        Streams the original uploaded or pulled document content associated with the given UID.
-
-        This endpoint serves the **unaltered file**, exactly as it was uploaded by a user (push mode) or pulled and saved from an external source (pull mode).
-
-        ### When this works:
-        - The document ingestion successfully reached the "raw content saving" step
-        - The document UID is valid and stored in the backend
-
-        ### Notes:
-        - This is a binary download stream
-        - Can be used to reprocess, inspect, or archive the source file
-        """,
+            responses={
+                200: {
+                    "description": "Binary file stream",
+                    "content": {"application/octet-stream": {"schema": {"type": "string", "format": "binary"}}},
+                }
+            },
         )
         async def download_document(document_uid: str):
-            try:
-                stream, file_name, content_type = await self.service.get_original_content(document_uid)
-
-                return StreamingResponse(content=stream, media_type=content_type, headers={"Content-Disposition": f'attachment; filename="{file_name}"'})
-            except ValueError as e:
-                raise HTTPException(status_code=400, detail=str(e))
-            except FileNotFoundError as e:
-                raise HTTPException(status_code=404, detail=str(e))
-            except Exception:
-                logger.exception("Unexpected error in download_document")
-                raise HTTPException(status_code=500, detail="Internal server error")
+            stream, file_name, content_type = await self.service.get_original_content(document_uid)
+            return StreamingResponse(content=stream, media_type=content_type, headers={"Content-Disposition": f'attachment; filename="{file_name}"'})

@@ -98,8 +98,13 @@ MAPPING = {
     },
 }
 
-def _merge_unique_by_key(existing: List[ChatMessage], new: List[ChatMessage]) -> List[ChatMessage]:
-    bucket: dict[tuple[str, int], ChatMessage] = {(m.exchange_id, m.rank): m for m in existing}
+
+def _merge_unique_by_key(
+    existing: List[ChatMessage], new: List[ChatMessage]
+) -> List[ChatMessage]:
+    bucket: dict[tuple[str, int], ChatMessage] = {
+        (m.exchange_id, m.rank): m for m in existing
+    }
     for m in new:
         k = (m.exchange_id, m.rank)
         if k not in bucket:
@@ -107,13 +112,14 @@ def _merge_unique_by_key(existing: List[ChatMessage], new: List[ChatMessage]) ->
         else:
             old = bucket[k]
             take_new = (
-                (getattr(old, "channel", None) != Channel.final and m.channel == Channel.final)
-                or ((m.timestamp or "") > (old.timestamp or ""))
-            )
+                getattr(old, "channel", None) != Channel.final
+                and m.channel == Channel.final
+            ) or ((m.timestamp or "") > (old.timestamp or ""))
             if take_new:
                 bucket[k] = m
     # keep session order by rank for readability
     return sorted(bucket.values(), key=lambda x: x.rank)
+
 
 class OpensearchHistoryIndex(BaseHistoryStore):
     """

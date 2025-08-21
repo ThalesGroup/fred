@@ -31,14 +31,13 @@ import {
 import dayjs from "dayjs";
 import React, { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { DOCUMENT_PROCESSING_STAGES, useUpdateDocumentRetrievableMutation } from "../../../slices/documentApi";
+import { DOCUMENT_PROCESSING_STAGES } from "../../../slices/documentApi";
 import {
   DocumentMetadata,
   TagType,
   TagWithItemsId,
   useLazyGetTagKnowledgeFlowV1TagsTagIdGetQuery,
 } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
-import { useToast } from "../../ToastProvider";
 import { CustomRowAction, DocumentTableRowActionsMenu } from "./DocumentOperationsTableRowActionsMenu";
 import { CustomBulkAction, DocumentOperationsTableSelectionToolbar } from "./DocumentOperationsTableSelectionToolbar";
 import { useDocumentActions } from "../common/useDocumentActions";
@@ -67,7 +66,6 @@ interface DocumentOperationsTableProps {
   rowActions?: CustomRowAction[]; // Action in the 3 dots menu of each row. If empty list is passed, not actions.
   bulkActions?: CustomBulkAction[]; // Actions on selected documents, in the selection toolbar. If empty list is passed, no actions.
   nameClickAction?: null | ((file: DocumentMetadata) => void); // Action when clicking on file name. If undefined, open document preview. If null, no action.
-  isAdmin?: boolean; // For retrievable toggle functionality
 }
 
 export const DocumentOperationsTable: React.FC<DocumentOperationsTableProps> = ({
@@ -79,16 +77,13 @@ export const DocumentOperationsTable: React.FC<DocumentOperationsTableProps> = (
     dateAdded: true,
     librairies: true,
     status: true,
-    retrievable: true,
     actions: true,
   },
   rowActions,
   bulkActions,
   nameClickAction,
-  isAdmin = false,
 }) => {
   const { t } = useTranslation();
-  const { showInfo, showError } = useToast();
 
   // Internal state management
   const [selectedFiles, setSelectedFiles] = useState<DocumentMetadata[]>([]);
@@ -98,7 +93,6 @@ export const DocumentOperationsTable: React.FC<DocumentOperationsTableProps> = (
   const [tagsById, setTagsById] = useState<Record<string, TagWithItemsId>>({});
 
   // API hooks
-  const [updateDocumentRetrievable] = useUpdateDocumentRetrievableMutation();
   const [getTag] = useLazyGetTagKnowledgeFlowV1TagsTagIdGetQuery();
 
   const allSelected = selectedFiles.length === files.length && files.length > 0;
@@ -163,33 +157,11 @@ export const DocumentOperationsTable: React.FC<DocumentOperationsTableProps> = (
     setSelectedFiles(checked ? [...files] : []);
   };
 
-  const handleToggleRetrievable = async (file: DocumentMetadata) => {
-    try {
-      await updateDocumentRetrievable({
-        document_uid: file.identity.document_uid,
-        retrievable: !file.source.retrievable,
-      }).unwrap();
-
-      showInfo({
-        summary: "Updated",
-        detail: `"${file.identity.document_name}" is now ${!file.source.retrievable ? "searchable" : "excluded from search"}.`,
-      });
-
-      onRefreshData?.();
-    } catch (error) {
-      console.error("Update failed:", error);
-      showError({
-        summary: "Error updating document",
-        detail: error?.data?.detail || error.message,
-      });
-    }
-  };
 
   // If actions are undefined, use default actions from useDocumentActions
-  const { defaultBulkActions, defaultRowActions, handleDocumentPreview } = useDocumentActions();
+  const { defaultBulkActions, defaultRowActions } = useDocumentActions();
   const rowActionsWithDefault = rowActions === undefined ? defaultRowActions : rowActions;
   const bulkActionsWithDefault = bulkActions === undefined ? defaultBulkActions : bulkActions;
-  const nameClickActionWithDefault = nameClickAction === undefined ? handleDocumentPreview : nameClickAction;
 
   // Enhanced action handler that refreshes data after execution
   const enhancedRowActions = useMemo(
@@ -303,8 +275,8 @@ export const DocumentOperationsTable: React.FC<DocumentOperationsTableProps> = (
                         display="flex"
                         alignItems="center"
                         gap={1}
-                        onClick={() => nameClickActionWithDefault?.(file)}
-                        sx={{ cursor: nameClickActionWithDefault ? "pointer" : "default" }}
+                        onClick={() => nameClickAction?.(file)}
+                        sx={{ cursor: nameClickAction ? "pointer" : "default" }}
                       >
                         {getDocumentIcon(file.identity.document_name)}
                         <Typography variant="body2" noWrap>
@@ -393,30 +365,6 @@ export const DocumentOperationsTable: React.FC<DocumentOperationsTableProps> = (
                           );
                         })}
                       </Box>
-                    </TableCell>
-                  )}
-                  {columns.retrievable && (
-                    <TableCell>
-                      {(() => {
-                        const isRetrievable = file.source.retrievable;
-
-                        return (
-                          <Chip
-                            label={isRetrievable ? t("documentTable.retrievableYes") : t("documentTable.retrievableNo")}
-                            size="small"
-                            variant="outlined"
-                            onClick={isAdmin ? () => handleToggleRetrievable(file) : undefined}
-                            sx={{
-                              cursor: isAdmin ? "pointer" : "default",
-                              backgroundColor: isRetrievable ? "#e6f4ea" : "#eceff1",
-                              borderColor: isRetrievable ? "#2e7d32" : "#90a4ae",
-                              color: isRetrievable ? "#2e7d32" : "#607d8b",
-                              fontWeight: 500,
-                              fontSize: "0.75rem",
-                            }}
-                          />
-                        );
-                      })()}
                     </TableCell>
                   )}
                   {columns.actions && (
