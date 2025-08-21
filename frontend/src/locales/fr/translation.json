@@ -262,7 +262,13 @@
     "collapseAll": "Tout réduire",
     "expandAll": "Tout développer",
     "folderDeleteSuccess": "Dossier supprimé",
-    "folderDeleteDetail": "Le dossier « {{name}} » a été supprimé."
+    "folderDeleteDetail": "Le dossier « {{name}} » a été supprimé.",
+    "searchPlaceholder":"Rechercher un(e) {{typeOne}}",
+    "importDrawerTitle": "Importer un(e) {{typeOne}}",
+    "dropFiles":"Deposez vos {{typePlural}} ici",
+    "noFiles": "Aucun(e) {{typeOne}} trouvé(e)",
+    "import": "Importer"
+
   },
   "documentTable": {
     "selectedCount": "{{count}} sélectionné(s)",
