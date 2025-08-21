@@ -1,15 +1,17 @@
 # Copyright Thales 2025
-# Licensed under the Apache License, Version 2.0 (the "License");
-# ...
+# Licensed under the Apache License, Version 2.0
+
+from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import secrets
 import tempfile
 from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple, Sequence
 from uuid import uuid4
 
 from fastapi import UploadFile
@@ -26,36 +28,29 @@ from app.core.agents.agent_manager import AgentManager
 from app.core.agents.flow import AgentFlow
 from app.core.agents.runtime_context import RuntimeContext
 from app.core.chatbot.chat_schema import (
-    ChatMessageMetadata,
-    ChatMessagePayload,
-    MessageSubtype,
-    MessageType,
-    Sender,
+    ChatMessage,
+    ChatMetadata,
+    ChatTokenUsage,
+    Channel,
+    FinishReason,
+    Role,
     SessionSchema,
     SessionWithFiles,
-    ToolCall,
+    MessagePart,
+    TextPart,
+    CodePart,
+    ImageUrlPart,
+    ToolCallPart,
+    ToolResultPart,
 )
 from app.core.chatbot.metric_structures import MetricsResponse
-
-# ⬇️ Structured-content helpers
-from app.core.session.langchain_to_payload_utils import (
-    coerce_finish_reason,
-    coerce_blocks,
-    coerce_content,
-    coerce_sender,
-    coerce_sources,
-    coerce_token_usage,
-    enrich_chat_message_payloads_with_latencies,
-    extract_tool_call,
-    infer_subtype,
-)
 from app.core.session.stores.base_session_store import BaseSessionStore
 from app.core.session.attachement_processing import AttachementProcessing
 
 logger = logging.getLogger(__name__)
 
-# Type for callback functions (synchronous or asynchronous)
-CallbackType = Union[Callable[[Dict], None], Callable[[Dict], Awaitable[None]]]
+# Type for callback functions (sync or async)
+CallbackType = Callable[[Dict], None] | Callable[[Dict], Awaitable[None]]
 
 
 def utcnow_dt() -> datetime:
@@ -63,10 +58,123 @@ def utcnow_dt() -> datetime:
     return datetime.now(timezone.utc).replace(microsecond=0)
 
 
+# ---------------- helpers (v2-native, strongly typed) ----------------
+
+
+def _parts_from_raw_content(raw: Any) -> List[MessagePart]:
+    """
+    Convert LangChain/OpenAI-style content into v2 MessagePart models.
+    Supports: text, image_url, light code heuristic for multi-line text blocks.
+    """
+    parts: List[MessagePart] = []
+    if raw is None:
+        return parts
+
+    if isinstance(raw, str):
+        if raw.strip():
+            parts.append(TextPart(text=raw))
+        return parts
+
+    if isinstance(raw, list):
+        for itm in raw:
+            if isinstance(itm, dict):
+                t = itm.get("type")
+                if t in ("text", "input_text"):
+                    txt = itm.get("text") or itm.get("input_text")
+                    if txt:
+                        parts.append(TextPart(text=str(txt)))
+                elif t == "image_url":
+                    url = (itm.get("image_url") or {}).get("url")
+                    if url:
+                        parts.append(ImageUrlPart(url=url))
+                elif (
+                    t == "input_text"
+                    and isinstance(itm.get("text"), str)
+                    and "\n" in itm["text"]
+                ):
+                    parts.append(CodePart(code=itm["text"]))
+        return parts
+
+    parts.append(TextPart(text=str(raw)))
+    return parts
+
+
+def _concat_text_parts(parts: Sequence[MessagePart]) -> str:
+    texts: List[str] = []
+    for p in parts or []:
+        if getattr(p, "type", None) == "text":
+            txt = getattr(p, "text", None)
+            if txt:
+                texts.append(str(txt))
+    return "\n".join(texts).strip()
+
+
+def _extract_tool_calls(msg: Any) -> List[dict]:
+    """
+    Normalize tool calls from AIMessage:
+      - OpenAI: msg.tool_calls or msg.additional_kwargs['tool_calls']
+      - Each call → {call_id, name, args(dict)}
+    """
+    calls = []
+    tc = getattr(msg, "tool_calls", None)
+    if not tc:
+        add = getattr(msg, "additional_kwargs", {}) or {}
+        tc = add.get("tool_calls")
+    if not tc:
+        return calls
+
+    for i, c in enumerate(tc):
+        cid = c.get("id") or f"t{i + 1}"
+        if "function" in c:
+            fn = c["function"] or {}
+            name = fn.get("name") or "unnamed"
+            args_raw = fn.get("arguments")
+        else:
+            name = c.get("name") or "unnamed"
+            args_raw = c.get("args")
+
+        if isinstance(args_raw, str):
+            try:
+                args = json.loads(args_raw)
+            except Exception:
+                args = {"_raw": args_raw}
+        elif isinstance(args_raw, dict):
+            args = args_raw
+        else:
+            args = {"_raw": args_raw}
+
+        calls.append({"call_id": cid, "name": name, "args": args})
+    return calls
+
+
+def _clean_token_usage(raw: dict | None) -> Optional[ChatTokenUsage]:
+    if not raw:
+        return None
+    try:
+        return ChatTokenUsage(
+            input_tokens=int(raw.get("input_tokens", 0) or 0),
+            output_tokens=int(raw.get("output_tokens", 0) or 0),
+            total_tokens=int(raw.get("total_tokens", 0) or 0),
+        )
+    except Exception:
+        return None
+
+
+def _coerce_finish_reason(val: Any) -> Optional[FinishReason]:
+    if val is None:
+        return None
+    try:
+        return FinishReason(str(val))
+    except Exception:
+        return FinishReason.other
+
+
+# ---------------- SessionManager (v2) ----------------
+
+
 class SessionManager:
     """
-    Manages user sessions and interactions with the chatbot.
-    Clean, typed implementation (no legacy/back-compat branches).
+    Manages user sessions and interactions with the chatbot using Chat Protocol v2.
     """
 
     def __init__(self, session_store: BaseSessionStore, agent_manager: AgentManager):
@@ -89,7 +197,7 @@ class SessionManager:
         agent_name: str,
         runtime_context: Optional[RuntimeContext] = None,
         client_exchange_id: Optional[str] = None,
-    ) -> Tuple[SessionSchema, List[ChatMessagePayload]]:
+    ) -> Tuple[SessionSchema, List[ChatMessage]]:
         logger.info(
             "chat_ask_websocket user_id=%s session_id=%s agent=%s",
             user_id,
@@ -97,93 +205,95 @@ class SessionManager:
             agent_name,
         )
 
-        session, history, agent, _is_new_session = self._prepare_session_and_history(
-            user_id=user_id,
-            session_id=session_id,
-            message=message,
-            agent_name=agent_name,
-            runtime_context=runtime_context,
+        session, history_msgs, agent, _is_new_session = (
+            self._prepare_session_and_history(
+                user_id=user_id,
+                session_id=session_id,
+                message=message,
+                agent_name=agent_name,
+                runtime_context=runtime_context,
+            )
         )
         exchange_id = client_exchange_id or str(uuid4())
-        base_rank = len(history)
 
-        # 1) User message (always final)
-        #    - We generate both 'content' (string) and 'blocks' (structured).
-        user_blocks = coerce_blocks(message)  # -> [TextBlock(text=...)]
-        user_content = coerce_content(message)  # -> string flattening of blocks
+        # Rank base = current stored history length
+        prior: List[ChatMessage] = self.history_store.get(session.id) or []
+        base_rank = len(prior)
+        seq = 0
 
-        user_payload = ChatMessagePayload(
-            exchange_id=exchange_id,
-            type=MessageType.human,
-            sender=Sender.user,
-            content=user_content,
-            blocks=user_blocks or None,
-            timestamp=utcnow_dt(),
+        # 1) User message
+        user_parts: List[MessagePart] = [TextPart(text=message)]
+        user_msg = ChatMessage(
             session_id=session.id,
-            rank=base_rank,
-            subtype=MessageSubtype.final,
-            user_id=user_id,
-            metadata=ChatMessageMetadata(),  # empty, but present for consistency
+            exchange_id=exchange_id,
+            rank=base_rank + seq,
+            timestamp=utcnow_dt(),
+            role=Role.user,
+            channel=Channel.final,
+            parts=user_parts,
+            metadata=ChatMetadata(),
         )
-        all_payloads: List[ChatMessagePayload] = [user_payload]
+        all_msgs: List[ChatMessage] = [user_msg]
+        await self._emit(callback, user_msg)
 
-        # 2) Stream agent responses
+        # 2) Stream agent responses from LangGraph
         try:
-            agent_payloads = await self._stream_agent_response(
+            agent_msgs = await self._stream_agent_response(
                 compiled_graph=agent.get_compiled_graph(),
-                input_messages=history,
+                input_messages=history_msgs + [HumanMessage(message)],
                 session_id=session.id,
-                callback=callback,
                 exchange_id=exchange_id,
-                base_rank=base_rank,
-                user_id=user_id,
                 agent_name=agent_name,
+                user_id=user_id,
+                base_rank=base_rank,
+                start_seq=seq + 1,
+                callback=callback,
             )
-            all_payloads.extend(agent_payloads)
+            all_msgs.extend(agent_msgs)
         except Exception:
             logger.exception("Agent execution failed")
 
-        # 3) Latency enrichment + persist
-        all_payloads = enrich_chat_message_payloads_with_latencies(all_payloads)
+        # 3) Persist
         session.updated_at = utcnow_dt()
         self.session_store.save(session)
-        self.history_store.save(session.id, all_payloads, user_id)
-        return session, all_payloads
+        assert session.user_id == user_id, "Session/user mismatch"
+        self.history_store.save(session.id, prior + all_msgs, user_id)
+        return session, all_msgs
 
     # ---------------- internals ----------------
 
     def _prepare_session_and_history(
         self,
         user_id: str,
-        session_id: Optional[str],
+        session_id: str | None,
         message: str,
         agent_name: str,
-        runtime_context: Optional[RuntimeContext] = None,
-    ) -> Tuple[SessionSchema, List[BaseMessage], AgentFlow, bool]:
+        runtime_context: RuntimeContext | None = None,
+    ) -> tuple[SessionSchema, list[BaseMessage], AgentFlow, bool]:
         session, is_new_session = self._get_or_create_session(
             user_id, message, session_id
         )
 
-        history: List[BaseMessage] = []
-        if not is_new_session:
-            # Rebuild history for LangGraph (AI messages carry response_metadata for context)
-            for msg in self.get_session_history(session.id, user_id):
-                if msg.type == MessageType.human:
-                    history.append(HumanMessage(content=msg.content))
-                elif msg.type == MessageType.ai:
-                    md = (
-                        msg.metadata.model_dump()
-                        if isinstance(msg.metadata, ChatMessageMetadata)
-                        else (msg.metadata or {})
+        # Rebuild minimal LangChain history (user/assistant/system only)
+        lc_history: list[BaseMessage] = []
+        for m in self.get_session_history(session.id, user_id):
+            if m.role == Role.user:
+                lc_history.append(HumanMessage(_concat_text_parts(m.parts or [])))
+            elif m.role == Role.assistant:
+                md = m.metadata.model_dump() if m.metadata else {}
+                lc_history.append(
+                    AIMessage(
+                        content=_concat_text_parts(m.parts or []), response_metadata=md
                     )
-                    history.append(AIMessage(content=msg.content, response_metadata=md))
-                elif msg.type == MessageType.system:
-                    history.append(SystemMessage(content=msg.content))
+                )
+            elif m.role == Role.system:
+                lc_history.append(SystemMessage(_concat_text_parts(m.parts or [])))
+            # We ignore Role.tool in LC history; not needed for a fresh exchange.
 
-        # Append the new user question to LangChain history (string is fine)
-        history.append(HumanMessage(message))
-        agent = self.agent_manager.get_agent_instance(agent_name, runtime_context)
-        return session, history, agent, is_new_session
+        agent: AgentFlow = self.agent_manager.get_agent_instance(
+            agent_name, runtime_context
+        )
+        return session, lc_history, agent, is_new_session
 
     def _get_or_create_session(
         self, user_id: str, query: str, session_id: Optional[str]
@@ -212,35 +322,37 @@ class SessionManager:
 
     async def _stream_agent_response(
         self,
+        *,
         compiled_graph: CompiledStateGraph,
         input_messages: List[BaseMessage],
         session_id: str,
-        callback: CallbackType,
         exchange_id: str,
-        base_rank: int,
-        user_id: str,
         agent_name: str,
-    ) -> List[ChatMessagePayload]:
+        user_id: str,
+        base_rank: int,
+        start_seq: int,
+        callback: CallbackType,
+    ) -> List[ChatMessage]:
         """
-        Execute the agentic flow and stream responses via callback.
-        Returns the collected ChatMessagePayloads (assistant/system/tool).
+        Execute the agentic flow and stream v2 ChatMessage dicts via `callback`.
+        Returns the collected ChatMessage list. Exactly one assistant/final per exchange.
         """
         config: RunnableConfig = {
             "configurable": {"thread_id": session_id},
             "recursion_limit": get_configuration().ai.recursion.recursion_limit,
         }
-        out: List[ChatMessagePayload] = []
-        seq = 0  # running index across all stream events
+        out: List[ChatMessage] = []
+        seq = start_seq
+        final_sent = False
 
         async for event in compiled_graph.astream(
             {"messages": input_messages},
             config=config,
             stream_mode="updates",
         ):
-            # Each 'event' is typically {'node_name': {'messages': [...]}} or {'end': None}
+            # event like {'node_name': {'messages': [...]}} or {'end': None}
             key = next(iter(event))
             payload = event[key]
-
             if not isinstance(payload, dict):
                 continue
             block = payload.get("messages", []) or []
@@ -248,67 +360,165 @@ class SessionManager:
                 continue
 
             for msg in block:
-                # Raw metadata from the LLM/tool
                 raw_md = getattr(msg, "response_metadata", {}) or {}
                 usage_raw = getattr(msg, "usage_metadata", {}) or {}
 
-                # ---- Build typed metadata ----
-                md = ChatMessageMetadata()
-                md.agent_name = agent_name
-                md.model = raw_md.get("model_name") or raw_md.get("model")
-                md.finish_reason = coerce_finish_reason(raw_md.get("finish_reason"))
-                md.token_usage = coerce_token_usage(usage_raw)
+                model_name = raw_md.get("model_name") or raw_md.get("model")
+                finish_reason = _coerce_finish_reason(raw_md.get("finish_reason"))
+                token_usage = _clean_token_usage(usage_raw)
 
-                # sources (typed)
-                if isinstance(raw_md.get("sources"), list):
-                    md.sources = coerce_sources(raw_md.get("sources"))
+                # --- TOOL CALLS ---
+                tool_calls = _extract_tool_calls(msg)
+                if tool_calls:
+                    for tc in tool_calls:
+                        tc_msg = ChatMessage(
+                            session_id=session_id,
+                            exchange_id=exchange_id,
+                            rank=base_rank + seq,
+                            timestamp=utcnow_dt(),
+                            role=Role.assistant,
+                            channel=Channel.tool_call,
+                            parts=[
+                                ToolCallPart(
+                                    call_id=tc["call_id"],
+                                    name=tc["name"],
+                                    args=tc["args"],
+                                )
+                            ],
+                            metadata=ChatMetadata(
+                                model=model_name,
+                                token_usage=token_usage,
+                                agent_name=agent_name,
+                                finish_reason=finish_reason,
+                                extras=raw_md.get("extras", {}),
+                                sources=raw_md.get("sources") or [],
+                            ),
+                        )
+                        out.append(tc_msg)
+                        seq += 1
+                        await self._emit(callback, tc_msg)
+                    continue  # tool_calls consume this message
 
-                # Thought/plans if your agent emits them
+                # --- TOOL RESULT ---
+                if getattr(msg, "type", "") == "tool":
+                    call_id = (
+                        getattr(msg, "tool_call_id", None)
+                        or raw_md.get("tool_call_id")
+                        or "t?"
+                    )
+                    content_str = getattr(msg, "content", "")
+                    if not isinstance(content_str, str):
+                        content_str = json.dumps(content_str)
+                    tr_msg = ChatMessage(
+                        session_id=session_id,
+                        exchange_id=exchange_id,
+                        rank=base_rank + seq,
+                        timestamp=utcnow_dt(),
+                        role=Role.tool,
+                        channel=Channel.tool_result,
+                        parts=[
+                            ToolResultPart(
+                                call_id=call_id,
+                                ok=True,
+                                latency_ms=raw_md.get("latency_ms"),
+                                content=content_str,
+                            )
+                        ],
+                        metadata=ChatMetadata(
+                            agent_name=agent_name,
+                            extras=raw_md.get("extras") or {},
+                            sources=raw_md.get("sources") or [],
+                        ),
+                    )
+                    out.append(tr_msg)
+                    seq += 1
+                    await self._emit(callback, tr_msg)
+                    continue
+
+                # --- ASSISTANT / SYSTEM TEXTUAL MESSAGES ---
+                lc_type = getattr(msg, "type", "ai")
+                role = {
+                    "ai": Role.assistant,
+                    "system": Role.system,
+                    "human": Role.user,
+                    "tool": Role.tool,
+                }.get(lc_type, Role.assistant)
+
+                parts = _parts_from_raw_content(getattr(msg, "content", ""))
+
+                # Thought trace (optional)
                 if "thought" in raw_md:
-                    md.thought = raw_md["thought"]
+                    thought_txt = raw_md["thought"]
+                    if isinstance(thought_txt, (dict, list)):
+                        thought_txt = json.dumps(thought_txt, ensure_ascii=False)
+                    if str(thought_txt).strip():
+                        thought_msg = ChatMessage(
+                            session_id=session_id,
+                            exchange_id=exchange_id,
+                            rank=base_rank + seq,
+                            timestamp=utcnow_dt(),
+                            role=Role.assistant,
+                            channel=Channel.thought,
+                            parts=[TextPart(text=str(thought_txt))],
+                            metadata=ChatMetadata(
+                                agent_name=agent_name, extras=raw_md.get("extras") or {}
+                            ),
+                        )
+                        out.append(thought_msg)
+                        seq += 1
+                        await self._emit(callback, thought_msg)
 
-                # Tool call (OpenAI-style function call)
-                tc = extract_tool_call(msg)
-                if tc and tc.get("name"):
-                    md.tool_call = ToolCall(name=str(tc["name"]), args=tc.get("args"))
+                # Channel selection
+                if role == Role.assistant:
+                    ch = (
+                        Channel.final
+                        if (parts and not final_sent)
+                        else Channel.observation
+                    )
+                    if ch == Channel.final:
+                        final_sent = True
+                elif role == Role.system:
+                    ch = Channel.system_note
+                elif role == Role.user:
+                    ch = Channel.final
+                else:
+                    ch = Channel.observation
 
-                # ---- Content & blocks ----
-                # LangChain may give str or list-of-blocks in msg.content.
-                raw_content: Any = getattr(msg, "content", "")
-                blocks = coerce_blocks(raw_content)  # -> List[MessageBlock]
-                content_str = coerce_content(
-                    raw_content
-                )  # -> String for indexing/previews
+                if role == Role.assistant and ch == Channel.observation:
+                    if not parts or all(
+                        p.type == "text" and not p.text.strip() for p in parts
+                    ):
+                        continue  # skip sending this is a langgraph intermediary step message
 
-                # ---- Core typing & subtype ----
-                mtype_str: str = getattr(msg, "type", "ai")  # "ai" | "system" | "tool"
-                mtype_enum: MessageType = MessageType(mtype_str)
-                subtype = infer_subtype(md.finish_reason, mtype_enum, md.thought)
-
-                enriched = ChatMessagePayload(
-                    exchange_id=exchange_id,
-                    type=mtype_enum,
-                    sender=coerce_sender(msg),  # "assistant" | "system"
-                    content=content_str,
-                    blocks=blocks or None,
-                    timestamp=utcnow_dt(),
-                    rank=base_rank + 1 + seq,  # strictly increasing
+                msg_v2 = ChatMessage(
                     session_id=session_id,
-                    metadata=md,
-                    subtype=subtype,
-                    user_id=user_id,
+                    exchange_id=exchange_id,
+                    rank=base_rank + seq,
+                    timestamp=utcnow_dt(),
+                    role=role,
+                    channel=ch,
+                    parts=parts or [TextPart(text="")],
+                    metadata=ChatMetadata(
+                        model=model_name,
+                        token_usage=token_usage,
+                        agent_name=agent_name,
+                        finish_reason=finish_reason,
+                        extras=raw_md.get("extras") or {},
+                        sources=raw_md.get("sources") or [],
+                    ),
                 )
-                out.append(enriched)
+                out.append(msg_v2)
                 seq += 1
-
-                # Emit to the stream immediately
-                result = callback(enriched.model_dump())
-                if asyncio.iscoroutine(result):
-                    await result
+                await self._emit(callback, msg_v2)
 
         return out
 
     # ---------------- misc (unchanged) ----------------
+
+    async def _emit(self, callback: CallbackType, message: ChatMessage) -> None:
+        result = callback(message.model_dump())
+        if asyncio.iscoroutine(result):
+            await result
 
     def delete_session(self, session_id: str, user_id: str) -> None:
         self.session_store.delete(session_id)
@@ -328,10 +538,8 @@ class SessionManager:
             )
         return enriched
 
-    def get_session_history(
-        self, session_id: str, user_id: str
-    ) -> List[ChatMessagePayload]:
-        return self.history_store.get(session_id)
+    def get_session_history(self, session_id: str, user_id: str) -> List[ChatMessage]:
+        return self.history_store.get(session_id) or []
 
     def get_session_temp_folder(self, session_id: str) -> Path:
         base_temp_dir = Path(tempfile.gettempdir()) / "chatbot_uploads"

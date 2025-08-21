@@ -171,7 +171,7 @@ class SemanticSplitter(BaseTextSplitter):
         for i, c in enumerate(sub_chunks):
             txt = c.page_content or ""
             if not txt:
-                logger.info("chunk[%d]: empty content, skip anchoring", i)
+                logger.debug("chunk[%d]: empty content, skip anchoring", i)
                 continue
 
             # First: exact search from rolling cursor, then global
@@ -201,11 +201,11 @@ class SemanticSplitter(BaseTextSplitter):
                 else:
                     cursor = idx + len(txt)
 
-                logger.info("anchor ok  | chunk=%d len=%d idx=%d cursor->%d fallback=%s preview=%r", i, len(txt), idx, cursor, fb, _short(txt))
+                logger.debug("anchor ok  | chunk=%d len=%d idx=%d cursor->%d fallback=%s preview=%r", i, len(txt), idx, cursor, fb, _short(txt))
             else:
                 # Diagnostics for misses
                 window = text_with_placeholders[cursor : cursor + max(0, len(txt) + 200)]
-                logger.info("anchor miss| chunk=%d len=%d cursor=%d needle=%r haystack_win=%r", i, len(txt), cursor, _short(txt), _short(window))
+                logger.debug("anchor miss| chunk=%d len=%d cursor=%d needle=%r haystack_win=%r", i, len(txt), cursor, _short(txt), _short(window))
 
         logger.info("Anchoring summary: %d/%d chunks anchored (fallback used on %d).", ok, total, used_fb)
 

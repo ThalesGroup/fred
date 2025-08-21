@@ -17,7 +17,7 @@ import InsertDriveFileOutlinedIcon from "@mui/icons-material/InsertDriveFileOutl
 import DeleteIcon from "@mui/icons-material/Delete";
 import SearchIcon from "@mui/icons-material/Search";
 import SearchOffIcon from "@mui/icons-material/SearchOff";
-
+import DownloadIcon from "@mui/icons-material/Download";
 import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
 import EventAvailableIcon from "@mui/icons-material/EventAvailable";
 import dayjs from "dayjs";
@@ -31,6 +31,7 @@ import { usePermissions } from "../../../security/usePermissions";
 export type DocumentRowCompactProps = {
   doc: DocumentMetadata;
   onPreview?: (doc: DocumentMetadata) => void;
+  onDownload?: (doc: DocumentMetadata) => void;
   onRemoveFromLibrary?: (doc: DocumentMetadata) => void;
   onToggleRetrievable?: (doc: DocumentMetadata) => void;
 };
@@ -38,6 +39,7 @@ export type DocumentRowCompactProps = {
 export function DocumentRowCompact({
   doc,
   onPreview,
+  onDownload,
   onRemoveFromLibrary,
   onToggleRetrievable,
 }: DocumentRowCompactProps) {
@@ -177,6 +179,14 @@ export function DocumentRowCompact({
           <Tooltip title={t("documentLibrary.preview")}>
             <IconButton size="small" onClick={() => onPreview(doc)}>
               <VisibilityOutlinedIcon fontSize="inherit" />
+            </IconButton>
+          </Tooltip>
+        )}
+         
+        {onDownload && (
+          <Tooltip title={t("documentLibrary.download")}>
+            <IconButton size="small" onClick={() => onDownload(doc)}>
+              <DownloadIcon fontSize="inherit" />
             </IconButton>
           </Tooltip>
         )}
