@@ -25,13 +25,13 @@ Note: You do not need to download any keys from “knowledge-flow”. Keys (JWKS
 
 1) Mint a short-lived service token for the agentic client
 
-   export KEYCLOACK_AGENTIC_TOKEN="<the-agentic-client-secret>"
+   export KEYCLOAK_AGENTIC_TOKEN="<the-agentic-client-secret>"
 
    TOKEN=$(curl -s -X POST \
      "http://app-keycloak:8080/realms/app/protocol/openid-connect/token" \
      -d "grant_type=client_credentials" \
      -d "client_id=agentic" \
-     -d "client_secret=${KEYCLOACK_AGENTIC_TOKEN}" | jq -r .access_token)
+     -d "client_secret=${KEYCLOAK_AGENTIC_TOKEN}" | jq -r .access_token)
 
 2) Sanity check that a token was returned (shows the first 20 characters)
 
