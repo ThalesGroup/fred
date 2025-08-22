@@ -28,7 +28,7 @@ from app.agents.rags.structures import (
     RagGraphState,
     RephraseQueryOutput,
 )
-from app.common.rags_client import VectorSearchClient
+from app.common.vector_search_client import VectorSearchClient
 from app.common.rags_utils import attach_sources_to_llm_response
 from app.core.agents.flow import AgentFlow
 from app.core.agents.runtime_context import get_document_libraries_ids

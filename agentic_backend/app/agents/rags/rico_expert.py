@@ -21,7 +21,7 @@ from langchain_core.messages import HumanMessage
 from langgraph.graph import END, START, MessagesState, StateGraph
 
 from fred_core import VectorSearchHit
-from app.common.rags_client import VectorSearchClient
+from app.common.vector_search_client import VectorSearchClient
 from app.common.rags_utils import (
     attach_sources_to_llm_response,
     ensure_ranks,
