@@ -138,7 +138,7 @@ def decode_jwt(token: str) -> KeycloakUser:
     except HTTPException:
         # Propagate 401/403, etc., as-is (don't convert into 500).
         raise
-    except Exception as e:
+    except Exception:
         logger.error("Unexpected error while decoding JWT", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error during token validation")
  
