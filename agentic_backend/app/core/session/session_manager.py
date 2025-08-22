@@ -585,7 +585,7 @@ class SessionManager:
         groupby: List[str],
         agg_mapping: Dict[str, List[str]],
     ) -> MetricsResponse:
-        return self.history_store.get_metrics(
+        return self.history_store.get_chatbot_metrics(
             start=start,
             end=end,
             precision=precision,

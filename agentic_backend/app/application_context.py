@@ -39,7 +39,7 @@ from app.common.structures import (
 )
 from app.core.model.model_factory import get_model
 from langchain_core.language_models.base import BaseLanguageModel
-from app.core.session.stores.base_history_store import BaseHistoryStore
+from app.core.monitoring.base_history_store import BaseHistoryStore
 from app.core.session.stores.base_session_store import BaseSessionStore
 from pathlib import Path
 from fred_core import (
@@ -345,11 +345,11 @@ class ApplicationContext:
         """
         if self._history_store_instance is not None:
             return self._history_store_instance
-        from app.core.session.stores.duckdb_history_store import DuckdbHistoryStore
+        from app.core.monitoring.duckdb_history_store import DuckdbHistoryStore
 
         store_config = get_configuration().storage.history_store
         if isinstance(store_config, DuckdbStoreConfig):
-            from app.core.session.stores.duckdb_history_store import DuckdbHistoryStore
+            from app.core.monitoring.duckdb_history_store import DuckdbHistoryStore
 
             db_path = Path(store_config.duckdb_path).expanduser()
             return DuckdbHistoryStore(db_path)
@@ -360,11 +360,11 @@ class ApplicationContext:
                 raise ValueError(
                     "Missing OpenSearch credentials: OPENSEARCH_USER and/or OPENSEARCH_PASSWORD"
                 )
-            from app.core.session.stores.opensearch_history_index import (
-                OpensearchHistoryIndex,
+            from app.core.monitoring.opensearch_history_store import (
+                OpensearchHistoryStore,
             )
 
-            return OpensearchHistoryIndex(
+            return OpensearchHistoryStore(
                 host=opensearch_config.host,
                 username=opensearch_config.username,
                 password=password,

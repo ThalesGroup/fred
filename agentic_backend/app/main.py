@@ -34,6 +34,7 @@ from app.application_context import (
 from app.core.chatbot.chatbot_controller import ChatbotController
 from app.common.structures import Configuration
 from app.common.utils import parse_server_configuration
+from app.core.monitoring.monitoring_controller import MonitoringController
 from app.core.prompts.controller import PromptController
 from app.core.session.session_manager import SessionManager
 from dotenv import load_dotenv
@@ -118,6 +119,7 @@ def create_app() -> FastAPI:
     ChatbotController(
         router, session_manager=session_manager, agent_manager=agent_manager
     )
+    MonitoringController(router)    
     app.include_router(router)
     logger.info("🧩 All controllers registered.")
     return app
