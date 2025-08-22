@@ -21,7 +21,7 @@ from langchain_core.messages import HumanMessage
 from langgraph.graph import END, START, MessagesState, StateGraph
 
 from fred_core import VectorSearchHit
-from app.common.rags_client import VectorSearchClient
+from app.common.vector_search_client import VectorSearchClient
 from app.common.rags_utils import (
     attach_sources_to_llm_response,
     ensure_ranks,
@@ -73,9 +73,6 @@ class RicoExpert(AgentFlow):
         self.description = agent_settings.description
         self.current_date = datetime.now().strftime("%Y-%m-%d")
         self.categories = agent_settings.categories or ["Documentation"]
-        self.knowledge_flow_url = agent_settings.settings.get(
-            "knowledge_flow_url", "http://localhost:8111/knowledge-flow/v1"
-        )
         self.model = None
         self.base_prompt = ""
         self._graph = None
@@ -83,7 +80,7 @@ class RicoExpert(AgentFlow):
 
     async def async_init(self):
         self.model = get_model(self.agent_settings.model)
-        self.search_client = VectorSearchClient(self.knowledge_flow_url, timeout_s=10)
+        self.search_client = VectorSearchClient()
         # Use shared preamble util
         self.base_prompt = rag_preamble(self.current_date)
         self._graph = self._build_graph()

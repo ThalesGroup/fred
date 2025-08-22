@@ -19,15 +19,15 @@ app:
   reload: false
   reload_dir: "."
   security:
-    enabled: false
-    client_id: "app"
+    enabled: true
+    client_id: "agentic"
     keycloak_url: "http://app-keycloak:8080/realms/app"
     authorized_origins:
       - "http://localhost:5173"
 
 frontend_settings:
   security:
-    enabled: false
+    enabled: true
     client_id: "app"
     keycloak_url: "http://app-keycloak:8080/realms/app"
     authorized_origins:
