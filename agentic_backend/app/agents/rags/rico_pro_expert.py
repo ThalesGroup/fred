@@ -137,10 +137,6 @@ class RicoProExpert(AgentFlow):
         self.description = agent_settings.description
         self.current_date = datetime.now().strftime("%Y-%m-%d")
         self.categories = agent_settings.categories or ["General"]
-        self.knowledge_flow_url = agent_settings.settings.get(
-            "knowledge_flow_url", "http://localhost:8111/knowledge-flow/v1"
-        )
-
         self.model = None
         self.base_prompt = ""
         self._graph = None
@@ -151,7 +147,7 @@ class RicoProExpert(AgentFlow):
 
     async def async_init(self):
         self.model = get_model(self.agent_settings.model)
-        self.search_client = VectorSearchClient(self.knowledge_flow_url, timeout_s=10)
+        self.search_client = VectorSearchClient()
         self.base_prompt = self._generate_prompt()
         self._graph = self._build_graph()
 

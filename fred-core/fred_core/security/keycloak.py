@@ -69,8 +69,13 @@ def decode_jwt(token: str) -> KeycloakUser:
             signing_key = jwks_client.get_signing_key_from_jwt(token).key
             logger.debug("Successfully retrieved signing key")
         except Exception as e:
-            logger.error(f"Failed to retrieve signing key from JWKS: {e}")
-            raise HTTPException(status_code=401, detail="Invalid token signature")
+            # Invalid JWT structure/kid/signature is a normal 401, not a 500.
+            logger.warning("Could not retrieve signing key from JWKS: %s", e)
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid token signature",
+                headers={"WWW-Authenticate": "Bearer error='invalid_token'"},
+            )
 
         # Decode JWT
         logger.debug("Decoding JWT token...")
@@ -84,11 +89,20 @@ def decode_jwt(token: str) -> KeycloakUser:
             logger.debug("JWT token successfully decoded")
 
         except jwt.ExpiredSignatureError:
-            logger.warning("JWT token has expired")
-            raise HTTPException(status_code=401, detail="Token has expired")
+            # Common/expected when the UI keeps a tab open: keep it calm and clear.
+            logger.info("Access token expired")
+            raise HTTPException(
+                status_code=401,
+                detail="Token has expired",
+                headers={"WWW-Authenticate": "Bearer error='invalid_token', error_description='token expired'"},
+            )
         except jwt.InvalidTokenError as e:
-            logger.error(f"Invalid JWT token: {str(e)}")
-            raise HTTPException(status_code=401, detail=f"Invalid token: {str(e)}")
+            logger.warning("Invalid JWT token: %s", e)
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid token",
+                headers={"WWW-Authenticate": "Bearer error='invalid_token'"},
+            )
 
         # Step 3: Validate audience in the token. This is optional
         # better to have in multi client environments.
@@ -121,26 +135,28 @@ def decode_jwt(token: str) -> KeycloakUser:
         logger.debug(f"Decoded user info: {user}")
         return user
 
+    except HTTPException:
+        # Propagate 401/403, etc., as-is (don't convert into 500).
+        raise
     except Exception as e:
-        logger.error(f"Unexpected error while decoding JWT: {str(e)}", exc_info=True)
-        raise HTTPException(
-            status_code=500, detail="Internal server error during token validation"
-        )
-
+        logger.error("Unexpected error while decoding JWT", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error during token validation")
+ 
 
 def get_current_user(token: str = Security(oauth2_scheme)) -> KeycloakUser:
     """Fetches the current user from Keycloak token."""
     if not KEYCLOAK_ENABLED:
-        logger.warning("Authentication is DISABLED. Returning a mock user.")
+        logger.info("Authentication is DISABLED. Returning a mock user.")
         return KeycloakUser(
             uid="admin", username="admin", roles=["admin"], email="admin@mail.com"
         )
-    else:
-        logger.info("Authentication is ENABLED")
     if not token:
-        raise HTTPException(status_code=401, detail="No authentication token provided")
+        raise HTTPException(
+            status_code=401,
+            detail="No authentication token provided",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
-    logger.debug(
-        f"Received token: {token[:10]}..."
-    )  # Display only the first 10 characters to avoid spamming the debug logs
+    # Display only the first 10 characters to avoid spamming the debug logs
+    logger.debug("Received token: %s...", token[:10])
     return decode_jwt(token)

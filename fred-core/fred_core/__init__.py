@@ -29,7 +29,7 @@ from fred_core.common.structures import (
     PostgresTableConfig,
     StoreConfig
 )
-
+from fred_core.security.outbound import ClientCredentialsProvider, BearerAuth
 __all__ = [
     "raise_internal_error",
     "get_current_user",
@@ -44,5 +44,7 @@ __all__ = [
     "PostgresTableConfig",
     "StoreConfig",
     "ThreadSafeLRUCache",
-    "VectorSearchHit"
+    "VectorSearchHit",
+    "ClientCredentialsProvider",
+    "BearerAuth"
 ]
