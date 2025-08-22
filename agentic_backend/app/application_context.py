@@ -471,10 +471,10 @@ class ApplicationContext:
         keycloak_base, realm = _split_realm_url(sec.keycloak_url)
         client_id = sec.client_id
         try:
-            client_secret = os.environ.get("KEYCLOACK_AGENTIC_TOKEN")
+            client_secret = os.environ.get("KEYCLOAK_AGENTIC_TOKEN")
         except KeyError:
             raise RuntimeError(
-                "Missing client secret env var 'KEYCLOACK_AGENTIC_TOKEN'."
+                "Missing client secret env var 'KEYCLOAK_AGENTIC_TOKEN'."
             )
         if not client_secret:
             raise ValueError("Client secret is empty.")
@@ -598,12 +598,12 @@ class ApplicationContext:
 
         # Outbound S2S (Agentic → Knowledge Flow)
         logger.info("  🔑 Outbound S2S (Agentic → Knowledge Flow):")
-        secret = os.getenv("KEYCLOACK_AGENTIC_TOKEN", "")
+        secret = os.getenv("KEYCLOAK_AGENTIC_TOKEN", "")
         if secret:
-            logger.info("     • KEYCLOACK_AGENTIC_TOKEN: present  (%s)", _mask(secret))
+            logger.info("     • KEYCLOAK_AGENTIC_TOKEN: present  (%s)", _mask(secret))
         else:
             logger.warning(
-                "     ⚠️ KEYCLOACK_AGENTIC_TOKEN is not set — outbound calls will be unauthenticated "
+                "     ⚠️ KEYCLOAK_AGENTIC_TOKEN is not set — outbound calls will be unauthenticated "
                 "(NoAuth). Knowledge Flow will likely return 401."
             )
 
