@@ -21,8 +21,11 @@ from app.agents.content_generator.content_generator_toolkit import (
 from app.common.mcp_utils import get_mcp_client_for_agent
 from app.common.structures import AgentSettings
 from app.core.agents.flow import AgentFlow
+from app.core.agents.runtime_context import get_template_libraries_ids
+from app.application_context import get_knowledge_flow_base_url
 from app.core.model.model_factory import get_model
-
+from app.common.resources.resource_client import ResourceClient
+from app.common.resources.structures import ResourceKind
 from langchain_core.messages import SystemMessage
 from langgraph.constants import START
 from langgraph.graph import MessagesState, StateGraph
@@ -63,6 +66,7 @@ class ContentGeneratorExpert(AgentFlow):
         self.model = get_model(self.agent_settings.model)
         self.mcp_client = await get_mcp_client_for_agent(self.agent_settings)
         self.toolkit = ContentGeneratorToolkit(self.mcp_client)
+        self.search_client = ResourceClient(get_knowledge_flow_base_url(), timeout_s=10)
         self.model = self.model.bind_tools(self.toolkit.get_tools())
         self._graph = self._build_graph()
 
@@ -121,9 +125,22 @@ class ContentGeneratorExpert(AgentFlow):
         """
         Send user request to the model with the base prompt so it calls MCP tools directly.
         """
-        messages = self.use_fred_prompts(
-            [SystemMessage(content=self.base_prompt)] + state["messages"]
-        )
+        template_tags = get_template_libraries_ids(self.get_runtime_context()) or []
+
+        selected_templates = []
+        if template_tags:
+            selected_templates = self.search_client.list_resources(
+                kind=ResourceKind.TEMPLATE,
+                tags=template_tags,
+            )
+        
+        system_messages = [SystemMessage(content=self.base_prompt)]
+
+        if selected_templates:
+            templates_info = f"The templates you have at your disposal are: {selected_templates}"
+            system_messages.append(SystemMessage(content=templates_info))
+
+        messages = self.use_fred_prompts(system_messages + state["messages"])
         assert self.model is not None
         response = await self.model.ainvoke(messages)
         return {"messages": [response]}

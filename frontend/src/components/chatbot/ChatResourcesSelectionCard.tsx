@@ -1,5 +1,6 @@
 // components/chat/ResourceLibrariesSelectionCard.tsx
-import { useMemo, useState } from "react";
+import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
+import KeyboardArrowRightIcon from "@mui/icons-material/KeyboardArrowRight";
 import {
   Box,
   Checkbox,
@@ -12,16 +13,15 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import KeyboardArrowRightIcon from "@mui/icons-material/KeyboardArrowRight";
-import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
+  Resource,
+  ResourceKind,
   TagType,
   TagWithItemsId,
   useListAllTagsKnowledgeFlowV1TagsGetQuery,
-  useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery,
-  Resource,
-  ResourceKind,
+  useListResourcesKnowledgeFlowV1ResourcesGetQuery,
 } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 
 export interface ResourceLibrariesSelectionCardProps {
@@ -48,7 +48,10 @@ export function ChatResourcesSelectionCard({
 
   const { data: fetchedResources = [] } =
     resourceKind
-      ? useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery({ kind: resourceKind })
+      ? useListResourcesKnowledgeFlowV1ResourcesGetQuery({
+          kind: resourceKind,
+          tags: undefined,
+        })
       : ({ data: [] } as { data: Resource[] });
 
   const [q, setQ] = useState("");

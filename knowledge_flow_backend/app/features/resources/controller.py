@@ -16,7 +16,7 @@
 import logging
 from typing import List
 from fastapi.params import Query
-from typing_extensions import Annotated
+from typing_extensions import Annotated, Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException, status
 from fred_core import KeycloakUser, get_current_user
@@ -125,14 +125,19 @@ class ResourceController:
             tags=["Resources"],
             response_model=List[Resource],
             response_model_exclude_none=True,
-            summary="List all resources for a kind (prompt|template).",
+            summary="List all resources, filtered by kind and tags.",
         )
-        async def list_resources_by_kind(
-            kind: Annotated[ResourceKind, Query(description="prompt | template")],
+        async def list_resources(
+            tags: Annotated[List[str], Query(description="List of tags to filter by")],
+            kind: Annotated[Optional[ResourceKind], Query(description="prompt | template")] = None,
             user: KeycloakUser = Depends(get_current_user),
         ) -> List[Resource]:
+            """
+            Returns all resources filtered by kind and tags.
+            NOTE: `tags` is mandatory.
+            """
             try:
-                return self.service.list_resources_by_kind(kind=kind)
+                return self.service.list_resources(kind=kind, tags=tags)
             except Exception as e:
                 raise handle_exception(e)
 
