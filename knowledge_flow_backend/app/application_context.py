@@ -18,7 +18,7 @@ import os
 from pathlib import Path
 from typing import Dict, Type, Union, Optional
 from fred_core import OpenSearchIndexConfig, DuckdbStoreConfig, OpenSearchKPIStore, BaseKPIStore, NoopKPIStore
-from opensearchpy import OpenSearch
+from opensearchpy import OpenSearch, RequestsHttpConnection
 from app.core.stores.catalog.opensearch_catalog_store import OpenSearchCatalogStore
 from app.core.stores.content.base_content_loader import BaseContentLoader
 from app.core.stores.content.filesystem_content_loader import FileSystemContentLoader
@@ -496,10 +496,11 @@ class ApplicationContext:
 
         opensearch_config = get_configuration().storage.opensearch
         self._opensearch_client = OpenSearch(
-            host=opensearch_config.host,
+            opensearch_config.host,
             http_auth=(opensearch_config.username, opensearch_config.password),
             use_ssl=opensearch_config.secure,
             verify_certs=opensearch_config.verify_certs,
+            connection_class=RequestsHttpConnection, 
         )
         return self._opensearch_client
 

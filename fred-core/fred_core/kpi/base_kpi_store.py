@@ -34,7 +34,6 @@ Key ideas:
 
 from __future__ import annotations
 from typing import Protocol
-from typing import List
 import logging
 from fred_core.kpi.kpi_writer_structures import (
     KPIEvent,
@@ -100,29 +99,3 @@ class BaseKPIStore(Protocol):
         ...
 
 
-class NoopKPIStore(BaseKPIStore):
-    """
-    No-op KPI store.
-
-    When to use:
-    - Local dev & unit tests (no infra required).
-    - Scenarios where we want *observability semantics* without persistence.
-    - Safe fallback when the real store is unavailable.
-
-    Behavior:
-    - Does not persist anything.
-    - Logs debug lines so developers can see what would have been recorded.
-    """
-
-    def ensure_ready(self) -> None:
-        logger.debug("[KPI][noop] ensure_ready called")
-
-    def index_event(self, event: KPIEvent) -> None:
-        logger.debug(f"[KPI][noop] index_event: {event.metric.name} {event.metric.value} dims={event.dims}")
-
-    def bulk_index(self, events: List[KPIEvent]) -> None:
-        logger.debug(f"[KPI][noop] bulk_index: {len(events)} events")
-
-    def query(self, q: KPIQuery) -> KPIQueryResult:
-        logger.debug(f"[KPI][noop] query: {q.model_dump(exclude_none=True)}")
-        return KPIQueryResult(rows=[])

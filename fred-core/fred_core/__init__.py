@@ -44,10 +44,10 @@ from fred_core.kpi.kpi_reader_structures import (
     KPIQueryResult,
     TimeBucket,
 )
-from fred_core.kpi.base_kpi_store import BaseKPIStore, NoopKPIStore
+from fred_core.kpi.base_kpi_store import BaseKPIStore
 from fred_core.kpi.kpi_writer import KPIWriter
 from fred_core.security.outbound import ClientCredentialsProvider, BearerAuth
-
+from fred_core.kpi.log_kpi_store import KpiLogStore
 __all__ = [
     "raise_internal_error",
     "get_current_user",
@@ -73,7 +73,7 @@ __all__ = [
     "Quantities",
     "Trace",
     "BaseKPIStore",
-    "NoopKPIStore",
+    "KpiLogStore",
     "KPIQuery",
     "KPIQueryResult",
     "TimeBucket",

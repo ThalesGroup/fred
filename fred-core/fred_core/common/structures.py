@@ -31,6 +31,10 @@ class OpenSearchIndexConfig(BaseModel):
     type: Literal["opensearch"]
     index: str = Field(..., description="OpenSearch index name")
 
+class LogStoreConfig(BaseModel):
+    type: Literal["log"]
+    level: str = Field(..., description="Logging level")
+
 class DuckdbStoreConfig(BaseModel):
     type: Literal["duckdb"]
     duckdb_path: str = Field(...,description="Path to the DuckDB database file.")
@@ -87,6 +91,6 @@ class SQLStorageConfig(BaseModel):
 
 
 StoreConfig = Annotated[
-    Union[DuckdbStoreConfig, PostgresTableConfig, OpenSearchIndexConfig, SQLStorageConfig],
+    Union[DuckdbStoreConfig, PostgresTableConfig, OpenSearchIndexConfig, SQLStorageConfig, LogStoreConfig],
     Field(discriminator="type")
 ]
