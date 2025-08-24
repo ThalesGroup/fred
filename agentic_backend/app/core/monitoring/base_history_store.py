@@ -48,12 +48,3 @@ class BaseHistoryStore(ABC):
         """Retrieve messages for a given session."""
         pass
 
-    @abstractmethod
-    def get_app_metrics(
-        self,
-        precision: str = "hour",
-        groupby: List[str] | None = None,
-        agg_mapping: Dict[str, List[str]] | None = None,
-    ) -> MetricsResponse:
-        """Retrieve messages for a given session."""
-        pass

@@ -27,9 +27,27 @@ from fred_core.common.structures import (
     DuckdbStoreConfig,
     PostgresStoreConfig,
     PostgresTableConfig,
-    StoreConfig
+    StoreConfig,
 )
+from fred_core.kpi.opensearch_kpi_store import OpenSearchKPIStore
+from fred_core.kpi.kpi_writer_structures import (
+    KPIEvent,
+    KPIActor,
+    Metric,
+    MetricType,
+    Cost,
+    Quantities,
+    Trace,
+)
+from fred_core.kpi.kpi_reader_structures import (
+    KPIQuery,
+    KPIQueryResult,
+    TimeBucket,
+)
+from fred_core.kpi.base_kpi_store import BaseKPIStore, NoopKPIStore
+from fred_core.kpi.kpi_writer import KPIWriter
 from fred_core.security.outbound import ClientCredentialsProvider, BearerAuth
+
 __all__ = [
     "raise_internal_error",
     "get_current_user",
@@ -46,5 +64,19 @@ __all__ = [
     "ThreadSafeLRUCache",
     "VectorSearchHit",
     "ClientCredentialsProvider",
-    "BearerAuth"
+    "BearerAuth",
+    "OpenSearchKPIStore",
+    "KPIEvent",
+    "Metric",
+    "MetricType",
+    "Cost",
+    "Quantities",
+    "Trace",
+    "BaseKPIStore",
+    "NoopKPIStore",
+    "KPIQuery",
+    "KPIQueryResult",
+    "TimeBucket",
+    "KPIWriter",
+    "KPIActor"
 ]

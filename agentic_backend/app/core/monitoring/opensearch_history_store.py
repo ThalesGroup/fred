@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from http import client
 import logging
 from datetime import datetime, timezone
 from statistics import mean
@@ -20,7 +21,6 @@ from app.core.chatbot.metric_structures import MetricsBucket, MetricsResponse
 from app.core.monitoring.base_history_store import BaseHistoryStore
 from fred_core import ThreadSafeLRUCache
 
-from app.core.monitoring.opensearch_monitoring_service_ import OpensearchMonitoringService, PragmaticIndicesReport
 
 logger = logging.getLogger(__name__)
 
@@ -144,7 +144,6 @@ class OpensearchHistoryStore(BaseHistoryStore):
             verify_certs=verify_certs,
             connection_class=RequestsHttpConnection,
         )
-        self.monitoringClient = OpensearchMonitoringService(self.client)
         self._cache = ThreadSafeLRUCache[str, List[ChatMessage]](max_size=1000)
         self.index = index
 
@@ -303,7 +302,6 @@ class OpensearchHistoryStore(BaseHistoryStore):
         # Our _flatten_message_v2 already uses flattened keys like "metadata.model".
         return d.get(path)
 
-
     @staticmethod
     def _to_utc_iso(value: Any) -> Optional[str]:
         """
@@ -325,20 +323,13 @@ class OpensearchHistoryStore(BaseHistoryStore):
                 return None
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
-        return dt.astimezone(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
-
-    def get_app_metrics(
-        self,
-        precision: str = "hour",
-        groupby: List[str] | None = None,
-        agg_mapping: Dict[str, List[str]] | None = None,
-    ) -> MetricsResponse:
-        return self.monitoringClient.get_app_metrics(
-            precision=precision,
-            groupby=groupby,
-            agg_mapping=agg_mapping,
+        return (
+            dt.astimezone(timezone.utc)
+            .replace(microsecond=0)
+            .isoformat()
+            .replace("+00:00", "Z")
         )
-    
+
     def get_chatbot_metrics(
         self,
         start: str,
@@ -366,7 +357,9 @@ class OpensearchHistoryStore(BaseHistoryStore):
             orig_groupby = list(groupby)
             groupby = [g for g in (groupby or []) if isinstance(g, str) and g.strip()]
             if orig_groupby != groupby:
-                logger.debug("[Metrics] normalized groupby: %r -> %r", orig_groupby, groupby)
+                logger.debug(
+                    "[Metrics] normalized groupby: %r -> %r", orig_groupby, groupby
+                )
 
             # 2) Allow short aliases for token fields
             TOKEN_ALIAS = {
@@ -384,11 +377,20 @@ class OpensearchHistoryStore(BaseHistoryStore):
                 if norm != field:
                     alias_reverse[norm] = field  # for pretty output keys
             if resolved_agg != agg_mapping:
-                logger.debug("[Metrics] normalized agg_mapping: %r -> %r", agg_mapping, resolved_agg)
+                logger.debug(
+                    "[Metrics] normalized agg_mapping: %r -> %r",
+                    agg_mapping,
+                    resolved_agg,
+                )
 
             logger.debug(
                 "[Metrics] INPUTS start=%s end=%s precision=%s groupby=%s agg_mapping=%s user_id=%s",
-                start, end, precision, groupby, agg_mapping, user_id,
+                start,
+                end,
+                precision,
+                groupby,
+                agg_mapping,
+                user_id,
             )
 
             # 1) Query by time range; do message-level filtering client-side
@@ -408,17 +410,25 @@ class OpensearchHistoryStore(BaseHistoryStore):
             response = self.client.search(index=self.index, body=query)
             hits = response.get("hits", {}).get("hits", [])
             total_hits = len(hits)
-            logger.debug("[Metrics] RAW hits in range %s..%s: %d", start, end, total_hits)
+            logger.debug(
+                "[Metrics] RAW hits in range %s..%s: %d", start, end, total_hits
+            )
 
             for i, h in enumerate(hits[:LOG_LIMIT_HITS]):
                 src = h.get("_source", {})
                 logger.debug(
                     "[Metrics] RAW[%d/%d] _id=%s ts=%r role=%r channel=%r",
-                    i + 1, total_hits, h.get("_id"),
-                    src.get("timestamp"), src.get("role"), src.get("channel")
+                    i + 1,
+                    total_hits,
+                    h.get("_id"),
+                    src.get("timestamp"),
+                    src.get("role"),
+                    src.get("channel"),
                 )
             if total_hits > LOG_LIMIT_HITS:
-                logger.debug("[Metrics] ... raw hits truncated at %d lines", LOG_LIMIT_HITS)
+                logger.debug(
+                    "[Metrics] ... raw hits truncated at %d lines", LOG_LIMIT_HITS
+                )
 
             # 2) Filter to assistant/final
             rows: List[Dict[str, Any]] = []
@@ -461,13 +471,15 @@ class OpensearchHistoryStore(BaseHistoryStore):
 
             logger.debug(
                 "[Metrics] PARSE/FILTER summary: parsed_ok=%d assistant_final=%d",
-                parsed_count, filtered_count
+                parsed_count,
+                filtered_count,
             )
 
             for i, r in enumerate(rows[:LOG_LIMIT_ROWS]):
                 logger.debug(
                     "[Metrics] ROW[%d/%d] datetime=%r (type=%s) bucket=%r (type=%s) model=%r agent=%r input_tokens=%r output_tokens=%r total_tokens=%r",
-                    i + 1, len(rows),
+                    i + 1,
+                    len(rows),
                     r.get("_datetime"),
                     type(r.get("_datetime")).__name__,
                     r.get("_bucket"),
@@ -479,7 +491,9 @@ class OpensearchHistoryStore(BaseHistoryStore):
                     r.get("metadata.token_usage.total_tokens"),
                 )
             if len(rows) > LOG_LIMIT_ROWS:
-                logger.debug("[Metrics] ... rows dump truncated at %d lines", LOG_LIMIT_ROWS)
+                logger.debug(
+                    "[Metrics] ... rows dump truncated at %d lines", LOG_LIMIT_ROWS
+                )
 
             # 3) Group by (_bucket, *groupby_fields)
             from collections import defaultdict as _dd
@@ -489,7 +503,12 @@ class OpensearchHistoryStore(BaseHistoryStore):
                 key_vals = [row["_bucket"]]
                 for f in groupby:
                     v = self._get_path(row, f)
-                    logger.debug("[Metrics] _get_path path=%r -> %r (type=%s)", f, v, type(v).__name__ if v is not None else "NoneType")
+                    logger.debug(
+                        "[Metrics] _get_path path=%r -> %r (type=%s)",
+                        f,
+                        v,
+                        type(v).__name__ if v is not None else "NoneType",
+                    )
                     key_vals.append(v)
                 grouped[tuple(key_vals)].append(row)
 
@@ -499,12 +518,17 @@ class OpensearchHistoryStore(BaseHistoryStore):
                 group_fields = {field: value for field, value in zip(groupby, key[1:])}
                 logger.debug(
                     "[Metrics] GROUP[%d/%d] bucket=%r (type=%s) fields=%r size=%d",
-                    i + 1, len(grouped),
-                    bucket_key, type(bucket_key).__name__,
-                    group_fields, len(group),
+                    i + 1,
+                    len(grouped),
+                    bucket_key,
+                    type(bucket_key).__name__,
+                    group_fields,
+                    len(group),
                 )
             if len(grouped) > LOG_LIMIT_GROUPS:
-                logger.debug("[Metrics] ... groups dump truncated at %d lines", LOG_LIMIT_GROUPS)
+                logger.debug(
+                    "[Metrics] ... groups dump truncated at %d lines", LOG_LIMIT_GROUPS
+                )
 
             # 4) Aggregate
             buckets: List[MetricsBucket] = []
@@ -517,12 +541,19 @@ class OpensearchHistoryStore(BaseHistoryStore):
                     vals_all = [self._get_path(r, field_norm) for r in group]
                     logger.debug(
                         "[Metrics] SERIES bucket=%r field=%s raw=%r",
-                        bucket_time, field_norm,
-                        vals_all[:LOG_LIMIT_AGG_VALUES] if len(vals_all) > LOG_LIMIT_AGG_VALUES else vals_all
+                        bucket_time,
+                        field_norm,
+                        vals_all[:LOG_LIMIT_AGG_VALUES]
+                        if len(vals_all) > LOG_LIMIT_AGG_VALUES
+                        else vals_all,
                     )
                     vals = [v for v in vals_all if isinstance(v, (int, float))]
                     if not vals:
-                        logger.debug("[Metrics] SERIES bucket=%r field=%s -> no numeric values", bucket_time, field_norm)
+                        logger.debug(
+                            "[Metrics] SERIES bucket=%r field=%s -> no numeric values",
+                            bucket_time,
+                            field_norm,
+                        )
                         continue
 
                     # pretty base name for output keys: keep user's alias if any
@@ -545,12 +576,20 @@ class OpensearchHistoryStore(BaseHistoryStore):
                         if len(vals) <= LOG_LIMIT_AGG_VALUES:
                             logger.debug(
                                 "[Metrics] AGG bucket=%r field=%s(op=%s) values=%r -> %r",
-                                bucket_time, out_base, op, vals, aggs.get(out_base + f"_{op}")
+                                bucket_time,
+                                out_base,
+                                op,
+                                vals,
+                                aggs.get(out_base + f"_{op}"),
                             )
                         else:
                             logger.debug(
                                 "[Metrics] AGG bucket=%r field=%s(op=%s) values=(%d nums, truncated) -> %r",
-                                bucket_time, out_base, op, len(vals), aggs.get(out_base + f"_{op}")
+                                bucket_time,
+                                out_base,
+                                op,
+                                len(vals),
+                                aggs.get(out_base + f"_{op}"),
                             )
 
                 # tolerate datetime or string buckets
@@ -558,13 +597,16 @@ class OpensearchHistoryStore(BaseHistoryStore):
                 if timestamp is None:
                     logger.debug(
                         "[Metrics] SKIP bucket: non-datetime/parseable key=%r (type=%s)",
-                        bucket_time, type(bucket_time).__name__,
+                        bucket_time,
+                        type(bucket_time).__name__,
                     )
                     continue
 
                 logger.debug(
                     "[Metrics] BUCKET timestamp normalization: key=%r (type=%s) -> iso=%s",
-                    bucket_time, type(bucket_time).__name__, timestamp
+                    bucket_time,
+                    type(bucket_time).__name__,
+                    timestamp,
                 )
 
                 buckets.append(
@@ -579,10 +621,17 @@ class OpensearchHistoryStore(BaseHistoryStore):
             for i, b in enumerate(buckets[:LOG_LIMIT_BUCKETS]):
                 logger.debug(
                     "[Metrics] RESULT[%d/%d] ts=%s group=%r aggs=%r",
-                    i + 1, len(buckets), b.timestamp, b.group, b.aggregations
+                    i + 1,
+                    len(buckets),
+                    b.timestamp,
+                    b.group,
+                    b.aggregations,
                 )
             if len(buckets) > LOG_LIMIT_BUCKETS:
-                logger.debug("[Metrics] ... result buckets dump truncated at %d lines", LOG_LIMIT_BUCKETS)
+                logger.debug(
+                    "[Metrics] ... result buckets dump truncated at %d lines",
+                    LOG_LIMIT_BUCKETS,
+                )
 
             return MetricsResponse(precision=precision, buckets=buckets)
 

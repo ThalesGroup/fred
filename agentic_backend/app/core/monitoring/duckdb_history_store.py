@@ -163,14 +163,6 @@ class DuckdbHistoryStore(BaseHistoryStore):
         return out
 
     # ------------------------------------------------------------------ metrics
-    def get_app_metrics(
-        self,
-        precision: str = "hour",
-        groupby: List[str] | None = None,
-        agg_mapping: Dict[str, List[str]] | None = None,
-    ) -> MetricsResponse:
-        """This i not supported by local one node instances."""
-        return MetricsResponse(precision=precision, buckets=[]) 
 
     def get_chatbot_metrics(
         self,

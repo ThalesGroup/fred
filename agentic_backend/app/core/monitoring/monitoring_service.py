@@ -36,14 +36,3 @@ class AppMonitoringMetricsService:
             user_id=user_id,
         )
     
-    def get_app_metrics(
-        self,
-        precision: str,
-        groupby: List[str] | None = None,
-        agg_mapping: Dict[str, List[str]] | None = None,
-    ) -> MetricsResponse:
-        return self.history_store.get_app_metrics(
-            precision=precision,
-            groupby=groupby,
-            agg_mapping=agg_mapping,
-        )

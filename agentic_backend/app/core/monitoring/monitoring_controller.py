@@ -31,6 +31,12 @@ from app.core.monitoring.monitoring_service import AppMonitoringMetricsService
 
 logger = logging.getLogger(__name__)
 
+def _split_csv(values: list[str]) -> list[str]:
+    out: list[str] = []
+    for v in values or []:
+        out.extend([p.strip() for p in v.split(",") if p and p.strip()])
+    return out
+
 class MonitoringController:
     def __init__(
         self,
@@ -53,6 +59,8 @@ class MonitoringController:
             groupby: List[str] = Query(default=[]),
             user: KeycloakUser = Depends(get_current_user),
         ) -> MetricsResponse:
+            agg = _split_csv(agg)         # supports ?agg=a:b&agg=c:d OR ?agg=a:b,c:d
+            groupby = _split_csv(groupby) 
             SUPPORTED_OPS = {"mean", "sum", "min", "max", "values"}
             agg_mapping: Dict[str, List[str]] = {}
             for item in agg:
@@ -73,37 +81,3 @@ class MonitoringController:
                 user_id=user.uid,
             )
         
-        @app.get(
-            "/metrics/app/numerical",
-            summary="Get aggregated numerical app metrics",
-            tags=fastapi_tags,
-            response_model=MetricsResponse,
-        )
-        def get_app_numerical_metrics(
-            start: str,
-            end: str,
-            precision: str = "hour",
-            agg: List[str] = Query(default=[]),
-            groupby: List[str] = Query(default=[]),
-            user: KeycloakUser = Depends(get_current_user),
-        ) -> MetricsResponse:
-            SUPPORTED_OPS = {"mean", "sum", "min", "max", "values"}
-            agg_mapping: Dict[str, List[str]] = {}
-            for item in agg:
-                if ":" not in item:
-                    raise HTTPException(
-                        400, detail=f"Invalid agg parameter format: {item}"
-                    )
-                field, op = item.split(":")
-                if op not in SUPPORTED_OPS:
-                    raise HTTPException(400, detail=f"Unsupported aggregation op: {op}")
-                agg_mapping.setdefault(field, []).append(op)
-            return self.service.get_app_metrics(
-                precision=precision,
-                groupby=groupby,
-                agg_mapping=agg_mapping,
-            )
-
-
-            
-

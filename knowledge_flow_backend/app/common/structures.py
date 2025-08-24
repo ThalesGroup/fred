@@ -273,6 +273,7 @@ class StorageConfig(BaseModel):
     opensearch: OpenSearchStoreConfig
     resource_store: StoreConfig
     tag_store: StoreConfig
+    kpi_store: StoreConfig
     metadata_store: StoreConfig
     catalog_store: StoreConfig
     tabular_store: Optional[StoreConfig] = Field(default=None, description="Optional tabular store")

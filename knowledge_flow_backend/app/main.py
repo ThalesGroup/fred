@@ -25,6 +25,8 @@ from rich.logging import RichHandler
 from dotenv import load_dotenv
 
 from app.features.catalog.controller import CatalogController
+from app.features.kpi.kpi_controller import KPIController
+from app.features.kpi.oensearch_controller import OpenSearchOpsController
 from app.features.pull.controller import PullDocumentController
 from app.features.pull.service import PullDocumentService
 from app.features.resources.controller import ResourceController
@@ -112,6 +114,8 @@ def create_app() -> FastAPI:
     TagController(router)
     ResourceController(router)
     VectorSearchController(router)
+    KPIController(router)
+    OpenSearchOpsController(router)
 
     if configuration.scheduler.enabled:
         logger.info("🧩 Activating ingestion scheduler controller.")
@@ -120,51 +124,109 @@ def create_app() -> FastAPI:
     logger.info("🧩 All controllers registered.")
     app.include_router(router)
 
+    mcp_opensearch_ops = FastApiMCP(
+        app,
+        name="Knowledge Flow OpenSearch Ops MCP",
+        description=(
+            "Read-only operational tools for OpenSearch. "
+            "Use these endpoints to inspect cluster health, node and shard status, "
+            "list indices, view mappings, and fetch sample documents. "
+            "Intended for monitoring and diagnostics, not for modifying data."
+        ),
+        include_tags=["OpenSearch"],
+        describe_all_responses=True,
+        describe_full_response_schema=True,
+    )
+    mcp_opensearch_ops.mount(mount_path="/mcp_opensearch_ops")
+
+    mcp_kpi = FastApiMCP(
+        app,
+        name="Knowledge Flow KPI MCP",
+        description=(
+            "Query interface for application KPIs. "
+            "Use these endpoints to run structured aggregations over metrics "
+            "(e.g. vectorization latency, LLM usage, token costs, error counts). "
+            "Provides schema, presets, and query compilation helpers so agents can "
+            "form valid KPI queries without guessing."
+        ),
+        include_tags=["KPI"],
+        describe_all_responses=True,
+        describe_full_response_schema=True,
+    )
+    mcp_kpi.mount(mount_path="/mcp_kpi")
+
     mcp_tabular = FastApiMCP(
         app,
         name="Knowledge Flow Tabular MCP",
-        description="MCP server for Knowledge Flow Tabular",
+        description=(
+            "SQL access layer exposed through SQLAlchemy. "
+            "Provides agents with read and query capabilities over relational data "
+            "from configured backends (e.g. PostgreSQL, MySQL, SQLite). "
+            "Use this MCP to explore table schemas, run SELECT queries, and analyze tabular datasets. "
+            "It does not modify or write data."
+        ),
         include_tags=["Tabular"],
         describe_all_responses=True,
         describe_full_response_schema=True,
     )
     mcp_tabular.mount(mount_path="/mcp_tabular")
+
     mcp_text = FastApiMCP(
         app,
         name="Knowledge Flow Text MCP",
-        description="MCP server for Knowledge Flow Text",
+        description=(
+            "Semantic text search interface backed by the vector store. "
+            "Use this MCP to perform vector similarity search over ingested documents, "
+            "retrieve relevant passages, and ground answers in source material. "
+            "It supports queries by text embedding rather than keyword match."
+        ),
         include_tags=["Vector Search"],
         describe_all_responses=True,
         describe_full_response_schema=True,
     )
     mcp_text.mount(mount_path="/mcp_text")
+    
     mcp_template = FastApiMCP(
         app,
         name="Knowledge Flow Text MCP",
         description="MCP server for Knowledge Flow Text",
-        include_tags=["Vector Search"],
+        include_tags=["Templates", "Prompts"],
         describe_all_responses=True,
         describe_full_response_schema=True,
     )
     mcp_template.mount(mount_path="/mcp_template")
+
     mcp_code = FastApiMCP(
         app,
         name="Knowledge Flow Code MCP",
-        description="MCP server for Knowledge Flow Codebase features",
+        description=(
+            "Codebase exploration and search interface. "
+            "Use this MCP to scan and query code repositories, find relevant files, "
+            "and retrieve snippets or definitions. "
+            "Currently supports basic search, with planned improvements for deeper analysis "
+            "such as symbol navigation, dependency mapping, and code understanding."
+        ),
         include_tags=["Code Search"],
         describe_all_responses=True,
         describe_full_response_schema=True,
     )
     mcp_code.mount(mount_path="/mcp_code")
+
     mcp_resources = FastApiMCP(
         app,
-        name="Knowledge Flow resource MCP",
-        description="MCP server for Knowledge Flow resources features",
+        name="Knowledge Flow Resources MCP",
+        description=(
+            "Access to reusable resources for agents. "
+            "Provides prompts, templates, and other content assets that can be used "
+            "to customize agent behavior or generate well-structured custom reports. "
+            "Use this MCP to browse, retrieve, and apply predefined resources when composing answers or building workflows."
+        ),
         include_tags=["Resources"],
         describe_all_responses=True,
         describe_full_response_schema=True,
     )
-    mcp_resources.mount(mount_path="/mcp_resource")
+    mcp_resources.mount(mount_path="/mcp_resources")
+
     return app
 
 
