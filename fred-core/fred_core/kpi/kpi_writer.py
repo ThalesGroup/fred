@@ -56,6 +56,7 @@ class KPIDefaults:
       - cluster: optional cluster label for multi-cluster observability
       - static_dims: arbitrary extra dimensions merged into all events
     """
+
     source: Optional[str] = None  # e.g. "agentic-backend@0.9.3"
     env: Optional[str] = None  # "dev" | "prod" | ...
     cluster: Optional[str] = None  # optional
@@ -87,6 +88,7 @@ def _now_iso() -> str:
     """UTC timestamp (ISO 8601). Useful when an explicit @timestamp is required."""
     return datetime.now(timezone.utc).isoformat()
 
+
 def to_kpi_actor(user: KeycloakUser) -> KPIActor:
     """
     Convert an authenticated Keycloak user into a KPIActor.
@@ -96,6 +98,7 @@ def to_kpi_actor(user: KeycloakUser) -> KPIActor:
       costs and usage to an actor to support per-user chargeback and audits.
     """
     return KPIActor(type="human", user_id=user.uid)
+
 
 # -------------------------
 # Public KPI API (emission)
@@ -137,7 +140,7 @@ class KPIWriter:
         labels: Optional[Iterable[str]] = None,
         trace: Optional[Dict[str, Any]] = None,
         timestamp: Optional[datetime] = None,
-        actor: KPIActor
+        actor: KPIActor,
     ) -> None:
         """
         Core primitive to index a KPIEvent.
@@ -174,7 +177,7 @@ class KPIWriter:
         *,
         dims: Optional[Dims] = None,
         labels: Optional[Iterable[str]] = None,
-        actor: KPIActor
+        actor: KPIActor,
     ):
         """
         Counter helper for discrete occurrences (errors, doc views, retries).
@@ -189,7 +192,7 @@ class KPIWriter:
             unit="count",
             dims=dims,
             labels=labels,
-            actor=actor
+            actor=actor,
         )
 
     def gauge(
@@ -199,7 +202,7 @@ class KPIWriter:
         *,
         unit: Optional[str] = None,
         dims: Optional[Dims] = None,
-        actor: KPIActor
+        actor: KPIActor,
     ):
         """
         Gauge helper for instantaneous values (queue size, memory, #chunks).
@@ -207,7 +210,14 @@ class KPIWriter:
         Note:
         - Gauges represent snapshots; they aren't aggregated like counters.
         """
-        self.emit(name=name, type="gauge", value=float(value), unit=unit, dims=dims, actor=actor)
+        self.emit(
+            name=name,
+            type="gauge",
+            value=float(value),
+            unit=unit,
+            dims=dims,
+            actor=actor,
+        )
 
     # ---- timers: context & decorator ----------------------------------------
     class _TimerCtx:
@@ -226,7 +236,7 @@ class KPIWriter:
             dims: Optional[Dims],
             unit: str,
             labels: Optional[Iterable[str]],
-            actor: KPIActor
+            actor: KPIActor,
         ):
             self.svc = svc
             self.metric_name = metric_name
@@ -264,12 +274,19 @@ class KPIWriter:
         dims: Optional[Dims] = None,
         unit: str = "ms",
         labels: Optional[Iterable[str]] = None,
-        actor: KPIActor
+        actor: KPIActor,
     ) -> "_TimerCtx":
         """Timing context. Usage: `with kpi.timer('vectorization.duration_ms', actor=actor): ...`"""
         return KPIWriter._TimerCtx(self, name, dims, unit, labels, actor)
 
-    def timed(self, name: str, *, unit: str = "ms", static_dims: Optional[Dims] = None, actor: KPIActor) -> Callable:
+    def timed(
+        self,
+        name: str,
+        *,
+        unit: str = "ms",
+        static_dims: Optional[Dims] = None,
+        actor: KPIActor,
+    ) -> Callable:
         """
         Timing decorator with fixed dims. Usage:
 
@@ -293,8 +310,8 @@ class KPIWriter:
     def log_llm(
         self,
         *,
-        scope_type: Optional[str],   # "session" | "project" | "library"
-        scope_id: Optional[str],     # the id within that scope
+        scope_type: Optional[str],  # "session" | "project" | "library"
+        scope_id: Optional[str],  # the id within that scope
         exchange_id: Optional[str],
         agent_id: Optional[str],
         model: Optional[str],
@@ -303,7 +320,7 @@ class KPIWriter:
         tokens_completion: int,
         usd: float,
         status: str = "ok",
-        actor: KPIActor
+        actor: KPIActor,
     ):
         """
         Record one LLM request: latency + tokens + cost, with scope and agent context.
@@ -333,7 +350,7 @@ class KPIWriter:
                 "tokens_total": tokens_prompt + tokens_completion,
                 "usd": usd,
             },
-            actor=actor
+            actor=actor,
         )
 
     def doc_used(
@@ -363,7 +380,7 @@ class KPIWriter:
                 "scope_type": scope_type,
                 "scope_id": scope_id,
             },
-            actor=actor
+            actor=actor,
         )
 
     def vectorization_result(
@@ -411,7 +428,7 @@ class KPIWriter:
                 "chunks": chunks or 0,
                 "vectors": vectors or 0,
             },
-            actor=actor
+            actor=actor,
         )
         # Optional: also keep counters for totals/failures for simpler dashboards.
         if status == "error":
@@ -419,15 +436,21 @@ class KPIWriter:
                 "vectorization.failed_total",
                 1,
                 dims={"file_type": file_type, "model": model, "error_code": error_code},
-                actor=actor
+                actor=actor,
             )
         if chunks is not None:
             self.gauge(
-                "vectorization.chunks", float(chunks), dims={"file_type": file_type}, actor=actor
+                "vectorization.chunks",
+                float(chunks),
+                dims={"file_type": file_type},
+                actor=actor,
             )
         if vectors is not None:
             self.gauge(
-                "vectorization.vectors", float(vectors), dims={"file_type": file_type}, actor=actor
+                "vectorization.vectors",
+                float(vectors),
+                dims={"file_type": file_type},
+                actor=actor,
             )
 
     # ---- API success/failure helpers (centralize error taxonomy) -------------
@@ -477,7 +500,7 @@ class KPIWriter:
             value=latency_ms,
             unit="ms",
             dims=dims,
-            actor=actor
+            actor=actor,
         )
         if status == "error":
             # specific + generic counters

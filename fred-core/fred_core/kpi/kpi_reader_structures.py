@@ -38,9 +38,11 @@ GroupByField = Literal[
 AggOp = Literal["sum", "avg", "min", "max", "count", "value_count", "percentile"]
 OrderDir = Literal["asc", "desc"]
 
+
 class TimeBucket(BaseModel):
     interval: str = Field(..., description="e.g. '1h', '1d', '15m'")
     timezone: Optional[str] = Field(None, description="IANA TZ, e.g. 'Europe/Paris'")
+
 
 class FilterTerm(BaseModel):
     field: Literal[
@@ -57,10 +59,13 @@ class FilterTerm(BaseModel):
     ]
     value: str
 
+
 class SelectMetric(BaseModel):
     alias: str = Field(..., description="name in response, e.g. 'p95' or 'cost_usd'")
     op: AggOp
-    field: Optional[MetricField] = Field(None, description="Required except for count/percentile")
+    field: Optional[MetricField] = Field(
+        None, description="Required except for count/percentile"
+    )
     p: Optional[float] = Field(None, ge=0, le=100, description="Percentile, e.g. 95")
 
     @field_validator("field")
@@ -75,10 +80,12 @@ class SelectMetric(BaseModel):
             raise ValueError(f"field is required for op={op}")
         return v
 
+
 class OrderBy(BaseModel):
     by: Literal["doc_count", "metric"] = "doc_count"
     metric_alias: Optional[str] = None
     direction: OrderDir = "desc"
+
 
 class KPIQuery(BaseModel):
     since: str = Field(..., description="ISO or 'now-24h'")
@@ -90,10 +97,12 @@ class KPIQuery(BaseModel):
     limit: int = Field(10, ge=1, le=1000)
     order_by: Optional[OrderBy] = None
 
+
 class KPIQueryResultRow(BaseModel):
     group: Dict[str, Any]
     metrics: Dict[str, float]
     doc_count: int
+
 
 class KPIQueryResult(BaseModel):
     rows: List[KPIQueryResultRow] = Field(default_factory=list)

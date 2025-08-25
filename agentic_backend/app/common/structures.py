@@ -42,10 +42,10 @@ class TimeoutSettings(BaseModel):
 
 
 class ModelConfiguration(BaseModel):
-    provider: str = Field(
-        ..., description="Provider of the AI model, e.g., openai, ollama, azure."
+    provider: Optional[str] = Field(
+        None, description="Provider of the AI model, e.g., openai, ollama, azure."
     )
-    name: str = Field(..., description="Model name, e.g., gpt-4o, llama2.")
+    name: Optional[str] = Field(None, description="Model name, e.g., gpt-4o, llama2.")
     settings: Optional[Dict[str, Any]] = Field(
         default_factory=dict,
         description="Additional provider-specific settings, e.g., Azure deployment name.",

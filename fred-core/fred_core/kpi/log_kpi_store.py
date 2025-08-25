@@ -17,49 +17,52 @@ from fred_core.kpi.base_kpi_store import BaseKPIStore
 from fred_core.kpi.kpi_writer_structures import (
     KPIEvent,
 )
-from fred_core.kpi.kpi_reader_structures import ( 
+from fred_core.kpi.kpi_reader_structures import (
     KPIQuery,
     KPIQueryResult,
 )
-import logging 
+import logging
+
 
 class KpiLogStore(BaseKPIStore):
-  """
-  No-op KPI store.
+    """
+    No-op KPI store.
 
-  When to use:
-  - Local dev & unit tests (no infra required).
-  - Scenarios where we want *observability semantics* without persistence.
-  - Safe fallback when the real store is unavailable.
+    When to use:
+    - Local dev & unit tests (no infra required).
+    - Scenarios where we want *observability semantics* without persistence.
+    - Safe fallback when the real store is unavailable.
 
-  Behavior:
-  - Does not persist anything.
-  - Logs debug lines so developers can see what would have been recorded.
-  """
+    Behavior:
+    - Does not persist anything.
+    - Logs debug lines so developers can see what would have been recorded.
+    """
 
-  def __init__(self, level: str):
-    self.level = level.lower()
-    self.logger = logging.getLogger("KPI")
+    def __init__(self, level: str):
+        self.level = level.lower()
+        self.logger = logging.getLogger("KPI")
 
-  def ensure_ready(self) -> None:
-    self._log("[KPI][log] ensure_ready called")
+    def ensure_ready(self) -> None:
+        self._log("[KPI][log] ensure_ready called")
 
-  def index_event(self, event: KPIEvent) -> None:
-    self._log(f"[KPI][log] index_event: {event.metric.name} {event.metric.value} dims={event.dims}")
+    def index_event(self, event: KPIEvent) -> None:
+        self._log(
+            f"[KPI][log] index_event: {event.metric.name} {event.metric.value} dims={event.dims}"
+        )
 
-  def bulk_index(self, events: List[KPIEvent]) -> None:
-    self._log(f"[KPI][log] bulk_index: {len(events)} events")
+    def bulk_index(self, events: List[KPIEvent]) -> None:
+        self._log(f"[KPI][log] bulk_index: {len(events)} events")
 
-  def query(self, q: KPIQuery) -> KPIQueryResult:
-    self._log(f"[KPI][log] query: {q.model_dump(exclude_none=True)}")
-    return KPIQueryResult(rows=[])
+    def query(self, q: KPIQuery) -> KPIQueryResult:
+        self._log(f"[KPI][log] query: {q.model_dump(exclude_none=True)}")
+        return KPIQueryResult(rows=[])
 
-  def _log(self, msg: str) -> None:
-    if self.level == "debug":
-      self.logger.debug(msg)
-    elif self.level in ("info", "information"):
-      self.logger.info(msg)
-    elif self.level in ("warn", "warning"):
-      self.logger.warning(msg)
-    else:
-      self.logger.debug(msg)
+    def _log(self, msg: str) -> None:
+        if self.level == "debug":
+            self.logger.debug(msg)
+        elif self.level in ("info", "information"):
+            self.logger.info(msg)
+        elif self.level in ("warn", "warning"):
+            self.logger.warning(msg)
+        else:
+            self.logger.debug(msg)

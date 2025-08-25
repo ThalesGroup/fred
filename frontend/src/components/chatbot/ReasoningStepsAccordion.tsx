@@ -126,7 +126,9 @@ export default function ReasoningTraceAccordion({
                       indexLabel={idx + 1}
                       numberColWidth={numberColWidth}
                       onClick={() => openDetails(m)}
-                      primaryText={preview || chipNode || chipTask || chipChannel}
+                      primaryText={
+                        String(preview || chipNode || chipTask || chipChannel)
+                      }
                       chipChannel={chipChannel}
                       chipNode={chipNode}
                       chipTask={chipTask}

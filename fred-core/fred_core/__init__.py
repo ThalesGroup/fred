@@ -28,7 +28,7 @@ from fred_core.common.structures import (
     PostgresStoreConfig,
     PostgresTableConfig,
     StoreConfig,
-    LogStoreConfig
+    LogStoreConfig,
 )
 from fred_core.kpi.opensearch_kpi_store import OpenSearchKPIStore
 from fred_core.kpi.kpi_writer_structures import (
@@ -49,6 +49,7 @@ from fred_core.kpi.base_kpi_store import BaseKPIStore
 from fred_core.kpi.kpi_writer import KPIWriter
 from fred_core.security.outbound import ClientCredentialsProvider, BearerAuth
 from fred_core.kpi.log_kpi_store import KpiLogStore
+
 __all__ = [
     "raise_internal_error",
     "get_current_user",
@@ -80,5 +81,5 @@ __all__ = [
     "TimeBucket",
     "KPIWriter",
     "KPIActor",
-    "LogStoreConfig"
+    "LogStoreConfig",
 ]

@@ -23,6 +23,7 @@ class KeycloakUser(BaseModel):
     roles: list[str]
     email: str | None = None
 
+
 class SecurityConfiguration(BaseModel):
     enabled: bool = False
     keycloak_url: str

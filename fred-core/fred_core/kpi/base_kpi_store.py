@@ -97,5 +97,3 @@ class BaseKPIStore(Protocol):
         - Not intended to replace BI/ELT; keep semantics simple and documented.
         """
         ...
-
-

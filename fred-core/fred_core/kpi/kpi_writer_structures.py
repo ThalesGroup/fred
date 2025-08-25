@@ -116,12 +116,14 @@ class Trace(BaseModel):
 # - exception_type: short class name (e.g., "TimeoutError", "JWTError")
 Dims = Dict[str, Optional[str]]
 
+
 class KPIActor(BaseModel):
     """
     Required for every KPI emission.
     - type='human' requires a user_id
     - type='system' is allowed without user_id
     """
+
     type: Literal["human", "system"]
     user_id: Optional[str] = None
 
@@ -160,7 +162,3 @@ class KPIEvent(BaseModel):
         if self.trace:
             doc["trace"] = self.trace.model_dump(exclude_none=True)
         return doc
-
-
-
-

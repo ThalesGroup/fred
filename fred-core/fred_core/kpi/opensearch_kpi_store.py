@@ -73,12 +73,16 @@ KPI_INDEX_MAPPING: Dict[str, Any] = {
                     "index": {"type": "keyword"},
                     "file_type": {"type": "keyword"},
                     "actor_type": {"type": "keyword"},  # "human" | "system"
-                    "scope_type": {"type": "keyword"},  # "session" | "project" | "library"
-                    "scope_id": {"type": "keyword"},    # session_id | project_id | library tag
-                    "status": {"type": "keyword"},           # ok | error | timeout | filtered
-                    "http_status": {"type": "keyword"},      # "200".."599"
-                    "error_code": {"type": "keyword"},       # e.g., rate_limit, jwt_invalid
-                    "exception_type": {"type": "keyword"},   # e.g., TimeoutError
+                    "scope_type": {
+                        "type": "keyword"
+                    },  # "session" | "project" | "library"
+                    "scope_id": {
+                        "type": "keyword"
+                    },  # session_id | project_id | library tag
+                    "status": {"type": "keyword"},  # ok | error | timeout | filtered
+                    "http_status": {"type": "keyword"},  # "200".."599"
+                    "error_code": {"type": "keyword"},  # e.g., rate_limit, jwt_invalid
+                    "exception_type": {"type": "keyword"},  # e.g., TimeoutError
                     "route": {"type": "keyword"},
                     "method": {"type": "keyword"},
                 }
@@ -187,7 +191,14 @@ class OpenSearchKPIStore(BaseKPIStore):
     # ---- internal: build OS query -------------------------------------------
     def _build_os_query(self, q: KPIQuery) -> Dict[str, Any]:
         filters: List[Dict[str, Any]] = [
-            {"range": {"@timestamp": {"gte": q.since, **({"lte": q.until} if q.until else {})}}}
+            {
+                "range": {
+                    "@timestamp": {
+                        "gte": q.since,
+                        **({"lte": q.until} if q.until else {}),
+                    }
+                }
+            }
         ]
         for f in q.filters:
             filters.append({"term": {f.field: f.value}})
@@ -202,7 +213,11 @@ class OpenSearchKPIStore(BaseKPIStore):
                 "date_histogram": {
                     "field": "@timestamp",
                     "fixed_interval": q.time_bucket.interval,
-                    **({"time_zone": q.time_bucket.timezone} if q.time_bucket.timezone else {}),
+                    **(
+                        {"time_zone": q.time_bucket.timezone}
+                        if q.time_bucket.timezone
+                        else {}
+                    ),
                     "min_doc_count": 0,
                 }
             }
@@ -213,7 +228,11 @@ class OpenSearchKPIStore(BaseKPIStore):
         for i, gb in enumerate(q.group_by):
             key = f"g{i}"
             parent[key] = {
-                "terms": {"field": gb, "size": q.limit, "order": self._terms_order_clause(q)}
+                "terms": {
+                    "field": gb,
+                    "size": q.limit,
+                    "order": self._terms_order_clause(q),
+                }
             }
             parent = parent[key]["aggs"] = {}
 
@@ -233,7 +252,9 @@ class OpenSearchKPIStore(BaseKPIStore):
                 # doc_count will be used when parsing
                 parent[sel.alias] = {"filter": {"match_all": {}}}
             elif sel.op == "percentile":
-                parent[sel.alias] = {"percentiles": {"field": sel.field, "percents": [sel.p or 95]}}
+                parent[sel.alias] = {
+                    "percentiles": {"field": sel.field, "percents": [sel.p or 95]}
+                }
             else:
                 raise ValueError(f"Unsupported op: {sel.op}")
 
@@ -246,7 +267,9 @@ class OpenSearchKPIStore(BaseKPIStore):
         return {"_count": q.order_by.direction if q.order_by else "desc"}
 
     # ---- internal: parse OS response ----------------------------------------
-    def _parse_response(self, q: KPIQuery, resp: Dict[str, Any]) -> List[KPIQueryResultRow]:
+    def _parse_response(
+        self, q: KPIQuery, resp: Dict[str, Any]
+    ) -> List[KPIQueryResultRow]:
         aggs = resp.get("aggregations") or {}
         rows: List[KPIQueryResultRow] = []
         if not aggs:
@@ -267,7 +290,9 @@ class OpenSearchKPIStore(BaseKPIStore):
                     out[sel.alias] = float(node.get("doc_count", 0))
                 else:
                     n = node.get(sel.alias)
-                    out[sel.alias] = float(n["value"]) if n and n.get("value") is not None else 0.0
+                    out[sel.alias] = (
+                        float(n["value"]) if n and n.get("value") is not None else 0.0
+                    )
             return out
 
         def walk_terms(node: Dict[str, Any], depth: int, group: Dict[str, Any]):
@@ -280,7 +305,7 @@ class OpenSearchKPIStore(BaseKPIStore):
                     gb_name = q.group_by[depth] if depth < len(q.group_by) else gkey
                     g[gb_name] = b.get("key")
                     # Recurse to next terms depth if present on this bucket
-                    next_key = f"g{depth+1}"
+                    next_key = f"g{depth + 1}"
                     if isinstance(b.get(next_key), dict) and "buckets" in b[next_key]:
                         walk_terms(b, depth + 1, g)
                     else:
@@ -293,14 +318,24 @@ class OpenSearchKPIStore(BaseKPIStore):
                         )
                 return
             # No more terms at this depth: leaf
-            rows.append(KPIQueryResultRow(group=group, metrics=collect_metrics(node), doc_count=int(node.get("doc_count", 0))))
+            rows.append(
+                KPIQueryResultRow(
+                    group=group,
+                    metrics=collect_metrics(node),
+                    doc_count=int(node.get("doc_count", 0)),
+                )
+            )
 
         # Entry: time bucket or direct terms or just metrics
         if "time" in aggs and "buckets" in aggs["time"]:
             for tb in aggs["time"]["buckets"]:
                 g0 = {"time": tb.get("key_as_string")}
                 # If we have group_bys, descend into terms within this time bucket; else collect metrics here.
-                if q.group_by and isinstance(tb.get("g0"), dict) and "buckets" in tb["g0"]:
+                if (
+                    q.group_by
+                    and isinstance(tb.get("g0"), dict)
+                    and "buckets" in tb["g0"]
+                ):
                     walk_terms(tb, 0, g0)
                 else:
                     rows.append(
@@ -314,6 +349,8 @@ class OpenSearchKPIStore(BaseKPIStore):
             walk_terms(aggs, 0, {})
         else:
             # No buckets; only leaf metrics at root
-            rows.append(KPIQueryResultRow(group={}, metrics=collect_metrics(aggs), doc_count=0))
+            rows.append(
+                KPIQueryResultRow(group={}, metrics=collect_metrics(aggs), doc_count=0)
+            )
 
         return rows

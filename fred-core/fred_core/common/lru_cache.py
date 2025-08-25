@@ -5,6 +5,7 @@ from typing import TypeVar, Generic
 K = TypeVar("K")
 V = TypeVar("V")
 
+
 class ThreadSafeLRUCache(Generic[K, V]):
     def __init__(self, max_size: int = 1000):
         self._max_size = max_size
