@@ -23,6 +23,7 @@ from app.application_context import (
     get_configuration,
     get_default_model,
     get_history_store,
+    get_kpi_writer,
 )
 from app.core.agents.agent_manager import AgentManager
 from app.core.agents.flow import AgentFlow
@@ -46,6 +47,7 @@ from app.core.chatbot.chat_schema import (
 from app.core.chatbot.metric_structures import MetricsResponse
 from app.core.session.stores.base_session_store import BaseSessionStore
 from app.core.session.attachement_processing import AttachementProcessing
+from fred_core import KPIWriter, KPIActor
 
 logger = logging.getLogger(__name__)
 
@@ -183,6 +185,7 @@ class SessionManager:
         self.temp_files: dict[str, list[str]] = defaultdict(list)
         self.attachement_processing = AttachementProcessing()
         self.history_store = get_history_store()
+        self.kpi: KPIWriter = get_kpi_writer()
         config = get_configuration()
         self.recursion_limit = config.ai.recursion.recursion_limit
 
@@ -203,6 +206,22 @@ class SessionManager:
             user_id,
             session_id,
             agent_name,
+        )
+        # ---- KPI actor & scope ---------------------------------------------------
+        actor = KPIActor(type="human", user_id=user_id)
+        scope_type, scope_id = "session", session_id
+        exchange_id = client_exchange_id or str(uuid4())
+        # Count the incoming user message (before doing any work)
+        self.kpi.count(
+            "chat.user_message_total",
+            1,
+            dims={
+                "agent_id": agent_name,
+                "scope_type": scope_type,
+                "scope_id": scope_id,
+                "exchange_id": exchange_id,
+            },
+            actor=actor,
         )
 
         session, history_msgs, agent, _is_new_session = (
@@ -237,21 +256,53 @@ class SessionManager:
         await self._emit(callback, user_msg)
 
         # 2) Stream agent responses from LangGraph
+        saw_final_assistant = False
         try:
-            agent_msgs = await self._stream_agent_response(
-                compiled_graph=agent.get_compiled_graph(),
-                input_messages=history_msgs + [HumanMessage(message)],
-                session_id=session.id,
-                exchange_id=exchange_id,
-                agent_name=agent_name,
-                user_id=user_id,
-                base_rank=base_rank,
-                start_seq=seq + 1,
-                callback=callback,
-            )
-            all_msgs.extend(agent_msgs)
+            # Timer covers the entire exchange; status is set to "error" automatically if an exception escapes the with-block.
+            with self.kpi.timer(
+                "chat.exchange_latency_ms",
+                dims={
+                    "agent_id": agent_name,
+                    "user_id": user_id,
+                    "session_id": session.id,
+                    "exchange_id": exchange_id,
+                },
+                actor=actor,
+            ):
+                agent_msgs = await self._stream_agent_response(
+                    compiled_graph=agent.get_compiled_graph(),
+                    input_messages=history_msgs + [HumanMessage(message)],
+                    session_id=session.id,
+                    exchange_id=exchange_id,
+                    agent_name=agent_name,
+                    user_id=user_id,
+                    base_rank=base_rank,
+                    start_seq=seq + 1,
+                    callback=callback,
+                )
+                all_msgs.extend(agent_msgs)
+                # Determine if the run produced a final assistant message (success signal)
+                saw_final_assistant = any(
+                    (m.role == Role.assistant and m.channel == Channel.final)
+                    for m in agent_msgs
+                )
         except Exception:
             logger.exception("Agent execution failed")
+            # We don't re-raise here; the timer has already recorded status="error".
+        finally:
+            # Count the exchange outcome (success if we saw a final assistant message)
+            self.kpi.count(
+                "chat.exchange_total",
+                1,
+                dims={
+                    "agent_id": agent_name,
+                    "user_id": user_id,
+                    "session_id": session.id,
+                    "exchange_id": exchange_id,
+                    "status": "ok" if saw_final_assistant else "error",
+                },
+                actor=actor,
+            )
 
         # 3) Persist
         session.updated_at = utcnow_dt()
@@ -585,7 +636,7 @@ class SessionManager:
         groupby: List[str],
         agg_mapping: Dict[str, List[str]],
     ) -> MetricsResponse:
-        return self.history_store.get_metrics(
+        return self.history_store.get_chatbot_metrics(
             start=start,
             end=end,
             precision=precision,

@@ -41,6 +41,7 @@ class ClientCredentialsProvider:
             __call__(): Returns a valid access token, fetching a new one if necessary.
             force_refresh(): Invalidates the cached token, forcing a refresh on next call.
     """
+
     def __init__(
         self,
         *,
@@ -51,7 +52,9 @@ class ClientCredentialsProvider:
         audience: Optional[str] = None,
         verify: Optional[bool] = None,
     ):
-        self.token_url = f"{keycloak_base.rstrip('/')}/realms/{realm}/protocol/openid-connect/token"
+        self.token_url = (
+            f"{keycloak_base.rstrip('/')}/realms/{realm}/protocol/openid-connect/token"
+        )
         self.client_id = client_id
         self.client_secret = client_secret
         self.audience = audience
@@ -99,8 +102,13 @@ class ClientCredentialsProvider:
 
 class BearerAuth(AuthBase):
     """requests.Auth that injects Authorization: Bearer <token> using a provider/callable."""
+
     def __init__(self, token_provider: Union[str, Callable[[], str]]):
-        self._provider = (lambda: token_provider) if isinstance(token_provider, str) else token_provider
+        self._provider = (
+            (lambda: token_provider)
+            if isinstance(token_provider, str)
+            else token_provider
+        )
 
     def __call__(self, r: requests.PreparedRequest) -> requests.PreparedRequest:
         token = self._provider()

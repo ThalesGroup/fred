@@ -12,19 +12,40 @@ import {
   CartesianGrid,
 } from "recharts";
 import dayjs, { ManipulateType } from "dayjs";
-import { useTheme } from "@mui/material/styles";
+import utc from "dayjs/plugin/utc";
+import { alpha, useTheme } from "@mui/material/styles";
 import { MetricsResponse } from "../../slices/agentic/agenticOpenApi";
+
+dayjs.extend(utc);
 
 export interface TokenUsageChartProps {
   start: Date;
   end: Date;
   precision: string; // "sec" | "min" | "hour" | "day"
   metrics: MetricsResponse;
+
+  /** clamp chart height from parent (prevents overflow) */
+  height?: number;
+  /** shared numeric x-domain across charts */
+  xDomain?: [number, number];
 }
 
-export function TokenUsageChart({ start, end, precision, metrics }: TokenUsageChartProps) {
+export function TokenUsageChart({
+  start,
+  end,
+  precision,
+  metrics,
+  height = 220,
+  xDomain,
+}: TokenUsageChartProps) {
   const theme = useTheme();
 
+  // Choose a bar base color from your theme (prefer chart.* then primary)
+  const chartPalette: any = (theme.palette as any).chart || {};
+  const baseBar = chartPalette.blue || chartPalette.primary || theme.palette.primary.main;
+  const barColor = alpha(baseBar, theme.palette.mode === "dark" ? 0.7 : 0.55);
+
+  // --- helpers ---------------------------------------------------------------
   const precisionToUnit: Record<string, ManipulateType> = {
     sec: "second",
     min: "minute",
@@ -32,71 +53,84 @@ export function TokenUsageChart({ start, end, precision, metrics }: TokenUsageCh
     day: "day",
   };
 
-  function getBucketKey(date: Date): string {
-    return dayjs(date).utc().format("YYYY-MM-DDTHH:mm:ss[Z]");
+  const unit: ManipulateType = precisionToUnit[precision] ?? "minute";
+
+  const fmtX = (ts: number) => {
+    const d = dayjs.utc(ts);
+    if (precision === "sec") return d.format("HH:mm:ss");
+    if (precision === "min") return d.format("HH:mm");
+    if (precision === "hour") return d.format("MMM D HH:mm");
+    return d.format("YYYY-MM-DD");
+  };
+
+  // --- map backend buckets by exact UTC millisecond --------------------------
+  const bucketMap = new Map<number, number>();
+  for (const b of metrics?.buckets ?? []) {
+    const ms = new Date(b.timestamp).getTime(); // UTC parse
+    const raw =
+      (b.aggregations as any)["total_tokens_sum"] ??
+      (b.aggregations as any)["total_tokens:sum"] ??
+      (b.aggregations as any)["total_tokens"] ??
+      0;
+    const num = Array.isArray(raw) ? Number(raw[0] ?? 0) : Number(raw ?? 0);
+    bucketMap.set(ms, num);
   }
 
-  function getLabel(date: Date): string {
-    const d = dayjs(date);
-    switch (precision) {
-      case "day":
-        return d.format("DD MMM");
-      case "hour":
-        return d.format("HH:00");
-      case "min":
-        return d.minute() % 10 === 0 ? d.format("HH:mm") : "";
-      case "sec":
-      default:
-        return d.second() === 0 && d.minute() % 5 === 0 ? d.format("HH:mm:ss") : "";
-    }
+  // --- build continuous series from start..end at the chosen precision -------
+  const series: { ts: number; tokens: number }[] = [];
+  let cur = dayjs.utc(start).startOf(unit);
+  const endUtc = dayjs.utc(end).endOf(unit);
+
+  while (cur.isBefore(endUtc) || cur.isSame(endUtc)) {
+    const ts = cur.valueOf(); // ms
+    const tokens = bucketMap.get(ts) ?? 0;
+    series.push({ ts, tokens });
+    cur = cur.add(1, unit);
   }
 
-  // Map of timestamp -> token value
-  const metricMap = new Map(
-    (metrics.buckets || []).map((b) => [b.timestamp, b.aggregations["total_tokens_sum"] ?? 0])
-  );
+  // half-bucket padding so the first/last bars don't hug the Y-axes
+  const stepMsFor = (p: string) => {
+    if (p === "sec") return 1_000;
+    if (p === "min") return 60_000;
+    if (p === "hour") return 3_600_000;
+    if (p === "day") return 86_400_000;
+    return 60_000;
+  };
+  const stepMs = stepMsFor(precision);
+  const paddedDomain: [number, number] | ["dataMin", "dataMax"] =
+    xDomain ? [xDomain[0] - stepMs / 2, xDomain[1] + stepMs / 2] : ["dataMin", "dataMax"];
 
-  // Debug: show available bucket keys
-  console.log("[TokenChart] metricMap keys:", Array.from(metricMap.keys()));
-  console.log("[TokenChart] precision:", precision);
-  console.log("[TokenChart] start:", start.toISOString(), "end:", end.toISOString());
-
-  const data: { time: string; tokens: number }[] = [];
-  const unit = precisionToUnit[precision] || "minute";
-  let current = dayjs.utc(start).startOf(unit);
-  const endTime = dayjs.utc(end).endOf(unit);
-  
-
-  while (current.isBefore(endTime) || current.isSame(endTime)) {
-    const key = getBucketKey(current.toDate());
-    const val = metricMap.get(key) ?? 0;
-    const numberValue = Array.isArray(val) ? val[0] ?? 0 : val;
-
-    // Debug: log each computed key and value
-    console.log("[TokenChart] key:", key, "| value:", numberValue);
-
-    data.push({
-      time: getLabel(current.toDate()),
-      tokens: numberValue,
-    });
-
-    current = current.add(1, unit);
-  }
-
-  console.log("[TokenChart] total points:", data.length);
-
-  const ticks = data
-    .map((d, i) => (d.time ? i : null))
-    .filter((i) => i !== null) as number[];
-
+  // --- render ----------------------------------------------------------------
   return (
-    <ResponsiveContainer width="100%" height={300}>
-      <BarChart data={data}>
-        <CartesianGrid strokeDasharray="3 3" />
-        <XAxis dataKey="time" ticks={ticks.map((i) => data[i].time)} />
-        <YAxis />
-        <Tooltip />
-        <Bar dataKey="tokens" fill={theme.palette.primary.main} />
+    <ResponsiveContainer width="100%" height={height}>
+      <BarChart data={series} margin={{ top: 6, right: 6, left: 0, bottom: 0 }}>
+        <CartesianGrid strokeDasharray="2 2" stroke={theme.palette.divider} />
+        <XAxis
+          dataKey="ts"
+          type="number"
+          domain={paddedDomain}
+          allowDataOverflow
+          padding={{ left: 6, right: 6 }}
+          tickFormatter={fmtX}
+          tick={{ fontSize: 11, fill: theme.palette.text.secondary }}
+        />
+        <YAxis tick={{ fontSize: 11, fill: theme.palette.text.secondary }} width={44} />
+        <Tooltip
+          contentStyle={{
+            backgroundColor: theme.palette.background.paper,
+            border: `1px solid ${theme.palette.divider}`,
+            borderRadius: 8,
+            color: theme.palette.text.primary,
+            boxShadow: theme.shadows[2] as any,
+            padding: 8,
+          }}
+          itemStyle={{ color: theme.palette.text.secondary }}
+          labelStyle={{ color: theme.palette.text.secondary }}
+          cursor={{ fill: theme.palette.action.hover }}
+          labelFormatter={(label) => fmtX(Number(label))}
+          formatter={(val: any) => [Number(val), "tokens"]}
+        />
+        <Bar dataKey="tokens" fill={barColor} radius={[3, 3, 0, 0]} />
       </BarChart>
     </ResponsiveContainer>
   );

@@ -227,17 +227,20 @@ applications:
           verify_certs: false
           username: admin
         feedback_store:
-          type: "duckdb"
-          duckdb_path: "~/.fred/agentic/feedback.duckdb"
+          type: "opensearch"
+          index: feedback-index
         agent_store:
-          type: "duckdb"
-          duckdb_path: "~/.fred/agentic/agent.duckdb"
+          type: "opensearch"
+          index: agent-index
         session_store:
-          type: "duckdb"
-          duckdb_path: "~/.fred/agentic/session.duckdb"
+          type: "opensearch"
+          index: session-index
         history_store:
-          type: "duckdb"
-          duckdb_path: "~/.fred/agentic/history.duckdb"
+          type: "opensearch"
+          index: history-index
+        kpi_store:
+          type: "opensearch"
+          index: kpi-index
     dotenv:
       AZURE_TENANT_ID: ""  
       AZURE_CLIENT_ID: ""  
@@ -534,17 +537,20 @@ applications:
           # username: "my_username" # Overrides the one specified as "SQL_USERNAME" in the .env file
           # password: "my_password" # Overrides the one specified as "SQL_PASSWORD" in the .env file
         catalog_store:
-          type: "duckdb"
-          duckdb_path: "~/.fred/knowledge-flow/catalog.duckdb"
+          type: "opensearch"
+          index: catalog-index
         prompt_store:
-          type: "duckdb"
-          duckdb_path: "~/.fred/knowledge-flow/prompt.duckdb"
+          type: "opensearch"
+          index: prompt-index
         tag_store:
-          type: "duckdb"
-          duckdb_path: "~/.fred/knowledge-flow/tag.duckdb"
+          type: "opensearch"
+          index: tag-index
+        kpi_store:
+          type: "opensearch"
+          index: kpi-index
         metadata_store:
-          type: "duckdb"
-          duckdb_path: "~/.fred/knowledge-flow/metadata.duckdb"
+          type: "opensearch"
+          index: metadata-index
         vector_store:
           type: in_memory
     dotenv:

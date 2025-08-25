@@ -81,6 +81,7 @@ def app_context(monkeypatch, fake_embedder):
             ),
             resource_store=duckdb,
             tag_store=duckdb,
+            kpi_store=duckdb,
             metadata_store=duckdb,
             catalog_store=duckdb,
             tabular_store=duckdb,

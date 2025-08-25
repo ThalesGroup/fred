@@ -12,6 +12,7 @@ import duckdb
 
 logger = logging.getLogger(__name__)
 
+
 class SQLTableStore:
     def __init__(self, driver: str, path: Path):
         self.driver = driver
@@ -28,7 +29,9 @@ class SQLTableStore:
         try:
             with self.engine.connect() as conn:
                 conn.execute(text("SELECT 1"))
-            logger.info(f"Successfully connected to the SQL database : {self.engine.url.database}")
+            logger.info(
+                f"Successfully connected to the SQL database : {self.engine.url.database}"
+            )
 
         except OperationalError as oe:
             msg = (
@@ -81,8 +84,7 @@ class SQLTableStore:
         self._validate_table_name(table_name)
         inspector = inspect(self.engine)
         return [
-            (col["name"], str(col["type"]))
-            for col in inspector.get_columns(table_name)
+            (col["name"], str(col["type"])) for col in inspector.get_columns(table_name)
         ]
 
     def _strip_quotes(self, name: str) -> str:
@@ -97,7 +99,12 @@ class SQLTableStore:
             expecting = False  # expecting a table list after a keyword
             for tok in stmt.tokens:
                 # Start of a table list?
-                if tok.ttype is Keyword and tok.value.upper() in ("FROM", "JOIN", "UPDATE", "INTO"):
+                if tok.ttype is Keyword and tok.value.upper() in (
+                    "FROM",
+                    "JOIN",
+                    "UPDATE",
+                    "INTO",
+                ):
                     expecting = True
                     continue
 
@@ -135,16 +142,21 @@ class SQLTableStore:
         try:
             referenced = self._extract_tables_from_query(sql)
         except Exception as e:
-            logger.warning(f"Table extraction failed ({e}). Skipping validation for this query.")
+            logger.warning(
+                f"Table extraction failed ({e}). Skipping validation for this query."
+            )
             referenced = set()
 
         valid = set(self.list_tables())
         unauthorized = {t for t in referenced if t not in valid}
         if unauthorized:
-            raise ValueError(f"Unauthorized table(s) in query: {', '.join(sorted(unauthorized))}")
+            raise ValueError(
+                f"Unauthorized table(s) in query: {', '.join(sorted(unauthorized))}"
+            )
 
         return pd.read_sql(text(sql), self.engine)
-    
+
+
 def create_empty_duckdb_store() -> SQLTableStore:
     db_path = (Path(tempfile.gettempdir()) / "empty_fallback.duckdb").resolve()
     db_path.parent.mkdir(parents=True, exist_ok=True)

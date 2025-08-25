@@ -22,7 +22,7 @@ from app.core.chatbot.chat_schema import (
     Channel,
     MessagePart,
 )
-from app.core.session.stores.base_history_store import BaseHistoryStore
+from app.core.monitoring.base_history_store import BaseHistoryStore
 from fred_core.store.duckdb_store import DuckDBTableStore
 
 logger = logging.getLogger(__name__)
@@ -163,7 +163,8 @@ class DuckdbHistoryStore(BaseHistoryStore):
         return out
 
     # ------------------------------------------------------------------ metrics
-    def get_metrics(
+
+    def get_chatbot_metrics(
         self,
         start: str,
         end: str,

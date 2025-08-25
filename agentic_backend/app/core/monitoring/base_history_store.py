@@ -36,7 +36,7 @@ class BaseHistoryStore(ABC):
         pass
 
     @abstractmethod
-    def get_metrics(
+    def get_chatbot_metrics(
         self,
         start: str,
         end: str,
