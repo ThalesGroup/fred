@@ -91,12 +91,11 @@ class KPIQuery(BaseModel):
     since: str = Field(..., description="ISO or 'now-24h'")
     until: Optional[str] = None
     filters: List[FilterTerm] = Field(default_factory=list)
-    select: List[SelectMetric] = Field(..., min_items=1)
+    select: List[SelectMetric] = Field(..., min_length=1)  # require at least one metric
     group_by: List[GroupByField] = Field(default_factory=list)
     time_bucket: Optional[TimeBucket] = None
     limit: int = Field(10, ge=1, le=1000)
     order_by: Optional[OrderBy] = None
-
 
 class KPIQueryResultRow(BaseModel):
     group: Dict[str, Any]
