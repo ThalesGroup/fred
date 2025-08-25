@@ -73,15 +73,6 @@ document_sources:
     base_path: ~/Documents/Fred
     description: "Personal local documents available for pull-mode ingestion"
 
-  minio:
-    type: pull
-    provider: minio
-    description: "Documents available for pull from MinIO"
-    endpoint_url: localhost:9000
-    bucket_name: "shared-content"
-    prefix: ""
-    secure: false
-
 embedding:
   type: "openai"
 
