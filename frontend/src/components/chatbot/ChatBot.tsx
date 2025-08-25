@@ -275,7 +275,7 @@ const ChatBot = ({
             body: formData,
           });
 
-        if (!response.ok) {
+          if (!response.ok) {
             showError({
               summary: "File Upload Error",
               detail: `Failed to upload ${file.name}: ${response.statusText}`,

@@ -45,8 +45,6 @@ from app.core.chatbot.chat_schema import (
     ToolResultPart,
 )
 from app.core.chatbot.metric_structures import MetricsResponse
-
-# ⬇️ Structured-content helpers
 from app.core.session.stores.base_session_store import BaseSessionStore
 from app.core.session.attachement_processing import AttachementProcessing
 from fred_core import KPIWriter, KPIActor
@@ -315,12 +313,10 @@ class SessionManager:
 
     # ---------------- internals ----------------
 
-    # ---------------- internals ----------------
-
     def _prepare_session_and_history(
         self,
         user_id: str,
-        session_id: Optional[str],
+        session_id: str | None,
         message: str,
         agent_name: str,
         runtime_context: RuntimeContext | None = None,
