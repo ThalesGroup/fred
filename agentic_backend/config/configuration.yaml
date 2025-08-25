@@ -20,7 +20,7 @@ app:
   reload_dir: "."
   security:
     enabled: false
-    client_id: "app"
+    client_id: "agentic"
     keycloak_url: "http://app-keycloak:8080/realms/app"
     authorized_origins:
       - "http://localhost:5173"
@@ -68,6 +68,18 @@ ai:
       type: "leader"
       enabled: true
       max_steps: 5
+      model: {}
+    - name: "SentinelExpert"
+      role: "Your instance monitoring expert"
+      mcp_servers:
+        - name: knowledge-flow-mcp-server
+          transport: sse
+          url: http://localhost:8111/mcp_opensearch_ops
+          sse_read_timeout: 2000
+      description: >
+        Sentinel watches your instance, providing real-time monitoring and alerts for performance issues.
+      class_path: "app.agents.sentinel.sentinel_expert.SentinelExpert"
+      enabled: true
       model: {}
     - name: "GeneralistExpert"
       role: "Fallback Generalist Expert"
@@ -131,6 +143,7 @@ ai:
           url: http://localhost:8111/mcp_resource
           sse_read_timeout: 2000
       model: {}
+
 storage:
   postgres:
     host: localhost
@@ -159,3 +172,8 @@ storage:
   history_store:
     type: "duckdb"
     duckdb_path: "~/.fred/agentic/history.duckdb"
+
+  kpi_store:
+    type: "log"
+    level: "INFO"
+

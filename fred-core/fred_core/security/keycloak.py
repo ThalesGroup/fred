@@ -94,7 +94,9 @@ def decode_jwt(token: str) -> KeycloakUser:
             raise HTTPException(
                 status_code=401,
                 detail="Token has expired",
-                headers={"WWW-Authenticate": "Bearer error='invalid_token', error_description='token expired'"},
+                headers={
+                    "WWW-Authenticate": "Bearer error='invalid_token', error_description='token expired'"
+                },
             )
         except jwt.InvalidTokenError as e:
             logger.warning("Invalid JWT token: %s", e)
@@ -140,8 +142,10 @@ def decode_jwt(token: str) -> KeycloakUser:
         raise
     except Exception:
         logger.error("Unexpected error while decoding JWT", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error during token validation")
- 
+        raise HTTPException(
+            status_code=500, detail="Internal server error during token validation"
+        )
+
 
 def get_current_user(token: str = Security(oauth2_scheme)) -> KeycloakUser:
     """Fetches the current user from Keycloak token."""

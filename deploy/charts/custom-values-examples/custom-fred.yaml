@@ -44,6 +44,10 @@ applications:
           type: "opensearch"
           index: session-index
 
+        kpi_store:
+          type: "opensearch"
+          index: kpi-index
+
         history_store:
           type: "opensearch"
           index: history-index
@@ -76,6 +80,10 @@ applications:
         tag_store:
           type: "opensearch"
           index: tag-index
+
+        kpi_store:
+          type: "opensearch"
+          index: kpi-index
 
         metadata_store:
           type: "opensearch"

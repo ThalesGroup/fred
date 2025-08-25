@@ -39,14 +39,19 @@ from app.common.structures import (
 )
 from app.core.model.model_factory import get_model
 from langchain_core.language_models.base import BaseLanguageModel
-from app.core.session.stores.base_history_store import BaseHistoryStore
+from app.core.monitoring.base_history_store import BaseHistoryStore
 from app.core.session.stores.base_session_store import BaseSessionStore
 from pathlib import Path
 from fred_core import (
+    LogStoreConfig,
     OpenSearchIndexConfig,
     DuckdbStoreConfig,
     ClientCredentialsProvider,
     BearerAuth,
+    OpenSearchKPIStore,
+    BaseKPIStore,
+    KpiLogStore,
+    KPIWriter,
 )
 from requests.auth import AuthBase
 import logging
@@ -80,6 +85,9 @@ class NoAuth(AuthBase):
     def __call__(self, r):
         return r
 
+    def auth_header(self) -> Optional[str]:
+        return None
+
 
 @dataclass(frozen=True)
 class OutboundAuth:
@@ -112,6 +120,10 @@ def get_knowledge_flow_base_url() -> str:
 
 def get_history_store() -> BaseHistoryStore:
     return get_app_context().get_history_store()
+
+
+def get_kpi_writer() -> KPIWriter:
+    return get_app_context().get_kpi_writer()
 
 
 def get_agent_store() -> BaseAgentStore:
@@ -213,7 +225,9 @@ class ApplicationContext:
     _agent_store_instance: Optional[BaseAgentStore] = None
     _session_store_instance: Optional[BaseSessionStore] = None
     _history_store_instance: Optional[BaseHistoryStore] = None
+    _kpi_store_instance: Optional[BaseKPIStore] = None
     _outbound_auth: OutboundAuth | None = None
+    _kpi_writer: Optional[KPIWriter] = None
 
     def __new__(cls, configuration: Configuration):
         with cls._lock:
@@ -345,11 +359,11 @@ class ApplicationContext:
         """
         if self._history_store_instance is not None:
             return self._history_store_instance
-        from app.core.session.stores.duckdb_history_store import DuckdbHistoryStore
+        from app.core.monitoring.duckdb_history_store import DuckdbHistoryStore
 
         store_config = get_configuration().storage.history_store
         if isinstance(store_config, DuckdbStoreConfig):
-            from app.core.session.stores.duckdb_history_store import DuckdbHistoryStore
+            from app.core.monitoring.duckdb_history_store import DuckdbHistoryStore
 
             db_path = Path(store_config.duckdb_path).expanduser()
             return DuckdbHistoryStore(db_path)
@@ -360,11 +374,11 @@ class ApplicationContext:
                 raise ValueError(
                     "Missing OpenSearch credentials: OPENSEARCH_USER and/or OPENSEARCH_PASSWORD"
                 )
-            from app.core.session.stores.opensearch_history_index import (
-                OpensearchHistoryIndex,
+            from app.core.monitoring.opensearch_history_store import (
+                OpensearchHistoryStore,
             )
 
-            return OpensearchHistoryIndex(
+            return OpensearchHistoryStore(
                 host=opensearch_config.host,
                 username=opensearch_config.username,
                 password=password,
@@ -374,6 +388,30 @@ class ApplicationContext:
             )
         else:
             raise ValueError("Unsupported sessions storage backend")
+
+    def get_kpi_store(self) -> BaseKPIStore:
+        if self._kpi_store_instance is not None:
+            return self._kpi_store_instance
+
+        store_config = get_configuration().storage.kpi_store
+        if isinstance(store_config, OpenSearchIndexConfig):
+            opensearch_config = get_configuration().storage.opensearch
+            password = opensearch_config.password
+            if not password:
+                raise ValueError("Missing OpenSearch credentials: OPENSEARCH_PASSWORD")
+            self._kpi_store_instance = OpenSearchKPIStore(
+                host=opensearch_config.host,
+                username=opensearch_config.username,
+                password=password,
+                secure=opensearch_config.secure,
+                verify_certs=opensearch_config.verify_certs,
+                index=store_config.index,
+            )
+        elif isinstance(store_config, LogStoreConfig):
+            self._kpi_store_instance = KpiLogStore(level=store_config.level)
+        else:
+            raise ValueError("Unsupported KPI storage backend")
+        return self._kpi_store_instance
 
     def get_agent_store(self) -> BaseAgentStore:
         """
@@ -415,6 +453,13 @@ class ApplicationContext:
             )
         else:
             raise ValueError("Unsupported sessions storage backend")
+
+    def get_kpi_writer(self) -> KPIWriter:
+        if self._kpi_writer is not None:
+            return self._kpi_writer
+
+        self._kpi_writer = KPIWriter(store=self.get_kpi_store())
+        return self._kpi_writer
 
     def get_feedback_store(self) -> BaseFeedbackStore:
         """
@@ -570,6 +615,7 @@ class ApplicationContext:
             _describe("session_store", st.session_store)
             _describe("history_store", st.history_store)
             _describe("feedback_store", st.feedback_store)
+            _describe("feedback_store", st.kpi_store)
         except Exception:
             logger.warning(
                 "  ⚠️ Failed to read storage section (some variables may be missing)."

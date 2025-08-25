@@ -3,6 +3,7 @@
 from typing import List, Optional
 from pydantic import BaseModel, Field
 
+
 class VectorSearchHit(BaseModel):
     # Content (chunk)
     content: str
@@ -32,10 +33,10 @@ class VectorSearchHit(BaseModel):
     tag_full_paths: List[str] = []
 
     # Link fields (internal viewers / external)
-    preview_url: Optional[str] = None       # e.g., "/documents/{uid}"
-    preview_at_url: Optional[str] = None    # e.g., "/documents/{uid}#{viewer_fragment}"
-    repo_url: Optional[str] = None          # e.g., "https://git/.../blob/ref/path#Lx-Ly"
-    citation_url: Optional[str] = None      # e.g., "/documents/{uid}#chunk={chunk_id}"
+    preview_url: Optional[str] = None  # e.g., "/documents/{uid}"
+    preview_at_url: Optional[str] = None  # e.g., "/documents/{uid}#{viewer_fragment}"
+    repo_url: Optional[str] = None  # e.g., "https://git/.../blob/ref/path#Lx-Ly"
+    citation_url: Optional[str] = None  # e.g., "/documents/{uid}#chunk={chunk_id}"
 
     # Access (optional, forward-looking)
     license: Optional[str] = None

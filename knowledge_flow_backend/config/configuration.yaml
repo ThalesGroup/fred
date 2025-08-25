@@ -27,7 +27,7 @@ app:
 
 security:
   enabled: false
-  keycloak_url: "http://fred-keycloak:8080/realms/fred"
+  keycloak_url: "http://app-keycloak:8080/realms/fred"
   authorized_origins:
     - "http://localhost:5173"
 
@@ -58,8 +58,9 @@ input_processors:
     class_path: app.core.processors.input.pps_tabular_processor.pps_tabular_processor.PpsTabularProcessor
 
 content_storage:
-  type: local
-  root_path: ~/.fred/knowledge-flow/content-store
+  type: "local"
+  root_path: ~/.fred/knowledge-flow/content-storage
+
 
 document_sources:
   fred:
@@ -89,26 +90,24 @@ storage:
     username: admin
 
   tabular_store:
-    # Local DB 
-    # type: "sql"
-    # driver: "duckdb"
-    # path: "~/.fred/knowledge-flow/db.duckdb"
-    ## Servor DB
-    # type: "sql"
-    # driver: "postgresql+psycopg2"
-    # port: 5433
-    # database: "test_db_postgre_sql"
-    # username: "my_username" # Overrides the one specified as "SQL_USERNAME" in the .env file
-    # password: "my_password" # Overrides the one specified as "SQL_PASSWORD" in the .env file
+    type: "duckdb"
+    duckdb_path: "~/.fred/knowledge-flow/tabular.duckdb"
 
-  
   catalog_store:
     type: "duckdb"
     duckdb_path: "~/.fred/knowledge-flow/catalog.duckdb"
 
+  prompt_store:
+    type: "duckdb"
+    duckdb_path: "~/.fred/knowledge-flow/prompt.duckdb"
+
   resource_store:
     type: "duckdb"
     duckdb_path: "~/.fred/knowledge-flow/resource.duckdb"
+
+  kpi_store:
+    type: "log"
+    level: "INFO"
 
   tag_store:
     type: "duckdb"

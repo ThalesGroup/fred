@@ -69,6 +69,18 @@ ai:
       enabled: true
       max_steps: 5
       model: {}
+    - name: "SentinelExpert"
+      role: "Your instance monitoring expert"
+      mcp_servers:
+        - name: knowledge-flow-mcp-server
+          transport: sse
+          url: http://localhost:8111/mcp_opensearch_ops
+          sse_read_timeout: 2000
+      description: >
+        Sentinel watches your instance, providing real-time monitoring and alerts for performance issues.
+      class_path: "app.agents.sentinel.sentinel_expert.SentinelExpert"
+      enabled: true
+      model: {}
     - name: "GeneralistExpert"
       role: "Fallback Generalist Expert"
       description: >
@@ -160,3 +172,8 @@ storage:
   history_store:
     type: "opensearch"
     index: history-index
+
+  kpi_store:
+    type: "opensearch"
+    index: kpi-index
+

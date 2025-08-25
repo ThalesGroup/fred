@@ -115,6 +115,10 @@ storage:
     type: "opensearch"
     index: resource-index
 
+  kpi_store:
+    type: "opensearch"
+    index: kpi-index
+
   tag_store:
     type: "opensearch"
     index: tag-index

@@ -17,10 +17,8 @@ import logging
 import os
 from pathlib import Path
 from typing import Dict, Type, Union, Optional
-from fred_core import (
-    OpenSearchIndexConfig,
-    DuckdbStoreConfig,
-)
+from fred_core import LogStoreConfig, OpenSearchIndexConfig, DuckdbStoreConfig, OpenSearchKPIStore, BaseKPIStore, KpiLogStore
+from opensearchpy import OpenSearch, RequestsHttpConnection
 from app.core.stores.catalog.opensearch_catalog_store import OpenSearchCatalogStore
 from app.core.stores.content.base_content_loader import BaseContentLoader
 from app.core.stores.content.filesystem_content_loader import FileSystemContentLoader
@@ -36,6 +34,7 @@ from app.common.structures import (
     MinioStorageConfig,
     WeaviateVectorStorage,
 )
+from fred_core import KPIWriter
 from app.common.utils import validate_settings_or_exit
 from app.config.embedding_azure_apim_settings import EmbeddingAzureApimSettings
 from app.config.embedding_azure_openai_settings import EmbeddingAzureOpenAISettings
@@ -107,6 +106,16 @@ def get_configuration() -> Configuration:
     return get_app_context().configuration
 
 
+def get_kpi_writer() -> KPIWriter:
+    """
+    Retrieves the global KPI writer instance.
+
+    Returns:
+        KPIWriter: The singleton KPI writer instance.
+    """
+    return get_app_context().get_kpi_writer()
+
+
 def get_app_context() -> "ApplicationContext":
     """
     Retrieves the global application context instance.
@@ -160,10 +169,13 @@ class ApplicationContext:
     _vector_store_instance: Optional[BaseVectoreStore] = None
     _metadata_store_instance: Optional[BaseMetadataStore] = None
     _tag_store_instance: Optional[BaseTagStore] = None
+    _kpi_store_instance: Optional[BaseKPIStore] = None
+    _opensearch_client: Optional[OpenSearch] = None
     _resource_store_instance: Optional[BaseResourceStore] = None
     _tabular_store_instance: Optional[Union[DuckDBTableStore, SQLTableStore]] = None
     _catalog_store_instance: Optional[BaseCatalogStore] = None
     _file_store_instance: Optional[BaseFileStore] = None
+    _kpi_writer: Optional[KPIWriter] = None
 
     def __init__(self, configuration: Configuration):
         # Allow reuse if already initialized with same config
@@ -480,6 +492,51 @@ class ApplicationContext:
             raise ValueError("Unsupported metadata storage backend")
         return self._metadata_store_instance
 
+    def get_opensearch_client(self) -> OpenSearch:
+        if self._opensearch_client is not None:
+            return self._opensearch_client
+
+        opensearch_config = get_configuration().storage.opensearch
+        self._opensearch_client = OpenSearch(
+            opensearch_config.host,
+            http_auth=(opensearch_config.username, opensearch_config.password),
+            use_ssl=opensearch_config.secure,
+            verify_certs=opensearch_config.verify_certs,
+            connection_class=RequestsHttpConnection,
+        )
+        return self._opensearch_client
+
+    def get_kpi_writer(self) -> KPIWriter:
+        if self._kpi_writer is not None:
+            return self._kpi_writer
+
+        self._kpi_writer = KPIWriter(store=self.get_kpi_store())
+        return self._kpi_writer
+
+    def get_kpi_store(self) -> BaseKPIStore:
+        if self._kpi_store_instance is not None:
+            return self._kpi_store_instance
+
+        store_config = get_configuration().storage.kpi_store
+        if isinstance(store_config, OpenSearchIndexConfig):
+            opensearch_config = get_configuration().storage.opensearch
+            password = opensearch_config.password
+            if not password:
+                raise ValueError("Missing OpenSearch credentials: OPENSEARCH_PASSWORD")
+            self._kpi_store_instance = OpenSearchKPIStore(
+                host=opensearch_config.host,
+                username=opensearch_config.username,
+                password=password,
+                secure=opensearch_config.secure,
+                verify_certs=opensearch_config.verify_certs,
+                index=store_config.index,
+            )
+        elif isinstance(store_config, LogStoreConfig):
+            self._kpi_store_instance = KpiLogStore(level=store_config.level)
+        else:
+            raise ValueError("Unsupported KPI storage backend")
+        return self._kpi_store_instance
+
     def get_tag_store(self) -> BaseTagStore:
         if self._tag_store_instance is not None:
             return self._tag_store_instance
@@ -682,21 +739,37 @@ class ApplicationContext:
         except Exception:
             logger.warning("⚠️ Failed to load vector store settings — some variables may be missing or misconfigured.")
 
-        logger.info(f"  🗃️ Metadata storage backend: {self.configuration.storage.metadata_store.type}")
-        if isinstance(self.configuration.storage.metadata_store, DuckdbStoreConfig):
-            logger.info(f"     ↳ DB Path: {self.configuration.storage.metadata_store.duckdb_path}")
+        try:
+            st = self.configuration.storage
+            logger.info("  🗄️  Storage:")
 
-        logger.info(f"  🗃️ Catalog storage backend: {self.configuration.storage.catalog_store.type}")
-        if isinstance(self.configuration.storage.catalog_store, DuckdbStoreConfig):
-            logger.info(f"     ↳ DB Path: {self.configuration.storage.catalog_store.duckdb_path}")
+            def _describe(label: str, store_cfg):
+                if isinstance(store_cfg, DuckdbStoreConfig):
+                    logger.info("     • %-14s DuckDB  path=%s", label, store_cfg.duckdb_path)
+                elif isinstance(store_cfg, OpenSearchIndexConfig):
+                    # These carry index name + opensearch global section
+                    os_cfg = self.configuration.storage.opensearch
+                    logger.info(
+                        "     • %-14s OpenSearch host=%s index=%s secure=%s verify=%s",
+                        label,
+                        os_cfg.host,
+                        store_cfg.index,
+                        os_cfg.secure,
+                        os_cfg.verify_certs,
+                    )
+                else:
+                    # Generic store types from your pydantic StoreConfig could land here
+                    logger.info("     • %-14s %s", label, type(store_cfg).__name__)
 
-        logger.info(f"  📂 Resource storage backend: {self.configuration.storage.resource_store.type}")
-        if isinstance(self.configuration.storage.resource_store, DuckdbStoreConfig):
-            logger.info(f"     ↳ DB Path: {self.configuration.storage.resource_store.duckdb_path}")
-
-        logger.info(f"  📂 Tag storage backend: {self.configuration.storage.tag_store.type}")
-        if isinstance(self.configuration.storage.tag_store, DuckdbStoreConfig):
-            logger.info(f"     ↳ DB Path: {self.configuration.storage.tag_store.duckdb_path}")
+            _describe("agent_store", st.tag_store)
+            _describe("session_store", st.kpi_store)
+            _describe("history_store", st.tabular_store)
+            _describe("feedback_store", st.catalog_store)
+            _describe("feedback_store", st.metadata_store)
+            _describe("feedback_store", st.vector_store)
+            _describe("feedback_store", st.resource_store)
+        except Exception:
+            logger.warning("  ⚠️ Failed to read storage section (some variables may be missing).")
 
         logger.info(f"  📁 Content storage backend: {self.configuration.content_storage.type}")
         if isinstance(self.configuration.content_storage, MinioStorageConfig):

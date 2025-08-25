@@ -29,6 +29,7 @@ class StorageConfig(BaseModel):
     session_store: StoreConfig
     history_store: StoreConfig
     feedback_store: StoreConfig
+    kpi_store: StoreConfig
 
 
 class TimeoutSettings(BaseModel):
