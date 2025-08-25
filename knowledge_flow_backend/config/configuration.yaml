@@ -58,10 +58,9 @@ input_processors:
     class_path: app.core.processors.input.pps_tabular_processor.pps_tabular_processor.PpsTabularProcessor
 
 content_storage:
-  type: minio
-  endpoint: http://localhost:9000
-  bucket_name: "knowledge-flow-content"
-  secure: false
+  type: "local"
+  root_path: ~/.fred/knowledge-flow/content-storage
+
 
 document_sources:
   fred:
