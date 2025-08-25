@@ -3,7 +3,6 @@ from sqlalchemy import create_engine, text, inspect
 from sqlalchemy.exc import SQLAlchemyError, OperationalError
 import logging
 from typing import List
-import tempfile
 from pathlib import Path
 import sqlparse
 from sqlparse.sql import Identifier, IdentifierList
@@ -163,5 +162,3 @@ class SQLTableStore:
         except Exception as e:
             logger.error(f"Error executing read/write query: {e}")
             raise
-
-        

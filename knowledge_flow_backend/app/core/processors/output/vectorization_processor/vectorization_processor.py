@@ -15,7 +15,7 @@
 import logging
 import os
 import time
-from typing import override
+from typing import override, Optional
 from langchain.schema.document import Document
 
 from app.application_context import ApplicationContext
