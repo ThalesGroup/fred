@@ -242,6 +242,7 @@ applications:
           type: "opensearch"
           index: kpi-index
     dotenv:
+      KEYCLOAK_AGENTIC_TOKEN: ""
       AZURE_TENANT_ID: ""  
       AZURE_CLIENT_ID: ""  
       AZURE_CLIENT_SECRET: ""
