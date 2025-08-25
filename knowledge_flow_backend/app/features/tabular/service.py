@@ -15,24 +15,28 @@
 import logging
 import re
 from datetime import datetime
-from typing import List
+from typing import List, Dict, Literal
 
-from app.application_context import ApplicationContext
-from app.features.tabular.structures import (
-    TabularColumnSchema,
-    TabularDatasetMetadata,
-    RawSQLRequest,
-    TabularQueryResponse,
-    TabularSchemaResponse,
-)
-from app.features.tabular.utils import extract_safe_sql_query
+from fred_core.store.sql_store import SQLTableStore
+from app.features.tabular.structures import TabularColumnSchema, RawSQLRequest, TabularQueryResponse, TabularSchemaResponse, DTypes
+
 
 logger = logging.getLogger(__name__)
 
 
 class TabularService:
-    def __init__(self):
-        self.tabular_store = ApplicationContext.get_instance().get_tabular_store()
+    def __init__(self, stores: Dict[str, SQLTableStore], store_modes: Dict[str, Literal["read_only", "read_and_write"]]):
+        self.stores = stores
+        self.store_modes = store_modes
+
+    def _get_store(self, db_name: str) -> SQLTableStore:
+        if db_name not in self.stores:
+            raise ValueError(f"Unknown database: {db_name}")
+        return self.stores[db_name]
+
+    def _check_write_allowed(self, db_name: str):
+        if self.store_modes.get(db_name) != "read_and_write":
+            raise PermissionError(f"Write operations are not allowed on database '{db_name}'")
 
     def _sanitize_table_name(self, name: str) -> str:
         return name.replace("-", "_")
@@ -40,7 +44,7 @@ class TabularService:
     def _format_date(self, dt: datetime) -> str:
         return dt.isoformat()
 
-    def _map_duckdb_type_to_literal(self, duckdb_type: str) -> str:
+    def _map_sql_type_to_literal(self, duckdb_type: str) -> DTypes:
         duckdb_type = duckdb_type.lower()
         if any(x in duckdb_type for x in ["varchar", "string", "text"]):
             return "string"
@@ -54,90 +58,65 @@ class TabularService:
             return "integer"
         return "unknown"
 
-    def list_tabular_datasets(self) -> List[TabularDatasetMetadata]:
-        datasets = []
-        if self.tabular_store is None:
-            raise RuntimeError("tabular_store is not initialized")
-        for table_name in self.tabular_store.list_tables():
-            try:
-                count_df = self.tabular_store.execute_sql_query(f"SELECT COUNT(*) AS count FROM {table_name}")
-                row_count = count_df["count"][0]
-            except Exception as e:
-                logger.warning(f"Failed to count rows for {table_name}: {e}")
-                row_count = 0
+    def delete_table(self, db_name: str, table_name: str) -> None:
+        self._check_write_allowed(db_name)
+        store = self._get_store(db_name)
+        store.delete_table(table_name)
 
-            datasets.append(
-                TabularDatasetMetadata(
-                    document_name=table_name,
-                    title=table_name,
-                    description="",
-                    tags=[],
-                    domain="",
-                    row_count=row_count,
-                )
-            )
-        return datasets
+    def list_databases(self) -> List[str]:
+        return list(self.stores.keys())
 
-    def get_schema(self, document_name: str) -> TabularSchemaResponse:
-        table_name = document_name.replace("-", "_")
-        if self.tabular_store is None:
-            raise RuntimeError("tabular_store is not initialized")
-        schema = self.tabular_store.get_table_schema(table_name)
+    def get_schema(self, db_name: str, document_name: str) -> TabularSchemaResponse:
+        table_name = self._sanitize_table_name(document_name)
+        store = self._get_store(db_name)
 
-        columns = [TabularColumnSchema(name=col, dtype=self._map_duckdb_type_to_literal(dtype)) for col, dtype in schema]
+        schema = store.get_table_schema(table_name)
+        columns = [TabularColumnSchema(name=col, dtype=self._map_sql_type_to_literal(dtype)) for col, dtype in schema]
 
-        count_df = self.tabular_store.execute_sql_query(f"SELECT COUNT(*) AS count FROM {table_name}")
+        count_df = store.execute_sql_query(f"SELECT COUNT(*) AS count FROM {table_name}")
         row_count = count_df["count"][0]
 
         return TabularSchemaResponse(document_name=document_name, columns=columns, row_count=row_count)
 
-    def list_datasets_with_schema(self) -> list[TabularSchemaResponse]:
+    def list_tables_with_schema(self, db_name: str) -> list[TabularSchemaResponse]:
+        store = self._get_store(db_name)
         responses = []
-        if self.tabular_store is None:
-            raise RuntimeError("tabular_store is not initialized")
-        table_names = self.tabular_store.list_tables()
+        table_names = store.list_tables()
 
         for table in table_names:
             try:
-                schema_info = self.tabular_store.get_table_schema(table)
-                columns = [TabularColumnSchema(name=col_name, dtype=self._map_duckdb_type_to_literal(col_type)) for col_name, col_type in schema_info]
-                count_df = self.tabular_store.execute_sql_query(f"SELECT COUNT(*) AS count FROM {table}")
+                schema_info = store.get_table_schema(table)
+                columns = [TabularColumnSchema(name=col_name, dtype=self._map_sql_type_to_literal(col_type)) for col_name, col_type in schema_info]
+                count_df = store.execute_sql_query(f"SELECT COUNT(*) AS count FROM {table}")
                 row_count = count_df["count"][0]
 
                 responses.append(TabularSchemaResponse(document_name=table, columns=columns, row_count=row_count))
             except Exception as e:
-                logger.warning(f"Failed to load schema for {table}: {e}")
+                logger.warning(f"[{db_name}] Failed to load schema for {table}: {e}")
                 continue
 
         return responses
 
-    def query(self, document_name: str, request: RawSQLRequest) -> TabularQueryResponse:
-        sql = request.query
+    def query(self, db_name: str, document_name: str, request: RawSQLRequest) -> TabularQueryResponse:
+        store = self._get_store(db_name)
+        sql = request.query.strip()
 
-        if not isinstance(sql, str):
-            raise TypeError("Expected request.query to be a string")
-
-        if not sql.strip():
+        if not sql:
             raise ValueError("Empty SQL string provided")
 
-        sql = extract_safe_sql_query(sql.strip())
-
-        if not isinstance(sql, str):
-            raise TypeError("extract_safe_sql_query did not return a string")
-
-        has_limit = re.search(r"\bLIMIT\b\s+\d+", sql, re.IGNORECASE) is not None
-
-        if not has_limit:
-            sql = sql.rstrip(";") + " LIMIT 20"
-
-        logger.info(f"🧠 Final SQL executed: {sql}")
-
         try:
-            if self.tabular_store is None:
-                raise RuntimeError("tabular_store is not initialized")
-            df = self.tabular_store.execute_sql_query(sql)
-            rows = df.to_dict(orient="records")
-            return TabularQueryResponse(sql_query=sql, rows=rows, error=None)
+            is_write = bool(re.match(r"^(insert|update|delete|drop|create|alter)", sql, re.IGNORECASE))
+            if is_write:
+                self._check_write_allowed(db_name)
+                logger.info(f"[{db_name}] Executing SQL: {sql}")
+                store.execute_update_query(sql)
+                rows = []
+            else:
+                logger.info(f"[{db_name}] Executing SQL: {sql}")
+                df = store.execute_sql_query(sql)
+                rows = df.to_dict(orient="records")
+            return TabularQueryResponse(db_name=db_name, sql_query=sql, rows=rows, error=None)
+
         except Exception as e:
-            logger.error(f"Error during query execution: {e}", exc_info=True)
-            return TabularQueryResponse(sql_query=sql, rows=[], error=str(e))
+            logger.error(f"[{db_name}] Error during query execution: {e}", exc_info=True)
+            return TabularQueryResponse(db_name=db_name, sql_query=sql, rows=[], error=str(e))

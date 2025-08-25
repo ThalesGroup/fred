@@ -89,10 +89,46 @@ storage:
     verify_certs: false
     username: admin
 
-  tabular_store:
-    type: "duckdb"
-    duckdb_path: "~/.fred/knowledge-flow/tabular.duckdb"
+  tabular_stores:
+    
+    base_database:                            # Minimal configuration to enable CSV document ingestion
+      type: "sql"
+      driver: "duckdb"
+      database: "base_database"
+      path: "~/.fred/knowledge-flow/db.duckdb"
+      mode: "read_only"
 
+    # mariadb_database:
+    #   type: "sql"
+    #   driver: "mysql+pymysql"
+    #   host: "localhost"
+    #   port: 3306
+    #   database: "test_db_mariadb"
+    #   username: your_user
+    #   password: your_pwd                 # pragma: allowlist secret
+    #   mode: "read_only"
+
+    postgres_database:
+      type: "sql"
+      driver: "postgresql+psycopg2"
+      host: "localhost"
+      port: 5433
+      database: "test_db_postgres"
+      username: your_user
+      password: your_pwd                    # pragma: allowlist secret
+      mode: "read_and_write"
+
+    # mysql_database:
+    #   type: "sql"
+    #   driver: "mysql+pymysql"
+    #   host: "localhost"
+    #   port: 3307
+    #   database: "test_db_mysql"
+    #   username: your_user
+    #   password: your_pwd                 # pragma: allowlist secret
+    #   mode: "read_only"
+    
+  
   catalog_store:
     type: "duckdb"
     duckdb_path: "~/.fred/knowledge-flow/catalog.duckdb"

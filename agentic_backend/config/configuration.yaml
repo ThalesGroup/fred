@@ -50,12 +50,13 @@ ai:
   default_model:
     # Required in .env:
     # - OPENAI_API_KEY
-    provider: "openai"
-    name: "gpt-4o"
+    provider: "azure"
+    name: "fred-gpt-4o"  # your Azure deployment name
     settings:
+      api_version: "2024-05-01-preview"
       temperature: 0.0
-      max_retries: 2
       request_timeout: 30
+      max_retries: 2
   recursion:
     recursion_limit: 40 # Number or max recursion use by the agents while using the model
   agents:

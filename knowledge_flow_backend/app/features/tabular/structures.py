@@ -38,6 +38,7 @@ class RawSQLRequest(BaseModel):
 
 
 class TabularQueryResponse(BaseModel):
+    db_name: str
     sql_query: str
     rows: Optional[List[dict]] = []
     error: Optional[str] = None
