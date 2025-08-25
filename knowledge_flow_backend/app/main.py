@@ -123,7 +123,7 @@ def create_app() -> FastAPI:
 
     logger.info("🧩 All controllers registered.")
     app.include_router(router)
-
+    mcp_prefix = "/knowledge-flow/v1"
     mcp_opensearch_ops = FastApiMCP(
         app,
         name="Knowledge Flow OpenSearch Ops MCP",
@@ -137,8 +137,8 @@ def create_app() -> FastAPI:
         describe_all_responses=True,
         describe_full_response_schema=True,
     )
-    mcp_opensearch_ops.mount(mount_path="/mcp_opensearch_ops")
-
+    mcp_opensearch_ops.mount(mount_path=f"{mcp_prefix}/mcp-opensearch-ops")
+    
     mcp_kpi = FastApiMCP(
         app,
         name="Knowledge Flow KPI MCP",
@@ -153,7 +153,7 @@ def create_app() -> FastAPI:
         describe_all_responses=True,
         describe_full_response_schema=True,
     )
-    mcp_kpi.mount(mount_path="/mcp_kpi")
+    mcp_kpi.mount(mount_path=f"{mcp_prefix}/mcp-kpi")
 
     mcp_tabular = FastApiMCP(
         app,
@@ -169,7 +169,7 @@ def create_app() -> FastAPI:
         describe_all_responses=True,
         describe_full_response_schema=True,
     )
-    mcp_tabular.mount(mount_path="/mcp_tabular")
+    mcp_tabular.mount(mount_path=f"{mcp_prefix}/mcp-tabular")
 
     mcp_text = FastApiMCP(
         app,
@@ -184,7 +184,7 @@ def create_app() -> FastAPI:
         describe_all_responses=True,
         describe_full_response_schema=True,
     )
-    mcp_text.mount(mount_path="/mcp_text")
+    mcp_text.mount(mount_path=f"{mcp_prefix}/mcp-text")
 
     mcp_template = FastApiMCP(
         app,
@@ -194,7 +194,7 @@ def create_app() -> FastAPI:
         describe_all_responses=True,
         describe_full_response_schema=True,
     )
-    mcp_template.mount(mount_path="/mcp_template")
+    mcp_template.mount(mount_path=f"{mcp_prefix}/mcp-template")
 
     mcp_code = FastApiMCP(
         app,
@@ -210,7 +210,7 @@ def create_app() -> FastAPI:
         describe_all_responses=True,
         describe_full_response_schema=True,
     )
-    mcp_code.mount(mount_path="/mcp_code")
+    mcp_code.mount(mount_path=f"{mcp_prefix}/mcp-code")
 
     mcp_resources = FastApiMCP(
         app,
@@ -225,7 +225,7 @@ def create_app() -> FastAPI:
         describe_all_responses=True,
         describe_full_response_schema=True,
     )
-    mcp_resources.mount(mount_path="/mcp_resources")
+    mcp_resources.mount(mount_path=f"{mcp_prefix}/mcp-resources")
 
     return app
 

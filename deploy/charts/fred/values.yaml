@@ -140,6 +140,7 @@ applications:
         properties:
           logoName: "fred"
       ai:
+        knowledge_flow_url: "http://localhost:8111/knowledge-flow/v1"
         # Timeout settings for the client
         timeout:
           connect: 5  # Time to wait for a connection in seconds
@@ -185,7 +186,7 @@ applications:
             mcp_servers:
               - name: knowledge-flow-mcp-server
                 transport: sse
-                url: http://localhost:8111/mcp_tabular
+                url: http://localhost:8111/knowledge-flow/v1/mcp-tabular
                 sse_read_timeout: 2000
             model: {}
           - name: "RicoProExpert"
