@@ -185,7 +185,7 @@ def create_app() -> FastAPI:
         describe_full_response_schema=True,
     )
     mcp_text.mount(mount_path="/mcp_text")
-    
+
     mcp_template = FastApiMCP(
         app,
         name="Knowledge Flow Text MCP",

@@ -9,6 +9,7 @@ from app.application_context import get_app_context
 
 logger = logging.getLogger(__name__)
 
+
 class KPIController:
     """
     Minimal controller exposing a single KPI query endpoint.
@@ -20,7 +21,7 @@ class KPIController:
         router: APIRouter,
     ):
         # Init the writer store (creates index if needed)
-        
+
         # Reader wraps the same OS client + index
         self.reader = get_app_context().get_kpi_store()
 

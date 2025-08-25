@@ -7,6 +7,7 @@ from app.application_context import get_app_context
 
 logger = logging.getLogger(__name__)
 
+
 class OpenSearchOpsController:
     """
     Read-only OpenSearch ops endpoints for MCP monitoring agents.
@@ -16,8 +17,8 @@ class OpenSearchOpsController:
         self,
         router: APIRouter,
     ):
-        self.client = get_app_context().get_opensearch_client() 
-        self.default_index_pattern ="*"
+        self.client = get_app_context().get_opensearch_client()
+        self.default_index_pattern = "*"
 
         def err(e: Exception) -> HTTPException:
             logger.error(f"[OSOPS] error: {e}", exc_info=True)

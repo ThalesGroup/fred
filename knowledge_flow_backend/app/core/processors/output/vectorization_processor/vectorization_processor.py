@@ -31,9 +31,7 @@ from app.core.processors.output.vectorization_processor.vectorization_utils impo
     sanitize_chunk_metadata,
 )
 
-# NEW: KPI imports
-from fred_core.kpi.kpi_writer import KPIWriter, KPIDefaults  # runtime emitter API
-from fred_core.kpi.kpi_writer_structures import MetricNames  # canonical metric names
+from fred_core import KPIWriter, KPIActor
 
 logger = logging.getLogger(__name__)
 
@@ -61,13 +59,7 @@ class VectorizationProcessor(BaseOutputProcessor):
         self.metadata_store = ApplicationContext.get_instance().get_metadata_store()
         logger.info(f"📝 Metadata store initialized: {self.metadata_store.__class__.__name__}")
 
-        # NEW: KPI writer (from ApplicationContext if available; otherwise fallback to a dev-safe Noop)
-        try:
-            self.kpi: KPIWriter = self.context.get_kpi_writer()  # preferred
-        except Exception:
-            # Optional fallback so devs don't need a KPI backend
-            from fred_core.kpi.base_kpi_store import NoopKPIStore
-            self.kpi = KPIWriter(store=NoopKPIStore(), defaults=KPIDefaults(source="vectorization-pipeline"))
+        self.kpi: KPIWriter = self.context.get_kpi_writer()  # preferred
 
     @override
     def process(self, file_path: str, metadata: DocumentMetadata) -> DocumentMetadata:
@@ -164,6 +156,9 @@ class VectorizationProcessor(BaseOutputProcessor):
                     index=index_name,
                     status="error",
                     error_code="vectorstore_write_failed",
+                    actor=KPIActor(type="system"),  # or "human", with user_id if relevant
+                    scope_type="document",
+                    scope_id=doc_uid,
                 )
                 raise VectorProcessingError("Failed to add documents to Vector Store") from e
 
@@ -182,6 +177,9 @@ class VectorizationProcessor(BaseOutputProcessor):
                 duration_ms=duration_ms,
                 index=index_name,
                 status="ok",
+                actor=KPIActor(type="system"),  # or "human", with user_id if relevant
+                scope_type="document",
+                scope_id=doc_uid,
             )
             return metadata
 
@@ -200,5 +198,8 @@ class VectorizationProcessor(BaseOutputProcessor):
                 index=index_name,
                 status="error",
                 error_code=type(e).__name__,
+                actor=KPIActor(type="system"),
+                scope_type="document",
+                scope_id=doc_uid,
             )
             raise VectorProcessingError("vectorization processing failed") from e

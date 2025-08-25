@@ -28,7 +28,7 @@ Why this exists in Fred:
 Key ideas:
 - `BaseKPIStore` is a `Protocol` (static duck-typing) → implementations don’t
   need inheritance, only matching shape.
-- `NoopKPIStore` is the dev/default sink: never fails, logs what would happen.
+- `LogKPIStore` is the dev/default sink: never fails, logs what would happen.
   Useful for local runs and unit tests where metrics persistence is out of scope.
 """
 

@@ -115,6 +115,7 @@ def minimal_generalist_config() -> Configuration:
             session_store=duckdb_store,
             history_store=duckdb_store,
             feedback_store=duckdb_store,
+            kpi_store=duckdb_store,
         ),
     )
 

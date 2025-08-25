@@ -105,6 +105,7 @@ def get_configuration() -> Configuration:
     """
     return get_app_context().configuration
 
+
 def get_kpi_writer() -> KPIWriter:
     """
     Retrieves the global KPI writer instance.
@@ -113,6 +114,7 @@ def get_kpi_writer() -> KPIWriter:
         KPIWriter: The singleton KPI writer instance.
     """
     return get_app_context().get_kpi_writer()
+
 
 def get_app_context() -> "ApplicationContext":
     """
@@ -500,7 +502,7 @@ class ApplicationContext:
             http_auth=(opensearch_config.username, opensearch_config.password),
             use_ssl=opensearch_config.secure,
             verify_certs=opensearch_config.verify_certs,
-            connection_class=RequestsHttpConnection, 
+            connection_class=RequestsHttpConnection,
         )
         return self._opensearch_client
 
@@ -534,7 +536,7 @@ class ApplicationContext:
         else:
             raise ValueError("Unsupported KPI storage backend")
         return self._kpi_store_instance
-    
+
     def get_tag_store(self) -> BaseTagStore:
         if self._tag_store_instance is not None:
             return self._tag_store_instance

@@ -20,7 +20,7 @@ import tempfile
 from typing import List, Optional
 
 from app.application_context import get_kpi_writer
-from fred_core import KeycloakUser, get_current_user, KPIWriter
+from fred_core import KeycloakUser, get_current_user, KPIWriter, KPIActor
 from app.common.structures import Status
 from fastapi import APIRouter, Depends, Response, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
@@ -170,7 +170,7 @@ class IngestionController:
             with kpi.timer(
                 "api.request_latency_ms",
                 dims={"route": "/upload-process-documents", "method": "POST"},
-                actor=user.to_kpi_actor(),  # or actor=user.to_kpi_actor() if you didn't add coercion
+                actor=KPIActor(type="human", user_id=user.uid),
             ) as t:
                 parsed_input = IngestionInput(**json.loads(metadata_json))
                 tags = parsed_input.tags
@@ -191,23 +191,15 @@ class IngestionController:
                     current_step = "metadata extraction"
                     try:
                         output_temp_dir = input_temp_file.parent.parent
-                        metadata = self.service.extract_metadata(
-                            file_path=input_temp_file, tags=tags, source_tag=source_tag
-                        )
+                        metadata = self.service.extract_metadata(file_path=input_temp_file, tags=tags, source_tag=source_tag)
 
                         current_step = "input content saving"
                         self.service.save_input(metadata, output_temp_dir / "input")
-                        events.append(ProcessingProgress(
-                            step=current_step, status=Status.SUCCESS,
-                            document_uid=metadata.document_uid, filename=filename
-                        ).model_dump_json() + "\n")
+                        events.append(ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n")
 
                         current_step = "input processing"
                         metadata = input_process(input_file=input_temp_file, metadata=metadata)
-                        events.append(ProcessingProgress(
-                            step=current_step, status=Status.SUCCESS,
-                            document_uid=metadata.document_uid, filename=filename
-                        ).model_dump_json() + "\n")
+                        events.append(ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n")
 
                         current_step = "output processing"
                         file_to_process = FileToProcess(
@@ -217,10 +209,7 @@ class IngestionController:
                             tags=tags,
                         )
                         metadata = output_process(file=file_to_process, metadata=metadata, accept_memory_storage=True)
-                        events.append(ProcessingProgress(
-                            step=current_step, status=Status.SUCCESS,
-                            document_uid=metadata.document_uid, filename=filename
-                        ).model_dump_json() + "\n")
+                        events.append(ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n")
 
                         current_step = "metadata saving (done)"
                         success += 1
@@ -228,10 +217,7 @@ class IngestionController:
                     except Exception as e:
                         logger.exception(f"Failed to process {filename}")
                         error_message = f"{type(e).__name__}: {str(e).strip() or 'No error message'}"
-                        events.append(ProcessingProgress(
-                            step=current_step, status=Status.ERROR,
-                            error=error_message, filename=filename
-                        ).model_dump_json() + "\n")
+                        events.append(ProcessingProgress(step=current_step, status=Status.ERROR, error=error_message, filename=filename).model_dump_json() + "\n")
 
                 # override timer status based on outcome (no exception at top-level)
                 t.dims["status"] = "ok" if success == total else "error"
