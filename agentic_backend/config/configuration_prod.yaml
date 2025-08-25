@@ -74,7 +74,7 @@ ai:
       mcp_servers:
         - name: knowledge-flow-mcp-server
           transport: sse
-          url: http://localhost:8111/mcp_opensearch_ops
+          url: http://localhost:8111/knowledge-flow/v1/mcp-opensearch-ops
           sse_read_timeout: 2000
       description: >
         Sentinel watches your instance, providing real-time monitoring and alerts for performance issues.
@@ -100,7 +100,7 @@ ai:
       mcp_servers:
         - name: knowledge-flow-mcp-server
           transport: sse
-          url: http://localhost:8111/mcp_tabular
+          url: http://localhost:8111/knowledge-flow/v1/mcp-tabular
           sse_read_timeout: 2000
       model: {}
     - name: "RicoProExpert"
@@ -140,7 +140,7 @@ ai:
       mcp_servers:
         - name: knowledge-flow-mcp-server
           transport: sse
-          url: http://localhost:8111/mcp_resource
+          url: http://localhost:8111/knowledge-flow/v1/mcp-resources
           sse_read_timeout: 2000
       model: {}
 

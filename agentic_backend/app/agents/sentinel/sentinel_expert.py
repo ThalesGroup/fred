@@ -60,7 +60,7 @@ class SentinelExpert(AgentFlow):
         # LLM
         self.model = get_model(self.agent_settings.model)
 
-        # MCP: connect to all servers configured for this agent (should include /mcp_kpi and /mcp_opensearch_ops)
+        # MCP: connect to all servers configured for this agent (should include /mcp-kpi and /mcp-opensearch-ops)
         self.mcp_client = await get_mcp_client_for_agent(self.agent_settings)
 
         # Toolkit (context-aware wrapper over kpi.* and os.* tools)
