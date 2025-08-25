@@ -1,7 +1,7 @@
 import logging
 from typing import List
 
-from fastapi import APIRouter, HTTPException, Path
+from fastapi import APIRouter, HTTPException, Path, Body
 from app.features.tabular.service import TabularService
 from app.features.tabular.structures import RawSQLRequest, TabularQueryResponse, TabularSchemaResponse
 from app.application_context import ApplicationContext
@@ -21,13 +21,7 @@ class TabularController:
         self._register_routes(router)
 
     def _register_routes(self, router: APIRouter):
-        @router.get(
-            "/tabular/databases",
-            response_model=List[str],
-            tags=["Tabular"],
-            summary="List available databases",
-            operation_id="list_tabular_databases"
-        )
+        @router.get("/tabular/databases", response_model=List[str], tags=["Tabular"], summary="List available databases", operation_id="list_tabular_databases")
         async def list_databases():
             try:
                 return self.service.list_databases()
@@ -35,13 +29,7 @@ class TabularController:
                 logger.exception("Failed to list databases")
                 raise HTTPException(status_code=500, detail=str(e))
 
-        @router.get(
-            "/tabular/{db_name}/tables",
-            response_model=List[str],
-            tags=["Tabular"],
-            summary="List tables in a database",
-            operation_id="list_table_names"
-        )
+        @router.get("/tabular/{db_name}/tables", response_model=List[str], tags=["Tabular"], summary="List tables in a database", operation_id="list_table_names")
         async def list_tables(db_name: str = Path(..., description="Name of the tabular database")):
             try:
                 store = self.service._get_store(db_name)
@@ -50,13 +38,7 @@ class TabularController:
                 logger.exception(f"Failed to list tables for {db_name}")
                 raise HTTPException(status_code=500, detail=str(e))
 
-        @router.get(
-            "/tabular/{db_name}/schemas",
-            response_model=List[TabularSchemaResponse],
-            tags=["Tabular"],
-            summary="Get schemas of all tables in a database",
-            operation_id="get_all_schemas"
-        )
+        @router.get("/tabular/{db_name}/schemas", response_model=List[TabularSchemaResponse], tags=["Tabular"], summary="Get schemas of all tables in a database", operation_id="get_all_schemas")
         async def get_schemas(db_name: str = Path(..., description="Name of the tabular database")):
             try:
                 return self.service.list_tables_with_schema(db_name=db_name)
@@ -70,12 +52,9 @@ class TabularController:
             tags=["Tabular"],
             summary="Execute raw SQL query in a database",
             operation_id="raw_sql_query",
-            description="Submit a raw SQL string. Use with caution: query is executed directly."
+            description="Submit a raw SQL string. Use with caution: query is executed directly.",
         )
-        async def raw_sql_query(
-            db_name: str = Path(..., description="Name of the tabular database"),
-            request: RawSQLRequest = ...
-        ):
+        async def raw_sql_query(db_name: str = Path(..., description="Name of the tabular database"), request: RawSQLRequest = Body(...)):
             try:
                 return self.service.query(db_name=db_name, document_name="raw_sql", request=request)
             except PermissionError as e:
@@ -85,17 +64,8 @@ class TabularController:
                 logger.exception(f"[{db_name}] Raw SQL execution failed")
                 raise HTTPException(status_code=500, detail=str(e))
 
-        @router.delete(
-            "/tabular/{db_name}/tables/{table_name}",
-            status_code=204,
-            tags=["Tabular"],
-            summary="Delete a table from a database",
-            operation_id="delete_table"
-        )
-        async def delete_table(
-            db_name: str = Path(..., description="Name of the tabular database"),
-            table_name: str = Path(..., description="Table name to delete")
-        ):
+        @router.delete("/tabular/{db_name}/tables/{table_name}", status_code=204, tags=["Tabular"], summary="Delete a table from a database", operation_id="delete_table")
+        async def delete_table(db_name: str = Path(..., description="Name of the tabular database"), table_name: str = Path(..., description="Table name to delete")):
             try:
                 self.service._check_write_allowed(db_name)
 

@@ -173,7 +173,7 @@ class ApplicationContext:
     _opensearch_client: Optional[OpenSearch] = None
     _resource_store_instance: Optional[BaseResourceStore] = None
     _all_tabular_stores: Optional[Dict[str, SQLTableStore]] = None
-    _all_tabular_stores_modes: Optional[Dict[str, Literal['read_only', 'read_and_write']]] = None
+    _all_tabular_stores_modes: Optional[Dict[str, Literal["read_only", "read_and_write"]]] = None
     _catalog_store_instance: Optional[BaseCatalogStore] = None
     _file_store_instance: Optional[BaseFileStore] = None
     _kpi_writer: Optional[KPIWriter] = None
@@ -587,12 +587,11 @@ class ApplicationContext:
         else:
             raise ValueError(f"Unsupported tag storage backend: {store_config.type}")
         return self._resource_store_instance
-    
-    def get_all_tabular_stores(self) -> tuple[dict[str, SQLTableStore], dict[str, Literal['read_only', 'read_and_write']]]:
 
-        if self._all_tabular_stores and self._all_tabular_stores_modes :
+    def get_all_tabular_stores(self) -> tuple[dict[str, SQLTableStore], dict[str, Literal["read_only", "read_and_write"]]]:
+        if self._all_tabular_stores and self._all_tabular_stores_modes:
             return self._all_tabular_stores, self._all_tabular_stores_modes
-        
+
         config_map = get_configuration().storage.tabular_stores or {}
         stores = {}
         store_modes = {}
@@ -601,7 +600,11 @@ class ApplicationContext:
             if isinstance(cfg, SQLStorageConfig):
                 try:
                     database_name = cfg.database
-                    store = SQLTableStore(driver=cfg.driver, path=Path(cfg.path))
+                    if cfg.path is not None:
+                        store = SQLTableStore(driver=cfg.driver, path=Path(cfg.path))
+                    else:
+                        raise ValueError("The path msut not be None")
+
                     stores[database_name] = store
                     store_modes[database_name] = cfg.mode
                     logger.info(f"[{database_name}] Connected to {cfg.driver} ({cfg.mode}) at {cfg.path}")
@@ -609,7 +612,6 @@ class ApplicationContext:
                     logger.warning(f"[{name}] Failed to connect to {cfg.driver}: {e}")
         self._all_tabular_stores, self._all_tabular_stores_modes = stores, store_modes
         return self._all_tabular_stores, self._all_tabular_stores_modes
-    
 
     def get_catalog_store(self) -> BaseCatalogStore:
         """
@@ -762,7 +764,7 @@ class ApplicationContext:
 
             _describe("agent_store", st.tag_store)
             _describe("session_store", st.kpi_store)
-            _describe("history_store", st.tabular_store)
+            # _describe("history_store", st.tabular_store)
             _describe("feedback_store", st.catalog_store)
             _describe("feedback_store", st.metadata_store)
             _describe("feedback_store", st.vector_store)

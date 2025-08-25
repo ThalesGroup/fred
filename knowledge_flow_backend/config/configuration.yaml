@@ -103,9 +103,9 @@ storage:
     #   driver: "mysql+pymysql"
     #   host: "localhost"
     #   port: 3306
-    #   database: "test_db"
-    #   username: root
-    #   password: root
+    #   database: "test_db_mariadb"
+    #   username: your_user
+    #   password: your_pwd                 # pragma: allowlist secret
     #   mode: "read_only"
 
     postgres_database:
@@ -113,9 +113,9 @@ storage:
       driver: "postgresql+psycopg2"
       host: "localhost"
       port: 5433
-      database: "myDataCenter"
-      username: postgres
-      password: root
+      database: "test_db_postgres"
+      username: your_user
+      password: your_pwd                    # pragma: allowlist secret
       mode: "read_and_write"
 
     # mysql_database:
@@ -124,8 +124,8 @@ storage:
     #   host: "localhost"
     #   port: 3307
     #   database: "test_db_mysql"
-    #   username: root
-    #   password: root
+    #   username: your_user
+    #   password: your_pwd                 # pragma: allowlist secret
     #   mode: "read_only"
     
   

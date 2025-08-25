@@ -18,18 +18,10 @@ from datetime import datetime
 from typing import List, Dict, Literal
 
 from fred_core.store.sql_store import SQLTableStore
-from app.features.tabular.structures import (
-    TabularColumnSchema,
-    TabularDatasetMetadata,
-    RawSQLRequest,
-    TabularQueryResponse,
-    TabularSchemaResponse,
-)
-from app.features.tabular.utils import extract_safe_sql_query
+from app.features.tabular.structures import TabularColumnSchema, RawSQLRequest, TabularQueryResponse, TabularSchemaResponse, DTypes
 
 
 logger = logging.getLogger(__name__)
-
 
 
 class TabularService:
@@ -41,7 +33,7 @@ class TabularService:
         if db_name not in self.stores:
             raise ValueError(f"Unknown database: {db_name}")
         return self.stores[db_name]
-    
+
     def _check_write_allowed(self, db_name: str):
         if self.store_modes.get(db_name) != "read_and_write":
             raise PermissionError(f"Write operations are not allowed on database '{db_name}'")
@@ -52,7 +44,7 @@ class TabularService:
     def _format_date(self, dt: datetime) -> str:
         return dt.isoformat()
 
-    def _map_sql_type_to_literal(self, duckdb_type: str) -> str:
+    def _map_sql_type_to_literal(self, duckdb_type: str) -> DTypes:
         duckdb_type = duckdb_type.lower()
         if any(x in duckdb_type for x in ["varchar", "string", "text"]):
             return "string"
@@ -65,7 +57,7 @@ class TabularService:
         if "int" in duckdb_type:
             return "integer"
         return "unknown"
-    
+
     def delete_table(self, db_name: str, table_name: str) -> None:
         self._check_write_allowed(db_name)
         store = self._get_store(db_name)
@@ -86,7 +78,6 @@ class TabularService:
 
         return TabularSchemaResponse(document_name=document_name, columns=columns, row_count=row_count)
 
-
     def list_tables_with_schema(self, db_name: str) -> list[TabularSchemaResponse]:
         store = self._get_store(db_name)
         responses = []
@@ -106,7 +97,6 @@ class TabularService:
 
         return responses
 
-        
     def query(self, db_name: str, document_name: str, request: RawSQLRequest) -> TabularQueryResponse:
         store = self._get_store(db_name)
         sql = request.query.strip()
@@ -126,9 +116,7 @@ class TabularService:
                 df = store.execute_sql_query(sql)
                 rows = df.to_dict(orient="records")
             return TabularQueryResponse(db_name=db_name, sql_query=sql, rows=rows, error=None)
-            
+
         except Exception as e:
             logger.error(f"[{db_name}] Error during query execution: {e}", exc_info=True)
             return TabularQueryResponse(db_name=db_name, sql_query=sql, rows=[], error=str(e))
-
-
