@@ -31,11 +31,13 @@ from app.core.monitoring.monitoring_service import AppMonitoringMetricsService
 
 logger = logging.getLogger(__name__)
 
+
 def _split_csv(values: list[str]) -> list[str]:
     out: list[str] = []
     for v in values or []:
         out.extend([p.strip() for p in v.split(",") if p and p.strip()])
     return out
+
 
 class MonitoringController:
     def __init__(
@@ -59,8 +61,8 @@ class MonitoringController:
             groupby: List[str] = Query(default=[]),
             user: KeycloakUser = Depends(get_current_user),
         ) -> MetricsResponse:
-            agg = _split_csv(agg)         # supports ?agg=a:b&agg=c:d OR ?agg=a:b,c:d
-            groupby = _split_csv(groupby) 
+            agg = _split_csv(agg)  # supports ?agg=a:b&agg=c:d OR ?agg=a:b,c:d
+            groupby = _split_csv(groupby)
             SUPPORTED_OPS = {"mean", "sum", "min", "max", "values"}
             agg_mapping: Dict[str, List[str]] = {}
             for item in agg:
@@ -80,4 +82,3 @@ class MonitoringController:
                 agg_mapping=agg_mapping,
                 user_id=user.uid,
             )
-        

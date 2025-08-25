@@ -26,8 +26,8 @@ from app.application_context import get_app_context
 
 logger = logging.getLogger(__name__)
 
-# ✅ Only allow transports that Fred knows how to handle. 
-#    This prevents silent misconfigurations where a developer 
+# ✅ Only allow transports that Fred knows how to handle.
+#    This prevents silent misconfigurations where a developer
 #    sets "grpc" or something unsupported in configuration.yaml.
 SUPPORTED_TRANSPORTS = ["sse", "stdio", "streamable_http", "websocket"]
 
@@ -36,8 +36,8 @@ def _auth_headers() -> Dict[str, str]:
     """
     Build Authorization headers for outbound MCP requests.
 
-    Fred’s outbound auth system may provide a token provider (callable). 
-    This allows us to forward the current user/session’s security context 
+    Fred’s outbound auth system may provide a token provider (callable).
+    This allows us to forward the current user/session’s security context
     when connecting to external MCP servers.
 
     Returns an empty dict if no provider is configured or token fails.
@@ -70,7 +70,9 @@ def _auth_stdio_env() -> Dict[str, str]:
     return {"MCP_AUTHORIZATION": val, "AUTHORIZATION": val}
 
 
-async def get_mcp_client_for_agent(agent_settings: AgentSettings) -> MultiServerMCPClient:
+async def get_mcp_client_for_agent(
+    agent_settings: AgentSettings,
+) -> MultiServerMCPClient:
     """
     Create and connect a MultiServerMCPClient for the given agent.
 
@@ -104,7 +106,9 @@ async def get_mcp_client_for_agent(agent_settings: AgentSettings) -> MultiServer
     for server in agent_settings.mcp_servers:
         if server.transport not in SUPPORTED_TRANSPORTS:
             # This ensures config errors surface early instead of silently failing.
-            raise UnsupportedTransportError(f"Unsupported transport: {server.transport}")
+            raise UnsupportedTransportError(
+                f"Unsupported transport: {server.transport}"
+            )
 
         # --- Build kwargs with explicit Dict[str, Any] ---
         # We construct the full connection spec here.

@@ -239,4 +239,3 @@ class ChatbotController:
             return await self.session_manager.upload_file(
                 user_id, session_id, agent_name, file
             )
-

@@ -18,7 +18,7 @@ from typing import List, Optional, Sequence
 from IPython.display import Image
 from langchain_core.tools import BaseToolkit
 from langgraph.checkpoint.memory import MemorySaver
-from langgraph.graph.state import CompiledStateGraph, StateGraph
+from langgraph.graph.state import CompiledStateGraph
 from langchain_core.messages import SystemMessage, BaseMessage
 from app.core.agents.agent_state import Prepared, resolve_prepared
 from app.application_context import get_knowledge_flow_base_url
@@ -27,51 +27,39 @@ from app.core.agents.runtime_context import RuntimeContext
 logger = logging.getLogger(__name__)
 
 
-class Flow:
-    """
-    Represents a workflow with a graph.
-    """
+# class Flow:
+#     def __init__(self, name: str, description: str, graph: StateGraph):
+#         # Name of agentic flow.
+#         self.name: str = name
+#         # Description of agentic flow.
+#         self.description: str = description
+#         # The graph of the agentic flow.
+#         self.graph: StateGraph | None = graph
+#         self.streaming_memory: MemorySaver = MemorySaver()
+#         self.compiled_graph: CompiledStateGraph | None = None
+#         self.runtime_context: Optional[RuntimeContext] = None
 
-    def __init__(self, name: str, description: str, graph: StateGraph):
-        # Name of agentic flow.
-        self.name: str = name
-        # Description of agentic flow.
-        self.description: str = description
-        # The graph of the agentic flow.
-        self.graph: StateGraph | None = graph
-        self.streaming_memory: MemorySaver = MemorySaver()
-        self.compiled_graph: CompiledStateGraph | None = None
-        self.runtime_context: Optional[RuntimeContext] = None
+#     def get_compiled_graph(self) -> CompiledStateGraph:
+#         if not self.graph:
+#             raise ValueError("Graph is not defined.")
+#         return self.graph.compile(checkpointer=self.streaming_memory)
 
-    def get_compiled_graph(self) -> CompiledStateGraph:
-        """
-        Compile and return the graph for execution.
-        """
-        if not self.graph:
-            raise ValueError("Graph is not defined.")
-        return self.graph.compile(checkpointer=self.streaming_memory)
+#     def save_graph_image(self, path: str):
+#         if not self.graph:
+#             raise ValueError("Graph is not defined.")
+#         compiled_graph: CompiledStateGraph = self.graph.compile()
+#         graph = Image(compiled_graph.get_graph().draw_mermaid_png())
+#         with open(f"{path}/{self.name}.png", "wb") as f:
+#             f.write(graph.data)
 
-    def save_graph_image(self, path: str):
-        """
-        Save the graph of agentic flow to an image.
-        """
-        if not self.graph:
-            raise ValueError("Graph is not defined.")
-        compiled_graph: CompiledStateGraph = self.graph.compile()
-        graph = Image(compiled_graph.get_graph().draw_mermaid_png())
-        with open(f"{path}/{self.name}.png", "wb") as f:
-            f.write(graph.data)
+#     def set_runtime_context(self, context: RuntimeContext) -> None:
+#         self.runtime_context = context
 
-    def set_runtime_context(self, context: RuntimeContext) -> None:
-        """Set the runtime context for this flow."""
-        self.runtime_context = context
+#     def get_runtime_context(self) -> Optional[RuntimeContext]:
+#         return self.runtime_context
 
-    def get_runtime_context(self) -> Optional[RuntimeContext]:
-        """Get the current runtime context."""
-        return self.runtime_context
-
-    def __str__(self) -> str:
-        return f"{self.name}: {self.description}"
+#     def __str__(self) -> str:
+#         return f"{self.name}: {self.description}"
 
 
 class AgentFlow:

@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-from http import client
 import logging
 from datetime import datetime, timezone
 from statistics import mean

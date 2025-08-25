@@ -43,14 +43,15 @@ from app.core.monitoring.base_history_store import BaseHistoryStore
 from app.core.session.stores.base_session_store import BaseSessionStore
 from pathlib import Path
 from fred_core import (
+    LogStoreConfig,
     OpenSearchIndexConfig,
     DuckdbStoreConfig,
     ClientCredentialsProvider,
     BearerAuth,
     OpenSearchKPIStore,
     BaseKPIStore,
-    NoopKPIStore,
-    KPIWriter
+    KpiLogStore,
+    KPIWriter,
 )
 from requests.auth import AuthBase
 import logging
@@ -83,9 +84,10 @@ class NoAuth(AuthBase):
 
     def __call__(self, r):
         return r
-    def auth_header(self) -> Optional[str]:  
+
+    def auth_header(self) -> Optional[str]:
         return None
-    
+
 
 @dataclass(frozen=True)
 class OutboundAuth:
@@ -118,6 +120,7 @@ def get_knowledge_flow_base_url() -> str:
 
 def get_history_store() -> BaseHistoryStore:
     return get_app_context().get_history_store()
+
 
 def get_kpi_writer() -> KPIWriter:
     return get_app_context().get_kpi_writer()
@@ -391,7 +394,7 @@ class ApplicationContext:
             return self._kpi_store_instance
 
         store_config = get_configuration().storage.kpi_store
-        if  isinstance(store_config, OpenSearchIndexConfig):
+        if isinstance(store_config, OpenSearchIndexConfig):
             opensearch_config = get_configuration().storage.opensearch
             password = opensearch_config.password
             if not password:
@@ -404,8 +407,10 @@ class ApplicationContext:
                 verify_certs=opensearch_config.verify_certs,
                 index=store_config.index,
             )
+        elif isinstance(store_config, LogStoreConfig):
+            self._kpi_store_instance = KpiLogStore(level=store_config.level)
         else:
-            self._kpi_store_instance = NoopKPIStore()
+            raise ValueError("Unsupported KPI storage backend")
         return self._kpi_store_instance
 
     def get_agent_store(self) -> BaseAgentStore:

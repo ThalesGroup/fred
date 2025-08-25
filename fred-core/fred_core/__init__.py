@@ -28,6 +28,7 @@ from fred_core.common.structures import (
     PostgresStoreConfig,
     PostgresTableConfig,
     StoreConfig,
+    LogStoreConfig
 )
 from fred_core.kpi.opensearch_kpi_store import OpenSearchKPIStore
 from fred_core.kpi.kpi_writer_structures import (
@@ -78,5 +79,6 @@ __all__ = [
     "KPIQueryResult",
     "TimeBucket",
     "KPIWriter",
-    "KPIActor"
+    "KPIActor",
+    "LogStoreConfig"
 ]

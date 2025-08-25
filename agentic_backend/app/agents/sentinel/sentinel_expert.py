@@ -64,7 +64,9 @@ class SentinelExpert(AgentFlow):
         self.mcp_client = await get_mcp_client_for_agent(self.agent_settings)
 
         # Toolkit (context-aware wrapper over kpi.* and os.* tools)
-        self.toolkit = SentinelToolkit(self.mcp_client, lambda: self.get_runtime_context())
+        self.toolkit = SentinelToolkit(
+            self.mcp_client, lambda: self.get_runtime_context()
+        )
 
         # Bind tools
         self.model = self.model.bind_tools(self.toolkit.get_tools())
@@ -101,7 +103,9 @@ class SentinelExpert(AgentFlow):
         builder = StateGraph(MessagesState)
         builder.add_node("reasoner", self.reasoner)
 
-        assert self.toolkit is not None, "Toolkit must be initialized before building graph"
+        assert self.toolkit is not None, (
+            "Toolkit must be initialized before building graph"
+        )
         builder.add_node("tools", ToolNode(self.toolkit.get_tools()))
 
         builder.add_edge(START, "reasoner")
@@ -115,7 +119,9 @@ class SentinelExpert(AgentFlow):
         outputs (JSON/objects) from ToolMessages and attach to response metadata for the UI.
         """
         if self.model is None:
-            raise RuntimeError("Model is not initialized. Did you forget to call async_init()?")
+            raise RuntimeError(
+                "Model is not initialized. Did you forget to call async_init()?"
+            )
 
         try:
             response = self.model.invoke([self.base_prompt] + state["messages"])
@@ -145,6 +151,10 @@ class SentinelExpert(AgentFlow):
         except Exception as e:
             logger.exception("Sentinel: unexpected error: %s", e)
             fallback = await self.model.ainvoke(
-                [HumanMessage(content="An error occurred while checking the system. Please try again.")]
+                [
+                    HumanMessage(
+                        content="An error occurred while checking the system. Please try again."
+                    )
+                ]
             )
             return {"messages": [fallback]}

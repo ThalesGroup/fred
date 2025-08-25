@@ -17,7 +17,7 @@ import logging
 import os
 from pathlib import Path
 from typing import Dict, Type, Union, Optional
-from fred_core import OpenSearchIndexConfig, DuckdbStoreConfig, OpenSearchKPIStore, BaseKPIStore, NoopKPIStore
+from fred_core import LogStoreConfig, OpenSearchIndexConfig, DuckdbStoreConfig, OpenSearchKPIStore, BaseKPIStore, KpiLogStore
 from opensearchpy import OpenSearch, RequestsHttpConnection
 from app.core.stores.catalog.opensearch_catalog_store import OpenSearchCatalogStore
 from app.core.stores.content.base_content_loader import BaseContentLoader
@@ -529,10 +529,12 @@ class ApplicationContext:
                 verify_certs=opensearch_config.verify_certs,
                 index=store_config.index,
             )
+        elif isinstance(store_config, LogStoreConfig):
+            self._kpi_store_instance = KpiLogStore(level=store_config.level)
         else:
-            self._kpi_store_instance = NoopKPIStore()
+            raise ValueError("Unsupported KPI storage backend")
         return self._kpi_store_instance
-
+    
     def get_tag_store(self) -> BaseTagStore:
         if self._tag_store_instance is not None:
             return self._tag_store_instance

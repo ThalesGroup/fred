@@ -47,4 +47,3 @@ class BaseHistoryStore(ABC):
     ) -> MetricsResponse:
         """Retrieve messages for a given session."""
         pass
-

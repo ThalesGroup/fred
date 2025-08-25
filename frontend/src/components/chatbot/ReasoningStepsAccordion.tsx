@@ -112,7 +112,7 @@ export default function ReasoningTraceAccordion({
             <List dense disablePadding>
               {ordered.map((m, idx) => {
                 const key = `${m.session_id}-${m.exchange_id}-${m.rank}`;
-                const preview = textPreview(m, 160);
+                const preview = textPreview(m);
                 const ex = getExtras(m);
 
                 const chipChannel = formatChannel(m.channel);

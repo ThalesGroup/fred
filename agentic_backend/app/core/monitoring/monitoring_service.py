@@ -35,4 +35,3 @@ class AppMonitoringMetricsService:
             agg_mapping=agg_mapping,
             user_id=user_id,
         )
-    

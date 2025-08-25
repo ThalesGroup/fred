@@ -224,6 +224,63 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/knowledge-flow/v1/vector/search`, method: "POST", body: queryArg.searchRequest }),
     }),
+    queryKnowledgeFlowV1KpiQueryPost: build.mutation<
+      QueryKnowledgeFlowV1KpiQueryPostApiResponse,
+      QueryKnowledgeFlowV1KpiQueryPostApiArg
+    >({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/kpi/query`, method: "POST", body: queryArg.kpiQuery }),
+    }),
+    osHealth: build.query<OsHealthApiResponse, OsHealthApiArg>({
+      query: () => ({ url: `/knowledge-flow/v1/os/health` }),
+    }),
+    osPendingTasks: build.query<OsPendingTasksApiResponse, OsPendingTasksApiArg>({
+      query: () => ({ url: `/knowledge-flow/v1/os/pending_tasks` }),
+    }),
+    osAllocationExplain: build.query<OsAllocationExplainApiResponse, OsAllocationExplainApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/os/allocation/explain`,
+        params: {
+          index: queryArg.index,
+        },
+      }),
+    }),
+    osNodesStats: build.query<OsNodesStatsApiResponse, OsNodesStatsApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/os/nodes/stats`,
+        params: {
+          metric: queryArg.metric,
+        },
+      }),
+    }),
+    osIndices: build.query<OsIndicesApiResponse, OsIndicesApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/os/indices`,
+        params: {
+          pattern: queryArg.pattern,
+          bytes: queryArg.bytes,
+        },
+      }),
+    }),
+    osIndexStats: build.query<OsIndexStatsApiResponse, OsIndexStatsApiArg>({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/os/index/${queryArg.index}/stats` }),
+    }),
+    osIndexMapping: build.query<OsIndexMappingApiResponse, OsIndexMappingApiArg>({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/os/index/${queryArg.index}/mapping` }),
+    }),
+    osIndexSettings: build.query<OsIndexSettingsApiResponse, OsIndexSettingsApiArg>({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/os/index/${queryArg.index}/settings` }),
+    }),
+    osShards: build.query<OsShardsApiResponse, OsShardsApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/os/shards`,
+        params: {
+          pattern: queryArg.pattern,
+        },
+      }),
+    }),
+    osDiagnostics: build.query<OsDiagnosticsApiResponse, OsDiagnosticsApiArg>({
+      query: () => ({ url: `/knowledge-flow/v1/os/diagnostics` }),
+    }),
     processDocumentsKnowledgeFlowV1ProcessDocumentsPost: build.mutation<
       ProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostApiResponse,
       ProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostApiArg
@@ -397,6 +454,45 @@ export type SearchDocumentsUsingVectorizationApiResponse = /** status 200 Succes
 export type SearchDocumentsUsingVectorizationApiArg = {
   searchRequest: SearchRequest;
 };
+export type QueryKnowledgeFlowV1KpiQueryPostApiResponse = /** status 200 Successful Response */ KpiQueryResult;
+export type QueryKnowledgeFlowV1KpiQueryPostApiArg = {
+  kpiQuery: KpiQuery;
+};
+export type OsHealthApiResponse = /** status 200 Successful Response */ any;
+export type OsHealthApiArg = void;
+export type OsPendingTasksApiResponse = /** status 200 Successful Response */ any;
+export type OsPendingTasksApiArg = void;
+export type OsAllocationExplainApiResponse = /** status 200 Successful Response */ any;
+export type OsAllocationExplainApiArg = {
+  index?: string | null;
+};
+export type OsNodesStatsApiResponse = /** status 200 Successful Response */ any;
+export type OsNodesStatsApiArg = {
+  metric?: string;
+};
+export type OsIndicesApiResponse = /** status 200 Successful Response */ any;
+export type OsIndicesApiArg = {
+  pattern?: string;
+  bytes?: string;
+};
+export type OsIndexStatsApiResponse = /** status 200 Successful Response */ any;
+export type OsIndexStatsApiArg = {
+  index: string;
+};
+export type OsIndexMappingApiResponse = /** status 200 Successful Response */ any;
+export type OsIndexMappingApiArg = {
+  index: string;
+};
+export type OsIndexSettingsApiResponse = /** status 200 Successful Response */ any;
+export type OsIndexSettingsApiArg = {
+  index: string;
+};
+export type OsShardsApiResponse = /** status 200 Successful Response */ any;
+export type OsShardsApiArg = {
+  pattern?: string;
+};
+export type OsDiagnosticsApiResponse = /** status 200 Successful Response */ any;
+export type OsDiagnosticsApiArg = void;
 export type ProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostApiResponse = /** status 200 Successful Response */ any;
 export type ProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostApiArg = {
   processDocumentsRequest: ProcessDocumentsRequest;
@@ -651,6 +747,74 @@ export type SearchRequest = {
   /** Optional list of tags to filter documents. Only chunks in a document with at least one of these tags will be returned. */
   tags?: string[] | null;
 };
+export type KpiQueryResultRow = {
+  group: {
+    [key: string]: any;
+  };
+  metrics: {
+    [key: string]: number;
+  };
+  doc_count: number;
+};
+export type KpiQueryResult = {
+  rows?: KpiQueryResultRow[];
+};
+export type FilterTerm = {
+  field:
+    | "metric.name"
+    | "metric.type"
+    | "dims.status"
+    | "dims.user_id"
+    | "dims.agent_id"
+    | "dims.doc_uid"
+    | "dims.file_type"
+    | "dims.http_status"
+    | "dims.error_code"
+    | "dims.model";
+  value: string;
+};
+export type SelectMetric = {
+  /** name in response, e.g. 'p95' or 'cost_usd' */
+  alias: string;
+  op: "sum" | "avg" | "min" | "max" | "count" | "value_count" | "percentile";
+  /** Required except for count/percentile */
+  field?: ("metric.value" | "cost.tokens_total" | "cost.usd" | "cost.tokens_prompt" | "cost.tokens_completion") | null;
+  /** Percentile, e.g. 95 */
+  p?: number | null;
+};
+export type TimeBucket = {
+  /** e.g. '1h', '1d', '15m' */
+  interval: string;
+  /** IANA TZ, e.g. 'Europe/Paris' */
+  timezone?: string | null;
+};
+export type OrderBy = {
+  by?: "doc_count" | "metric";
+  metric_alias?: string | null;
+  direction?: "asc" | "desc";
+};
+export type KpiQuery = {
+  /** ISO or 'now-24h' */
+  since: string;
+  until?: string | null;
+  filters?: FilterTerm[];
+  select: SelectMetric[];
+  group_by?: (
+    | "dims.file_type"
+    | "dims.doc_uid"
+    | "dims.doc_source"
+    | "dims.user_id"
+    | "dims.agent_id"
+    | "dims.tool_name"
+    | "dims.model"
+    | "dims.http_status"
+    | "dims.error_code"
+    | "dims.status"
+  )[];
+  time_bucket?: TimeBucket | null;
+  limit?: number;
+  order_by?: OrderBy | null;
+};
 export type FileToProcess = {
   source_tag: string;
   tags?: string[];
@@ -708,6 +872,27 @@ export const {
   useLazyGetResourceKnowledgeFlowV1ResourcesResourceIdGetQuery,
   useDeleteResourceKnowledgeFlowV1ResourcesResourceIdDeleteMutation,
   useSearchDocumentsUsingVectorizationMutation,
+  useQueryKnowledgeFlowV1KpiQueryPostMutation,
+  useOsHealthQuery,
+  useLazyOsHealthQuery,
+  useOsPendingTasksQuery,
+  useLazyOsPendingTasksQuery,
+  useOsAllocationExplainQuery,
+  useLazyOsAllocationExplainQuery,
+  useOsNodesStatsQuery,
+  useLazyOsNodesStatsQuery,
+  useOsIndicesQuery,
+  useLazyOsIndicesQuery,
+  useOsIndexStatsQuery,
+  useLazyOsIndexStatsQuery,
+  useOsIndexMappingQuery,
+  useLazyOsIndexMappingQuery,
+  useOsIndexSettingsQuery,
+  useLazyOsIndexSettingsQuery,
+  useOsShardsQuery,
+  useLazyOsShardsQuery,
+  useOsDiagnosticsQuery,
+  useLazyOsDiagnosticsQuery,
   useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation,
   useScheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPostMutation,
 } = injectedRtkApi;

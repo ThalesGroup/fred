@@ -215,10 +215,15 @@ class SessionManager:
         self.kpi.count(
             "chat.user_message_total",
             1,
-            dims={"agent_id": agent_name, "scope_type": scope_type, "scope_id": scope_id, "exchange_id": exchange_id},
+            dims={
+                "agent_id": agent_name,
+                "scope_type": scope_type,
+                "scope_id": scope_id,
+                "exchange_id": exchange_id,
+            },
             actor=actor,
         )
-        
+
         session, history_msgs, agent, _is_new_session = (
             self._prepare_session_and_history(
                 user_id=user_id,
@@ -278,9 +283,10 @@ class SessionManager:
                 all_msgs.extend(agent_msgs)
                 # Determine if the run produced a final assistant message (success signal)
                 saw_final_assistant = any(
-                    (m.role == Role.assistant and m.channel == Channel.final) for m in agent_msgs
+                    (m.role == Role.assistant and m.channel == Channel.final)
+                    for m in agent_msgs
                 )
-        except Exception as e:
+        except Exception:
             logger.exception("Agent execution failed")
             # We don't re-raise here; the timer has already recorded status="error".
         finally:
