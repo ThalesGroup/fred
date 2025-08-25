@@ -43,7 +43,7 @@ ARG GROUP_ID=1000
 
 # System deps (minimal)
 RUN apt-get update && \
-    apt-get install -y curl && \
+    apt-get install -y curl pandoc --no-install-recommends && \
     rm -rf /var/lib/apt/lists/*
 
 # Create user
