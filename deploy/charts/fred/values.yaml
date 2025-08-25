@@ -42,15 +42,9 @@ applications:
           port: 80
           targetPort: 8000
     ingress:
-      enabled: true
-      hosts:
-        - host: agentic-backend.dev.fred.thalesgroup.com
-          paths:
-            - path: /
-              pathType: Prefix
-              service:
-                name: agentic-backend
-                port: 80
+      enabled: false
+      className: ""
+      hosts: []
     volumeMounts:
       - name: agentic-backend-vol
         mountPath: /app/config/configuration.yaml
@@ -299,6 +293,16 @@ applications:
               service:
                 name: fred-frontend
                 port: 80
+            - path: /agentic
+              pathType: Prefix
+              service:
+                name: agentic-backend
+                port: 80
+            - path: /knowledge-flow
+              pathType: Prefix
+              service:
+                name: knowledge-flow-backend
+                port: 8000
             # # The additionnal paths might be useful if
             # # only the frontend is exposed
             # - path: /agentic
@@ -408,16 +412,9 @@ applications:
           targetPort: 8443
           protocol: TCP
     ingress:
-      enabled: true
+      enabled: false
       className: ""
-      hosts:
-        - host: knowledge-flow-backend.dev.fred.thalesgroup.com
-          paths:
-            - path: /
-              pathType: Prefix
-              service:
-                name: knowledge-flow-backend
-                port: 8000    
+      hosts: []
     volumeMounts:
       - name: knowledge-flow-backend-vol
         mountPath: /app/config/configuration.yaml
