@@ -190,6 +190,7 @@ class OpenSearchKPIStore(BaseKPIStore):
 
     # ---- internal: build OS query -------------------------------------------
     def _build_os_query(self, q: KPIQuery) -> Dict[str, Any]:
+        # ---- filters ----
         filters: List[Dict[str, Any]] = [
             {
                 "range": {
@@ -207,36 +208,39 @@ class OpenSearchKPIStore(BaseKPIStore):
         aggs: Dict[str, Any] = {}
         root = aggs
 
-        # optional date_histogram
+        # ---- optional date_histogram (robust) ----
         if q.time_bucket:
-            root["time"] = {
-                "date_histogram": {
-                    "field": "@timestamp",
-                    "fixed_interval": q.time_bucket.interval,
-                    **(
-                        {"time_zone": q.time_bucket.timezone}
-                        if q.time_bucket.timezone
-                        else {}
-                    ),
-                    "min_doc_count": 0,
+            interval = getattr(q.time_bucket, "interval", None)
+            tz = getattr(q.time_bucket, "timezone", None)
+            if interval:
+                root["time"] = {
+                    "date_histogram": {
+                        "field": "@timestamp",
+                        "fixed_interval": interval,
+                        **({"time_zone": tz} if tz else {}),
+                        "min_doc_count": 0,
+                    },
+                    "aggs": {},  # ensure key exists before re-rooting
                 }
-            }
-            root = root["time"]["aggs"] = {}
+                root = root["time"]["aggs"]
+            else:
+                logger.debug("[KPI] time_bucket present but missing interval; skipping date_histogram")
 
-        # terms group_bys
+        # ---- terms group_bys (safe agg creation) ----
         parent = root
-        for i, gb in enumerate(q.group_by):
-            key = f"g{i}"
-            parent[key] = {
+        for i, gb in enumerate(q.group_by or []):
+            gkey = f"g{i}"
+            parent[gkey] = {
                 "terms": {
                     "field": gb,
-                    "size": q.limit,
+                    "size": q.limit or 10,  # guard None
                     "order": self._terms_order_clause(q),
-                }
+                },
+                "aggs": {},  # create child aggs inline
             }
-            parent = parent[key]["aggs"] = {}
+            parent = parent[gkey]["aggs"]
 
-        # leaf metrics
+        # ---- leaf metrics ----
         for sel in q.select:
             if sel.op == "sum":
                 parent[sel.alias] = {"sum": {"field": sel.field}}
@@ -249,18 +253,16 @@ class OpenSearchKPIStore(BaseKPIStore):
             elif sel.op == "value_count":
                 parent[sel.alias] = {"value_count": {"field": sel.field}}
             elif sel.op == "count":
-                # doc_count will be used when parsing
-                parent[sel.alias] = {"filter": {"match_all": {}}}
+                # rely on bucket doc_count; parser reads node.doc_count
+                # no sub-aggregation needed here
+                continue
             elif sel.op == "percentile":
-                parent[sel.alias] = {
-                    "percentiles": {"field": sel.field, "percents": [sel.p or 95]}
-                }
+                parent[sel.alias] = {"percentiles": {"field": sel.field, "percents": [sel.p or 95]}}
             else:
                 raise ValueError(f"Unsupported op: {sel.op}")
 
         base["aggs"] = aggs
         return base
-
     def _terms_order_clause(self, q: KPIQuery) -> Dict[str, Any]:
         if q.order_by and q.order_by.by == "metric" and q.order_by.metric_alias:
             return {q.order_by.metric_alias: q.order_by.direction}

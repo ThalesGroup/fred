@@ -1,72 +1,32 @@
 // Copyright Thales 2025
-// Apache-2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
-import dayjs from "dayjs";
+
 import { Theme, alpha } from "@mui/material/styles";
+import { formatTick, TimePrecision } from "./timeAxis";
 
-/** Keep it string to match OpenAPI client. */
+/** Keep it string to match OpenAPI client; but delegate to TimePrecision underneath. */
 export type PrecisionStr = string;
 
-export function getPrecisionForRange(start: Date | number, end: Date | number): PrecisionStr {
-  const s = typeof start === "number" ? start : (start as Date).getTime();
-  const e = typeof end === "number" ? end : (end as Date).getTime();
-  const diffMs = e - s;
-  const diffDays = diffMs / (1000 * 60 * 60 * 24);
-  const diffHours = diffMs / (1000 * 60 * 60);
-
-  if (diffMs <= 10_000) return "sec";
-  if (diffHours < 10) return "min";
-  if (diffDays <= 3) return "hour";
-  return "day";
+/** Back-compat wrapper: returns a tick formatter using the centralized timeAxis formatter. */
+export function tsTickFormatter(precision: PrecisionStr) {
+  return (ts: number) => formatTick(Number(ts), precision as TimePrecision);
 }
 
-export function formatBytes(n: number) {
-  if (!Number.isFinite(n)) return "-";
-  const units = ["B", "KB", "MB", "GB", "TB", "PB"];
-  let v = n, i = 0;
-  while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
-  return `${v.toFixed(2)} ${units[i]}`;
-}
+/* -------------------------- THEME-DRIVEN STYLES --------------------------- */
 
-export function buildStackedByCategory(
-  metrics: { precision?: string; buckets?: any[] } | undefined,
-  valueKey: "store_size_bytes_sum" | "docs_count_sum"
-) {
-  const byTs = new Map<number, Record<string, number>>();
-  const keys = new Set<string>();
-  for (const b of metrics?.buckets ?? []) {
-    const ts = new Date(b.timestamp).getTime();
-    const cat = (b.group?.category ?? "other") as string;
-    const val = Number(b.aggregations?.[valueKey] ?? 0);
-    keys.add(cat);
-    const row = byTs.get(ts) ?? { ts };
-    row[cat] = (row[cat] ?? 0) + val;
-    byTs.set(ts, row);
-  }
-  const data = Array.from(byTs.entries()).sort((a, b) => a[0] - b[0]).map(([ts, row]) => ({ ts, ...row }));
-  return { data, keys: Array.from(keys).sort() };
-}
-
-export function tsTickFormatter(precision: string) {
-  return (ts: number) => {
-    const d = dayjs(ts);
-    if (precision === "sec") return d.format("HH:mm:ss");
-    if (precision === "min") return d.format("HH:mm");
-    if (precision === "hour") return d.format("MMM D HH:mm");
-    return d.format("YYYY-MM-DD");
-  };
-}
-
-/* -------------------------------------------------------------------------- */
-/* THEME-DRIVEN CHART STYLES                                                  */
-/* -------------------------------------------------------------------------- */
-
-/**
- * Returns a soft, theme-aware list of series colors (RGBA) derived from theme.palette.chart.
- * Pass a `count` to ensure you get at least that many colors (it cycles if needed).
- */
 export function chartSeriesPalette(theme: Theme, count?: number): string[] {
-  // use your extended theme.palette.chart (from your theme file)
   const c = (theme.palette as any).chart || {};
   const bases: string[] = [
     c.primary, c.secondary,
@@ -75,7 +35,6 @@ export function chartSeriesPalette(theme: Theme, count?: number): string[] {
   ].filter(Boolean);
 
   if (bases.length === 0) {
-    // fallback to MUI main colors if chart palette is missing
     bases.push(
       theme.palette.primary.main,
       theme.palette.secondary.main,
@@ -86,7 +45,7 @@ export function chartSeriesPalette(theme: Theme, count?: number): string[] {
     );
   }
 
-  const baseA = theme.palette.mode === "dark" ? 0.28 : 0.22; // soft fills
+  const baseA = theme.palette.mode === "dark" ? 0.28 : 0.22;
   const soft = bases.map((hex) => alpha(hex, baseA));
 
   if (!count) return soft;
@@ -95,22 +54,18 @@ export function chartSeriesPalette(theme: Theme, count?: number): string[] {
   return out;
 }
 
-/** Theme-consistent axis tick styling */
 export function axisTickProps(theme: Theme) {
   return { fontSize: 11, fill: theme.palette.text.secondary };
 }
 
-/** Theme-consistent grid stroke */
 export function gridStroke(theme: Theme) {
   return theme.palette.divider;
 }
 
-/** Legend wrapper style that follows theme text colors */
 export function legendStyle(theme: Theme) {
   return { fontSize: 11, color: theme.palette.text.secondary as any };
 }
 
-/** Tooltip panel style following theme surfaces */
 export function tooltipStyle(theme: Theme) {
   return {
     fontSize: 12,
@@ -123,10 +78,6 @@ export function tooltipStyle(theme: Theme) {
   };
 }
 
-/**
- * Single bar/line color (e.g. token chart) from theme.palette.chart.
- * Change the key here if you prefer "primary" or another chart color.
- */
 export function primarySeriesColor(theme: Theme) {
   const c = (theme.palette as any).chart || {};
   const base = c.blue || c.primary || theme.palette.primary.main;
