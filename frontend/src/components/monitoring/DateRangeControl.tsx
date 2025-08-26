@@ -1,5 +1,17 @@
 // Copyright Thales 2025
-// Apache-2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 import { Box, ButtonGroup } from "@mui/material";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
@@ -15,6 +27,10 @@ type Props = {
   setStartDate: (d: Dayjs) => void;
   setEndDate: (d: Dayjs) => void;
 };
+
+const CONTROL_H = 32; // keep all controls the same height
+const BTN_FONT_SIZE = 13;
+const TF_MIN_W = 160;
 
 function isRangeSelected(type: QuickRangeType, startDate: Dayjs, endDate: Dayjs): boolean {
   const today = dayjs();
@@ -69,10 +85,32 @@ function setSelectedRange(
 
 export default function DateRangeControls({ startDate, endDate, setStartDate, setEndDate }: Props) {
   const { t } = useTranslation();
+
+  // Compact text field styles to match ButtonGroup height
+  const textFieldSx = {
+    minWidth: TF_MIN_W,
+    "& .MuiOutlinedInput-root": { height: CONTROL_H },
+    "& .MuiInputBase-input": { paddingTop: 0, paddingBottom: 0, fontSize: BTN_FONT_SIZE },
+    "& .MuiInputAdornment-root": {
+      "& .MuiIconButton-root": { padding: 0.25 }, // shrink picker icon button
+    },
+    // keep label from overlapping when compact
+    "& .MuiInputLabel-root": { fontSize: BTN_FONT_SIZE },
+  };
+
   return (
     <Box display="flex" flexWrap="wrap" alignItems="center" justifyContent="space-between" gap={1}>
-      <ButtonGroup variant="outlined" size="small" sx={{ flexWrap: "wrap" }}>
-        {(["last12h","last24h","last7d","last30d","today","yesterday","thisWeek","thisMonth","thisYear"] as QuickRangeType[]).map((type) => (
+      <ButtonGroup
+        variant="outlined"
+        size="small"
+        sx={{
+          flexWrap: "wrap",
+          // Make all buttons the same height + font size
+          "& .MuiButtonBase-root": { height: CONTROL_H, fontSize: BTN_FONT_SIZE, paddingInline: 1 },
+        }}
+      >
+        {(["last12h","last24h","last7d","last30d","today","yesterday","thisWeek","thisMonth","thisYear"] as QuickRangeType[])
+          .map((type) => (
           <QuickRangeButton
             key={type}
             isSel={isRangeSelected(type, startDate, endDate)}
@@ -88,8 +126,10 @@ export default function DateRangeControls({ startDate, endDate, setStartDate, se
             label={t("metrics.from")}
             value={startDate}
             onChange={(v) => v && setStartDate(v)}
+            format="YYYY-MM-DD HH:mm" // shorter to keep width tight
             slotProps={{
-              textField: { size: "small", margin: "dense", sx: { minWidth: 150 } },
+              textField: { size: "small", margin: "dense", sx: textFieldSx },
+              openPickerButton: { size: "small" },
             }}
             maxDateTime={endDate}
           />
@@ -97,8 +137,10 @@ export default function DateRangeControls({ startDate, endDate, setStartDate, se
             label={t("metrics.to")}
             value={endDate}
             onChange={(v) => v && setEndDate(v)}
+            format="YYYY-MM-DD HH:mm"
             slotProps={{
-              textField: { size: "small", margin: "dense", sx: { minWidth: 150 } },
+              textField: { size: "small", margin: "dense", sx: textFieldSx },
+              openPickerButton: { size: "small" },
             }}
             minDateTime={startDate}
           />

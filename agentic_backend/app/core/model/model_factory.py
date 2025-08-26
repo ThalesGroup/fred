@@ -73,14 +73,24 @@ def get_model(model_config: ModelConfiguration):
     elif provider == "openai":
         logger.info("Creating OpenAI Chat model instance with config %s", model_config)
         if not model_config.name:
-            logger.error("Missing model name for OpenAI provider in model configuration: %s", model_config)
-            raise ValueError("Missing model name for OpenAI provider in model configuration.")
+            logger.error(
+                "Missing model name for OpenAI provider in model configuration: %s",
+                model_config,
+            )
+            raise ValueError(
+                "Missing model name for OpenAI provider in model configuration."
+            )
         return ChatOpenAI(model=model_config.name, **settings)
     elif provider == "ollama":
         logger.info("Creating Ollama Chat model instance with config %s", model_config)
         if not model_config.name:
-            logger.error("Missing model name for Ollama provider in model configuration: %s", model_config)
-            raise ValueError("Missing model name for Ollama provider in model configuration.")
+            logger.error(
+                "Missing model name for Ollama provider in model configuration: %s",
+                model_config,
+            )
+            raise ValueError(
+                "Missing model name for Ollama provider in model configuration."
+            )
         return ChatOllama(
             model=model_config.name, base_url=settings.pop("base_url", None), **settings
         )

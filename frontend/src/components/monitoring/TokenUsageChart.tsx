@@ -15,6 +15,7 @@ import dayjs, { ManipulateType } from "dayjs";
 import utc from "dayjs/plugin/utc";
 import { alpha, useTheme } from "@mui/material/styles";
 import { MetricsResponse } from "../../slices/agentic/agenticOpenApi";
+import { precisionToUnit } from "./timeAxis";
 
 dayjs.extend(utc);
 
@@ -46,12 +47,6 @@ export function TokenUsageChart({
   const barColor = alpha(baseBar, theme.palette.mode === "dark" ? 0.7 : 0.55);
 
   // --- helpers ---------------------------------------------------------------
-  const precisionToUnit: Record<string, ManipulateType> = {
-    sec: "second",
-    min: "minute",
-    hour: "hour",
-    day: "day",
-  };
 
   const unit: ManipulateType = precisionToUnit[precision] ?? "minute";
 
