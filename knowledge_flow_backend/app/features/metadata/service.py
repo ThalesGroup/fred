@@ -45,6 +45,16 @@ class MetadataService:
         self.config = ApplicationContext.get_instance().get_config()
         self.metadata_store = ApplicationContext.get_instance().get_metadata_store()
         self.catalog_store = ApplicationContext.get_instance().get_catalog_store()
+        stores, store_modes = ApplicationContext.get_instance().get_all_tabular_stores()
+        read_write_stores = {name: stores[name] for name, mode in store_modes.items() if mode == "read_and_write"}
+        if "base_database" in read_write_stores:
+            self.base_tabular_store = stores["base_database"]
+        elif read_write_stores:
+            selected_name = next(iter(read_write_stores))
+            self.base_tabular_store = stores[selected_name]
+            print(f"[INFO] Store 'base_database' not found. We will use '{selected_name}' as fallback.")
+        else:
+            logger.info(f"[INFO] Noe 'read_and_write' store found. You will be limited regarding CSV ingestion.")
         self.vector_store = None
 
     def get_documents_metadata(self, filters_dict: dict) -> list[DocumentMetadata]:
@@ -119,6 +129,15 @@ class MetadataService:
                 self.vector_store.delete_vectors(metadata.document_uid)
                 self.metadata_store.delete_metadata(metadata.document_uid)
                 logger.info(f"[METADATA] Deleted document '{metadata.document_name}' because no tags remain (last removed by '{modified_by}')")
+
+                # Try deleting associated tabular table
+                if self.base_tabular_store :
+                    table_name = metadata.document_name.rsplit(".", 1)[0]
+                    try:
+                        self.base_tabular_store.delete_table(table_name)
+                        logger.info(f"[TABULAR] Deleted SQL table '{table_name}' linked to '{metadata.document_name}'")
+                    except Exception as e:
+                        logger.warning(f"[TABULAR] Could not delete SQL table '{table_name}' — {e}")
             else:
                 metadata.identity.modified = datetime.now(timezone.utc)
                 metadata.identity.last_modified_by = modified_by

@@ -69,6 +69,7 @@ class PostgresTableConfig(BaseModel):
 class SQLStorageConfig(BaseModel):
     type: Literal["sql"] = "sql"
     driver: str
+    mode: Literal["read_and_write", "read_only"]
     database: Optional[str] = None
     host: Optional[str] = None
     port: Optional[int] = None

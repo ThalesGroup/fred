@@ -16,15 +16,15 @@ import importlib
 import logging
 import os
 from pathlib import Path
-from typing import Dict, Type, Union, Optional
+from typing import Dict, Type, Union, Optional, Literal
 from fred_core import LogStoreConfig, OpenSearchIndexConfig, DuckdbStoreConfig, OpenSearchKPIStore, BaseKPIStore, KpiLogStore
 from opensearchpy import OpenSearch, RequestsHttpConnection
 from app.core.stores.catalog.opensearch_catalog_store import OpenSearchCatalogStore
 from app.core.stores.content.base_content_loader import BaseContentLoader
 from app.core.stores.content.filesystem_content_loader import FileSystemContentLoader
 from app.core.stores.content.minio_content_loader import MinioContentLoader
-from fred_core.store.duckdb_store import DuckDBTableStore
-from fred_core.store.sql_store import SQLTableStore, create_empty_duckdb_store
+from fred_core.store.sql_store import SQLTableStore
+from fred_core.common.structures import SQLStorageConfig
 from app.common.structures import (
     Configuration,
     InMemoryVectorStorage,
@@ -76,7 +76,6 @@ BaseProcessorType = Union[BaseMarkdownProcessor, BaseTabularProcessor]
 DEFAULT_OUTPUT_PROCESSORS = {
     "markdown": "app.core.processors.output.vectorization_processor.vectorization_processor.VectorizationProcessor",
     "tabular": "app.core.processors.output.tabular_processor.tabular_processor.TabularProcessor",
-    "duckdb": "app.core.processors.output.duckdb_processor.duckdb_processor.DuckDBProcessor",
 }
 
 # Mapping file extensions to categories
@@ -172,7 +171,8 @@ class ApplicationContext:
     _kpi_store_instance: Optional[BaseKPIStore] = None
     _opensearch_client: Optional[OpenSearch] = None
     _resource_store_instance: Optional[BaseResourceStore] = None
-    _tabular_store_instance: Optional[Union[DuckDBTableStore, SQLTableStore]] = None
+    _all_tabular_stores: Optional[Dict[str, SQLTableStore]] = None
+    _all_tabular_stores_modes: Optional[Dict[str, Literal["read_only", "read_and_write"]]] = None
     _catalog_store_instance: Optional[BaseCatalogStore] = None
     _file_store_instance: Optional[BaseFileStore] = None
     _kpi_writer: Optional[KPIWriter] = None
@@ -587,30 +587,30 @@ class ApplicationContext:
             raise ValueError(f"Unsupported tag storage backend: {store_config.type}")
         return self._resource_store_instance
 
-    def get_tabular_store(self):
-        if hasattr(self, "_tabular_store_instance") and self._tabular_store_instance is not None:
-            return self._tabular_store_instance
+    def get_all_tabular_stores(self) -> tuple[dict[str, SQLTableStore], dict[str, Literal["read_only", "read_and_write"]]]:
+        if self._all_tabular_stores and self._all_tabular_stores_modes:
+            return self._all_tabular_stores, self._all_tabular_stores_modes
 
-        store_config = get_configuration().storage.tabular_store
+        config_map = get_configuration().storage.tabular_stores or {}
+        stores = {}
+        store_modes = {}
 
-        if store_config is None:
-            logger.warning("No tabular store configured")
-            self._tabular_store_instance = create_empty_duckdb_store()
+        for name, cfg in config_map.items():
+            if isinstance(cfg, SQLStorageConfig):
+                try:
+                    database_name = cfg.database
+                    if cfg.path is not None:
+                        store = SQLTableStore(driver=cfg.driver, path=Path(cfg.path))
+                    else:
+                        raise ValueError("The path msut not be None")
 
-        else:
-            if store_config.type == "duckdb":
-                db_path = Path(store_config.duckdb_path).expanduser()
-                self._tabular_store_instance = DuckDBTableStore(db_path, prefix="tabular_")
-
-            elif store_config.type == "sql":
-                if store_config.path:
-                    path = Path(store_config.path)
-                    self._tabular_store_instance = SQLTableStore(driver=store_config.driver, path=path)
-
-            else:
-                raise ValueError("Unsupported tabular storage backend")
-
-        return self._tabular_store_instance
+                    stores[database_name] = store
+                    store_modes[database_name] = cfg.mode
+                    logger.info(f"[{database_name}] Connected to {cfg.driver} ({cfg.mode}) at {cfg.path}")
+                except Exception as e:
+                    logger.warning(f"[{name}] Failed to connect to {cfg.driver}: {e}")
+        self._all_tabular_stores, self._all_tabular_stores_modes = stores, store_modes
+        return self._all_tabular_stores, self._all_tabular_stores_modes
 
     def get_catalog_store(self) -> BaseCatalogStore:
         """
