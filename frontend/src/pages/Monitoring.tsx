@@ -13,8 +13,8 @@
 // limitations under the License.
 
 import { TopBar } from "../common/TopBar";
-import MetricsDashboard from "../components/monitoring/MetricDashboard";
 import { useTranslation } from "react-i18next";
+import MonitoringOverview from "../components/monitoring/MonitoringOverview";
 
 export const Monitoring = () => {
   const { t } = useTranslation();
@@ -22,7 +22,7 @@ export const Monitoring = () => {
   return (
     <>
       <TopBar title={t("monitoring.title")} description={t("monitoring.description")} />
-      <MetricsDashboard />
+      <MonitoringOverview />
     </>
   );
 };

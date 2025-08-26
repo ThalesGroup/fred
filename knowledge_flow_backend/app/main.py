@@ -138,7 +138,7 @@ def create_app() -> FastAPI:
         describe_full_response_schema=True,
     )
     mcp_opensearch_ops.mount(mount_path=f"{mcp_prefix}/mcp-opensearch-ops")
-    
+
     mcp_kpi = FastApiMCP(
         app,
         name="Knowledge Flow KPI MCP",
