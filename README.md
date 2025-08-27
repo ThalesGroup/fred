@@ -1,9 +1,13 @@
 # Fred
 
+- [Fred](#fred)
   - [Core Architecture and Licensing Clarity](#core-architecture-and-licensing-clarity)
+    - [Licensing Note](#licensing-note)
   - [Getting started](#getting-started)
     - [Local (Native) Mode](#local-native-mode)
       - [1 · Prerequisites](#1--prerequisites)
+        - [Required](#required)
+        - [Optional](#optional)
       - [2 · Clone](#2--clone)
       - [3 · Add your OpenAI key](#3--add-your-openai-key)
       - [4 · Run the services](#4--run-the-services)
