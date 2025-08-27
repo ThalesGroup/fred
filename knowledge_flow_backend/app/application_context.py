@@ -778,7 +778,6 @@ class ApplicationContext:
 
             _describe("agent_store", st.tag_store)
             _describe("session_store", st.kpi_store)
-            _describe("history_store", st.history_store)
             _describe("feedback_store", st.catalog_store)
             _describe("feedback_store", st.metadata_store)
             _describe("feedback_store", st.vector_store)

@@ -84,7 +84,6 @@ def app_context(monkeypatch, fake_embedder):
             kpi_store=duckdb,
             metadata_store=duckdb,
             catalog_store=duckdb,
-            history_store=duckdb,
             tabular_stores={"base_tabular_store": duckdb},
             vector_store=InMemoryVectorStorage(type="in_memory"),
         ),
