@@ -24,6 +24,8 @@ from app.core.stores.content.base_content_loader import BaseContentLoader
 from app.core.stores.content.filesystem_content_loader import FileSystemContentLoader
 from app.core.stores.content.minio_content_loader import MinioContentLoader
 from fred_core.store.sql_store import SQLTableStore
+from fred_core.store.structures import StoreInfo
+
 from fred_core.common.structures import SQLStorageConfig
 from app.common.structures import (
     Configuration,
@@ -171,8 +173,7 @@ class ApplicationContext:
     _kpi_store_instance: Optional[BaseKPIStore] = None
     _opensearch_client: Optional[OpenSearch] = None
     _resource_store_instance: Optional[BaseResourceStore] = None
-    _all_tabular_stores: Optional[Dict[str, SQLTableStore]] = None
-    _all_tabular_stores_modes: Optional[Dict[str, Literal["read_only", "read_and_write"]]] = None
+    _tabular_stores: Optional[Dict[str, StoreInfo]] = None
     _catalog_store_instance: Optional[BaseCatalogStore] = None
     _file_store_instance: Optional[BaseFileStore] = None
     _kpi_writer: Optional[KPIWriter] = None
@@ -587,13 +588,12 @@ class ApplicationContext:
             raise ValueError(f"Unsupported tag storage backend: {store_config.type}")
         return self._resource_store_instance
 
-    def get_all_tabular_stores(self) -> tuple[dict[str, SQLTableStore], dict[str, Literal["read_only", "read_and_write"]]]:
-        if self._all_tabular_stores and self._all_tabular_stores_modes:
-            return self._all_tabular_stores, self._all_tabular_stores_modes
+    def get_tabular_stores(self) -> Dict[str, StoreInfo]:
+        if self._tabular_stores is not None:
+            return self._tabular_stores
 
         config_map = get_configuration().storage.tabular_stores or {}
         stores = {}
-        store_modes = {}
 
         for name, cfg in config_map.items():
             if isinstance(cfg, SQLStorageConfig):
@@ -602,15 +602,31 @@ class ApplicationContext:
                     if cfg.path is not None:
                         store = SQLTableStore(driver=cfg.driver, path=Path(cfg.path))
                     else:
-                        raise ValueError("The path msut not be None")
+                        raise ValueError("The path must not be None")
 
-                    stores[database_name] = store
-                    store_modes[database_name] = cfg.mode
+                    stores[database_name] = StoreInfo(store=store, mode=cfg.mode)
                     logger.info(f"[{database_name}] Connected to {cfg.driver} ({cfg.mode}) at {cfg.path}")
                 except Exception as e:
                     logger.warning(f"[{name}] Failed to connect to {cfg.driver}: {e}")
-        self._all_tabular_stores, self._all_tabular_stores_modes = stores, store_modes
-        return self._all_tabular_stores, self._all_tabular_stores_modes
+
+        self._tabular_stores = stores
+        return stores
+    
+    def get_csv_input_store(self) -> Optional[SQLTableStore]:
+        """
+        Returns the store named 'base_database' if it exists,
+        otherwise returns the first store with mode 'read_and_write'.
+        """
+        stores = self.get_tabular_stores()
+
+        if 'base_database' in stores:
+            return stores['base_database'].store
+
+        for store_info in stores.values():
+            if store_info.mode == 'read_and_write':
+                return store_info.store
+
+        return None
 
     def get_catalog_store(self) -> BaseCatalogStore:
         """

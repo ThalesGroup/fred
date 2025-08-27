@@ -31,8 +31,8 @@ class TabularController:
 
     def __init__(self, router: APIRouter):
         self.context = ApplicationContext.get_instance()
-        stores, modes = self.context.get_all_tabular_stores()
-        self.service = TabularService(stores=stores, store_modes=modes)
+        stores = self.context.get_tabular_stores()
+        self.service = TabularService(stores)
         self._register_routes(router)
 
     def _register_routes(self, router: APIRouter):

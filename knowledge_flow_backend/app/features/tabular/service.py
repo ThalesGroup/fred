@@ -18,6 +18,7 @@ from datetime import datetime
 from typing import List, Dict, Literal
 
 from fred_core.store.sql_store import SQLTableStore
+from fred_core.store.structures import StoreInfo
 from app.features.tabular.structures import TabularColumnSchema, RawSQLRequest, TabularQueryResponse, TabularSchemaResponse, DTypes
 
 
@@ -25,17 +26,16 @@ logger = logging.getLogger(__name__)
 
 
 class TabularService:
-    def __init__(self, stores: Dict[str, SQLTableStore], store_modes: Dict[str, Literal["read_only", "read_and_write"]]):
-        self.stores = stores
-        self.store_modes = store_modes
+    def __init__(self, stores_info: Dict[str, StoreInfo]):
+        self.stores_info = stores_info
 
     def _get_store(self, db_name: str) -> SQLTableStore:
-        if db_name not in self.stores:
+        if db_name not in self.stores_info:
             raise ValueError(f"Unknown database: {db_name}")
-        return self.stores[db_name]
+        return self.stores_info[db_name].store
 
     def _check_write_allowed(self, db_name: str):
-        if self.store_modes.get(db_name) != "read_and_write":
+        if self.stores_info.get(db_name).mode != "read_and_write":
             raise PermissionError(f"Write operations are not allowed on database '{db_name}'")
 
     def _sanitize_table_name(self, name: str) -> str:
