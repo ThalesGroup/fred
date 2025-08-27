@@ -42,9 +42,8 @@ class TabularProcessor(BaseOutputProcessor):
     """
 
     def __init__(self):
-
         self.csv_input_store = ApplicationContext.get_instance().get_csv_input_store()
-        
+
         logger.info("Initializing TabularPipeline")
 
     def process(self, file_path: str, metadata: DocumentMetadata) -> DocumentMetadata:

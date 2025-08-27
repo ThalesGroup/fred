@@ -15,7 +15,7 @@
 import logging
 import re
 from datetime import datetime
-from typing import List, Dict, Literal
+from typing import List, Dict
 
 from fred_core.store.sql_store import SQLTableStore
 from fred_core.store.structures import StoreInfo
@@ -35,7 +35,8 @@ class TabularService:
         return self.stores_info[db_name].store
 
     def _check_write_allowed(self, db_name: str):
-        if self.stores_info.get(db_name).mode != "read_and_write":
+        store = self.stores_info.get(db_name)
+        if store and store.mode != "read_and_write":
             raise PermissionError(f"Write operations are not allowed on database '{db_name}'")
 
     def _sanitize_table_name(self, name: str) -> str:
@@ -64,7 +65,7 @@ class TabularService:
         store.delete_table(table_name)
 
     def list_databases(self) -> List[str]:
-        return list(self.stores.keys())
+        return list(self.stores_info.keys())
 
     def get_schema(self, db_name: str, document_name: str) -> TabularSchemaResponse:
         table_name = self._sanitize_table_name(document_name)

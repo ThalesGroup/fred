@@ -16,7 +16,7 @@ import importlib
 import logging
 import os
 from pathlib import Path
-from typing import Dict, Type, Union, Optional, Literal
+from typing import Dict, Type, Union, Optional
 from fred_core import LogStoreConfig, OpenSearchIndexConfig, DuckdbStoreConfig, OpenSearchKPIStore, BaseKPIStore, KpiLogStore
 from opensearchpy import OpenSearch, RequestsHttpConnection
 from app.core.stores.catalog.opensearch_catalog_store import OpenSearchCatalogStore
@@ -611,22 +611,21 @@ class ApplicationContext:
 
         self._tabular_stores = stores
         return stores
-    
-    def get_csv_input_store(self) -> Optional[SQLTableStore]:
+
+    def get_csv_input_store(self) -> SQLTableStore:
         """
         Returns the store named 'base_database' if it exists,
         otherwise returns the first store with mode 'read_and_write'.
         """
         stores = self.get_tabular_stores()
 
-        if 'base_database' in stores:
-            return stores['base_database'].store
+        if "base_database" in stores:
+            return stores["base_database"].store
 
         for store_info in stores.values():
-            if store_info.mode == 'read_and_write':
+            if store_info.mode == "read_and_write":
                 return store_info.store
-
-        return None
+        raise ValueError("No tabular_stores with mode 'read_and_write' found. Please check the knowledge flow configuration.")
 
     def get_catalog_store(self) -> BaseCatalogStore:
         """
@@ -779,7 +778,7 @@ class ApplicationContext:
 
             _describe("agent_store", st.tag_store)
             _describe("session_store", st.kpi_store)
-            _describe("history_store", st.tabular_store)
+            _describe("history_store", st.history_store)
             _describe("feedback_store", st.catalog_store)
             _describe("feedback_store", st.metadata_store)
             _describe("feedback_store", st.vector_store)

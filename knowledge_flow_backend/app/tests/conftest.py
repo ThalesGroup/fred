@@ -84,6 +84,7 @@ def app_context(monkeypatch, fake_embedder):
             kpi_store=duckdb,
             metadata_store=duckdb,
             catalog_store=duckdb,
+            history_store=duckdb,
             tabular_stores={"base_tabular_store": duckdb},
             vector_store=InMemoryVectorStorage(type="in_memory"),
         ),
@@ -149,4 +150,4 @@ def metadata_store(app_context: ApplicationContext):
 
 @pytest.fixture
 def all_tabular_stores(app_context: ApplicationContext):
-    return app_context.get_instance().get_all_tabular_stores()
+    return app_context.get_instance().get_tabular_stores()

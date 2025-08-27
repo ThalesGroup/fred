@@ -121,14 +121,12 @@ class MetadataService:
                 self.metadata_store.delete_metadata(metadata.document_uid)
                 logger.info(f"[METADATA] Deleted document '{metadata.document_name}' because no tags remain (last removed by '{modified_by}')")
 
-                if self.csv_input_store is None :
+                if self.csv_input_store is None:
                     self.csv_input_store = ApplicationContext.get_instance().get_csv_input_store()
-                table_name = metadata.document_name.rsplit(".", 1)[0]  
-                try:
-                    self.csv_input_store.delete_table(table_name)
-                    logger.info(f"[TABULAR] Deleted SQL table '{table_name}' linked to '{metadata.document_name}'")
-                except Exception as e:
-                    logger.warning(f"[TABULAR] Could not delete SQL table '{table_name}' — {e}")
+                table_name = metadata.document_name.rsplit(".", 1)[0]
+                self.csv_input_store.delete_table(table_name)
+                logger.info(f"[TABULAR] Deleted SQL table '{table_name}' linked to '{metadata.document_name}'")
+
             else:
                 metadata.identity.modified = datetime.now(timezone.utc)
                 metadata.identity.last_modified_by = modified_by
