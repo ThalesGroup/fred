@@ -19,6 +19,7 @@
 Entrypoint for the Agentic Backend App.
 """
 
+import asyncio
 from contextlib import asynccontextmanager
 import logging
 import os
@@ -93,10 +94,19 @@ def create_app() -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        await agent_manager.load_agents()
-        agent_manager.start_retry_loop()
-        logger.info("🚀 AgentManager fully loaded.")
-        yield
+        try:
+            await agent_manager.load_agents()
+            agent_manager.start_retry_loop()
+            logger.info("🚀 AgentManager fully loaded.")
+            yield
+        except asyncio.CancelledError as e:
+            logger.warning(
+                "🧯 Lifespan CancelledError caught (expected on shutdown): %r", e
+            )
+            # IMPORTANT: do NOT re-raise; cancellation is a control signal.
+            # Swallowing it here prevents the noisy traceback you observed.
+        finally:
+            logger.info("🧹 Lifespan exit.")
 
     app = FastAPI(
         docs_url=f"{base_url}/docs",

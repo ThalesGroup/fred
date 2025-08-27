@@ -52,6 +52,7 @@ from fred_core import (
     BaseKPIStore,
     KpiLogStore,
     KPIWriter,
+    split_realm_url,
 )
 from requests.auth import AuthBase
 import logging
@@ -513,13 +514,13 @@ class ApplicationContext:
             self._outbound_auth = OutboundAuth(auth=NoAuth(), refresh=None)
             return self._outbound_auth
 
-        keycloak_base, realm = _split_realm_url(sec.keycloak_url)
+        keycloak_base, realm = split_realm_url(sec.keycloak_url)
         client_id = sec.client_id
         try:
-            client_secret = os.environ.get("KEYCLOAK_AGENTIC_TOKEN")
+            client_secret = os.environ.get("KEYCLOAK_AGENTIC_CLIENT_SECRET")
         except KeyError:
             raise RuntimeError(
-                "Missing client secret env var 'KEYCLOAK_AGENTIC_TOKEN'."
+                "Missing client secret env var 'KEYCLOAK_AGENTIC_CLIENT_SECRET'."
             )
         if not client_secret:
             raise ValueError("Client secret is empty.")
@@ -622,13 +623,13 @@ class ApplicationContext:
             )
 
         # Inbound security (UI -> Agentic)
-        logger.info("  🔒 Inbound security (UI → Agentic):")
+        logger.info("  🔒 Outbound security (Agentic → Knwoledge/Third Party):")
         logger.info("     • enabled: %s", sec.enabled)
         logger.info("     • client_id: %s", sec.client_id or "<unset>")
         logger.info("     • keycloak_url: %s", sec.keycloak_url or "<unset>")
         # realm parsing
         try:
-            base, realm = _split_realm_url(sec.keycloak_url)
+            base, realm = split_realm_url(sec.keycloak_url)
             logger.info("     • realm: %s  (base=%s)", realm, base)
         except Exception as e:
             logger.error(
@@ -644,12 +645,14 @@ class ApplicationContext:
 
         # Outbound S2S (Agentic → Knowledge Flow)
         logger.info("  🔑 Outbound S2S (Agentic → Knowledge Flow):")
-        secret = os.getenv("KEYCLOAK_AGENTIC_TOKEN", "")
+        secret = os.getenv("KEYCLOAK_AGENTIC_CLIENT_SECRET", "")
         if secret:
-            logger.info("     • KEYCLOAK_AGENTIC_TOKEN: present  (%s)", _mask(secret))
+            logger.info(
+                "     • KEYCLOAK_AGENTIC_CLIENT_SECRET: present  (%s)", _mask(secret)
+            )
         else:
             logger.warning(
-                "     ⚠️ KEYCLOAK_AGENTIC_TOKEN is not set — outbound calls will be unauthenticated "
+                "     ⚠️ KEYCLOAK_AGENTIC_CLIENT_SECRET is not set — outbound calls will be unauthenticated "
                 "(NoAuth). Knowledge Flow will likely return 401."
             )
 
@@ -669,21 +672,3 @@ class ApplicationContext:
             )
 
         logger.info("────────────────────────────────────────────────────────────────")
-
-
-def _split_realm_url(realm_url: str) -> tuple[str, str]:
-    """
-    Split a Keycloak realm URL like:
-      http://host:port/realms/<realm>
-    into (base, realm).
-    """
-    u = realm_url.rstrip("/")
-    marker = "/realms/"
-    idx = u.find(marker)
-    if idx == -1:
-        raise ValueError(
-            f"Invalid keycloak_url (expected .../realms/<realm>): {realm_url}"
-        )
-    base = u[:idx]
-    realm = u[idx + len(marker) :].split("/", 1)[0]
-    return base, realm

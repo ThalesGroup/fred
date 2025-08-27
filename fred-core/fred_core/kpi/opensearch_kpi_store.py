@@ -224,7 +224,9 @@ class OpenSearchKPIStore(BaseKPIStore):
                 }
                 root = root["time"]["aggs"]
             else:
-                logger.debug("[KPI] time_bucket present but missing interval; skipping date_histogram")
+                logger.debug(
+                    "[KPI] time_bucket present but missing interval; skipping date_histogram"
+                )
 
         # ---- terms group_bys (safe agg creation) ----
         parent = root
@@ -257,12 +259,15 @@ class OpenSearchKPIStore(BaseKPIStore):
                 # no sub-aggregation needed here
                 continue
             elif sel.op == "percentile":
-                parent[sel.alias] = {"percentiles": {"field": sel.field, "percents": [sel.p or 95]}}
+                parent[sel.alias] = {
+                    "percentiles": {"field": sel.field, "percents": [sel.p or 95]}
+                }
             else:
                 raise ValueError(f"Unsupported op: {sel.op}")
 
         base["aggs"] = aggs
         return base
+
     def _terms_order_clause(self, q: KPIQuery) -> Dict[str, Any]:
         if q.order_by and q.order_by.by == "metric" and q.order_by.metric_alias:
             return {q.order_by.metric_alias: q.order_by.direction}

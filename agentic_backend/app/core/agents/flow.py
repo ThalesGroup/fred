@@ -16,7 +16,6 @@ import logging
 from typing import List, Optional, Sequence
 
 from IPython.display import Image
-from langchain_core.tools import BaseToolkit
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph.state import CompiledStateGraph
 from langchain_core.messages import SystemMessage, BaseMessage
@@ -98,11 +97,9 @@ class AgentFlow:
         base_prompt: str,
         categories=None,
         tag=None,
-        toolkit: BaseToolkit | None = None,
     ):
         """
-        Initialize the agent with its core properties. This method creates the model,
-        binds the toolkit if any.
+        Initialize the agent with its core properties.
 
         Args:
             name: The name of the agent.
@@ -126,7 +123,6 @@ class AgentFlow:
         self.tag = tag
         self.streaming_memory = MemorySaver()
         self.compiled_graph: Optional[CompiledStateGraph] = None
-        self.toolkit = toolkit
         self.runtime_context: Optional[RuntimeContext] = None
 
     def use_fred_prompts(self, messages: Sequence[BaseMessage]) -> List[BaseMessage]:

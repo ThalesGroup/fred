@@ -1,6 +1,18 @@
-# app/agents/sentinel/sentinel.py
 # Copyright Thales 2025
-# Licensed under the Apache License, Version 2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# app/agents/sentinel/sentinel.py
 
 import json
 import logging
@@ -10,27 +22,31 @@ from typing import Any, Dict, List
 from langchain_core.messages import HumanMessage, ToolMessage
 from langgraph.constants import START
 from langgraph.graph import MessagesState, StateGraph
-from langgraph.prebuilt import ToolNode, tools_condition
+from langgraph.prebuilt import tools_condition
 from pydantic import TypeAdapter
 
-from app.common.mcp_utils import get_mcp_client_for_agent
+from app.common.mcp_runtime import MCPRuntime
+
+from app.common.resilient_tool_node import make_resilient_tools_node
 from app.common.structures import AgentSettings
 from app.core.agents.flow import AgentFlow
 from app.core.model.model_factory import get_model
-
-from app.agents.sentinel.sentinel_toolkit import SentinelToolkit
 
 logger = logging.getLogger(__name__)
 
 
 class SentinelExpert(AgentFlow):
     """
-    Sentinel: production ops & monitoring agent.
-    - Equipped with KPI + OpenSearch Ops MCP tools (kpi.* & os.*).
-    - The model decides which tools to call (cluster health, shards, KPI queries).
-    - Tool outputs are attached to response metadata for UI inspection.
+    Sentinel — Ops & Monitoring agent (OpenSearch + KPIs).
+
+    Design goals:
+    - Keep the agent focused on reasoning/presentation.
+    - Push all MCP client/tool refresh logic into MCPRuntime.
+    - Use a resilient ToolNode so transient 401/stream issues turn into
+      structured ToolMessages (not hard failures), then refresh MCP and continue.
     """
 
+    # static metadata
     name: str
     role: str
     nickname: str
@@ -47,8 +63,13 @@ class SentinelExpert(AgentFlow):
         self.description = agent_settings.description
         self.current_date = datetime.now().strftime("%Y-%m-%d")
         self.model = None
-        self.mcp_client = None
-        self.toolkit = None
+        self.mcp = MCPRuntime(
+            agent_settings=self.agent_settings,
+            # If you expose runtime filtering (tenant/library/time window),
+            # pass a provider: lambda: self.get_runtime_context()
+            context_provider=(lambda: self.get_runtime_context()),
+        )
+
         self.categories = agent_settings.categories or ["ops", "monitoring"]
         self.tag = agent_settings.tag or "ops"
         self.base_prompt = self._generate_prompt()
@@ -59,19 +80,8 @@ class SentinelExpert(AgentFlow):
     async def async_init(self):
         # LLM
         self.model = get_model(self.agent_settings.model)
-
-        # MCP: connect to all servers configured for this agent (should include /mcp-kpi and /mcp-opensearch-ops)
-        self.mcp_client = await get_mcp_client_for_agent(self.agent_settings)
-
-        # Toolkit (context-aware wrapper over kpi.* and os.* tools)
-        self.toolkit = SentinelToolkit(
-            self.mcp_client, lambda: self.get_runtime_context()
-        )
-
-        # Bind tools
-        self.model = self.model.bind_tools(self.toolkit.get_tools())
-
-        # Build graph
+        await self.mcp.init()
+        self.model = self.model.bind_tools(self.mcp.get_tools())
         self._graph = self._build_graph()
 
         super().__init__(
@@ -84,8 +94,11 @@ class SentinelExpert(AgentFlow):
             base_prompt=self.base_prompt,
             categories=self.categories,
             tag=self.tag,
-            toolkit=self.toolkit,
         )
+
+    async def aclose(self):
+        # Let AgentManager call this on shutdown if it supports it.
+        await self.mcp.aclose()
 
     def _generate_prompt(self) -> str:
         return (
@@ -100,14 +113,23 @@ class SentinelExpert(AgentFlow):
         )
 
     def _build_graph(self) -> StateGraph:
+        if self.mcp.toolkit is None:
+            raise RuntimeError("Toolkit must be initialized before building graph")
+
         builder = StateGraph(MessagesState)
         builder.add_node("reasoner", self.reasoner)
 
-        assert self.toolkit is not None, (
-            "Toolkit must be initialized before building graph"
-        )
-        builder.add_node("tools", ToolNode(self.toolkit.get_tools()))
+        async def _refresh_and_rebind():
+            # Refresh MCP (new client + toolkit) and rebind tools into the model.
+            # MCPRuntime handles snapshot logging + safe old-client close.
+            self.model = await self.mcp.refresh_and_bind(self.model)
 
+        tools_node = make_resilient_tools_node(
+            get_tools=self.mcp.get_tools,  # always returns the latest tool instances
+            refresh_cb=_refresh_and_rebind,  # on timeout/401/stream close, refresh + rebind
+        )
+
+        builder.add_node("tools", tools_node)
         builder.add_edge(START, "reasoner")
         builder.add_conditional_edges("reasoner", tools_condition)
         builder.add_edge("tools", "reasoner")
@@ -117,11 +139,19 @@ class SentinelExpert(AgentFlow):
         """
         One LLM step; may call tools (kpi.* or os.*). After tools run, we collect their
         outputs (JSON/objects) from ToolMessages and attach to response metadata for the UI.
+
+        Fred rationale:
+        - Run MCP preflight *before* the LLM decides to call tools. This ensures the
+          underlying httpx Auth minted a fresh token (client-credentials) for this turn.
+        - Preflight should be cheap and non-fatal: if it fails, we log and keep going.
         """
         if self.model is None:
             raise RuntimeError(
                 "Model is not initialized. Did you forget to call async_init()?"
             )
+
+        # if self.toolkit is not None:
+        #     await self._preflight_mcp(timeout_seconds=2.0)
 
         try:
             response = self.model.invoke([self.base_prompt] + state["messages"])

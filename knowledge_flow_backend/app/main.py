@@ -24,6 +24,7 @@ import os
 from rich.logging import RichHandler
 from dotenv import load_dotenv
 
+from app.application_state import attach_app
 from app.features.catalog.controller import CatalogController
 from app.features.kpi.kpi_controller import KPIController
 from app.features.kpi.oensearch_controller import OpenSearchOpsController
@@ -31,10 +32,10 @@ from app.features.pull.controller import PullDocumentController
 from app.features.pull.service import PullDocumentService
 from app.features.resources.controller import ResourceController
 from app.features.scheduler.controller import SchedulerController
-from fastapi import APIRouter, FastAPI
+from fastapi import APIRouter, Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi_mcp import FastApiMCP
-from fred_core import initialize_keycloak
+from fastapi_mcp import AuthConfig, FastApiMCP
+from fred_core import get_current_user, initialize_keycloak
 
 from app.application_context import ApplicationContext
 from app.common.structures import Configuration
@@ -99,6 +100,8 @@ def create_app() -> FastAPI:
         allow_methods=["GET", "POST", "PUT", "DELETE"],
         allow_headers=["Content-Type", "Authorization"],
     )
+    # Attach FastAPI to build B2B in-process client (lives outside ApplicationContext)
+    attach_app(app)
 
     router = APIRouter(prefix=configuration.app.base_url)
 
@@ -127,18 +130,18 @@ def create_app() -> FastAPI:
     mcp_opensearch_ops = FastApiMCP(
         app,
         name="Knowledge Flow OpenSearch Ops MCP",
-        description=(
-            "Read-only operational tools for OpenSearch. "
-            "Use these endpoints to inspect cluster health, node and shard status, "
-            "list indices, view mappings, and fetch sample documents. "
-            "Intended for monitoring and diagnostics, not for modifying data."
-        ),
-        include_tags=["OpenSearch"],
+        description=("Read-only operational tools for OpenSearch: cluster health, nodes, shards, indices, mappings, and sample docs. Monitoring/diagnostics only."),
+        include_tags=["OpenSearch"],  # <-- only export routes tagged OpenSearch as MCP tools
         describe_all_responses=True,
         describe_full_response_schema=True,
+        auth_config=AuthConfig(  # <-- protect with your user auth as a normal dependency
+            dependencies=[Depends(get_current_user)]
+        ),
     )
-    mcp_opensearch_ops.mount(mount_path=f"{mcp_prefix}/mcp-opensearch-ops")
-
+    # Mount via HTTP at a clear, versioned path:
+    mcp_mount_path = f"{mcp_prefix}/mcp-opensearch-ops"
+    mcp_opensearch_ops.mount_http(mount_path=mcp_mount_path)
+    logger.info(f"🔌 MCP OpenSearch Ops mounted at {mcp_mount_path}")
     mcp_kpi = FastApiMCP(
         app,
         name="Knowledge Flow KPI MCP",
@@ -152,8 +155,11 @@ def create_app() -> FastAPI:
         include_tags=["KPI"],
         describe_all_responses=True,
         describe_full_response_schema=True,
+        auth_config=AuthConfig(  # <-- protect with your user auth as a normal dependency
+            dependencies=[Depends(get_current_user)]
+        ),
     )
-    mcp_kpi.mount(mount_path=f"{mcp_prefix}/mcp-kpi")
+    mcp_kpi.mount_http(mount_path=f"{mcp_prefix}/mcp-kpi")
 
     mcp_tabular = FastApiMCP(
         app,
@@ -168,8 +174,11 @@ def create_app() -> FastAPI:
         include_tags=["Tabular"],
         describe_all_responses=True,
         describe_full_response_schema=True,
+        auth_config=AuthConfig(  # <-- protect with your user auth as a normal dependency
+            dependencies=[Depends(get_current_user)]
+        ),
     )
-    mcp_tabular.mount(mount_path=f"{mcp_prefix}/mcp-tabular")
+    mcp_tabular.mount_http(mount_path=f"{mcp_prefix}/mcp-tabular")
 
     mcp_text = FastApiMCP(
         app,
@@ -183,8 +192,11 @@ def create_app() -> FastAPI:
         include_tags=["Vector Search"],
         describe_all_responses=True,
         describe_full_response_schema=True,
+        auth_config=AuthConfig(  # <-- protect with your user auth as a normal dependency
+            dependencies=[Depends(get_current_user)]
+        ),
     )
-    mcp_text.mount(mount_path=f"{mcp_prefix}/mcp-text")
+    mcp_text.mount_http(mount_path=f"{mcp_prefix}/mcp-text")
 
     mcp_template = FastApiMCP(
         app,
@@ -193,8 +205,11 @@ def create_app() -> FastAPI:
         include_tags=["Templates", "Prompts"],
         describe_all_responses=True,
         describe_full_response_schema=True,
+        auth_config=AuthConfig(  # <-- protect with your user auth as a normal dependency
+            dependencies=[Depends(get_current_user)]
+        ),
     )
-    mcp_template.mount(mount_path=f"{mcp_prefix}/mcp-template")
+    mcp_template.mount_http(mount_path=f"{mcp_prefix}/mcp-template")
 
     mcp_code = FastApiMCP(
         app,
@@ -209,8 +224,11 @@ def create_app() -> FastAPI:
         include_tags=["Code Search"],
         describe_all_responses=True,
         describe_full_response_schema=True,
+        auth_config=AuthConfig(  # <-- protect with your user auth as a normal dependency
+            dependencies=[Depends(get_current_user)]
+        ),
     )
-    mcp_code.mount(mount_path=f"{mcp_prefix}/mcp-code")
+    mcp_code.mount_http(mount_path=f"{mcp_prefix}/mcp-code")
 
     mcp_resources = FastApiMCP(
         app,
@@ -224,8 +242,11 @@ def create_app() -> FastAPI:
         include_tags=["Resources"],
         describe_all_responses=True,
         describe_full_response_schema=True,
+        auth_config=AuthConfig(  # <-- protect with your user auth as a normal dependency
+            dependencies=[Depends(get_current_user)]
+        ),
     )
-    mcp_resources.mount(mount_path=f"{mcp_prefix}/mcp-resources")
+    mcp_resources.mount_http(mount_path=f"{mcp_prefix}/mcp-resources")
 
     return app
 
