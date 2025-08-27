@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 
 class EmbeddingAzureOpenAISettings(BaseSettings):
-    azure_openai_base_url: str = Field(..., validation_alias="AZURE_OPENAI_BASE_URL")
+    azure_openai_endpoint: str = Field(..., validation_alias="AZURE_OPENAI_ENDPOINT")
     azure_openai_api_key: str = Field(..., validation_alias="AZURE_OPENAI_API_KEY")
     azure_api_version: str = Field(..., validation_alias="AZURE_API_VERSION")
     azure_deployment_llm: str = Field(..., validation_alias="AZURE_DEPLOYMENT_LLM")

@@ -412,7 +412,7 @@ class ApplicationContext:
                 AzureOpenAIEmbeddings(
                     deployment=openai_settings.azure_deployment_embedding,
                     openai_api_type="azure",
-                    azure_endpoint=openai_settings.azure_openai_base_url,
+                    azure_endpoint=openai_settings.azure_openai_endpoint,
                     openai_api_version=openai_settings.azure_api_version,
                     openai_api_key=openai_settings.azure_openai_api_key,
                 )
