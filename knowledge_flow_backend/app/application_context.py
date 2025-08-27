@@ -23,8 +23,10 @@ from app.core.stores.catalog.opensearch_catalog_store import OpenSearchCatalogSt
 from app.core.stores.content.base_content_loader import BaseContentLoader
 from app.core.stores.content.filesystem_content_loader import FileSystemContentLoader
 from app.core.stores.content.minio_content_loader import MinioContentLoader
-from fred_core.store.duckdb_store import DuckDBTableStore
-from fred_core.store.sql_store import SQLTableStore, create_empty_duckdb_store
+from fred_core.store.sql_store import SQLTableStore
+from fred_core.store.structures import StoreInfo
+
+from fred_core.common.structures import SQLStorageConfig
 from app.common.structures import (
     Configuration,
     InMemoryVectorStorage,
@@ -76,7 +78,6 @@ BaseProcessorType = Union[BaseMarkdownProcessor, BaseTabularProcessor]
 DEFAULT_OUTPUT_PROCESSORS = {
     "markdown": "app.core.processors.output.vectorization_processor.vectorization_processor.VectorizationProcessor",
     "tabular": "app.core.processors.output.tabular_processor.tabular_processor.TabularProcessor",
-    "duckdb": "app.core.processors.output.duckdb_processor.duckdb_processor.DuckDBProcessor",
 }
 
 # Mapping file extensions to categories
@@ -180,7 +181,7 @@ class ApplicationContext:
     _kpi_store_instance: Optional[BaseKPIStore] = None
     _opensearch_client: Optional[OpenSearch] = None
     _resource_store_instance: Optional[BaseResourceStore] = None
-    _tabular_store_instance: Optional[Union[DuckDBTableStore, SQLTableStore]] = None
+    _tabular_stores: Optional[Dict[str, StoreInfo]] = None
     _catalog_store_instance: Optional[BaseCatalogStore] = None
     _file_store_instance: Optional[BaseFileStore] = None
     _kpi_writer: Optional[KPIWriter] = None
@@ -595,30 +596,44 @@ class ApplicationContext:
             raise ValueError(f"Unsupported tag storage backend: {store_config.type}")
         return self._resource_store_instance
 
-    def get_tabular_store(self):
-        if hasattr(self, "_tabular_store_instance") and self._tabular_store_instance is not None:
-            return self._tabular_store_instance
+    def get_tabular_stores(self) -> Dict[str, StoreInfo]:
+        if self._tabular_stores is not None:
+            return self._tabular_stores
 
-        store_config = get_configuration().storage.tabular_store
+        config_map = get_configuration().storage.tabular_stores or {}
+        stores = {}
 
-        if store_config is None:
-            logger.warning("No tabular store configured")
-            self._tabular_store_instance = create_empty_duckdb_store()
+        for name, cfg in config_map.items():
+            if isinstance(cfg, SQLStorageConfig):
+                try:
+                    database_name = cfg.database
+                    if cfg.path is not None:
+                        store = SQLTableStore(driver=cfg.driver, path=Path(cfg.path))
+                    else:
+                        raise ValueError("The path must not be None")
 
-        else:
-            if store_config.type == "duckdb":
-                db_path = Path(store_config.duckdb_path).expanduser()
-                self._tabular_store_instance = DuckDBTableStore(db_path, prefix="tabular_")
+                    stores[database_name] = StoreInfo(store=store, mode=cfg.mode)
+                    logger.info(f"[{database_name}] Connected to {cfg.driver} ({cfg.mode}) at {cfg.path}")
+                except Exception as e:
+                    logger.warning(f"[{name}] Failed to connect to {cfg.driver}: {e}")
 
-            elif store_config.type == "sql":
-                if store_config.path:
-                    path = Path(store_config.path)
-                    self._tabular_store_instance = SQLTableStore(driver=store_config.driver, path=path)
+        self._tabular_stores = stores
+        return stores
 
-            else:
-                raise ValueError("Unsupported tabular storage backend")
+    def get_csv_input_store(self) -> SQLTableStore:
+        """
+        Returns the store named 'base_database' if it exists,
+        otherwise returns the first store with mode 'read_and_write'.
+        """
+        stores = self.get_tabular_stores()
 
-        return self._tabular_store_instance
+        if "base_database" in stores:
+            return stores["base_database"].store
+
+        for store_info in stores.values():
+            if store_info.mode == "read_and_write":
+                return store_info.store
+        raise ValueError("No tabular_stores with mode 'read_and_write' found. Please check the knowledge flow configuration.")
 
     def get_catalog_store(self) -> BaseCatalogStore:
         """
@@ -796,7 +811,6 @@ class ApplicationContext:
 
             _describe("agent_store", st.tag_store)
             _describe("session_store", st.kpi_store)
-            _describe("history_store", st.tabular_store)
             _describe("feedback_store", st.catalog_store)
             _describe("feedback_store", st.metadata_store)
             _describe("feedback_store", st.vector_store)

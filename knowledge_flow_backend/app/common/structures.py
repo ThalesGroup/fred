@@ -276,7 +276,7 @@ class StorageConfig(BaseModel):
     kpi_store: StoreConfig
     metadata_store: StoreConfig
     catalog_store: StoreConfig
-    tabular_store: Optional[StoreConfig] = Field(default=None, description="Optional tabular store")
+    tabular_stores: Optional[Dict[str, StoreConfig]] = Field(default=None, description="Optional tabular store")
     vector_store: VectorStorageConfig
 
 

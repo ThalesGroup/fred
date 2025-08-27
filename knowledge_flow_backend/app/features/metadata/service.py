@@ -45,6 +45,7 @@ class MetadataService:
         self.config = ApplicationContext.get_instance().get_config()
         self.metadata_store = ApplicationContext.get_instance().get_metadata_store()
         self.catalog_store = ApplicationContext.get_instance().get_catalog_store()
+        self.csv_input_store = None
         self.vector_store = None
 
     def get_documents_metadata(self, filters_dict: dict) -> list[DocumentMetadata]:
@@ -119,6 +120,13 @@ class MetadataService:
                 self.vector_store.delete_vectors(metadata.document_uid)
                 self.metadata_store.delete_metadata(metadata.document_uid)
                 logger.info(f"[METADATA] Deleted document '{metadata.document_name}' because no tags remain (last removed by '{modified_by}')")
+
+                if self.csv_input_store is None:
+                    self.csv_input_store = ApplicationContext.get_instance().get_csv_input_store()
+                table_name = metadata.document_name.rsplit(".", 1)[0]
+                self.csv_input_store.delete_table(table_name)
+                logger.info(f"[TABULAR] Deleted SQL table '{table_name}' linked to '{metadata.document_name}'")
+
             else:
                 metadata.identity.modified = datetime.now(timezone.utc)
                 metadata.identity.last_modified_by = modified_by
