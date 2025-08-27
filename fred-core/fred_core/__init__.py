@@ -13,7 +13,11 @@
 # limitations under the License.
 
 from fred_core.common.utils import raise_internal_error
-from fred_core.security.keycloak import get_current_user, initialize_keycloak
+from fred_core.security.keycloak import (
+    get_current_user,
+    split_realm_url,
+    initialize_keycloak,
+)
 from fred_core.security.structure import (
     KeycloakUser,
     SecurityConfiguration,
@@ -48,6 +52,12 @@ from fred_core.kpi.kpi_reader_structures import (
 from fred_core.kpi.base_kpi_store import BaseKPIStore
 from fred_core.kpi.kpi_writer import KPIWriter
 from fred_core.security.outbound import ClientCredentialsProvider, BearerAuth
+from fred_core.security.backend_to_backend_auth import (
+    B2BAuthConfig,
+    B2BTokenProvider,
+    B2BBearerAuth,
+    make_b2b_asgi_client,
+)
 from fred_core.kpi.log_kpi_store import KpiLogStore
 
 __all__ = [
@@ -82,4 +92,9 @@ __all__ = [
     "KPIWriter",
     "KPIActor",
     "LogStoreConfig",
+    "B2BAuthConfig",
+    "B2BTokenProvider",
+    "B2BBearerAuth",
+    "make_b2b_asgi_client",
+    "split_realm_url",
 ]

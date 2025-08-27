@@ -58,7 +58,6 @@ class MCPAgent(AgentFlow):
             base_prompt=self.build_base_prompt(),
             categories=self.categories,
             tag=self.tag,
-            toolkit=self.toolkit,
         )
 
     def build_base_prompt(self) -> str:

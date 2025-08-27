@@ -17,7 +17,7 @@ import logging
 import os
 from pathlib import Path
 from typing import Dict, Type, Union, Optional
-from fred_core import LogStoreConfig, OpenSearchIndexConfig, DuckdbStoreConfig, OpenSearchKPIStore, BaseKPIStore, KpiLogStore
+from fred_core import LogStoreConfig, OpenSearchIndexConfig, DuckdbStoreConfig, OpenSearchKPIStore, BaseKPIStore, KpiLogStore, split_realm_url
 from opensearchpy import OpenSearch, RequestsHttpConnection
 from app.core.stores.catalog.opensearch_catalog_store import OpenSearchCatalogStore
 from app.core.stores.content.base_content_loader import BaseContentLoader
@@ -94,6 +94,14 @@ EXTENSION_CATEGORY = {
 }
 
 logger = logging.getLogger(__name__)
+
+
+def _mask(value: Optional[str], left: int = 4, right: int = 4) -> str:
+    if not value:
+        return "<empty>"
+    if len(value) <= left + right:
+        return "<hidden>"
+    return f"{value[:left]}…{value[-right:]}"
 
 
 def get_configuration() -> Configuration:
@@ -687,6 +695,31 @@ class ApplicationContext:
         logger.info(f"     ↳ {name} set: {'✅' if value else '❌'}")
 
     def _log_config_summary(self):
+        sec = self.configuration.app.security
+
+        logger.info("  🔒 security (Knowledge → Knowledge/Third Party):")
+        logger.info("     • enabled: %s", sec.enabled)
+        logger.info("     • client_id: %s", sec.client_id or "<unset>")
+        logger.info("     • keycloak_url: %s", sec.keycloak_url or "<unset>")
+        # realm parsing
+
+        if sec.enabled:
+            try:
+                base, realm = split_realm_url(sec.keycloak_url)
+                logger.info("     • realm: %s  (base=%s)", realm, base)
+            except Exception as e:
+                logger.error("     ❌ keycloak_url invalid (expected …/realms/<realm>): %s", e)
+                raise ValueError("Invalid Keycloak URL") from e
+
+            secret = os.getenv("KEYCLOAK_KNOWLEDGE_CLIENT_SECRET", "")
+            if secret:
+                logger.info("     • KEYCLOAK_KNOWLEDGE_CLIENT_SECRET: present  (%s)", _mask(secret))
+            else:
+                logger.error(
+                    "     ⚠️  KEYCLOAK_KNOWLEDGE_CLIENT_SECRET is not set — external or recursive MCP or REST calls will not be protected (NoAuth). Knowledge Flow will likely suffer from 401."
+                )
+                raise ValueError("Missing KEYCLOAK_KNOWLEDGE_CLIENT_SECRET environment variable")
+
         backend = self.configuration.embedding.type
         logger.info("🔧 Application configuration summary:")
         logger.info("--------------------------------------------------")

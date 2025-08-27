@@ -97,6 +97,7 @@ class KPIQuery(BaseModel):
     limit: int = Field(10, ge=1, le=1000)
     order_by: Optional[OrderBy] = None
 
+
 class KPIQueryResultRow(BaseModel):
     group: Dict[str, Any]
     metrics: Dict[str, float]
