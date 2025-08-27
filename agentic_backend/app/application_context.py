@@ -52,6 +52,7 @@ from fred_core import (
     BaseKPIStore,
     KpiLogStore,
     KPIWriter,
+    split_realm_url,
 )
 from requests.auth import AuthBase
 import logging
@@ -513,7 +514,7 @@ class ApplicationContext:
             self._outbound_auth = OutboundAuth(auth=NoAuth(), refresh=None)
             return self._outbound_auth
 
-        keycloak_base, realm = _split_realm_url(sec.keycloak_url)
+        keycloak_base, realm = split_realm_url(sec.keycloak_url)
         client_id = sec.client_id
         try:
             client_secret = os.environ.get("KEYCLOAK_AGENTIC_TOKEN")
@@ -628,7 +629,7 @@ class ApplicationContext:
         logger.info("     • keycloak_url: %s", sec.keycloak_url or "<unset>")
         # realm parsing
         try:
-            base, realm = _split_realm_url(sec.keycloak_url)
+            base, realm = split_realm_url(sec.keycloak_url)
             logger.info("     • realm: %s  (base=%s)", realm, base)
         except Exception as e:
             logger.error(
@@ -669,21 +670,3 @@ class ApplicationContext:
             )
 
         logger.info("────────────────────────────────────────────────────────────────")
-
-
-def _split_realm_url(realm_url: str) -> tuple[str, str]:
-    """
-    Split a Keycloak realm URL like:
-      http://host:port/realms/<realm>
-    into (base, realm).
-    """
-    u = realm_url.rstrip("/")
-    marker = "/realms/"
-    idx = u.find(marker)
-    if idx == -1:
-        raise ValueError(
-            f"Invalid keycloak_url (expected .../realms/<realm>): {realm_url}"
-        )
-    base = u[:idx]
-    realm = u[idx + len(marker) :].split("/", 1)[0]
-    return base, realm

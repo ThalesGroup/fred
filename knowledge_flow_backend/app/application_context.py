@@ -18,6 +18,7 @@ import os
 from pathlib import Path
 from typing import Dict, Type, Union, Optional
 from fred_core import LogStoreConfig, OpenSearchIndexConfig, DuckdbStoreConfig, OpenSearchKPIStore, BaseKPIStore, KpiLogStore
+import httpx
 from opensearchpy import OpenSearch, RequestsHttpConnection
 from app.core.stores.catalog.opensearch_catalog_store import OpenSearchCatalogStore
 from app.core.stores.content.base_content_loader import BaseContentLoader

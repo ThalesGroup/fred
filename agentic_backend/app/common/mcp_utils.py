@@ -14,12 +14,16 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 import logging
 from builtins import ExceptionGroup
+import time
+import copy
 from typing import Any, Dict, List
+from urllib.parse import urlsplit, urlunsplit
 
 from langchain_mcp_adapters.client import MultiServerMCPClient
-
+from langchain_mcp_adapters.tools import load_mcp_tools
 from app.common.structures import AgentSettings
 from app.common.error import UnsupportedTransportError
 from app.application_context import get_app_context
@@ -31,6 +35,23 @@ logger = logging.getLogger(__name__)
 #    sets "grpc" or something unsupported in configuration.yaml.
 SUPPORTED_TRANSPORTS = ["sse", "stdio", "streamable_http", "websocket"]
 
+def _ensure_trailing_slash(url: str) -> str:
+    """Hardening: MCP HTTP servers expect a base path ending with '/'."""
+    if not url:
+        return url
+    parts = list(urlsplit(url))
+    if not parts[2].endswith("/"):
+        parts[2] += "/"
+    return urlunsplit(parts)
+
+def _mask_auth_value(v: str | None) -> str:
+    """Never log secrets; show quick clue for ops."""
+    if not v:
+        return "none"
+    if v.lower().startswith("bearer "):
+        # Show first 8 chars after "Bearer "
+        return "present:Bearer " + v[7:15] + "…"
+    return "present"
 
 def _auth_headers() -> Dict[str, str]:
     """
@@ -69,6 +90,63 @@ def _auth_stdio_env() -> Dict[str, str]:
     val = hdrs["Authorization"]
     return {"MCP_AUTHORIZATION": val, "AUTHORIZATION": val}
 
+def _is_auth_error(exc: Exception) -> bool:
+    """Heuristic: adapter errors may not expose status; check message."""
+    msg = str(exc)
+    return "401" in msg or "Unauthorized" in msg
+
+async def ensure_mcp_sessions_alive(client) -> None:
+    """
+    Verify each MCP session. On 401 (expired bearer), refresh and reconnect that server
+    with fresh Authorization (HTTP transports) or refreshed env (stdio).
+    """
+    conn_specs: Dict[str, Dict[str, Any]] = getattr(client, "_conn_specs", {})
+
+    for name, session in list(client.sessions.items()):
+        try:
+            # Cheap ping that exercises auth/transport
+            await load_mcp_tools(session)
+        except Exception as e:
+            if not _is_auth_error(e):
+                logger.info("MCP health: non-auth error on %s: %s", name, e.__class__.__name__)
+                continue
+
+            logger.info("MCP health: 401 on %s — refreshing token and reconnecting.", name)
+
+            # 1) refresh token
+            oa = get_app_context().get_outbound_auth()
+            _refresh = getattr(oa, "refresh", None)
+            if callable(_refresh):
+                try:
+                    _refresh()
+                except Exception as ref_exc:
+                    logger.info("MCP token refresh failed quickly name=%s err=%s", name, type(ref_exc).__name__)
+
+            # 2) rebuild headers/env *based on transport* and reconnect
+            spec = copy.deepcopy(conn_specs.get(name, {}))
+            if not spec:
+                logger.info("MCP health: no saved spec for %s, skipping reconnect.", name)
+                continue
+
+            fresh_headers = _auth_headers()
+            transport = spec.get("transport")
+
+            if transport in ("sse", "streamable_http", "websocket"):
+                # Always set fresh headers on reconnect (even if they weren't present initially)
+                spec["headers"] = dict(fresh_headers) if fresh_headers else None
+            elif transport == "stdio":
+                # Merge fresh token into env for stdio transports
+                merged_env: Dict[str, str] = dict(spec.get("env") or {})
+                merged_env.update(_auth_stdio_env())
+                spec["env"] = merged_env
+
+            try:
+                await client.connect_to_server(**spec)
+                # Persist the effective spec so subsequent reconnects use it
+                client.__dict__.setdefault("_conn_specs", {})[name] = dict(spec)
+                logger.info("MCP health: reconnected %s after refresh.", name)
+            except Exception as rexc:
+                logger.info("MCP health: reconnect failed for %s err=%s", name, type(rexc).__name__)
 
 async def get_mcp_client_for_agent(
     agent_settings: AgentSettings,
@@ -102,7 +180,7 @@ async def get_mcp_client_for_agent(
     # Precompute base auth headers/env once, so we don’t repeat provider calls.
     base_headers = _auth_headers()
     base_stdio_env = _auth_stdio_env()
-
+    auth_label = _mask_auth_value(base_headers.get("Authorization"))
     for server in agent_settings.mcp_servers:
         if server.transport not in SUPPORTED_TRANSPORTS:
             # This ensures config errors surface early instead of silently failing.
@@ -124,55 +202,120 @@ async def get_mcp_client_for_agent(
 
         # Inject auth according to transport type.
         if server.transport in ("sse", "streamable_http", "websocket"):
+            if server.url:
+                url = server.url
+                if server.transport in ("sse", "streamable_http"):
+                    url = _ensure_trailing_slash(url)
+                connect_kwargs["url"] = url
             if base_headers:
                 connect_kwargs["headers"] = dict(base_headers)
+            if server.transport == "streamable_http" and isinstance(server.sse_read_timeout, (int, float)):
+                connect_kwargs["sse_read_timeout"] = timedelta(seconds=float(server.sse_read_timeout))
+            else:
+                connect_kwargs["sse_read_timeout"] = server.sse_read_timeout
         elif server.transport == "stdio":
             merged_env: Dict[str, str] = dict(server.env or {})
             merged_env.update(base_stdio_env)
             connect_kwargs["env"] = merged_env
 
-        # First connection attempt
+
+        url_for_log = connect_kwargs.get("url", "")
+        start = time.perf_counter()
         try:
             await client.connect_to_server(**connect_kwargs)
+            client.__dict__.setdefault("_conn_specs", {})[server.name] = dict(connect_kwargs)
+
+            dur_ms = (time.perf_counter() - start) * 1000
+            tools = client.server_name_to_tools.get(server.name, [])
+            logger.info(
+                "MCP connect ok name=%s transport=%s url=%s auth=%s tools=%d dur_ms=%.0f",
+                server.name,
+                server.transport,
+                url_for_log,
+                auth_label,
+                len(tools),
+                dur_ms,
+            )
             continue
         except Exception as e1:
-            msg = str(e1)
-            unauthorized = ("401" in msg) or ("Unauthorized" in msg)
-            if not unauthorized:
-                # Non-auth errors → collect for final ExceptionGroup
-                for exc in getattr(e1, "exceptions", [e1]):
-                    if isinstance(exc, Exception):
-                        exceptions.append(exc)
+            dur_ms = (time.perf_counter() - start) * 1000
+            logger.info(
+                "MCP connect fail name=%s transport=%s url=%s auth=%s dur_ms=%.0f err=%s",
+                server.name,
+                server.transport,
+                url_for_log,
+                auth_label,
+                dur_ms,
+                e1.__class__.__name__,
+            )
+
+            if not _is_auth_error(e1):
+                # Non-auth errors → keep details for final summary
+                exceptions.extend(getattr(e1, "exceptions", [e1]))
                 continue
 
-            # Auth error → refresh and retry once
+            # ---- Auth retry once --------------------------------------------
+            logger.info("MCP connect 401 → refreshing token and retrying once (name=%s).", server.name)
+            oa = get_app_context().get_outbound_auth()
+            refresh_fn = getattr(oa, "refresh", None)
+            if callable(refresh_fn):
+                try:
+                    refresh_fn()
+                except Exception as ref_exc:
+                    logger.info("MCP token refresh failed quickly name=%s err=%s", server.name, type(ref_exc).__name__)
+
+            fresh_headers = _auth_headers()
+            fresh_auth_label = _mask_auth_value(fresh_headers.get("Authorization"))
+            if server.transport in ("sse", "streamable_http", "websocket"):
+                if fresh_headers:
+                    connect_kwargs["headers"] = dict(fresh_headers)
+                else:
+                    connect_kwargs.pop("headers", None)
+            elif server.transport == "stdio":
+                merged_env = dict(server.env or {})
+                merged_env.update(_auth_stdio_env())
+                connect_kwargs["env"] = merged_env
+
+            start2 = time.perf_counter()
             try:
-                logger.info("MCP connect 401 — refreshing token and retrying once.")
-                if oa.refresh:
-                    oa.refresh()
-
-                fresh_headers = _auth_headers()
-                fresh_stdio_env = _auth_stdio_env()
-
-                if server.transport in ("sse", "streamable_http", "websocket"):
-                    if fresh_headers:
-                        connect_kwargs["headers"] = dict(fresh_headers)
-                    else:
-                        connect_kwargs.pop("headers", None)
-                elif server.transport == "stdio":
-                    merged_env2: Dict[str, str] = dict(server.env or {})
-                    merged_env2.update(fresh_stdio_env)
-                    connect_kwargs["env"] = merged_env2
-
                 await client.connect_to_server(**connect_kwargs)
+                client.__dict__.setdefault("_conn_specs", {})[server.name] = dict(connect_kwargs)
+
+                dur2_ms = (time.perf_counter() - start2) * 1000
+                tools = client.server_name_to_tools.get(server.name, [])
+                logger.info(
+                    "MCP connect ok (after refresh) name=%s transport=%s url=%s auth=%s tools=%d dur_ms=%.0f",
+                    server.name,
+                    server.transport,
+                    url_for_log,
+                    fresh_auth_label,
+                    len(tools),
+                    dur2_ms,
+                )
                 continue
             except Exception as e2:
-                # Retry failed → collect exception for final aggregation
+                dur2_ms = (time.perf_counter() - start2) * 1000
+                logger.info(
+                    "MCP connect fail (after refresh) name=%s transport=%s url=%s auth=%s dur_ms=%.0f err=%s",
+                    server.name,
+                    server.transport,
+                    url_for_log,
+                    fresh_auth_label,
+                    dur2_ms,
+                    e2.__class__.__name__,
+                )
                 exceptions.extend(getattr(e2, "exceptions", [e2]))
                 continue
 
     if exceptions:
-        # Aggregate all partial failures so the developer sees the full picture.
+        logger.info("MCP summary: %d server(s) failed to connect.", len(exceptions))
+        for i, exc in enumerate(exceptions, 1):
+            logger.info("  [%d] %s: %s", i, exc.__class__.__name__, str(exc))
         raise ExceptionGroup("Some MCP connections failed", exceptions)
 
+    # Optional: log grand total of tools
+    total_tools = sum(len(v) for v in client.server_name_to_tools.values())
+    logger.info("MCP summary: all servers connected, total tools=%d", total_tools)
+
     return client
+

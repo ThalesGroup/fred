@@ -1,20 +1,10 @@
 # Copyright Thales 2025
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# Licensed under the Apache License, Version 2.0
 
 import logging
-from typing import Any
+from typing import Any, Optional
 
+import httpx  # ← we log/inspect HTTP errors coming from MCP adapters
 from langchain_core.tools import BaseTool
 from pydantic import Field
 
@@ -26,19 +16,77 @@ from app.core.agents.runtime_context import (
 logger = logging.getLogger(__name__)
 
 
+def _unwrap_httpx_status_error(exc: BaseException) -> Optional[httpx.HTTPStatusError]:
+    """
+    Fred rationale:
+    MCP adapters sometimes re-wrap httpx exceptions. We walk the cause/context chain
+    to find the underlying HTTPStatusError so we can extract status code & URL.
+    """
+    seen: set[int] = set()
+    cur: Optional[BaseException] = exc  # type: ignore[assignment]
+    while cur and id(cur) not in seen:
+        seen.add(id(cur))
+        if isinstance(cur, httpx.HTTPStatusError):
+            return cur
+        cur = (getattr(cur, "__cause__", None)  # exception chaining
+               or getattr(cur, "__context__", None))
+    return None
+
+
+def _log_http_error(tool_name: str, err: httpx.HTTPStatusError) -> None:
+    """
+    Fred rationale:
+    Give ops-grade traces that directly point to auth/token problems, with enough
+    context (method, URL, body snippet) to debug quickly.
+    """
+    req = getattr(err, "request", None)
+    resp = getattr(err, "response", None)
+
+    method = getattr(req, "method", "?")
+    url = str(getattr(req, "url", "?"))
+    code = getattr(resp, "status_code", None)
+
+    body_preview = ""
+    try:
+        if resp is not None and resp.text:
+            txt = resp.text
+            # keep logs short; we only need a hint
+            body_preview = f" | body: {txt[:300].replace(chr(10), ' ')}"
+    except Exception:
+        pass
+
+    if code == 401:
+        logger.error(
+            "[MCP][%s] 401 Unauthorized (likely expired/invalid token) on %s %s%s",
+            tool_name,
+            method,
+            url,
+            body_preview,
+            exc_info=True,
+        )
+    else:
+        logger.error(
+            "[MCP][%s] HTTP %s on %s %s%s",
+            tool_name,
+            code,
+            method,
+            url,
+            body_preview,
+            exc_info=True,
+        )
+
+
 class ContextAwareTool(BaseTool):
     """
-    Generic wrapper tool that injects runtime context into tool calls.
+    Developer intent (Fred):
+    - This wrapper injects **runtime context** (e.g., doc library tags) into MCP tools.
+    - It also **traces auth failures** cleanly: if the MCP call returns 401, we log
+      an explicit message so ops/devs see token expiry immediately.
 
-    This tool acts as a proxy for any base tool, automatically injecting
-    runtime context parameters when appropriate. It's designed to be extensible
-    for different types of context injection.
-
-    Current supported context injections:
-    - Library IDs as 'tags' parameter for filtering operations
-
-    Future extensions could include:
-    - User preferences, session data, security contexts, etc.
+    Why here?
+    - Tool execution happens inside LangGraph's ToolNode; catching here guarantees we
+      see the *real* tool failure (including wrapped httpx errors) without changing
+      your graph or agent code.
     """
 
     base_tool: BaseTool = Field(..., description="The underlying tool to wrap")
@@ -47,6 +95,7 @@ class ContextAwareTool(BaseTool):
     )
 
     def __init__(self, base_tool: BaseTool, context_provider: RuntimeContextProvider):
+        # Preserve tool identity (name/description) so LLM can pick it properly.
         super().__init__(
             **base_tool.__dict__,
             base_tool=base_tool,
@@ -55,10 +104,9 @@ class ContextAwareTool(BaseTool):
 
     def _inject_context_if_needed(self, kwargs: dict[str, Any]) -> dict[str, Any]:
         """
-        Generic method to inject runtime context into tool arguments.
-
-        This method checks the tool's schema and conditionally injects
-        context parameters that the tool supports.
+        Fred rationale:
+        Keep injection conservative + schema-aware. For now we only add "tags" if the
+        tool supports it and caller didn't pass it.
         """
         context = self.context_provider()
         if not context:
@@ -67,27 +115,19 @@ class ContextAwareTool(BaseTool):
         tool_properties = {}
         if self.base_tool.args_schema:
             try:
-                # Get schema - args_schema should be a Pydantic model class
-                schema_method = getattr(
-                    self.base_tool.args_schema, "model_json_schema", None
-                )
+                # Pydantic v2 first, v1 fallback, else assume dict-like
+                schema_method = getattr(self.base_tool.args_schema, "model_json_schema", None)
                 if schema_method:
                     tool_schema = schema_method()
                 else:
                     schema_method = getattr(self.base_tool.args_schema, "schema", None)
-                    if schema_method:
-                        tool_schema = schema_method()
-                    else:
-                        # Fallback: assume it's already a dict-like schema
-                        tool_schema = self.base_tool.args_schema
-
+                    tool_schema = schema_method() if schema_method else self.base_tool.args_schema
                 if isinstance(tool_schema, dict):
                     tool_properties = tool_schema.get("properties", {})
             except Exception as e:
-                logger.warning(f"Could not extract tool schema: {e}")
+                logger.warning("ContextAwareTool(%s): could not extract tool schema: %s", self.name, e)
                 tool_properties = {}
 
-        # Inject library IDs as tags for filtering
         library_ids = get_document_libraries_ids(context)
         if (
             library_ids
@@ -95,23 +135,46 @@ class ContextAwareTool(BaseTool):
             and ("tags" not in kwargs or kwargs["tags"] is None)
         ):
             kwargs["tags"] = library_ids
-            logger.info(f"ContextAwareTool injecting library filter: {library_ids}")
-
-        # Future: Add other context injections here
-        # Example:
-        # if ("user_id" in tool_properties and
-        #     "user_id" not in kwargs and
-        #     hasattr(context, 'user_id')):
-        #     kwargs["user_id"] = context.user_id
+            logger.info("ContextAwareTool(%s) injecting library filter: %s", self.name, library_ids)
 
         return kwargs
 
     def _run(self, **kwargs: Any) -> Any:
-        """Synchronous execution with context injection"""
+        """Sync execution with context injection + robust HTTP(401) tracing."""
         kwargs = self._inject_context_if_needed(kwargs)
-        return self.base_tool._run(**kwargs)
+        try:
+            return self.base_tool._run(**kwargs)
+        except httpx.RequestError as e:
+            # Network / DNS / TLS issues before we even get an HTTP status code
+            logger.error("[MCP][%s] HTTP request error: %s", self.name, e, exc_info=True)
+            raise
+        except httpx.HTTPStatusError as e:
+            _log_http_error(self.name, e)
+            raise
+        except Exception as e:
+            # Catch wrapped httpx errors (common in adapters)
+            inner = _unwrap_httpx_status_error(e)
+            if inner is not None:
+                _log_http_error(self.name, inner)
+            else:
+                logger.exception("[MCP][%s] Tool error", self.name)
+            raise
 
     async def _arun(self, config=None, **kwargs: Any) -> Any:
-        """Asynchronous execution with context injection"""
+        """Async execution with context injection + robust HTTP(401) tracing."""
         kwargs = self._inject_context_if_needed(kwargs)
-        return await self.base_tool._arun(config=config, **kwargs)
+        try:
+            return await self.base_tool._arun(config=config, **kwargs)
+        except httpx.RequestError as e:
+            logger.error("[MCP][%s] HTTP request error: %s", self.name, e, exc_info=True)
+            raise
+        except httpx.HTTPStatusError as e:
+            _log_http_error(self.name, e)
+            raise
+        except Exception as e:
+            inner = _unwrap_httpx_status_error(e)
+            if inner is not None:
+                _log_http_error(self.name, inner)
+            else:
+                logger.exception("[MCP][%s] Tool error", self.name)
+            raise
