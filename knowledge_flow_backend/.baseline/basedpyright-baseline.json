@@ -342,46 +342,12 @@
                 }
             }
         ],
-        "./app/features/tabular/controller.py": [
-            {
-                "code": "reportArgumentType",
-                "range": {
-                    "startColumn": 95,
-                    "endColumn": 98,
-                    "lineCount": 1
-                }
-            }
-        ],
         "./app/features/tabular/service.py": [
-            {
-                "code": "reportArgumentType",
-                "range": {
-                    "startColumn": 30,
-                    "endColumn": 39,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportArgumentType",
-                "range": {
-                    "startColumn": 55,
-                    "endColumn": 94,
-                    "lineCount": 1
-                }
-            },
             {
                 "code": "reportArgumentType",
                 "range": {
                     "startColumn": 93,
                     "endColumn": 102,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportArgumentType",
-                "range": {
-                    "startColumn": 68,
-                    "endColumn": 110,
                     "lineCount": 1
                 }
             },

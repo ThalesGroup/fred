@@ -89,9 +89,6 @@ storage:
     verify_certs: false
     username: admin
 
-  tabular_store:
-    type: "duckdb"
-    duckdb_path: "~/.fred/knowledge-flow/tabular.duckdb"
 
   catalog_store:
     type: "duckdb"
@@ -119,3 +116,11 @@ storage:
 
   vector_store:
     type: in_memory
+
+  tabular_stores:
+    base_database:                            # Minimal configuration to enable CSV document ingestion
+      type: "sql"
+      driver: "duckdb"
+      database: "base_database"
+      path: "~/.fred/knowledge-flow/db.duckdb"
+      mode: "read_and_write"

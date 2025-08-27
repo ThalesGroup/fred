@@ -40,8 +40,9 @@ tabular_store:
   database: "test_db_postgre_sql"
 
   # These override the values from the .env file if set
-  username: "my_username"
-  password: "my_password"
+  username: "my_username"     # pragma: allowlist secret
+  password: "my_password"     # pragma: allowlist secret
+```
 ```
 
 ## 🔐 Credential Management (.env)
