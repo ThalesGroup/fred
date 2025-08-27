@@ -28,8 +28,10 @@ def _unwrap_httpx_status_error(exc: BaseException) -> Optional[httpx.HTTPStatusE
         seen.add(id(cur))
         if isinstance(cur, httpx.HTTPStatusError):
             return cur
-        cur = (getattr(cur, "__cause__", None)  # exception chaining
-               or getattr(cur, "__context__", None))
+        cur = (
+            getattr(cur, "__cause__", None)  # exception chaining
+            or getattr(cur, "__context__", None)
+        )
     return None
 
 
@@ -53,6 +55,7 @@ def _log_http_error(tool_name: str, err: httpx.HTTPStatusError) -> None:
             # keep logs short; we only need a hint
             body_preview = f" | body: {txt[:300].replace(chr(10), ' ')}"
     except Exception:
+        logger.warning("Failed to extract HTTP response body", exc_info=True)
         pass
 
     if code == 401:
@@ -116,16 +119,24 @@ class ContextAwareTool(BaseTool):
         if self.base_tool.args_schema:
             try:
                 # Pydantic v2 first, v1 fallback, else assume dict-like
-                schema_method = getattr(self.base_tool.args_schema, "model_json_schema", None)
+                schema_method = getattr(
+                    self.base_tool.args_schema, "model_json_schema", None
+                )
                 if schema_method:
                     tool_schema = schema_method()
                 else:
                     schema_method = getattr(self.base_tool.args_schema, "schema", None)
-                    tool_schema = schema_method() if schema_method else self.base_tool.args_schema
+                    tool_schema = (
+                        schema_method() if schema_method else self.base_tool.args_schema
+                    )
                 if isinstance(tool_schema, dict):
                     tool_properties = tool_schema.get("properties", {})
             except Exception as e:
-                logger.warning("ContextAwareTool(%s): could not extract tool schema: %s", self.name, e)
+                logger.warning(
+                    "ContextAwareTool(%s): could not extract tool schema: %s",
+                    self.name,
+                    e,
+                )
                 tool_properties = {}
 
         library_ids = get_document_libraries_ids(context)
@@ -135,7 +146,11 @@ class ContextAwareTool(BaseTool):
             and ("tags" not in kwargs or kwargs["tags"] is None)
         ):
             kwargs["tags"] = library_ids
-            logger.info("ContextAwareTool(%s) injecting library filter: %s", self.name, library_ids)
+            logger.info(
+                "ContextAwareTool(%s) injecting library filter: %s",
+                self.name,
+                library_ids,
+            )
 
         return kwargs
 
@@ -146,7 +161,9 @@ class ContextAwareTool(BaseTool):
             return self.base_tool._run(**kwargs)
         except httpx.RequestError as e:
             # Network / DNS / TLS issues before we even get an HTTP status code
-            logger.error("[MCP][%s] HTTP request error: %s", self.name, e, exc_info=True)
+            logger.error(
+                "[MCP][%s] HTTP request error: %s", self.name, e, exc_info=True
+            )
             raise
         except httpx.HTTPStatusError as e:
             _log_http_error(self.name, e)
@@ -166,7 +183,9 @@ class ContextAwareTool(BaseTool):
         try:
             return await self.base_tool._arun(config=config, **kwargs)
         except httpx.RequestError as e:
-            logger.error("[MCP][%s] HTTP request error: %s", self.name, e, exc_info=True)
+            logger.error(
+                "[MCP][%s] HTTP request error: %s", self.name, e, exc_info=True
+            )
             raise
         except httpx.HTTPStatusError as e:
             _log_http_error(self.name, e)

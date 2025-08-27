@@ -14,15 +14,14 @@
 
 from datetime import datetime
 
-from app.common.mcp_utils import get_mcp_client_for_agent
+from app.common.mcp_runtime import MCPRuntime
+from app.common.resilient_tool_node import make_resilient_tools_node
 from app.common.structures import AgentSettings
 from app.core.agents.flow import AgentFlow
 from app.core.model.model_factory import get_model
 from langgraph.graph import MessagesState, StateGraph
 from langgraph.constants import START
-from langgraph.prebuilt import ToolNode, tools_condition
-
-from app.agents.jira.jira_toolkit import JiraExpertToolkit
+from langgraph.prebuilt import tools_condition
 
 
 class JiraExpert(AgentFlow):
@@ -47,17 +46,26 @@ class JiraExpert(AgentFlow):
         self.description = agent_settings.description
         self.current_date = datetime.now().strftime("%Y-%m-%d")
         self.model = get_model(self.agent_settings.model)
-        self.mcp_client = get_mcp_client_for_agent(self.agent_settings)
-        self.toolkit = JiraExpertToolkit(self.mcp_client)
+        self.mcp = MCPRuntime(
+            agent_settings=self.agent_settings,
+            # If you expose runtime filtering (tenant/library/time window),
+            # pass a provider: lambda: self.get_runtime_context()
+            context_provider=(lambda: self.get_runtime_context()),
+        )
         self.base_prompt = self._generate_prompt()
         self.categories = (
             self.agent_settings.categories
             if self.agent_settings.categories
             else ["Jira"]
         )
-        # On conserve le tag de classe si agent_settings.tag est None ou vide
         if self.agent_settings.tag:
             self.tag = self.agent_settings.tag
+
+    async def async_init(self):
+        self.model = get_model(self.agent_settings.model)
+        await self.mcp.init()
+        self.model = self.model.bind_tools(self.mcp.get_tools())
+        self._graph = self.get_graph()
 
         super().__init__(
             name=self.name,
@@ -65,11 +73,10 @@ class JiraExpert(AgentFlow):
             nickname=self.nickname,
             description=self.description,
             icon=self.icon,
-            graph=self.get_graph(),
+            graph=self._graph,
             base_prompt=self.base_prompt,
             categories=self.categories,
             tag=self.tag,
-            toolkit=self.toolkit,
         )
 
     def _generate_prompt(self) -> str:
@@ -111,7 +118,18 @@ class JiraExpert(AgentFlow):
         builder = StateGraph(MessagesState)
 
         builder.add_node("reasoner", self.reasoner)
-        builder.add_node("tools", ToolNode(self.toolkit.get_tools()))
+
+        async def _refresh_and_rebind():
+            # Refresh MCP (new client + toolkit) and rebind tools into the model.
+            # MCPRuntime handles snapshot logging + safe old-client close.
+            self.model = await self.mcp.refresh_and_bind(self.model)
+
+        tools_node = make_resilient_tools_node(
+            get_tools=self.mcp.get_tools,  # always returns the latest tool instances
+            refresh_cb=_refresh_and_rebind,  # on timeout/401/stream close, refresh + rebind
+        )
+
+        builder.add_node("tools", tools_node)
 
         builder.add_edge(START, "reasoner")
         builder.add_conditional_edges("reasoner", tools_condition)

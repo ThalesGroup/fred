@@ -13,7 +13,11 @@
 # limitations under the License.
 
 from fred_core.common.utils import raise_internal_error
-from fred_core.security.keycloak import get_current_user, split_realm_url, initialize_keycloak
+from fred_core.security.keycloak import (
+    get_current_user,
+    split_realm_url,
+    initialize_keycloak,
+)
 from fred_core.security.structure import (
     KeycloakUser,
     SecurityConfiguration,

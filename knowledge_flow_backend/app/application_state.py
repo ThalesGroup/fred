@@ -25,7 +25,10 @@ import httpx
 from fastapi import FastAPI
 
 from fred_core import (
-    B2BAuthConfig, B2BTokenProvider, B2BBearerAuth, make_b2b_asgi_client,
+    B2BAuthConfig,
+    B2BTokenProvider,
+    B2BBearerAuth,
+    make_b2b_asgi_client,
 )
 
 from app.application_context import get_configuration
@@ -36,7 +39,6 @@ class _AppState:
         self._app: Optional[FastAPI] = None
         self._b2b_client: Optional[httpx.AsyncClient] = None
         self._b2b_provider: Optional[B2BTokenProvider] = None
-
 
     def attach_app(self, app: FastAPI) -> None:
         """
@@ -55,7 +57,7 @@ class _AppState:
         get_configuration().app.security.client_id
         realm_url = get_configuration().app.security.keycloak_url
         client_id = get_configuration().app.security.client_id
-        secret_env = "KEYCLOAK_CLIENT_SECRET"
+        token_env_var_name = "KEYCLOAK_KNOWLEDGE_CLIENT_SECRET"  # nosec B105
 
         if not realm_url or not client_id:
             # Soft-fail: allows tests/dev without B2B; errors only when accessed.
@@ -64,7 +66,7 @@ class _AppState:
         cfg = B2BAuthConfig(
             keycloak_realm_url=realm_url,
             client_id=client_id,
-            secret_env=secret_env,
+            secret_env=token_env_var_name,
         )
         self._b2b_provider = B2BTokenProvider(cfg)
         auth = B2BBearerAuth(self._b2b_provider)
@@ -72,10 +74,7 @@ class _AppState:
 
     def get_b2b_client(self) -> httpx.AsyncClient:
         if self._b2b_client is None:
-            raise RuntimeError(
-                "B2B client not initialized. Call application_state.attach_app(app) at startup "
-                "and set KEYCLOAK_REALM_URL / KEYCLOAK_CLIENT_ID / KEYCLOAK_CLIENT_SECRET."
-            )
+            raise RuntimeError("B2B client not initialized. Call application_state.attach_app(app) at startup and set KEYCLOAK_REALM_URL / KEYCLOAK_CLIENT_ID / KEYCLOAK_CLIENT_SECRET.")
         return self._b2b_client
 
     async def internal_request(
@@ -104,21 +103,27 @@ class _AppState:
             await self._b2b_client.aclose()
             self._b2b_client = None
 
+
 # Module-level singleton (simple and explicit)
 _STATE = _AppState()
+
 
 # Public helpers (nice import ergonomics)
 def attach_app(app: FastAPI) -> None:
     _STATE.attach_app(app)
 
+
 def get_b2b_client() -> httpx.AsyncClient:
     return _STATE.get_b2b_client()
+
 
 async def internal_get(path: str, *, user_authorization: Optional[str] = None, **kw) -> httpx.Response:
     return await _STATE.internal_request("GET", path, user_authorization=user_authorization, **kw)
 
+
 async def internal_post(path: str, *, user_authorization: Optional[str] = None, **kw) -> httpx.Response:
     return await _STATE.internal_request("POST", path, user_authorization=user_authorization, **kw)
+
 
 async def shutdown() -> None:
     await _STATE.shutdown()

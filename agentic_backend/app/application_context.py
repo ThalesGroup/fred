@@ -517,10 +517,10 @@ class ApplicationContext:
         keycloak_base, realm = split_realm_url(sec.keycloak_url)
         client_id = sec.client_id
         try:
-            client_secret = os.environ.get("KEYCLOAK_AGENTIC_TOKEN")
+            client_secret = os.environ.get("KEYCLOAK_AGENTIC_CLIENT_SECRET")
         except KeyError:
             raise RuntimeError(
-                "Missing client secret env var 'KEYCLOAK_AGENTIC_TOKEN'."
+                "Missing client secret env var 'KEYCLOAK_AGENTIC_CLIENT_SECRET'."
             )
         if not client_secret:
             raise ValueError("Client secret is empty.")
@@ -623,7 +623,7 @@ class ApplicationContext:
             )
 
         # Inbound security (UI -> Agentic)
-        logger.info("  🔒 Inbound security (UI → Agentic):")
+        logger.info("  🔒 Outbound security (Agentic → Knwoledge/Third Party):")
         logger.info("     • enabled: %s", sec.enabled)
         logger.info("     • client_id: %s", sec.client_id or "<unset>")
         logger.info("     • keycloak_url: %s", sec.keycloak_url or "<unset>")
@@ -645,12 +645,14 @@ class ApplicationContext:
 
         # Outbound S2S (Agentic → Knowledge Flow)
         logger.info("  🔑 Outbound S2S (Agentic → Knowledge Flow):")
-        secret = os.getenv("KEYCLOAK_AGENTIC_TOKEN", "")
+        secret = os.getenv("KEYCLOAK_AGENTIC_CLIENT_SECRET", "")
         if secret:
-            logger.info("     • KEYCLOAK_AGENTIC_TOKEN: present  (%s)", _mask(secret))
+            logger.info(
+                "     • KEYCLOAK_AGENTIC_CLIENT_SECRET: present  (%s)", _mask(secret)
+            )
         else:
             logger.warning(
-                "     ⚠️ KEYCLOAK_AGENTIC_TOKEN is not set — outbound calls will be unauthenticated "
+                "     ⚠️ KEYCLOAK_AGENTIC_CLIENT_SECRET is not set — outbound calls will be unauthenticated "
                 "(NoAuth). Knowledge Flow will likely return 401."
             )
 

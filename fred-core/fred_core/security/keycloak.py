@@ -46,6 +46,7 @@ def initialize_keycloak(config: SecurityConfiguration):
         f"Keycloak initialized. Enabled: {KEYCLOAK_ENABLED}, URL: {KEYCLOAK_URL}"
     )
 
+
 def split_realm_url(realm_url: str) -> tuple[str, str]:
     """
     Split a Keycloak realm URL like:
@@ -62,6 +63,7 @@ def split_realm_url(realm_url: str) -> tuple[str, str]:
     base = u[:idx]
     realm = u[idx + len(marker) :].split("/", 1)[0]
     return base, realm
+
 
 # OAuth2 Password Bearer
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token", auto_error=False)

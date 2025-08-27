@@ -100,7 +100,9 @@ def create_app() -> FastAPI:
             logger.info("🚀 AgentManager fully loaded.")
             yield
         except asyncio.CancelledError as e:
-            logger.warning("🧯 Lifespan CancelledError caught (expected on shutdown): %r", e)
+            logger.warning(
+                "🧯 Lifespan CancelledError caught (expected on shutdown): %r", e
+            )
             # IMPORTANT: do NOT re-raise; cancellation is a control signal.
             # Swallowing it here prevents the noisy traceback you observed.
         finally:

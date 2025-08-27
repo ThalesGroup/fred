@@ -40,15 +40,17 @@ from fastapi import FastAPI
 # - We don’t wire it into FastAPI yet; that comes later.
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 class B2BAuthConfig(BaseModel):
     """
     Minimal config for client-credentials flow.
     keycloak_realm_url: the *realm* URL, same one you already use for JWKS
                         (e.g., https://kc.example/realms/myrealm)
     client_id:          confidential client ID (e.g., "knowledge")
-    secret_env:         env var name that stores the client secret (e.g., "KEYCLOAK_KNOWLEDGE_TOKEN")
+    secret_env:         env var name that stores the client secret (e.g., "KEYCLOAK_KNOWLEDGE_CLIENT_SECRET")
     scope:              optional Keycloak scopes (rarely needed)
     """
+
     keycloak_realm_url: str
     client_id: str
     secret_env: str
@@ -65,6 +67,7 @@ class B2BTokenProvider:
     Caches and refreshes a Keycloak client-credentials token.
     Thread-safe (async) and cheap to reuse across calls.
     """
+
     def __init__(self, cfg: B2BAuthConfig):
         self.cfg = cfg
         self._secret = os.getenv(cfg.secret_env, "")
@@ -85,7 +88,9 @@ class B2BTokenProvider:
 
             if not self._secret:
                 # Fail fast: missing secret will otherwise cause confusing 401s
-                raise RuntimeError(f"Missing Keycloak client secret in env: {self.cfg.secret_env}")
+                raise RuntimeError(
+                    f"Missing Keycloak client secret in env: {self.cfg.secret_env}"
+                )
 
             form = {
                 "grant_type": "client_credentials",
@@ -121,13 +126,16 @@ class B2BBearerAuth(httpx.Auth):
     Important: httpx expects an *async generator* here. We yield the request
     after mutating headers, which avoids the common type errors.
     """
+
     requires_request_body = True
     requires_response_body = False
 
     def __init__(self, provider: B2BTokenProvider):
         self._provider = provider
 
-    async def async_auth_flow(self, request: Request) -> t.AsyncGenerator[Request, Response]:
+    async def async_auth_flow(
+        self, request: Request
+    ) -> t.AsyncGenerator[Request, Response]:
         token = await self._provider.get_token()
         request.headers["Authorization"] = f"Bearer {token}"
         yield request  # httpx performs the request; we don't need the response hook here.

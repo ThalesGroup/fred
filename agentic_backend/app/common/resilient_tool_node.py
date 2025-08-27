@@ -9,6 +9,7 @@ from langgraph.graph import MessagesState
 
 logger = logging.getLogger(__name__)
 
+
 def _is_401(exc: BaseException) -> bool:
     seen = set()
     cur: Optional[BaseException] = exc
@@ -19,9 +20,11 @@ def _is_401(exc: BaseException) -> bool:
                 if cur.response is not None and cur.response.status_code == 401:
                     return True
             except Exception:
+                logger.warning("Failed to check for 401 status", exc_info=True)
                 pass
-        cur = (getattr(cur, "__cause__", None) or getattr(cur, "__context__", None))
+        cur = getattr(cur, "__cause__", None) or getattr(cur, "__context__", None)
     return False
+
 
 def _get_pending_tool_calls(state: MessagesState) -> List[Dict[str, Any]]:
     messages: List[BaseMessage] = state.get("messages", [])  # type: ignore[assignment]
@@ -35,21 +38,27 @@ def _get_pending_tool_calls(state: MessagesState) -> List[Dict[str, Any]]:
             break
     return []
 
+
 def _log_tools(where: str, tools: list) -> None:
-    names = ", ".join(f"{getattr(t,'name','?')}@{id(t):x}" for t in tools)
+    names = ", ".join(f"{getattr(t, 'name', '?')}@{id(t):x}" for t in tools)
     logger.info("[MCP][ToolNode] %s tools=[%s]", where, names)
+
 
 def _fallback_as_tool_messages(
     state: MessagesState,
-    note: str = "Temporary auth issue. I refreshed my connection. Please retry your request."
+    note: str = "Temporary auth issue. I refreshed my connection. Please retry your request.",
 ) -> dict:
     pending = _get_pending_tool_calls(state)
     if not pending:
-        logger.info("[MCP][ToolNode] fallback: no pending tool_calls; emitting AIMessage")
+        logger.info(
+            "[MCP][ToolNode] fallback: no pending tool_calls; emitting AIMessage"
+        )
         return {"messages": [AIMessage(content=note)]}
 
     ids = ", ".join((p.get("id") or p.get("tool_call_id") or "?") for p in pending)
-    logger.info("[MCP][ToolNode] fallback: emitting ToolMessages for tool_calls=[%s]", ids)
+    logger.info(
+        "[MCP][ToolNode] fallback: emitting ToolMessages for tool_calls=[%s]", ids
+    )
 
     tool_msgs: List[ToolMessage] = []
     for tc in pending:
@@ -64,6 +73,7 @@ def _fallback_as_tool_messages(
             )
         )
     return {"messages": tool_msgs}
+
 
 def make_resilient_tools_node(
     get_tools: Callable[[], list],
@@ -100,26 +110,37 @@ def make_resilient_tools_node(
             return await _yield_fallback(state)
 
         except anyio.ClosedResourceError:
-            logger.warning("[MCP][ToolNode] stream closed — refreshing and yielding.", exc_info=True)
+            logger.warning(
+                "[MCP][ToolNode] stream closed — refreshing and yielding.",
+                exc_info=True,
+            )
             await refresh_cb()
             _log_tools("after_refresh", get_tools())
             return await _yield_fallback(state)
 
         except httpx.HTTPStatusError as e:
             if e.response is not None and e.response.status_code == 401:
-                logger.warning("[MCP][ToolNode] 401 Unauthorized — refreshing and yielding.", exc_info=True)
+                logger.warning(
+                    "[MCP][ToolNode] 401 Unauthorized — refreshing and yielding.",
+                    exc_info=True,
+                )
                 await refresh_cb()
                 _log_tools("after_refresh", get_tools())
                 return await _yield_fallback(state)
-            logger.error("[MCP][ToolNode] HTTP %s on %s",
-                         getattr(e.response, "status_code", "?"),
-                         getattr(getattr(e, "request", None), "url", "?"),
-                         exc_info=True)
+            logger.error(
+                "[MCP][ToolNode] HTTP %s on %s",
+                getattr(e.response, "status_code", "?"),
+                getattr(getattr(e, "request", None), "url", "?"),
+                exc_info=True,
+            )
             return await _yield_fallback(state)
 
         except Exception as e:
             if _is_401(e):
-                logger.warning("[MCP][ToolNode] wrapped 401 — refreshing and yielding.", exc_info=True)
+                logger.warning(
+                    "[MCP][ToolNode] wrapped 401 — refreshing and yielding.",
+                    exc_info=True,
+                )
                 await refresh_cb()
                 _log_tools("after_refresh", get_tools())
                 return await _yield_fallback(state)
@@ -127,7 +148,9 @@ def make_resilient_tools_node(
             return await _yield_fallback(state)
 
         except BaseException:
-            logger.critical("[MCP][ToolNode] non-standard fatal — yielding.", exc_info=True)
+            logger.critical(
+                "[MCP][ToolNode] non-standard fatal — yielding.", exc_info=True
+            )
             return await _yield_fallback(state)
 
     return _node
