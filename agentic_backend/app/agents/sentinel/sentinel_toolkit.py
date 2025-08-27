@@ -21,6 +21,10 @@ from pydantic import Field
 from app.core.agents.context_aware_tool import ContextAwareTool
 from app.core.agents.runtime_context import RuntimeContextProvider
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 class SentinelToolkit(BaseToolkit):
     """
@@ -49,6 +53,14 @@ class SentinelToolkit(BaseToolkit):
             ]
         else:
             self.tools = base_tools
+
+        logger.info(
+            "[SentinelToolkit] building tools: toolkit=%s mcp_client=%s tools=[%s]",
+            f"0x{id(self):x}",
+            f"0x{id(mcp_client):x}",
+            ", ".join(f"{t.name}@{id(t):x}" for t in self.tools)
+        )
+
 
     @override
     def get_tools(self) -> list[BaseTool]:

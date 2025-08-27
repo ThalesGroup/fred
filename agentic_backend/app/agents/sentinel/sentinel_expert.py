@@ -75,7 +75,7 @@ class SentinelExpert(AgentFlow):
 
         # Bind tools
         self.model = self.model.bind_tools(self.toolkit.get_tools())
-
+        self._snapshot_tools("async_init/bound") 
         # Build graph
         self._graph = self._build_graph()
 
@@ -101,13 +101,42 @@ class SentinelExpert(AgentFlow):
                 return t
         return None
 
+    def _snapshot_tools(self, where: str) -> None:
+        try:
+            tools = self.toolkit.get_tools() if self.toolkit else []
+            summary = ", ".join(f"{getattr(t, 'name', '?')}@{id(t):x}" for t in tools)
+            logger.info(
+                "[MCP][Snapshot] %s | client=%s toolkit=%s tools=[%s]",
+                where,
+                f"0x{id(self.mcp_client):x}" if self.mcp_client else "None",
+                f"0x{id(self.toolkit):x}" if self.toolkit else "None",
+                summary,
+            )
+        except Exception:
+            logger.info("[MCP][Snapshot] %s | <failed to list tools>", where, exc_info=True)
+
     async def _refresh_mcp_session(self) -> None:
         logger.info("[MCP] Refreshing MCP session...")
+        self._snapshot_tools("refresh/before") 
+        old = self.mcp_client
         self.mcp_client = await get_mcp_client_for_agent(self.agent_settings)
         self.toolkit = SentinelToolkit(self.mcp_client, lambda: self.get_runtime_context())
         self.model = self.model.bind_tools(self.toolkit.get_tools())
+        self._snapshot_tools("refresh/after")
         logger.info("[MCP] Refresh complete.")
+        try:
+            if old:
+                close_fn = getattr(old, "aclose", None)
+                if callable(close_fn):
+                    await close_fn()
+                else:
+                    close_fn = getattr(old, "close", None)
+                    if callable(close_fn):
+                        close_fn()
+        except Exception:
+            logger.info("[MCP] old client close ignored.", exc_info=True)
 
+    logger.info("[MCP] Refresh complete.")
     async def _preflight_mcp(self, timeout_seconds: float = 2.0) -> None:
         """
             Fred rationale:
@@ -140,12 +169,15 @@ class SentinelExpert(AgentFlow):
         )
 
     def _build_graph(self) -> StateGraph:
+        if self.toolkit is None:
+            raise RuntimeError("Toolkit must be initialized before building graph")
+        
+        self._snapshot_tools("build_graph/before_tools_node")
         builder = StateGraph(MessagesState)
         builder.add_node("reasoner", self.reasoner)
 
-        assert self.toolkit is not None, "Toolkit must be initialized before building graph"
         tools_node = make_resilient_tools_node(
-            get_tools=self.toolkit.get_tools,
+            get_tools=lambda: (self.toolkit.get_tools() if self.toolkit else []),
             refresh_cb=self._refresh_mcp_session,
         )
         builder.add_node("tools", tools_node)   

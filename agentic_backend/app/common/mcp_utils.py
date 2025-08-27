@@ -228,6 +228,13 @@ async def get_mcp_client_for_agent(
             dur_ms = (time.perf_counter() - start) * 1000
             tools = client.server_name_to_tools.get(server.name, [])
             logger.info(
+                "MCP post-connect: client=%s sessions=%s tools=%d",
+                f"0x{id(client):x}",
+                list(client.sessions.keys()),
+                len(tools),
+            )
+
+            logger.info(
                 "MCP connect ok name=%s transport=%s url=%s auth=%s tools=%d dur_ms=%.0f",
                 server.name,
                 server.transport,
@@ -283,6 +290,13 @@ async def get_mcp_client_for_agent(
 
                 dur2_ms = (time.perf_counter() - start2) * 1000
                 tools = client.server_name_to_tools.get(server.name, [])
+                logger.info(
+                    "MCP after-refresh: client=%s sessions=%s tools=%d",
+                    f"0x{id(client):x}",
+                    list(client.sessions.keys()),
+                    len(tools),
+                )
+
                 logger.info(
                     "MCP connect ok (after refresh) name=%s transport=%s url=%s auth=%s tools=%d dur_ms=%.0f",
                     server.name,
