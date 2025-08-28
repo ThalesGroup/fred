@@ -17,7 +17,6 @@ import pathlib
 import shutil
 from app.common.document_structures import DocumentMetadata, ProcessingStage, SourceType
 from app.core.processors.input.common.base_input_processor import BaseMarkdownProcessor, BaseTabularProcessor
-from app.core.processors.input.duckdb_processor.duckdb_processor import DuckDBProcessor
 from app.features.metadata.service import MetadataNotFound, MetadataService
 
 from app.application_context import ApplicationContext
@@ -125,9 +124,6 @@ class IngestionService:
 
         if isinstance(processor, BaseMarkdownProcessor):
             processor.convert_file_to_markdown(input_path, output_dir, metadata.document_uid)
-        elif isinstance(processor, DuckDBProcessor):
-            output_path = output_dir / input_path.name
-            shutil.copy(input_path, output_path)
         elif isinstance(processor, BaseTabularProcessor):
             df = processor.convert_file_to_table(input_path)
             df.to_csv(output_dir / "table.csv", index=False)
