@@ -93,6 +93,12 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.bodyUploadFileAgenticV1ChatbotUploadPost,
       }),
     }),
+    healthzAgenticV1HealthzGet: build.query<HealthzAgenticV1HealthzGetApiResponse, HealthzAgenticV1HealthzGetApiArg>({
+      query: () => ({ url: `/agentic/v1/healthz` }),
+    }),
+    readyAgenticV1ReadyGet: build.query<ReadyAgenticV1ReadyGetApiResponse, ReadyAgenticV1ReadyGetApiArg>({
+      query: () => ({ url: `/agentic/v1/ready` }),
+    }),
     getNodeNumericalMetricsAgenticV1MetricsChatbotNumericalGet: build.query<
       GetNodeNumericalMetricsAgenticV1MetricsChatbotNumericalGetApiResponse,
       GetNodeNumericalMetricsAgenticV1MetricsChatbotNumericalGetApiArg
@@ -172,6 +178,10 @@ export type UploadFileAgenticV1ChatbotUploadPostApiResponse = /** status 200 Suc
 export type UploadFileAgenticV1ChatbotUploadPostApiArg = {
   bodyUploadFileAgenticV1ChatbotUploadPost: BodyUploadFileAgenticV1ChatbotUploadPost;
 };
+export type HealthzAgenticV1HealthzGetApiResponse = /** status 200 Successful Response */ any;
+export type HealthzAgenticV1HealthzGetApiArg = void;
+export type ReadyAgenticV1ReadyGetApiResponse = /** status 200 Successful Response */ any;
+export type ReadyAgenticV1ReadyGetApiArg = void;
 export type GetNodeNumericalMetricsAgenticV1MetricsChatbotNumericalGetApiResponse =
   /** status 200 Successful Response */ MetricsResponse;
 export type GetNodeNumericalMetricsAgenticV1MetricsChatbotNumericalGetApiArg = {
@@ -587,6 +597,10 @@ export const {
   useLazyGetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetQuery,
   useDeleteSessionAgenticV1ChatbotSessionSessionIdDeleteMutation,
   useUploadFileAgenticV1ChatbotUploadPostMutation,
+  useHealthzAgenticV1HealthzGetQuery,
+  useLazyHealthzAgenticV1HealthzGetQuery,
+  useReadyAgenticV1ReadyGetQuery,
+  useLazyReadyAgenticV1ReadyGetQuery,
   useGetNodeNumericalMetricsAgenticV1MetricsChatbotNumericalGetQuery,
   useLazyGetNodeNumericalMetricsAgenticV1MetricsChatbotNumericalGetQuery,
 } = injectedRtkApi;
