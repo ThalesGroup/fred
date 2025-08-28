@@ -73,7 +73,7 @@ ai:
       role: "Your instance monitoring expert"
       mcp_servers:
         - name: knowledge-flow-mcp-server
-          transport: sse
+          transport: streamable_http
           url: http://localhost:8111/knowledge-flow/v1/mcp-opensearch-ops
           sse_read_timeout: 2000
       description: >
@@ -99,7 +99,7 @@ ai:
       enabled: true
       mcp_servers:
         - name: knowledge-flow-mcp-server
-          transport: sse
+          transport: streamable_http
           url: http://localhost:8111/knowledge-flow/v1/mcp-tabular
           sse_read_timeout: 2000
       model: {}

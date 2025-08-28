@@ -171,7 +171,7 @@ def create_app() -> FastAPI:
             "Provides agents with read and query capabilities over relational data "
             "from configured backends (e.g. PostgreSQL, MySQL, SQLite). "
             "Use this MCP to explore table schemas, run SELECT queries, and analyze tabular datasets. "
-            "It does not modify or write data."
+            "Create, update and drop tables if asked by the user if allowed."
         ),
         include_tags=["Tabular"],
         describe_all_responses=True,
