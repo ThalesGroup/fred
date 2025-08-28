@@ -40,7 +40,7 @@ class CsvTabularProcessor(BaseTabularProcessor):
             except Exception as e:
                 logger.warning(f"Failed to detect the delemiter, error: {e}")
         return ","
-    
+
     def check_column_consistency(self, file_path: Path, delimiter: str, encoding: str, max_lines: int = 10) -> bool:
         try:
             with open(file_path, "r", encoding=encoding) as f:
@@ -53,7 +53,7 @@ class CsvTabularProcessor(BaseTabularProcessor):
                         break
                     cols = line.rstrip("\n").split(delimiter)
                     if len(cols) != expected_cols:
-                        logger.warning(f"Inconsistent number of columns at line {i+2}: expected {expected_cols}, got {len(cols)}")
+                        logger.warning(f"Inconsistent number of columns at line {i + 2}: expected {expected_cols}, got {len(cols)}")
                         return False
             return True
         except Exception as e:
@@ -69,7 +69,7 @@ class CsvTabularProcessor(BaseTabularProcessor):
         if delimiter is None:
             logger.error(f"Could not detect delimiter for file {path}")
             return pd.DataFrame()
-        
+
         # if not self.check_column_consistency(path, delimiter):
         #     logger.error(f"CSV file '{path}' has inconsistent column counts. Skipping.")
         #     return pd.DataFrame()
@@ -84,7 +84,6 @@ class CsvTabularProcessor(BaseTabularProcessor):
 
         logger.error(f"Failed to read CSV file '{path}' with detected delimiter '{delimiter}' and encodings {encodings}")
         return pd.DataFrame()
-    
 
     def extract_file_metadata(self, file_path: Path) -> dict:
         df = self.read_csv_flexible(file_path)

@@ -1,15 +1,5 @@
 {
     "files": {
-        "./app/agents/jira/jira_expert.py": [
-            {
-                "code": "reportArgumentType",
-                "range": {
-                    "startColumn": 41,
-                    "endColumn": 56,
-                    "lineCount": 1
-                }
-            }
-        ],
         "./app/agents/tabular/tabular_expert.py": [
             {
                 "code": "reportArgumentType",

@@ -61,7 +61,7 @@ class TabularProcessor(BaseOutputProcessor):
             df = pd.read_csv(io.StringIO(document.page_content))
             table_name = sanitize_sql_name(metadata.document_name.rsplit(".", 1)[0])
             df.columns = [sanitize_sql_name(col) for col in df.columns]
-            
+
             for col in df.columns:
                 if df[col].dtype == object:
                     sample_values = df[col].dropna().astype(str).head(10)

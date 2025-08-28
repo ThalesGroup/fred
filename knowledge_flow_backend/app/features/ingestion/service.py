@@ -14,7 +14,6 @@
 
 import logging
 import pathlib
-import shutil
 from app.common.document_structures import DocumentMetadata, ProcessingStage, SourceType
 from app.core.processors.input.common.base_input_processor import BaseMarkdownProcessor, BaseTabularProcessor
 from app.features.metadata.service import MetadataNotFound, MetadataService
