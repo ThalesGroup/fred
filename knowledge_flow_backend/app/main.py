@@ -25,6 +25,7 @@ from rich.logging import RichHandler
 from dotenv import load_dotenv
 
 from app.application_state import attach_app
+from app.common.http_logging import RequestResponseLogger
 from app.features.catalog.controller import CatalogController
 from app.features.kpi.kpi_controller import KPIController
 from app.features.kpi.oensearch_controller import OpenSearchOpsController
@@ -100,6 +101,7 @@ def create_app() -> FastAPI:
         allow_methods=["GET", "POST", "PUT", "DELETE"],
         allow_headers=["Content-Type", "Authorization"],
     )
+    app.add_middleware(RequestResponseLogger)
     # Attach FastAPI to build B2B in-process client (lives outside ApplicationContext)
     attach_app(app)
 
