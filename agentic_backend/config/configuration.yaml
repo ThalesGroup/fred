@@ -74,7 +74,7 @@ ai:
       mcp_servers:
         - name: knowledge-flow-mcp-server
           transport: sse
-          url: http://localhost:8111/knowledge-flow/v1/mcp-opensearch-sops
+          url: http://localhost:8111/knowledge-flow/v1/mcp-opensearch-ops
           sse_read_timeout: 2000
       description: >
         Sentinel watches your instance, providing real-time monitoring and alerts for performance issues.
