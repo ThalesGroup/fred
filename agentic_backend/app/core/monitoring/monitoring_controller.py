@@ -47,6 +47,14 @@ class MonitoringController:
         fastapi_tags: list[str | Enum] = ["Monitoring"]
         self.service = AppMonitoringMetricsService()
 
+        @app.get("/healthz")
+        async def healthz():
+            return {"status": "ok"}
+
+        @app.get("/ready")
+        def ready():
+            return {"status": "ready"}
+
         @app.get(
             "/metrics/chatbot/numerical",
             summary="Get aggregated numerical chatbot metrics",
