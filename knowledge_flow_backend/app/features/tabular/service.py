@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import logging
-import re
 from datetime import datetime
 from typing import List, Dict
 
