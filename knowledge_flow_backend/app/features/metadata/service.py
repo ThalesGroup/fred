@@ -18,6 +18,7 @@ import logging
 from app.common.document_structures import DocumentMetadata
 from app.core.stores.metadata.base_metadata_store import MetadataDeserializationError
 from app.application_context import ApplicationContext
+from app.common.utils import sanitize_sql_name
 
 logger = logging.getLogger(__name__)
 
@@ -123,7 +124,7 @@ class MetadataService:
 
                 if self.csv_input_store is None:
                     self.csv_input_store = ApplicationContext.get_instance().get_csv_input_store()
-                table_name = metadata.document_name.rsplit(".", 1)[0]
+                table_name = sanitize_sql_name(metadata.document_name.rsplit(".", 1)[0])
                 self.csv_input_store.delete_table(table_name)
                 logger.info(f"[TABULAR] Deleted SQL table '{table_name}' linked to '{metadata.document_name}'")
 
