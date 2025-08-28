@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Box, Grid2, Tooltip, Typography, useTheme, IconButton, Paper, Chip, Stack } from "@mui/material";
+import { Box, Grid2, Tooltip, Typography, useTheme } from "@mui/material";
 import { useEffect, useRef, useState, useLayoutEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { v4 as uuidv4 } from "uuid";
@@ -477,22 +477,6 @@ const ChatBot = ({
       (userInputContext?.promptResourceIds?.length ?? 0) > 0 ||
       (userInputContext?.templateResourceIds?.length ?? 0) > 0);
 
-  const renderChips = (
-    ids: string[] = [],
-    onDelete?: (id: string) => void,
-    labelMap?: Record<string, string>
-  ) => (
-    <Stack direction="row" flexWrap="wrap" gap={0.5}>
-      {ids.map((id) => (
-        <Chip
-          key={id}
-          label={labelMap?.[id] ?? id}
-          size="small"
-          onDelete={onDelete ? () => onDelete(id) : undefined}
-        />
-      ))}
-    </Stack>
-  );
 
   return (
     <Box width={"100%"} height="100%" display="flex" flexDirection="column" alignItems="center" sx={{ minHeight: 0 }} >
