@@ -3,7 +3,7 @@
 // Licensed under the Apache License, Version 2.0 (the "License");
 // ...
 
-import { Box, Grid2, Tooltip, Typography, useTheme } from "@mui/material";
+import { Box, Chip, Divider, Grid2, Tooltip, Typography, useTheme } from "@mui/material";
 import { useEffect, useRef, useState, useLayoutEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { v4 as uuidv4 } from "uuid";
@@ -42,6 +42,7 @@ export interface ChatBotProps {
   agenticFlows: AgenticFlow[];
   onUpdateOrAddSession: (session: SessionSchema) => void;
   isCreatingNewConversation: boolean;
+  isExistingSession: boolean;
   runtimeContext?: RuntimeContext;
 }
 
@@ -51,10 +52,19 @@ const ChatBot = ({
   agenticFlows,
   onUpdateOrAddSession,
   isCreatingNewConversation,
+  isExistingSession = false,
   runtimeContext: baseRuntimeContext,
 }: ChatBotProps) => {
   const theme = useTheme();
   const { t } = useTranslation();
+  const conversationLabel =
+    isExistingSession && currentChatBotSession
+      ? currentChatBotSession.title || t("chatbot.untitled")
+      : t("chatbot.newConversation");
+  const conversationChipColor = isExistingSession ? "default" : "primary";
+  const conversationChipText = isExistingSession
+    ? t("chatbot.conversationChip.existing")
+    : t("chatbot.conversationChip.newDraft");
 
   const { showInfo, showError } = useToast();
   const webSocketRef = useRef<WebSocket | null>(null);
@@ -62,8 +72,7 @@ const ChatBot = ({
   const [webSocket, setWebSocket] = useState<WebSocket | null>(null);
 
   // Lazy messages fetcher
-  const [fetchHistory] =
-    useLazyGetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetQuery();
+  const [fetchHistory] = useLazyGetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetQuery();
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const messagesRef = useRef<ChatMessage[]>([]);
@@ -366,9 +375,23 @@ const ChatBot = ({
     messages && messages.length
       ? messages.reduce((sum, msg) => sum + (msg.metadata?.token_usage?.input_tokens || 0), 0)
       : 0;
+  // After your state declarations
+  const showWelcome = isCreatingNewConversation || messages.length === 0;
 
   return (
-    <Box width={"100%"} height="100%" display="flex" flexDirection="column" alignItems="center" sx={{ minHeight: 0 }} >
+    <Box width={"100%"} height="100%" display="flex" flexDirection="column" alignItems="center" sx={{ minHeight: 0 }}>
+      {/* ===== Conversation header status =====
+           Fred rationale:
+           - Always show the conversation context so developers/users immediately
+             understand if they’re in a persisted session or a draft.
+           - Avoid guesswork (messages length, etc.). Keep UX deterministic. */}
+      <Box width="100%" px={2} pt={1.5} pb={0.5}>
+        <Box display="flex" alignItems="center" justifyContent="space-between">
+          <Chip size="small" label={conversationChipText} color={conversationChipColor as any} />
+        </Box>
+      </Box>
+      <Divider sx={{ width: "100%", mb: 1 }} />
+
       <Box
         width="80%"
         maxWidth="768px"
@@ -377,10 +400,10 @@ const ChatBot = ({
         flexDirection="column"
         alignItems="center"
         paddingBottom={1}
-        sx={{ minHeight: 0, overflow: "hidden" }} 
+        sx={{ minHeight: 0, overflow: "hidden" }}
       >
         {/* Conversation start: new conversation without message */}
-        {isCreatingNewConversation && messages.length === 0 && (
+        {showWelcome && (
           <Box
             display="flex"
             flexDirection="column"
@@ -390,17 +413,27 @@ const ChatBot = ({
             gap={2}
             width="100%"
           >
-            {/* User input area */}
-            <Grid2 container display="flex" alignItems="center" gap={2}>
+            <Grid2
+              container
+              display="flex"
+              alignItems="center"
+              justifyContent="center" // ⬅ centers horizontally
+              gap={2}
+              width="100%"
+            >
               <Box display="flex" flexDirection="row" alignItems="center">
-                <Typography variant="h4" paddingRight={1}>
+                <Typography variant="h4" paddingRight={1} textAlign="center">
                   {t("chatbot.startNew", { name: currentAgenticFlow.nickname })}
                 </Typography>
                 {getAgentBadge(currentAgenticFlow.nickname)}
               </Box>
             </Grid2>
-            <Typography variant="h5">{currentAgenticFlow.role}.</Typography>
-            <Typography>{t("chatbot.changeAssistant")}</Typography>
+
+            <Box textAlign="center">
+              <Typography variant="h5">{currentAgenticFlow.role}.</Typography>
+              <Typography>{t("chatbot.changeAssistant")}</Typography>
+            </Box>
+
             <Box display="flex" alignItems="start" width="100%">
               <UserInput
                 enableFilesAttachment={true}
@@ -413,7 +446,7 @@ const ChatBot = ({
         )}
 
         {/* Ongoing conversation */}
-        {(messages.length > 0 || !isCreatingNewConversation) && (
+        {!showWelcome && (
           <>
             {/* Chatbot messages area */}
             <Grid2

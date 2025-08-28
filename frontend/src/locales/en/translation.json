@@ -95,6 +95,12 @@
     }
   },
   "chatbot": {
+    "untitled": "Untitled",
+    "newConversation": "New conversation",
+    "conversationChip": {
+      "existing": "Existing conversation",
+      "newDraft": "New conversation (draft)"
+    },
     "searchDocumentLibraries": "Search document libraries...",
     "searchPromptLibraries": "Search prompt libraries...",
     "startNew": "Start a new conversation with {{name}}",

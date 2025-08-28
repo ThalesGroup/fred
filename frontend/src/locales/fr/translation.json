@@ -95,6 +95,12 @@
     }
   },
   "chatbot": {
+    "untitled": "Sans titre",
+    "newConversation": "Nouvelle conversation",
+    "conversationChip": {
+      "existing": "Conversation existante",
+      "newDraft": "Nouvelle conversation (brouillon)"
+    },
     "searchDocumentLibraries": "Rechercher dans les bibliothèques de documents...",
     "searchPromptLibraries": "Rechercher dans les bibliothèques de prompts...",
     "startNew": "Commencer une nouvelle conversation avec {{name}}",
@@ -111,7 +117,9 @@
     "conversations": "Conversations",
     "newConversation": "Nouvelle conversation",
     "noConversation": "Aucune conversation",
-    "delete": "Supprimer"
+    "delete": "Supprimer",
+    "newConversationHelp": "Commencer une nouvelle conversation (non encore enregistrée)",
+    "draftNotSaved": "Brouillon • non encore enregistré"
   },
   "monitoring": {
     "title": "Surveillance des agents et services IA",

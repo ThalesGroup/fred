@@ -168,30 +168,37 @@ export const Chat = () => {
     return <LoadingWithProgress />;
   }
 
-  return (
-    <Grid2 container display="flex" flexDirection="row">
-      <Grid2 size="grow">
-        <ChatBot
-          currentChatBotSession={currentChatBotSession as SessionSchema | null}
-          currentAgenticFlow={currentAgenticFlow as AgenticFlow}
-          agenticFlows={agenticFlows}
-          onUpdateOrAddSession={handleUpdateOrAddSession}
-          isCreatingNewConversation={isCreatingNewConversation}
-          runtimeContext={{ cluster }}
-        />
-      </Grid2>
-      <Grid2 size="auto">
-        <Settings
-          sessions={chatBotSessions}
-          currentSession={currentChatBotSession}
-          onSelectSession={handleSelectSession}
-          onCreateNewConversation={handleCreateNewConversation}
-          agenticFlows={agenticFlows}
-          currentAgenticFlow={currentAgenticFlow}
-          onSelectAgenticFlow={handleSelectAgenticFlow}
-          onDeleteSession={handleDeleteSession}
-        />
-      </Grid2>
+return (
+  <Grid2 container display="flex" flexDirection="row">
+    <Grid2 size="grow">
+      <ChatBot
+        currentChatBotSession={currentChatBotSession as SessionSchema | null}
+        currentAgenticFlow={currentAgenticFlow as AgenticFlow}
+        agenticFlows={agenticFlows}
+        onUpdateOrAddSession={handleUpdateOrAddSession}
+        isCreatingNewConversation={isCreatingNewConversation}
+        // Fred rationale:
+        // - We propagate an explicit “mode” so children render clear UX affordances
+        //   (header chip, disabled destructive actions, etc.) without guessing.
+        isExistingSession={Boolean(currentChatBotSession)}
+        runtimeContext={{ cluster }}
+      />
     </Grid2>
+    <Grid2 size="auto">
+      <Settings
+        sessions={chatBotSessions}
+        currentSession={currentChatBotSession}
+        onSelectSession={handleSelectSession}
+        onCreateNewConversation={handleCreateNewConversation}
+        agenticFlows={agenticFlows}
+        currentAgenticFlow={currentAgenticFlow}
+        onSelectAgenticFlow={handleSelectAgenticFlow}
+        onDeleteSession={handleDeleteSession}
+        // Fred rationale:
+        // - Settings can highlight the “New conversation” pseudo-item when applicable.
+        isCreatingNewConversation={isCreatingNewConversation}
+      />
+    </Grid2>
+  </Grid2>
   );
 };
