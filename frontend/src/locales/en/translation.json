@@ -104,6 +104,15 @@
       "tokenCount": "This conversation has used {{total}} tokens",
       "selectDocumentLibraries": "Select the documents libraries to use in this conversation",
       "selectPromptLibraries": "Select the prompt libraries to use in this conversation"
+    },
+    "knowledgePanel": {
+      "title": "Selected knowledge",
+      "files": "Files ({{count}})",
+      "audio": "Audio",
+      "oneRecording": "1 recording",
+      "libraries": "Libraries ({{count}})",
+      "prompts": "Prompts ({{count}})",
+      "templates": "Templates ({{count}})"
     }
   },
   "settings": {

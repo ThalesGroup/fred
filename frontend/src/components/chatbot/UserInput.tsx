@@ -18,9 +18,10 @@ import AttachFileIcon from "@mui/icons-material/AttachFile";
 import MicIcon from "@mui/icons-material/Mic";
 import StopIcon from "@mui/icons-material/Stop";
 import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
-import { Badge, Grid2, IconButton, InputBase, Tooltip, useTheme } from "@mui/material";
+import { Badge, Grid2, IconButton, InputBase, Tooltip, useTheme, Box } from "@mui/material";
 import Chip from "@mui/material/Chip";
-import React, { useRef, useState } from "react";
+import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
+import React, { useEffect, useRef, useState } from "react";
 import AudioController from "./AudioController.tsx";
 import AudioRecorder from "./AudioRecorder.tsx";
 import { ChatResourcesSelection } from "./ChatResourcesSelection.tsx";
@@ -39,12 +40,24 @@ export default function UserInput({
   enableFilesAttachment = false,
   enableAudioAttachment = false,
   isWaiting = false,
-  onSend = () => {},
+  onSend = () => { },
+  contextOpen = false,
+  onToggleContext,
+  onContextChange,
+  initialDocumentLibraryIds,
+  initialPromptResourceIds,
+  initialTemplateResourceIds,
 }: {
   enableFilesAttachment: boolean;
   enableAudioAttachment: boolean;
   isWaiting: boolean;
   onSend: (content: UserInputContent) => void;
+  contextOpen?: boolean;
+  onToggleContext?: () => void;
+  onContextChange?: (ctx: UserInputContent) => void;
+  initialDocumentLibraryIds?: string[];
+  initialPromptResourceIds?: string[];
+  initialTemplateResourceIds?: string[];
 }) {
   const theme = useTheme();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -63,6 +76,24 @@ export default function UserInput({
   const [selectedDocumentLibrariesIds, setSelectedDocumentLibrariesIds] = useState<string[]>([]);
   const [selectedPromptResourceIds, setSelectedPromptResourceIds] = useState<string[]>([]);
   const [selectedTemplateResourceIds, setSelectedTemplateResourceIds] = useState<string[]>([]);
+
+  // ⬅️ init depuis les props initiales (réhydratation locale)
+  useEffect(() => {
+    if (initialDocumentLibraryIds) setSelectedDocumentLibrariesIds(initialDocumentLibraryIds);
+  }, [initialDocumentLibraryIds]);
+  useEffect(() => {
+    if (initialPromptResourceIds) setSelectedPromptResourceIds(initialPromptResourceIds);
+  }, [initialPromptResourceIds]);
+  useEffect(() => {
+    if (initialTemplateResourceIds) setSelectedTemplateResourceIds(initialTemplateResourceIds);
+  }, [initialTemplateResourceIds]);
+
+  const totalContextCount =
+    (filesBlob?.length ?? 0) +
+    (audioBlob ? 1 : 0) +
+    selectedDocumentLibrariesIds.length +
+    selectedPromptResourceIds.length +
+    selectedTemplateResourceIds.length;
 
   const handleKeyDown = (event: React.KeyboardEvent) => {
     if (event.key === "Enter") {
@@ -118,7 +149,7 @@ export default function UserInput({
     setIsRecording(!isRecording);
     setDisplayAudioRecorder(true);
     // Focus on the send button after starting the recording
-    sendRef ? sendRef.current.focus() : console.error("Send ref is null");
+    sendRef ? sendRef.current!.focus() : console.error("Send ref is null");
   };
 
   const handleAudioChange = (content: Blob) => {
@@ -126,7 +157,7 @@ export default function UserInput({
     setDisplayAudioRecorder(false);
     setAudioBlob(content);
     // Focus on the send button after stopping the recording
-    sendRef ? sendRef.current.focus() : console.error("Send ref is null");
+    sendRef ? sendRef.current!.focus() : console.error("Send ref is null");
   };
 
   const handleRemoveFile = (index: number) => {
@@ -136,6 +167,27 @@ export default function UserInput({
       return newFiles;
     });
   };
+
+  // ⬅️ remonte l’état sélectionné pour persistance côté parent (localStorage)
+  useEffect(() => {
+    if (!onContextChange) return;
+
+    onContextChange({
+      files: filesBlob ?? undefined,
+      audio: audioBlob ?? undefined,
+      documentLibraryIds: selectedDocumentLibrariesIds.length ? selectedDocumentLibrariesIds : undefined,
+      promptResourceIds: selectedPromptResourceIds.length ? selectedPromptResourceIds : undefined,
+      templateResourceIds: selectedTemplateResourceIds.length ? selectedTemplateResourceIds : undefined,
+    });
+  }, [
+    filesBlob,
+    audioBlob,
+    selectedDocumentLibrariesIds,
+    selectedPromptResourceIds,
+    selectedTemplateResourceIds,
+    onContextChange,
+  ]);
+
   return (
     <Grid2
       container
@@ -162,7 +214,7 @@ export default function UserInput({
           {filesBlob &&
             filesBlob.map((f, i) => {
               return (
-                <Grid2 size="auto">
+                <Grid2 size="auto" key={`${(f as File).name}-${i}`}>
                   <Chip
                     label={(f as File).name.replace(/\.[^/.]+$/, "")}
                     color="primary"
@@ -205,8 +257,40 @@ export default function UserInput({
           borderRadius: 4,
           padding: "12px",
           gap: "8px",
+          position: "relative",
         }}
       >
+        <Box sx={{ position: "absolute", top: 6, right: 14, zIndex: 10 }}>
+          <Tooltip
+            title={
+              totalContextCount === 0
+                ? "No context selected"
+                : contextOpen
+                  ? "Hide context panel"
+                  : "Show context panel"
+            }
+            placement="top"
+          >
+            {/* garder le Tooltip actif quand le bouton est disabled */}
+            <span>
+              <IconButton
+                sx={{ fontSize: "1.6rem", padding: "8px" }}
+                aria-label="toggle-context-panel"
+                onClick={() => onToggleContext?.()}
+                disabled={totalContextCount === 0}
+              >
+                <ArrowForwardIcon
+                  fontSize="inherit"
+                  sx={{
+                    transition: "transform 180ms ease",
+                    transform: contextOpen ? "rotate(180deg)" : "rotate(0deg)", // ← tourne à gauche quand ouvert
+                  }}
+                />
+              </IconButton>
+            </span>
+          </Tooltip>
+        </Box>
+
         {/* User Input Section */}
         <Grid2
           container
@@ -267,7 +351,7 @@ export default function UserInput({
             )}
           </Grid2>
 
-          {/* Next the Buttons Area with on the left the attach and audio and t-on the right the attach */}
+          {/* Next the Buttons Area with on the left the attach and audio and on the right the send */}
           <Grid2
             container
             alignItems="center"
