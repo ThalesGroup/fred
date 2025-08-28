@@ -224,24 +224,6 @@
                 }
             }
         ],
-        "./app/core/processors/input/duckdb_processor/duckdb_processor.py": [
-            {
-                "code": "reportOptionalSubscript",
-                "range": {
-                    "startColumn": 28,
-                    "endColumn": 88,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportIncompatibleMethodOverride",
-                "range": {
-                    "startColumn": 8,
-                    "endColumn": 29,
-                    "lineCount": 1
-                }
-            }
-        ],
         "./app/core/processors/input/pdf_markdown_processor/pdf_markdown_processor.py": [
             {
                 "code": "reportPrivateImportUsage",

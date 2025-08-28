@@ -22,6 +22,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 logger = logging.getLogger("http")
 
+
 def _jwt_preview(auth_header: Optional[str]) -> Dict[str, Any]:
     """Non-validating peek at JWT claims (never logs the token)."""
     if not auth_header or not auth_header.startswith("Bearer "):
@@ -38,22 +39,16 @@ def _jwt_preview(auth_header: Optional[str]) -> Dict[str, Any]:
     except Exception as e:
         return {"present": True, "decode_error": str(e)}
 
+
 class RequestResponseLogger(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         t0 = time.perf_counter()
         hdrs = {k.lower(): v for k, v in request.headers.items()}
         auth_info = _jwt_preview(hdrs.get("authorization"))
-        logger.info(
-            f">>> {request.method} {request.url.path} qs='{request.url.query}' "
-            f"client={request.client.host if request.client else None} "
-            f"auth={auth_info}"
-        )
+        logger.info(f">>> {request.method} {request.url.path} qs='{request.url.query}' client={request.client.host if request.client else None} auth={auth_info}")
         response: Response = await call_next(request)
         dt = (time.perf_counter() - t0) * 1000
         is_redirect = response.status_code in (301, 302, 303, 307, 308)
         location = response.headers.get("location")
-        logger.info(
-            f"<<< {request.method} {request.url.path} status={response.status_code} "
-            f"ms={dt:.1f} redirect={is_redirect} location={location}"
-        )
+        logger.info(f"<<< {request.method} {request.url.path} status={response.status_code} ms={dt:.1f} redirect={is_redirect} location={location}")
         return response

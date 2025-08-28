@@ -24,6 +24,7 @@ from app.application_context import ApplicationContext
 from app.common.document_structures import DocumentMetadata, ProcessingStage
 from app.core.processors.output.vectorization_processor.vectorization_utils import load_langchain_doc_from_metadata
 from app.core.processors.output.base_output_processor import BaseOutputProcessor, TabularProcessingError
+from app.common.utils import sanitize_sql_name
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +59,9 @@ class TabularProcessor(BaseOutputProcessor):
 
             # 2. Load the DataFrame from the document
             df = pd.read_csv(io.StringIO(document.page_content))
-            document_name = metadata.document_name.split(".")[0]
+            table_name = sanitize_sql_name(metadata.document_name.rsplit(".", 1)[0])
+            df.columns = [sanitize_sql_name(col) for col in df.columns]
+
             for col in df.columns:
                 if df[col].dtype == object:
                     sample_values = df[col].dropna().astype(str).head(10)
@@ -74,7 +77,7 @@ class TabularProcessor(BaseOutputProcessor):
             try:
                 if self.csv_input_store is None:
                     raise RuntimeError("csv_input_store is not initialized")
-                result = self.csv_input_store.save_table(document_name, df)
+                result = self.csv_input_store.save_table(table_name, df)
                 logger.debug(f"Document added to Tabular Store: {result}")
             except Exception as e:
                 logger.exception("Failed to add documents to Tabular Storage")
