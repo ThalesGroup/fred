@@ -726,14 +726,14 @@ class ApplicationContext:
                 logger.error("     ❌ keycloak_url invalid (expected …/realms/<realm>): %s", e)
                 raise ValueError("Invalid Keycloak URL") from e
 
-            secret = os.getenv("KEYCLOAK_KNOWLEDGE_CLIENT_SECRET", "")
+            secret = os.getenv("KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET", "")
             if secret:
-                logger.info("     • KEYCLOAK_KNOWLEDGE_CLIENT_SECRET: present  (%s)", _mask(secret))
+                logger.info("     • KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET: present  (%s)", _mask(secret))
             else:
                 logger.error(
-                    "     ⚠️  KEYCLOAK_KNOWLEDGE_CLIENT_SECRET is not set — external or recursive MCP or REST calls will not be protected (NoAuth). Knowledge Flow will likely suffer from 401."
+                    "     ⚠️  KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET is not set — external or recursive MCP or REST calls will not be protected (NoAuth). Knowledge Flow will likely suffer from 401."
                 )
-                raise ValueError("Missing KEYCLOAK_KNOWLEDGE_CLIENT_SECRET environment variable")
+                raise ValueError("Missing KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET environment variable")
 
         backend = self.configuration.embedding.type
         logger.info("🔧 Application configuration summary:")

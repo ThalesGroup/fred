@@ -556,6 +556,7 @@ applications:
         vector_store:
           type: in_memory
     dotenv:
+      KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET: ""
       AZURE_TENANT_ID: ""
       AZURE_CLIENT_ID: ""
       AZURE_CLIENT_SECRET: ""

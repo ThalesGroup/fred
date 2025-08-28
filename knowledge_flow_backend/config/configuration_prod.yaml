@@ -21,15 +21,10 @@ app:
   security:
     enabled: true
     keycloak_url: "http://app-keycloak:8080/realms/app"
-    client_id: "app"
+    client_id: "knowledge-flow"
     authorized_origins:
       - "http://localhost:5173"
 
-security:
-  enabled: true
-  keycloak_url: "http://app-keycloak:8080/realms/fred"
-  authorized_origins:
-    - "http://localhost:5173"
 
 scheduler:
   enabled: true
