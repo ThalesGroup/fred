@@ -60,7 +60,6 @@ import logging
 from builtins import ExceptionGroup
 import time
 from typing import Any, Dict, List
-from urllib.parse import urlsplit, urlunsplit
 
 from langchain_mcp_adapters.client import MultiServerMCPClient
 
@@ -72,29 +71,6 @@ logger = logging.getLogger(__name__)
 
 # ✅ Only allow transports that Fred knows how to configure safely.
 SUPPORTED_TRANSPORTS = ["sse", "stdio", "streamable_http", "websocket"]
-
-
-def _ensure_trailing_slash(url: str) -> str:
-    """Normalize base URLs for HTTP-like transports.
-
-    Many MCP HTTP servers expect a base path ending with `/` to resolve
-    relative endpoints correctly. For example:
-
-        http://host:8111/knowledge-flow/v1/mcp-opensearch-ops  -> BAD
-        http://host:8111/knowledge-flow/v1/mcp-opensearch-ops/ -> GOOD
-
-    Args:
-        url: The URL to normalize.
-
-    Returns:
-        The URL with a trailing slash on the path component.
-    """
-    if not url:
-        return url
-    parts = list(urlsplit(url))
-    if not parts[2].endswith("/"):
-        parts[2] += "/"
-    return urlunsplit(parts)
 
 
 def _mask_auth_value(v: str | None) -> str:
@@ -234,8 +210,6 @@ async def get_mcp_client_for_agent(
         if server.transport in ("sse", "streamable_http", "websocket"):
             if server.url:
                 url = server.url
-                if server.transport in ("sse", "streamable_http"):
-                    url = _ensure_trailing_slash(url)
                 connect_kwargs["url"] = url
             if base_headers:
                 connect_kwargs["headers"] = dict(base_headers)
