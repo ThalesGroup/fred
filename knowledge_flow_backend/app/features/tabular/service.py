@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import logging
-import re
 from datetime import datetime
 from typing import List, Dict
 
@@ -106,7 +105,7 @@ class TabularService:
             raise ValueError("Empty SQL string provided")
 
         try:
-            is_write = bool(re.match(r"^(insert|update|delete|drop|create|alter)", sql, re.IGNORECASE))
+            is_write = not sql.lower().lstrip().startswith("select")
             if is_write:
                 self._check_write_allowed(db_name)
                 logger.info(f"[{db_name}] Executing SQL: {sql}")
