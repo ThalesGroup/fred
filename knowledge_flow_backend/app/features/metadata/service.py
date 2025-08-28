@@ -125,8 +125,11 @@ class MetadataService:
                 if self.csv_input_store is None:
                     self.csv_input_store = ApplicationContext.get_instance().get_csv_input_store()
                 table_name = sanitize_sql_name(metadata.document_name.rsplit(".", 1)[0])
-                self.csv_input_store.delete_table(table_name)
-                logger.info(f"[TABULAR] Deleted SQL table '{table_name}' linked to '{metadata.document_name}'")
+                try:
+                    self.csv_input_store.delete_table(table_name)
+                    logger.info(f"[TABULAR] Deleted SQL table '{table_name}' linked to '{metadata.document_name}'")
+                except Exception as e:
+                    logger.warning(f"Could not delete SQL table '{table_name}': {e}")
 
             else:
                 metadata.identity.modified = datetime.now(timezone.utc)
