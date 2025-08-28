@@ -47,6 +47,7 @@ from app.features.tabular.controller import TabularController
 from app.features.tag.controller import TagController
 from app.features.vector_search.controller import VectorSearchController
 from app.features.ingestion.controller import IngestionController
+from app.core.monitoring.monitoring_controller import MonitoringController
 
 # -----------------------
 # LOGGING + ENVIRONMENT
@@ -107,6 +108,8 @@ def create_app() -> FastAPI:
 
     router = APIRouter(prefix=configuration.app.base_url)
 
+    MonitoringController(router)
+    
     pull_document_service = PullDocumentService()
     # Register controllers
     MetadataController(router, pull_document_service)

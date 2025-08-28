@@ -1,6 +1,18 @@
 import { knowledgeFlowApi as api } from "./knowledgeFlowApi";
 const injectedRtkApi = api.injectEndpoints({
   endpoints: (build) => ({
+    healthzKnowledgeFlowV1HealthzGet: build.query<
+      HealthzKnowledgeFlowV1HealthzGetApiResponse,
+      HealthzKnowledgeFlowV1HealthzGetApiArg
+    >({
+      query: () => ({ url: `/knowledge-flow/v1/healthz` }),
+    }),
+    readyKnowledgeFlowV1ReadyGet: build.query<
+      ReadyKnowledgeFlowV1ReadyGetApiResponse,
+      ReadyKnowledgeFlowV1ReadyGetApiArg
+    >({
+      query: () => ({ url: `/knowledge-flow/v1/ready` }),
+    }),
     searchDocumentMetadataKnowledgeFlowV1DocumentsMetadataSearchPost: build.mutation<
       SearchDocumentMetadataKnowledgeFlowV1DocumentsMetadataSearchPostApiResponse,
       SearchDocumentMetadataKnowledgeFlowV1DocumentsMetadataSearchPostApiArg
@@ -321,6 +333,10 @@ const injectedRtkApi = api.injectEndpoints({
   overrideExisting: false,
 });
 export { injectedRtkApi as knowledgeFlowApi };
+export type HealthzKnowledgeFlowV1HealthzGetApiResponse = /** status 200 Successful Response */ any;
+export type HealthzKnowledgeFlowV1HealthzGetApiArg = void;
+export type ReadyKnowledgeFlowV1ReadyGetApiResponse = /** status 200 Successful Response */ any;
+export type ReadyKnowledgeFlowV1ReadyGetApiArg = void;
 export type SearchDocumentMetadataKnowledgeFlowV1DocumentsMetadataSearchPostApiResponse =
   /** status 200 Successful Response */ DocumentMetadata[];
 export type SearchDocumentMetadataKnowledgeFlowV1DocumentsMetadataSearchPostApiArg = {
@@ -871,6 +887,10 @@ export type ProcessDocumentsRequest = {
   pipeline_name: string;
 };
 export const {
+  useHealthzKnowledgeFlowV1HealthzGetQuery,
+  useLazyHealthzKnowledgeFlowV1HealthzGetQuery,
+  useReadyKnowledgeFlowV1ReadyGetQuery,
+  useLazyReadyKnowledgeFlowV1ReadyGetQuery,
   useSearchDocumentMetadataKnowledgeFlowV1DocumentsMetadataSearchPostMutation,
   useGetDocumentMetadataKnowledgeFlowV1DocumentsMetadataDocumentUidGetQuery,
   useLazyGetDocumentMetadataKnowledgeFlowV1DocumentsMetadataDocumentUidGetQuery,
