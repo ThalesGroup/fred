@@ -57,7 +57,7 @@ class _AppState:
         get_configuration().app.security.client_id
         realm_url = get_configuration().app.security.keycloak_url
         client_id = get_configuration().app.security.client_id
-        token_env_var_name = "KEYCLOAK_KNOWLEDGE_CLIENT_SECRET"  # nosec B105
+        token_env_var_name = "KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET"  # nosec B105
 
         if not realm_url or not client_id:
             # Soft-fail: allows tests/dev without B2B; errors only when accessed.
@@ -74,7 +74,7 @@ class _AppState:
 
     def get_b2b_client(self) -> httpx.AsyncClient:
         if self._b2b_client is None:
-            raise RuntimeError("B2B client not initialized. Call application_state.attach_app(app) at startup and set KEYCLOAK_REALM_URL / KEYCLOAK_CLIENT_ID / KEYCLOAK_CLIENT_SECRET.")
+            raise RuntimeError("B2B client not initialized. Call application_state.attach_app(app) at startup and set Keycloak configuration and environment variables.")
         return self._b2b_client
 
     async def internal_request(

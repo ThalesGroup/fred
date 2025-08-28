@@ -47,7 +47,7 @@ class B2BAuthConfig(BaseModel):
     keycloak_realm_url: the *realm* URL, same one you already use for JWKS
                         (e.g., https://kc.example/realms/myrealm)
     client_id:          confidential client ID (e.g., "knowledge")
-    secret_env:         env var name that stores the client secret (e.g., "KEYCLOAK_KNOWLEDGE_CLIENT_SECRET")
+    secret_env:         env var name that stores the client secret (e.g., "KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET")
     scope:              optional Keycloak scopes (rarely needed)
     """
 
