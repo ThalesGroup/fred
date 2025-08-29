@@ -92,6 +92,7 @@ EXTENSION_CATEGORY = {
     ".xls": "tabular",
     ".xlsm": "tabular",
     ".duckdb": "duckdb",
+    ".jsonl": "markdown",
 }
 
 logger = logging.getLogger(__name__)
