@@ -48,6 +48,7 @@ dependencies = [
   "duckdb-engine>=0.17.0",
   "psycopg2-binary>=2.9.10",
   "sqlparse>=0.5.3",
+  "uv",
 ]
 
 [project.optional-dependencies]
