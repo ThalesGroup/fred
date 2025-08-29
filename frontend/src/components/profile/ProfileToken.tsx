@@ -1,4 +1,13 @@
-import { Box, Card, CardContent, Grid2, Typography, useTheme } from "@mui/material";
+// components/profile/ProfileToken.tsx
+import {
+  Box,
+  Card,
+  CardContent,
+  Grid2,
+  Stack,
+  Typography,
+  useTheme,
+} from "@mui/material";
 import CodeIcon from "@mui/icons-material/Code";
 import { useTranslation } from "react-i18next";
 
@@ -11,43 +20,63 @@ export function ProfileToken({ tokenParsed }: ProfileTokenProps) {
   const { t } = useTranslation();
 
   return (
-    <Grid2 size={{ xs: 12 }}>
-      <Card elevation={3} sx={{ borderRadius: 2 }}>
-        <CardContent>
-          <Typography
-            variant="h6"
-            sx={{
-              mb: 2,
-              fontWeight: "medium",
-              display: "flex",
-              alignItems: "center",
-            }}
-          >
-            <CodeIcon sx={{ mr: 1 }} /> {t("profile.token.title")}
-          </Typography>
+    // Right-anchored container to match ProfileCard
+    <Grid2
+      size={{ xs: 12 }}
+      display="flex"
+      justifyContent={{ xs: "stretch", md: "flex-end" }}
+      px={{ xs: 1.5, md: 3 }}
+    >
+      <Card
+        variant="outlined"
+        sx={{
+          ml: { md: "auto" },        // stick to the right on md+
+          width: "100%",
+          maxWidth: 980,             // align width with ProfileCard
+          borderRadius: 3,
+          bgcolor: "transparent",    // no paper fill
+          boxShadow: "none",
+          borderColor: "divider",
+        }}
+      >
+        <CardContent sx={{ py: { xs: 2, md: 3 }, px: { xs: 2, md: 3 } }}>
+          {/* Compact section header */}
+          <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5 }}>
+            <CodeIcon fontSize="small" />
+            <Typography
+              variant="overline"
+              color="text.secondary"
+              sx={{ letterSpacing: 0.6, fontWeight: 600 }}
+            >
+              {t("profile.token.title")}
+            </Typography>
+          </Stack>
+
+          {/* Monospace token box */}
           <Box
             sx={{
-              backgroundColor: theme.palette.mode === "dark" ? "grey.800" : "grey.100",
-              borderRadius: 1,
-              p: 2,
-              maxHeight: "400px",
+              border: `1px solid ${theme.palette.divider}`,
+              borderRadius: 1.5,
+              p: 1.5,
+              maxHeight: 380,
               overflowY: "auto",
               overflowX: "auto",
-              border: `1px solid ${theme.palette.divider}`,
-              "&::-webkit-scrollbar": {
-                width: "8px",
-                height: "8px",
-              },
-              "&::-webkit-scrollbar-thumb": {
-                borderRadius: "4px",
-              },
+              bgcolor:
+                theme.palette.mode === "dark"
+                  ? "rgba(255,255,255,0.03)"
+                  : "rgba(0,0,0,0.03)", // very subtle surface
+              "&::-webkit-scrollbar": { width: 8, height: 8 },
+              "&::-webkit-scrollbar-thumb": { borderRadius: 4 },
             }}
           >
             <pre
               style={{
                 margin: 0,
-                fontFamily: '"Roboto Mono", monospace',
-                fontSize: "0.75rem",
+                whiteSpace: "pre",
+                fontFamily:
+                  'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+                fontSize: "0.78rem",
+                lineHeight: 1.5,
               }}
             >
               {tokenParsed ? JSON.stringify(tokenParsed, null, 2) : t("profile.token.none")}

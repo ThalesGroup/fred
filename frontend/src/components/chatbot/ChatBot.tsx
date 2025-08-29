@@ -106,8 +106,7 @@ const ChatBot = ({
   );
 
   // Lazy messages fetcher
-  const [fetchHistory] =
-    useLazyGetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetQuery();
+  const [fetchHistory] = useLazyGetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetQuery();
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const messagesRef = useRef<ChatMessage[]>([]);
@@ -468,6 +467,8 @@ const ChatBot = ({
     messages && messages.length
       ? messages.reduce((sum, msg) => sum + (msg.metadata?.token_usage?.input_tokens || 0), 0)
       : 0;
+  // After your state declarations
+  const showWelcome = isCreatingNewConversation || messages.length === 0;
 
   const hasContext =
     !!userInputContext &&
@@ -479,7 +480,13 @@ const ChatBot = ({
 
 
   return (
-    <Box width={"100%"} height="100%" display="flex" flexDirection="column" alignItems="center" sx={{ minHeight: 0 }} >
+    <Box width={"100%"} height="100%" display="flex" flexDirection="column" alignItems="center" sx={{ minHeight: 0 }}>
+      {/* ===== Conversation header status =====
+           Fred rationale:
+           - Always show the conversation context so developers/users immediately
+             understand if they’re in a persisted session or a draft.
+           - Avoid guesswork (messages length, etc.). Keep UX deterministic. */}
+      
       <Box
         width="80%"
         maxWidth="768px"
@@ -491,46 +498,96 @@ const ChatBot = ({
         sx={{ minHeight: 0, overflow: "hidden" }}
       >
         {/* Conversation start: new conversation without message */}
-        {isCreatingNewConversation && messages.length === 0 && (
-          <Box
-            display="flex"
-            flexDirection="column"
-            justifyContent="center"
-            height="100vh"
-            alignItems="center"
-            gap={2}
-            width="100%"
-          >
-            {/* User input area */}
-            <Grid2 container display="flex" alignItems="center" gap={2}>
-              <Box display="flex" flexDirection="row" alignItems="center">
-                <Typography variant="h4" paddingRight={1}>
-                  {t("chatbot.startNew", { name: currentAgenticFlow.nickname })}
-                </Typography>
-                {getAgentBadge(currentAgenticFlow.nickname)}
-              </Box>
-            </Grid2>
-            <Typography variant="h5">{currentAgenticFlow.role}.</Typography>
-            <Typography>{t("chatbot.changeAssistant")}</Typography>
-            <Box display="flex" alignItems="start" width="100%">
-              <UserInput
-                enableFilesAttachment={true}
-                enableAudioAttachment={true}
-                isWaiting={waitResponse}
-                onSend={handleSend}
-                contextOpen={contextOpen}
-                onToggleContext={() => setContextOpen((v) => !v)}
-                onContextChange={setUserInputContext}
-                initialDocumentLibraryIds={initialCtx.documentLibraryIds}
-                initialPromptResourceIds={initialCtx.promptResourceIds}
-                initialTemplateResourceIds={initialCtx.templateResourceIds}
-              />
-            </Box>
-          </Box>
-        )}
+{showWelcome && (
+  <Box
+    sx={{
+      minHeight: "100vh",
+      width: "100%",
+      px: { xs: 2, sm: 3 },
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 2.5,
+    }}
+  >
+    {/* Hero header */}
+    <Box
+      sx={{
+        width: "min(900px, 100%)",
+        borderRadius: 3,
+        border: (t) => `1px solid ${t.palette.divider}`,
+        background: (t) =>
+          `linear-gradient(180deg, ${t.palette.heroBackgroundGrad.gradientFrom}, ${t.palette.heroBackgroundGrad.gradientTo})`,
+        boxShadow: (t) =>
+          t.palette.mode === "light"
+            ? "0 1px 2px rgba(0,0,0,0.06)"
+            : "0 1px 2px rgba(0,0,0,0.25)",
+        px: { xs: 2, sm: 3 },
+        py: { xs: 2, sm: 2.5 },
+      }}
+    >
+      <Box
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 1.25,
+          textAlign: "center",
+          flexWrap: "nowrap",
+        }}
+      >
+        {getAgentBadge(currentAgenticFlow.nickname)}
+        <Typography variant="h5" sx={{ fontWeight: 600, letterSpacing: 0.2 }}>
+          {t("chatbot.startNew", { name: currentAgenticFlow.nickname })}
+        </Typography>
+      </Box>
 
-        {/* Ongoing conversation */}
-        {(messages.length > 0 || !isCreatingNewConversation) && (
+      <Box
+        sx={{
+          mt: 1,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 1.25,
+          color: "text.secondary",
+          textAlign: "center",
+          flexWrap: "wrap",
+        }}
+      >
+        <Typography variant="body2" sx={{ fontStyle: "italic" }}>
+  {currentAgenticFlow.role}
+</Typography>
+
+        <Box
+          sx={{
+            width: 1,
+            height: 14,
+            borderLeft: (t) => `1px solid ${t.palette.divider}`,
+            opacity: 0.6,
+          }}
+        />
+        <Typography variant="body2">{t("chatbot.changeAssistant")}</Typography>
+      </Box>
+    </Box>
+
+    {/* Input area */}
+    <Box sx={{ width: "min(900px, 100%)" }}>
+      <UserInput
+        enableFilesAttachment
+        enableAudioAttachment
+        isWaiting={waitResponse}
+        onSend={handleSend}
+        onContextChange={setUserInputContext}
+        initialDocumentLibraryIds={initialCtx.documentLibraryIds}
+        initialPromptResourceIds={initialCtx.promptResourceIds}
+        initialTemplateResourceIds={initialCtx.templateResourceIds}
+      />
+    </Box>
+  </Box>
+)}
+       {/* Ongoing conversation */}
+        {!showWelcome && (
           <>
             {/* Chatbot messages area */}
             <Grid2
@@ -568,8 +625,6 @@ const ChatBot = ({
                 enableAudioAttachment={true}
                 isWaiting={waitResponse}
                 onSend={handleSend}
-                contextOpen={contextOpen}
-                onToggleContext={() => setContextOpen((v) => !v)}
                 onContextChange={setUserInputContext}
                 initialDocumentLibraryIds={initialCtx.documentLibraryIds}
                 initialPromptResourceIds={initialCtx.promptResourceIds}

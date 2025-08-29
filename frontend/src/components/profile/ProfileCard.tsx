@@ -11,6 +11,7 @@ import {
   Stack,
   Typography,
   useTheme,
+  Tooltip,
 } from "@mui/material";
 import AccountCircleIcon from "@mui/icons-material/AccountCircle";
 import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings";
@@ -26,7 +27,7 @@ import { LanguageSelector } from "../LanguageSelector";
 interface ProfileCardProps {
   username: string;
   userRoles: string[];
-  tokenParsed: any;
+  tokenParsed: any; // unused, kept for API compatibility
   fullName: string;
   userEmail: string;
   userId: string;
@@ -50,8 +51,8 @@ export function ProfileCard({
 
   const getInitials = () => {
     if (!username) return "U";
-    const names = username.split(" ");
-    if (names.length > 1) return `${names[0][0]}${names[1][0]}`.toUpperCase();
+    const parts = username.trim().split(/\s+/);
+    if (parts.length > 1) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
     return username.substring(0, 2).toUpperCase();
   };
 
@@ -63,143 +64,161 @@ export function ProfileCard({
 
   const getRoleIcon = (role: string) => {
     if (role.includes("admin")) return <AdminPanelSettingsIcon fontSize="small" />;
-    if (role.includes("user")) return <AccountCircleIcon fontSize="small" />;
     if (role.includes("manager")) return <SecurityIcon fontSize="small" />;
+    if (role.includes("user")) return <AccountCircleIcon fontSize="small" />;
     return <CodeIcon fontSize="small" />;
   };
 
+  // Compact label/value row
+  const InfoItem = ({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) => (
+    <Stack spacing={0.5}>
+      <Stack direction="row" spacing={1} alignItems="center">
+        <Box sx={{ color: "primary.main", display: "inline-flex" }}>{icon}</Box>
+        <Typography variant="caption" color="text.secondary">
+          {label}
+        </Typography>
+      </Stack>
+      <Typography variant="body2" sx={{ wordBreak: "break-word" }}>
+        {value}
+      </Typography>
+    </Stack>
+  );
+
+  const SectionTitle = ({ children }: { children: React.ReactNode }) => (
+    <Typography
+      variant="overline"
+      color="text.secondary"
+      sx={{ letterSpacing: 0.6, fontWeight: 600, display: "block" }}
+    >
+      {children}
+    </Typography>
+  );
+
   return (
-    <Grid2 size={{ xs: 12 }}>
+    // Right-anchored container
+    <Grid2
+      size={{ xs: 12 }}
+      display="flex"
+      justifyContent={{ xs: "stretch", md: "flex-end" }}
+      px={{ xs: 1.5, md: 3 }}
+    >
       <Card
-        elevation={3}
+        variant="outlined"
         sx={{
-          borderRadius: 2,
-          overflow: "visible",
-          position: "relative",
-          pt: 7,
+          ml: { md: "auto" },           // stick to the right on md+
+          width: "100%",
+          maxWidth: 980,                // comfortable reading width
+          borderRadius: 3,
+          bgcolor: "transparent",       // no paper slab
+          boxShadow: "none",
+          borderColor: "divider",
         }}
       >
-        <Box
-          sx={{
-            position: "absolute",
-            top: -40,
-            left: "50%",
-            transform: "translateX(-50%)",
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-          }}
-        >
-          <Avatar
-            sx={{
-              width: 80,
-              height: 80,
-              fontSize: "1.8rem",
-              fontWeight: "bold",
-              backgroundColor: getAvatarColor(),
-            }}
-          >
-            {getInitials()}
-          </Avatar>
-        </Box>
+        <CardContent sx={{ py: { xs: 2, md: 3 }, px: { xs: 2, md: 3 } }}>
+          {/* Two-column responsive grid */}
+          <Grid2 container spacing={3}>
+            {/* LEFT COLUMN — identity & controls */}
+            <Grid2 size={{ xs: 12, md: 5 }} sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+              <Stack direction="row" spacing={1.5} alignItems="center">
+                <Avatar
+                  sx={{
+                    width: 64,
+                    height: 64,
+                    fontSize: "1.25rem",
+                    fontWeight: 700,
+                    backgroundColor: getAvatarColor(),
+                    outline: (t) => `2px solid ${t.palette.background.default}`, // subtle halo
+                  }}
+                >
+                  {getInitials()}
+                </Avatar>
+                <Box sx={{ minWidth: 0 }}>
+                  <Typography variant="h6" fontWeight={600} noWrap>
+                    {fullName}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" noWrap>
+                    @{username}
+                  </Typography>
+                </Box>
+              </Stack>
 
-        <CardContent sx={{ pt: 3, pb: 4 }}>
-          <Typography variant="h5" fontWeight="bold" sx={{ mb: 1, textAlign: "center" }}>
-            {fullName}
-          </Typography>
-          <Typography variant="body1" color="text.secondary" sx={{ mb: 3, textAlign: "center" }}>
-            @{username}
-          </Typography>
+              <Divider />
 
-          <Divider sx={{ mb: 3 }} />
-
-          <Box sx={{ mb: 3 }}>
-            <Typography variant="subtitle2" sx={{ textAlign: "center", mb: 1 }}>
-              {t("profile.language")}
-            </Typography>
-            <Box display="flex" justifyContent="center">
-              <LanguageSelector />
-            </Box>
-          </Box>
-
-          <Divider sx={{ mb: 3 }} />
-
-          <Grid2 container spacing={2} sx={{ mb: 3, alignItems: "center" }}>
-            <Grid2 size={{ xs: 12, sm: 6 }}>
-              <Box display="flex" alignItems="center" justifyContent="center" mb={1}>
-                <EmailIcon sx={{ mr: 2, color: "primary.main" }} />
-                <Typography variant="body2" fontWeight="medium">{t("profile.email")}</Typography>
+              <Box>
+                <SectionTitle>{t("profile.language")}</SectionTitle>
+                <LanguageSelector />
               </Box>
-              <Typography variant="body1" textAlign="center">{userEmail}</Typography>
+
+              <Box sx={{ flexGrow: 1 }} />
+
+              <Button
+                variant="contained"
+                color="primary"
+                startIcon={<LogoutIcon />}
+                onClick={onLogout}
+                sx={{ alignSelf: { xs: "stretch", md: "flex-start" }, textTransform: "none", minHeight: 36 }}
+              >
+                {t("profile.logout")}
+              </Button>
             </Grid2>
 
-            <Grid2 size={{ xs: 12, sm: 6 }}>
-              <Box display="flex" alignItems="center" justifyContent="center" mb={1}>
-                <FingerprintIcon sx={{ mr: 2, color: "primary.main" }} />
-                <Typography variant="body2" fontWeight="medium">{t("profile.userId")}</Typography>
+            {/* RIGHT COLUMN — account details & roles */}
+            <Grid2 size={{ xs: 12, md: 7 }} sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+              <Box>
+                <SectionTitle>{t("profile.title", "Profile")}</SectionTitle>
+                <Grid2 container spacing={2} sx={{ mt: 0.5 }}>
+                  <Grid2 size={{ xs: 12, sm: 6 }}>
+                    <InfoItem icon={<EmailIcon fontSize="small" />} label={t("profile.email")} value={userEmail} />
+                  </Grid2>
+                  <Grid2 size={{ xs: 12, sm: 6 }}>
+                    <InfoItem icon={<FingerprintIcon fontSize="small" />} label={t("profile.userId")} value={userId} />
+                  </Grid2>
+                  <Grid2 size={{ xs: 12, sm: 6 }}>
+                    <InfoItem
+                      icon={<AccessTimeIcon fontSize="small" />}
+                      label={t("profile.authTime")}
+                      value={formatAuthDate()}
+                    />
+                  </Grid2>
+                  <Grid2 size={{ xs: 12, sm: 6 }}>
+                    <InfoItem
+                      icon={<AccessTimeIcon fontSize="small" />}
+                      label={t("profile.expTime")}
+                      value={formatExpDate()}
+                    />
+                  </Grid2>
+                </Grid2>
               </Box>
-              <Typography variant="body1" textAlign="center" sx={{ wordBreak: "break-all" }}>{userId}</Typography>
-            </Grid2>
 
-            <Grid2 size={{ xs: 12, sm: 6 }}>
-              <Box display="flex" alignItems="center" justifyContent="center" mb={1}>
-                <AccessTimeIcon sx={{ mr: 2, color: "primary.main" }} />
-                <Typography variant="body2" fontWeight="medium">{t("profile.authTime")}</Typography>
-              </Box>
-              <Typography variant="body1" textAlign="center">{formatAuthDate()}</Typography>
-            </Grid2>
+              <Divider />
 
-            <Grid2 size={{ xs: 12, sm: 6 }}>
-              <Box display="flex" alignItems="center" justifyContent="center" mb={1}>
-                <AccessTimeIcon sx={{ mr: 2, color: "primary.main" }} />
-                <Typography variant="body2" fontWeight="medium">{t("profile.expTime")}</Typography>
+              <Box>
+                <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
+                  <SecurityIcon fontSize="small" />
+                  <Typography variant="subtitle2">{t("profile.roles")}</Typography>
+                </Stack>
+                <Box display="flex" flexWrap="wrap" gap={0.75}>
+                  {userRoles.map((role) => (
+                    <Tooltip key={role} title={role} arrow disableInteractive>
+                      <Chip
+                        size="small"
+                        icon={getRoleIcon(role)}
+                        label={role}
+                        sx={{
+                          px: 0.5,
+                          borderRadius: 1.5,
+                          backgroundColor: theme.palette.mode === "dark" ? "primary.dark" : "primary.light",
+                          color: theme.palette.mode === "dark" ? "common.white" : "primary.dark",
+                          "& .MuiChip-label": { px: 0.5, fontSize: "0.78rem" },
+                          "&:hover": { backgroundColor: "primary.main", color: "common.white" },
+                        }}
+                      />
+                    </Tooltip>
+                  ))}
+                </Box>
               </Box>
-              <Typography variant="body1" textAlign="center">{formatExpDate()}</Typography>
             </Grid2>
           </Grid2>
-
-          <Divider sx={{ mb: 3 }} />
-
-          <Typography
-            variant="h6"
-            sx={{ mb: 2, display: "flex", alignItems: "center", justifyContent: "center" }}
-          >
-            <SecurityIcon sx={{ mr: 1 }} /> {t("profile.roles")}
-          </Typography>
-
-          <Box display="flex" flexWrap="wrap" justifyContent="center" gap={1} mb={3}>
-            {userRoles.map((role) => (
-              <Chip
-                key={role}
-                icon={getRoleIcon(role)}
-                label={role}
-                sx={{
-                  fontWeight: "medium",
-                  py: 2,
-                  backgroundColor: theme.palette.mode === "dark" ? "primary.dark" : "primary.light",
-                  color: theme.palette.mode === "dark" ? "white" : "primary.dark",
-                  transition: "all 0.2s ease",
-                  "&:hover": {
-                    backgroundColor: theme.palette.primary.main,
-                    color: "white",
-                    transform: "translateY(-2px)",
-                  },
-                }}
-              />
-            ))}
-          </Box>
-
-          <Stack direction={{ xs: "column", sm: "row" }} spacing={2} justifyContent="center">
-            <Button
-              variant="contained"
-              color="primary"
-              startIcon={<LogoutIcon />}
-              onClick={onLogout}
-              sx={{ borderRadius: 2, px: 3, boxShadow: 2 }}
-            >
-              {t("profile.logout")}
-            </Button>
-          </Stack>
         </CardContent>
       </Card>
     </Grid2>

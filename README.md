@@ -229,8 +229,10 @@ See `agentic_backend/config/configuration.yaml` (section `ai:`) for concrete exa
 * Main docs: <https://fredk8.dev/docs>  
 * [Agentic backend README](./agentic_backend/README.md)  
 * [Agentic backend agentic design](./agentic_backend/docs/AGENTS.md)  
+* [MCP](./agentic_backend/docs/MCP.md)
 * [Frontend README](./frontend/README.md)  
 * [Knowledge Flow backend README](./knowledge_flow_backend/README.md)
+* [Keycloak](./docs/KEYCLOAK.md)
 * [Developer Tools](./developer_tools/README.md)    
 * [Code of Conduct](./docs/CODE_OF_CONDUCT.md) 
 * [License](./docs/LICENSE.md)  
