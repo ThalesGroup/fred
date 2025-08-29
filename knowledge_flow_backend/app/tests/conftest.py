@@ -10,6 +10,7 @@ from app.common.structures import (
     AppConfig,
     Configuration,
     EmbeddingConfig,
+    EmbeddingProvider,
     LocalContentStorageConfig,
     StorageConfig,
     PushSourceConfig,
@@ -91,7 +92,7 @@ def app_context(monkeypatch, fake_embedder):
             type="local",
             root_path="/tmp/knowledge-flow-test-content",
         ),
-        embedding=EmbeddingConfig(type="openai"),
+        embedding=EmbeddingConfig(type=EmbeddingProvider.OPENAI),
         input_processors=[
             ProcessorConfig(
                 prefix=".docx",
