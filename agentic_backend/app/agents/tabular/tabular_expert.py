@@ -129,22 +129,6 @@ class TabularExpert(AgentFlow):
             )
             response = await self.model.ainvoke([prompt] + state["messages"])
 
-            for msg in state["messages"]:
-                if isinstance(msg, ToolMessage):
-                    try:
-                        datasets = json.loads(msg.content)
-                        summaries = (
-                            self._extract_dataset_summaries_from_get_schema_reponse(
-                                datasets
-                            )
-                        )
-                        if summaries:
-                            response.content += (
-                                "\n\n### Available Datasets:\n" + "\n".join(summaries)
-                            )
-                    except Exception as e:
-                        logger.warning(f"Failed to parse tool response: {e}")
-
             return {"messages": [response]}
 
         except Exception:
