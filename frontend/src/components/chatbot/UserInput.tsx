@@ -38,7 +38,12 @@ import {
 } from "@mui/material";
 import { ChatResourcesSelectionCard } from "./ChatResourcesSelectionCard.tsx";
 import { ChatDocumentLibrariesSelectionCard } from "./ChatDocumentLibrariesSelectionCard.tsx";
-import { Resource, TagWithItemsId, useListAllTagsKnowledgeFlowV1TagsGetQuery, useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi.ts";
+import {
+  Resource,
+  TagWithItemsId,
+  useListAllTagsKnowledgeFlowV1TagsGetQuery,
+  useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery,
+} from "../../slices/knowledgeFlow/knowledgeFlowOpenApi.ts";
 import { useTranslation } from "react-i18next";
 
 export interface UserInputContent {
@@ -50,12 +55,45 @@ export interface UserInputContent {
   templateResourceIds?: string[];
 }
 
+type PersistedCtx = {
+  documentLibraryIds?: string[];
+  promptResourceIds?: string[];
+  templateResourceIds?: string[];
+};
+
+function makeStorageKey(sessionId?: string) {
+  return sessionId ? `fred:userInput:ctx:${sessionId}` : "";
+}
+
+function loadSessionCtx(sessionId?: string): PersistedCtx | null {
+  const key = makeStorageKey(sessionId);
+  if (!key) return null;
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as PersistedCtx) : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveSessionCtx(sessionId: string | undefined, ctx: PersistedCtx) {
+  const key = makeStorageKey(sessionId);
+  if (!key) return;
+  try {
+    localStorage.setItem(key, JSON.stringify(ctx));
+  } catch {
+    // storage may be unavailable (private mode/quotas) — fail quietly
+  }
+}
+
 export default function UserInput({
   enableFilesAttachment = false,
   enableAudioAttachment = false,
   isWaiting = false,
   onSend = () => {},
   onContextChange,
+  sessionId, // current conversation id from backend
+  // initial* are defaults only — used once when a session starts and nothing is yet persisted/selected
   initialDocumentLibraryIds,
   initialPromptResourceIds,
   initialTemplateResourceIds,
@@ -65,17 +103,19 @@ export default function UserInput({
   isWaiting: boolean;
   onSend: (content: UserInputContent) => void;
   onContextChange?: (ctx: UserInputContent) => void;
+  sessionId?: string;
   initialDocumentLibraryIds?: string[];
   initialPromptResourceIds?: string[];
   initialTemplateResourceIds?: string[];
 }) {
   const theme = useTheme();
   const { t } = useTranslation();
+
   // Refs
   const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Message + attachments
+  // Message + attachments (per-message, not persisted across messages)
   const [userInput, setUserInput] = useState<string>("");
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [displayAudioRecorder, setDisplayAudioRecorder] = useState<boolean>(false);
@@ -83,21 +123,119 @@ export default function UserInput({
   const [isRecording, setIsRecording] = useState<boolean>(false);
   const [filesBlob, setFilesBlob] = useState<File[] | null>(null);
 
-  // Conversation setup (lives across messages, never clutters the text area)
+  // --- Fred rationale ---
+  // These three selections are *session-scoped context* (used by agents for retrieval/templates).
+  // Rule: hydrate exactly once per session. Persist to localStorage to restore when returning.
   const [selectedDocumentLibrariesIds, setSelectedDocumentLibrariesIds] = useState<string[]>([]);
   const [selectedPromptResourceIds, setSelectedPromptResourceIds] = useState<string[]>([]);
   const [selectedTemplateResourceIds, setSelectedTemplateResourceIds] = useState<string[]>([]);
 
-  // Hydrate from props
+  // Selections made *before* we get a real sessionId (first question) — migrate them.
+  const preSessionRef = useRef<PersistedCtx>({});
+
+  // Capture pre-session picks while sessionId is undefined.
   useEffect(() => {
-    if (initialDocumentLibraryIds) setSelectedDocumentLibrariesIds(initialDocumentLibraryIds);
-  }, [initialDocumentLibraryIds]);
+    if (!sessionId) {
+      preSessionRef.current = {
+        documentLibraryIds: selectedDocumentLibrariesIds,
+        promptResourceIds: selectedPromptResourceIds,
+        templateResourceIds: selectedTemplateResourceIds,
+      };
+    }
+  }, [
+    sessionId,
+    selectedDocumentLibrariesIds,
+    selectedPromptResourceIds,
+    selectedTemplateResourceIds,
+  ]);
+
+  // Hydration guard: run at most once per session id.
+  const hydratedForSession = useRef<string | undefined>(undefined);
+
   useEffect(() => {
-    if (initialPromptResourceIds) setSelectedPromptResourceIds(initialPromptResourceIds);
-  }, [initialPromptResourceIds]);
-  useEffect(() => {
-    if (initialTemplateResourceIds) setSelectedTemplateResourceIds(initialTemplateResourceIds);
-  }, [initialTemplateResourceIds]);
+    // Only attempt to hydrate when we *have* a session id.
+    if (!sessionId) return;
+
+    const isNewSession = hydratedForSession.current !== sessionId;
+    if (!isNewSession) return;
+    hydratedForSession.current = sessionId;
+
+    // Priority to hydrate:
+    // 1) localStorage (returning to a session)
+    // 2) pre-session user picks (user acted before id assigned)
+    // 3) initial* defaults
+    const persisted = loadSessionCtx(sessionId) ?? {};
+    const pre = preSessionRef.current ?? {};
+
+    const libs =
+      persisted.documentLibraryIds?.length
+        ? persisted.documentLibraryIds
+        : pre.documentLibraryIds?.length
+        ? pre.documentLibraryIds
+        : initialDocumentLibraryIds ?? [];
+    const prompts =
+      persisted.promptResourceIds?.length
+        ? persisted.promptResourceIds
+        : pre.promptResourceIds?.length
+        ? pre.promptResourceIds
+        : initialPromptResourceIds ?? [];
+    const templates =
+      persisted.templateResourceIds?.length
+        ? persisted.templateResourceIds
+        : pre.templateResourceIds?.length
+        ? pre.templateResourceIds
+        : initialTemplateResourceIds ?? [];
+
+    setSelectedDocumentLibrariesIds(libs);
+    setSelectedPromptResourceIds(prompts);
+    setSelectedTemplateResourceIds(templates);
+
+    // Save immediately so storage stays the source of truth for this session.
+    saveSessionCtx(sessionId, {
+      documentLibraryIds: libs,
+      promptResourceIds: prompts,
+      templateResourceIds: templates,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId]);
+
+  // Wrap setters to persist to storage.
+  const setLibs = (next: React.SetStateAction<string[]>) => {
+    setSelectedDocumentLibrariesIds((prev) => {
+      const value = typeof next === "function" ? (next as any)(prev) : next;
+      if (sessionId)
+        saveSessionCtx(sessionId, {
+          documentLibraryIds: value,
+          promptResourceIds: selectedPromptResourceIds,
+          templateResourceIds: selectedTemplateResourceIds,
+        });
+      return value;
+    });
+  };
+  const setPrompts = (next: React.SetStateAction<string[]>) => {
+    setSelectedPromptResourceIds((prev) => {
+      const value = typeof next === "function" ? (next as any)(prev) : next;
+      if (sessionId)
+        saveSessionCtx(sessionId, {
+          documentLibraryIds: selectedDocumentLibrariesIds,
+          promptResourceIds: value,
+          templateResourceIds: selectedTemplateResourceIds,
+        });
+      return value;
+    });
+  };
+  const setTemplates = (next: React.SetStateAction<string[]>) => {
+    setSelectedTemplateResourceIds((prev) => {
+      const value = typeof next === "function" ? (next as any)(prev) : next;
+      if (sessionId)
+        saveSessionCtx(sessionId, {
+          documentLibraryIds: selectedDocumentLibrariesIds,
+          promptResourceIds: selectedPromptResourceIds,
+          templateResourceIds: value,
+        });
+      return value;
+    });
+  };
 
   // “+” menu popover
   const [plusAnchor, setPlusAnchor] = useState<HTMLElement | null>(null);
@@ -117,19 +255,21 @@ export default function UserInput({
     useListAllTagsKnowledgeFlowV1TagsGetQuery({ type: "document" });
 
   const promptNameById = useMemo(
-    () => Object.fromEntries((promptResources as Resource[]).map(r => [r.id, r.name])),
+    () => Object.fromEntries((promptResources as Resource[]).map((r) => [r.id, r.name])),
     [promptResources]
   );
   const templateNameById = useMemo(
-    () => Object.fromEntries((templateResources as Resource[]).map(r => [r.id, r.name])),
+    () => Object.fromEntries((templateResources as Resource[]).map((r) => [r.id, r.name])),
     [templateResources]
   );
   const libNameById = useMemo(
-    () => Object.fromEntries((documentTags as TagWithItemsId[]).map(t => [t.id, t.name])),
+    () => Object.fromEntries((documentTags as TagWithItemsId[]).map((t) => [t.id, t.name])),
     [documentTags]
   );
-+
-  // Lift setup state (for session persistence)
+
+  // --- Fred rationale ---
+  // Lift session context up so the parent can persist alongside messages.
+  // This emits on any relevant change, but we *never* pull state back down except on session change.
   useEffect(() => {
     if (!onContextChange) return;
     onContextChange({
@@ -173,7 +313,7 @@ export default function UserInput({
     setUserInput("");
     setAudioBlob(null);
     setFilesBlob(null);
-    // Keep libs/prompts/templates
+    // Keep libs/prompts/templates (session context)
   };
 
   // Files
@@ -207,10 +347,10 @@ export default function UserInput({
     inputRef.current?.focus();
   };
 
-  // UI helpers
-  const removeLib = (id: string) => setSelectedDocumentLibrariesIds((prev) => prev.filter((x) => x !== id));
-  const removePrompt = (id: string) => setSelectedPromptResourceIds((prev) => prev.filter((x) => x !== id));
-  const removeTemplate = (id: string) => setSelectedTemplateResourceIds((prev) => prev.filter((x) => x !== id));
+  // UI helpers — persist via wrapped setters
+  const removeLib = (id: string) => setLibs((prev) => prev.filter((x) => x !== id));
+  const removePrompt = (id: string) => setPrompts((prev) => prev.filter((x) => x !== id));
+  const removeTemplate = (id: string) => setTemplates((prev) => prev.filter((x) => x !== id));
 
   // Small count chip
   const countChip = (n: number) =>
@@ -235,7 +375,15 @@ export default function UserInput({
       <Stack direction="row" alignItems="center" spacing={0.5}>
         {onClear && count > 0 && (
           <Tooltip title={t("documentLibrary.clearSelection")}>
-            <IconButton size="small" onClick={onClear}>
+            <IconButton
+              size="small"
+              onClick={() => {
+                // clear via wrappers so storage updates
+                if (label === t("knowledge.viewSelector.libraries")) setLibs([]);
+                if (label === t("knowledge.viewSelector.prompts")) setPrompts([]);
+                if (label === t("knowledge.viewSelector.templates")) setTemplates([]);
+              }}
+            >
               <DeleteOutlineIcon fontSize="small" />
             </IconButton>
           </Tooltip>
@@ -294,7 +442,6 @@ export default function UserInput({
         <Box sx={{ position: "relative", width: "100%" }}>
           {/* + anchored inside the input, bottom-left */}
           <Box sx={{ position: "absolute", right: 8, bottom: 6, zIndex: 1 }}>
-
             <Tooltip title={t("chatbot.menu.addToSetup")}>
               <span>
                 <IconButton
@@ -355,9 +502,7 @@ export default function UserInput({
                 fullWidth
                 multiline
                 maxRows={12}
-                placeholder={t(
-                  "chatbot.input.placeholder"
-                )}
+                placeholder={t("chatbot.input.placeholder")}
                 value={userInput}
                 onKeyDown={handleKeyDown}
                 onChange={(event) => setUserInput(event.target.value)}
@@ -408,18 +553,13 @@ export default function UserInput({
                 t("knowledge.viewSelector.libraries"),
                 selectedDocumentLibrariesIds.length,
                 () => setPickerView("libraries"),
-                () => setSelectedDocumentLibrariesIds([]),
+                () => setLibs([]),
               )}
               <Box sx={{ mb: 1 }}>
                 {selectedDocumentLibrariesIds.length ? (
                   <Stack direction="row" flexWrap="wrap" gap={0.75}>
                     {selectedDocumentLibrariesIds.map((id) => (
-                      <Chip
-                        key={id}
-                        size="small"
-                        label={libNameById[id] ?? id}
-                        onDelete={() => removeLib(id)}
-                      />
+                      <Chip key={id} size="small" label={libNameById[id] ?? id} onDelete={() => removeLib(id)} />
                     ))}
                   </Stack>
                 ) : (
@@ -436,19 +576,14 @@ export default function UserInput({
                 t("knowledge.viewSelector.prompts"),
                 selectedPromptResourceIds.length,
                 () => setPickerView("prompts"),
-                () => setSelectedPromptResourceIds([]),
+                () => setPrompts([]),
               )}
               <Box sx={{ mb: 1 }}>
                 {selectedPromptResourceIds.length ? (
                   <Stack direction="row" flexWrap="wrap" gap={0.75}>
                     {selectedPromptResourceIds.map((id) => (
-                      <Chip
-                        key={id}
-                        size="small"
-                        label={promptNameById[id] ?? id}
-                        onDelete={() => removePrompt(id)}
-                      />
-                     ))}
+                      <Chip key={id} size="small" label={promptNameById[id] ?? id} onDelete={() => removePrompt(id)} />
+                    ))}
                   </Stack>
                 ) : (
                   <Typography variant="caption" color="text.secondary">
@@ -464,19 +599,14 @@ export default function UserInput({
                 t("knowledge.viewSelector.templates"),
                 selectedTemplateResourceIds.length,
                 () => setPickerView("templates"),
-                () => setSelectedTemplateResourceIds([]),
+                () => setTemplates([]),
               )}
               <Box sx={{ mb: 1 }}>
                 {selectedTemplateResourceIds.length ? (
                   <Stack direction="row" flexWrap="wrap" gap={0.75}>
                     {selectedTemplateResourceIds.map((id) => (
-                      <Chip
-                        key={id}
-                        size="small"
-                        label={templateNameById[id] ?? id}
-                        onDelete={() => removeTemplate(id)}
-                      />
-                      ))}
+                      <Chip key={id} size="small" label={templateNameById[id] ?? id} onDelete={() => removeTemplate(id)} />
+                    ))}
                   </Stack>
                 ) : (
                   <Typography variant="caption" color="text.secondary">
@@ -523,13 +653,7 @@ export default function UserInput({
                     <ListItemIcon>
                       {isRecording ? <StopIcon fontSize="small" /> : <MicIcon fontSize="small" />}
                     </ListItemIcon>
-                    <ListItemText
-                      primary={
-                        isRecording
-                          ? t("chatbot.stopRecording")
-                          : t("chatbot.recordAudio")
-                      }
-                    />
+                    <ListItemText primary={isRecording ? t("chatbot.stopRecording") : t("chatbot.recordAudio")} />
                   </MenuItem>
                 )}
               </MenuList>
@@ -542,7 +666,7 @@ export default function UserInput({
               {pickerView === "libraries" && (
                 <ChatDocumentLibrariesSelectionCard
                   selectedLibrariesIds={selectedDocumentLibrariesIds}
-                  setSelectedLibrariesIds={setSelectedDocumentLibrariesIds}
+                  setSelectedLibrariesIds={setLibs} // wrapped setter (persist)
                   libraryType="document"
                 />
               )}
@@ -550,14 +674,14 @@ export default function UserInput({
                 <ChatResourcesSelectionCard
                   libraryType="prompt"
                   selectedResourceIds={selectedPromptResourceIds}
-                  setSelectedResourceIds={setSelectedPromptResourceIds}
+                  setSelectedResourceIds={setPrompts} // wrapped setter (persist)
                 />
               )}
               {pickerView === "templates" && (
                 <ChatResourcesSelectionCard
                   libraryType="template"
                   selectedResourceIds={selectedTemplateResourceIds}
-                  setSelectedResourceIds={setSelectedTemplateResourceIds}
+                  setSelectedResourceIds={setTemplates} // wrapped setter (persist)
                 />
               )}
             </Box>
