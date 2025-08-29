@@ -1,9 +1,13 @@
 # Fred
 
+- [Fred](#fred)
   - [Core Architecture and Licensing Clarity](#core-architecture-and-licensing-clarity)
+    - [Licensing Note](#licensing-note)
   - [Getting started](#getting-started)
     - [Local (Native) Mode](#local-native-mode)
       - [1 · Prerequisites](#1--prerequisites)
+        - [Required](#required)
+        - [Optional](#optional)
       - [2 · Clone](#2--clone)
       - [3 · Add your OpenAI key](#3--add-your-openai-key)
       - [4 · Run the services](#4--run-the-services)
@@ -72,11 +76,12 @@ Production services and databases can be added later or via the **deployment fac
 
 ##### Required 
 
-| Tool   | Version | Install hint           |
-| ------ | ------- | ---------------------- |
-| Python | 3.12.8  | `pyenv install 3.12.8` |
-| Node   | 22.13.0 | `nvm install 22.13.0`  |
-| Make   | any     | install from your OS   |
+| Tool   | Version | Install hint                                                                                      |
+| ------ | ------- | ------------------------------------------------------------------------------------------------- |
+| Pyenv  | any     | [Pyenv installation instructions](https://github.com/pyenv/pyenv?tab=readme-ov-file#installation) |
+| Python | 3.12.8  | `pyenv install 3.12.8`                                                                            |
+| Node   | 22.13.0 | `nvm install 22.13.0`                                                                             |
+| Make   | any     | install from your OS                                                                              |
 
 ##### Optional
 
