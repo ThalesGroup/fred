@@ -139,7 +139,7 @@ ai:
       enabled: false
       mcp_servers:
         - name: knowledge-flow-mcp-server
-          transport: sse
+          transport: streamable_http
           url: http://localhost:8111/knowledge-flow/v1/mcp-resources
           sse_read_timeout: 2000
       model: {}
@@ -176,4 +176,3 @@ storage:
   kpi_store:
     type: "opensearch"
     index: kpi-index
-

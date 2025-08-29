@@ -25,7 +25,6 @@ app:
     authorized_origins:
       - "http://localhost:5173"
 
-
 scheduler:
   enabled: true
   backend: "temporal"
@@ -51,6 +50,8 @@ input_processors:
     class_path: app.core.processors.input.markdown_markdown_processor.markdown_markdown_processor.MarkdownMarkdownProcessor
   - prefix: ".xlsm"
     class_path: app.core.processors.input.pps_tabular_processor.pps_tabular_processor.PpsTabularProcessor
+  - prefix: ".jsonl"
+    class_path: app.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor
 
 content_storage:
   type: minio
@@ -94,10 +95,6 @@ storage:
     verify_certs: false
     username: admin
 
-  tabular_store:
-    type: "duckdb"
-    duckdb_path: "~/.fred/knowledge-flow/tabular.duckdb"
-
   catalog_store:
     type: "opensearch"
     index: catalog-index
@@ -125,3 +122,11 @@ storage:
   vector_store:
     type: opensearch
     index: vector-index-ada002
+
+  tabular_stores:
+    base_database: # Minimal configuration to enable CSV document ingestion
+      type: "sql"
+      driver: "duckdb"
+      database: "base_database"
+      path: "~/.fred/knowledge-flow/db.duckdb"
+      mode: "read_and_write"
