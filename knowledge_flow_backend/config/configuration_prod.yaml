@@ -51,7 +51,8 @@ input_processors:
     class_path: app.core.processors.input.markdown_markdown_processor.markdown_markdown_processor.MarkdownMarkdownProcessor
   - prefix: ".xlsm"
     class_path: app.core.processors.input.pps_tabular_processor.pps_tabular_processor.PpsTabularProcessor
-
+  - prefix: ".jsonl"
+    class_path: app.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor
 content_storage:
   type: minio
   endpoint: http://localhost:9000
