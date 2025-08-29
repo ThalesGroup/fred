@@ -298,6 +298,7 @@ const ChatBot = ({
   });
 
   // load from local storage
+   // Load defaults for a brand-new convo (no session yet). These act as initial* props for UserInput.
   useEffect(() => {
     try {
       const raw = localStorage.getItem(storageKey);
@@ -309,11 +310,7 @@ const ChatBot = ({
           templateResourceIds: parsed.templateResourceIds ?? [],
         });
       } else {
-        setInitialCtx({
-          documentLibraryIds: [],
-          promptResourceIds: [],
-          templateResourceIds: [],
-        });
+        setInitialCtx({ documentLibraryIds: [], promptResourceIds: [], templateResourceIds: [] });
       }
     } catch (e) {
       console.warn("Local context load failed:", e);
@@ -322,8 +319,15 @@ const ChatBot = ({
 
   const [userInputContext, setUserInputContext] = useState<any>(null);
 
+
+ // IMPORTANT:
+  // Save per-agent defaults *only before a session exists* (pre-session seeding).
+  // Once a session exists, UserInput persists per-session selections itself.
   useEffect(() => {
     if (!userInputContext) return;
+    const sessionId = currentChatBotSession?.id;
+    if (sessionId) return; // session exists -> do NOT save per-agent defaults here
+
     try {
       const payload = {
         documentLibraryIds: userInputContext.documentLibraryIds ?? [],
@@ -339,7 +343,9 @@ const ChatBot = ({
     userInputContext?.promptResourceIds,
     userInputContext?.templateResourceIds,
     storageKey,
+    currentChatBotSession?.id, // guard: only save when undefined
   ]);
+
 
   // Handle user input (text/audio/files)
   const handleSend = async (content: UserInputContent) => {
@@ -470,14 +476,13 @@ const ChatBot = ({
   // After your state declarations
   const showWelcome = isCreatingNewConversation || messages.length === 0;
 
-  const hasContext =
+    const hasContext =
     !!userInputContext &&
     ((userInputContext?.files?.length ?? 0) > 0 ||
       !!userInputContext?.audioBlob ||
       (userInputContext?.documentLibraryIds?.length ?? 0) > 0 ||
       (userInputContext?.promptResourceIds?.length ?? 0) > 0 ||
       (userInputContext?.templateResourceIds?.length ?? 0) > 0);
-
 
   return (
     <Box width={"100%"} height="100%" display="flex" flexDirection="column" alignItems="center" sx={{ minHeight: 0 }}>
@@ -498,95 +503,97 @@ const ChatBot = ({
         sx={{ minHeight: 0, overflow: "hidden" }}
       >
         {/* Conversation start: new conversation without message */}
-{showWelcome && (
-  <Box
-    sx={{
-      minHeight: "100vh",
-      width: "100%",
-      px: { xs: 2, sm: 3 },
-      display: "flex",
-      flexDirection: "column",
-      alignItems: "center",
-      justifyContent: "center",
-      gap: 2.5,
-    }}
-  >
-    {/* Hero header */}
-    <Box
-      sx={{
-        width: "min(900px, 100%)",
-        borderRadius: 3,
-        border: (t) => `1px solid ${t.palette.divider}`,
-        background: (t) =>
-          `linear-gradient(180deg, ${t.palette.heroBackgroundGrad.gradientFrom}, ${t.palette.heroBackgroundGrad.gradientTo})`,
-        boxShadow: (t) =>
-          t.palette.mode === "light"
-            ? "0 1px 2px rgba(0,0,0,0.06)"
-            : "0 1px 2px rgba(0,0,0,0.25)",
-        px: { xs: 2, sm: 3 },
-        py: { xs: 2, sm: 2.5 },
-      }}
-    >
-      <Box
-        sx={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: 1.25,
-          textAlign: "center",
-          flexWrap: "nowrap",
-        }}
-      >
-        {getAgentBadge(currentAgenticFlow.nickname)}
-        <Typography variant="h5" sx={{ fontWeight: 600, letterSpacing: 0.2 }}>
-          {t("chatbot.startNew", { name: currentAgenticFlow.nickname })}
-        </Typography>
-      </Box>
+        {showWelcome && (
+          <Box
+            sx={{
+              minHeight: "100vh",
+              width: "100%",
+              px: { xs: 2, sm: 3 },
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 2.5,
+            }}
+          >
+            {/* Hero header */}
+            <Box
+              sx={{
+                width: "min(900px, 100%)",
+                borderRadius: 3,
+                border: (t) => `1px solid ${t.palette.divider}`,
+                background: (t) =>
+                  `linear-gradient(180deg, ${t.palette.heroBackgroundGrad.gradientFrom}, ${t.palette.heroBackgroundGrad.gradientTo})`,
+                boxShadow: (t) =>
+                  t.palette.mode === "light"
+                    ? "0 1px 2px rgba(0,0,0,0.06)"
+                    : "0 1px 2px rgba(0,0,0,0.25)",
+                px: { xs: 2, sm: 3 },
+                py: { xs: 2, sm: 2.5 },
+              }}
+            >
+              <Box
+                sx={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 1.25,
+                  textAlign: "center",
+                  flexWrap: "nowrap",
+                }}
+              >
+                {getAgentBadge(currentAgenticFlow.nickname)}
+                <Typography variant="h5" sx={{ fontWeight: 600, letterSpacing: 0.2 }}>
+                  {t("chatbot.startNew", { name: currentAgenticFlow.nickname })}
+                </Typography>
+              </Box>
 
-      <Box
-        sx={{
-          mt: 1,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: 1.25,
-          color: "text.secondary",
-          textAlign: "center",
-          flexWrap: "wrap",
-        }}
-      >
-        <Typography variant="body2" sx={{ fontStyle: "italic" }}>
-  {currentAgenticFlow.role}
-</Typography>
+              <Box
+                sx={{
+                  mt: 1,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 1.25,
+                  color: "text.secondary",
+                  textAlign: "center",
+                  flexWrap: "wrap",
+                }}
+              >
+                <Typography variant="body2" sx={{ fontStyle: "italic" }}>
+                  {currentAgenticFlow.role}
+                </Typography>
 
-        <Box
-          sx={{
-            width: 1,
-            height: 14,
-            borderLeft: (t) => `1px solid ${t.palette.divider}`,
-            opacity: 0.6,
-          }}
-        />
-        <Typography variant="body2">{t("chatbot.changeAssistant")}</Typography>
-      </Box>
-    </Box>
+                <Box
+                  sx={{
+                    width: 1,
+                    height: 14,
+                    borderLeft: (t) => `1px solid ${t.palette.divider}`,
+                    opacity: 0.6,
+                  }}
+                />
+                <Typography variant="body2">{t("chatbot.changeAssistant")}</Typography>
+              </Box>
+            </Box>
 
-    {/* Input area */}
-    <Box sx={{ width: "min(900px, 100%)" }}>
-      <UserInput
-        enableFilesAttachment
-        enableAudioAttachment
-        isWaiting={waitResponse}
-        onSend={handleSend}
-        onContextChange={setUserInputContext}
-        initialDocumentLibraryIds={initialCtx.documentLibraryIds}
-        initialPromptResourceIds={initialCtx.promptResourceIds}
-        initialTemplateResourceIds={initialCtx.templateResourceIds}
-      />
-    </Box>
-  </Box>
-)}
-       {/* Ongoing conversation */}
+            {/* Input area */}
+            <Box sx={{ width: "min(900px, 100%)" }}>
+              <UserInput
+                enableFilesAttachment
+                enableAudioAttachment
+                isWaiting={waitResponse}
+                onSend={handleSend}
+                onContextChange={setUserInputContext}
+                sessionId={currentChatBotSession?.id}
+                initialDocumentLibraryIds={initialCtx.documentLibraryIds}
+                initialPromptResourceIds={initialCtx.promptResourceIds}
+                initialTemplateResourceIds={initialCtx.templateResourceIds}
+              />
+            </Box>
+          </Box>
+        )}
+
+        {/* Ongoing conversation */}
         {!showWelcome && (
           <>
             {/* Chatbot messages area */}
@@ -626,6 +633,7 @@ const ChatBot = ({
                 isWaiting={waitResponse}
                 onSend={handleSend}
                 onContextChange={setUserInputContext}
+                sessionId={currentChatBotSession?.id}
                 initialDocumentLibraryIds={initialCtx.documentLibraryIds}
                 initialPromptResourceIds={initialCtx.promptResourceIds}
                 initialTemplateResourceIds={initialCtx.templateResourceIds}
@@ -633,7 +641,7 @@ const ChatBot = ({
             </Grid2>
 
             {/* Conversation tokens count */}
-            <Grid2 container width="100%" display="fex" justifyContent="flex-end" marginTop={0.5}>
+            <Grid2 container width="100%" display="flex" justifyContent="flex-end" marginTop={0.5}>
               <Tooltip
                 title={t("chatbot.tooltip.tokenUsage", {
                   input: inputTokenCounts,
@@ -650,17 +658,18 @@ const ChatBot = ({
           </>
         )}
       </Box>
-        <ChatKnowledge
-          open={contextOpen}
-          hasContext={hasContext}
-          userInputContext={userInputContext}
-          onClose={() => setContextOpen(false)}
-          libraryNameMap={libraryNameMap}
-          promptNameMap={promptNameMap}
-          templateNameMap={templateNameMap}
-        />
+
+      <ChatKnowledge
+        open={contextOpen}
+        hasContext={hasContext}
+        userInputContext={userInputContext}
+        onClose={() => setContextOpen(false)}
+        libraryNameMap={libraryNameMap}
+        promptNameMap={promptNameMap}
+        templateNameMap={templateNameMap}
+      />
     </Box>
   );
-};
+}; 
 
 export default ChatBot;
