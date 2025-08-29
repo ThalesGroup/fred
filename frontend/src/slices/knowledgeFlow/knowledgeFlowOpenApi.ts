@@ -254,6 +254,9 @@ const injectedRtkApi = api.injectEndpoints({
         url: `/knowledge-flow/v1/os/allocation/explain`,
         params: {
           index: queryArg.index,
+          shard: queryArg.shard,
+          primary: queryArg.primary,
+          include_disk_info: queryArg.includeDiskInfo,
         },
       }),
     }),
@@ -494,7 +497,14 @@ export type OsPendingTasksApiResponse = /** status 200 Successful Response */ an
 export type OsPendingTasksApiArg = void;
 export type OsAllocationExplainApiResponse = /** status 200 Successful Response */ any;
 export type OsAllocationExplainApiArg = {
+  /** Index name (optional) */
   index?: string | null;
+  /** Shard number (optional) */
+  shard?: number | null;
+  /** Whether primary shard (optional) */
+  primary?: boolean | null;
+  /** Include disk info in explanation */
+  includeDiskInfo?: boolean;
 };
 export type OsNodesStatsApiResponse = /** status 200 Successful Response */ any;
 export type OsNodesStatsApiArg = {

@@ -1,4 +1,8 @@
 {
+  "common": {
+    "add": "Ajouter",
+    "noneSelected": "Aucune sélection"
+  },
   "resource": {
     "kind": {
       "prompt":   { "one": "prompt",   "other": "prompts" },
@@ -95,6 +99,20 @@
     }
   },
   "chatbot": {
+    "menu": {
+      "addToSetup": "Ajouter à la configuration de la conversation"
+    },
+    "input": {
+      "placeholder": "Écrivez votre message…  Entrée pour envoyer • Maj+Entrée pour un saut de ligne"
+    },
+    "attachFiles": "Joindre des fichiers",
+    "attachments": {
+      "count": "{{count}} joints"
+    },
+    "recordAudio": "Enregistrer de l'audio",
+    "stopRecording": "Arrêter l'enregistrement",
+    "audioChip": "Enregistrement audio",
+    "hideAudio": "Masquer le contrôleur audio",
     "searchDocumentLibraries": "Rechercher dans les bibliothèques de documents...",
     "searchPromptLibraries": "Rechercher dans les bibliothèques de prompts...",
     "startNew": "Commencer une nouvelle conversation avec {{name}}",
@@ -120,7 +138,9 @@
     "conversations": "Conversations",
     "newConversation": "Nouvelle conversation",
     "noConversation": "Aucune conversation",
-    "delete": "Supprimer"
+    "delete": "Supprimer",
+    "newConversationHelp": "Commencer une nouvelle conversation (non encore enregistrée)",
+    "draftNotSaved": "Brouillon • non encore enregistré"
   },
   "monitoring": {
     "title": "Surveillance des agents et services IA",

@@ -28,7 +28,7 @@ from app.application_state import attach_app
 from app.common.http_logging import RequestResponseLogger
 from app.features.catalog.controller import CatalogController
 from app.features.kpi.kpi_controller import KPIController
-from app.features.kpi.oensearch_controller import OpenSearchOpsController
+from app.features.kpi.opensearch_controller import OpenSearchOpsController
 from app.features.pull.controller import PullDocumentController
 from app.features.pull.service import PullDocumentService
 from app.features.resources.controller import ResourceController
