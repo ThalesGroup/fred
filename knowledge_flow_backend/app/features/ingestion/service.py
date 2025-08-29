@@ -180,4 +180,4 @@ class IngestionService:
             candidate = output_dir / name
             if candidate.exists() and candidate.is_file():
                 return candidate
-        raise FileNotFoundError(f"No preview file found for document: {metadata.document_uid}")
+        raise FileNotFoundError(f"No preview file found for document: {metadata.document_uid} did you generate an output file named 'output.md' or 'table.csv'?")
