@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import json
 import logging
 from datetime import datetime
 
@@ -22,7 +21,7 @@ from app.common.structures import AgentSettings
 from app.core.agents.flow import AgentFlow
 from app.core.model.model_factory import get_model
 
-from langchain_core.messages import HumanMessage, ToolMessage, SystemMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.constants import START
 from langgraph.graph import MessagesState, StateGraph
 from langgraph.prebuilt import tools_condition
@@ -123,28 +122,11 @@ class TabularExpert(AgentFlow):
 
     async def _run_reasoning_step(self, state: MessagesState):
         try:
-            prompt = SystemMessage(content=self.base_prompt)
-            assert self.model is not None, (
-                "Model must be initialized before building graph"
+            messages = self.use_fred_prompts(
+                [SystemMessage(content=self.base_prompt)] + state["messages"]
             )
-            response = await self.model.ainvoke([prompt] + state["messages"])
-
-            for msg in state["messages"]:
-                if isinstance(msg, ToolMessage):
-                    try:
-                        datasets = json.loads(msg.content)
-                        summaries = (
-                            self._extract_dataset_summaries_from_get_schema_reponse(
-                                datasets
-                            )
-                        )
-                        if summaries:
-                            response.content += (
-                                "\n\n### Available Datasets:\n" + "\n".join(summaries)
-                            )
-                    except Exception as e:
-                        logger.warning(f"Failed to parse tool response: {e}")
-
+            assert self.model is not None
+            response = await self.model.ainvoke(messages)
             return {"messages": [response]}
 
         except Exception:
