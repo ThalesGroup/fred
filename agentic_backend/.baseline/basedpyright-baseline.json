@@ -2,14 +2,6 @@
     "files": {
         "./app/agents/tabular/tabular_expert.py": [
             {
-                "code": "reportArgumentType",
-                "range": {
-                    "startColumn": 46,
-                    "endColumn": 57,
-                    "lineCount": 1
-                }
-            },
-            {
                 "code": "reportOptionalMemberAccess",
                 "range": {
                     "startColumn": 40,
