@@ -1,199 +1,168 @@
+// security/KeyCloakService.ts
 // Copyright Thales 2025
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// ...
 
-import Keycloak from "keycloak-js";
+import Keycloak, { KeycloakInstance } from "keycloak-js";
 
-let keycloakInstance = null;
-let isSecurityEnabled = false
+let keycloakInstance: KeycloakInstance | null = null;
+let isSecurityEnabled = false;
+
+// single-flight so concurrent calls don’t trigger multiple refreshes
+let refreshInFlight: Promise<boolean> | null = null;
 
 /**
- * Parses a full Keycloak realm URL like:
- *    http://app-keycloak:8080/realms/app
- * Into:
- *    url:   http://app-keycloak:8080/
- *    realm: app
+ * Parse a full KC realm URL like:
+ *   http://kc:8080/realms/myrealm
+ * => { url: "http://kc:8080/", realm: "myrealm" }
  */
 function parseKeycloakUrl(fullUrl: string): { url: string; realm: string } {
   const match = fullUrl.match(/^(https?:\/\/[^/]+(?:\/[^/]+)*)\/realms\/([^/]+)\/?$/);
-  if (!match) {
-    throw new Error(`Invalid keycloak_url format: ${fullUrl}`);
-  }
-  return {
-    url: match[1] + "/",    // ensure trailing slash
-    realm: match[2],
-  };
+  if (!match) throw new Error(`Invalid keycloak_url format: ${fullUrl}`);
+  return { url: match[1] + "/", realm: match[2] };
 }
+
 export function createKeycloakInstance(keycloak_url: string, keycloak_client_id: string) {
   if (!keycloakInstance) {
-    isSecurityEnabled = true
+    isSecurityEnabled = true;
     const { url, realm } = parseKeycloakUrl(keycloak_url);
-    console.log("[Keycloak] Creating Keycloak instance with:");
-    console.log("  ↳ keycloak_url:     ", keycloak_url);
-    console.log("  ↳ client_id:        ", keycloak_client_id);
-    try {
-        keycloakInstance = new Keycloak({
-        url: url,
-        realm: realm,
-        clientId: keycloak_client_id,
+
+    keycloakInstance = new Keycloak({ url, realm, clientId: keycloak_client_id });
+
+    // Proactive refresh when KC tells us the token is expired
+    keycloakInstance.onTokenExpired = () => {
+      // try to refresh quietly; if it fails, KC will push to login on next API call
+      ensureFreshToken(30).catch(() => {
+        // no-op; the baseQuery will handle 401 -> logout
       });
-    } catch (err) {
-      console.error("[Keycloak] Failed to create Keycloak instance:", err);
-      throw err;
-    }
+    };
   }
-  return keycloakInstance;
+  return keycloakInstance!;
 }
 
 /**
- * Initializes Keycloak instance and calls the provided callback function if successfully authenticated.
- *
- * @param onAuthenticatedCallback
+ * Call on app startup (after createKeycloakInstance).
  */
 const Login = (onAuthenticatedCallback: Function) => {
-  console.log("Login called", isSecurityEnabled);
-
-  if (isSecurityEnabled) {
-    keycloakInstance
-      .init({
-        onLoad: "login-required",
-        pkceMethod: "S256",
-        checkLoginIframe: false,
-      })
-      .then(function (authenticated) {
-        if (authenticated) {
-          // Store the token in localStorage (or sessionStorage)
-          localStorage.setItem("keycloak_token", keycloakInstance.token);
-          onAuthenticatedCallback();
-        } else {
-          alert("User not authenticated");
-        }
-      })
-      .catch((e) => {
-        console.dir(e);
-        console.log(`keycloak init exception: ${e}`);
-      });
-  } else {
+  if (!isSecurityEnabled) {
     onAuthenticatedCallback();
+    return;
   }
+
+  keycloakInstance!
+    .init({
+      onLoad: "login-required",
+      pkceMethod: "S256",
+      checkLoginIframe: false,
+    })
+    .then((authenticated) => {
+      if (authenticated) {
+        localStorage.setItem("keycloak_token", keycloakInstance!.token || "");
+        onAuthenticatedCallback();
+      } else {
+        alert("User not authenticated");
+      }
+    })
+    .catch((e) => {
+      console.error("[Keycloak] init error:", e);
+    });
 };
 
 const Logout = () => {
-  if (isSecurityEnabled) {
+  if (!isSecurityEnabled || !keycloakInstance) return;
+  try {
     sessionStorage.clear();
-    keycloakInstance.logout({
-      redirectUri: window.location.origin + "/", // Ensure this matches Keycloak's allowed URIs
+    localStorage.removeItem("keycloak_token");
+  } finally {
+    keycloakInstance.logout({ redirectUri: window.location.origin + "/" });
+  }
+};
+
+/**
+ * Ensure token validity (minValidity seconds).
+ * Returns true if token is valid or refreshed, false if refresh failed.
+ */
+export async function ensureFreshToken(minValidity = 30): Promise<boolean> {
+  if (!isSecurityEnabled || !keycloakInstance) return true;
+
+  // If a refresh is already running, await it
+  if (refreshInFlight) return refreshInFlight;
+
+  // Use KC.updateToken (it refreshes only if needed)
+  refreshInFlight = keycloakInstance
+    .updateToken(minValidity)
+    .then((refreshed) => {
+      if (refreshed) {
+        localStorage.setItem("keycloak_token", keycloakInstance!.token || "");
+      }
+      return true;
+    })
+    .catch((err) => {
+      console.warn("[Keycloak] token refresh failed:", err);
+      return false;
+    })
+    .finally(() => {
+      refreshInFlight = null;
     });
-  }
-};
 
-const refreshToken = () => {
-  if (isSecurityEnabled) {
-    if (keycloakInstance.isTokenExpired()) {
-      console.log("Token expired, refreshing...");
-      keycloakInstance
-        .updateToken(30)
-        .then((refreshed) => {
-          if (refreshed) {
-            console.log("Token refreshed:", keycloakInstance.token);
-            localStorage.setItem("keycloak_token", keycloakInstance.token);
-          }
-        })
-        .catch(() => {
-          console.log("Failed to refresh token, forcing re-authentication");
-          keycloakInstance.login();
-        });
-    }
-  } else {
-    console.log("No token to refresh, using default authentication");
-  }
-};
+  return refreshInFlight;
+}
 
-// Schedule token refresh
-setInterval(refreshToken, 300000); // Every 30s
+// ========================= Getters =========================
 
 const GetRealmRoles = (): string[] => {
-  if (isSecurityEnabled) {
-    const resourceAccess = keycloakInstance.tokenParsed?.realm_access;
-    return resourceAccess?.roles || [];
-  }
-  return ["admin"];
+  if (!isSecurityEnabled || !keycloakInstance?.tokenParsed) return ["admin"];
+  return keycloakInstance.tokenParsed.realm_access?.roles || [];
 };
+
 const GetUserRoles = (): string[] => {
-  if (!isSecurityEnabled) {
-    return ["admin"];
-  }
-  const clientRoles = keycloakInstance.tokenParsed?.resource_access?.[keycloakInstance.clientId]?.roles || [];
-  return [...clientRoles]; // Merge both
+  if (!isSecurityEnabled || !keycloakInstance?.tokenParsed) return ["admin"];
+  const clientId = (keycloakInstance as any).clientId as string;
+  const clientRoles = keycloakInstance.tokenParsed.resource_access?.[clientId]?.roles || [];
+  return [...clientRoles];
 };
 
 const GetUserName = (): string | null => {
-  if (isSecurityEnabled) {
-    return keycloakInstance.tokenParsed.preferred_username;
-  }
-  return "admin"; // Default to "admin" if no authentication is used
+  if (!isSecurityEnabled || !keycloakInstance?.tokenParsed) return "admin";
+  return (keycloakInstance.tokenParsed as any).preferred_username || null;
 };
 
 const GetUserFullName = (): string | null => {
-  if (isSecurityEnabled) {
-    return keycloakInstance.tokenParsed.name;
-  }
-  return "Administrator"; // Default to "Administrator" if no authentication is used
+  if (!isSecurityEnabled || !keycloakInstance?.tokenParsed) return "Administrator";
+  return (keycloakInstance.tokenParsed as any).name || null;
 };
 
 const GetUserMail = (): string | null => {
-  if (isSecurityEnabled && keycloakInstance?.tokenParsed) {
-    // Au choix, "name", "preferred_username", "email", ...
-    return keycloakInstance.tokenParsed.email;
-  }
-  return "admin@mail.com";
+  if (!isSecurityEnabled || !keycloakInstance?.tokenParsed) return "admin@mail.com";
+  return (keycloakInstance.tokenParsed as any).email || null;
 };
 
 const GetUserId = (): string | null => {
-  if (isSecurityEnabled && keycloakInstance?.tokenParsed) {
-    return keycloakInstance.tokenParsed.sub;
-  }
-  return "admin";
-};
-/**
- * Renvoie le token brut pour l'ajouter dans Authorization: Bearer <token>.
- */
-const GetToken = (): string | null => {
-  if (isSecurityEnabled && keycloakInstance?.token) {
-    return keycloakInstance.token;
-  }
-  return null;
+  if (!isSecurityEnabled || !keycloakInstance?.tokenParsed) return "admin";
+  return (keycloakInstance.tokenParsed as any).sub || null;
 };
 
-/**
- * Renvoie tout le token décodé (claims) si dispo, sinon null.
- */
+const GetToken = (): string | null => {
+  if (!isSecurityEnabled) return null;
+  return keycloakInstance?.token || localStorage.getItem("keycloak_token");
+};
+
 const GetTokenParsed = (): any => {
-  if (isSecurityEnabled && keycloakInstance?.tokenParsed) {
-    return keycloakInstance.tokenParsed;
-  }
-  return null;
+  if (!isSecurityEnabled) return null;
+  return keycloakInstance?.tokenParsed ?? null;
 };
 
 export const KeyCloakService = {
   CallLogin: Login,
   CallLogout: Logout,
-  GetUserName: GetUserName,
-  GetUserId: GetUserId,
-  GetUserFullName: GetUserFullName,
-  GetUserMail: GetUserMail,
-  GetToken: GetToken,
-  GetRealmRoles: GetRealmRoles,
-  GetUserRoles: GetUserRoles,
+  GetUserName,
+  GetUserId,
+  GetUserFullName,
+  GetUserMail,
+  GetToken,
+  GetRealmRoles,
+  GetUserRoles,
   GetTokenParsed,
+  ensureFreshToken,
 };

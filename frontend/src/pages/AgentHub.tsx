@@ -317,7 +317,7 @@ export const AgentHub = () => {
                   {filteredAgents.length > 0 ? (
                     <Grid2 container spacing={2}>
                       {filteredAgents.map((agent) => (
-                        <Grid2 key={agent.name} size={{ xs: 12, sm: 6, md: 4, lg: 3 }}>
+                        <Grid2 key={agent.name} size={{ xs: 12, sm: 6, md: 4, lg: 4, xl: 4 }} sx={{ display: "flex" }}>
                           <Fade in timeout={500}>
                             <Box>
                               <AgentCard
