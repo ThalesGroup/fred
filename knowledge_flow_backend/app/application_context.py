@@ -29,6 +29,7 @@ from fred_core.store.structures import StoreInfo
 from fred_core.common.structures import SQLStorageConfig
 from app.common.structures import (
     Configuration,
+    EmbeddingProvider,
     InMemoryVectorStorage,
     FileSystemPullSource,
     LocalContentStorageConfig,
@@ -390,7 +391,7 @@ class ApplicationContext:
         """
         backend_type = self.configuration.embedding.type
 
-        if backend_type == "openai":
+        if backend_type == EmbeddingProvider.OPENAI:
             settings = EmbeddingOpenAISettings()  # type: ignore[call-arg]
             embedding_params = {
                 "model": settings.openai_model_name,
@@ -405,23 +406,23 @@ class ApplicationContext:
 
             return Embedder(OpenAIEmbeddings(**embedding_params))  # type: ignore[call-arg]
 
-        elif backend_type == "azureopenai":
+        elif backend_type == EmbeddingProvider.AZUREOPENAI:
             openai_settings = EmbeddingAzureOpenAISettings()  # type: ignore[call-arg]
             return Embedder(
                 AzureOpenAIEmbeddings(
                     deployment=openai_settings.azure_deployment_embedding,
                     openai_api_type="azure",
-                    azure_endpoint=openai_settings.azure_openai_base_url,
+                    azure_endpoint=openai_settings.azure_openai_endpoint,
                     openai_api_version=openai_settings.azure_api_version,
                     openai_api_key=openai_settings.azure_openai_api_key,
                 )
             )  # type: ignore[call-arg]
 
-        elif backend_type == "azureapim":
+        elif backend_type == EmbeddingProvider.AZUREAPIM:
             settings = validate_settings_or_exit(EmbeddingAzureApimSettings, "Azure APIM Embedding Settings")
             return AzureApimEmbedder(settings)
 
-        elif backend_type == "ollama":
+        elif backend_type == EmbeddingProvider.OLLAMA:
             ollama_settings = OllamaSettings()
             embedding_params = {
                 "model": ollama_settings.embedding_model_name,
@@ -739,18 +740,18 @@ class ApplicationContext:
         backend = self.configuration.embedding.type
         logger.info("🔧 Application configuration summary:")
         logger.info("--------------------------------------------------")
-        logger.info(f"  📦 Embedding backend: {backend}")
+        logger.info(f"  📦 Embedding backend: {backend.value}")
 
-        if backend == "openai":
+        if backend == EmbeddingProvider.OPENAI:
             s = validate_settings_or_exit(EmbeddingOpenAISettings, "OpenAI Embedding Settings")
             self._log_sensitive("OPENAI_API_KEY", s.openai_api_key)
             logger.info(f"     ↳ Model: {s.openai_model_name}")
-        elif backend == "azureopenai":
+        elif backend == EmbeddingProvider.AZUREOPENAI:
             s = validate_settings_or_exit(EmbeddingAzureOpenAISettings, "Azure OpenAI Embedding Settings")
             self._log_sensitive("AZURE_OPENAI_API_KEY", s.azure_openai_api_key)
             logger.info(f"     ↳ Deployment: {s.azure_deployment_embedding}")
             logger.info(f"     ↳ API Version: {s.azure_api_version}")
-        elif backend == "azureapim":
+        elif backend == EmbeddingProvider.AZUREAPIM:
             try:
                 s = validate_settings_or_exit(EmbeddingAzureApimSettings, "Azure APIM Embedding Settings")
                 self._log_sensitive("AZURE_CLIENT_ID", s.azure_client_id)
@@ -760,7 +761,7 @@ class ApplicationContext:
                 logger.info(f"     ↳ Deployment: {s.azure_deployment_embedding}")
             except Exception:
                 logger.warning("⚠️ Failed to load Azure APIM settings — some variables may be missing.")
-        elif backend == "ollama":
+        elif backend == EmbeddingProvider.OLLAMA:
             s = validate_settings_or_exit(OllamaSettings, "Ollama Embedding Settings")
             logger.info(f"     ↳ Model: {s.embedding_model_name}")
             logger.info(f"     ↳ API URL: {s.api_url if s.api_url else 'default'}")
