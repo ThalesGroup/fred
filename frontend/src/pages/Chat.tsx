@@ -177,10 +177,6 @@ return (
         agenticFlows={agenticFlows}
         onUpdateOrAddSession={handleUpdateOrAddSession}
         isCreatingNewConversation={isCreatingNewConversation}
-        // Fred rationale:
-        // - We propagate an explicit “mode” so children render clear UX affordances
-        //   (header chip, disabled destructive actions, etc.) without guessing.
-        isExistingSession={Boolean(currentChatBotSession)}
         runtimeContext={{ cluster }}
       />
     </Grid2>

@@ -26,9 +26,9 @@ import {
   ListItem,
   ClickAwayListener,
   Fade,
-  ButtonBase,
   ListItemButton,
   ListItemText,
+  Divider,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
@@ -65,7 +65,6 @@ export const Settings = ({
   const theme = useTheme<Theme>();
   const isDarkTheme = theme.palette.mode === "dark";
   const { t } = useTranslation();
-  const isDraftSelected = isCreatingNewConversation || !currentSession;
 
   // Couleurs harmonisées avec le SideBar
   const bgColor = theme.palette.sidebar.background;
@@ -184,29 +183,43 @@ export const Settings = ({
 
                   // Tooltip content: nickname (title), then role + description
                   const tooltipContent = (
-                    <Box sx={{ maxWidth: 360 }}>
-                      <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 0.25 }}>
+                    <Box sx={{ maxWidth: 460 }}>
+                      {/* Nickname */}
+                      <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 0.75 }}>
                         {flow.nickname}
                       </Typography>
-                      <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
-                        {flow.role}
-                      </Typography>
-                      {flow.description && (
-                        <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.25 }}>
-                          {flow.description}
+
+                      {/* Subtle separator */}
+                      <Divider sx={{ opacity: 0.5, mb: 0.75 }} />
+
+                      {/* Role + description grouped with a thin left accent */}
+                      <Box
+                        sx={(theme) => ({
+                          pl: 1.25,
+                          borderLeft: `2px solid ${theme.palette.divider}`,
+                        })}
+                      >
+                        <Typography
+                          variant="body2"
+                          color="text.secondary"
+                          sx={{ fontStyle: "italic", mb: flow.description ? 0.25 : 0 }}
+                        >
+                          {flow.role}
                         </Typography>
-                      )}
+
+                        {flow.description && (
+                          <Typography variant="body2" color="text.secondary">
+                            {flow.description}
+                          </Typography>
+                        )}
+                      </Box>
                     </Box>
                   );
 
                   return (
-                    <ListItem key={flow.name} disableGutters sx={{ mb: 0.5 }}>
-                      <Tooltip
-                        title={tooltipContent}
-                        placement="right"
-                        arrow
-                        disableInteractive
-                        slotProps={{ tooltip: { sx: { pointerEvents: "none", p: 1 } } }}
+                    <ListItem key={flow.name} disableGutters sx={{ mb: 0 }}>
+                      <Tooltip title={tooltipContent} placement="right" arrow
+                        slotProps={{ tooltip: { sx: { maxWidth: 460 } } }}
                       >
                         <ListItemButton
                           dense
@@ -214,10 +227,10 @@ export const Settings = ({
                           selected={isSelected}
                           sx={{
                             // Compact, consistent row height
-                            minHeight: 36,
+                            //minHeight: 30,
                             borderRadius: 1,
                             px: 1,
-                            py: 0.25,
+                            py: 0,
                             border: `1px solid ${isSelected ? theme.palette.primary.main : theme.palette.divider}`,
                             backgroundColor: isSelected
                               ? theme.palette.mode === "dark"

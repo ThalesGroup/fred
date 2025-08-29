@@ -404,15 +404,26 @@ const lightTheme = createTheme({
   },
   components: {
     MuiTooltip: {
+      defaultProps: { arrow: true, disableInteractive: true,
+       enterDelay: 900,
+      enterNextDelay: 200,
+      leaveDelay: 100,
+      enterTouchDelay: 800,
+      leaveTouchDelay: 3000,
+
+       },
       styleOverrides: {
         tooltip: {
           fontSize: "1.0rem", // Adjust font size
           fontWeight: "300", // Remove bold (use light font weight)
-          color: lightPalette.primary.contrastText, // Text color
+          backgroundColor: lightPalette.background.paper,
+          color: lightPalette.text.primary,
           padding: "12px 16px", // Add comfortable padding
           borderRadius: "8px", // Optional: rounded corners
           boxShadow: "0px 2px 4px rgba(0, 0, 0, 0.1)", // Optional: subtle shadow
+          maxWidth: 360,
         },
+        arrow: { color: lightPalette.background.paper },
       },
     },
     MuiTypography: {
@@ -446,15 +457,25 @@ const darkTheme = createTheme({
   },
   components: {
     MuiTooltip: {
+      defaultProps: { arrow: true, disableInteractive: true,
+         enterDelay: 900,
+      enterNextDelay: 200,
+      leaveDelay: 100,
+      enterTouchDelay: 800,
+      leaveTouchDelay: 3000,
+       },
       styleOverrides: {
         tooltip: {
           fontSize: "1.0rem", // Adjust font size
           fontWeight: "300", // Remove bold (use light font weight)
-          color: darkPalette.primary.contrastText, // Text color
+          backgroundColor: darkPalette.background.paper,
+          color: darkPalette.text.primary, // Text color
           padding: "12px 16px", // Add comfortable padding
           borderRadius: "8px", // Optional: rounded corners
           boxShadow: "0px 2px 4px rgba(0, 0, 0, 0.1)", // Optional: subtle shadow
+          maxWidth: 360,
         },
+        arrow: { color: darkPalette.background.paper },
         popper: {
           backdropFilter: "blur(8px)", // Optional: subtle blur effect
         },
