@@ -241,7 +241,7 @@ def create_app() -> FastAPI:
             "to customize agent behavior or generate well-structured custom reports. "
             "Use this MCP to browse, retrieve, and apply predefined resources when composing answers or building workflows."
         ),
-        include_tags=["Resources"],
+        include_tags=["Resources", "Tags"],
         describe_all_responses=True,
         describe_full_response_schema=True,
         auth_config=AuthConfig(  # <-- protect with your user auth as a normal dependency
