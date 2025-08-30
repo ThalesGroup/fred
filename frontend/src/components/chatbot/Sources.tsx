@@ -11,6 +11,7 @@ type Props = {
   expandSources?: boolean;
   enableSources?: boolean;
   pageSize?: number; // default 8
+  highlightUid?: string | null;
 };
 
 type SelectedState = null | { uid: string; hits: VectorSearchHit[] };
@@ -19,10 +20,12 @@ function SourceRow({
   uid,
   hits,
   onOpen,
+  highlighted = false,
 }: {
   uid: string;
   hits: VectorSearchHit[];
   onOpen: () => void;
+  highlighted: boolean; 
 }) {
   const bestScore = Math.max(...hits.map(h => h.score ?? 0));
   const bestPct = Math.round(Math.max(0, Math.min(1, bestScore)) * 100);
@@ -42,13 +45,16 @@ function SourceRow({
     <Paper
       variant="outlined"
       sx={{
-        px: 1.5,
-        py: 1,
-        mb: 1,
-        borderRadius: 2,
-        "&:hover": { bgcolor: "action.hover" },
-        cursor: "pointer",
-      }}
+    px: 1.5,
+    py: 1,
+    mb: 1,
+    borderRadius: 2,
+    borderColor: highlighted ? "primary.main" : undefined,
+    boxShadow: highlighted ? 3 : undefined,
+    "&:hover": { bgcolor: "action.hover" },
+    cursor: "pointer",
+    transition: "box-shadow 120ms ease, border-color 120ms ease",
+  }}
       role="button"
       tabIndex={0}
       onClick={onOpen}
@@ -121,6 +127,7 @@ export default function Sources({
   expandSources = false,
   enableSources = false,
   pageSize = 8,
+  highlightUid,
 }: Props) {
   const [visibleCount, setVisibleCount] = useState(pageSize);
   const [selected, setSelected] = useState<SelectedState>(null);
@@ -284,7 +291,9 @@ export default function Sources({
     >
       <Box sx={{ mt: 0.5 }}>
         {items.map(({ uid, hits }) => (
-          <SourceRow key={uid} uid={uid} hits={hits} onOpen={() => setSelected({ uid, hits })} />
+          <SourceRow key={uid} uid={uid} hits={hits} 
+          highlighted={uid === highlightUid}
+          onOpen={() => setSelected({ uid, hits })} />
         ))}
       </Box>
 

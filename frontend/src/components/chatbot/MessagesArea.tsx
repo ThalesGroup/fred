@@ -1,9 +1,10 @@
 import React, { memo, useMemo, useRef, useEffect } from "react";
-import Message from "./MessageCard";
+import MessageCard from "./MessageCard";
 import Sources from "./Sources";
 import { AgenticFlow, ChatMessage } from "../../slices/agentic/agenticOpenApi";
 import { getExtras, hasNonEmptyText } from "./ChatBotUtils";
 import ReasoningStepsAccordion from "./ReasoningStepsAccordion";
+import { buildCitationMap, renderTextWithCitations } from "./citations";
 
 type Props = {
   messages: ChatMessage[];
@@ -12,16 +13,19 @@ type Props = {
 };
 
 function Area({ messages, agenticFlows, currentAgenticFlow }: Props) {
-  // ⬇️ Old-pattern: bottom anchor we scroll into view after render
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
+  // Hover highlight + click-to-open
+  const [highlightUid, setHighlightUid] = React.useState<string | null>(null);
+
   const scrollToBottom = () => {
-        if (messagesEndRef.current) {
-            setTimeout(() => {
-                messagesEndRef.current?.scrollIntoView({behavior: 'smooth'});
-            }, 300); // Adjust the timeout as needed
-        }
-    };
+    if (messagesEndRef.current) {
+      setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      }, 300);
+    }
+  };
+
   const resolveAgenticFlow = (msg: ChatMessage): AgenticFlow => {
     const agentName = msg.metadata?.agent_name ?? currentAgenticFlow.name;
     return agenticFlows.find((flow) => flow.name === agentName) ?? currentAgenticFlow;
@@ -61,7 +65,11 @@ function Area({ messages, agenticFlows, currentAgenticFlow }: Props) {
         }
 
         const extras = getExtras(msg);
-        if (extras?.node === "grade_documents" && Array.isArray(msg.metadata?.sources) && msg.metadata!.sources!.length) {
+        if (
+          extras?.node === "grade_documents" &&
+          Array.isArray(msg.metadata?.sources) &&
+          msg.metadata!.sources!.length
+        ) {
           keptSources = msg.metadata!.sources as any[];
         }
 
@@ -89,7 +97,7 @@ function Area({ messages, agenticFlows, currentAgenticFlow }: Props) {
 
       if (userMessage) {
         elements.push(
-          <Message
+          <MessageCard
             key={`user-${userMessage.session_id}-${userMessage.exchange_id}-${userMessage.rank}`}
             message={userMessage}
             currentAgenticFlow={currentAgenticFlow}
@@ -120,19 +128,28 @@ function Area({ messages, agenticFlows, currentAgenticFlow }: Props) {
             sources={keptSources}
             enableSources
             expandSources={false}
+            highlightUid={highlightUid ?? undefined}
           />,
         );
       }
 
+      // ---------- intermediary assistant/user messages ----------
       for (const msg of others) {
         const agenticFlow = resolveAgenticFlow(msg);
         const inlineSrc = msg.metadata?.sources;
+
         elements.push(
           <React.Fragment key={`other-${msg.session_id}-${msg.exchange_id}-${msg.rank}`}>
             {!keptSources && inlineSrc?.length && (
-              <Sources sources={inlineSrc as any[]} enableSources expandSources={false} />
+              <Sources
+                sources={inlineSrc as any[]}
+                enableSources
+                expandSources={false}
+                highlightUid={highlightUid ?? undefined}
+              />
             )}
-            <Message
+
+            <MessageCard
               message={msg}
               agenticFlow={agenticFlow}
               currentAgenticFlow={currentAgenticFlow}
@@ -145,10 +162,12 @@ function Area({ messages, agenticFlows, currentAgenticFlow }: Props) {
         );
       }
 
+      // ---------- final assistant message ----------
       for (const msg of finals) {
         const agenticFlow = resolveAgenticFlow(msg);
         const finalSources = keptSources ?? (msg.metadata?.sources as any[] | undefined);
 
+        // 1) Sources first (expanded)
         if (finalSources?.length) {
           elements.push(
             <Sources
@@ -156,12 +175,39 @@ function Area({ messages, agenticFlows, currentAgenticFlow }: Props) {
               sources={finalSources}
               enableSources
               expandSources
+              highlightUid={highlightUid ?? undefined}
             />,
           );
         }
 
+        // 2) Inline text with hoverable & clickable [n] markers
+        const textParts = (msg.parts || []).filter((p: any) => p?.type === "text");
+        if (textParts.length) {
+          const citeMap = buildCitationMap(msg);
+          elements.push(
+            <div
+              key={`final-inline-${msg.session_id}-${msg.exchange_id}-${msg.rank}`}
+              style={{ padding: "8px 12px", margin: "4px 0", whiteSpace: "pre-wrap" }}
+            >
+              {textParts.map((p: any, i: number) => (
+                <div key={i}>
+                  {renderTextWithCitations(
+                    p.text || "",
+                    citeMap,
+                    // hover
+                    (uid) => setHighlightUid(uid),
+                    // metaMap is optional (tooltips already improved in MessageCard path)
+                    undefined,
+                  )}
+                </div>
+              ))}
+            </div>,
+          );
+        }
+
+        // 3) Render non-text parts only
         elements.push(
-          <Message
+          <MessageCard
             key={`final-${msg.session_id}-${msg.exchange_id}-${msg.rank}`}
             message={msg}
             agenticFlow={agenticFlow}
@@ -170,24 +216,23 @@ function Area({ messages, agenticFlows, currentAgenticFlow }: Props) {
             enableCopy
             enableThumbs
             enableAudio
+            suppressText
           />,
         );
       }
     }
 
     return elements;
-  }, [messages, agenticFlows, currentAgenticFlow]);
+  }, [messages, agenticFlows, currentAgenticFlow, highlightUid]); // include states as deps
 
-  // Always scroll to bottom when content changes (new msg or loaded history)
   useEffect(() => {
-        scrollToBottom();
-    }, [messages]);
+    scrollToBottom();
+  }, [messages]);
 
-  // Container + bottom anchor—no extra styling required here;
   return (
     <div style={{ display: "flex", flexDirection: "column", flexGrow: 1 }}>
       {content}
-      <div ref={messagesEndRef} style={{ height: '1px', marginTop: '8px' }} />
+      <div ref={messagesEndRef} style={{ height: "1px", marginTop: "8px" }} />
     </div>
   );
 }
