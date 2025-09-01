@@ -25,6 +25,7 @@ import logging
 import os
 
 from app.core.agents.agent_manager import AgentManager
+from app.core.chatbot.session_orchestrator import SessionOrchestrator
 from app.core.feedback.controller import FeedbackController
 from app.core.agents.agent_controller import AgentController
 from app.application_context import (
@@ -37,7 +38,6 @@ from app.common.structures import Configuration
 from app.common.utils import parse_server_configuration
 from app.core.monitoring.monitoring_controller import MonitoringController
 from app.core.prompts.controller import PromptController
-from app.core.session.session_manager import SessionManager
 from dotenv import load_dotenv
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -88,9 +88,7 @@ def create_app() -> FastAPI:
 
     initialize_keycloak(configuration.app.security)
     agent_manager = AgentManager(configuration, get_agent_store())
-    session_manager = SessionManager(
-        session_store=get_session_store(), agent_manager=agent_manager
-    )
+    session_orchestrator = SessionOrchestrator(get_session_store(), agent_manager)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -126,8 +124,9 @@ def create_app() -> FastAPI:
     FeedbackController(router)
     PromptController(router)
     AgentController(router, agent_manager=agent_manager)
+
     ChatbotController(
-        router, session_manager=session_manager, agent_manager=agent_manager
+        router, session_orchestrator=session_orchestrator, agent_manager=agent_manager
     )
     MonitoringController(router)
     app.include_router(router)

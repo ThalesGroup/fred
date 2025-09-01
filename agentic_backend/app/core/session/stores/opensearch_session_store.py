@@ -15,8 +15,8 @@
 import logging
 from typing import List
 from opensearchpy import NotFoundError, OpenSearch, RequestsHttpConnection
+from app.core.chatbot.chat_schema import SessionSchema
 from app.core.session.stores.base_session_store import BaseSessionStore
-from app.core.session.session_manager import SessionSchema
 from fred_core import ThreadSafeLRUCache
 
 logger = logging.getLogger(__name__)

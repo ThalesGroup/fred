@@ -267,10 +267,31 @@ export type CodePart = {
   language?: string | null;
   code: string;
 };
+export type GeoPart = {
+  type?: "geo";
+  geojson: {
+    [key: string]: any;
+  };
+  popup_property?: string | null;
+  fit_bounds?: boolean;
+  style?: {
+    [key: string]: any;
+  } | null;
+};
 export type ImageUrlPart = {
   type?: "image_url";
   url: string;
   alt?: string | null;
+};
+export type LinkKind = "citation" | "download" | "external" | "dashboard" | "related";
+export type LinkPart = {
+  type?: "link";
+  href: string;
+  title?: string | null;
+  kind?: LinkKind;
+  rel?: string | null;
+  mime?: string | null;
+  source_id?: string | null;
 };
 export type TextPart = {
   type?: "text";
@@ -357,8 +378,14 @@ export type ChatMessage = {
         type: "code";
       } & CodePart)
     | ({
+        type: "geo";
+      } & GeoPart)
+    | ({
         type: "image_url";
       } & ImageUrlPart)
+    | ({
+        type: "link";
+      } & LinkPart)
     | ({
         type: "text";
       } & TextPart)
@@ -463,8 +490,14 @@ export type ChatMessage2 = {
         type: "code";
       } & CodePart)
     | ({
+        type: "geo";
+      } & GeoPart)
+    | ({
         type: "image_url";
       } & ImageUrlPart)
+    | ({
+        type: "link";
+      } & LinkPart)
     | ({
         type: "text";
       } & TextPart)

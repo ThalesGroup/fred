@@ -1,17 +1,8 @@
+# app/core/chatbot/chatbot_controller.py
 # Copyright Thales 2025
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# Licensed under the Apache License, Version 2.0
 
+from __future__ import annotations
 
 import logging
 from enum import Enum
@@ -27,8 +18,8 @@ from fastapi import (
     WebSocketDisconnect,
 )
 from starlette.websockets import WebSocketState
-
 from pydantic import BaseModel, Field
+
 from fred_core import KeycloakUser, get_current_user, VectorSearchHit
 
 from app.application_context import get_configuration
@@ -46,7 +37,8 @@ from app.core.chatbot.chat_schema import (
     StreamEvent,
 )
 from app.core.chatbot.metric_structures import MetricsBucket, MetricsResponse
-from app.core.session.session_manager import SessionManager
+from app.core.chatbot.session_orchestrator import SessionOrchestrator
+
 
 logger = logging.getLogger(__name__)
 
@@ -84,14 +76,21 @@ class EchoEnvelope(BaseModel):
 
 
 class ChatbotController:
+    """
+    Why this controller stays thin:
+      - It exposes HTTP/WS endpoints and delegates *all* chat orchestration
+        (session lifecycle, KPI, persistence, streaming) to SessionOrchestrator.
+      - This keeps transport concerns (WS/HTTP) separate from agent/runtime logic.
+    """
+
     def __init__(
         self,
         app: APIRouter,
-        session_manager: SessionManager,
+        session_orchestrator: SessionOrchestrator,
         agent_manager: AgentManager,
     ):
         self.agent_manager = agent_manager
-        self.session_manager = session_manager
+        self.session_orchestrator = session_orchestrator
         fastapi_tags: list[str | Enum] = ["Frontend"]
 
         @app.post(
@@ -124,6 +123,14 @@ class ChatbotController:
 
         @app.websocket("/chatbot/query/ws")
         async def websocket_chatbot_question(websocket: WebSocket):
+            """
+            Transport-only:
+              - Accept WS
+              - Parse ChatAskInput
+              - Provide a callback that forwards StreamEvents
+              - Send FinalEvent or ErrorEvent
+              - All heavy lifting is in SessionOrchestrator.chat_ask_websocket()
+            """
             await websocket.accept()
             try:
                 while True:
@@ -133,15 +140,17 @@ class ChatbotController:
                         ask = ChatAskInput(**client_request)
 
                         async def ws_callback(msg_dict: dict):
+                            # Stream every ChatMessage as a StreamEvent over WS
                             event = StreamEvent(
                                 type="stream", message=ChatMessage(**msg_dict)
                             )
                             await websocket.send_text(event.model_dump_json())
 
+                        # Delegate the whole exchange to the orchestrator
                         (
                             session,
                             final_messages,
-                        ) = await self.session_manager.chat_ask_websocket(
+                        ) = await self.session_orchestrator.chat_ask_websocket(
                             callback=ws_callback,
                             user_id=ask.user_id,
                             session_id=ask.session_id or "unknown-session",
@@ -151,6 +160,7 @@ class ChatbotController:
                             client_exchange_id=ask.client_exchange_id,
                         )
 
+                        # Send final “bundle”
                         await websocket.send_text(
                             FinalEvent(
                                 type="final", messages=final_messages, session=session
@@ -198,7 +208,8 @@ class ChatbotController:
         def get_sessions(
             user: KeycloakUser = Depends(get_current_user),
         ) -> list[SessionWithFiles]:
-            return self.session_manager.get_sessions(user.uid)
+            # Orchestrator owns session lifecycle surface
+            return self.session_orchestrator.get_sessions(user.uid)
 
         @app.get(
             "/chatbot/session/{session_id}/history",
@@ -210,7 +221,7 @@ class ChatbotController:
         def get_session_history(
             session_id: str, user: KeycloakUser = Depends(get_current_user)
         ) -> list[ChatMessage]:
-            return self.session_manager.get_session_history(session_id, user.uid)
+            return self.session_orchestrator.get_session_history(session_id, user.uid)
 
         @app.delete(
             "/chatbot/session/{session_id}",
@@ -221,7 +232,7 @@ class ChatbotController:
         def delete_session(
             session_id: str, user: KeycloakUser = Depends(get_current_user)
         ) -> bool:
-            self.session_manager.delete_session(session_id, user.uid)
+            self.session_orchestrator.delete_session(session_id, user.uid)
             return True
 
         @app.post(
@@ -236,6 +247,6 @@ class ChatbotController:
             agent_name: str = Form(...),
             file: UploadFile = File(...),
         ) -> dict:
-            return await self.session_manager.upload_file(
+            return await self.session_orchestrator.upload_file(
                 user_id, session_id, agent_name, file
             )
