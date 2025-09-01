@@ -22,32 +22,6 @@ import {
 import { toCopyText, toMarkdown, toSpeechText } from "./messageParts.ts";
 import { getExtras, isToolCall, isToolResult } from "./ChatBotUtils.tsx";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Helper: build citation map 1..N → { uid, title?, href? } from metadata.sources
-// Order is the rank asc (fallback very large if missing)
-function buildCitationMapFromMsg(msg: ChatMessage) {
-  const src = (msg.metadata?.sources as any[] | undefined) ?? [];
-  if (!src.length) return undefined;
-
-  const ordered = [...src].sort(
-    (a, b) => (a?.rank ?? 1e9) - (b?.rank ?? 1e9)
-  );
-
-  const m = new Map<number, { uid: string; title?: string; href?: string }>();
-  ordered.forEach((hit, i) => {
-    const n = i + 1;
-    if (hit?.uid) {
-      m.set(n, {
-        uid: String(hit.uid),
-        title: hit.title,
-        href: hit.preview_at_url || hit.citation_url || hit.preview_url || undefined,
-      });
-    }
-  });
-  return m.size ? m : undefined;
-}
-// ─────────────────────────────────────────────────────────────────────────────
-
 export default function MessageCard({
   message,
   agenticFlow,
@@ -148,9 +122,6 @@ export default function MessageCard({
       : message.parts || [];
     return toMarkdown(parts);
   }, [message.parts, suppressText]);
-
-  // Build citation map (activates the citation plugin in CustomMarkdownRenderer)
-  const citationMap = useMemo(() => buildCitationMapFromMsg(message), [message]);
 
   return (
     <>
