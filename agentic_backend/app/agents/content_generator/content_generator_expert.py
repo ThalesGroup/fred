@@ -34,9 +34,9 @@ class ContentGeneratorExpert(AgentFlow):
     This agent uses MCP tools to list, inspect, and query structured data like CSV or Excel.
     """
 
-    name: str
-    role: str
-    nickname: str = "Brontë"
+    name: str = "ContentGeneratorExpert"
+    role: str = "Content Generator Expert"
+    nickname: str
     description: str
     icon: str = "content_generator"
     categories: list[str] = ["blog", "content", "cir"]
@@ -45,6 +45,7 @@ class ContentGeneratorExpert(AgentFlow):
     def __init__(self, agent_settings: AgentSettings):
         self.agent_settings = agent_settings
         self.name = agent_settings.name
+        self.nickname = agent_settings.nickname or agent_settings.name
         self.current_date = datetime.now().strftime("%Y-%m-%d")
         self.model = None
         self.mcp = MCPRuntime(

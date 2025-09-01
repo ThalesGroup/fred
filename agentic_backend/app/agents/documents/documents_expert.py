@@ -26,15 +26,15 @@ from pydantic import TypeAdapter, ValidationError
 logger = logging.getLogger(__name__)
 
 
-class Dominic(AgentFlow):
+class DocumentExpert(AgentFlow):
     """
-    Dominic: tool-first documents expert using MCP.
+    Tool-first documents expert using MCP.
     - The model decides when to call the MCP tool `search_documents_using_vectorization`.
     - Results are strict VectorSearchHit and are attached to response metadata for the UI.
     """
 
-    name: str
-    role: str
+    name: str = "DocumentExpert"
+    role: str = "Document Expert using basic RAG"
     nickname: str
     description: str
     icon: str = "documents_agent"

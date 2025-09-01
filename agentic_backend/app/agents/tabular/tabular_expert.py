@@ -35,9 +35,10 @@ class TabularExpert(AgentFlow):
     This agent uses MCP tools to list, inspect, and query structured data like CSV or Excel.
     """
 
-    name: str
-    role: str
-    nickname: str = "Tessa"
+    # static metadata
+    name: str = "Tabular Expert"
+    role: str = "Data Query and SQL Expert"
+    nickname: str
     description: str
     icon: str = "tabular_agent"
     categories: list[str] = ["tabular", "sql"]
@@ -46,6 +47,7 @@ class TabularExpert(AgentFlow):
     def __init__(self, agent_settings: AgentSettings):
         self.agent_settings = agent_settings
         self.name = agent_settings.name
+        self.nickname = agent_settings.nickname or agent_settings.name
         self.current_date = datetime.now().strftime("%Y-%m-%d")
         self.model = None
         self.mcp = MCPRuntime(

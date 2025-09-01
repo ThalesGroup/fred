@@ -69,19 +69,19 @@ ai:
       enabled: true
       max_steps: 5
       model: {}
-    - name: "SentinelExpert"
-      role: "Your instance monitoring expert"
+    - name: "Samy"
+      role: "Instance monitoring expert"
       mcp_servers:
         - name: knowledge-flow-mcp-server
           transport: streamable_http
           url: http://localhost:8111/knowledge-flow/v1/mcp-opensearch-ops
           sse_read_timeout: 2000
       description: >
-        Sentinel watches your instance, providing real-time monitoring and alerts for performance issues.
-      class_path: "app.agents.sentinel.sentinel_expert.SentinelExpert"
+        Samy watches your instance, providing real-time monitoring and alerts for performance issues.
+      class_path: "app.agents.sentinel.sentinel_expert.OpsMonitoringExpert"
       enabled: true
       model: {}
-    - name: "GeneralistExpert"
+    - name: "Georges"
       role: "Fallback Generalist Expert"
       description: >
         Provides broad, high-level guidance when no specific expert is better suited. 
@@ -89,7 +89,7 @@ ai:
       class_path: "app.agents.generalist.generalist_expert.GeneralistExpert"
       enabled: true
       model: {}
-    - name: "TabularExpert"
+    - name: "Tessa"
       role: "Data Query and SQL Expert"
       description: >
         Executes advanced SQL queries (including joins and aggregations) 
@@ -103,12 +103,12 @@ ai:
           url: http://localhost:8111/knowledge-flow/v1/mcp-tabular
           sse_read_timeout: 2000
       model: {}
-    - name: "RicoProExpert"
+    - name: "Rico Senior"
       role: "Document Retrieval Expert"
       description: >
         Answers user questions by retrieving relevant information from ingested document corpora.
         Uses a vector-based retrieval pipeline to ground responses in internal or uploaded knowledge.
-      class_path: "app.agents.rags.rico_pro_expert.RicoProExpert"
+      class_path: "app.agents.rags.advanced_rag_expert.AdvancedRagExpert"
       enabled: true
       categories:
         - "rag"
@@ -117,11 +117,11 @@ ai:
         chunk_overlap: 64
         knowledge_flow_url: "http://localhost:8111/knowledge-flow/v1"
       model: {}
-    - name: "RicoExpert"
+    - name: "Rico Jr."
       role: "Document Retrieval Expert"
       description: >
         Provides quick answers based on document content, using direct retrieval and generation.
-      class_path: "app.agents.rags.rico_expert.RicoExpert"
+      class_path: "app.agents.rags.rag_expert.RagExpert"
       enabled: true
       categories:
         - "rag"
@@ -130,7 +130,7 @@ ai:
         chunk_overlap: 64
         knowledge_flow_url: "http://localhost:8111/knowledge-flow/v1"
       model: {}
-    - name: "ContentGeneratorExpert"
+    - name: "Brontë"
       role: "Content generator expert"
       description: >
         This agent is able to generate some content based on some template he manages 
