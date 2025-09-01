@@ -4,7 +4,7 @@
 import { Box, Grid2, IconButton, Tooltip, Chip, Typography } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import RateReviewIcon from "@mui/icons-material/RateReview";
 import VolumeUpIcon from "@mui/icons-material/VolumeUp";
 import ClearIcon from "@mui/icons-material/Clear";
@@ -22,8 +22,31 @@ import {
 import { toCopyText, toMarkdown, toSpeechText } from "./messageParts.ts";
 import { getExtras, isToolCall, isToolResult } from "./ChatBotUtils.tsx";
 
-// Inline citation helpers (themed tooltips, hover/click)
-import { buildCitationMap, renderTextWithCitations } from "./citations";
+// ─────────────────────────────────────────────────────────────────────────────
+// Helper: build citation map 1..N → { uid, title?, href? } from metadata.sources
+// Order is the rank asc (fallback very large if missing)
+function buildCitationMapFromMsg(msg: ChatMessage) {
+  const src = (msg.metadata?.sources as any[] | undefined) ?? [];
+  if (!src.length) return undefined;
+
+  const ordered = [...src].sort(
+    (a, b) => (a?.rank ?? 1e9) - (b?.rank ?? 1e9)
+  );
+
+  const m = new Map<number, { uid: string; title?: string; href?: string }>();
+  ordered.forEach((hit, i) => {
+    const n = i + 1;
+    if (hit?.uid) {
+      m.set(n, {
+        uid: String(hit.uid),
+        title: hit.title,
+        href: hit.preview_at_url || hit.citation_url || hit.preview_url || undefined,
+      });
+    }
+  });
+  return m.size ? m : undefined;
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 export default function MessageCard({
   message,
@@ -35,13 +58,13 @@ export default function MessageCard({
   currentAgenticFlow,
   pending = false,
   showMetaChips = true,
-  suppressText = false,          // optional: hide text in fallback markdown path
-  renderInlineCitations = false, // render [n] inside bubble with tooltip + hover/click
-  onCitationHover,               // (uid|null) -> parent highlights/opens Sources
+  suppressText = false,                 // hides text parts when true (we still render non-text via markdown)
+  onCitationHover,                      // optional: (uid|null) → let parent highlight Sources
+  onCitationClick,                      // optional: (uid|null) → parent can open dialog
 }: {
   message: ChatMessage;
   agenticFlow: AgenticFlow;
-  side: string;
+  side: "left" | "right";
   enableCopy?: boolean;
   enableThumbs?: boolean;
   enableAudio?: boolean;
@@ -49,8 +72,8 @@ export default function MessageCard({
   pending?: boolean;
   showMetaChips?: boolean;
   suppressText?: boolean;
-  renderInlineCitations?: boolean;
   onCitationHover?: (uid: string | null) => void;
+  onCitationClick?: (uid: string | null) => void;
 }) {
   const theme = useTheme();
   const { showError, showInfo } = useToast();
@@ -118,26 +141,21 @@ export default function MessageCard({
   const isCall = isToolCall(message);
   const isResult = isToolResult(message);
 
-  // Pre-split parts for rendering
-  const textParts = (message.parts || []).filter((p: any) => p?.type === "text");
-  const nonTextParts = (message.parts || []).filter((p: any) => p?.type !== "text");
+  // Build the markdown content once (optionally filtering out text parts)
+  const mdContent = useMemo(() => {
+    const parts = suppressText
+      ? (message.parts || []).filter((p: any) => p?.type !== "text")
+      : message.parts || [];
+    return toMarkdown(parts);
+  }, [message.parts, suppressText]);
 
-  // [n] -> uid map (using metadata.sources order by rank)
-  const citeMap = renderInlineCitations ? buildCitationMap(message) : undefined;
-
-  // Build meta map for nicer tooltip titles from LinkPart(kind:'citation')
-  const linkParts = (message.parts || []).filter(
-    (p: any) => p?.type === "link" && (p?.kind === "citation" || !p?.kind)
-  );
-  const citeMeta = new Map<number, { title?: string | null; href?: string | null }>();
-  linkParts.forEach((lp: any, i: number) => {
-    citeMeta.set(i + 1, { title: lp?.title ?? null, href: lp?.href ?? null });
-  });
+  // Build citation map (activates the citation plugin in CustomMarkdownRenderer)
+  const citationMap = useMemo(() => buildCitationMapFromMsg(message), [message]);
 
   return (
     <>
       <Grid2 container marginBottom={1}>
-        {/* Agent avatar (assistant side) */}
+        {/* Assistant avatar on the left */}
         {side === "left" && agenticFlow && (
           <Grid2 size="auto" paddingTop={2}>
             <Tooltip title={`${agenticFlow.nickname}: ${agenticFlow.role}`}>
@@ -162,7 +180,7 @@ export default function MessageCard({
                     wordBreak: "break-word",
                   }}
                 >
-                  {/* Header: chips + tool-call indicators */}
+                  {/* Header: task chips + tool-call indicators */}
                   {(showMetaChips || isCall || isResult) && (
                     <Box display="flex" alignItems="center" gap={1} px={side === "right" ? 0 : 1} pb={0.5}>
                       {showMetaChips && extras?.task && (
@@ -200,32 +218,24 @@ export default function MessageCard({
                     </Box>
                   )}
 
-                  {/* Main content: inline citations if enabled, otherwise default markdown */}
+                  {/* Main content (single path): ALWAYS markdown, with optional citationMap */}
                   <Box px={side === "right" ? 0 : 1} pb={0.5}>
-                    {renderInlineCitations && textParts.length > 0 ? (
-                      <>
-                        {textParts.map((p: any, i: number) => (
-                          <div key={i} style={{ whiteSpace: "pre-wrap" }}>
-                            {renderTextWithCitations(
-                              p.text || "",
-                              citeMap!,                   // [n] -> uid
-                              onCitationHover,           // hover highlight
-                            )}
-                          </div>
-                        ))}
-
-                        {nonTextParts.length > 0 && (
-                          <CustomMarkdownRenderer content={toMarkdown(nonTextParts)} size="medium" />
-                        )}
-                      </>
-                    ) : (
-                      <CustomMarkdownRenderer
-                        content={toMarkdown(
-                          suppressText ? (message.parts || []).filter((p: any) => p?.type !== "text") : message.parts
-                        )}
-                        size="medium"
-                      />
-                    )}
+                    <CustomMarkdownRenderer
+                      content={mdContent}
+                      size="medium"
+                      
+                      citations={{
+    getUidForNumber: (n) => {
+      // Build once per message if you like, but simplest:
+      const src = (message.metadata?.sources as any[]) || [];
+      const ordered = [...src].sort((a, b) => (a?.rank ?? 1e9) - (b?.rank ?? 1e9));
+      const hit = ordered[n - 1];
+      return hit?.uid ?? null;
+    },
+    onHover: onCitationHover,  // already coming from parent
+    onClick: onCitationClick,  // optional
+  }}
+                    />
                   </Box>
                 </Box>
               </Grid2>

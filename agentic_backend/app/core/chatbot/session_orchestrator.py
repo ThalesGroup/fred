@@ -379,6 +379,7 @@ class SessionOrchestrator:
 
 # ---------- pure helpers (kept local for discoverability) ----------
 
+
 def _concat_text_parts(parts) -> str:
     texts: list[str] = []
     for p in parts or []:

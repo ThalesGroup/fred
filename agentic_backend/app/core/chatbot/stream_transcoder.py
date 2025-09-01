@@ -25,7 +25,13 @@ from app.core.chatbot.chat_schema import (
     TextPart,
     MessagePart,
 )
-from app.core.chatbot.message_part import clean_token_usage, coerce_finish_reason, extract_tool_calls, hydrate_fred_parts, parts_from_raw_content
+from app.core.chatbot.message_part import (
+    clean_token_usage,
+    coerce_finish_reason,
+    extract_tool_calls,
+    hydrate_fred_parts,
+    parts_from_raw_content,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -93,14 +99,15 @@ class StreamTranscoder:
             for msg in block:
                 raw_md = getattr(msg, "response_metadata", {}) or {}
                 usage_raw = getattr(msg, "usage_metadata", {}) or {}
-                additional_kwargs = getattr(msg, "additional_kwargs", {}) or {}   # NEW
+                additional_kwargs = getattr(msg, "additional_kwargs", {}) or {}  # NEW
 
                 model_name = raw_md.get("model_name") or raw_md.get("model")
                 finish_reason = coerce_finish_reason(raw_md.get("finish_reason"))
                 token_usage = clean_token_usage(usage_raw)
 
-                sources_payload = raw_md.get("sources") or additional_kwargs.get("sources") or []  # NEW
-
+                sources_payload = (
+                    raw_md.get("sources") or additional_kwargs.get("sources") or []
+                )  # NEW
 
                 # ---------- TOOL CALLS ----------
                 tool_calls = extract_tool_calls(msg)
@@ -213,7 +220,11 @@ class StreamTranscoder:
 
                 # Channel selection
                 if role == Role.assistant:
-                    ch = Channel.final if (parts and not final_sent) else Channel.observation
+                    ch = (
+                        Channel.final
+                        if (parts and not final_sent)
+                        else Channel.observation
+                    )
                     if ch == Channel.final:
                         final_sent = True
                 elif role == Role.system:

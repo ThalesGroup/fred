@@ -86,7 +86,7 @@ class ChatbotController:
     def __init__(
         self,
         app: APIRouter,
-        session_orchestrator: SessionOrchestrator,  
+        session_orchestrator: SessionOrchestrator,
         agent_manager: AgentManager,
     ):
         self.agent_manager = agent_manager
@@ -147,16 +147,17 @@ class ChatbotController:
                             await websocket.send_text(event.model_dump_json())
 
                         # Delegate the whole exchange to the orchestrator
-                        session, final_messages = (
-                            await self.session_orchestrator.chat_ask_websocket(
-                                callback=ws_callback,
-                                user_id=ask.user_id,
-                                session_id=ask.session_id or "unknown-session",
-                                message=ask.message,
-                                agent_name=ask.agent_name,
-                                runtime_context=ask.runtime_context,
-                                client_exchange_id=ask.client_exchange_id,
-                            )
+                        (
+                            session,
+                            final_messages,
+                        ) = await self.session_orchestrator.chat_ask_websocket(
+                            callback=ws_callback,
+                            user_id=ask.user_id,
+                            session_id=ask.session_id or "unknown-session",
+                            message=ask.message,
+                            agent_name=ask.agent_name,
+                            runtime_context=ask.runtime_context,
+                            client_exchange_id=ask.client_exchange_id,
                         )
 
                         # Send final “bundle”

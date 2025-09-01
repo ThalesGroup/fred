@@ -67,6 +67,7 @@ def format_sources_for_prompt(
         lines.append(f"[{n}] {label}\n{snippet}")
     return "\n\n".join(lines)
 
+
 def _extract_url_from_hit(hit: VectorSearchHit) -> Optional[str]:
     """
     Prefer precise, user-facing viewers in this order:
@@ -139,12 +140,11 @@ def hits_to_link_parts(hits: List[VectorSearchHit]) -> List[LinkPart]:
                 href=href,
                 title=title,
                 kind=LinkKind.citation,
-                source_id=h.uid,          # stable for hover-sync
-                mime=h.mime_type or None, # optional hint
+                source_id=h.uid,  # stable for hover-sync
+                mime=h.mime_type or None,  # optional hint
             )
         )
     return parts
-
 
 
 def attach_sources_to_llm_response(answer, hits: List[VectorSearchHit]):

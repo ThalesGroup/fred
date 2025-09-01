@@ -4,7 +4,6 @@ import Sources from "./Sources";
 import { AgenticFlow, ChatMessage } from "../../slices/agentic/agenticOpenApi";
 import { getExtras, hasNonEmptyText } from "./ChatBotUtils";
 import ReasoningStepsAccordion from "./ReasoningStepsAccordion";
-import { buildCitationMap, renderTextWithCitations } from "./citations";
 
 type Props = {
   messages: ChatMessage[];
@@ -15,7 +14,7 @@ type Props = {
 function Area({ messages, agenticFlows, currentAgenticFlow }: Props) {
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
-  // Hover highlight + click-to-open
+  // Hover highlight in Sources (syncs with [n] markers inside MessageCard)
   const [highlightUid, setHighlightUid] = React.useState<string | null>(null);
 
   const scrollToBottom = () => {
@@ -56,6 +55,7 @@ function Area({ messages, agenticFlows, currentAgenticFlow }: Props) {
           continue;
         }
 
+        // Skip empty intermediary observations unless they carry sources
         if (
           msg.channel === "observation" &&
           !hasNonEmptyText(msg) &&
@@ -65,6 +65,7 @@ function Area({ messages, agenticFlows, currentAgenticFlow }: Props) {
         }
 
         const extras = getExtras(msg);
+        // If your pipeline keeps the graded set, prefer that for this exchange
         if (
           extras?.node === "grade_documents" &&
           Array.isArray(msg.metadata?.sources) &&
@@ -82,6 +83,7 @@ function Area({ messages, agenticFlows, currentAgenticFlow }: Props) {
           "system_note",
           "error",
         ] as const;
+
         if (TRACE_CHANNELS.includes(msg.channel as any)) {
           reasoningSteps.push(msg);
           continue;
@@ -95,6 +97,7 @@ function Area({ messages, agenticFlows, currentAgenticFlow }: Props) {
         others.push(msg);
       }
 
+      // User bubble (unchanged)
       if (userMessage) {
         elements.push(
           <MessageCard
@@ -110,6 +113,7 @@ function Area({ messages, agenticFlows, currentAgenticFlow }: Props) {
         );
       }
 
+      // Reasoning accordion (unchanged)
       if (reasoningSteps.length) {
         elements.push(
           <ReasoningStepsAccordion
@@ -121,6 +125,7 @@ function Area({ messages, agenticFlows, currentAgenticFlow }: Props) {
         );
       }
 
+      // If we already have a curated set and there is no final yet, show it early
       if (keptSources?.length && finals.length === 0) {
         elements.push(
           <Sources
@@ -157,6 +162,9 @@ function Area({ messages, agenticFlows, currentAgenticFlow }: Props) {
               enableCopy
               enableThumbs
               enableAudio
+              // Hook up hover/click from inline [n] markers to highlight Sources
+              onCitationHover={(uid) => setHighlightUid(uid)}
+              onCitationClick={(uid) => setHighlightUid(uid)}
             />
           </React.Fragment>,
         );
@@ -180,32 +188,7 @@ function Area({ messages, agenticFlows, currentAgenticFlow }: Props) {
           );
         }
 
-        // 2) Inline text with hoverable & clickable [n] markers
-        const textParts = (msg.parts || []).filter((p: any) => p?.type === "text");
-        if (textParts.length) {
-          const citeMap = buildCitationMap(msg);
-          elements.push(
-            <div
-              key={`final-inline-${msg.session_id}-${msg.exchange_id}-${msg.rank}`}
-              style={{ padding: "8px 12px", margin: "4px 0", whiteSpace: "pre-wrap" }}
-            >
-              {textParts.map((p: any, i: number) => (
-                <div key={i}>
-                  {renderTextWithCitations(
-                    p.text || "",
-                    citeMap,
-                    // hover
-                    (uid) => setHighlightUid(uid),
-                    // metaMap is optional (tooltips already improved in MessageCard path)
-                    undefined,
-                  )}
-                </div>
-              ))}
-            </div>,
-          );
-        }
-
-        // 3) Render non-text parts only
+        // 2) Single MessageCard (always markdown, inline [n] handled inside)
         elements.push(
           <MessageCard
             key={`final-${msg.session_id}-${msg.exchange_id}-${msg.rank}`}
@@ -216,14 +199,17 @@ function Area({ messages, agenticFlows, currentAgenticFlow }: Props) {
             enableCopy
             enableThumbs
             enableAudio
-            suppressText
+            // Keep text; MessageCard → CustomMarkdownRenderer renders it robustly
+            suppressText={false}
+            onCitationHover={(uid) => setHighlightUid(uid)}
+            onCitationClick={(uid) => setHighlightUid(uid)}
           />,
         );
       }
     }
 
     return elements;
-  }, [messages, agenticFlows, currentAgenticFlow, highlightUid]); // include states as deps
+  }, [messages, agenticFlows, currentAgenticFlow, highlightUid]);
 
   useEffect(() => {
     scrollToBottom();

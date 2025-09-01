@@ -25,6 +25,7 @@ from app.core.chatbot.chat_schema import (
 # Content -> MessageParts
 # -------------------------------------------------------------------
 
+
 def parts_from_raw_content(raw: Any) -> List[MessagePart]:
     """
     Purpose:
@@ -78,6 +79,7 @@ def parts_from_raw_content(raw: Any) -> List[MessagePart]:
 # Hydrate agent-provided fred_parts (links, maps, future extensions)
 # -------------------------------------------------------------------
 
+
 def hydrate_fred_parts(additional_kwargs: dict) -> List[MessagePart]:
     """
     Purpose:
@@ -111,6 +113,7 @@ def hydrate_fred_parts(additional_kwargs: dict) -> List[MessagePart]:
 # -------------------------------------------------------------------
 # Tool calls (LangChain/OpenAI style) -> normalized dicts
 # -------------------------------------------------------------------
+
 
 def extract_tool_calls(msg: Any) -> List[dict]:
     """
@@ -158,6 +161,7 @@ def extract_tool_calls(msg: Any) -> List[dict]:
 # -------------------------------------------------------------------
 # Metadata coercion
 # -------------------------------------------------------------------
+
 
 def clean_token_usage(raw: dict | None) -> Optional[ChatTokenUsage]:
     """
