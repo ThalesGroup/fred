@@ -54,13 +54,14 @@ _DATE_REGEX = re.compile(
         \b(janvier|février|mars|avril|mai|juin|juillet|août|
             septembre|octobre|novembre|décembre)\s+\d{1,2},?\s*\d{2,4}\b           # septembre 1, 2023
     )""",
-    re.IGNORECASE | re.VERBOSE
+    re.IGNORECASE | re.VERBOSE,
 )
 
 
 def _looks_like_date(value: str) -> bool:
     """Check if the string matches a common date format (with separators or month names)."""
     return bool(_DATE_REGEX.search(value))
+
 
 def _looks_like_compact_date(value: str) -> bool:
     """Check for compact date strings like YYYYMM or YYYYMMDD."""
@@ -77,15 +78,13 @@ def _looks_like_compact_date(value: str) -> bool:
     except ValueError:
         return False
 
+
 def _parse_date(value: str) -> pd.Timestamp | NaTType:
     """Attempt to parse a string into a pandas Timestamp using dateparser."""
     if not isinstance(value, str) or not any(c.isdigit() for c in value):
         return pd.NaT
 
-    dt = dateparser.parse(
-        value,
-        settings={"PREFER_DAY_OF_MONTH": "first", "RETURN_AS_TIMEZONE_AWARE": False}
-    )
+    dt = dateparser.parse(value, settings={"PREFER_DAY_OF_MONTH": "first", "RETURN_AS_TIMEZONE_AWARE": False})
 
     if dt is None:
         return pd.NaT
@@ -95,6 +94,7 @@ def _parse_date(value: str) -> pd.Timestamp | NaTType:
         return ts if ts.year >= 0 else pd.NaT
     except (ValueError, OverflowError):
         return pd.NaT
+
 
 def is_valid_date(series: pd.Series, threshold: float = 0.7) -> bool:
     """
@@ -106,13 +106,11 @@ def is_valid_date(series: pd.Series, threshold: float = 0.7) -> bool:
         return False
 
     def is_parsable(value: str) -> bool:
-        return (
-            (_looks_like_date(value) or _looks_like_compact_date(value))
-            and not pd.isna(_parse_date(value))
-        )
+        return (_looks_like_date(value) or _looks_like_compact_date(value)) and not bool(pd.isna(_parse_date(value)))
 
     valid_count = sum(is_parsable(val) for val in values)
     return (valid_count / len(values)) >= threshold
+
 
 class TabularProcessor(BaseOutputProcessor):
     """
@@ -138,7 +136,7 @@ class TabularProcessor(BaseOutputProcessor):
             df.columns = [sanitize_sql_name(col) for col in df.columns]
 
             for col in df.select_dtypes(include=["object"]).columns:
-                sample = df[col].dropna().astype(str).head(20)
+                sample = pd.Series(df[col].dropna().astype(str).head(20))
                 if not sample.empty and is_valid_date(sample, threshold=0.7):
                     logger.info(f"🕒 Parsing column '{col}' as datetime")
                     df[col] = df[col].astype(str).map(_parse_date)
