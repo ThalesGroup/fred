@@ -16,7 +16,6 @@ import logging
 from datetime import datetime
 
 from langgraph.graph import START, END, MessagesState, StateGraph
-from langchain_core.messages import SystemMessage
 from app.common.structures import AgentSettings
 from app.core.model.model_factory import get_model
 from app.core.agents.flow import AgentFlow
@@ -87,9 +86,7 @@ class GeneralistExpert(AgentFlow):
         return builder
 
     async def reasoner(self, state: MessagesState):
-        messages = self.use_fred_prompts(
-            [SystemMessage(content=self.base_prompt)] + state["messages"]
-        )
+        messages = self.use_fred_prompts(state["messages"])
         assert self.model is not None
         response = await self.model.ainvoke(messages)
         return {"messages": [response]}
