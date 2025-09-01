@@ -30,13 +30,31 @@ logger = logging.getLogger(__name__)
 
 
 def _parse_date(value: str) -> pd.Timestamp | NaTType:
-    dt = dateparser.parse(value, settings={"PREFER_DAY_OF_MONTH": "first", "RETURN_AS_TIMEZONE_AWARE": False})
-    if dt:
-        return pd.to_datetime(dt)
-    return pd.NaT
-    return pd.NaT
+    if not value or not isinstance(value, str):
+        return pd.NaT
 
+    # Quick reject: no digits → unlikely to be a date
+    if not any(c.isdigit() for c in value):
+        return pd.NaT
 
+    dt = dateparser.parse(
+        value,
+        settings={"PREFER_DAY_OF_MONTH": "first", "RETURN_AS_TIMEZONE_AWARE": False},
+    )
+
+    if dt is None:
+        return pd.NaT
+
+    try:
+        ts = pd.to_datetime(dt, errors="raise")
+        # Reject absurd dates
+        if ts.year < 0 :
+            return pd.NaT
+        return ts
+    except (ValueError, OverflowError):
+        return pd.NaT
+
+    
 class TabularProcessor(BaseOutputProcessor):
     """
     A pipeline for processing tabular data.

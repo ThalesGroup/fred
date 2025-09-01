@@ -40,7 +40,7 @@ class TabularExpert(AgentFlow):
     role: str
     nickname: str = "Tessa"
     description: str
-    icon: str = "tabulat_agent"
+    icon: str = "tabular_agent"
     categories: list[str] = ["tabular", "sql"]
     tag: str = "data"
 
@@ -123,27 +123,14 @@ class TabularExpert(AgentFlow):
 
     async def _run_reasoning_step(self, state: MessagesState):
         try:
-            prompt = SystemMessage(content=self.base_prompt)
+            messages = self.use_fred_prompts(
+            [SystemMessage(content=self.base_prompt)] + state["messages"]
+            )
             assert self.model is not None, (
                 "Model must be initialized before building graph"
             )
-            response = await self.model.ainvoke([prompt] + state["messages"])
+            response = await self.model.ainvoke(messages)
 
-            for msg in state["messages"]:
-                if isinstance(msg, ToolMessage):
-                    try:
-                        datasets = json.loads(msg.content)
-                        summaries = (
-                            self._extract_dataset_summaries_from_get_schema_reponse(
-                                datasets
-                            )
-                        )
-                        if summaries:
-                            response.content += (
-                                "\n\n### Available Datasets:\n" + "\n".join(summaries)
-                            )
-                    except Exception as e:
-                        logger.warning(f"Failed to parse tool response: {e}")
 
             return {"messages": [response]}
 
