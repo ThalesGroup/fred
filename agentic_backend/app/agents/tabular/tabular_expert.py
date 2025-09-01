@@ -123,9 +123,7 @@ class TabularExpert(AgentFlow):
 
     async def _run_reasoning_step(self, state: MessagesState):
         try:
-            messages = self.use_fred_prompts(
-            [SystemMessage(content=self.base_prompt)] + state["messages"]
-            )
+            messages = self.use_fred_prompts(state["messages"])
             assert self.model is not None, (
                 "Model must be initialized before building graph"
             )

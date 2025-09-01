@@ -117,7 +117,7 @@ class ContentGeneratorExpert(AgentFlow):
             "  * Style: Specify the desired structure, format, or delivery style.\n"
             "  * Tone: Indicate the appropriate tone for the response.\n"
             "  * Audience: Define who will consume or use the content.\n"
-            "  * Reason: Explain why this content or action is needed.\n"
+            "  * Result: Explain what output is expected.\n"
             "- Always integrate these six aspects naturally when creating prompts or templates, without explicitly listing or labeling them.\n"
             "\n"
             "PROMPT CREATION PRINCIPLES:\n"
@@ -160,9 +160,7 @@ class ContentGeneratorExpert(AgentFlow):
         """
         Send user request to the model with the base prompt so it calls MCP tools directly.
         """
-        messages = self.use_fred_prompts(
-            [SystemMessage(content=self.base_prompt)] + state["messages"]
-        )
+        messages = self.use_fred_prompts(state["messages"])
         assert self.model is not None
         response = await self.model.ainvoke(messages)
         return {"messages": [response]}
