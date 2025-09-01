@@ -4,7 +4,7 @@ import {
   Button, Typography, Stack
 } from "@mui/material";
 import { AgenticFlow, ChatMessage } from "../../slices/agentic/agenticOpenApi";
-import Message from "./MessageCard";
+import MessageCard from "./MessageCard";
 
 function safeStringify(v: unknown, space = 2) {
   try { return JSON.stringify(v, null, space); } catch { return String(v); }
@@ -66,7 +66,7 @@ export default function TraceDetailsDialog({
         {step.channel === "tool_call" && <ToolCall m={step} />}
         {step.channel === "tool_result" && <ToolResult m={step} />}
         {step.channel !== "tool_call" && step.channel !== "tool_result" && (
-          <Message
+          <MessageCard
             message={step}
             agenticFlow={agent!}
             currentAgenticFlow={agent!}

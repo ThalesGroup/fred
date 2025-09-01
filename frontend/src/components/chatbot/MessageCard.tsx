@@ -1,21 +1,10 @@
 // Copyright Thales 2025
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Licensed under the Apache License, Version 2.0
 
 import { Box, Grid2, IconButton, Tooltip, Chip, Typography } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import RateReviewIcon from "@mui/icons-material/RateReview";
 import VolumeUpIcon from "@mui/icons-material/VolumeUp";
 import ClearIcon from "@mui/icons-material/Clear";
@@ -33,7 +22,7 @@ import {
 import { toCopyText, toMarkdown, toSpeechText } from "./messageParts.ts";
 import { getExtras, isToolCall, isToolResult } from "./ChatBotUtils.tsx";
 
-export default function Message({
+export default function MessageCard({
   message,
   agenticFlow,
   side,
@@ -41,27 +30,34 @@ export default function Message({
   enableThumbs = false,
   enableAudio = false,
   currentAgenticFlow,
-  pending = false, // NEW
-  showMetaChips = true, // NEW
+  pending = false,
+  showMetaChips = true,
+  suppressText = false,                 // hides text parts when true (we still render non-text via markdown)
+  onCitationHover,                      // optional: (uid|null) → let parent highlight Sources
+  onCitationClick,                      // optional: (uid|null) → parent can open dialog
 }: {
   message: ChatMessage;
   agenticFlow: AgenticFlow;
-  side: string;
+  side: "left" | "right";
   enableCopy?: boolean;
   enableThumbs?: boolean;
   enableAudio?: boolean;
   currentAgenticFlow: AgenticFlow;
-  pending?: boolean; // NEW
-  showMetaChips?: boolean; // NEW
+  pending?: boolean;
+  showMetaChips?: boolean;
+  suppressText?: boolean;
+  onCitationHover?: (uid: string | null) => void;
+  onCitationClick?: (uid: string | null) => void;
 }) {
   const theme = useTheme();
-  const { showError, showInfo } = useToast(); // Use the toast hook
+  const { showError, showInfo } = useToast();
 
   const [postSpeechText] = usePostSpeechTextMutation();
   const [postFeedback] = usePostFeedbackAgenticV1ChatbotFeedbackPostMutation();
 
-  const [audioToSpeech, setAudioToSpeech] = useState<HTMLAudioElement>(null);
+  const [audioToSpeech, setAudioToSpeech] = useState<HTMLAudioElement | null>(null);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
+
   const handleFeedbackSubmit = (rating: number, comment?: string) => {
     postFeedback({
       feedbackPayload: {
@@ -84,21 +80,16 @@ export default function Message({
     setFeedbackOpen(false);
   };
 
-  // Function to start speaking the message content
-  const handleStartSpeaking = (message: string) => {
-    postSpeechText(message).then((response) => {
+  const handleStartSpeaking = (msgText: string) => {
+    postSpeechText(msgText).then((response) => {
       if (response.data) {
         const audioBlob = response.data as Blob;
         const audioUrl = URL.createObjectURL(audioBlob);
-        const audioToSpeech = new Audio(audioUrl);
-        setAudioToSpeech(audioToSpeech);
-        audioToSpeech
-          .play()
+        const a = new Audio(audioUrl);
+        setAudioToSpeech(a);
+        a.play()
           .then(() => {
-            // Stop the audio after it finishes playing
-            audioToSpeech.onended = () => {
-              setAudioToSpeech(null);
-            };
+            a.onended = () => setAudioToSpeech(null);
           })
           .catch((error) => {
             console.error("Failed to play audio:", error);
@@ -109,28 +100,33 @@ export default function Message({
     });
   };
 
-  // Function to stop the audio from playing
   const handleStopSpeaking = () => {
-    // Stop the audio
     if (audioToSpeech) {
       audioToSpeech.pause();
       setAudioToSpeech(null);
     }
   };
 
-  // Function to copy the message content to the clipboard
   const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text).then(() => {
-      console.log("Copied to clipboard");
-    });
+    navigator.clipboard.writeText(text).catch(() => {});
   };
+
   const extras = getExtras(message);
   const isCall = isToolCall(message);
   const isResult = isToolResult(message);
+
+  // Build the markdown content once (optionally filtering out text parts)
+  const mdContent = useMemo(() => {
+    const parts = suppressText
+      ? (message.parts || []).filter((p: any) => p?.type !== "text")
+      : message.parts || [];
+    return toMarkdown(parts);
+  }, [message.parts, suppressText]);
+
   return (
     <>
       <Grid2 container marginBottom={1}>
-        {/* Display the avatar for message on the right side */}
+        {/* Assistant avatar on the left */}
         {side === "left" && agenticFlow && (
           <Grid2 size="auto" paddingTop={2}>
             <Tooltip title={`${agenticFlow.nickname}: ${agenticFlow.role}`}>
@@ -138,8 +134,8 @@ export default function Message({
             </Tooltip>
           </Grid2>
         )}
+
         <Grid2 container size="grow" display="flex" justifyContent={side}>
-          {/* Display the event content only if it is not null */}
           {message && (
             <>
               <Grid2>
@@ -155,7 +151,7 @@ export default function Message({
                     wordBreak: "break-word",
                   }}
                 >
-                  {/* Header: task chips + pending indicator for tool calls */}
+                  {/* Header: task chips + tool-call indicators */}
                   {(showMetaChips || isCall || isResult) && (
                     <Box display="flex" alignItems="center" gap={1} px={side === "right" ? 0 : 1} pb={0.5}>
                       {showMetaChips && extras?.task && (
@@ -180,8 +176,7 @@ export default function Message({
                     </Box>
                   )}
 
-                  {/* Main content */}
-                  {/* For tool_call, optionally show a compact args preview above the markdown */}
+                  {/* For tool_call: compact args preview */}
                   {isCall && message.parts?.[0]?.type === "tool_call" && (
                     <Box px={side === "right" ? 0 : 1} pb={0.5} sx={{ opacity: 0.8 }}>
                       <Typography fontSize=".8rem">
@@ -194,10 +189,29 @@ export default function Message({
                     </Box>
                   )}
 
-                  <CustomMarkdownRenderer content={toMarkdown(message.parts)} size="medium" />
+                  {/* Main content (single path): ALWAYS markdown, with optional citationMap */}
+                  <Box px={side === "right" ? 0 : 1} pb={0.5}>
+                    <CustomMarkdownRenderer
+                      content={mdContent}
+                      size="medium"
+                      
+                      citations={{
+    getUidForNumber: (n) => {
+      // Build once per message if you like, but simplest:
+      const src = (message.metadata?.sources as any[]) || [];
+      const ordered = [...src].sort((a, b) => (a?.rank ?? 1e9) - (b?.rank ?? 1e9));
+      const hit = ordered[n - 1];
+      return hit?.uid ?? null;
+    },
+    onHover: onCitationHover,  // already coming from parent
+    onClick: onCitationClick,  // optional
+  }}
+                    />
+                  </Box>
                 </Box>
               </Grid2>
 
+              {/* Footer controls (assistant side) */}
               {side === "left" ? (
                 <Grid2 size={12} display="flex" alignItems="center" gap={1} flexWrap="wrap">
                   {enableCopy && (
@@ -238,7 +252,6 @@ export default function Message({
                     </Tooltip>
                   )}
 
-                  {/* Only show disclaimer on assistant-side */}
                   <Chip
                     label="AI content may be incorrect, please double-check responses"
                     size="small"
@@ -258,6 +271,7 @@ export default function Message({
           )}
         </Grid2>
       </Grid2>
+
       <FeedbackDialog open={feedbackOpen} onClose={() => setFeedbackOpen(false)} onSubmit={handleFeedbackSubmit} />
     </>
   );

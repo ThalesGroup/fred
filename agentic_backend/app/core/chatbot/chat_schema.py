@@ -53,6 +53,51 @@ class FinishReason(str, Enum):
 
 
 # ---------- Typed message parts ----------
+class LinkKind(str, Enum):
+    citation = "citation"  # source supporting the answer
+    download = "download"  # file to fetch (pdf, csv, etc.)
+    external = "external"  # generic external link
+    dashboard = "dashboard"  # e.g., Grafana, Kibana
+    related = "related"  # further reading
+
+
+class LinkPart(BaseModel):
+    """
+    Why this exists:
+      - The UI needs a typed, explicit way to render links without parsing free text.
+      - Lets agents express intent (citation/download/etc.) so the UI can group + style.
+    """
+
+    type: Literal["link"] = "link"
+    href: str  # absolute URL
+    title: Optional[str] = None  # human label; fallback to href if None
+    kind: LinkKind = LinkKind.external
+    rel: Optional[str] = None  # e.g. "noopener", "noreferrer", "ugc"
+    mime: Optional[str] = None  # e.g. "application/pdf"
+    source_id: Optional[str] = None
+    # ^ if this link corresponds to a VectorSearchHit (metadata.sources),
+    #   set source_id = hit.id so the UI can cross-highlight.
+
+
+class GeoPart(BaseModel):
+    """
+    Why this exists:
+      - Maps shouldn't be 'imagined' from text. We carry real data (GeoJSON FeatureCollection)
+        so the UI can render it with Leaflet immediately.
+      - Optional presentation hints keep style logic minimal in the UI.
+    """
+
+    type: Literal["geo"] = "geo"
+    # Strict GeoJSON to avoid format proliferation; agents must normalize before emitting.
+    # Expecting: {"type":"FeatureCollection","features":[...]}
+    geojson: Dict[str, Any]
+    # Optional UI hints; the UI should treat all as best-effort:
+    popup_property: Optional[str] = None  # property to show in popups if present
+    fit_bounds: bool = True  # auto-fit map to the features
+    style: Optional[Dict[str, Any]] = None
+    # e.g. {"weight":2,"opacity":0.8,"fillOpacity":0.1}
+
+
 class TextPart(BaseModel):
     type: Literal["text"] = "text"
     text: str
@@ -87,7 +132,15 @@ class ToolResultPart(BaseModel):
 
 
 MessagePart = Annotated[
-    Union[TextPart, CodePart, ImageUrlPart, ToolCallPart, ToolResultPart],
+    Union[
+        TextPart,
+        CodePart,
+        ImageUrlPart,
+        ToolCallPart,
+        ToolResultPart,
+        LinkPart,
+        GeoPart,
+    ],
     Field(discriminator="type"),
 ]
 

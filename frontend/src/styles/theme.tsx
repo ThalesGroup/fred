@@ -1,7 +1,7 @@
 // Copyright Thales 2025
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
+// You may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
 //     http://www.apache.org/licenses/LICENSE-2.0
@@ -15,7 +15,14 @@
 import { createTheme, PaletteMode } from "@mui/material/styles";
 import React from "react";
 
-// Extend MUI theme interface for custom chart colors
+/**
+ * Fred rationale:
+ * - We treat the "hero" gradient as the canonical tinted surface for dark (and light) UI.
+ * - Surfaces are centralized as palette tokens so components can reference them consistently.
+ * - Minimalism over magic: two surfaces (soft/raised) cover 95% of use cases.
+ */
+
+// ---------- Type Augmentation ----------
 declare module "@mui/material/styles" {
   interface Palette {
     chart: {
@@ -60,9 +67,19 @@ declare module "@mui/material/styles" {
       gradientFrom: string;
       gradientTo: string;
     };
+    /** Reusable container surfaces derived from hero gradient */
+    surfaces: {
+      soft: string;
+      raised: string;
+    };
   }
   interface PaletteOptions {
     chart?: Partial<Palette["chart"]>;
+    chip?: Partial<Palette["chip"]>;
+    sidebar?: Partial<Palette["sidebar"]>;
+    borderChip?: Partial<Palette["borderChip"]>;
+    heroBackgroundGrad?: Partial<Palette["heroBackgroundGrad"]>;
+    surfaces?: Partial<Palette["surfaces"]>;
   }
 
   interface TypographyVariants {
@@ -103,53 +120,28 @@ declare module "@mui/material/Typography" {
     sidebar: true;
   }
 }
-// Light Mode Palette
+
+// ---------- Shared Gradient Stops (single source of truth) ----------
+const lightHeroFrom = "#ffffffd9";
+const lightHeroTo   = "#ffffffe6";
+
+const darkHeroFrom  = "#191923cc";
+const darkHeroTo    = "#191923e6";
+
+// ---------- Light Palette ----------
 const lightPalette = {
   mode: "light" as PaletteMode,
   background: {
     default: "#ffffff",
     paper: "#f4f4f4",
   },
-  common: {
-    white: "#fff",
-    black: "#000",
-  },
-  primary: {
-    contrastText: "#fff",
-    main: "#4F83CC",
-    light: "#879ed9",
-    dark: "#023D54",
-  },
-  secondary: {
-    main: "#9c27b0",
-    light: "#ba68c8",
-    dark: "#7b1fa2",
-    contrastText: "#fff",
-  },
-  info: {
-    main: "#6986D0",
-    light: "#879ed9",
-    dark: "#495d91",
-    contrastText: "#fff",
-  },
-  warning: {
-    main: "#ffbb00",
-    light: "#ffd149",
-    dark: "#ffc833",
-    contrastText: "#fff",
-  },
-  error: {
-    main: "#d32f2f",
-    light: "#ef5350",
-    dark: "#c62828",
-    contrastText: "#fff",
-  },
-  success: {
-    main: "#2e7d32",
-    light: "#4caf50",
-    dark: "#1b5e20",
-    contrastText: "#fff",
-  },
+  common: { white: "#fff", black: "#000" },
+  primary: { contrastText: "#fff", main: "#4F83CC", light: "#879ed9", dark: "#023D54" },
+  secondary: { main: "#9c27b0", light: "#ba68c8", dark: "#7b1fa2", contrastText: "#fff" },
+  info: { main: "#6986D0", light: "#879ed9", dark: "#495d91", contrastText: "#fff" },
+  warning: { main: "#ffbb00", light: "#ffd149", dark: "#ffc833", contrastText: "#fff" },
+  error: { main: "#d32f2f", light: "#ef5350", dark: "#c62828", contrastText: "#fff" },
+  success: { main: "#2e7d32", light: "#4caf50", dark: "#1b5e20", contrastText: "#fff" },
   chart: {
     primary: "#08519c",
     secondary: "#3182bd",
@@ -178,75 +170,32 @@ const lightPalette = {
     alterningBgColor1: "#ffffff1a",
     alterningBgColor2: "#c8c8c84d",
   },
-  text: {
-    primary: "#000",
-    secondary: "#000",
-    disabled: "#BDBDBD",
-  },
-  chip: {
-    mediumGrey: "#dedfe0",
-  },
-  sidebar: {
-    background: "#fafafaf2",
-    activeItem: "#f0f0f5cc",
-    hoverColor: "#00000008",
-  },
-  borderChip: {
-    border: "#0000004d",
-  },
-  heroBackgroundGrad: {
-    gradientFrom: "#ffffffd9",
-    gradientTo: "#ffffffe6",
+  text: { primary: "#000", secondary: "#000", disabled: "#BDBDBD" },
+  chip: { mediumGrey: "#dedfe0" },
+  sidebar: { background: "#fafafaf2", activeItem: "#f0f0f5cc", hoverColor: "#00000008" },
+  borderChip: { border: "#0000004d" },
+  heroBackgroundGrad: { gradientFrom: lightHeroFrom, gradientTo: lightHeroTo },
+  // Surfaces derived from hero gradient to keep consistency with the welcome box
+  surfaces: {
+    soft:   `linear-gradient(180deg, ${lightHeroFrom}, ${lightHeroTo})`,
+    raised: `linear-gradient(180deg, #ffffffcc, #f7f7f7f2)`,
   },
 };
 
-// Dark Mode Palette
+// ---------- Dark Palette ----------
 const darkPalette = {
   mode: "dark" as PaletteMode,
   background: {
     default: "#1b1b1b",
     paper: "#333333",
   },
-  common: {
-    white: "#fff",
-    black: "#000",
-  },
-  primary: {
-    contrastText: "#fff",
-    main: "#6482AD",
-    light: "#879ed9",
-    dark: "#404040",
-  },
-  secondary: {
-    main: "#f48fb1",
-    light: "#f8bbd0",
-    dark: "#c2185b",
-    contrastText: "#000",
-  },
-  info: {
-    main: "#81d4fa",
-    light: "#b3e5fc",
-    dark: "#0288d1",
-    contrastText: "#fff",
-  },
-  warning: {
-    main: "#ffcc80",
-    light: "#ffe0b2",
-    dark: "#f57c00",
-    contrastText: "#fff",
-  },
-  error: {
-    main: "#e57373",
-    light: "#ef9a9a",
-    dark: "#d32f2f",
-    contrastText: "#fff",
-  },
-  success: {
-    main: "#81c784",
-    light: "#a5d6a7",
-    dark: "#388e3c",
-    contrastText: "#fff",
-  },
+  common: { white: "#fff", black: "#000" },
+  primary: { contrastText: "#fff", main: "#6482AD", light: "#879ed9", dark: "#404040" },
+  secondary: { main: "#f48fb1", light: "#f8bbd0", dark: "#c2185b", contrastText: "#000" },
+  info: { main: "#81d4fa", light: "#b3e5fc", dark: "#0288d1", contrastText: "#fff" },
+  warning: { main: "#ffcc80", light: "#ffe0b2", dark: "#f57c00", contrastText: "#fff" },
+  error: { main: "#e57373", light: "#ef9a9a", dark: "#d32f2f", contrastText: "#fff" },
+  success: { main: "#81c784", light: "#a5d6a7", dark: "#388e3c", contrastText: "#fff" },
   chart: {
     primary: "#de7d39",
     secondary: "#ffa726",
@@ -275,26 +224,18 @@ const darkPalette = {
     alterningBgColor1: "#ffffff1a",
     alterningBgColor2: "#c8c8c84d",
   },
-  text: {
-    primary: "#fff",
-    secondary: "#bbb",
-    disabled: "#888888",
-  },
-  sidebar: {
-    background: "#121214f2",
-    activeItem: "#42424db3",
-    hoverColor: "#ffffff0d",
-  },
-  borderChip: {
-    border: "#ffffff26",
-  },
-  heroBackgroundGrad: {
-    gradientFrom: "#191923cc",
-    gradientTo: "#191923e6",
+  text: { primary: "#fff", secondary: "#bbb", disabled: "#888888" },
+  sidebar: { background: "#121214f2", activeItem: "#42424db3", hoverColor: "#ffffff0d" },
+  borderChip: { border: "#ffffff26" },
+  heroBackgroundGrad: { gradientFrom: darkHeroFrom, gradientTo: darkHeroTo },
+  // Surfaces derived from hero gradient (the subtle blue you liked)
+  surfaces: {
+    soft:   `linear-gradient(180deg, ${darkHeroFrom}, ${darkHeroTo})`,
+    raised: `linear-gradient(180deg, #1f2230cc, #1b1f2ae6)`,
   },
 };
 
-// Base common typography styles
+// ---------- Typography ----------
 const baseTypography = {
   fontFamily: "Inter, sans-serif",
   fontSize: 12,
@@ -309,68 +250,21 @@ const baseTypography = {
   body1: { fontSize: "1rem", fontWeight: 400 },
   body2: { fontSize: "0.875rem", fontWeight: 400 },
   markdown: {
-    h1: {
-      lineHeight: 1.5,
-      fontWeight: 500,
-      fontSize: "1.2rem",
-      marginBottom: "0.6rem",
-    },
-    h2: {
-      lineHeight: 1.5,
-      fontWeight: 500,
-      fontSize: "1.15rem",
-      marginBottom: "0.6rem",
-    },
-    h3: {
-      lineHeight: 1.5,
-      fontWeight: 400,
-      fontSize: "1.10rem",
-      marginBottom: "0.6rem",
-    },
-    h4: {
-      lineHeight: 1.5,
-      fontWeight: 400,
-      fontSize: "1.05rem",
-      marginBottom: "0.6rem",
-    },
-    p: {
-      lineHeight: 1.8,
-      fontWeight: 400,
-      fontSize: "1.0rem",
-      marginBottom: "0.8rem",
-    },
-    code: {
-      lineHeight: 1.5,
-      fontSize: "0.9rem",
-      borderRadius: "4px",
-    },
-    a: {
-      textDecoration: "underline",
-      lineHeight: 1.6,
-      fontWeight: 400,
-      fontSize: "0.9rem",
-    },
-    ul: {
-      marginLeft: "0.2rem",
-      lineHeight: 1.4,
-      fontWeight: 400,
-      fontSize: "0.9rem",
-    },
-    li: {
-      marginBottom: "0.5rem",
-      lineHeight: 1.4,
-      fontSize: "0.9rem",
-    },
+    h1: { lineHeight: 1.5, fontWeight: 500, fontSize: "1.2rem", marginBottom: "0.6rem" },
+    h2: { lineHeight: 1.5, fontWeight: 500, fontSize: "1.15rem", marginBottom: "0.6rem" },
+    h3: { lineHeight: 1.5, fontWeight: 400, fontSize: "1.10rem", marginBottom: "0.6rem" },
+    h4: { lineHeight: 1.5, fontWeight: 400, fontSize: "1.05rem", marginBottom: "0.6rem" },
+    p:  { lineHeight: 1.8, fontWeight: 400, fontSize: "1.0rem", marginBottom: "0.8rem" },
+    code: { lineHeight: 1.5, fontSize: "0.9rem", borderRadius: "4px" },
+    a: { textDecoration: "underline", lineHeight: 1.6, fontWeight: 400, fontSize: "0.9rem" },
+    ul: { marginLeft: "0.2rem", lineHeight: 1.4, fontWeight: 400, fontSize: "0.9rem" },
+    li: { marginBottom: "0.5rem", lineHeight: 1.4, fontSize: "0.9rem" },
   },
 };
 
-// Light theme typography with color injection
 const lightTypography = {
   ...baseTypography,
-  sidebar: {
-    ...baseTypography.sidebar,
-    color: lightPalette.text.secondary,
-  },
+  sidebar: { ...baseTypography.sidebar, color: lightPalette.text.secondary },
   markdown: Object.fromEntries(
     Object.entries(baseTypography.markdown).map(([k, v]) => [
       k,
@@ -379,13 +273,9 @@ const lightTypography = {
   ),
 };
 
-// Dark theme typography with color injection
 const darkTypography = {
   ...baseTypography,
-  sidebar: {
-    ...baseTypography.sidebar,
-    color: darkPalette.text.secondary,
-  },
+  sidebar: { ...baseTypography.sidebar, color: darkPalette.text.secondary },
   markdown: Object.fromEntries(
     Object.entries(baseTypography.markdown).map(([k, v]) => [
       k,
@@ -394,7 +284,8 @@ const darkTypography = {
   ),
 };
 
-// Create themes
+// ---------- Theme Factories ----------
+
 const lightTheme = createTheme({
   palette: lightPalette,
   typography: lightTypography,
@@ -403,24 +294,26 @@ const lightTheme = createTheme({
     sidebarCollapsedWidth: 80,
   },
   components: {
+    // Keep your existing overrides...
     MuiTooltip: {
-      defaultProps: { arrow: true, disableInteractive: true,
-       enterDelay: 900,
-      enterNextDelay: 200,
-      leaveDelay: 100,
-      enterTouchDelay: 800,
-      leaveTouchDelay: 3000,
-
-       },
+      defaultProps: {
+        arrow: true,
+        disableInteractive: true,
+        enterDelay: 900,
+        enterNextDelay: 200,
+        leaveDelay: 100,
+        enterTouchDelay: 800,
+        leaveTouchDelay: 3000,
+      },
       styleOverrides: {
         tooltip: {
-          fontSize: "1.0rem", // Adjust font size
-          fontWeight: "300", // Remove bold (use light font weight)
+          fontSize: "1.0rem",
+          fontWeight: "300",
           backgroundColor: lightPalette.background.paper,
           color: lightPalette.text.primary,
-          padding: "12px 16px", // Add comfortable padding
-          borderRadius: "8px", // Optional: rounded corners
-          boxShadow: "0px 2px 4px rgba(0, 0, 0, 0.1)", // Optional: subtle shadow
+          padding: "12px 16px",
+          borderRadius: "8px",
+          boxShadow: "0px 2px 4px rgba(0, 0, 0, 0.1)",
           maxWidth: 360,
         },
         arrow: { color: lightPalette.background.paper },
@@ -428,9 +321,7 @@ const lightTheme = createTheme({
     },
     MuiTypography: {
       styleOverrides: {
-        root: {
-          color: lightPalette.text.primary, // Set the default text color to 'text.primary'
-        },
+        root: { color: lightPalette.text.primary },
       },
       variants: [
         {
@@ -445,6 +336,43 @@ const lightTheme = createTheme({
         },
       ],
     },
+
+    // Apply the subtle hero-tinted surfaces globally
+    MuiPaper: {
+      styleOverrides: {
+        root: ({ theme }) => ({
+          background: theme.palette.surfaces.soft,
+          border: `1px solid ${theme.palette.divider}`,
+        }),
+      },
+    },
+    MuiCard: {
+      styleOverrides: {
+        root: ({ theme }) => ({
+          background: theme.palette.surfaces.raised,
+          border: `1px solid ${theme.palette.divider}`,
+          borderRadius: 16,
+        }),
+      },
+    },
+    MuiDrawer: {
+      styleOverrides: {
+        paper: ({ theme }) => ({
+          background: theme.palette.surfaces.soft,
+          borderRight: `1px solid ${theme.palette.divider}`,
+        }),
+      },
+    },
+    MuiAppBar: {
+      styleOverrides: {
+        root: ({ theme }) => ({
+          background: theme.palette.surfaces.soft,
+          backdropFilter: "saturate(120%) blur(6px)",
+          boxShadow: "none",
+          borderBottom: `1px solid ${theme.palette.divider}`,
+        }),
+      },
+    },
   },
 });
 
@@ -456,36 +384,35 @@ const darkTheme = createTheme({
     sidebarCollapsedWidth: 80,
   },
   components: {
+    // Keep your existing overrides...
     MuiTooltip: {
-      defaultProps: { arrow: true, disableInteractive: true,
-         enterDelay: 900,
-      enterNextDelay: 200,
-      leaveDelay: 100,
-      enterTouchDelay: 800,
-      leaveTouchDelay: 3000,
-       },
+      defaultProps: {
+        arrow: true,
+        disableInteractive: true,
+        enterDelay: 900,
+        enterNextDelay: 200,
+        leaveDelay: 100,
+        enterTouchDelay: 800,
+        leaveTouchDelay: 3000,
+      },
       styleOverrides: {
         tooltip: {
-          fontSize: "1.0rem", // Adjust font size
-          fontWeight: "300", // Remove bold (use light font weight)
+          fontSize: "1.0rem",
+          fontWeight: "300",
           backgroundColor: darkPalette.background.paper,
-          color: darkPalette.text.primary, // Text color
-          padding: "12px 16px", // Add comfortable padding
-          borderRadius: "8px", // Optional: rounded corners
-          boxShadow: "0px 2px 4px rgba(0, 0, 0, 0.1)", // Optional: subtle shadow
+          color: darkPalette.text.primary,
+          padding: "12px 16px",
+          borderRadius: "8px",
+          boxShadow: "0px 2px 4px rgba(0, 0, 0, 0.1)",
           maxWidth: 360,
         },
         arrow: { color: darkPalette.background.paper },
-        popper: {
-          backdropFilter: "blur(8px)", // Optional: subtle blur effect
-        },
+        popper: { backdropFilter: "blur(8px)" },
       },
     },
     MuiTypography: {
       styleOverrides: {
-        root: {
-          color: darkPalette.text.primary, // Set the default text color to 'text.primary'
-        },
+        root: { color: darkPalette.text.primary },
       },
       variants: [
         {
@@ -499,6 +426,43 @@ const darkTheme = createTheme({
           },
         },
       ],
+    },
+
+    // Apply the subtle hero-tinted surfaces globally
+    MuiPaper: {
+      styleOverrides: {
+        root: ({ theme }) => ({
+          background: theme.palette.surfaces.soft,
+          border: `1px solid ${theme.palette.divider}`,
+        }),
+      },
+    },
+    MuiCard: {
+      styleOverrides: {
+        root: ({ theme }) => ({
+          background: theme.palette.surfaces.raised,
+          border: `1px solid ${theme.palette.divider}`,
+          borderRadius: 16,
+        }),
+      },
+    },
+    MuiDrawer: {
+      styleOverrides: {
+        paper: ({ theme }) => ({
+          background: theme.palette.surfaces.soft,
+          borderRight: `1px solid ${theme.palette.divider}`,
+        }),
+      },
+    },
+    MuiAppBar: {
+      styleOverrides: {
+        root: ({ theme }) => ({
+          background: theme.palette.surfaces.soft,
+          backdropFilter: "saturate(120%) blur(6px)",
+          boxShadow: "none",
+          borderBottom: `1px solid ${theme.palette.divider}`,
+        }),
+      },
     },
   },
 });
