@@ -16,7 +16,6 @@ import logging
 from datetime import datetime
 
 from langgraph.graph import START, END, MessagesState, StateGraph
-from langchain_core.messages import SystemMessage
 from app.common.structures import AgentSettings
 from app.core.model.model_factory import get_model
 from app.core.agents.flow import AgentFlow
