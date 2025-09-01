@@ -56,10 +56,10 @@ def build_rag_prompt(preamble: str, question: str, sources_block: str) -> str:
     )
 
 
-class RicoExpert(AgentFlow):
-    name: str = "RicoExpert"
-    role: str = "Rags Expert"
-    nickname: str = "Rico"
+class RagExpert(AgentFlow):
+    name: str = "RagExpert"
+    role: str = "Rag Expert"
+    nickname: str
     description: str
     icon: str = "rags_agent"
     categories: List[str] = []
@@ -149,7 +149,7 @@ class RicoExpert(AgentFlow):
             return {"messages": [answer]}
 
         except Exception:
-            logger.exception("Error in RicoExpert reasoning.")
+            logger.exception("Error in agent reasoning.")
             fallback = await self.model.ainvoke(
                 [HumanMessage(content="An error occurred. Please try again later.")]
             )

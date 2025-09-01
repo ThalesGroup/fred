@@ -79,9 +79,9 @@ class Leader(AgentFlow):
     This version prioritizes determinism and short plans to avoid loops.
     """
 
-    name: str = "Fred"
+    name: str = "Leader"
     role: str = "Team Leader"
-    nickname: str = "Fred"
+    nickname: str
     description: str = "Supervises multiple experts to provide answers and insights."
     icon: str = "fred_agent"
     tag: str = "leader"
@@ -89,6 +89,7 @@ class Leader(AgentFlow):
     def __init__(self, agent_settings: AgentSettings):
         self.agent_settings = agent_settings
         self.max_steps = agent_settings.max_steps
+        self.nickname = agent_settings.nickname or agent_settings.name
 
         self.model = None
         self._graph: StateGraph | None = None

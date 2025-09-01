@@ -35,7 +35,7 @@ from app.core.model.model_factory import get_model
 logger = logging.getLogger(__name__)
 
 
-class SentinelExpert(AgentFlow):
+class OpsMonitoringExpert(AgentFlow):
     """
     Sentinel — Ops & Monitoring agent (OpenSearch + KPIs).
 
@@ -47,8 +47,8 @@ class SentinelExpert(AgentFlow):
     """
 
     # static metadata
-    name: str
-    role: str
+    name: str = "OpsMonitoringExpert"
+    role: str = "Ops & Monitoring Expert"
     nickname: str
     description: str
     icon: str = "ops_agent"

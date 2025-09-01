@@ -32,7 +32,7 @@ class JiraExpert(AgentFlow):
     # Class-level attributes for metadata
     name: str = "JiraExpert"
     role: str = "Jira Expert"
-    nickname: str = "Josh"
+    nickname: str
     description: str = "An expert that has access to Jira API and can perform issues queries and aggregate data in a clear and concise manner"
     icon: str = "jira_agent"
     categories: list[str] = []

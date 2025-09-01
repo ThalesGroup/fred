@@ -98,7 +98,7 @@ def mk_tool_result(
 def _chunk_key(d: VectorSearchHit) -> str:
     """
     Build a stable, collision-resistant key for a chunk based on its document ID + locators.
-    Works even if some fields are missing; keeps Rico Pro grading/dedup deterministic.
+    Works even if some fields are missing; keeps agent grading/dedup deterministic.
     """
     uid = getattr(d, "document_uid", None) or getattr(d, "uid", "") or ""
     page = getattr(d, "page", "")
@@ -109,7 +109,7 @@ def _chunk_key(d: VectorSearchHit) -> str:
     return f"{uid}|p={page}|cs={start}|ce={end}|h={heading}"
 
 
-class RicoProExpert(AgentFlow):
+class AdvancedRagExpert(AgentFlow):
     """
     A pragmatic RAG agent that:
       1) retrieves chunks (VectorSearchHit) via knowledge-flow REST,
@@ -121,9 +121,9 @@ class RicoProExpert(AgentFlow):
     TOP_K = 5
     MIN_DOCS = 3  # minimum number of docs we'll try to keep for generation
 
-    name: str
-    role: str
-    nickname: str = "Rico Pro"
+    name: str = "AdvancedRagExpert"
+    role: str = "Advanced Rag Expert"
+    nickname: str
     description: str
     icon: str = "rags_agent"
     categories: List[str] = []
@@ -356,7 +356,7 @@ class RicoProExpert(AgentFlow):
             else:
                 irrelevant_documents.append(document)
 
-        # Failsafe: ensure we keep at least MIN_DOCS (like Rico plain keeps 3).
+        # Failsafe: ensure we keep at least MIN_DOCS (like standard RagExpert keeps 3).
         if (len(filtered_docs) == 0) and documents:
             filtered_docs = documents[: self.MIN_DOCS]
         elif 0 < len(filtered_docs) < self.MIN_DOCS and documents:

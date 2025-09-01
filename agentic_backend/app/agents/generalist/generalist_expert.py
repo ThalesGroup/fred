@@ -30,8 +30,8 @@ class GeneralistExpert(AgentFlow):
     """
 
     # Class-level metadata
-    name: str
-    role: str
+    name: str = "GeneralistExpert"
+    role: str = "Generalist Expert"
     nickname: str
     description: str
     icon: str = "generalist_agent"
