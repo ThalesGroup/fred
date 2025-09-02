@@ -11,14 +11,11 @@
       "args": [
         "app.main:create_app",
         "--factory",
-        "--port",
-        "8000",
-        "--env-file",
-        "config/.env",
-        "--log-level",
-        "info",
-        "--loop",
-        "asyncio"
+        "--host", "0.0.0.0",
+        "--port", "8000",
+        "--log-level", "info",
+        "--loop", "asyncio",
+        "--reload"
       ],
       "env": {
         "PYTHONPATH": "${workspaceFolder}/agentic_backend",
@@ -37,12 +34,11 @@
       "args": [
         "app.main:create_app",
         "--factory",
-        "--port",
-        "8111",
-        "--env-file",
-        "config/.env",
-        "--log-level",
-        "info"
+        "--host", "0.0.0.0",
+        "--port", "8111",
+        "--log-level", "info",
+        "--loop", "asyncio",
+        "--reload"
       ],
       "env": {
         "PYTHONPATH": "${workspaceFolder}/knowledge_flow_backend",
