@@ -65,10 +65,10 @@ ai:
         Handles complex, ambiguous, or multi-step user queries. Delegates tasks to the most suitable experts 
         based on context, capabilities, and relevance. Ensures coherent, high-quality responses by coordinating the expert team.
       class_path: "app.agents.leader.leader.Leader"
-      type: "leader"
       enabled: true
-      max_steps: 5
       model: {}
+      type: "leader"
+      max_steps: 5
     - name: "Samy"
       role: "Instance monitoring expert"
       mcp_servers:
@@ -77,8 +77,8 @@ ai:
           url: http://localhost:8111/knowledge-flow/v1/mcp-opensearch-ops
           sse_read_timeout: 2000
       description: >
-        Samy watches your instance, providing real-time monitoring and alerts for performance issues.
-      class_path: "app.agents.sentinel.sentinel_expert.OpsMonitoringExpert"
+        Watches your instance, providing real-time monitoring and alerts for performance issues.
+      class_path: "app.agents.sentinel.sentinel_expert.SentinelExpert"
       enabled: true
       model: {}
     - name: "Georges"
@@ -133,8 +133,8 @@ ai:
     - name: "Brontë"
       role: "Content generator expert"
       description: >
-        This agent is able to generate some content based on some template he manages 
-        to get from the knowledge-flow backend
+        Generates some content based on some templates she manages 
+        to get from the knowledge-flow backend.
       class_path: "app.agents.content_generator.content_generator_expert.ContentGeneratorExpert"
       enabled: false
       mcp_servers:
