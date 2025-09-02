@@ -175,7 +175,7 @@ async def get_mcp_client_for_agent(
         ExceptionGroup: if one or more servers failed to connect (after retry).
     """
     if not agent_settings.mcp_servers:
-        raise ValueError("no mcp server configuration")
+        raise ValueError("No MCP server configuration")
 
     ctx = get_app_context()
     oa = ctx.get_outbound_auth()

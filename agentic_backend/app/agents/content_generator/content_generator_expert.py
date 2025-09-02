@@ -35,19 +35,16 @@ class ContentGeneratorExpert(AgentFlow):
     """
 
     name: str = "ContentGeneratorExpert"
+    nickname: str = "Brice"
     role: str = "Content Generator Expert"
-    nickname: str
-    description: str
+    description: str = """Generates some content based on some templates she manages 
+        to get from the knowledge-flow backend."""
     icon: str = "content_generator"
     categories: list[str] = ["blog", "content", "cir"]
     tag: str = "content generator"
 
     def __init__(self, agent_settings: AgentSettings):
-        self.agent_settings = agent_settings
-        self.name = agent_settings.name
-        self.nickname = agent_settings.nickname or agent_settings.name
-        self.current_date = datetime.now().strftime("%Y-%m-%d")
-        self.model = None
+        super().__init__(agent_settings=agent_settings)
         self.mcp = MCPRuntime(
             agent_settings=self.agent_settings,
             # If you expose runtime filtering (tenant/library/time window),
@@ -55,29 +52,12 @@ class ContentGeneratorExpert(AgentFlow):
             context_provider=(lambda: self.get_runtime_context()),
         )
         self.base_prompt = self._generate_prompt()
-        self._graph = None
-        self.categories = agent_settings.categories or self.categories
-        self.tag = agent_settings.tag or self.tag
-        self.description = agent_settings.description
-        self.role = agent_settings.role
 
     async def async_init(self):
         self.model = get_model(self.agent_settings.model)
         await self.mcp.init()
         self.model = self.model.bind_tools(self.mcp.get_tools())
         self._graph = self._build_graph()
-
-        super().__init__(
-            name=self.name,
-            role=self.role,
-            nickname=self.nickname,
-            description=self.description,
-            icon=self.icon,
-            graph=self._graph,
-            base_prompt=self.base_prompt,
-            categories=self.categories,
-            tag=self.tag,
-        )
 
     def _generate_prompt(self) -> str:
         return (
