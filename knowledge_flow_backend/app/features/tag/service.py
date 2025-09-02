@@ -13,6 +13,7 @@
 # limitations under the License.
 
 # Copyright Thales 2025
+
 from datetime import datetime
 import logging
 from typing import Optional, Iterable
@@ -140,7 +141,7 @@ class TagService:
         # Link items
         if tag.type == TagType.DOCUMENT:
             for doc in documents:
-                self.document_metadata_service.add_tag_id_to_document(metadata=doc, new_tag_id=tag.id, modified_by=user.username)
+                self.document_metadata_service.add_tag_id_to_document(metadata=doc, new_tag_id=tag.id, modified_by=user.uid)
         elif tag.type in (TagType.PROMPT, TagType.TEMPLATE):
             # rk = _tagtype_to_rk(tag.type)
             for rid in tag_data.item_ids:
@@ -163,9 +164,9 @@ class TagService:
             added_documents = self._retrieve_documents_metadata(added)
             removed_documents = self._retrieve_documents_metadata(removed)
             for doc in added_documents:
-                self.document_metadata_service.add_tag_id_to_document(doc, tag.id, modified_by=user.username)
+                self.document_metadata_service.add_tag_id_to_document(doc, tag.id, modified_by=user.uid)
             for doc in removed_documents:
-                self.document_metadata_service.remove_tag_id_from_document(doc, tag.id, modified_by=user.username)
+                self.document_metadata_service.remove_tag_id_from_document(doc, tag.id, modified_by=user.uid)
 
         elif tag.type in (TagType.PROMPT, TagType.TEMPLATE):
             rk = _tagtype_to_rk(tag.type)
@@ -207,7 +208,7 @@ class TagService:
         if tag.type == TagType.DOCUMENT:
             documents = self._retrieve_documents_for_tag(tag_id)
             for doc in documents:
-                self.document_metadata_service.remove_tag_id_from_document(doc, tag_id, modified_by=user.username)
+                self.document_metadata_service.remove_tag_id_from_document(doc, tag_id, modified_by=user.uid)
         elif tag.type == TagType.PROMPT:
             self.resource_service.remove_tag_from_resources(ResourceKind.PROMPT, tag_id)
         elif tag.type == TagType.TEMPLATE:

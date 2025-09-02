@@ -100,7 +100,7 @@ class TagController:
         async def create_tag(tag: TagCreate, user: KeycloakUser = Depends(get_current_user)):
             try:
                 # Consider normalizing tag.path in the service if not already done
-                logger.info(f"Creating tag: {tag} for user: {user.username}")
+                logger.info(f"Creating tag: {tag} for user: {user.uid}")
                 return self.service.create_tag_for_user(tag, user)
             except Exception as e:
                 raise handle_exception(e)
