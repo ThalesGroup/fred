@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import logging
-from datetime import datetime
 
 from app.common.mcp_runtime import MCPRuntime
 from app.common.resilient_tool_node import make_resilient_tools_node
