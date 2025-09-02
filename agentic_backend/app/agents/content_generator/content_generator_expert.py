@@ -34,7 +34,7 @@ class ContentGeneratorExpert(AgentFlow):
     """
 
     name: str = "ContentGeneratorExpert"
-    nickname: str = "Brice"
+    nickname: str = "Brontë"
     role: str = "Content Generator Expert"
     description: str = """Generates some content based on some templates she manages 
         to get from the knowledge-flow backend."""
