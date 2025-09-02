@@ -109,7 +109,7 @@ def create_app() -> FastAPI:
     router = APIRouter(prefix=configuration.app.base_url)
 
     MonitoringController(router)
-    
+
     pull_document_service = PullDocumentService()
     # Register controllers
     MetadataController(router, pull_document_service)

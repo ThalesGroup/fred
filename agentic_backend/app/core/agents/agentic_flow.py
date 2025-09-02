@@ -24,8 +24,7 @@ class AgenticFlow(BaseModel):
     name: Optional[str] = Field(default=None, description="Name of the agentic flow")
     role: str = Field(description="Human-readable role of the agentic flow")
     nickname: Optional[str] = Field(
-        default=None,
-        description="Human-readable nickname of the agentic flow"
+        default=None, description="Human-readable nickname of the agentic flow"
     )
     description: str = Field(
         description="Human-readable description of the agentic flow"

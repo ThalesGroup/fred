@@ -49,13 +49,11 @@ class JiraExpert(AgentFlow):
         )
         self.base_prompt = self._generate_prompt()
 
-
     async def async_init(self):
         self.model = get_model(self.agent_settings.model)
         await self.mcp.init()
         self.model = self.model.bind_tools(self.mcp.get_tools())
         self._graph = self.get_graph()
-
 
     def _generate_prompt(self) -> str:
         """

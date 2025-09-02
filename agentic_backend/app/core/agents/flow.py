@@ -108,11 +108,25 @@ class AgentFlow:
         self.agent_settings = agent_settings
         self.name = agent_settings.name
         self.nickname = agent_settings.nickname or agent_settings.name
-        self.role = agent_settings.role if agent_settings.role is not None else self.__class__.role
-        self.description = agent_settings.description if agent_settings.description is not None else self.__class__.description
+        self.role = (
+            agent_settings.role
+            if agent_settings.role is not None
+            else self.__class__.role
+        )
+        self.description = (
+            agent_settings.description
+            if agent_settings.description is not None
+            else self.__class__.description
+        )
         self.current_date = datetime.now().strftime("%Y-%m-%d")
-        self.categories = agent_settings.categories if agent_settings.categories is not None else self.__class__.categories
-        self.tag = agent_settings.tag if agent_settings.tag is not None else self.__class__.tag
+        self.categories = (
+            agent_settings.categories
+            if agent_settings.categories is not None
+            else self.__class__.categories
+        )
+        self.tag = (
+            agent_settings.tag if agent_settings.tag is not None else self.__class__.tag
+        )
         self.model = None  # Will be set in async_init
         self.base_prompt = ""  # Will be set in async_init
         self._graph = None  # Will be built in async_init
@@ -169,7 +183,9 @@ class AgentFlow:
         This method is idempotent and reuses the cached compiled graph.
         """
         if self.compiled_graph is None:
-            self.compiled_graph = self._graph.compile(checkpointer=self.streaming_memory)
+            self.compiled_graph = self._graph.compile(
+                checkpointer=self.streaming_memory
+            )
         return self.compiled_graph
 
     def save_graph_image(self, path: str):

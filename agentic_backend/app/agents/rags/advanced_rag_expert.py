@@ -132,8 +132,8 @@ class AdvancedRagExpert(AgentFlow):
     tag: str = "rags"
 
     def __init__(self, agent_settings: AgentSettings):
-        super().__init__(agent_settings = agent_settings)
-    
+        super().__init__(agent_settings=agent_settings)
+
     async def async_init(self):
         self.model = get_model(self.agent_settings.model)
         self.search_client = VectorSearchClient()

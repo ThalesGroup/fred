@@ -66,7 +66,7 @@ class RagExpert(AgentFlow):
     tag: str = "rags"
 
     def __init__(self, agent_settings: AgentSettings):
-        super().__init__(agent_settings = agent_settings)
+        super().__init__(agent_settings=agent_settings)
 
     async def async_init(self):
         self.model = get_model(self.agent_settings.model)
@@ -74,7 +74,6 @@ class RagExpert(AgentFlow):
         # Use shared preamble util
         self.base_prompt = rag_preamble(self.current_date)
         self._graph = self._build_graph()
-
 
     def _build_graph(self) -> StateGraph:
         builder = StateGraph(MessagesState)

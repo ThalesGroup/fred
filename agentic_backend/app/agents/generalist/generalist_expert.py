@@ -34,14 +34,16 @@ class GeneralistExpert(AgentFlow):
     name: str | None = "GeneralistExpert"
     nickname: str | None = "Georges"
     role: str | None = "Fallback Generalist Expert"
-    description: str | None = """Provides broad, high-level guidance when no specific expert is better suited. 
+    description: (
+        str | None
+    ) = """Provides broad, high-level guidance when no specific expert is better suited. 
         Acts as a default agent to assist with general questions across all domains."""
     icon: str = "generalist_agent"
     categories: List[str] = ["General"]
     tag: str = "generalist"
 
     def __init__(self, agent_settings: AgentSettings):
-        super().__init__(agent_settings = agent_settings)
+        super().__init__(agent_settings=agent_settings)
 
     async def async_init(self):
         self.model = get_model(self.agent_settings.model)

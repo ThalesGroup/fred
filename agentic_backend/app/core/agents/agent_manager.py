@@ -104,7 +104,7 @@ class AgentManager:
             instance = cls(agent_settings=agent_cfg)
             if iscoroutinefunction(getattr(instance, "async_init", None)):
                 await instance.async_init()
-            
+
             self._register_loaded_agent(agent_registered_name, instance, agent_cfg)
             logger.info(
                 f"✅ Registered static agent '{agent_registered_name}' from configuration."

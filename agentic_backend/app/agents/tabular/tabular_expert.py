@@ -62,7 +62,6 @@ class TabularExpert(AgentFlow):
         self.model = self.model.bind_tools(self.mcp.get_tools())
         self._graph = self._build_graph()
 
-
     def _generate_prompt(self) -> str:
         return (
             "You are a data analyst agent tasked with answering user questions based on structured tabular data "
@@ -111,7 +110,6 @@ class TabularExpert(AgentFlow):
                 "Model must be initialized before building graph"
             )
             response = await self.model.ainvoke(messages)
-
 
             return {"messages": [response]}
 

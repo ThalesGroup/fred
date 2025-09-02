@@ -56,7 +56,7 @@ class SentinelExpert(AgentFlow):
     tag: str = "ops"
 
     def __init__(self, agent_settings: AgentSettings):
-        super().__init__(agent_settings = agent_settings)
+        super().__init__(agent_settings=agent_settings)
         self.mcp = MCPRuntime(
             agent_settings=self.agent_settings,
             # If you expose runtime filtering (tenant/library/time window),

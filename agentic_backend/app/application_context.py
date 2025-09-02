@@ -580,9 +580,7 @@ class ApplicationContext:
         logger.info("  ⏱️  Timeouts: connect=%ss, read=%ss", tcfg.connect, tcfg.read)
 
         # Agents
-        enabled_agents = [
-            a.name or a.class_path for a in cfg.ai.agents if a.enabled
-        ]
+        enabled_agents = [a.name or a.class_path for a in cfg.ai.agents if a.enabled]
         logger.info(
             "  🤖 Agents enabled: %d%s",
             len(enabled_agents),
