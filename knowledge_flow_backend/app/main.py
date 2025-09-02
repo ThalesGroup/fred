@@ -136,10 +136,10 @@ def create_app() -> FastAPI:
         app,
         name="Knowledge Flow OpenSearch Ops MCP",
         description=("Read-only operational tools for OpenSearch: cluster health, nodes, shards, indices, mappings, and sample docs. Monitoring/diagnostics only."),
-        include_tags=["OpenSearch"],  # <-- only export routes tagged OpenSearch as MCP tools
+        include_tags=["OpenSearch"],
         describe_all_responses=True,
         describe_full_response_schema=True,
-        auth_config=AuthConfig(  # <-- protect with your user auth as a normal dependency
+        auth_config=AuthConfig(
             dependencies=[Depends(get_current_user)]
         ),
     )
@@ -160,7 +160,7 @@ def create_app() -> FastAPI:
         include_tags=["KPI"],
         describe_all_responses=True,
         describe_full_response_schema=True,
-        auth_config=AuthConfig(  # <-- protect with your user auth as a normal dependency
+        auth_config=AuthConfig(
             dependencies=[Depends(get_current_user)]
         ),
     )
@@ -179,7 +179,7 @@ def create_app() -> FastAPI:
         include_tags=["Tabular"],
         describe_all_responses=True,
         describe_full_response_schema=True,
-        auth_config=AuthConfig(  # <-- protect with your user auth as a normal dependency
+        auth_config=AuthConfig(
             dependencies=[Depends(get_current_user)]
         ),
     )
@@ -197,7 +197,7 @@ def create_app() -> FastAPI:
         include_tags=["Vector Search"],
         describe_all_responses=True,
         describe_full_response_schema=True,
-        auth_config=AuthConfig(  # <-- protect with your user auth as a normal dependency
+        auth_config=AuthConfig(
             dependencies=[Depends(get_current_user)]
         ),
     )
@@ -210,7 +210,7 @@ def create_app() -> FastAPI:
         include_tags=["Templates", "Prompts"],
         describe_all_responses=True,
         describe_full_response_schema=True,
-        auth_config=AuthConfig(  # <-- protect with your user auth as a normal dependency
+        auth_config=AuthConfig(
             dependencies=[Depends(get_current_user)]
         ),
     )
@@ -229,7 +229,7 @@ def create_app() -> FastAPI:
         include_tags=["Code Search"],
         describe_all_responses=True,
         describe_full_response_schema=True,
-        auth_config=AuthConfig(  # <-- protect with your user auth as a normal dependency
+        auth_config=AuthConfig(
             dependencies=[Depends(get_current_user)]
         ),
     )
@@ -247,7 +247,7 @@ def create_app() -> FastAPI:
         include_tags=["Resources", "Tags"],
         describe_all_responses=True,
         describe_full_response_schema=True,
-        auth_config=AuthConfig(  # <-- protect with your user auth as a normal dependency
+        auth_config=AuthConfig(
             dependencies=[Depends(get_current_user)]
         ),
     )
