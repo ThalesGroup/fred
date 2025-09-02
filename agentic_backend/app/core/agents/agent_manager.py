@@ -98,18 +98,21 @@ class AgentManager:
             )
             return False
 
+        agent_registered_name = agent_cfg.name or agent_cfg.nickname
+
         try:
             instance = cls(agent_settings=agent_cfg)
             if iscoroutinefunction(getattr(instance, "async_init", None)):
                 await instance.async_init()
-            self._register_loaded_agent(agent_cfg.name, instance, agent_cfg)
+            
+            self._register_loaded_agent(agent_registered_name, instance, agent_cfg)
             logger.info(
-                f"✅ Registered static agent '{agent_cfg.name}' from configuration."
+                f"✅ Registered static agent '{agent_registered_name}' from configuration."
             )
             return True
         except Exception as e:
             logger.error(
-                f"❌ Failed to instantiate or register static agent '{agent_cfg.name}': {e}"
+                f"❌ Failed to instantiate or register static agent '{agent_registered_name}': {e}"
             )
             return False
 
@@ -360,7 +363,7 @@ class AgentManager:
         while True:
             await asyncio.sleep(10)
             if not self.failed_agents:
-                logger.debug("🔄 Agent retry all is all right.")
+                logger.debug("🔄 Agent retry is all right.")
                 continue
 
             try:

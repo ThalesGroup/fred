@@ -122,46 +122,23 @@ class AdvancedRagExpert(AgentFlow):
     MIN_DOCS = 3  # minimum number of docs we'll try to keep for generation
 
     name: str = "AdvancedRagExpert"
+    nickname: str = "Remulus"
     role: str = "Advanced Rag Expert"
-    nickname: str
-    description: str
+    description: str = """Answers user questions by retrieving relevant information from ingested document corpora.
+        Uses a vector-based retrieval pipeline to ground responses in internal or uploaded knowledge.
+    """
     icon: str = "rags_agent"
-    categories: List[str] = []
-    tag: str = "Innovation"
+    categories: List[str] = ["Documentation"]
+    tag: str = "rags"
 
     def __init__(self, agent_settings: AgentSettings):
-        self.agent_settings = agent_settings
-        self.name = agent_settings.name
-        self.nickname = agent_settings.nickname or agent_settings.name
-        self.role = agent_settings.role
-        self.description = agent_settings.description
-        self.current_date = datetime.now().strftime("%Y-%m-%d")
-        self.categories = agent_settings.categories or ["General"]
-        self.model = None
-        self.base_prompt = ""
-        self._graph = None
-
-        # sane defaults
-        self.categories = agent_settings.categories or ["Documentation"]
-        self.tag = agent_settings.tag or "rags"
-
+        super().__init__(agent_settings = agent_settings)
+    
     async def async_init(self):
         self.model = get_model(self.agent_settings.model)
         self.search_client = VectorSearchClient()
         self.base_prompt = self._generate_prompt()
         self._graph = self._build_graph()
-
-        super().__init__(
-            name=self.name,
-            role=self.role,
-            nickname=self.nickname,
-            description=self.description,
-            icon=self.icon,
-            graph=self._graph,
-            base_prompt=self.base_prompt,
-            categories=self.categories,
-            tag=self.tag,
-        )
 
     # ---------- prompt ----------
 
