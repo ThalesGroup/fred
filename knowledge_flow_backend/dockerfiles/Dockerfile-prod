@@ -73,4 +73,4 @@ EXPOSE 8111
 
 # Entrypoint without make
 ENTRYPOINT ["uvicorn", "app.main:create_app", "--factory"]
-CMD ["--port", "8111", "--host", "0.0.0.0", "--env-file", "/app/config/.env", "--log-level", "info", "--loop", "asyncio"]
+CMD ["--port", "8111", "--host", "0.0.0.0", "--log-level", "info", "--loop", "asyncio"]
