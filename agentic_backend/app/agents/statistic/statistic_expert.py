@@ -84,18 +84,21 @@ class StatisticExpert(AgentFlow):
 
     def _generate_prompt(self) -> str:
         return (
-            "You are a data analyst agent tasked with answering user questions based on structured tabular data "
-            "such as CSV or Excel files. Use the available tools to **list, inspect, and query datasets**.\n\n"
+            "You are a data science assistant capable of performing **statistical analysis** and **machine learning** "
+            "on structured tabular datasets (CSV, Excel).\n\n"
             "### Instructions:\n"
-            "1. ALWAYS Start by invoking the tool to **list available datasets and their schema**.\n"
-            "2. Decide which dataset(s) to use.\n"
-            "3. Formulate an SQL-like query using the relevant schema.\n"
-            "4. Invoke the query tool to get the answer.\n"
-            "5. Derive your final answer from the actual data.\n\n"
+            "1. ALWAYS start by listing available datasets and inspecting their schema.\n"
+            "2. You can use the following abilities:\n"
+            "- **Describe datasets**: mean, median, std, value counts, histograms.\n"
+            "- **Statistical testing**: A/B tests, t-tests, chi-square, correlations.\n"
+            "- **Machine Learning**: Train models like Linear Regression, XGBoost, Random Forest.\n"
+            "- **Update data**: create or update columns, transform values.\n"
+            "3. Formulate a step-by-step approach to solve the problem using available tools.\n\n"
             "### Rules:\n"
-            "- Use markdown tables to present tabular results.\n"
-            "- Do NOT invent columns or data that aren't present.\n"
-            "- Format math formulas using LaTeX: `$$...$$` for blocks or `$...$` inline.\n"
+            "- Use markdown for results and code outputs.\n"
+            "- Do not invent columns, datasets, or values.\n"
+            "- Present statistical outputs clearly with explanations.\n"
+            "- Use LaTeX (`$$...$$`) for formulas if needed.\n"
             f"\nThe current date is {self.current_date}.\n"
         )
 
@@ -131,22 +134,6 @@ class StatisticExpert(AgentFlow):
             )
             response = await self.model.ainvoke([prompt] + state["messages"])
 
-            for msg in state["messages"]:
-                if isinstance(msg, ToolMessage):
-                    try:
-                        datasets = json.loads(msg.content)
-                        summaries = (
-                            self._extract_dataset_summaries_from_get_schema_reponse(
-                                datasets
-                            )
-                        )
-                        if summaries:
-                            response.content += (
-                                "\n\n### Available Datasets:\n" + "\n".join(summaries)
-                            )
-                    except Exception as e:
-                        logger.warning(f"Failed to parse tool response: {e}")
-
             return {"messages": [response]}
 
         except Exception:
@@ -160,22 +147,4 @@ class StatisticExpert(AgentFlow):
             )
             return {"messages": [fallback]}
 
-    def _extract_dataset_summaries_from_get_schema_reponse(
-        self, data: list[dict]
-    ) -> list[str]:
-        summaries = []
-        for entry in data:
-            if isinstance(entry, dict) and {
-                "document_name",
-                "columns",
-                "row_count",
-            }.issubset(entry.keys()):
-                try:
-                    title = entry.get("document_name", "Untitled")
-                    uid = entry.get("document_uid", "")
-                    rows = entry.get("row_count", "?")
-                    summaries.append(f"- **{title}** (`{uid}`), {rows} rows")
-                except Exception as e:
-                    logger.warning(f"Failed to summarize dataset entry: {e}")
 
-        return summaries

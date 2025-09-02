@@ -12,8 +12,6 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import RandomForestRegressor
-from RestrictedPython import compile_restricted
-from RestrictedPython import safe_globals
 from app.features.statistic.utils import safe_eval_function
 
 logger = logging.getLogger(__name__)
@@ -49,6 +47,11 @@ class StatisticService:
         except Exception as e:
             logger.error(f"❌ Failed to save CSV to {self.csv_path}", exc_info=True)
             raise
+
+    def head(self, n: Optional[int] = 5) -> Dict[str, Any]:
+        n = n or 5
+        head = self.df.head(n).replace({np.nan: None}).to_dict(orient='records')
+        return {"head": head}
 
     def describe_data(self, columns: Optional[List[str]] = None) -> Dict[str, Any]:
         try:
@@ -125,6 +128,9 @@ class StatisticService:
         try:
             if column_name not in self.df.columns:
                 raise ValueError(f"Column '{column_name}' does not exist.")
+            
+            if not func_str.startswith("lambda x: "):
+                func_str = "lambda x: " + func_str
 
             func = safe_eval_function(func_str)
 
@@ -145,6 +151,9 @@ class StatisticService:
                 raise ValueError(f"Source column '{source_column_name}' does not exist.")
             if new_column_name in self.df.columns:
                 raise ValueError(f"Target column '{new_column_name}' already exists.")
+        
+            if not func_str.startswith("lambda x: "):
+                func_str = "lambda x: " + func_str
 
             func = safe_eval_function(func_str)
 

@@ -44,6 +44,7 @@ from app.common.utils import parse_server_configuration
 from app.features.content.controller import ContentController
 from app.features.metadata.controller import MetadataController
 from app.features.tabular.controller import TabularController
+from app.features.statistic.controller import StatisticController
 from app.features.tag.controller import TagController
 from app.features.vector_search.controller import VectorSearchController
 from app.features.ingestion.controller import IngestionController
@@ -118,6 +119,7 @@ def create_app() -> FastAPI:
     ContentController(router)
     IngestionController(router)
     TabularController(router)
+    StatisticController(router)
     # CodeSearchController(router)
     TagController(router)
     ResourceController(router)
@@ -184,6 +186,22 @@ def create_app() -> FastAPI:
         ),
     )
     mcp_tabular.mount_http(mount_path=f"{mcp_prefix}/mcp-tabular")
+
+    mcp_statistic = FastApiMCP(
+        app,
+        name="Knowledge Flow Statistic MCP",
+        description=(
+            "ML access layer exposed through pandas, sklearn, matplolib. "
+            "Provides agents with describe, plot, test, update, add_column and train "
+        ),
+        include_tags=["Statistic"],
+        describe_all_responses=True,
+        describe_full_response_schema=True,
+        auth_config=AuthConfig(  # <-- protect with your user auth as a normal dependency
+            dependencies=[Depends(get_current_user)]
+        ),
+    )
+    mcp_statistic.mount_http(mount_path=f"{mcp_prefix}/mcp-statistic")
 
     mcp_text = FastApiMCP(
         app,

@@ -86,6 +86,15 @@ ai:
           transport: streamable_http
           url: http://localhost:8111/knowledge-flow/v1/mcp-tabular
           sse_read_timeout: 2000
+    - name: "StatisticExpert"
+      role: "Data science Expert"
+      class_path: "app.agents.statistic.statistic_expert.StatisticExpert"
+      enabled: true
+      mcp_servers:
+        - name: knowledge-flow-mcp-server
+          transport: streamable_http
+          url: http://localhost:8111/knowledge-flow/v1/mcp-statistic
+          sse_read_timeout: 2000
     - name: "Rico Senior"
       class_path: "app.agents.rags.advanced_rag_expert.AdvancedRagExpert"
       enabled: true

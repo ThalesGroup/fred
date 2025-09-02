@@ -56,6 +56,18 @@ class StatisticController:
     def _register_routes(self, router: APIRouter):
 
         @router.get(
+            "/stat/head",
+            tags=["Statistic"],
+            summary="Describe dataset or specific columns"
+        )
+        async def head(n: int = Query(None, description="Number of lines to get")):
+            try:
+                return self.service.head(n)
+            except Exception as e:
+                logger.exception("Failed to show head data")
+                raise HTTPException(status_code=500, detail=str(e))
+            
+        @router.get(
             "/stat/describe",
             tags=["Statistic"],
             summary="Describe dataset or specific columns"
