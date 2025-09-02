@@ -123,15 +123,6 @@ ai:
           url: http://localhost:8111/knowledge-flow/v1/mcp-resources
           sse_read_timeout: 2000
       model: {}
-    - name: "Dan"
-      class_path: "app.agents.documents.documents_expert.DocumentExpert"
-      enabled: true
-      mcp_servers:
-        - name: knowledge-flow-mcp-server
-          transport: streamable_http
-          url: http://localhost:8111/knowledge-flow/v1/mcp-text
-          sse_read_timeout: 2000
-      model: {}
 
 storage:
   postgres:
