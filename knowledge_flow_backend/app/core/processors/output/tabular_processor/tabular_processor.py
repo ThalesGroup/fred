@@ -44,6 +44,9 @@ _DATE_REGEX = re.compile(
         \b\d{1,2}\s*(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\s*\d{2,4}\b |  # 1 Jan 2023
         \b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\s*\d{1,2},?\s*\d{2,4}\b | # Jan 1, 2023
 
+         \b\d{1,2}\s*(jan|fév|mar|avr|mai|jun|juin|juil|jui|aoû|sep|sept|oct|nov|déc)\s*\d{2,4}\b |  # 1 Fév 2023
+        \b(jan|fév|mar|avr|mai|jun|juin|juil|jui|aoû|sep|sept|oct|nov|déc)\s*\d{1,2},?\s*\d{2,4}\b | # Fév 1, 2023
+
         \b\d{1,2}\s*(january|february|march|april|may|june|july|august|
                     september|october|november|december)\s*\d{2,4}\b |             # 1 January 2023
         \b(january|february|march|april|may|june|july|august|
