@@ -58,7 +58,7 @@ const Login = (onAuthenticatedCallback: Function) => {
     })
     .then((authenticated) => {
       if (authenticated) {
-        localStorage.setItem("keycloak_token", keycloakInstance!.token || "");
+        sessionStorage.setItem("keycloak_token", keycloakInstance!.token || "");
         onAuthenticatedCallback();
       } else {
         alert("User not authenticated");
@@ -73,7 +73,7 @@ const Logout = () => {
   if (!isSecurityEnabled || !keycloakInstance) return;
   try {
     sessionStorage.clear();
-    localStorage.removeItem("keycloak_token");
+    sessionStorage.removeItem("keycloak_token");
   } finally {
     keycloakInstance.logout({ redirectUri: window.location.origin + "/" });
   }
@@ -94,7 +94,7 @@ export async function ensureFreshToken(minValidity = 30): Promise<boolean> {
     .updateToken(minValidity)
     .then((refreshed) => {
       if (refreshed) {
-        localStorage.setItem("keycloak_token", keycloakInstance!.token || "");
+        sessionStorage.setItem("keycloak_token", keycloakInstance!.token || "");
       }
       return true;
     })
@@ -145,7 +145,7 @@ const GetUserId = (): string | null => {
 
 const GetToken = (): string | null => {
   if (!isSecurityEnabled) return null;
-  return keycloakInstance?.token || localStorage.getItem("keycloak_token");
+  return keycloakInstance?.token || sessionStorage.getItem("keycloak_token");
 };
 
 const GetTokenParsed = (): any => {
