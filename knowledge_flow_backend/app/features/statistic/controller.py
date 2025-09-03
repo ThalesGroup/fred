@@ -1,10 +1,9 @@
 import logging
-from fastapi import APIRouter, HTTPException, UploadFile, File, Query
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from typing import List, Optional, Dict, Any, Literal
+from typing import List, Dict, Any, Literal
 
 from app.features.statistic.service import StatisticService
-from app.features.tabular.service import TabularService
 from app.application_context import ApplicationContext
 
 logger = logging.getLogger(__name__)
@@ -60,10 +59,7 @@ def clean_json(obj):
 class StatisticController:
     def __init__(self, router: APIRouter):
         self.service = StatisticService()
-        
-        self.context = ApplicationContext.get_instance()
-        stores = self.context.get_tabular_stores()
-        self.tabular_service = TabularService(stores)
+        self.store = ApplicationContext.get_instance().get_csv_input_store()
 
         self._register_routes(router)
 
@@ -72,7 +68,7 @@ class StatisticController:
         @router.get("/stat/list_datasets", tags=["Statistic"], summary="View the available datasets")
         async def list_datasets():
             try:
-                return clean_json(f"available_datasets:{self.tabular_service.list_tables()}")
+                return clean_json(f"available_datasets:{self.store.list_tables()}")
             except Exception as e:
                 logger.exception("Failed to get head")
                 raise HTTPException(500, str(e))
@@ -80,10 +76,10 @@ class StatisticController:
         @router.post("/stat/set_dataset", tags=["Statistic"], summary="Select a dataset")
         async def set_dataset(request: SetDatasetRequest):
             try:
-                dataset = self.tabular_service.get_table(request.dataset_name)
+                dataset = self.store.load_table(request.dataset_name)
                 return self.service.set_dataset(dataset)
             except Exception as e:
-                logger.exception("Failed to set the dataset as {request.dataset_name}")
+                logger.exception(f"Failed to set the dataset as {request.dataset_name}")
                 raise HTTPException(500, str(e))
 
         @router.get("/stat/head", tags=["Statistic"], summary="Preview the dataset")

@@ -76,10 +76,19 @@ class SQLTableStore:
     def save_table(self, table_name: str, df: pd.DataFrame):
         df.to_sql(table_name, self.engine, if_exists="replace", index=False)
         logger.info(f"Saved table '{table_name}' to SQL database")
-
+    
     def load_table(self, table_name: str) -> pd.DataFrame:
+        """
+        Loads a SQL table as a DataFrame with correct dtypes (inferred by pandas).
+        Raises an error if the table does not exist.
+        """
         self._validate_table_name(table_name)
-        return pd.read_sql_table(table_name, self.engine)
+
+        # Read table with SQLAlchemy engine and preserve inferred types
+        df = pd.read_sql_table(table_name, con=self.engine)
+
+        logger.info(f"📥 Retrieved table '{table_name}' with shape {df.shape} and dtypes: {df.dtypes.to_dict()}")
+        return df
 
     def delete_table(self, table_name: str):
         self._validate_table_name(table_name)
