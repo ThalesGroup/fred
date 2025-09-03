@@ -1,169 +1,187 @@
 import logging
+from fastapi import APIRouter, HTTPException, UploadFile, File, Query
+from pydantic import BaseModel
 from typing import List, Optional, Dict, Any, Literal
 
-from fastapi import APIRouter, HTTPException, Path, Query, Body
-from pydantic import BaseModel
-
 from app.features.statistic.service import StatisticService
+from app.features.tabular.service import TabularService
+from app.application_context import ApplicationContext
 
 logger = logging.getLogger(__name__)
 
+# Pydantic Models
 
-# Models pour requêtes/réponses
+class SetDatasetRequest(BaseModel):
+    dataset_name : str
 
-class DeleteColumnRequest(BaseModel):
-    column_name: str
+class DetectOutliersRequest(BaseModel):
+    method: Literal["zscore", "iqr"] = "zscore"
+    threshold: float = 3.0
 
-class UpdateColumnRequest(BaseModel):
-    column_name: str
-    lambda_func: str  
-
-class AddColumnRequest(BaseModel):
-    new_column_name: str
-    source_column_name: str
-    lambda_func: str
-
-class ABTestRequest(BaseModel):
-    group_col: str
-    metric_col: str
-    alpha: float
+class CorrelationsRequest(BaseModel):
+    top_n: int = 5
 
 class PlotHistogramRequest(BaseModel):
     column: str
-    bins: int = 5
+    bins: int = 30
 
 class PlotScatterRequest(BaseModel):
     x_col: str
     y_col: str
 
 class TrainModelRequest(BaseModel):
-    target_column: str
-    feature_columns: List[str]
-    model_type: Literal["linear_regression","random_forest"]
-    model_params: Optional[Dict[str, Any]] = None
+    target: str
+    features: List[str]
+    model_type: Literal["linear", "random_forest"] = "linear"
 
-class PlotRequest(BaseModel):
-    column: Optional[str]
-    x_col: Optional[str]
-    y_col: Optional[str]
+class PredictRowRequest(BaseModel):
+    row: Dict[str, Any]
 
+class SaveModelRequest(BaseModel):
+    name: str
+
+class LoadModelRequest(BaseModel):
+    name: str
+
+import math
+
+def clean_json(obj):
+    if isinstance(obj, dict):
+        return {k: clean_json(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [clean_json(v) for v in obj]
+    elif isinstance(obj, float):
+        if math.isnan(obj) or math.isinf(obj):
+            return None  # ou str(obj) si tu veux garder "NaN", "inf"
+    return obj
+
+# Controller Class
 
 class StatisticController:
     def __init__(self, router: APIRouter):
         self.service = StatisticService()
+        
+        self.context = ApplicationContext.get_instance()
+        stores = self.context.get_tabular_stores()
+        self.tabular_service = TabularService(stores)
+
         self._register_routes(router)
 
     def _register_routes(self, router: APIRouter):
 
-        @router.get(
-            "/stat/head",
-            tags=["Statistic"],
-            summary="Describe dataset or specific columns"
-        )
-        async def head(n: int = Query(None, description="Number of lines to get")):
+        @router.get("/stat/list_datasets", tags=["Statistic"], summary="View the available datasets")
+        async def list_datasets():
             try:
-                return self.service.head(n)
+                return clean_json(f"available_datasets:{self.tabular_service.list_tables()}")
             except Exception as e:
-                logger.exception("Failed to show head data")
-                raise HTTPException(status_code=500, detail=str(e))
+                logger.exception("Failed to get head")
+                raise HTTPException(500, str(e))
             
-        @router.get(
-            "/stat/describe",
-            tags=["Statistic"],
-            summary="Describe dataset or specific columns"
-        )
-        async def describe(columns: Optional[List[str]] = Query(None, description="List of columns to describe")):
+        @router.post("/stat/set_dataset", tags=["Statistic"], summary="Select a dataset")
+        async def set_dataset(request: SetDatasetRequest):
             try:
-                return self.service.describe_data(columns)
+                dataset = self.tabular_service.get_table(request.dataset_name)
+                return self.service.set_dataset(dataset)
             except Exception as e:
-                logger.exception("Failed to describe data")
-                raise HTTPException(status_code=500, detail=str(e))
-            
-        @router.delete(
-            "/stat/delete_column",
-            tags=["Statistic"],
-            summary="Delete a column from the dataset"
-        )
-        async def delete_column(request: DeleteColumnRequest):
-            try:
-                self.service.delete_column(request.column_name)
-                return {"status": "success", "message": f"Column '{request.column_name}' deleted."}
-            except Exception as e:
-                logger.exception("Failed to delete column")
-                raise HTTPException(status_code=400, detail=str(e))
+                logger.exception("Failed to set the dataset as {request.dataset_name}")
+                raise HTTPException(500, str(e))
 
-        @router.post(
-            "/stat/update_column",
-            tags=["Statistic"],
-            summary="Update a column applying a transformation function"
-        )
-        async def update_column(request: UpdateColumnRequest):
+        @router.get("/stat/head", tags=["Statistic"], summary="Preview the dataset")
+        async def head(n: int = 5):
             try:
-                func_str = request.lambda_func
-                self.service.update_column(request.column_name, func_str)
-                return {"status": "success", "message": f"Column {request.column_name} updated with function: {func_str}."}
+                return clean_json(self.service.head(n))
             except Exception as e:
-                logger.exception("Failed to update column")
-                raise HTTPException(status_code=400, detail=str(e))
+                logger.exception("Failed to get head")
+                raise HTTPException(500, str(e))
 
-        @router.post(
-            "/stat/add_column",
-            tags=["Statistic"],
-            summary="Add a new column from existing column"
-        )
-        async def add_transformed_column(request: AddColumnRequest):
+        @router.get("/stat/describe", tags=["Statistic"], summary="Describe the dataset")
+        async def describe():
             try:
-                self.service.add_transformed_column(request.new_column_name, request.source_column_name, request.lambda_func)
-                return {"status": "success", "message": f"Column {request.source_column_name} transformed with {request.lambda_func} added to {request.new_column_name}."}
+                return clean_json(self.service.describe_data())
             except Exception as e:
-                logger.exception("Failed to add column")
-                raise HTTPException(status_code=400, detail=str(e))
+                logger.exception("Failed to describe dataset")
+                raise HTTPException(500, str(e))
 
-        @router.post(
-            "/stat/ab_test",
-            tags=["Statistic"],
-            summary="Perform A/B test between two groups"
-        )
-        async def ab_test(request: ABTestRequest):
+        @router.post("/stat/detect_outliers", tags=["Statistic"], summary="Detect outliers in numeric columns")
+        async def detect_outliers(request: DetectOutliersRequest):
             try:
-                result = self.service.ab_test(request.group_col, request.metric_col, request.alpha)
-                return result
+                return clean_json(self.service.detect_outliers(method=request.method, threshold=request.threshold))
             except Exception as e:
-                logger.exception("A/B test failed")
-                raise HTTPException(status_code=400, detail=str(e))
+                logger.exception("Outlier detection failed")
+                raise HTTPException(500, str(e))
 
-        @router.post(
-            "/stat/train_model",
-            tags=["Statistic"],
-            summary="Train a ML model on dataset"
-        )
-        async def train_model(request: TrainModelRequest):
+        @router.get("/stat/correlations", tags=["Statistic"], summary="Get top correlations in the dataset")
+        async def correlations(request: CorrelationsRequest):
             try:
-                result = self.service.train_model(
-                    target_column=request.target_column,
-                    feature_columns=request.feature_columns,
-                    model_type=request.model_type,
-                    model_params=request.model_params
-                )
-                return result
+                return clean_json(self.service.correlation_analysis(request.top_n))
             except Exception as e:
-                logger.exception("Model training failed")
-                raise HTTPException(status_code=400, detail=str(e))
+                logger.exception("Correlation analysis failed")
+                raise HTTPException(500, str(e))
 
-        @router.post("/stat/plot_histo", tags=["Statistic"])
+        @router.post("/stat/plot/histogram", tags=["Statistic"], summary="Plot histogram for a column")
         async def plot_histogram(request: PlotHistogramRequest):
             try:
-                path = self.service.plot_histogram(request.column, request.bins)
-                return {"status": "success", "path": path}
+                path = self.service.plot_histogram(column=request.column, bins=request.bins)
+                return clean_json({"status": "success", "path": path})
             except Exception as e:
-                raise HTTPException(status_code=400, detail=str(e))
+                raise HTTPException(400, str(e))
 
-        @router.post("/stat/plot_scatter", tags=["Statistic"])
+        @router.post("/stat/plot/scatter", tags=["Statistic"], summary="Plot scatter plot")
         async def plot_scatter(request: PlotScatterRequest):
             try:
                 path = self.service.plot_scatter(request.x_col, request.y_col)
-                return {"status": "success", "path": path}
+                return clean_json({"status": "success", "path": path})
             except Exception as e:
-                raise HTTPException(status_code=400, detail=str(e))
+                raise HTTPException(400, str(e))
+
+        @router.post("/stat/train", tags=["Statistic"], summary="Train a model")
+        async def train_model(request: TrainModelRequest):
+            try:
+                training_results = self.service.train_model(request.target, request.features, model_type=request.model_type)
+                return clean_json({"status": "success", "message": training_results})
+            except Exception as e:
+                logger.exception("Model training failed")
+                raise HTTPException(400, str(e))
+
+        @router.get("/stat/evaluate", tags=["Statistic"], summary="Evaluate last trained model")
+        async def evaluate_model():
+            try:
+                return clean_json(self.service.evaluate_model())
+            except Exception as e:
+                logger.exception("Model evaluation failed")
+                raise HTTPException(400, str(e))
+
+        @router.post("/stat/predict_row", tags=["Statistic"], summary="Predict a single row of data")
+        async def predict_row(request: PredictRowRequest):
+            try:
+                prediction = self.service.predict_from_row(request.row)
+                return clean_json({"prediction": prediction})
+            except Exception as e:
+                logger.exception("Row prediction failed")
+                raise HTTPException(400, str(e))
+
+        @router.post("/stat/save_model", tags=["Statistic"], summary="Save trained model")
+        async def save_model(request: SaveModelRequest):
+            try:
+                self.service.save_model(request.name)
+                return {"status": "success", "message": f"Model saved as '{request.name}'."}
+            except Exception as e:
+                logger.exception("Model saving failed")
+                raise HTTPException(400, str(e))
             
-    
+        @router.get("/stat/list_models", tags=["Statistic"], summary="List saved models")
+        async def list_models():
+            try:
+                return clean_json({"models": self.service.list_models()})
+            except Exception as e:
+                logger.exception("Failed to list models")
+                raise HTTPException(500, str(e))
+
+        @router.post("/stat/load_model", tags=["Statistic"], summary="Load a previously saved model")
+        async def load_model(request: LoadModelRequest):
+            try:
+                self.service.load_model(request.name)
+                return clean_json({"status": "success", "message": f"Model '{request.name}' loaded."})
+            except Exception as e:
+                logger.exception("Model loading failed")
+                raise HTTPException(400, str(e))

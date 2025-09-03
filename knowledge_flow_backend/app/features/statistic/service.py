@@ -1,279 +1,223 @@
-import logging
 import os
-from typing import Optional, List, Dict, Any
-
-import pandas as pd
-import datetime
 import io
-import contextlib
+import base64
+import logging
+import joblib
+import pandas as pd
 import numpy as np
-from scipy import stats
 import matplotlib.pyplot as plt
 import seaborn as sns
+
+from typing import Optional, List, Dict, Any
+from scipy import stats
+from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import RandomForestRegressor
-from app.features.statistic.utils import safe_eval_function
+from sklearn.preprocessing import LabelEncoder
+from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import confusion_matrix, accuracy_score, r2_score, mean_absolute_error, root_mean_squared_error
 
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
 
 class StatisticService:
     def __init__(
         self,
-        csv_path: str = "/home/thomas/.fred/knowledge-flow/statistic/data/data.csv",
         graphiques_dir: str = "/home/thomas/.fred/knowledge-flow/statistic/data/graphiques",
+        models_dir: str = "/home/thomas/.fred/knowledge-flow/statistic/data/models"
     ):
-        self.csv_path = csv_path
         self.graphiques_dir = graphiques_dir
-        os.makedirs(self.graphiques_dir, exist_ok=True)
-        self._load_data()
-
-    def _load_data(self):
-        try:
-            self.df = pd.read_csv(self.csv_path)
-            logger.info(f"✅ Data loaded from {self.csv_path} with shape {self.df.shape}")
-        except Exception as e:
-            logger.error(f"❌ Failed to load CSV file {self.csv_path}", exc_info=True)
-            self.df = pd.DataFrame()
-
-    def reload_data(self):
-        self._load_data()
-
-    def _save_data(self):
-        try:
-            self.df.to_csv(self.csv_path, index=False)
-            self.reload_data()
-            logger.info(f"💾 Data saved to {self.csv_path}")
-        except Exception as e:
-            logger.error(f"❌ Failed to save CSV to {self.csv_path}", exc_info=True)
-            raise
-
-    def head(self, n: Optional[int] = 5) -> Dict[str, Any]:
-        n = n or 5
-        head = self.df.head(n).replace({np.nan: None}).to_dict(orient='records')
-        return {"head": head}
-
-    def describe_data(self, columns: Optional[List[str]] = None) -> Dict[str, Any]:
-        try:
-            df = self.df if columns is None else self.df[columns]
-
-            head = df.head(5).replace({np.nan: None}).to_dict(orient='records')
-
-            dtypes = {col: str(dtype) for col, dtype in df.dtypes.items()}
-            null_counts = df.isnull().sum().to_dict()
-            unique_counts = df.nunique(dropna=False).to_dict()
-
-            description_raw = df.describe(include='all').replace({np.nan: None})
-            if isinstance(description_raw, pd.Series):
-                description_raw = description_raw.to_frame().T
-            description_dict = description_raw.to_dict()
-
-            skewness = df.skew(numeric_only=True).to_dict()
-            kurtosis = df.kurt(numeric_only=True).to_dict()
-
-            description = {}
-            total_rows = df.shape[0]
-
-            for col in df.columns:
-                stats = description_dict.get(col, {})
-                col_dict = {str(k): v for k, v in stats.items()}
-                col_dict["dtype"] = dtypes.get(col, "unknown")
-                col_dict["null_count"] = null_counts.get(col, 0)
-                col_dict["null_percentage"] = round(100 * null_counts.get(col, 0) / total_rows, 2) if total_rows > 0 else None
-                col_dict["unique_count"] = unique_counts.get(col, 0)
-                col_dict["unique_percentage"] = round(100 * unique_counts.get(col, 0) / total_rows, 2) if total_rows > 0 else None
-
-                if col in skewness and not pd.isna(skewness[col]):
-                    col_dict["skewness"] = skewness[col]
-                if col in kurtosis and not pd.isna(kurtosis[col]):
-                    col_dict["kurtosis"] = kurtosis[col]
-
-                col_dict = {k: v for k, v in col_dict.items() if v not in [np.nan, "null", None, "NaN"]}
-
-                description[col] = col_dict
-
-            shape = {"rows": total_rows, "columns": df.shape[1]}
-
-            logger.info(f"📊 Data description generated (columns={columns})")
-
-            return {
-                "head": head,
-                "description": description,
-                "shape": shape
-            }
-
-        except Exception as e:
-            logger.error(f"❌ Failed to describe data (columns={columns})", exc_info=True)
-            raise
-
-    def delete_column(self, column_name: str) -> None:
-        """
-        Delete a column from the DataFrame.
-        """
-        try:
-            if column_name not in self.df.columns:
-                raise ValueError(f"Column '{column_name}' does not exist.")
-            self.df.drop(columns=[column_name], inplace=True)
-            self._save_data()
-            logger.info(f"🗑️ Column '{column_name}' deleted.")
-        except Exception as e:
-            logger.error(f"❌ Failed to delete column '{column_name}'", exc_info=True)
-            raise
-
-    def update_column(self, column_name: str, func_str: str) -> None:
-        """
-        Apply a function (provided as a string) to a DataFrame column.
-        Optionally allows the use of a dictionary named `mapping` within the function.
-        """
-        try:
-            if column_name not in self.df.columns:
-                raise ValueError(f"Column '{column_name}' does not exist.")
-            
-            if not func_str.startswith("lambda x: "):
-                func_str = "lambda x: " + func_str
-
-            func = safe_eval_function(func_str)
-
-            self.df[column_name] = self.df[column_name].apply(func)
-            self._save_data()
-            logger.info(f"✅ Column '{column_name}' successfully updated.")
-
-        except Exception as e:
-            logger.error(f"❌ Failed to update column '{column_name}'", exc_info=True)
-
-    def add_transformed_column(self, new_column_name: str, source_column_name: str, func_str: str) -> None:
-        """
-        Create a new column based on an existing column
-        by applying a function provided as a string.
-        """
-        try:
-            if source_column_name not in self.df.columns:
-                raise ValueError(f"Source column '{source_column_name}' does not exist.")
-            if new_column_name in self.df.columns:
-                raise ValueError(f"Target column '{new_column_name}' already exists.")
+        self.models_dir = models_dir
+        os.makedirs(graphiques_dir, exist_ok=True)
+        os.makedirs(models_dir, exist_ok=True)
         
-            if not func_str.startswith("lambda x: "):
-                func_str = "lambda x: " + func_str
+    def set_dataset(self,df: pd.DataFrame):
+        self.df = df
 
-            func = safe_eval_function(func_str)
+    def head(self, n: int = 5):
+        return self.df.head(n).to_dict(orient="records")
 
-            self.df[new_column_name] = self.df[source_column_name].apply(func)
-            self._save_data()
-            logger.info(f"✅ Column '{new_column_name}' created from '{source_column_name}' with transformation '{func_str}'.")
+    def describe_data(self) -> Dict[str, Any]:
+        df = self.df
+        desc = df.describe(include='all').to_dict()
+        top_values = {
+            col: df[col].value_counts(dropna=False).head(3).to_dict()
+            for col in df.columns
+        }
+        correlations = df.corr(numeric_only=True).to_dict()
 
-        except Exception as e:
-            logger.error(f"❌ Failed to create column '{new_column_name}' from '{source_column_name}'", exc_info=True)
-            raise
+        outliers = {}
+        for col in df.select_dtypes(include=[np.number]).columns:
+            z = np.abs(stats.zscore(df[col].dropna()))
+            outliers[col] = int((z > 3).sum())
 
-    def ab_test(self, group_col: str, metric_col: str, alpha=0.05) -> Dict[str, Any]:
-        try:
-            if group_col not in self.df.columns or metric_col not in self.df.columns:
-                raise ValueError(f"Columns '{group_col}' or '{metric_col}' not found.")
+        return {
+            "description": desc,
+            "top_values": top_values,
+            "correlations": correlations,
+            "outliers": outliers,
+            "shape": {"rows": df.shape[0], "columns": df.shape[1]}
+        }
 
-            groups = self.df[group_col].unique()
-            if len(groups) != 2:
-                raise ValueError("A/B test requires exactly two groups.")
+    def detect_outliers(self, method="zscore", threshold=3.0) -> Dict[str, List[int]]:
+        df = self.df
+        outliers = {}
+        for col in df.select_dtypes(include=[np.number]).columns:
+            series = df[col].dropna()
+            if method == "zscore":
+                z = np.abs(stats.zscore(series))
+                outliers[col] = series.index[z > threshold].tolist()
+            elif method == "iqr":
+                Q1 = series.quantile(0.25)
+                Q3 = series.quantile(0.75)
+                IQR = Q3 - Q1
+                mask = (series < Q1 - threshold * IQR) | (series > Q3 + threshold * IQR)
+                outliers[col] = series.index[mask].tolist()
+        return outliers
 
-            group1 = self.df[self.df[group_col] == groups[0]][metric_col].dropna()
-            group2 = self.df[self.df[group_col] == groups[1]][metric_col].dropna()
+    def correlation_analysis(self, top_n: int = 5) -> Dict[str, Any]:
+        corr_matrix = self.df.corr(numeric_only=True)
+        corr_pairs = corr_matrix.unstack().reset_index()
+        corr_pairs.columns = ['var1', 'var2', 'correlation']
+        corr_pairs = corr_pairs[corr_pairs['var1'] != corr_pairs['var2']]
+        top_corr = corr_pairs.reindex(corr_pairs['correlation'].abs().sort_values(ascending=False).index).drop_duplicates().head(top_n)
+        return top_corr.to_dict(orient="records")
 
-            t_stat, p_value = stats.ttest_ind(group1, group2, equal_var=False)
-            significant = p_value < alpha
+    def plot_histogram(self, column: str, bins: int = 30, to_base64: bool = False) -> str:
+        plt.figure(figsize=(8, 6))
+        sns.histplot(self.df[column].dropna(), bins=bins, kde=True)
+        plt.title(f"Histogram of {column}")
+        plt.tight_layout()
+        path = os.path.join(self.graphiques_dir, f"hist_{column}.png")
+        plt.savefig(path)
+        plt.close()
+        if to_base64:
+            with open(path, "rb") as img:
+                return base64.b64encode(img.read()).decode()
+        return path
 
-            result = {
-                "group_1": groups[0],
-                "group_2": groups[1],
-                "t_statistic": t_stat,
-                "p_value": p_value,
-                "significant": significant,
-                "alpha": alpha,
-            }
+    def plot_scatter(self, x_col: str, y_col: str, to_base64=False) -> str:
+        plt.figure(figsize=(8, 6))
+        sns.scatterplot(data=self.df, x=x_col, y=y_col)
+        plt.title(f"{y_col} vs {x_col}")
+        plt.tight_layout()
+        path = os.path.join(self.graphiques_dir, f"scatter_{x_col}_vs_{y_col}.png")
+        plt.savefig(path)
+        plt.close()
+        if to_base64:
+            with open(path, "rb") as img:
+                return base64.b64encode(img.read()).decode()
+        return path
+    
 
-            logger.info(f"🧪 A/B test performed on '{metric_col}' grouped by '{group_col}' | p={p_value:.4f}")
-            return result
-        except Exception as e:
-            logger.error(f"❌ A/B test failed (group_col={group_col}, metric_col={metric_col})", exc_info=True)
-            raise
 
-    def plot_histogram(self, column: str, bins: int = 30) -> str:
-        try:
-            if column not in self.df.columns:
-                raise ValueError(f"Column '{column}' not found.")
+    def train_model(self, target: str, features: List[str], model_type: str = "linear") -> Dict[str, Any]:
+        df = self.df.dropna(subset=[target] + features)
+        X = df[features]
+        y = df[target]
 
-            plt.figure(figsize=(8, 6))
-            sns.histplot(self.df[column].dropna(), bins=bins, kde=True)
-            plt.title(f"Histogram of {column}")
-            plt.xlabel(column)
-            plt.ylabel("Frequency")
+        X = pd.get_dummies(X, drop_first=True)
+        self.feature_columns = X.columns.tolist()
 
-            save_path = os.path.join(self.graphiques_dir, f"histogram_{column}.png")
-            plt.savefig(save_path)
-            plt.close()
-
-            logger.info(f"📈 Histogram for '{column}' saved to {save_path}")
-            return save_path
-        except Exception as e:
-            logger.error(f"❌ Failed to plot histogram for column '{column}'", exc_info=True)
-            raise
-
-    def plot_scatter(self, x_col: str, y_col: str) -> str:
-        try:
-            if x_col not in self.df.columns or y_col not in self.df.columns:
-                raise ValueError(f"Columns '{x_col}' or '{y_col}' not found.")
-
-            plt.figure(figsize=(8, 6))
-            sns.scatterplot(x=self.df[x_col], y=self.df[y_col])
-            plt.title(f"Scatter plot of {y_col} vs {x_col}")
-            plt.xlabel(x_col)
-            plt.ylabel(y_col)
-
-            save_path = os.path.join(self.graphiques_dir, f"scatter_{x_col}_vs_{y_col}.png")
-            plt.savefig(save_path)
-            plt.close()
-
-            logger.info(f"📊 Scatter plot of '{y_col}' vs '{x_col}' saved to {save_path}")
-            return save_path
-        except Exception as e:
-            logger.error(f"❌ Failed to plot scatter ({x_col} vs {y_col})", exc_info=True)
-            raise
-
-    def train_model(
-        self,
-        target_column: str,
-        feature_columns: List[str],
-        model_type: str = "linear_regression",
-        model_params: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
-        try:
-            if target_column not in self.df.columns:
-                raise ValueError(f"Target column '{target_column}' not found.")
-            for col in feature_columns:
-                if col not in self.df.columns:
-                    raise ValueError(f"Feature column '{col}' not found.")
-
-            X = self.df[feature_columns].select_dtypes(include=[np.number]).dropna()
-            y = self.df.loc[X.index, target_column]
-            model_params = model_params or {}
-
-            if model_type == "linear_regression":
-                model = LinearRegression(**model_params)
-                model.fit(X, y)
-                score = model.score(X, y)
-                coefs = dict(zip(feature_columns, model.coef_))
-                result = {"model": "Linear Regression", "score_r2": score, "coefficients": coefs}
-
+        is_classification = False
+        if y.dtype == 'object' or y.dtype.name == 'category' or y.nunique() < 20:
+            is_classification = True
+        self.is_classification = is_classification
+       
+        if is_classification:
+            self.label_encoder = LabelEncoder()
+            y = self.label_encoder.fit_transform(y)
+            if model_type == "linear":
+                model = LogisticRegression()
             elif model_type == "random_forest":
-                model = RandomForestRegressor(**model_params)
-                model.fit(X, y)
-                score = model.score(X, y)
-                importances = dict(zip(feature_columns, model.feature_importances_))
-                result = {"model": "Random Forest", "score_r2": score, "feature_importances": importances}
-
+                model = RandomForestClassifier()
             else:
-                raise ValueError(f"Unsupported model type: {model_type}")
+                raise ValueError("Unknown model type")
+        else:
+            if model_type == "linear":
+                model = LinearRegression()
+            elif model_type == "random_forest":
+                model = RandomForestRegressor()
+            else:
+                raise ValueError("Unknown model type")
 
-            logger.info(f"🤖 Model '{model_type}' trained on target '{target_column}' with score {score:.4f}")
-            return result
-        except Exception as e:
-            logger.error(f"❌ Model training failed (type={model_type}, target={target_column})", exc_info=True)
-            raise
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+        model.fit(X_train, y_train)
+
+        self.current_model = model
+        self.X_test = X_test
+        self.y_test = y_test
+        self.y_pred = model.predict(X_test)
+
+        metrics = {}
+        if self.is_classification:
+            metrics["accuracy"] = accuracy_score(y_test, self.y_pred)
+            metrics["confusion_matrix"] = confusion_matrix(y_test, self.y_pred).tolist()
+        else:
+            metrics["r2"] = r2_score(y_test, self.y_pred)
+            metrics["rmse"] = root_mean_squared_error(y_test, self.y_pred)
+            metrics["mae"] = mean_absolute_error(y_test, self.y_pred)
+
+        logger.info(f"✅ Model '{model_type}' trained | Metrics: {metrics}")
+        return {
+            "model_type": model_type,
+            "metrics": metrics
+        }
+
+    def evaluate_model(self) -> Dict[str, Any]:
+        if not hasattr(self, "y_test") or not hasattr(self, "y_pred"):
+            raise ValueError("No model evaluation data found. Train a model first.")
+        metrics = {}
+        if self.is_classification:
+            metrics["accuracy"] = accuracy_score(self.y_test, self.y_pred)
+            metrics["confusion_matrix"] = confusion_matrix(self.y_test, self.y_pred).tolist()
+        else:
+            metrics["r2"] = r2_score(self.y_test, self.y_pred)
+            metrics["rmse"] = root_mean_squared_error(self.y_test, self.y_pred)
+            metrics["mae"] = mean_absolute_error(self.y_test, self.y_pred)
+
+        return metrics
+
+    def predict_from_row(self, row: Dict[str, Any]) -> Any:
+        if not hasattr(self, "current_model"):
+            raise ValueError("No model is loaded or trained yet.")
+        if not hasattr(self, "feature_columns"):
+            raise ValueError("Feature columns are missing. Load model with features.")
+
+        df_row = pd.DataFrame([row])
+        df_row = pd.get_dummies(df_row, drop_first=True)
+
+        for col in self.feature_columns:
+            if col not in df_row.columns:
+                df_row[col] = 0
+        df_row = df_row[self.feature_columns]
+        prediction = self.current_model.predict(df_row)[0]
+        if self.is_classification:
+            prediction_label = self.label_encoder.inverse_transform([prediction])[0]
+            return prediction_label
+        else:
+            return prediction
+
+    def save_model(self, name: str):
+        path = os.path.join(self.models_dir, f"{name}.pkl")
+        to_save = {
+            "model": self.current_model,
+            "feature_columns": self.feature_columns
+        }
+        joblib.dump(to_save, path)
+        logger.info(f"💾 Model and features saved to {path}")
+
+    def list_models(self) -> List[str]:
+        return [
+            f for f in os.listdir(self.models_dir)
+            if f.endswith(".pkl")
+        ]
+
+    def load_model(self, name: str):
+        path = os.path.join(self.models_dir, f"{name}.pkl")
+        data = joblib.load(path)
+        self.current_model = data["model"]
+        self.feature_columns = data["feature_columns"]
+        logger.info(f"📦 Model and features loaded from {path}")
+

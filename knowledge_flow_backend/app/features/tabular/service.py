@@ -15,6 +15,7 @@
 import logging
 from datetime import datetime
 from typing import List, Dict
+import pandas as pd
 
 from fred_core.store.sql_store import SQLTableStore
 from fred_core.store.structures import StoreInfo
@@ -65,6 +66,24 @@ class TabularService:
 
     def list_databases(self) -> List[str]:
         return list(self.stores_info.keys())
+    
+    def list_tables(self) -> List[str]:
+        databases = self.list_databases()
+        tables = []
+        for db_name in databases:
+            store = self._get_store(db_name)
+            tables.extend(store.list_tables())
+        return tables
+    
+    def get_table(self, table_name: str) -> pd.DataFrame:
+        databases = self.list_databases()
+        for db_name in databases:
+            store = self._get_store(db_name)
+            tables = store.list_tables()
+            for tab in tables :
+                if tab == table_name:
+                    return store.load_table(table_name)
+        return pd.DataFrame()
 
     def get_schema(self, db_name: str, document_name: str) -> TabularSchemaResponse:
         table_name = self._sanitize_table_name(document_name)
