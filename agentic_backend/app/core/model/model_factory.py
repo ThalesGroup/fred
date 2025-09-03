@@ -48,7 +48,7 @@ def get_model_config(model_config: ModelConfiguration | None) -> ModelConfigurat
     # TODO: Need to better handle model in AgentSettings class. We need to keep it optional so that we default to the default_model. 
     # But if we set it to Optional in pydantic class, it throws type checking errors.
     if model_config is None: 
-        raise ValueError("Missing mandatory model configuation.")
+        raise ValueError("Missing mandatory model configuration.")
     return model_config
 
 
