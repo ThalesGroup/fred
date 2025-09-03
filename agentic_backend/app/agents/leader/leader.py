@@ -104,7 +104,7 @@ class Leader(AgentFlow):
         self._last_progress_hash: str | None = None
 
     async def async_init(self):
-        self.agent_settings.model = get_model_config(self.agent_settings.model)
+        assert self.agent_settings.model is not None, ("Model configuration should not be `None` here")
         base = get_model(self.agent_settings.model)
         try:
             base = base.bind(temperature=0, top_p=1)  # deterministic routing/validation
