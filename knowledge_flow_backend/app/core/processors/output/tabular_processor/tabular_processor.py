@@ -18,6 +18,7 @@ from pandas._libs.tslibs.nattype import NaTType
 from langchain.schema.document import Document
 import io
 import dateparser
+import re
 
 
 from app.application_context import ApplicationContext
@@ -28,33 +29,91 @@ from app.common.utils import sanitize_sql_name
 
 logger = logging.getLogger(__name__)
 
+_DATE_REGEX = re.compile(
+    r"""(
+        \b\d{1,2}/\d{1,2}/\d{4}\b |
+        \b\d{1,2}/\d{1,2}/\d{2}\b |
+        \b\d{1,2}-\d{1,2}-\d{4}\b |
+        \b\d{1,2}-\d{1,2}-\d{2}\b |
+        \b\d{1,2}\.\d{1,2}\.\d{4}\b |
+        \b\d{1,2}\.\d{1,2}\.\d{2}\b |
+        \b\d{4}-\d{1,2}-\d{1,2}\b |
+        \b\d{4}/\d{1,2}/\d{1,2}\b |
+        \b\d{4}\.\d{1,2}\.\d{1,2}\b |
+
+        \b\d{1,2}\s*(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\s*\d{2,4}\b |  # 1 Jan 2023
+        \b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\s*\d{1,2},?\s*\d{2,4}\b | # Jan 1, 2023
+
+         \b\d{1,2}\s*(jan|fév|mar|avr|mai|jun|juin|juil|jui|aoû|sep|sept|oct|nov|déc)\s*\d{2,4}\b |  # 1 Fév 2023
+        \b(jan|fév|mar|avr|mai|jun|juin|juil|jui|aoû|sep|sept|oct|nov|déc)\s*\d{1,2},?\s*\d{2,4}\b | # Fév 1, 2023
+
+        \b\d{1,2}\s*(january|february|march|april|may|june|july|august|
+                    september|october|november|december)\s*\d{2,4}\b |             # 1 January 2023
+        \b(january|february|march|april|may|june|july|august|
+            september|october|november|december)\s+\d{1,2},?\s*\d{2,4}\b |         # January 1, 2023
+
+        \b\d{1,2}\s*(janvier|février|mars|avril|mai|juin|juillet|août|
+                     septembre|octobre|novembre|décembre)\s*\d{2,4}\b |            # 1 septembre 2023
+        \b(janvier|février|mars|avril|mai|juin|juillet|août|
+            septembre|octobre|novembre|décembre)\s+\d{1,2},?\s*\d{2,4}\b           # septembre 1, 2023
+    )""",
+    re.IGNORECASE | re.VERBOSE,
+)
+
+
+def _looks_like_date(value: str) -> bool:
+    """Check if the string matches a common date format (with separators or month names)."""
+    return bool(_DATE_REGEX.search(value))
+
+
+def _looks_like_compact_date(value: str) -> bool:
+    """Check for compact date strings like YYYYMM or YYYYMMDD."""
+    if not re.fullmatch(r"\d{6,8}", value):
+        return False
+    try:
+        month = int(value[4:6])
+        if not (1 <= month <= 12):
+            return False
+        if len(value) == 8:
+            day = int(value[6:8])
+            return 1 <= day <= 31
+        return True
+    except ValueError:
+        return False
+
 
 def _parse_date(value: str) -> pd.Timestamp | NaTType:
-    if not value or not isinstance(value, str):
+    """Attempt to parse a string into a pandas Timestamp using dateparser."""
+    if not isinstance(value, str) or not any(c.isdigit() for c in value):
         return pd.NaT
 
-    # Quick reject: no digits → unlikely to be a date
-    if not any(c.isdigit() for c in value):
-        return pd.NaT
-
-    dt = dateparser.parse(
-        value,
-        settings={"PREFER_DAY_OF_MONTH": "first", "RETURN_AS_TIMEZONE_AWARE": False},
-    )
+    dt = dateparser.parse(value, settings={"PREFER_DAY_OF_MONTH": "first", "RETURN_AS_TIMEZONE_AWARE": False})
 
     if dt is None:
         return pd.NaT
 
     try:
         ts = pd.to_datetime(dt, errors="raise")
-        # Reject absurd dates
-        if ts.year < 0 :
-            return pd.NaT
-        return ts
+        return ts if ts.year >= 0 else pd.NaT
     except (ValueError, OverflowError):
         return pd.NaT
 
-    
+
+def is_valid_date(series: pd.Series, threshold: float = 0.7) -> bool:
+    """
+    Determine if a series contains mostly valid dates (above the given threshold).
+    Uses both format heuristics and actual parsing.
+    """
+    values = series.dropna().astype(str)
+    if values.empty:
+        return False
+
+    def is_parsable(value: str) -> bool:
+        return (_looks_like_date(value) or _looks_like_compact_date(value)) and not bool(pd.isna(_parse_date(value)))
+
+    valid_count = sum(is_parsable(val) for val in values)
+    return (valid_count / len(values)) >= threshold
+
 class TabularProcessor(BaseOutputProcessor):
     """
     A pipeline for processing tabular data.
@@ -69,29 +128,23 @@ class TabularProcessor(BaseOutputProcessor):
         try:
             logger.info(f"Processing file: {file_path} with metadata: {metadata}")
 
-            # 1. Load the document
             document: Document = load_langchain_doc_from_metadata(file_path, metadata)
             logger.debug(f"Document loaded: {document}")
             if not document:
                 raise ValueError("Document is empty or not loaded correctly.")
 
-            # 2. Load the DataFrame from the document
             df = pd.read_csv(io.StringIO(document.page_content))
             table_name = sanitize_sql_name(metadata.document_name.rsplit(".", 1)[0])
             df.columns = [sanitize_sql_name(col) for col in df.columns]
 
-            for col in df.columns:
-                if df[col].dtype == object:
-                    sample_values = df[col].dropna().astype(str).head(10)
-                    parsed_samples = sample_values.map(_parse_date)
-                    success_ratio = parsed_samples.notna().mean()
-                    if success_ratio > 0.6 and parsed_samples.nunique() > 1:
-                        logger.info(f"🕒 Parsing column '{col}' as datetime (score: {success_ratio:.2f})")
-                        df[col] = df[col].astype(str).map(_parse_date)
+            for col in df.select_dtypes(include=["object"]).columns:
+                sample = pd.Series(df[col].dropna().astype(str).head(20))
+                if not sample.empty and is_valid_date(sample, threshold=0.7):
+                    logger.info(f"🕒 Parsing column '{col}' as datetime")
+                    df[col] = df[col].astype(str).map(_parse_date)
 
             logger.debug(f"document {document}")
 
-            # 3. save the document into the selected tabular storage
             try:
                 if self.csv_input_store is None:
                     raise RuntimeError("csv_input_store is not initialized")

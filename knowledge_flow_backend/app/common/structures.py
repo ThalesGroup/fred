@@ -33,6 +33,7 @@ unit tests. It helps to decouple the different components of the application and
 to define clear workflows and data structures.
 """
 
+
 class EmbeddingProvider(str, Enum):
     OPENAI = "openai"
     AZUREOPENAI = "azureopenai"
