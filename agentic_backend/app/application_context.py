@@ -254,14 +254,6 @@ class ApplicationContext:
         This merges the default settings into each component's model config.
         """
 
-        def merge(target: BaseModel) -> BaseModel:
-            defaults = self.configuration.ai.default_model.model_dump(
-                exclude_unset=True
-            )
-            target_dict = target.model_dump(exclude_unset=True)
-            merged_dict = {**defaults, **target_dict}
-            return type(target)(**merged_dict)
-
         # Apply to agents
         for agent in self.configuration.ai.agents:
             agent.model = self._merge_with_default_model(agent.model)
@@ -580,7 +572,7 @@ class ApplicationContext:
         logger.info("  ⏱️  Timeouts: connect=%ss, read=%ss", tcfg.connect, tcfg.read)
 
         # Agents
-        enabled_agents = [a.name or a.class_path for a in cfg.ai.agents if a.enabled]
+        enabled_agents = [a.name for a in cfg.ai.agents if a.enabled]
         logger.info(
             "  🤖 Agents enabled: %d%s",
             len(enabled_agents),

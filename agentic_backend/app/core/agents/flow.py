@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from abc import abstractmethod
 from datetime import datetime
 import logging
 from typing import List, Optional, Sequence
@@ -213,3 +214,10 @@ class AgentFlow:
     def __str__(self) -> str:
         """String representation of the agent."""
         return f"{self.name} ({self.nickname}): {self.description}"
+
+    @abstractmethod
+    async def async_init(self):
+        """
+        Asynchronous initialization routine that must be implemented by subclasses.
+        """
+        pass

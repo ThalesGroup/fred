@@ -63,7 +63,6 @@ ai:
       role: "Multi-Agent Orchestrator"
       class_path: "app.agents.leader.leader.Leader"
       enabled: true
-      model: {}
       type: "leader"
       max_steps: 5
     - name: "Samy"
@@ -75,11 +74,9 @@ ai:
           sse_read_timeout: 2000
       class_path: "app.agents.sentinel.sentinel_expert.SentinelExpert"
       enabled: true
-      model: {}
     - name: "Georges"
       class_path: "app.agents.generalist.generalist_expert.GeneralistExpert"
       enabled: true
-      model: {}
     - name: "Tessa"
       role: "Data Query and SQL Expert"
       class_path: "app.agents.tabular.tabular_expert.TabularExpert"
@@ -89,7 +86,6 @@ ai:
           transport: streamable_http
           url: http://localhost:8111/knowledge-flow/v1/mcp-tabular
           sse_read_timeout: 2000
-      model: {}
     - name: "Rico Senior"
       class_path: "app.agents.rags.advanced_rag_expert.AdvancedRagExpert"
       enabled: true
@@ -97,7 +93,6 @@ ai:
         chunk_size: 512
         chunk_overlap: 64
         knowledge_flow_url: "http://localhost:8111/knowledge-flow/v1"
-      model: {}
     - name: "Rico Jr."
       role: "Document Retrieval Expert"
       class_path: "app.agents.rags.rag_expert.RagExpert"
@@ -109,7 +104,6 @@ ai:
         chunk_size: 512
         chunk_overlap: 64
         knowledge_flow_url: "http://localhost:8111/knowledge-flow/v1"
-      model: {}
     - name: "Brontë"
       role: "Content generator expert"
       description: >
@@ -122,7 +116,6 @@ ai:
           transport: streamable_http
           url: http://localhost:8111/knowledge-flow/v1/mcp-resources
           sse_read_timeout: 2000
-      model: {}
 
 storage:
   postgres:

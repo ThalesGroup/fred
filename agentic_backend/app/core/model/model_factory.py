@@ -28,7 +28,31 @@ from app.common.structures import ModelConfiguration
 logger = logging.getLogger(__name__)
 
 
-def get_model(model_config: ModelConfiguration):
+def get_model_config(model_config: ModelConfiguration | None) -> ModelConfiguration:
+    """
+    Temporary function to validate and return the provided model configuration.
+
+    This function exists as a placeholder while handling of model configuration
+    via the AgentSettings class is being improved (see #TODO note).
+    Once the relevant refactor is complete, this function should be removed.
+
+    Args:
+        model_config (ModelConfiguration | None): The model configuration to validate.
+
+    Returns:
+        ModelConfiguration: The validated (non-None) model configuration.
+
+    Raises:
+        ValueError: If model_config is None.
+    """
+    # TODO: Need to better handle model in AgentSettings class. We need to keep it optional so that we default to the default_model. 
+    # But if we set it to Optional in pydantic class, it throws type checking errors.
+    if model_config is None: 
+        raise ValueError("Missing mandatory model configuation.")
+    return model_config
+
+
+def get_model(model_config: ModelConfiguration | None):
     """
     Factory function to create a model instance based on configuration.
 
@@ -46,6 +70,9 @@ def get_model(model_config: ModelConfiguration):
     Returns:
         An instance of a Chat model.
     """
+
+    model_config = get_model_config(model_config=model_config)
+
     provider = model_config.provider
 
     if not provider:
@@ -53,7 +80,7 @@ def get_model(model_config: ModelConfiguration):
             "Missing mandatory model_type property in model configuration: %s",
             model_config,
         )
-        raise ValueError("Missing mandatory_model type in model configuration.")
+        raise ValueError("Missing mandatory model type in model configuration.")
     settings = (model_config.settings or {}).copy()
 
     if provider == "azure":

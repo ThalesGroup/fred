@@ -166,7 +166,6 @@ applications:
             type: "leader"
             enabled: true
             max_steps: 5
-            model: {}
           - name: "GeneralistExpert"
             role: "Fallback Generalist Expert"
             description: >
@@ -174,7 +173,6 @@ applications:
               Acts as a default agent to assist with general questions across all domains.
             class_path: "app.agents.generalist.generalist_expert.GeneralistExpert"
             enabled: true
-            model: {}
           - name: "TabularExpert"
             role: "Data Query and SQL Expert"
             description: >
@@ -188,7 +186,6 @@ applications:
                 transport: sse
                 url: http://localhost:8111/knowledge-flow/v1/mcp-tabular
                 sse_read_timeout: 2000
-            model: {}
           - name: "Rico Senior"
             role: "Document Retrieval Expert"
             description: >
@@ -202,7 +199,6 @@ applications:
               chunk_size: 512
               chunk_overlap: 64
               knowledge_flow_url: "http://localhost:8111/knowledge-flow/v1"
-            model: {}
           - name: "Rico Jr."
             role: "Document Retrieval Expert"
             description: >
@@ -215,7 +211,6 @@ applications:
               chunk_size: 512
               chunk_overlap: 64
               knowledge_flow_url: "http://localhost:8111/knowledge-flow/v1"
-            model: {}
       storage:
         postgres:
           host: localhost

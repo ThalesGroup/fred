@@ -13,7 +13,7 @@ from langgraph.constants import START, END
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 
 from app.common.structures import AgentSettings
-from app.core.model.model_factory import get_model, get_structured_chain
+from app.core.model.model_factory import get_model, get_model_config, get_structured_chain
 from app.core.agents.flow import AgentFlow
 from app.agents.leader.structures.state import State
 from app.agents.leader.structures.plan import Plan
@@ -104,6 +104,7 @@ class Leader(AgentFlow):
         self._last_progress_hash: str | None = None
 
     async def async_init(self):
+        self.agent_settings.model = get_model_config(self.agent_settings.model)
         base = get_model(self.agent_settings.model)
         try:
             base = base.bind(temperature=0, top_p=1)  # deterministic routing/validation
