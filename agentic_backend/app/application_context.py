@@ -30,7 +30,6 @@ from typing import Any, Callable, Dict, List, Optional
 
 from app.core.agents.store.base_agent_store import BaseAgentStore
 from app.core.feedback.store.base_feedback_store import BaseFeedbackStore
-from pydantic import BaseModel
 
 from app.common.structures import (
     AgentSettings,
