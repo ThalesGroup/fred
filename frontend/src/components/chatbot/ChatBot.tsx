@@ -35,7 +35,11 @@ import { useToast } from "../ToastProvider.tsx";
 import { MessagesArea } from "./MessagesArea.tsx";
 import UserInput, { UserInputContent } from "./UserInput.tsx";
 import { keyOf, mergeAuthoritative, sortMessages, toWsUrl, upsertOne } from "./ChatBotUtils.tsx";
-import { TagType, useListAllTagsKnowledgeFlowV1TagsGetQuery, useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import {
+  TagType,
+  useListAllTagsKnowledgeFlowV1TagsGetQuery,
+  useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery,
+} from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import ChatKnowledge from "./ChatKnowledge.tsx";
 
 export interface ChatBotError {
@@ -79,7 +83,7 @@ const ChatBot = ({
     try {
       const uid = KeyCloakService.GetUserId?.() || "anon";
       localStorage.setItem(`chatctx_open:${uid}`, contextOpen ? "1" : "0");
-    } catch { }
+    } catch {}
   }, [contextOpen]);
 
   const { showInfo, showError } = useToast();
@@ -94,15 +98,15 @@ const ChatBot = ({
 
   const libraryNameMap = useMemo(
     () => Object.fromEntries((docLibs as any[]).map((x: any) => [x.id, x.name])),
-    [docLibs]
+    [docLibs],
   );
   const promptNameMap = useMemo(
     () => Object.fromEntries((promptResources as any[]).map((x: any) => [x.id, x.name ?? x.id])),
-    [promptResources]
+    [promptResources],
   );
   const templateNameMap = useMemo(
     () => Object.fromEntries((templateResources as any[]).map((x: any) => [x.id, x.name ?? x.id])),
-    [templateResources]
+    [templateResources],
   );
 
   // Lazy messages fetcher
@@ -231,6 +235,7 @@ const ChatBot = ({
       socket.onclose = () => {
         console.warn("[❌ ChatBot] WebSocket closed");
         webSocketRef.current = null;
+        setWaitResponse(false);
       };
     });
   };
@@ -291,14 +296,18 @@ const ChatBot = ({
   }, [currentAgenticFlow?.name]);
 
   // Init values (réhydratation)
-  const [initialCtx, setInitialCtx] = useState<{ documentLibraryIds: string[]; promptResourceIds: string[]; templateResourceIds: string[]; }>({
+  const [initialCtx, setInitialCtx] = useState<{
+    documentLibraryIds: string[];
+    promptResourceIds: string[];
+    templateResourceIds: string[];
+  }>({
     documentLibraryIds: [],
     promptResourceIds: [],
     templateResourceIds: [],
   });
 
   // load from local storage
-   // Load defaults for a brand-new convo (no session yet). These act as initial* props for UserInput.
+  // Load defaults for a brand-new convo (no session yet). These act as initial* props for UserInput.
   useEffect(() => {
     try {
       const raw = localStorage.getItem(storageKey);
@@ -319,8 +328,7 @@ const ChatBot = ({
 
   const [userInputContext, setUserInputContext] = useState<any>(null);
 
-
- // IMPORTANT:
+  // IMPORTANT:
   // Save per-agent defaults *only before a session exists* (pre-session seeding).
   // Once a session exists, UserInput persists per-session selections itself.
   useEffect(() => {
@@ -345,7 +353,6 @@ const ChatBot = ({
     storageKey,
     currentChatBotSession?.id, // guard: only save when undefined
   ]);
-
 
   // Handle user input (text/audio/files)
   const handleSend = async (content: UserInputContent) => {
@@ -474,9 +481,9 @@ const ChatBot = ({
       ? messages.reduce((sum, msg) => sum + (msg.metadata?.token_usage?.input_tokens || 0), 0)
       : 0;
   // After your state declarations
-  const showWelcome = isCreatingNewConversation || messages.length === 0;
+  const showWelcome = !waitResponse && (isCreatingNewConversation || messages.length === 0);
 
-    const hasContext =
+  const hasContext =
     !!userInputContext &&
     ((userInputContext?.files?.length ?? 0) > 0 ||
       !!userInputContext?.audioBlob ||
@@ -491,7 +498,7 @@ const ChatBot = ({
            - Always show the conversation context so developers/users immediately
              understand if they’re in a persisted session or a draft.
            - Avoid guesswork (messages length, etc.). Keep UX deterministic. */}
-      
+
       <Box
         width="80%"
         maxWidth="768px"
@@ -525,9 +532,7 @@ const ChatBot = ({
                 background: (t) =>
                   `linear-gradient(180deg, ${t.palette.heroBackgroundGrad.gradientFrom}, ${t.palette.heroBackgroundGrad.gradientTo})`,
                 boxShadow: (t) =>
-                  t.palette.mode === "light"
-                    ? "0 1px 2px rgba(0,0,0,0.06)"
-                    : "0 1px 2px rgba(0,0,0,0.25)",
+                  t.palette.mode === "light" ? "0 1px 2px rgba(0,0,0,0.06)" : "0 1px 2px rgba(0,0,0,0.25)",
                 px: { xs: 2, sm: 3 },
                 py: { xs: 2, sm: 2.5 },
               }}
@@ -619,9 +624,9 @@ const ChatBot = ({
                 currentAgenticFlow={currentAgenticFlow}
               />
               {waitResponse && (
-                <Grid2 size="grow" marginTop={5}>
+                <Box mt={1} sx={{ alignSelf: "flex-start" }}>
                   <DotsLoader dotColor={theme.palette.text.primary} />
-                </Grid2>
+                </Box>
               )}
             </Grid2>
 
@@ -670,6 +675,6 @@ const ChatBot = ({
       />
     </Box>
   );
-}; 
+};
 
 export default ChatBot;
