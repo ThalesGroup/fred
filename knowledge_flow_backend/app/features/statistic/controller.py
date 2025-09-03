@@ -1,60 +1,12 @@
 import logging
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
-from typing import List, Dict, Any, Literal
 
+from app.features.statistic.utils import clean_json
+from app.features.statistic.structures import SetDatasetRequest, DetectOutliersRequest, CorrelationsRequest, PlotHistogramRequest, PlotScatterRequest, TrainModelRequest, PredictRowRequest, SaveModelRequest, LoadModelRequest
 from app.features.statistic.service import StatisticService
 from app.application_context import ApplicationContext
 
 logger = logging.getLogger(__name__)
-
-# Pydantic Models
-
-class SetDatasetRequest(BaseModel):
-    dataset_name : str
-
-class DetectOutliersRequest(BaseModel):
-    method: Literal["zscore", "iqr"] = "zscore"
-    threshold: float = 3.0
-
-class CorrelationsRequest(BaseModel):
-    top_n: int = 5
-
-class PlotHistogramRequest(BaseModel):
-    column: str
-    bins: int = 30
-
-class PlotScatterRequest(BaseModel):
-    x_col: str
-    y_col: str
-
-class TrainModelRequest(BaseModel):
-    target: str
-    features: List[str]
-    model_type: Literal["linear", "random_forest"] = "linear"
-
-class PredictRowRequest(BaseModel):
-    row: Dict[str, Any]
-
-class SaveModelRequest(BaseModel):
-    name: str
-
-class LoadModelRequest(BaseModel):
-    name: str
-
-import math
-
-def clean_json(obj):
-    if isinstance(obj, dict):
-        return {k: clean_json(v) for k, v in obj.items()}
-    elif isinstance(obj, list):
-        return [clean_json(v) for v in obj]
-    elif isinstance(obj, float):
-        if math.isnan(obj) or math.isinf(obj):
-            return None  # ou str(obj) si tu veux garder "NaN", "inf"
-    return obj
-
-# Controller Class
 
 class StatisticController:
     def __init__(self, router: APIRouter):

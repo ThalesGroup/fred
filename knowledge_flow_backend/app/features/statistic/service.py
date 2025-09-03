@@ -112,7 +112,7 @@ class StatisticService:
     
 
 
-    def train_model(self, target: str, features: List[str], model_type: str = "linear") -> Dict[str, Any]:
+    def train_model(self, target: str, features: List[str], model_type: str) -> Dict[str, Any]:
         df = self.df.dropna(subset=[target] + features)
         X = df[features]
         y = df[target]
