@@ -2,7 +2,7 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Debug Agentic Backend",
+      "name": "Debug Agentic Backend (configuration.yaml)",
       "type": "debugpy",
       "request": "launch",
       "python": "${workspaceFolder}/agentic_backend/.venv/bin/python",
@@ -15,7 +15,10 @@
         "--port", "8000",
         "--log-level", "info",
         "--loop", "asyncio",
-        "--reload"
+        "--reload",
+        "--reload-dir", "${workspaceFolder}/agentic_backend/config",
+        "--reload-include", "*.py",
+        "--reload-include", "*.yaml",
       ],
       "env": {
         "PYTHONPATH": "${workspaceFolder}/agentic_backend",
@@ -25,7 +28,34 @@
       "console": "integratedTerminal"
     },
     {
-      "name": "Debug Knowledge Flow Backend",
+      "name": "Debug Agentic Backend (configuration_prod.yaml)",
+      "type": "debugpy",
+      "request": "launch",
+      "python": "${workspaceFolder}/agentic_backend/.venv/bin/python",
+      "cwd": "${workspaceFolder}/agentic_backend",
+      "module": "uvicorn",
+      "args": [
+        "app.main:create_app",
+        "--factory",
+        "--host", "0.0.0.0",
+        "--port", "8000",
+        "--log-level", "info",
+        "--loop", "asyncio",
+        "--reload",
+        "--reload-dir", "${workspaceFolder}/agentic_backend/config",
+        "--reload-include", "*.py",
+        "--reload-include", "*.yaml",
+
+      ],
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/agentic_backend",
+        "CONFIG_FILE": "${workspaceFolder}/agentic_backend/config/configuration_prod.yaml"
+      },
+      "justMyCode": false,
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Debug Knowledge Flow Backend (configuration.yaml)",
       "type": "debugpy",
       "request": "launch",
       "python": "${workspaceFolder}/knowledge_flow_backend/.venv/bin/python",
@@ -38,11 +68,41 @@
         "--port", "8111",
         "--log-level", "info",
         "--loop", "asyncio",
-        "--reload"
+        "--reload",
+        "--reload-dir", "${workspaceFolder}/knowledge_flow_backend/config",
+        "--reload-include", "*.py",
+        "--reload-include", "*.yaml",
+
       ],
       "env": {
         "PYTHONPATH": "${workspaceFolder}/knowledge_flow_backend",
         "CONFIG_FILE": "${workspaceFolder}/knowledge_flow_backend/config/configuration.yaml"
+      },
+      "justMyCode": false,
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Debug Knowledge Flow Backend (configuration_prod.yaml)",
+      "type": "debugpy",
+      "request": "launch",
+      "python": "${workspaceFolder}/knowledge_flow_backend/.venv/bin/python",
+      "cwd": "${workspaceFolder}/knowledge_flow_backend",
+      "module": "uvicorn",
+      "args": [
+        "app.main:create_app",
+        "--factory",
+        "--host", "0.0.0.0",
+        "--port", "8111",
+        "--log-level", "info",
+        "--loop", "asyncio",
+        "--reload",
+        "--reload-dir", "${workspaceFolder}/knowledge_flow_backend/config",
+        "--reload-include", "*.py",
+        "--reload-include", "*.yaml",
+      ],
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/knowledge_flow_backend",
+        "CONFIG_FILE": "${workspaceFolder}/knowledge_flow_backend/config/configuration_prod.yaml"
       },
       "justMyCode": false,
       "console": "integratedTerminal"

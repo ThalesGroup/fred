@@ -102,6 +102,7 @@ class AgentManager:
             instance = cls(agent_settings=agent_cfg)
             if iscoroutinefunction(getattr(instance, "async_init", None)):
                 await instance.async_init()
+
             self._register_loaded_agent(agent_cfg.name, instance, agent_cfg)
             logger.info(
                 f"✅ Registered static agent '{agent_cfg.name}' from configuration."
@@ -360,7 +361,7 @@ class AgentManager:
         while True:
             await asyncio.sleep(10)
             if not self.failed_agents:
-                logger.debug("🔄 Agent retry all is all right.")
+                logger.debug("🔄 Agent retry is all right.")
                 continue
 
             try:

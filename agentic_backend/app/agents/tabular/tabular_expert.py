@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import logging
-from datetime import datetime
 
 from app.common.mcp_runtime import MCPRuntime
 from app.common.resilient_tool_node import make_resilient_tools_node
@@ -35,49 +34,32 @@ class TabularExpert(AgentFlow):
     This agent uses MCP tools to list, inspect, and query structured data like CSV or Excel.
     """
 
-    name: str
-    role: str
-    nickname: str = "Tessa"
-    description: str
+    # Class-level metadata
+    name: str = "Tabular Expert"
+    nickname: str = "Tom"
+    role: str = "Data Query and SQL Expert"
+    description: str = """Executes advanced SQL queries (including joins and aggregations) 
+        over structured datasets like CSVs, Postgres exports, or DuckDB files. 
+        Ideal for analyzing tabular data ingested into the platform."""
     icon: str = "tabular_agent"
     categories: list[str] = ["tabular", "sql"]
     tag: str = "data"
 
     def __init__(self, agent_settings: AgentSettings):
-        self.agent_settings = agent_settings
-        self.name = agent_settings.name
-        self.current_date = datetime.now().strftime("%Y-%m-%d")
-        self.model = None
+        super().__init__(agent_settings=agent_settings)
         self.mcp = MCPRuntime(
-            agent_settings=self.agent_settings,
+            agent_settings=agent_settings,
             # If you expose runtime filtering (tenant/library/time window),
             # pass a provider: lambda: self.get_runtime_context()
             context_provider=(lambda: self.get_runtime_context()),
         )
         self.base_prompt = self._generate_prompt()
-        self._graph = None
-        self.categories = agent_settings.categories or ["tabular"]
-        self.tag = agent_settings.tag or "data"
-        self.description = agent_settings.description
-        self.role = agent_settings.role
 
     async def async_init(self):
         self.model = get_model(self.agent_settings.model)
         await self.mcp.init()
         self.model = self.model.bind_tools(self.mcp.get_tools())
         self._graph = self._build_graph()
-
-        super().__init__(
-            name=self.name,
-            role=self.role,
-            nickname=self.nickname,
-            description=self.description,
-            icon=self.icon,
-            graph=self._graph,
-            base_prompt=self.base_prompt,
-            categories=self.categories,
-            tag=self.tag,
-        )
 
     def _generate_prompt(self) -> str:
         return (
@@ -127,7 +109,6 @@ class TabularExpert(AgentFlow):
                 "Model must be initialized before building graph"
             )
             response = await self.model.ainvoke(messages)
-
 
             return {"messages": [response]}
 

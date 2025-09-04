@@ -17,16 +17,14 @@ Fred agents are **LangGraph-based conversational experts** that follow a few cor
 
 The `AgentFlow` base class defines:
 
-| Attribute         | Purpose                                                              |
-|------------------|----------------------------------------------------------------------|
-| `name`, `role`, etc. | Metadata for display and logging                                    |
-| `model`           | The language model used by the agent                                 |
-| `toolkit`         | Optional LangChain tools (e.g., for querying CSVs, databases, etc.)  |
-| `base_prompt`     | The initial `SystemMessage` given to the agent                       |
-| `graph`           | The LangGraph flow used to process user input                        |
+| Attribute              | Purpose                                                             |
+| ---------------------- | ------------------------------------------------------------------- |
+| `name`, `role`, etc.   | Metadata for display and logging                                    |
+| `model`                | The language model used by the agent                                |
+| `toolkit`              | Optional LangChain tools (e.g., for querying CSVs, databases, etc.) |
+| `base_prompt`          | The initial `SystemMessage` given to the agent                      |
+| `graph`                | The LangGraph flow used to process user input                       |
 | `get_compiled_graph()` | Compiles and caches the flow for execution                          |
-
-All agents must call `super().__init__()` inside their `async_init()` once the model, prompt, and graph are ready.
 
 ---
 
@@ -79,54 +77,52 @@ This is the simplest kind of agent: no tools, just a reasoning loop.
 
 ```python
 class GeneralistExpert(AgentFlow):
-    name = "GeneralistExpert"
-    role = "Generalist Expert"
-    nickname = "Georges"
-    description = "Provides guidance on a wide range of topics without deep specialization."
-    icon = "generalist_agent"
-    tag = "Generalist"
+    """
+    Generalist Expert provides guidance on a wide range of topics
+    without deep specialization.
+    """
+
+    # Class-level metadata
+    name: str | None = "GeneralistExpert"
+    nickname: str | None = "Georges"
+    role: str | None = "Fallback Generalist Expert"
+    description: str | None = """Provides broad, high-level guidance when no specific expert is better suited. 
+        Acts as a default agent to assist with general questions across all domains."""
+    icon: str = "generalist_agent"
+    categories: List[str] = ["General"]
+    tag: str = "generalist"
 
     def __init__(self, agent_settings: AgentSettings):
-        self.agent_settings = agent_settings
-        self.categories = agent_settings.categories or ["General"]
-        self.model = None
-        self.base_prompt = ""
-        self._graph = None
+        super().__init__(agent_settings = agent_settings)
 
     async def async_init(self):
         self.model = get_model(self.agent_settings.model)
         self.base_prompt = self._generate_prompt()
         self._graph = self._build_graph()
 
-        super().__init__(
-            name=self.name,
-            role=self.role,
-            nickname=self.nickname,
-            description=self.description,
-            icon=self.icon,
-            graph=self._graph,
-            base_prompt=self.base_prompt,
-            categories=self.categories,
-            tag=self.tag,
+    def _generate_prompt(self) -> str:
+        today = datetime.now().strftime("%Y-%m-%d")
+        return "\n".join(
+            [
+                "You are a friendly generalist expert, skilled at providing guidance on a wide range of topics without deep specialization.",
+                "Your role is to respond with clarity, providing accurate and reliable information.",
+                "When appropriate, highlight elements that could be particularly relevant.",
+                f"The current date is {today}.",
+                "In case of graphical representation, render mermaid diagrams code.",
+            ]
         )
 
-    def _generate_prompt(self):
-        return "\n".join([
-            "You are a helpful generalist.",
-            "You provide guidance on any topic.",
-            f"The current date is {datetime.now().strftime('%Y-%m-%d')}."
-        ])
-
-    def _build_graph(self):
+    def _build_graph(self) -> StateGraph:
         builder = StateGraph(MessagesState)
-        builder.add_node("expert", monitor_node(self.reasoner))
+        builder.add_node("expert", self.reasoner)
         builder.add_edge(START, "expert")
         builder.add_edge("expert", END)
         return builder
 
     async def reasoner(self, state: MessagesState):
-        prompt = SystemMessage(content=self.base_prompt)
-        response = await self.model.ainvoke([prompt] + state["messages"])
+        messages = self.use_fred_prompts(state["messages"])
+        assert self.model is not None
+        response = await self.model.ainvoke(messages)
         return {"messages": [response]}
 ```
 
@@ -143,4 +139,5 @@ class GeneralistExpert(AgentFlow):
 
 - See `TabularExpert` for an example agent that loads tools asynchronously and uses LangGraph `ToolNode`.
 - In the future, shared utilities for common node types, graph patterns, and memory behaviors will further reduce duplication.
+
 

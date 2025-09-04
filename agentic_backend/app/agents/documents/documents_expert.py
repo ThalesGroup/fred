@@ -6,7 +6,6 @@
 
 import json
 import logging
-from datetime import datetime
 from typing import List
 
 from langchain_core.messages import HumanMessage, ToolMessage
@@ -26,37 +25,29 @@ from pydantic import TypeAdapter, ValidationError
 logger = logging.getLogger(__name__)
 
 
-class Dominic(AgentFlow):
+class DocumentExpert(AgentFlow):
     """
-    Dominic: tool-first documents expert using MCP.
+    Tool-first documents expert using MCP.
     - The model decides when to call the MCP tool `search_documents_using_vectorization`.
     - Results are strict VectorSearchHit and are attached to response metadata for the UI.
     """
 
-    name: str
-    role: str
-    nickname: str
-    description: str
+    name: str = "DocumentExpert"
+    nickname: str = "Dominic"
+    role: str = "Document Expert using basic RAG"
+    description: str = "Performs basic RAG (Retrieval Augmented Generation)"
     icon: str = "documents_agent"
-    categories: list[str] = []
-    tag: str = "documents"
+    categories: list[str] = ["Documentation"]
+    tag: str = "rags"
 
     def __init__(self, agent_settings: AgentSettings):
-        self.agent_settings = agent_settings
-        self.name = agent_settings.name
-        self.nickname = agent_settings.nickname or agent_settings.name
-        self.role = agent_settings.role
-        self.description = agent_settings.description
-        self.current_date = datetime.now().strftime("%Y-%m-%d")
-        self.model = None
+        super().__init__(agent_settings=agent_settings)
         self.mcp = MCPRuntime(
-            agent_settings=self.agent_settings,
+            agent_settings=agent_settings,
             # If you expose runtime filtering (tenant/library/time window),
             # pass a provider: lambda: self.get_runtime_context()
             context_provider=(lambda: self.get_runtime_context()),
         )
-        self.categories = agent_settings.categories or ["documents"]
-        self.tag = agent_settings.tag or "documents"
         self.base_prompt = self._generate_prompt()
 
         # Typed adapter for validating tool outputs into List[VectorSearchHit]
@@ -69,18 +60,6 @@ class Dominic(AgentFlow):
         await self.mcp.init()
         self.model = self.model.bind_tools(self.mcp.get_tools())
         self._graph = self._build_graph()
-
-        super().__init__(
-            name=self.name,
-            role=self.role,
-            nickname=self.nickname,
-            description=self.description,
-            icon=self.icon,
-            graph=self._graph,
-            base_prompt=self.base_prompt,
-            categories=self.categories,
-            tag=self.tag,
-        )
 
     def _generate_prompt(self) -> str:
         return (

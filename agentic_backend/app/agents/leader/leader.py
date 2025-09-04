@@ -79,19 +79,16 @@ class Leader(AgentFlow):
     This version prioritizes determinism and short plans to avoid loops.
     """
 
-    name: str = "Fred"
-    role: str = "Team Leader"
+    name: str = "Leader"
     nickname: str = "Fred"
+    role: str = "Team Leader"
     description: str = "Supervises multiple experts to provide answers and insights."
     icon: str = "fred_agent"
     tag: str = "leader"
 
     def __init__(self, agent_settings: AgentSettings):
-        self.agent_settings = agent_settings
+        super().__init__(agent_settings=agent_settings)
         self.max_steps = agent_settings.max_steps
-
-        self.model = None
-        self._graph: StateGraph | None = None
 
         # Expert registry + routing index
         self.experts: dict[str, AgentFlow] = {}
@@ -107,6 +104,7 @@ class Leader(AgentFlow):
         self._last_progress_hash: str | None = None
 
     async def async_init(self):
+        assert self.agent_settings.model is not None, ("Model configuration should not be `None` here")
         base = get_model(self.agent_settings.model)
         try:
             base = base.bind(temperature=0, top_p=1)  # deterministic routing/validation
@@ -123,18 +121,6 @@ class Leader(AgentFlow):
         )
         self.plan_decision_chain = get_structured_chain(
             PlanDecision, self.agent_settings.model
-        )
-
-        super().__init__(
-            name=self.name,
-            role=self.role,
-            nickname=self.nickname,
-            description=self.description,
-            icon=self.icon,
-            graph=self._graph,
-            base_prompt="",  # optional global prompt if needed
-            categories=["orchestrator"],
-            tag=self.tag,
         )
 
     # -------------------------

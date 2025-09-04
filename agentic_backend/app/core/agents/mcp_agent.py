@@ -1,4 +1,4 @@
-from datetime import datetime
+from typing import List
 from app.common.mcp_utils import get_mcp_client_for_agent
 from app.common.structures import AgentSettings
 from app.core.agents.mcp_agent_toolkit import McpAgentToolkit
@@ -14,29 +14,35 @@ logger = logging.getLogger(__name__)
 
 
 class MCPAgent(AgentFlow):
+    """
+    Agent dynamically created to use MCP-based tools
+    """
+
+    # Class-level metadata
+    name: str | None = "MCPExpert"
+    nickname: str | None = "Mitch"
+    role: str | None = "MCP Expert"
+    description: (
+        str | None
+    ) = "Agent dynamically created to use MCP-based tools."
+    icon: str = "agent_generic"
+    categories: List[str] = ["MCP"]
+    tag: str = "mcp"
+
     def __init__(
         self,
         agent_settings: AgentSettings,
     ):
-        self.current_date = datetime.now().strftime("%Y-%m-%d")
-        self.agent_settings = agent_settings
-        self.name = agent_settings.name
+        super().__init__(agent_settings=agent_settings)
         self.base_prompt = agent_settings.base_prompt
-        self.role = agent_settings.role or "Agent using external MCP tools"
-        self.nickname = agent_settings.nickname or agent_settings.name
         self.description = (
             agent_settings.description
             or "Agent dynamically created to use MCP-based tools."
         )
-        self.icon = agent_settings.icon or "agent_generic"
-        self.categories = agent_settings.categories or []
-        self.tag = agent_settings.tag or "mcp"
 
         # Will be set in async_init
-        self.model = None
         self.mcp_client = None
         self.toolkit = None
-        self._graph = None  # LangGraph will be built async
 
     async def async_init(self):
         """
@@ -47,18 +53,6 @@ class MCPAgent(AgentFlow):
         self.toolkit = McpAgentToolkit(self.mcp_client)
         self.model = self.model.bind_tools(self.toolkit.get_tools())
         self._graph = self.get_graph()
-
-        super().__init__(
-            name=self.name,
-            role=self.role,
-            nickname=self.nickname,
-            description=self.description,
-            icon=self.icon,
-            graph=self._graph,
-            base_prompt=self.build_base_prompt(),
-            categories=self.categories,
-            tag=self.tag,
-        )
 
     def build_base_prompt(self) -> str:
         return f"{self.base_prompt}\n\nThe current date is {self.current_date}."

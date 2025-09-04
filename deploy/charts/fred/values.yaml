@@ -166,7 +166,6 @@ applications:
             type: "leader"
             enabled: true
             max_steps: 5
-            model: {}
           - name: "GeneralistExpert"
             role: "Fallback Generalist Expert"
             description: >
@@ -174,7 +173,6 @@ applications:
               Acts as a default agent to assist with general questions across all domains.
             class_path: "app.agents.generalist.generalist_expert.GeneralistExpert"
             enabled: true
-            model: {}
           - name: "TabularExpert"
             role: "Data Query and SQL Expert"
             description: >
@@ -188,13 +186,12 @@ applications:
                 transport: sse
                 url: http://localhost:8111/knowledge-flow/v1/mcp-tabular
                 sse_read_timeout: 2000
-            model: {}
-          - name: "RicoProExpert"
+          - name: "Rico Senior"
             role: "Document Retrieval Expert"
             description: >
               Answers user questions by retrieving relevant information from ingested document corpora.
               Uses a vector-based retrieval pipeline to ground responses in internal or uploaded knowledge.
-            class_path: "app.agents.rags.rico_pro_expert.RicoProExpert"
+            class_path: "app.agents.rags.advanced_rag.AdvancedRagExpert"
             enabled: true
             categories:
               - "rag"
@@ -202,12 +199,11 @@ applications:
               chunk_size: 512
               chunk_overlap: 64
               knowledge_flow_url: "http://localhost:8111/knowledge-flow/v1"
-            model: {}
-          - name: "RicoExpert"
+          - name: "Rico Jr."
             role: "Document Retrieval Expert"
             description: >
               Provides quick answers based on document content, using direct retrieval and generation.
-            class_path: "app.agents.rags.rico_expert.RicoExpert"
+            class_path: "app.agents.rags.rag_expert.RagExpert"
             enabled: true
             categories:
               - "rag"
@@ -215,7 +211,6 @@ applications:
               chunk_size: 512
               chunk_overlap: 64
               knowledge_flow_url: "http://localhost:8111/knowledge-flow/v1"
-            model: {}
       storage:
         postgres:
           host: localhost
