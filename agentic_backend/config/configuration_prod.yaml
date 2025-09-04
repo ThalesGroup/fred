@@ -61,40 +61,24 @@ ai:
   agents:
     - name: "Fred"
       role: "Multi-Agent Orchestrator"
-      description: >
-        Handles complex, ambiguous, or multi-step user queries. Delegates tasks to the most suitable experts 
-        based on context, capabilities, and relevance. Ensures coherent, high-quality responses by coordinating the expert team.
       class_path: "app.agents.leader.leader.Leader"
-      type: "leader"
       enabled: true
+      type: "leader"
       max_steps: 5
-      model: {}
-    - name: "SentinelExpert"
-      role: "Your instance monitoring expert"
+    - name: "Samy"
+      role: "Opensearch instance monitoring expert"
       mcp_servers:
         - name: knowledge-flow-mcp-server
           transport: streamable_http
           url: http://localhost:8111/knowledge-flow/v1/mcp-opensearch-ops
           sse_read_timeout: 2000
-      description: >
-        Sentinel watches your instance, providing real-time monitoring and alerts for performance issues.
       class_path: "app.agents.sentinel.sentinel_expert.SentinelExpert"
       enabled: true
-      model: {}
-    - name: "GeneralistExpert"
-      role: "Fallback Generalist Expert"
-      description: >
-        Provides broad, high-level guidance when no specific expert is better suited. 
-        Acts as a default agent to assist with general questions across all domains.
+    - name: "Georges"
       class_path: "app.agents.generalist.generalist_expert.GeneralistExpert"
       enabled: true
-      model: {}
-    - name: "TabularExpert"
+    - name: "Tessa"
       role: "Data Query and SQL Expert"
-      description: >
-        Executes advanced SQL queries (including joins and aggregations) 
-        over structured datasets like CSVs, Postgres exports, or DuckDB files. 
-        Ideal for analyzing tabular data ingested into the platform.
       class_path: "app.agents.tabular.tabular_expert.TabularExpert"
       enabled: true
       mcp_servers:
@@ -102,47 +86,43 @@ ai:
           transport: streamable_http
           url: http://localhost:8111/knowledge-flow/v1/mcp-tabular
           sse_read_timeout: 2000
-      model: {}
-    - name: "RicoProExpert"
-      role: "Document Retrieval Expert"
-      description: >
-        Answers user questions by retrieving relevant information from ingested document corpora.
-        Uses a vector-based retrieval pipeline to ground responses in internal or uploaded knowledge.
-      class_path: "app.agents.rags.rico_pro_expert.RicoProExpert"
+    - name: "Rico Senior"
+      class_path: "app.agents.rags.advanced_rag_expert.AdvancedRagExpert"
       enabled: true
-      categories:
-        - "rag"
       settings:
         chunk_size: 512
         chunk_overlap: 64
         knowledge_flow_url: "http://localhost:8111/knowledge-flow/v1"
-      model: {}
-    - name: "RicoExpert"
+    - name: "Rico Jr."
       role: "Document Retrieval Expert"
-      description: >
-        Provides quick answers based on document content, using direct retrieval and generation.
-      class_path: "app.agents.rags.rico_expert.RicoExpert"
+      class_path: "app.agents.rags.rag_expert.RagExpert"
       enabled: true
+      # TODO: It seems that categories are not used in the UI
       categories:
-        - "rag"
+        - "Retrieval-Augmented Generation"
       settings:
         chunk_size: 512
         chunk_overlap: 64
         knowledge_flow_url: "http://localhost:8111/knowledge-flow/v1"
-      model: {}
-    - name: "ContentGeneratorExpert"
+    - name: "Brontë"
       role: "Content generator expert"
       description: >
-        This agent is able to generate some content based on some template he manages 
-        to get from the knowledge-flow backend
+        Generates some content based on some templates she manages 
+        to get from the knowledge-flow backend.
       class_path: "app.agents.content_generator.content_generator_expert.ContentGeneratorExpert"
-      enabled: false
+      enabled: true
       mcp_servers:
         - name: knowledge-flow-mcp-server
           transport: streamable_http
           url: http://localhost:8111/knowledge-flow/v1/mcp-resources
           sse_read_timeout: 2000
-      model: {}
+      model: 
+        provider: "azure"
+        name: "gpt-4o"
+        settings:
+          temperature: 0.1
+          max_retries: 2
+          request_timeout: 30
 
 storage:
   postgres:

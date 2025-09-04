@@ -30,7 +30,6 @@ from typing import Any, Callable, Dict, List, Optional
 
 from app.core.agents.store.base_agent_store import BaseAgentStore
 from app.core.feedback.store.base_feedback_store import BaseFeedbackStore
-from pydantic import BaseModel
 
 from app.common.structures import (
     AgentSettings,
@@ -253,14 +252,6 @@ class ApplicationContext:
         Apply the default model configuration to all agents and services if not explicitly set.
         This merges the default settings into each component's model config.
         """
-
-        def merge(target: BaseModel) -> BaseModel:
-            defaults = self.configuration.ai.default_model.model_dump(
-                exclude_unset=True
-            )
-            target_dict = target.model_dump(exclude_unset=True)
-            merged_dict = {**defaults, **target_dict}
-            return type(target)(**merged_dict)
 
         # Apply to agents
         for agent in self.configuration.ai.agents:

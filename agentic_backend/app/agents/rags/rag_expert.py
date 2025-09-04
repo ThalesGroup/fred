@@ -56,27 +56,17 @@ def build_rag_prompt(preamble: str, question: str, sources_block: str) -> str:
     )
 
 
-class RicoExpert(AgentFlow):
-    name: str = "RicoExpert"
-    role: str = "Rags Expert"
-    nickname: str = "Rico"
-    description: str
+class RagExpert(AgentFlow):
+    name: str = "RagExpert"
+    nickname: str = "Remus"
+    role: str = "Document Retrieval Expert"
+    description: str = "Provides quick answers based on document content, using direct retrieval and generation."
     icon: str = "rags_agent"
-    categories: List[str] = []
-    tag: str = "Innovation"
+    categories: List[str] = ["Documentation"]
+    tag: str = "rags"
 
     def __init__(self, agent_settings: AgentSettings):
-        self.agent_settings = agent_settings
-        self.name = agent_settings.name
-        self.nickname = agent_settings.nickname or agent_settings.name
-        self.role = agent_settings.role
-        self.description = agent_settings.description
-        self.current_date = datetime.now().strftime("%Y-%m-%d")
-        self.categories = agent_settings.categories or ["Documentation"]
-        self.model = None
-        self.base_prompt = ""
-        self._graph = None
-        self.tag = agent_settings.tag or "rags"
+        super().__init__(agent_settings=agent_settings)
 
     async def async_init(self):
         self.model = get_model(self.agent_settings.model)
@@ -84,18 +74,6 @@ class RicoExpert(AgentFlow):
         # Use shared preamble util
         self.base_prompt = rag_preamble(self.current_date)
         self._graph = self._build_graph()
-
-        super().__init__(
-            name=self.name,
-            role=self.role,
-            nickname=self.nickname,
-            description=self.description,
-            icon=self.icon,
-            graph=self._graph,
-            base_prompt=self.base_prompt,
-            categories=self.categories,
-            tag=self.tag,
-        )
 
     def _build_graph(self) -> StateGraph:
         builder = StateGraph(MessagesState)
@@ -149,7 +127,7 @@ class RicoExpert(AgentFlow):
             return {"messages": [answer]}
 
         except Exception:
-            logger.exception("Error in RicoExpert reasoning.")
+            logger.exception("Error in agent reasoning.")
             fallback = await self.model.ainvoke(
                 [HumanMessage(content="An error occurred. Please try again later.")]
             )
