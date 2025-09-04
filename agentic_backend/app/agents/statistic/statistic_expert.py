@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import json
 import logging
 from datetime import datetime
 
@@ -62,7 +61,6 @@ class StatisticExpert(AgentFlow):
         self.description = agent_settings.description
         self.role = agent_settings.role
 
-############################################################################################
 
     async def async_init(self):
         self.model = get_model(self.agent_settings.model)
@@ -84,20 +82,12 @@ class StatisticExpert(AgentFlow):
 
     def _generate_prompt(self) -> str:
         return (
-            "You are a data science assistant capable of performing **statistical analysis** and **machine learning** "
-            "on structured tabular datasets (CSV, Excel).\n\n"
-            "### Instructions:\n"
-            "1. ALWAYS start by listing available datasets and inspecting their schema.\n"
-            "2. You can use the following abilities:\n"
-            "- **Describe datasets**: mean, median, std, value counts, histograms.\n"
-            "- **Statistical testing**: A/B tests, t-tests, chi-square, correlations.\n"
-            "- **Machine Learning**: Train models like Linear Regression, XGBoost, Random Forest.\n"
-            "- **Update data**: create or update columns, transform values.\n"
-            "3. Formulate a step-by-step approach to solve the problem using available tools.\n\n"
+            "You are a data science assistant for structured tabular data (CSV, Excel)\n"
+            "Your purpose is to respond precisely to the user's questions and orders.\n"
             "### Rules:\n"
-            "- Use markdown for results and code outputs.\n"
-            "- Do not invent columns, datasets, or values.\n"
-            "- Present statistical outputs clearly with explanations.\n"
+            "- Only use existing datasets and columns.\n"
+            "- Use markdown for outputs and code blocks.\n"
+            "- Present results clearly and explain them.\n"
             "- Use LaTeX (`$$...$$`) for formulas if needed.\n"
             f"\nThe current date is {self.current_date}.\n"
         )
@@ -146,5 +136,4 @@ class StatisticExpert(AgentFlow):
                 ]
             )
             return {"messages": [fallback]}
-
 

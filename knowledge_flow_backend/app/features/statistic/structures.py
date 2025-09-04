@@ -17,33 +17,41 @@ from pydantic import BaseModel
 
 
 class SetDatasetRequest(BaseModel):
-    dataset_name : str
+    dataset_name: str
+
 
 class DetectOutliersRequest(BaseModel):
     method: Literal["zscore", "iqr"] = "zscore"
     threshold: float = 3.0
 
+
 class CorrelationsRequest(BaseModel):
     top_n: int = 5
+
 
 class PlotHistogramRequest(BaseModel):
     column: str
     bins: int = 30
 
+
 class PlotScatterRequest(BaseModel):
     x_col: str
     y_col: str
+
 
 class TrainModelRequest(BaseModel):
     target: str
     features: List[str]
     model_type: Literal["linear", "random_forest"] = "linear"
 
+
 class PredictRowRequest(BaseModel):
     row: Dict[str, Any]
 
+
 class SaveModelRequest(BaseModel):
     name: str
+
 
 class LoadModelRequest(BaseModel):
     name: str

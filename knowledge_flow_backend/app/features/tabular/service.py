@@ -15,7 +15,6 @@
 import logging
 from datetime import datetime
 from typing import List, Dict
-import pandas as pd
 
 from fred_core.store.sql_store import SQLTableStore
 from fred_core.store.structures import StoreInfo

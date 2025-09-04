@@ -2,11 +2,22 @@ import logging
 from fastapi import APIRouter, HTTPException
 
 from app.features.statistic.utils import clean_json
-from app.features.statistic.structures import SetDatasetRequest, DetectOutliersRequest, CorrelationsRequest, PlotHistogramRequest, PlotScatterRequest, TrainModelRequest, PredictRowRequest, SaveModelRequest, LoadModelRequest
+from app.features.statistic.structures import (
+    SetDatasetRequest,
+    DetectOutliersRequest,
+    CorrelationsRequest,
+    PlotHistogramRequest,
+    PlotScatterRequest,
+    TrainModelRequest,
+    PredictRowRequest,
+    SaveModelRequest,
+    LoadModelRequest,
+)
 from app.features.statistic.service import StatisticService
 from app.application_context import ApplicationContext
 
 logger = logging.getLogger(__name__)
+
 
 class StatisticController:
     def __init__(self, router: APIRouter):
@@ -16,20 +27,20 @@ class StatisticController:
         self._register_routes(router)
 
     def _register_routes(self, router: APIRouter):
-
         @router.get("/stat/list_datasets", tags=["Statistic"], summary="View the available datasets")
         async def list_datasets():
             try:
-                return clean_json(f"available_datasets:{self.store.list_tables()}")
+                return f"available_datasets:{self.store.list_tables()}"
             except Exception as e:
                 logger.exception("Failed to get head")
                 raise HTTPException(500, str(e))
-            
+
         @router.post("/stat/set_dataset", tags=["Statistic"], summary="Select a dataset")
         async def set_dataset(request: SetDatasetRequest):
             try:
                 dataset = self.store.load_table(request.dataset_name)
-                return self.service.set_dataset(dataset)
+                self.service.set_dataset(dataset)
+                return f"{request.dataset_name} is loaded."
             except Exception as e:
                 logger.exception(f"Failed to set the dataset as {request.dataset_name}")
                 raise HTTPException(500, str(e))
@@ -116,7 +127,7 @@ class StatisticController:
             except Exception as e:
                 logger.exception("Model saving failed")
                 raise HTTPException(400, str(e))
-            
+
         @router.get("/stat/list_models", tags=["Statistic"], summary="List saved models")
         async def list_models():
             try:
