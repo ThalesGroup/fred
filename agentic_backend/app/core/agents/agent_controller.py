@@ -12,13 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from app.common.error import MCPClientConnectionException
-from app.core.agents.agent_manager import AgentManager
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
+from fred_core import KeycloakUser, get_current_user
 
-from app.core.agents.structures import CreateAgentRequest
-from app.core.agents.agent_service import AgentAlreadyExistsException, AgentService
+from app.common.error import MCPClientConnectionException
 from app.common.utils import log_exception
+from app.core.agents.agent_manager import AgentManager
+from app.core.agents.agent_service import AgentAlreadyExistsException, AgentService
+from app.core.agents.structures import CreateAgentRequest
 
 
 def handle_exception(e: Exception) -> HTTPException:
@@ -45,8 +46,9 @@ class AgentController:
             tags=fastapi_tags,
             summary="Create a Dynamic Agent that can access MCP tools",
         )
-        # @TODO: check for authorization
-        async def create_agent(req: CreateAgentRequest):
+        async def create_agent(
+            req: CreateAgentRequest, _: KeycloakUser = Depends(get_current_user)
+        ):
             try:
                 return await self.service.build_and_register_mcp_agent(req)
             except Exception as e:
@@ -58,7 +60,11 @@ class AgentController:
             tags=fastapi_tags,
             summary="Update a dynamic agent's configuration",
         )
-        async def update_agent(name: str, req: CreateAgentRequest):
+        async def update_agent(
+            name: str,
+            req: CreateAgentRequest,
+            _: KeycloakUser = Depends(get_current_user),
+        ):
             try:
                 return await self.service.update_agent(name, req)
             except Exception as e:
@@ -70,7 +76,7 @@ class AgentController:
             tags=fastapi_tags,
             summary="Delete a dynamic agent by name",
         )
-        async def delete_agent(name: str):
+        async def delete_agent(name: str, _: KeycloakUser = Depends(get_current_user)):
             try:
                 return self.service.delete_agent(name)
             except Exception as e:

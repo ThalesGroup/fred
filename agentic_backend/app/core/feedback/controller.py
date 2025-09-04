@@ -12,17 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from datetime import datetime
+import logging
 import uuid
+from datetime import datetime
+from typing import List, Optional
 
+from fastapi import APIRouter, Depends, HTTPException, status
 from fred_core import KeycloakUser, get_current_user
+from pydantic import BaseModel, Field
+
 from app.application_context import get_feedback_store
 from app.core.feedback.service import FeedbackService
-from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field
-from typing import List, Optional
-import logging
-
 from app.core.feedback.structures import FeedbackRecord
 
 logger = logging.getLogger(__name__)
@@ -89,7 +89,7 @@ class FeedbackController:
             tags=["Feedback"],
             summary="List all feedback entries",
         )
-        async def get_feedback():
+        async def get_feedback(_: KeycloakUser = Depends(get_current_user)):
             try:
                 return self.service.get_feedback()
             except Exception as e:
@@ -101,7 +101,9 @@ class FeedbackController:
             status_code=status.HTTP_204_NO_CONTENT,
             summary="Delete a feedback entry by ID",
         )
-        async def delete_feedback(feedback_id: str):
+        async def delete_feedback(
+            feedback_id: str, _: KeycloakUser = Depends(get_current_user)
+        ):
             try:
                 deleted = self.service.delete_feedback(feedback_id)
                 if not deleted:

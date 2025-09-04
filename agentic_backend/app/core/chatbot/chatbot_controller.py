@@ -17,10 +17,9 @@ from fastapi import (
     WebSocket,
     WebSocketDisconnect,
 )
-from starlette.websockets import WebSocketState
+from fred_core import KeycloakUser, VectorSearchHit, get_current_user
 from pydantic import BaseModel, Field
-
-from fred_core import KeycloakUser, get_current_user, VectorSearchHit
+from starlette.websockets import WebSocketState
 
 from app.application_context import get_configuration
 from app.common.utils import log_exception
@@ -38,7 +37,6 @@ from app.core.chatbot.chat_schema import (
 )
 from app.core.chatbot.metric_structures import MetricsBucket, MetricsResponse
 from app.core.chatbot.session_orchestrator import SessionOrchestrator
-
 
 logger = logging.getLogger(__name__)
 
@@ -99,7 +97,9 @@ class ChatbotController:
             summary="Echo a schema (schema anchor for codegen)",
             response_model=EchoEnvelope,
         )
-        def echo_schema(envelope: EchoEnvelope) -> EchoEnvelope:
+        def echo_schema(
+            envelope: EchoEnvelope, _: KeycloakUser = Depends(get_current_user)
+        ) -> EchoEnvelope:
             return envelope
 
         @app.get(
@@ -246,6 +246,7 @@ class ChatbotController:
             session_id: str = Form(...),
             agent_name: str = Form(...),
             file: UploadFile = File(...),
+            _: KeycloakUser = Depends(get_current_user),
         ) -> dict:
             return await self.session_orchestrator.upload_file(
                 user_id, session_id, agent_name, file
