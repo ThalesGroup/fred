@@ -92,12 +92,16 @@ def has_auth_dependency(app, path: str, method: str) -> bool:
 def get_exempt_routes() -> Set[str]:
     """Return set of routes that are exempt from authentication requirements."""
     return {
+        # FastAPI auto routes
         "/docs",
         "/docs/oauth2-redirect",
         "/redoc", 
         "/openapi.json",
+        # Kubernetes monitoring routes
         "/healthz",
         "/ready",
+        # Agentic specific routes
+        "/config/frontend_settings"
     }
 
 
