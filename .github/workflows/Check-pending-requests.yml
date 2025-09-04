@@ -149,6 +149,11 @@ jobs:
         run: |
           cd agentic_backend/
           timeout 5 make run || true
+      
+      - name: Check route security
+        run: |
+          cd agentic_backend/
+          make check-route-security
   
   # Job for knownledge-flow
   knowledge-flow-backend-checks:
@@ -172,6 +177,11 @@ jobs:
         run: |
           cd knowledge_flow_backend/
           make build
+      
+      - name: Check route security
+        run: |
+          cd knowledge_flow_backend/
+          make check-route-security
 
   # Job to check OpenAPI spec drift when backends or frontend change
   openapi-drift-check:
