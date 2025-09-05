@@ -114,6 +114,7 @@ def is_valid_date(series: pd.Series, threshold: float = 0.7) -> bool:
     valid_count = sum(is_parsable(val) for val in values)
     return (valid_count / len(values)) >= threshold
 
+
 class TabularProcessor(BaseOutputProcessor):
     """
     A pipeline for processing tabular data.

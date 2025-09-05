@@ -22,9 +22,7 @@ class MCPAgent(AgentFlow):
     name: str | None = "MCPExpert"
     nickname: str | None = "Mitch"
     role: str | None = "MCP Expert"
-    description: (
-        str | None
-    ) = "Agent dynamically created to use MCP-based tools."
+    description: str | None = "Agent dynamically created to use MCP-based tools."
     icon: str = "agent_generic"
     categories: List[str] = ["MCP"]
     tag: str = "mcp"

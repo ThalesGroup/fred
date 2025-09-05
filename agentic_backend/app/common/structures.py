@@ -117,6 +117,7 @@ class AIConfig(BaseModel):
         ..., description="Number of max recursion while using the model"
     )
 
+
 class FrontendFlags(BaseModel):
     enableK8Features: bool = False
     enableElecWarfare: bool = False

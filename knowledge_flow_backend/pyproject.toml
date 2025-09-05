@@ -49,6 +49,9 @@ dependencies = [
   "psycopg2-binary>=2.9.10",
   "sqlparse>=0.5.3",
   "uv",
+  "matplotlib>=3.10.6",
+  "seaborn>=0.13.2",
+  "scikit-learn>=1.7.1",
 ]
 
 [project.optional-dependencies]
