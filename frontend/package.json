@@ -28,7 +28,7 @@
     "lodash": "^4.17.21",
     "mammoth": "^1.9.0",
     "marked": "^16.0.0",
-    "mermaid": "^11.7.0",
+    "mermaid": "^11.10.0",
     "papaparse": "^5.4.1",
     "primeflex": "^3.3.1",
     "react": "^18.2.0",
