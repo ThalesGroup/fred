@@ -1,5 +1,6 @@
 import logging
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException, Path
+from fred_core import KeycloakUser, get_current_user
 
 from app.features.statistic.utils import clean_json
 from app.features.statistic.structures import (
@@ -29,7 +30,7 @@ class StatisticController:
 
     def _register_routes(self, router: APIRouter):
         @router.get("/stat/list_datasets", tags=["Statistic"], summary="View the available datasets")
-        async def list_datasets():
+        async def list_datasets(_: KeycloakUser = Depends(get_current_user)):
             try:
                 return f"available_datasets:{self.store.list_tables()}"
             except Exception as e:
@@ -37,7 +38,7 @@ class StatisticController:
                 raise HTTPException(500, str(e))
 
         @router.post("/stat/set_dataset", tags=["Statistic"], summary="Select a dataset")
-        async def set_dataset(request: SetDatasetRequest):
+        async def set_dataset(request: SetDatasetRequest, _: KeycloakUser = Depends(get_current_user)):
             try:
                 dataset = self.store.load_table(sanitize_sql_name(request.dataset_name))
                 self.service.set_dataset(dataset)
@@ -47,7 +48,7 @@ class StatisticController:
                 raise HTTPException(500, str(e))
 
         @router.get("/stat/head", tags=["Statistic"], summary="Preview the dataset")
-        async def head(n: int = 5):
+        async def head(n: int = 5, _: KeycloakUser = Depends(get_current_user)):
             try:
                 return clean_json(self.service.head(n))
             except Exception as e:
@@ -55,7 +56,7 @@ class StatisticController:
                 raise HTTPException(500, str(e))
 
         @router.get("/stat/describe", tags=["Statistic"], summary="Describe the dataset")
-        async def describe():
+        async def describe(_: KeycloakUser = Depends(get_current_user)):
             try:
                 return clean_json(self.service.describe_data())
             except Exception as e:
@@ -63,7 +64,7 @@ class StatisticController:
                 raise HTTPException(500, str(e))
 
         @router.post("/stat/detect_outliers", tags=["Statistic"], summary="Detect outliers in numeric columns")
-        async def detect_outliers(request: DetectOutliersRequest):
+        async def detect_outliers(request: DetectOutliersRequest, _: KeycloakUser = Depends(get_current_user)):
             try:
                 return clean_json(self.service.detect_outliers(method=request.method, threshold=request.threshold))
             except Exception as e:
@@ -71,7 +72,7 @@ class StatisticController:
                 raise HTTPException(500, str(e))
 
         @router.get("/stat/correlations", tags=["Statistic"], summary="Get top correlations in the dataset")
-        async def correlations(request: CorrelationsRequest):
+        async def correlations(request: CorrelationsRequest, _: KeycloakUser = Depends(get_current_user)):
             try:
                 return clean_json(self.service.correlation_analysis(request.top_n))
             except Exception as e:
@@ -79,7 +80,7 @@ class StatisticController:
                 raise HTTPException(500, str(e))
 
         @router.post("/stat/plot/histogram", tags=["Statistic"], summary="Plot histogram for a column")
-        async def plot_histogram(request: PlotHistogramRequest):
+        async def plot_histogram(request: PlotHistogramRequest, _: KeycloakUser = Depends(get_current_user)):
             try:
                 path = self.service.plot_histogram(column=request.column, bins=request.bins)
                 return clean_json({"status": "success", "path": path})
@@ -87,7 +88,7 @@ class StatisticController:
                 raise HTTPException(400, str(e))
 
         @router.post("/stat/plot/scatter", tags=["Statistic"], summary="Plot scatter plot")
-        async def plot_scatter(request: PlotScatterRequest):
+        async def plot_scatter(request: PlotScatterRequest, _: KeycloakUser = Depends(get_current_user)):
             try:
                 path = self.service.plot_scatter(request.x_col, request.y_col)
                 return clean_json({"status": "success", "path": path})
@@ -95,7 +96,7 @@ class StatisticController:
                 raise HTTPException(400, str(e))
 
         @router.post("/stat/train", tags=["Statistic"], summary="Train a model")
-        async def train_model(request: TrainModelRequest):
+        async def train_model(request: TrainModelRequest, _: KeycloakUser = Depends(get_current_user)):
             try:
                 training_results = self.service.train_model(request.target, request.features, model_type=request.model_type)
                 return clean_json({"status": "success", "message": training_results})
@@ -104,7 +105,7 @@ class StatisticController:
                 raise HTTPException(400, str(e))
 
         @router.get("/stat/evaluate", tags=["Statistic"], summary="Evaluate last trained model")
-        async def evaluate_model():
+        async def evaluate_model(_: KeycloakUser = Depends(get_current_user)):
             try:
                 return clean_json(self.service.evaluate_model())
             except Exception as e:
@@ -112,7 +113,7 @@ class StatisticController:
                 raise HTTPException(400, str(e))
 
         @router.post("/stat/predict_row", tags=["Statistic"], summary="Predict a single row of data")
-        async def predict_row(request: PredictRowRequest):
+        async def predict_row(request: PredictRowRequest, _: KeycloakUser = Depends(get_current_user)):
             try:
                 prediction = self.service.predict_from_row(request.row)
                 return clean_json({"prediction": prediction})
@@ -121,7 +122,7 @@ class StatisticController:
                 raise HTTPException(400, str(e))
 
         @router.post("/stat/save_model", tags=["Statistic"], summary="Save trained model")
-        async def save_model(request: SaveModelRequest):
+        async def save_model(request: SaveModelRequest, _: KeycloakUser = Depends(get_current_user)):
             try:
                 self.service.save_model(request.name)
                 return {"status": "success", "message": f"Model saved as '{request.name}'."}
@@ -130,7 +131,7 @@ class StatisticController:
                 raise HTTPException(400, str(e))
 
         @router.get("/stat/list_models", tags=["Statistic"], summary="List saved models")
-        async def list_models():
+        async def list_models(_: KeycloakUser = Depends(get_current_user)):
             try:
                 return clean_json({"models": self.service.list_models()})
             except Exception as e:
@@ -138,7 +139,7 @@ class StatisticController:
                 raise HTTPException(500, str(e))
 
         @router.post("/stat/load_model", tags=["Statistic"], summary="Load a previously saved model")
-        async def load_model(request: LoadModelRequest):
+        async def load_model(request: LoadModelRequest, _: KeycloakUser = Depends(get_current_user)):
             try:
                 self.service.load_model(request.name)
                 return clean_json({"status": "success", "message": f"Model '{request.name}' loaded."})
