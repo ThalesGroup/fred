@@ -149,6 +149,123 @@ const injectedRtkApi = api.injectEndpoints({
         method: "DELETE",
       }),
     }),
+    listDatasetsKnowledgeFlowV1StatListDatasetsGet: build.query<
+      ListDatasetsKnowledgeFlowV1StatListDatasetsGetApiResponse,
+      ListDatasetsKnowledgeFlowV1StatListDatasetsGetApiArg
+    >({
+      query: () => ({ url: `/knowledge-flow/v1/stat/list_datasets` }),
+    }),
+    setDatasetKnowledgeFlowV1StatSetDatasetPost: build.mutation<
+      SetDatasetKnowledgeFlowV1StatSetDatasetPostApiResponse,
+      SetDatasetKnowledgeFlowV1StatSetDatasetPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/stat/set_dataset`,
+        method: "POST",
+        body: queryArg.setDatasetRequest,
+      }),
+    }),
+    headKnowledgeFlowV1StatHeadGet: build.query<
+      HeadKnowledgeFlowV1StatHeadGetApiResponse,
+      HeadKnowledgeFlowV1StatHeadGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/stat/head`,
+        params: {
+          n: queryArg.n,
+        },
+      }),
+    }),
+    describeKnowledgeFlowV1StatDescribeGet: build.query<
+      DescribeKnowledgeFlowV1StatDescribeGetApiResponse,
+      DescribeKnowledgeFlowV1StatDescribeGetApiArg
+    >({
+      query: () => ({ url: `/knowledge-flow/v1/stat/describe` }),
+    }),
+    detectOutliersKnowledgeFlowV1StatDetectOutliersPost: build.mutation<
+      DetectOutliersKnowledgeFlowV1StatDetectOutliersPostApiResponse,
+      DetectOutliersKnowledgeFlowV1StatDetectOutliersPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/stat/detect_outliers`,
+        method: "POST",
+        body: queryArg.detectOutliersRequest,
+      }),
+    }),
+    correlationsKnowledgeFlowV1StatCorrelationsGet: build.query<
+      CorrelationsKnowledgeFlowV1StatCorrelationsGetApiResponse,
+      CorrelationsKnowledgeFlowV1StatCorrelationsGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/stat/correlations`, body: queryArg.correlationsRequest }),
+    }),
+    plotHistogramKnowledgeFlowV1StatPlotHistogramPost: build.mutation<
+      PlotHistogramKnowledgeFlowV1StatPlotHistogramPostApiResponse,
+      PlotHistogramKnowledgeFlowV1StatPlotHistogramPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/stat/plot/histogram`,
+        method: "POST",
+        body: queryArg.plotHistogramRequest,
+      }),
+    }),
+    plotScatterKnowledgeFlowV1StatPlotScatterPost: build.mutation<
+      PlotScatterKnowledgeFlowV1StatPlotScatterPostApiResponse,
+      PlotScatterKnowledgeFlowV1StatPlotScatterPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/stat/plot/scatter`,
+        method: "POST",
+        body: queryArg.plotScatterRequest,
+      }),
+    }),
+    trainModelKnowledgeFlowV1StatTrainPost: build.mutation<
+      TrainModelKnowledgeFlowV1StatTrainPostApiResponse,
+      TrainModelKnowledgeFlowV1StatTrainPostApiArg
+    >({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/stat/train`, method: "POST", body: queryArg.trainModelRequest }),
+    }),
+    evaluateModelKnowledgeFlowV1StatEvaluateGet: build.query<
+      EvaluateModelKnowledgeFlowV1StatEvaluateGetApiResponse,
+      EvaluateModelKnowledgeFlowV1StatEvaluateGetApiArg
+    >({
+      query: () => ({ url: `/knowledge-flow/v1/stat/evaluate` }),
+    }),
+    predictRowKnowledgeFlowV1StatPredictRowPost: build.mutation<
+      PredictRowKnowledgeFlowV1StatPredictRowPostApiResponse,
+      PredictRowKnowledgeFlowV1StatPredictRowPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/stat/predict_row`,
+        method: "POST",
+        body: queryArg.predictRowRequest,
+      }),
+    }),
+    saveModelKnowledgeFlowV1StatSaveModelPost: build.mutation<
+      SaveModelKnowledgeFlowV1StatSaveModelPostApiResponse,
+      SaveModelKnowledgeFlowV1StatSaveModelPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/stat/save_model`,
+        method: "POST",
+        body: queryArg.saveModelRequest,
+      }),
+    }),
+    listModelsKnowledgeFlowV1StatListModelsGet: build.query<
+      ListModelsKnowledgeFlowV1StatListModelsGetApiResponse,
+      ListModelsKnowledgeFlowV1StatListModelsGetApiArg
+    >({
+      query: () => ({ url: `/knowledge-flow/v1/stat/list_models` }),
+    }),
+    loadModelKnowledgeFlowV1StatLoadModelPost: build.mutation<
+      LoadModelKnowledgeFlowV1StatLoadModelPostApiResponse,
+      LoadModelKnowledgeFlowV1StatLoadModelPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/stat/load_model`,
+        method: "POST",
+        body: queryArg.loadModelRequest,
+      }),
+    }),
     listAllTagsKnowledgeFlowV1TagsGet: build.query<
       ListAllTagsKnowledgeFlowV1TagsGetApiResponse,
       ListAllTagsKnowledgeFlowV1TagsGetApiArg
@@ -439,6 +556,54 @@ export type DeleteTableApiArg = {
   /** Table name to delete */
   tableName: string;
 };
+export type ListDatasetsKnowledgeFlowV1StatListDatasetsGetApiResponse = /** status 200 Successful Response */ any;
+export type ListDatasetsKnowledgeFlowV1StatListDatasetsGetApiArg = void;
+export type SetDatasetKnowledgeFlowV1StatSetDatasetPostApiResponse = /** status 200 Successful Response */ any;
+export type SetDatasetKnowledgeFlowV1StatSetDatasetPostApiArg = {
+  setDatasetRequest: SetDatasetRequest;
+};
+export type HeadKnowledgeFlowV1StatHeadGetApiResponse = /** status 200 Successful Response */ any;
+export type HeadKnowledgeFlowV1StatHeadGetApiArg = {
+  n?: number;
+};
+export type DescribeKnowledgeFlowV1StatDescribeGetApiResponse = /** status 200 Successful Response */ any;
+export type DescribeKnowledgeFlowV1StatDescribeGetApiArg = void;
+export type DetectOutliersKnowledgeFlowV1StatDetectOutliersPostApiResponse = /** status 200 Successful Response */ any;
+export type DetectOutliersKnowledgeFlowV1StatDetectOutliersPostApiArg = {
+  detectOutliersRequest: DetectOutliersRequest;
+};
+export type CorrelationsKnowledgeFlowV1StatCorrelationsGetApiResponse = /** status 200 Successful Response */ any;
+export type CorrelationsKnowledgeFlowV1StatCorrelationsGetApiArg = {
+  correlationsRequest: CorrelationsRequest;
+};
+export type PlotHistogramKnowledgeFlowV1StatPlotHistogramPostApiResponse = /** status 200 Successful Response */ any;
+export type PlotHistogramKnowledgeFlowV1StatPlotHistogramPostApiArg = {
+  plotHistogramRequest: PlotHistogramRequest;
+};
+export type PlotScatterKnowledgeFlowV1StatPlotScatterPostApiResponse = /** status 200 Successful Response */ any;
+export type PlotScatterKnowledgeFlowV1StatPlotScatterPostApiArg = {
+  plotScatterRequest: PlotScatterRequest;
+};
+export type TrainModelKnowledgeFlowV1StatTrainPostApiResponse = /** status 200 Successful Response */ any;
+export type TrainModelKnowledgeFlowV1StatTrainPostApiArg = {
+  trainModelRequest: TrainModelRequest;
+};
+export type EvaluateModelKnowledgeFlowV1StatEvaluateGetApiResponse = /** status 200 Successful Response */ any;
+export type EvaluateModelKnowledgeFlowV1StatEvaluateGetApiArg = void;
+export type PredictRowKnowledgeFlowV1StatPredictRowPostApiResponse = /** status 200 Successful Response */ any;
+export type PredictRowKnowledgeFlowV1StatPredictRowPostApiArg = {
+  predictRowRequest: PredictRowRequest;
+};
+export type SaveModelKnowledgeFlowV1StatSaveModelPostApiResponse = /** status 200 Successful Response */ any;
+export type SaveModelKnowledgeFlowV1StatSaveModelPostApiArg = {
+  saveModelRequest: SaveModelRequest;
+};
+export type ListModelsKnowledgeFlowV1StatListModelsGetApiResponse = /** status 200 Successful Response */ any;
+export type ListModelsKnowledgeFlowV1StatListModelsGetApiArg = void;
+export type LoadModelKnowledgeFlowV1StatLoadModelPostApiResponse = /** status 200 Successful Response */ any;
+export type LoadModelKnowledgeFlowV1StatLoadModelPostApiArg = {
+  loadModelRequest: LoadModelRequest;
+};
 export type ListAllTagsKnowledgeFlowV1TagsGetApiResponse = /** status 200 Successful Response */ TagWithItemsId[];
 export type ListAllTagsKnowledgeFlowV1TagsGetApiArg = {
   /** Filter by tag type */
@@ -706,6 +871,40 @@ export type TabularQueryResponse = {
 export type RawSqlRequest = {
   query: string;
 };
+export type SetDatasetRequest = {
+  dataset_name: string;
+};
+export type DetectOutliersRequest = {
+  method?: "zscore" | "iqr";
+  threshold?: number;
+};
+export type CorrelationsRequest = {
+  top_n?: number;
+};
+export type PlotHistogramRequest = {
+  column: string;
+  bins?: number;
+};
+export type PlotScatterRequest = {
+  x_col: string;
+  y_col: string;
+};
+export type TrainModelRequest = {
+  target: string;
+  features: string[];
+  model_type?: "linear" | "random_forest";
+};
+export type PredictRowRequest = {
+  row: {
+    [key: string]: any;
+  };
+};
+export type SaveModelRequest = {
+  name: string;
+};
+export type LoadModelRequest = {
+  name: string;
+};
 export type TagType = "document" | "prompt" | "template";
 export type TagWithItemsId = {
   id: string;
@@ -919,6 +1118,26 @@ export const {
   useLazyGetAllSchemasQuery,
   useRawSqlQueryMutation,
   useDeleteTableMutation,
+  useListDatasetsKnowledgeFlowV1StatListDatasetsGetQuery,
+  useLazyListDatasetsKnowledgeFlowV1StatListDatasetsGetQuery,
+  useSetDatasetKnowledgeFlowV1StatSetDatasetPostMutation,
+  useHeadKnowledgeFlowV1StatHeadGetQuery,
+  useLazyHeadKnowledgeFlowV1StatHeadGetQuery,
+  useDescribeKnowledgeFlowV1StatDescribeGetQuery,
+  useLazyDescribeKnowledgeFlowV1StatDescribeGetQuery,
+  useDetectOutliersKnowledgeFlowV1StatDetectOutliersPostMutation,
+  useCorrelationsKnowledgeFlowV1StatCorrelationsGetQuery,
+  useLazyCorrelationsKnowledgeFlowV1StatCorrelationsGetQuery,
+  usePlotHistogramKnowledgeFlowV1StatPlotHistogramPostMutation,
+  usePlotScatterKnowledgeFlowV1StatPlotScatterPostMutation,
+  useTrainModelKnowledgeFlowV1StatTrainPostMutation,
+  useEvaluateModelKnowledgeFlowV1StatEvaluateGetQuery,
+  useLazyEvaluateModelKnowledgeFlowV1StatEvaluateGetQuery,
+  usePredictRowKnowledgeFlowV1StatPredictRowPostMutation,
+  useSaveModelKnowledgeFlowV1StatSaveModelPostMutation,
+  useListModelsKnowledgeFlowV1StatListModelsGetQuery,
+  useLazyListModelsKnowledgeFlowV1StatListModelsGetQuery,
+  useLoadModelKnowledgeFlowV1StatLoadModelPostMutation,
   useListAllTagsKnowledgeFlowV1TagsGetQuery,
   useLazyListAllTagsKnowledgeFlowV1TagsGetQuery,
   useCreateTagKnowledgeFlowV1TagsPostMutation,
