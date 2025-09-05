@@ -22,6 +22,14 @@ from fred_core.security.structure import (
     KeycloakUser,
     SecurityConfiguration,
 )
+from fred_core.security.authorization import (
+    Action,
+    Resource,
+    AuthorizationError,
+    is_authorized,
+    authorize,
+)
+from fred_core.security.decorators import authorize as authorize_decorator
 from fred_core.store.vector_search import VectorSearchHit
 from fred_core.common.lru_cache import ThreadSafeLRUCache
 from fred_core.common.structures import (
@@ -66,6 +74,12 @@ __all__ = [
     "initialize_keycloak",
     "KeycloakUser",
     "SecurityConfiguration",
+    "Action",
+    "Resource",
+    "AuthorizationError",
+    "is_authorized",
+    "authorize",
+    "authorize_decorator",
     "BaseModelWithId",
     "OpenSearchStoreConfig",
     "OpenSearchIndexConfig",
