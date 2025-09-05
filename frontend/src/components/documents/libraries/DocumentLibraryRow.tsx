@@ -24,9 +24,9 @@ import dayjs from "dayjs";
 import { useTranslation } from "react-i18next";
 
 import { getDocumentIcon } from "../common/DocumentIcon";
-import { DOCUMENT_PROCESSING_STAGES } from "../../../slices/documentApi";
-import type { DocumentMetadata } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { type DocumentMetadata } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { usePermissions } from "../../../security/usePermissions";
+import { DOCUMENT_PROCESSING_STAGES } from "../../../utils/const";
 
 export type DocumentRowCompactProps = {
   doc: DocumentMetadata;
