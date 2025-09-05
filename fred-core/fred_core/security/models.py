@@ -33,23 +33,10 @@ class Resource(Enum):
 
     # Knowledge Flow Backend resources
     TAGS = "tags"
-    # DOCUMENTS = "documents"
-    # METADATA = "metadata"
-    # VECTOR_SEARCH = "vector_search"
-    # TABULAR = "tabular"
-    # CATALOG = "catalog"
-    # CONTENT = "content"
-    # INGESTION = "ingestion"
-    # PULL = "pull"
-    # KPI = "kpi"
-    # OPENSEARCH = "opensearch"
+    DOCUMENTS = "documents"
 
     # Agentic Backend resources
-    # SESSIONS = "sessions"
-    # AGENTS = "agents"
-    # PROMPTS = "prompts"
-    # FEEDBACK = "feedback"
-    # MONITORING = "monitoring"
+    # ...
 
 
 class AuthorizationError(Exception):

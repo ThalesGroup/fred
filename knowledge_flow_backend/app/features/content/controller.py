@@ -115,13 +115,13 @@ class ContentController:
         """,
             response_model=MarkdownContentResponse,
         )
-        async def get_markdown_preview(document_uid: str, _: KeycloakUser = Depends(get_current_user)):
+        async def get_markdown_preview(document_uid: str, user: KeycloakUser = Depends(get_current_user)):
             """
             Endpoint to retrieve a complete document including its content.
             """
             try:
                 logger.info(f"Retrieving full document: {document_uid}")
-                content = await self.service.get_markdown_preview(document_uid)
+                content = await self.service.get_markdown_preview(user, document_uid)
                 return {"content": content}
             except ValueError as e:
                 raise HTTPException(status_code=400, detail=str(e))
@@ -144,9 +144,9 @@ class ContentController:
         Used by the frontend when rendering previews that link to original embedded media.
         """,
         )
-        async def download_document_media(document_uid: str, media_id: str, _: KeycloakUser = Depends(get_current_user)):
+        async def download_document_media(document_uid: str, media_id: str, user: KeycloakUser = Depends(get_current_user)):
             try:
-                stream, file_name, content_type = await self.service.get_document_media(document_uid, media_id)
+                stream, file_name, content_type = await self.service.get_document_media(user, document_uid, media_id)
 
                 return StreamingResponse(content=stream, media_type=content_type, headers={"Content-Disposition": f'attachment; filename="{file_name}"'})
             except FileNotFoundError as e:
@@ -166,6 +166,6 @@ class ContentController:
                 }
             },
         )
-        async def download_document(document_uid: str, _: KeycloakUser = Depends(get_current_user)):
-            stream, file_name, content_type = await self.service.get_original_content(document_uid)
+        async def download_document(document_uid: str, user: KeycloakUser = Depends(get_current_user)):
+            stream, file_name, content_type = await self.service.get_original_content(user, document_uid)
             return StreamingResponse(content=stream, media_type=content_type, headers={"Content-Disposition": f'attachment; filename="{file_name}"'})
