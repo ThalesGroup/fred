@@ -80,30 +80,25 @@ class SchedulerController:
         async def schedule_documents(req: ProcessDocumentsRequest, _: KeycloakUser = Depends(get_current_user)):
             logger.info(f"Processing {len(req.files)} file(s) via Temporal pipeline")
 
-            try:
-                # You may batch files per-source_tag if needed
-                definition = PipelineDefinition(
-                    name=req.pipeline_name,
-                    files=req.files,
-                )
+            # You may batch files per-source_tag if needed
+            definition = PipelineDefinition(
+                name=req.pipeline_name,
+                files=req.files,
+            )
 
-                client = await Client.connect(
-                    target_host=self.config.host,
-                    namespace=self.config.namespace,
-                )
-                workflow_id = f"{self.config.workflow_prefix}-{uuid4()}"
-                handle = await client.start_workflow(
-                    Process.run,
-                    definition,
-                    id=workflow_id,
-                    task_queue=self.config.task_queue,
-                )
-                logger.info(f"🛠️ started temporal workflow={workflow_id}")
-                return {
-                    "workflow_id": handle.id,
-                    "run_id": handle.first_execution_run_id,
-                }
-
-            except Exception as e:
-                log_exception(e, "Failed to submit process-documents workflow")
-                raise HTTPException(status_code=500, detail="Workflow submission failed")
+            client = await Client.connect(
+                target_host=self.config.host,
+                namespace=self.config.namespace,
+            )
+            workflow_id = f"{self.config.workflow_prefix}-{uuid4()}"
+            handle = await client.start_workflow(
+                Process.run,
+                definition,
+                id=workflow_id,
+                task_queue=self.config.task_queue,
+            )
+            logger.info(f"🛠️ started temporal workflow={workflow_id}")
+            return {
+                "workflow_id": handle.id,
+                "run_id": handle.first_execution_run_id,
+            }

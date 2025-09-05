@@ -44,7 +44,7 @@ class TabularController:
                 return self.service.list_databases()
             except Exception as e:
                 logger.exception("Failed to list databases")
-                raise HTTPException(status_code=500, detail=str(e))
+                raise e
 
         @router.get("/tabular/{db_name}/tables", response_model=List[str], tags=["Tabular"], summary="List tables in a database", operation_id="list_table_names")
         async def list_tables(db_name: str = Path(..., description="Name of the tabular database"), _: KeycloakUser = Depends(get_current_user)):
@@ -53,7 +53,7 @@ class TabularController:
                 return store.list_tables()
             except Exception as e:
                 logger.exception(f"Failed to list tables for {db_name}")
-                raise HTTPException(status_code=500, detail=str(e))
+                raise e
 
         @router.get("/tabular/{db_name}/schemas", response_model=List[TabularSchemaResponse], tags=["Tabular"], summary="Get schemas of all tables in a database", operation_id="get_all_schemas")
         async def get_schemas(db_name: str = Path(..., description="Name of the tabular database"), _: KeycloakUser = Depends(get_current_user)):
@@ -61,7 +61,7 @@ class TabularController:
                 return self.service.list_tables_with_schema(db_name=db_name)
             except Exception as e:
                 logger.exception(f"Failed to get schemas for {db_name}")
-                raise HTTPException(status_code=500, detail=str(e))
+                raise e
 
         @router.post(
             "/tabular/{db_name}/sql",
@@ -79,7 +79,7 @@ class TabularController:
                 raise HTTPException(status_code=403, detail=str(e))
             except Exception as e:
                 logger.exception(f"[{db_name}] Raw SQL execution failed")
-                raise HTTPException(status_code=500, detail=str(e))
+                raise e
 
         @router.delete("/tabular/{db_name}/tables/{table_name}", status_code=204, tags=["Tabular"], summary="Delete a table from a database", operation_id="delete_table")
         async def delete_table(
@@ -101,4 +101,4 @@ class TabularController:
                 raise HTTPException(status_code=400, detail=str(ve))
             except Exception as e:
                 logger.exception(f"[{db_name}] Failed to delete table '{table_name}'")
-                raise HTTPException(status_code=500, detail=str(e))
+                raise e

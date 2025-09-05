@@ -15,15 +15,15 @@
 
 import logging
 from typing import List
-from fastapi.params import Query
-from typing_extensions import Annotated
 
 from fastapi import APIRouter, Body, Depends, HTTPException, status
+from fastapi.params import Query
 from fred_core import KeycloakUser, get_current_user
+from typing_extensions import Annotated
 
 from app.core.stores.resources.base_resource_store import (
-    ResourceNotFoundError,
     ResourceAlreadyExistsError,
+    ResourceNotFoundError,
 )
 from app.features.resources.service import ResourceService
 from app.features.resources.structures import Resource, ResourceCreate, ResourceKind, ResourceUpdate
@@ -40,14 +40,13 @@ class ResourceController:
     def __init__(self, router: APIRouter):
         self.service = ResourceService()
 
-        def handle_exception(e: Exception) -> HTTPException:
+        def handle_exception(e: Exception) -> HTTPException | Exception:
             if isinstance(e, ResourceNotFoundError):
                 return HTTPException(status_code=404, detail="Resource not found")
             if isinstance(e, ResourceAlreadyExistsError):
                 return HTTPException(status_code=409, detail="Resource already exists")
 
-            logger.error(f"Internal server error: {e}", exc_info=True)
-            return HTTPException(status_code=500, detail="Internal server error")
+            return e
 
         self._register_routes(router, handle_exception)
 

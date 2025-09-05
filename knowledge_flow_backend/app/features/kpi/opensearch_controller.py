@@ -2,7 +2,7 @@
 import logging
 from typing import Any, Optional, Tuple
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Path
+from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from fred_core import KeycloakUser, get_current_user
 from opensearchpy.exceptions import TransportError  # ← surface OS error details
 
@@ -31,12 +31,10 @@ class OpenSearchOpsController:
         self.client = get_app_context().get_opensearch_client()
         self.default_index_pattern = "*"
 
-        def err(e: Exception) -> HTTPException:
+        def err(e: Exception) -> HTTPException | Exception:
             """
-            Fred rationale:
-            - Keep a single place that converts Python exceptions into HTTP errors.
-            - If it's an OpenSearch TransportError, bubble up the OS message so MCP
-              tools can display something actionable (privilege issue, bad arg, ...).
+            If it's an OpenSearch TransportError, bubble up the OS message so MCP
+            tools can display something actionable (privilege issue, bad arg, ...).
             """
             logger.error("[OSOPS] error: %s", e, exc_info=True)
             if isinstance(e, TransportError):
@@ -46,7 +44,8 @@ class OpenSearchOpsController:
                     status_code=status,
                     detail={"message": "OpenSearch error", "opensearch": getattr(e, "error", str(e))},
                 )
-            return HTTPException(status_code=500, detail={"message": "OpenSearch error", "exception": str(e)})
+
+            return e  # Will be handled by generic_exception_handler as 500
 
         # --- helper: choose a shard when only 'index' was provided ----------------
         def _pick_problem_shard(index: str) -> Optional[Tuple[str, int, bool]]:

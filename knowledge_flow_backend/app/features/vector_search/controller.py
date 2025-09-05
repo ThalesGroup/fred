@@ -5,17 +5,13 @@
 import logging
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException
-from fred_core import KeycloakUser, get_current_user, VectorSearchHit
+from fastapi import APIRouter, Depends
+from fred_core import KeycloakUser, VectorSearchHit, get_current_user
 
 from app.features.vector_search.service import VectorSearchService
 from app.features.vector_search.structures import SearchRequest
 
 logger = logging.getLogger(__name__)
-
-
-def handle_exception(e: Exception) -> HTTPException:
-    return HTTPException(status_code=500, detail="Internal server error")
 
 
 class VectorSearchController:
@@ -39,15 +35,11 @@ class VectorSearchController:
             request: SearchRequest,
             user: KeycloakUser = Depends(get_current_user),
         ) -> List[VectorSearchHit]:
-            try:
-                hits = self.service.similarity_search_with_score(
-                    request.query,
-                    user,
-                    k=request.top_k,
-                    tags_ids=request.tags,
-                )
-                # hits is expected to be List[VectorSearchHit]
-                return hits
-            except Exception as e:
-                logger.exception("Vector search failed")
-                raise handle_exception(e)
+            hits = self.service.similarity_search_with_score(
+                request.query,
+                user,
+                k=request.top_k,
+                tags_ids=request.tags,
+            )
+            # hits is expected to be List[VectorSearchHit]
+            return hits

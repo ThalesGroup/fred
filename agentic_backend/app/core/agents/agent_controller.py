@@ -22,14 +22,14 @@ from app.core.agents.agent_service import AgentAlreadyExistsException, AgentServ
 from app.core.agents.structures import CreateAgentRequest
 
 
-def handle_exception(e: Exception) -> HTTPException:
+def handle_exception(e: Exception) -> HTTPException | Exception:
     if isinstance(e, AgentAlreadyExistsException):
         return HTTPException(status_code=409, detail=str(e))
     if isinstance(e, MCPClientConnectionException):
         return HTTPException(
             status_code=502, detail=f"MCP connection failed: {e.reason}"
         )
-    return HTTPException(status_code=500, detail="Internal server error")
+    return e
 
 
 class AgentController:

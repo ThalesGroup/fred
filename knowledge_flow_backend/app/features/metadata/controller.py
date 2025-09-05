@@ -46,14 +46,15 @@ class BrowseDocumentsRequest(BaseModel):
     sort_by: Optional[List[SortOption]] = None
 
 
-def handle_exception(e: Exception) -> HTTPException:
+def handle_exception(e: Exception) -> HTTPException | Exception:
     if isinstance(e, MetadataNotFound):
         return HTTPException(status_code=404, detail=str(e))
     elif isinstance(e, InvalidMetadataRequest):
         return HTTPException(status_code=400, detail=str(e))
     elif isinstance(e, MetadataUpdateError):
-        return HTTPException(status_code=500, detail=str(e))
-    return HTTPException(status_code=500, detail="Internal server error")
+        return e  # Will be handled by generic_exception_handler as 500
+
+    return e
 
 
 class MetadataController:
@@ -176,30 +177,25 @@ class MetadataController:
             if not config:
                 raise HTTPException(status_code=404, detail=f"Source tag '{req.source_tag}' not found")
 
-            try:
-                if config.type == "push":
-                    filters = req.filters or {}
-                    filters["source_tag"] = req.source_tag
-                    docs = self.service.get_documents_metadata(filters)
-                    sort_by = req.sort_by or [SortOption(field="document_name", direction="asc")]
+            if config.type == "push":
+                filters = req.filters or {}
+                filters["source_tag"] = req.source_tag
+                docs = self.service.get_documents_metadata(filters)
+                sort_by = req.sort_by or [SortOption(field="document_name", direction="asc")]
 
-                    for sort in reversed(sort_by):  # Apply last sort first for correct multi-field sorting
-                        docs.sort(
-                            key=lambda d: getattr(d, sort.field, "") or "",  # fallback to empty string
-                            reverse=(sort.direction == "desc"),
-                        )
+                for sort in reversed(sort_by):  # Apply last sort first for correct multi-field sorting
+                    docs.sort(
+                        key=lambda d: getattr(d, sort.field, "") or "",  # fallback to empty string
+                        reverse=(sort.direction == "desc"),
+                    )
 
-                    paginated = docs[req.offset : req.offset + req.limit]
-                    return PullDocumentsResponse(documents=paginated, total=len(docs))
+                paginated = docs[req.offset : req.offset + req.limit]
+                return PullDocumentsResponse(documents=paginated, total=len(docs))
 
-                elif config.type == "pull":
-                    docs, total = self.pull_document_service.list_pull_documents(source_tag=req.source_tag, offset=req.offset, limit=req.limit)
-                    # You could apply extra filtering here if needed
-                    return PullDocumentsResponse(documents=docs, total=total)
+            elif config.type == "pull":
+                docs, total = self.pull_document_service.list_pull_documents(source_tag=req.source_tag, offset=req.offset, limit=req.limit)
+                # You could apply extra filtering here if needed
+                return PullDocumentsResponse(documents=docs, total=total)
 
-                else:
-                    raise HTTPException(status_code=400, detail=f"Unsupported source type '{config.type}'")
-
-            except Exception as e:
-                log_exception(e, "An unexpected error occurred while rbrowsing document")
-                raise HTTPException(status_code=500, detail="Internal server error")
+            else:
+                raise HTTPException(status_code=400, detail=f"Unsupported source type '{config.type}'")
