@@ -190,10 +190,7 @@ def create_app() -> FastAPI:
     mcp_statistic = FastApiMCP(
         app,
         name="Knowledge Flow Statistic MCP",
-        description=(
-            "ML access layer exposed through pandas, sklearn, matplolib. "
-            "Provides agents with describe, plot, test, update, add_column and train "
-        ),
+        description=("ML access layer exposed through pandas, sklearn, matplolib. Provides agents with describe, plot, test, update, add_column and train "),
         include_tags=["Statistic"],
         describe_all_responses=True,
         describe_full_response_schema=True,
