@@ -127,9 +127,6 @@ class ContentController:
                 raise HTTPException(status_code=400, detail=str(e))
             except FileNotFoundError as e:
                 raise HTTPException(status_code=404, detail=str(e))
-            except Exception:
-                logger.exception("Unexpected error in get_document_preview")
-                raise HTTPException(status_code=500, detail="Internal server error")
 
         @router.get(
             "/markdown/{document_uid}/media/{media_id}",
@@ -151,9 +148,6 @@ class ContentController:
                 return StreamingResponse(content=stream, media_type=content_type, headers={"Content-Disposition": f'attachment; filename="{file_name}"'})
             except FileNotFoundError as e:
                 raise HTTPException(status_code=404, detail=str(e))
-            except Exception:
-                logger.exception("Unexpected error in download_document")
-                raise HTTPException(status_code=500, detail="Internal server error")
 
         @router.get(
             "/raw_content/{document_uid}",
