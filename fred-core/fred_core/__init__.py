@@ -51,7 +51,7 @@ from fred_core.kpi.kpi_reader_structures import (
 )
 from fred_core.kpi.base_kpi_store import BaseKPIStore
 from fred_core.kpi.kpi_writer import KPIWriter
-from fred_core.security.outbound import ClientCredentialsProvider, BearerAuth
+from fred_core.security.outbound import ClientCredentialsProvider, BearerAuth, TokenExchangeProvider
 from fred_core.security.backend_to_backend_auth import (
     B2BAuthConfig,
     B2BTokenProvider,
@@ -77,6 +77,7 @@ __all__ = [
     "VectorSearchHit",
     "ClientCredentialsProvider",
     "BearerAuth",
+    "TokenExchangeProvider",
     "OpenSearchKPIStore",
     "KPIEvent",
     "Metric",
