@@ -47,6 +47,7 @@ from fred_core import (
     DuckdbStoreConfig,
     ClientCredentialsProvider,
     BearerAuth,
+    TokenExchangeProvider,
     OpenSearchKPIStore,
     BaseKPIStore,
     KpiLogStore,
@@ -521,10 +522,24 @@ class ApplicationContext:
             client_id=client_id,
             client_secret=client_secret,
         )
+        
+        # Create token exchange provider for user identity preservation
+        token_exchanger = TokenExchangeProvider(
+            keycloak_base=keycloak_base,
+            realm=realm,
+            client_id=client_id,
+            client_secret=client_secret,
+            audience="knowledge-flow",  # Target audience for exchanged tokens
+        )
+        
         self._outbound_auth = OutboundAuth(
             auth=BearerAuth(provider),
             refresh=provider.force_refresh,
         )
+        
+        # Attach token exchanger for use in MCP calls
+        self._outbound_auth._token_exchanger = token_exchanger
+        
         return self._outbound_auth
 
     def _log_config_summary(self) -> None:

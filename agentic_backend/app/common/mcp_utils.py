@@ -66,6 +66,7 @@ from langchain_mcp_adapters.client import MultiServerMCPClient
 from app.common.structures import AgentSettings
 from app.common.error import UnsupportedTransportError
 from app.application_context import get_app_context
+from app.core.agents.runtime_context import get_user_token, RuntimeContextProvider
 
 logger = logging.getLogger(__name__)
 
@@ -89,29 +90,59 @@ def _mask_auth_value(v: str | None) -> str:
     return "present"
 
 
-def _auth_headers() -> Dict[str, str]:
+def _auth_headers(context_provider: RuntimeContextProvider | None = None) -> Dict[str, str]:
     """Build HTTP Authorization headers for outbound MCP requests.
 
-    We consult the app-level outbound auth provider (if configured).
-    - If a token is available, return {"Authorization": "Bearer <token>"}.
-    - Otherwise return an empty dict.
+    This function supports OAuth2 Token Exchange to preserve user identity:
+    - If user context with token is provided, exchanges the user token for a service token
+    - Otherwise falls back to standard client credentials service token
+    - Returns {"Authorization": "Bearer <token>"}
+
+    Args:
+        context_provider: Optional function to get the runtime context with user token.
 
     Returns:
         Dict of headers suitable for HTTP transports (SSE, streamable_http, websocket).
     """
+    headers = {}
+    
+    # Try token exchange first if user context is available
+    if context_provider:
+        try:
+            context = context_provider()
+            user_token = get_user_token(context)
+            if user_token:
+                # Get token exchange provider from app context
+                oa = get_app_context().get_outbound_auth()
+                exchanger = getattr(oa, "_token_exchanger", None)
+                if exchanger:
+                    try:
+                        exchanged_token = exchanger.exchange_token(user_token)
+                        headers["Authorization"] = f"Bearer {exchanged_token}"
+                        logger.debug("Using token exchange for user identity preservation")
+                        return headers
+                    except Exception as e:
+                        logger.warning("Token exchange failed, falling back to service token: %s", e)
+        except Exception:
+            # Don't fail if context provider fails, just skip token exchange
+            pass
+    
+    # Fallback to standard service account token
     oa = get_app_context().get_outbound_auth()
     provider = getattr(oa.auth, "_provider", None)  # internal by design
     if callable(provider):
         try:
             token = provider()
         except Exception:
-            return {}
+            token = None
         if token:
-            return {"Authorization": f"Bearer {token}"}
-    return {}
+            headers["Authorization"] = f"Bearer {token}"
+            logger.debug("Using standard service account token")
+    
+    return headers
 
 
-def _auth_stdio_env() -> Dict[str, str]:
+def _auth_stdio_env(context_provider: RuntimeContextProvider | None = None) -> Dict[str, str]:
     """Build env vars used to pass auth to stdio transports.
 
     stdio servers don't see HTTP headers, so we mirror the Authorization header
@@ -120,14 +151,22 @@ def _auth_stdio_env() -> Dict[str, str]:
     - MCP_AUTHORIZATION
     - AUTHORIZATION
 
+    Args:
+        context_provider: Optional function to get the runtime context with user token.
+
     Returns:
         Environment variable mapping (possibly empty).
     """
-    hdrs = _auth_headers()
-    if not hdrs:
-        return {}
-    val = hdrs["Authorization"]
-    return {"MCP_AUTHORIZATION": val, "AUTHORIZATION": val}
+    hdrs = _auth_headers(context_provider)
+    env_vars = {}
+    
+    # Add authorization token (already includes token exchange if applicable)
+    if "Authorization" in hdrs:
+        auth_val = hdrs["Authorization"]
+        env_vars["MCP_AUTHORIZATION"] = auth_val
+        env_vars["AUTHORIZATION"] = auth_val
+    
+    return env_vars
 
 
 def _is_auth_error(exc: Exception) -> bool:
@@ -145,6 +184,7 @@ def _is_auth_error(exc: Exception) -> bool:
 
 async def get_mcp_client_for_agent(
     agent_settings: AgentSettings,
+    context_provider: RuntimeContextProvider | None = None,
 ) -> MultiServerMCPClient:
     """Create and connect a `MultiServerMCPClient` for the given agent.
 
@@ -165,6 +205,7 @@ async def get_mcp_client_for_agent(
 
     Args:
         agent_settings: Agent configuration containing one or more MCP server specs.
+        context_provider: Optional function to get the runtime context with user info.
 
     Returns:
         A connected `MultiServerMCPClient` with all declared servers attached.
@@ -184,8 +225,8 @@ async def get_mcp_client_for_agent(
     exceptions: List[Exception] = []
 
     # Build base auth once to avoid multiple provider calls.
-    base_headers = _auth_headers()
-    base_stdio_env = _auth_stdio_env()
+    base_headers = _auth_headers(context_provider)
+    base_stdio_env = _auth_stdio_env(context_provider)
     auth_label = _mask_auth_value(base_headers.get("Authorization"))
 
     for server in agent_settings.mcp_servers:
@@ -292,7 +333,7 @@ async def get_mcp_client_for_agent(
                         type(ref_exc).__name__,
                     )
 
-            fresh_headers = _auth_headers()
+            fresh_headers = _auth_headers(context_provider)
             fresh_auth_label = _mask_auth_value(fresh_headers.get("Authorization"))
 
             if server.transport in ("sse", "streamable_http", "websocket"):
@@ -302,7 +343,7 @@ async def get_mcp_client_for_agent(
                     connect_kwargs.pop("headers", None)
             elif server.transport == "stdio":
                 merged_env = dict(server.env or {})
-                merged_env.update(_auth_stdio_env())
+                merged_env.update(_auth_stdio_env(context_provider))
                 connect_kwargs["env"] = merged_env
 
             start2 = time.perf_counter()

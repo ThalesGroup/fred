@@ -2,6 +2,8 @@
 
 This guide shows how the **Agentic backend** authenticates to the **Knowledge Flow** backend using Keycloak. It also clarifies the **three clients** you should create in your realm and what each one is for.
 
+> **Token Exchange Support**: Fred now supports OAuth2 Token Exchange (RFC 8693) to preserve user identity in service-to-service calls. When a user makes a request to Agentic, it can exchange the user's token for a service token that maintains the user's identity when calling Knowledge Flow.
+
 > Today: we validate signature/expiry/issuer. Audience and roles are **not enforced yet** (coming soon).
 > Already working: both **agentic** and **knowledge-flow** clients can mint service tokens for protected, service-to-service calls. In particular, **Agentic calls Knowledge Flow**.
 
@@ -134,6 +136,42 @@ Transport rules (client side)
 
 Expected: HTTP 200 with a JSON description. In KF logs you should see:
     Processing request of type ListToolsRequest
+
+---
+
+## Token Exchange Configuration
+
+Token Exchange allows Agentic to preserve user identity when making calls to Knowledge Flow. This is especially useful for resource creation where you want the correct author field instead of "service-account-agentic".
+
+### Keycloak Setup for Token Exchange
+
+1. **Enable Token Exchange on agentic client:**
+   - Go to Keycloak Admin Console → Clients → agentic
+   - Go to Capability config → enable Standard Token Exchange
+
+2. **Verification:**
+   ```bash
+   # Test token exchange manually
+   USER_TOKEN="<user_access_token>"
+   AGENTIC_SECRET="<your_agentic_client_secret>"
+   
+   curl -X POST "https://your-keycloak/realms/fred/protocol/openid-connect/token" \
+     -d "grant_type=urn:ietf:params:oauth:grant-type:token-exchange" \
+     -d "client_id=agentic" \
+     -d "client_secret=$AGENTIC_SECRET" \
+     -d "subject_token=$USER_TOKEN" \
+     -d "subject_token_type=urn:ietf:params:oauth:token-type:access_token" \
+     -d "requested_token_type=urn:ietf:params:oauth:token-type:access_token" \
+     -d "audience=knowledge-flow"
+   ```
+
+### How It Works
+
+1. User alice logs in via frontend and gets a JWT token
+2. Frontend sends request to Agentic with alice's token
+3. Agentic extracts alice's token and stores it in RuntimeContext
+4. When making MCP calls, Agentic exchanges alice's token for a service token that preserves her identity
+5. Knowledge Flow receives the exchanged token and sees alice as the author (not service-account-agentic)
 
 ---
 

@@ -151,6 +151,17 @@ const ChatBot = ({
 
       socket.onopen = () => {
         console.log("[✅ ChatBot] WebSocket connected");
+        
+        // Send authentication token for OAuth2 Token Exchange
+        const userToken = KeyCloakService.GetToken();
+        if (userToken) {
+          socket.send(JSON.stringify({
+            type: "auth",
+            token: userToken
+          }));
+          console.debug("[🔐 ChatBot] Sent authentication token for OAuth2 Token Exchange");
+        }
+        
         webSocketRef.current = socket;
         setWebSocket(socket); // ensure unmount cleanup closes the right instance
         resolve(socket);

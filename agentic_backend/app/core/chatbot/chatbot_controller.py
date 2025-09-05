@@ -26,6 +26,7 @@ from app.common.utils import log_exception
 from app.core.agents.agent_manager import AgentManager
 from app.core.agents.runtime_context import RuntimeContext
 from app.core.agents.structures import AgenticFlow
+from app.core.auth.user_context_helper import create_runtime_context_with_user_token
 from app.core.chatbot.chat_schema import (
     ChatAskInput,
     ChatMessage,
@@ -132,12 +133,37 @@ class ChatbotController:
               - All heavy lifting is in SessionOrchestrator.chat_ask_websocket()
             """
             await websocket.accept()
+            
+            # Wait for authentication message or regular chat message
+            user_token = None
+            
             try:
                 while True:
                     client_request = None
                     try:
                         client_request = await websocket.receive_json()
+                        
+                        # Handle authentication message
+                        if client_request.get("type") == "auth":
+                            user_token = client_request.get("token")
+                            if user_token:
+                                logger.debug("Received user token via WebSocket for OAuth2 Token Exchange")
+                            continue  # Wait for next message (actual chat request)
+                        
+                        # Handle regular chat message
                         ask = ChatAskInput(**client_request)
+                        
+                        # Enhance runtime_context with user token for OAuth2 Token Exchange
+                        enhanced_runtime_context = ask.runtime_context
+                        if user_token:
+                            if enhanced_runtime_context is not None:
+                                # Add user token to existing context
+                                enhanced_runtime_context = enhanced_runtime_context.model_copy()
+                                enhanced_runtime_context.user_token = user_token
+                            else:
+                                # Create new context with user token
+                                enhanced_runtime_context = RuntimeContext(user_token=user_token)
+                            logger.debug("Enhanced runtime context with user token for OAuth2 Token Exchange")
 
                         async def ws_callback(msg_dict: dict):
                             # Stream every ChatMessage as a StreamEvent over WS
@@ -156,7 +182,7 @@ class ChatbotController:
                             session_id=ask.session_id or "unknown-session",
                             message=ask.message,
                             agent_name=ask.agent_name,
-                            runtime_context=ask.runtime_context,
+                            runtime_context=enhanced_runtime_context,
                             client_exchange_id=ask.client_exchange_id,
                         )
 
