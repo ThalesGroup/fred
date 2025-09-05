@@ -53,7 +53,6 @@ def authorize(action: Action, resource: Resource):
                     f"Method {func.__name__} decorated with @authorize must have a 'user: KeycloakUser' parameter"
                 )
 
-            print(f"\n\nchecking {user.username} for {action} on {resource}\n\n\n")
             # Perform authorization check
             authz_check(user, action, resource)
 

@@ -21,33 +21,33 @@ Entrypoint for the Knowledge Flow Backend App.
 
 import logging
 import os
-from rich.logging import RichHandler
-from dotenv import load_dotenv
 
+from dotenv import load_dotenv
+from fastapi import APIRouter, Depends, FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi_mcp import AuthConfig, FastApiMCP
+from fred_core import get_current_user, initialize_keycloak, register_exception_handlers
+from rich.logging import RichHandler
+
+from app.application_context import ApplicationContext
 from app.application_state import attach_app
 from app.common.http_logging import RequestResponseLogger
+from app.common.structures import Configuration
+from app.common.utils import parse_server_configuration
+from app.core.monitoring.monitoring_controller import MonitoringController
 from app.features.catalog.controller import CatalogController
+from app.features.content.controller import ContentController
+from app.features.ingestion.controller import IngestionController
 from app.features.kpi.kpi_controller import KPIController
 from app.features.kpi.opensearch_controller import OpenSearchOpsController
+from app.features.metadata.controller import MetadataController
 from app.features.pull.controller import PullDocumentController
 from app.features.pull.service import PullDocumentService
 from app.features.resources.controller import ResourceController
 from app.features.scheduler.controller import SchedulerController
-from fastapi import APIRouter, Depends, FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi_mcp import AuthConfig, FastApiMCP
-from fred_core import get_current_user, initialize_keycloak, register_authorization_handlers
-
-from app.application_context import ApplicationContext
-from app.common.structures import Configuration
-from app.common.utils import parse_server_configuration
-from app.features.content.controller import ContentController
-from app.features.metadata.controller import MetadataController
 from app.features.tabular.controller import TabularController
 from app.features.tag.controller import TagController
 from app.features.vector_search.controller import VectorSearchController
-from app.features.ingestion.controller import IngestionController
-from app.core.monitoring.monitoring_controller import MonitoringController
 
 # -----------------------
 # LOGGING + ENVIRONMENT
@@ -96,8 +96,8 @@ def create_app() -> FastAPI:
         openapi_url=f"{configuration.app.base_url}/openapi.json",
     )
 
-    # Register authorization exception handlers
-    register_authorization_handlers(app)
+    # Register exception handlers
+    register_exception_handlers(app)
 
     app.add_middleware(
         CORSMiddleware,
@@ -112,7 +112,7 @@ def create_app() -> FastAPI:
     router = APIRouter(prefix=configuration.app.base_url)
 
     MonitoringController(router)
-    
+
     pull_document_service = PullDocumentService()
     # Register controllers
     MetadataController(router, pull_document_service)
@@ -122,7 +122,7 @@ def create_app() -> FastAPI:
     IngestionController(router)
     TabularController(router)
     # CodeSearchController(router)
-    TagController(router)
+    TagController(app, router)
     ResourceController(router)
     VectorSearchController(router)
     KPIController(router)

@@ -30,7 +30,7 @@ from fred_core.security.authorization import (
     authorize,
 )
 from fred_core.security.decorators import authorize as authorize_decorator
-from fred_core.security.fastapi_handlers import register_authorization_handlers
+from fred_core.common.fastapi_handlers import register_exception_handlers
 from fred_core.store.vector_search import VectorSearchHit
 from fred_core.common.lru_cache import ThreadSafeLRUCache
 from fred_core.common.structures import (
@@ -81,7 +81,7 @@ __all__ = [
     "is_authorized",
     "authorize",
     "authorize_decorator",
-    "register_authorization_handlers",
+    "register_exception_handlers",
     "BaseModelWithId",
     "OpenSearchStoreConfig",
     "OpenSearchIndexConfig",

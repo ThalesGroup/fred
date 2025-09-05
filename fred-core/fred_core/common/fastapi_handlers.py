@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import logging
-
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
@@ -22,13 +21,24 @@ from fred_core.security.models import AuthorizationError
 logger = logging.getLogger(__name__)
 
 
-def register_authorization_handlers(app: FastAPI) -> None:
-    """Register authorization exception handlers for FastAPI application."""
+def register_exception_handlers(app: FastAPI) -> None:
+    """Register authorization and generic exception handlers for FastAPI application."""
 
     @app.exception_handler(AuthorizationError)
     async def authorization_error_handler(
         request: Request, exc: AuthorizationError
     ) -> JSONResponse:
         """Handle AuthorizationError by returning a 403 Forbidden response."""
-        logger.debug(f"Authorization denied for user {exc.user_id}: {exc}")
+        logger.warning(f"Authorization denied for user {exc.user_id}: {exc}")
         return JSONResponse(status_code=403, content={"detail": str(exc)})
+
+    @app.exception_handler(Exception)
+    async def generic_exception_handler(
+        request: Request, exc: Exception
+    ) -> JSONResponse:
+        """Handle all unhandled exceptions by logging and returning 500."""
+        logger.error(f"Unhandled exception in {request.method} {request.url}: {exc}", exc_info=True)
+        return JSONResponse(
+            status_code=500, 
+            content={"detail": "Internal server error"}
+        )

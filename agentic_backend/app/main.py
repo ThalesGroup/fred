@@ -41,7 +41,7 @@ from app.core.prompts.controller import PromptController
 from dotenv import load_dotenv
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fred_core import initialize_keycloak, register_authorization_handlers
+from fred_core import initialize_keycloak, register_exception_handlers
 from rich.logging import RichHandler
 
 
@@ -113,8 +113,8 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    # Register authorization exception handlers
-    register_authorization_handlers(app)
+    # Register exception handlers
+    register_exception_handlers(app)
 
     app.add_middleware(
         CORSMiddleware,
