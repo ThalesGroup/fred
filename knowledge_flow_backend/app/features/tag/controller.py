@@ -13,17 +13,17 @@
 # limitations under the License.
 
 # Copyright Thales 2025
-from typing import Annotated, Optional
 import logging
+from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.params import Query
+from fred_core import AuthorizationError, KeycloakUser, get_current_user
 
 from app.core.stores.tags.base_tag_store import TagAlreadyExistsError, TagNotFoundError
 from app.features.metadata.service import MetadataNotFound
 from app.features.tag.service import TagService
-from app.features.tag.structure import TagCreate, TagUpdate, TagWithItemsId, TagType
-from fred_core import KeycloakUser, get_current_user
+from app.features.tag.structure import TagCreate, TagType, TagUpdate, TagWithItemsId
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +39,8 @@ class TagController:
         self.service = TagService()
 
         def handle_exception(e: Exception) -> HTTPException:
+            if isinstance(e, AuthorizationError):
+                return HTTPException(status_code=403, detail="Not authorized")
             if isinstance(e, TagNotFoundError):
                 return HTTPException(status_code=404, detail="Tag not found")
             if isinstance(e, TagAlreadyExistsError):
