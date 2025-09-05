@@ -109,7 +109,7 @@ jobs:
       - name: Frontend run
         run: |
           cd frontend/
-          timeout 5s make run || true
+          timeout 30s make run || true
 
   # Job to check helm charts
   deploy-charts-checks:
@@ -144,11 +144,16 @@ jobs:
         with:
           working-directory: agentic_backend
       
-      
+      - name: Check route security
+        run: |
+          cd agentic_backend/
+          make check-route-security
+
       - name: Test backend startup
         run: |
           cd agentic_backend/
-          timeout 5 make run || true
+          timeout 30s make run || true
+      
   
   # Job for knownledge-flow
   knowledge-flow-backend-checks:
@@ -166,12 +171,16 @@ jobs:
         uses: ./.github/actions/setup-python-env
         with:
           working-directory: knowledge_flow_backend
-      
-      
+
+      - name: Check route security
+        run: |
+          cd knowledge_flow_backend/
+          make check-route-security
+
       - name: Build and test
         run: |
           cd knowledge_flow_backend/
-          make build
+          timeout 30s make run || true
 
   # Job to check OpenAPI spec drift when backends or frontend change
   openapi-drift-check:

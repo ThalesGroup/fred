@@ -13,20 +13,19 @@
 # limitations under the License.
 
 import logging
+from threading import Lock
 from typing import Any, Dict, List, Literal, Optional
 
-from fred_core import KeycloakUser, get_current_user
-from app.common.document_structures import DocumentMetadata
-from app.common.utils import log_exception
-from app.features.pull.controller import PullDocumentsResponse
-from app.features.pull.service import PullDocumentService
 from fastapi import APIRouter, Body, Depends, HTTPException
+from fred_core import KeycloakUser, get_current_user
+from pydantic import BaseModel, Field
 
 from app.application_context import ApplicationContext
+from app.common.document_structures import DocumentMetadata
+from app.common.utils import log_exception
 from app.features.metadata.service import InvalidMetadataRequest, MetadataNotFound, MetadataService, MetadataUpdateError
-from threading import Lock
-
-from pydantic import BaseModel, Field
+from app.features.pull.controller import PullDocumentsResponse
+from app.features.pull.service import PullDocumentService
 
 
 class SortOption(BaseModel):
@@ -129,7 +128,7 @@ class MetadataController:
                 "Use `/documents/pull` to inspect discovered-but-unprocessed files."
             ),
         )
-        def get_document_metadata(document_uid: str):
+        def get_document_metadata(document_uid: str, _: KeycloakUser = Depends(get_current_user)):
             try:
                 return self.service.get_document_metadata(document_uid)
             except Exception as e:
@@ -172,7 +171,7 @@ class MetadataController:
             **Example filters:** `tags`, `retrievable`, `title`, etc.
             """,
         )
-        def browse_documents(req: BrowseDocumentsRequest):
+        def browse_documents(req: BrowseDocumentsRequest, _: KeycloakUser = Depends(get_current_user)):
             config = self.context.get_config().document_sources.get(req.source_tag)
             if not config:
                 raise HTTPException(status_code=404, detail=f"Source tag '{req.source_tag}' not found")
