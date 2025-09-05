@@ -15,6 +15,7 @@ from app.features.statistic.structures import (
 )
 from app.features.statistic.service import StatisticService
 from app.application_context import ApplicationContext
+from app.common.utils import sanitize_sql_name
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +39,7 @@ class StatisticController:
         @router.post("/stat/set_dataset", tags=["Statistic"], summary="Select a dataset")
         async def set_dataset(request: SetDatasetRequest):
             try:
-                dataset = self.store.load_table(request.dataset_name)
+                dataset = self.store.load_table(sanitize_sql_name(request.dataset_name))
                 self.service.set_dataset(dataset)
                 return f"{request.dataset_name} is loaded."
             except Exception as e:
