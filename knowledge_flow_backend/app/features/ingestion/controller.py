@@ -19,13 +19,13 @@ import shutil
 import tempfile
 from typing import List, Optional
 
-from app.application_context import get_kpi_writer
-from fred_core import KeycloakUser, get_current_user, KPIWriter, KPIActor
-from app.common.structures import Status
-from fastapi import APIRouter, Depends, Response, UploadFile, File, Form
+from fastapi import APIRouter, Depends, File, Form, Response, UploadFile
 from fastapi.responses import StreamingResponse
+from fred_core import KeycloakUser, KPIActor, KPIWriter, get_current_user
 from pydantic import BaseModel
 
+from app.application_context import get_kpi_writer
+from app.common.structures import Status
 from app.features.ingestion.service import IngestionService
 from app.features.scheduler.activities import input_process, output_process
 from app.features.scheduler.structure import FileToProcess
@@ -113,6 +113,7 @@ class IngestionController:
         def upload_documents_sync(
             files: List[UploadFile] = File(...),
             metadata_json: str = Form(...),
+            _: KeycloakUser = Depends(get_current_user),
         ) -> Response:
             parsed_input = IngestionInput(**json.loads(metadata_json))
             tags = parsed_input.tags
