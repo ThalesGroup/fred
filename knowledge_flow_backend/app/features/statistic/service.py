@@ -21,11 +21,11 @@ logger = logging.getLogger(__name__)
 class StatisticService:
     def __init__(self, charts_dir: str = "~/.fred/knowledge-flow/statistic/data/charts", models_dir: str = "~/.fred/knowledge-flow/statistic/data/models"):
         self.df = None
-        self.charts_dir = charts_dir
-        self.models_dir = models_dir
+        self.charts_dir = os.path.expanduser(charts_dir)
+        self.models_dir = os.path.expanduser(models_dir)
         os.makedirs(charts_dir, exist_ok=True)
         os.makedirs(models_dir, exist_ok=True)
-        logger.info(f"StatisticService initialized with charts_dir: {charts_dir}\n and models_dir:{models_dir}")
+        logger.info(f"StatisticService initialized with charts_dir: {self.charts_dir}\n and models_dir:{self.models_dir}")
 
     def set_dataset(self, df: pd.DataFrame):
         self.df = df

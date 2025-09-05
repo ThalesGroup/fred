@@ -1,5 +1,5 @@
 import logging
-from fastapi import APIRouter, Body, Depends, HTTPException, Path
+from fastapi import APIRouter, Depends, HTTPException
 from fred_core import KeycloakUser, get_current_user
 
 from app.features.statistic.utils import clean_json
