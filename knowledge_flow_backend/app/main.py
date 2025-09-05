@@ -36,7 +36,7 @@ from app.features.scheduler.controller import SchedulerController
 from fastapi import APIRouter, Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi_mcp import AuthConfig, FastApiMCP
-from fred_core import get_current_user, initialize_keycloak
+from fred_core import get_current_user, initialize_keycloak, register_authorization_handlers
 
 from app.application_context import ApplicationContext
 from app.common.structures import Configuration
@@ -95,6 +95,9 @@ def create_app() -> FastAPI:
         redoc_url=f"{configuration.app.base_url}/redoc",
         openapi_url=f"{configuration.app.base_url}/openapi.json",
     )
+
+    # Register authorization exception handlers
+    register_authorization_handlers(app)
 
     app.add_middleware(
         CORSMiddleware,
