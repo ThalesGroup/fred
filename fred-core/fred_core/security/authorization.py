@@ -23,6 +23,25 @@ from fred_core.security.structure import KeycloakUser
 
 authz_providers: list[AuthorizationProvider] = [RBACProvider()]
 
+# Fake user to use when a function requires a user but we don't have one yet
+# but should have one when authorization is added to the service.
+# This is a temporary workaround and should be replaced with a real user.
+TODO_PASS_REAL_USER = KeycloakUser(
+    uid="internal-admin-todo",
+    username="internal admin - todo",
+    email="internal-admin-todo@localhost",
+    roles=["admin"],
+)
+
+# Internal admin user to use for system operations that must always succeed
+# and should not be subject to authorization checks.
+NO_AUTHZ_CHECK_USER = KeycloakUser(
+    uid="internal-admin",
+    username="internal admin",
+    email="internal-admin@localhost",
+    roles=["admin"],
+)
+
 
 def is_authorized(
     user: KeycloakUser,

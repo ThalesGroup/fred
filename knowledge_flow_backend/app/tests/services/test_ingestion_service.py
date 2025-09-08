@@ -1,6 +1,8 @@
 import pytest
-from app.features.ingestion.service import IngestionService
+from fred_core import KeycloakUser
+
 from app.common.document_structures import DocumentMetadata
+from app.features.ingestion.service import IngestionService
 
 
 @pytest.fixture
@@ -28,8 +30,14 @@ def test_extract_and_save_metadata(sample_docx, metadata_store):
     assert metadata.source_tag == "uploads"
 
     # 💾 Save metadata and reload it
-    service.save_metadata(metadata)
-    restored = service.get_metadata(metadata.document_uid)
+    user = KeycloakUser(
+        uid="test-user",
+        username="testuser",
+        email="testuser@localhost",
+        roles=["admin"],
+    )
+    service.save_metadata(user, metadata)
+    restored = service.get_metadata(user, metadata.document_uid)
     assert restored is not None
     assert restored.document_uid == metadata.document_uid
     assert restored.tags == ["test"]

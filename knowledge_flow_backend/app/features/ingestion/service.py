@@ -14,11 +14,13 @@
 
 import logging
 import pathlib
+
+from fred_core import KeycloakUser
+
+from app.application_context import ApplicationContext
 from app.common.document_structures import DocumentMetadata, ProcessingStage, SourceType
 from app.core.processors.input.common.base_input_processor import BaseMarkdownProcessor, BaseTabularProcessor
 from app.features.metadata.service import MetadataNotFound, MetadataService
-
-from app.application_context import ApplicationContext
 
 logger = logging.getLogger(__name__)
 
@@ -45,11 +47,11 @@ class IngestionService:
         self.content_store.save_output(metadata.document_uid, output_dir)
         metadata.mark_stage_done(ProcessingStage.PREVIEW_READY)
 
-    def save_metadata(self, metadata: DocumentMetadata) -> None:
+    def save_metadata(self, user: KeycloakUser, metadata: DocumentMetadata) -> None:
         logger.debug(f"Saving metadata {metadata}")
-        return self.metadata_service.save_document_metadata(metadata)
+        return self.metadata_service.save_document_metadata(user, metadata)
 
-    def get_metadata(self, document_uid: str) -> DocumentMetadata | None:
+    def get_metadata(self, user: KeycloakUser, document_uid: str) -> DocumentMetadata | None:
         """
         Retrieve the metadata associated with the given document UID.
 
@@ -66,7 +68,7 @@ class IngestionService:
         """
 
         try:
-            return self.metadata_service.get_document_metadata(document_uid)
+            return self.metadata_service.get_document_metadata(user, document_uid)
         except MetadataNotFound:
             return None
 

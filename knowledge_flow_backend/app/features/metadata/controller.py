@@ -113,7 +113,7 @@ class MetadataController:
         )
         def search_document_metadata(filters: Dict[str, Any] = Body(default={}), user: KeycloakUser = Depends(get_current_user)):
             try:
-                return self.service.get_documents_metadata(filters)
+                return self.service.get_documents_metadata(user, filters)
             except Exception as e:
                 log_exception(e)
                 raise handle_exception(e)
@@ -129,9 +129,9 @@ class MetadataController:
                 "Use `/documents/pull` to inspect discovered-but-unprocessed files."
             ),
         )
-        def get_document_metadata(document_uid: str, _: KeycloakUser = Depends(get_current_user)):
+        def get_document_metadata(document_uid: str, user: KeycloakUser = Depends(get_current_user)):
             try:
-                return self.service.get_document_metadata(document_uid)
+                return self.service.get_document_metadata(user, document_uid)
             except Exception as e:
                 raise handle_exception(e)
 
@@ -153,7 +153,7 @@ class MetadataController:
             user: KeycloakUser = Depends(get_current_user),
         ):
             try:
-                self.service.update_document_retrievable(document_uid, retrievable, user.username)
+                self.service.update_document_retrievable(user, document_uid, retrievable, user.username)
             except Exception as e:
                 raise handle_exception(e)
 
@@ -172,7 +172,7 @@ class MetadataController:
             **Example filters:** `tags`, `retrievable`, `title`, etc.
             """,
         )
-        def browse_documents(req: BrowseDocumentsRequest, _: KeycloakUser = Depends(get_current_user)):
+        def browse_documents(req: BrowseDocumentsRequest, user: KeycloakUser = Depends(get_current_user)):
             config = self.context.get_config().document_sources.get(req.source_tag)
             if not config:
                 raise HTTPException(status_code=404, detail=f"Source tag '{req.source_tag}' not found")
@@ -180,7 +180,7 @@ class MetadataController:
             if config.type == "push":
                 filters = req.filters or {}
                 filters["source_tag"] = req.source_tag
-                docs = self.service.get_documents_metadata(filters)
+                docs = self.service.get_documents_metadata(user, filters)
                 sort_by = req.sort_by or [SortOption(field="document_name", direction="asc")]
 
                 for sort in reversed(sort_by):  # Apply last sort first for correct multi-field sorting

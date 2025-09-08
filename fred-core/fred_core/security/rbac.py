@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import logging
-from typing import Optional, Set
+from typing import Set
 
 from fred_core.security.models import (
     Action,

@@ -113,7 +113,7 @@ class IngestionController:
         def upload_documents_sync(
             files: List[UploadFile] = File(...),
             metadata_json: str = Form(...),
-            _: KeycloakUser = Depends(get_current_user),
+            user: KeycloakUser = Depends(get_current_user),
         ) -> Response:
             parsed_input = IngestionInput(**json.loads(metadata_json))
             tags = parsed_input.tags
@@ -143,7 +143,7 @@ class IngestionController:
                     events.append(ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n")
 
                     current_step = "metadata saving"
-                    self.service.save_metadata(metadata=metadata)
+                    self.service.save_metadata(user, metadata=metadata)
                     success += 1
 
                 except Exception as e:
