@@ -1,8 +1,8 @@
 # app/features/kpi/controller.py
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException
-from fred_core import KeycloakUser, KPIQuery, KPIQueryResult, get_current_user
+from fastapi import APIRouter, Depends
+from fred_core import Action, KeycloakUser, KPIQuery, KPIQueryResult, Resource, authorize_or_raise, get_current_user
 
 from app.application_context import get_app_context
 
@@ -25,5 +25,6 @@ class KPIController:
         self.reader = get_app_context().get_kpi_store()
 
         @router.post("/kpi/query", response_model=KPIQueryResult, tags=["KPI"])
-        async def query(body: KPIQuery, _: KeycloakUser = Depends(get_current_user)):
+        async def query(body: KPIQuery, user: KeycloakUser = Depends(get_current_user)):
+            authorize_or_raise(user, Action.READ, Resource.KPIS)
             return self.reader.query(body)

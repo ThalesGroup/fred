@@ -24,6 +24,10 @@ from fred_core.security.structure import KeycloakUser
 
 logger = logging.getLogger(__name__)
 
+ALL = set(Action)
+CRUD = {Action.CREATE, Action.READ, Action.UPDATE, Action.DELETE}
+READ_ONLY = {Action.READ}
+
 
 class RBACProvider(AuthorizationProvider):
     """Role-Based Access Control authorization provider."""
@@ -33,38 +37,21 @@ class RBACProvider(AuthorizationProvider):
         self.role_permissions: dict[str, dict[Resource, Set[Action]]] = {
             "admin": {
                 # Admin can do everything
-                **{
-                    resource: {Action.CREATE, Action.READ, Action.UPDATE, Action.DELETE}
-                    for resource in Resource
-                }
+                **{resource: ALL for resource in Resource}
             },
             "editor": {
-                # Editor can create/read/update/delete most resources
-                Resource.TAGS: {
-                    Action.CREATE,
-                    Action.READ,
-                    Action.UPDATE,
-                    Action.DELETE,
-                },
-                Resource.DOCUMENTS: {
-                    Action.READ,
-                    Action.CREATE,
-                    Action.UPDATE,
-                    Action.DELETE,
-                },
-                Resource.RESOURCES: {
-                    Action.CREATE,
-                    Action.READ,
-                    Action.UPDATE,
-                    Action.DELETE,
-                },
-                Resource.DOCUMENTS_SOURCES: {
-                    Action.READ,
-                },
+                Resource.TAGS: CRUD,
+                Resource.DOCUMENTS: CRUD,  # Can't process Document (Action.Process)
+                Resource.RESOURCES: CRUD,
+                Resource.DOCUMENTS_SOURCES: READ_ONLY,  # Can't rescan sources (Action.Update)
+                Resource.TABLES: CRUD,
+                Resource.TABLES_DATABASES: CRUD,
+                Resource.KPIS: READ_ONLY,
+                Resource.OPENSEARCH: READ_ONLY,
             },
             "viewer": {
                 # Viewer can only read
-                **{resource: {Action.READ} for resource in Resource}
+                **{resource: READ_ONLY for resource in Resource}
             },
         }
 

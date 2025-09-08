@@ -3,7 +3,7 @@ import logging
 from typing import Any, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
-from fred_core import KeycloakUser, get_current_user
+from fred_core import Action, KeycloakUser, Resource, authorize_or_raise, get_current_user
 from opensearchpy.exceptions import TransportError  # ← surface OS error details
 
 from app.application_context import get_app_context
@@ -90,14 +90,18 @@ class OpenSearchOpsController:
 
         # --------- cluster & health
         @router.get("/os/health", tags=["OpenSearch"], operation_id="os_health", summary="Cluster health")
-        async def health(_: KeycloakUser = Depends(get_current_user)):
+        async def health(user: KeycloakUser = Depends(get_current_user)):
+            authorize_or_raise(user, Action.READ, Resource.OPENSEARCH)
+
             try:
                 return self.client.cluster.health()
             except Exception as e:
                 raise err(e)
 
         @router.get("/os/pending_tasks", tags=["OpenSearch"], operation_id="os_pending_tasks", summary="Pending tasks")
-        async def pending_tasks(_: KeycloakUser = Depends(get_current_user)):
+        async def pending_tasks(user: KeycloakUser = Depends(get_current_user)):
+            authorize_or_raise(user, Action.READ, Resource.OPENSEARCH)
+
             try:
                 return self.client.cluster.pending_tasks()
             except Exception as e:
@@ -114,7 +118,7 @@ class OpenSearchOpsController:
             shard: int | None = Query(None, description="Shard number (optional)"),
             primary: bool | None = Query(None, description="Whether primary shard (optional)"),
             include_disk_info: bool = Query(True, description="Include disk info in explanation"),
-            _: KeycloakUser = Depends(get_current_user),
+            user: KeycloakUser = Depends(get_current_user),
         ):
             """
             Fred rationale:
@@ -123,6 +127,8 @@ class OpenSearchOpsController:
             - Case 3: nothing provided → emulate GET /_cluster/allocation/explain
               (OS chooses a random unassigned shard if any).
             """
+            authorize_or_raise(user, Action.READ, Resource.OPENSEARCH)
+
             try:
                 # Case 1: full specification
                 if index and shard is not None and primary is not None:
@@ -165,7 +171,9 @@ class OpenSearchOpsController:
 
         # --------- nodes
         @router.get("/os/nodes/stats", tags=["OpenSearch"], operation_id="os_nodes_stats", summary="Node stats")
-        async def nodes_stats(metric: str = Query("_all"), _: KeycloakUser = Depends(get_current_user)):
+        async def nodes_stats(metric: str = Query("_all"), user: KeycloakUser = Depends(get_current_user)):
+            authorize_or_raise(user, Action.READ, Resource.OPENSEARCH)
+
             try:
                 return self.client.nodes.stats(metric=metric)
             except Exception as e:
@@ -173,28 +181,36 @@ class OpenSearchOpsController:
 
         # --------- indices
         @router.get("/os/indices", tags=["OpenSearch"], operation_id="os_indices", summary="List indices (cat.indices)")
-        async def cat_indices(pattern: str = Query("*"), bytes: str = Query("mb"), _: KeycloakUser = Depends(get_current_user)):
+        async def cat_indices(pattern: str = Query("*"), bytes: str = Query("mb"), user: KeycloakUser = Depends(get_current_user)):
+            authorize_or_raise(user, Action.READ, Resource.OPENSEARCH)
+
             try:
                 return self.client.cat.indices(index=pattern or self.default_index_pattern, params={"format": "json", "bytes": "mb"})
             except Exception as e:
                 raise err(e)
 
         @router.get("/os/index/{index}/stats", tags=["OpenSearch"], operation_id="os_index_stats", summary="Index stats")
-        async def index_stats(index: str = Path(...), _: KeycloakUser = Depends(get_current_user)):
+        async def index_stats(index: str = Path(...), user: KeycloakUser = Depends(get_current_user)):
+            authorize_or_raise(user, Action.READ, Resource.OPENSEARCH)
+
             try:
                 return self.client.indices.stats(index=index)
             except Exception as e:
                 raise err(e)
 
         @router.get("/os/index/{index}/mapping", tags=["OpenSearch"], operation_id="os_index_mapping", summary="Index mapping")
-        async def index_mapping(index: str = Path(...), _: KeycloakUser = Depends(get_current_user)):
+        async def index_mapping(index: str = Path(...), user: KeycloakUser = Depends(get_current_user)):
+            authorize_or_raise(user, Action.READ, Resource.OPENSEARCH)
+
             try:
                 return self.client.indices.get_mapping(index=index)
             except Exception as e:
                 raise err(e)
 
         @router.get("/os/index/{index}/settings", tags=["OpenSearch"], operation_id="os_index_settings", summary="Index settings")
-        async def index_settings(index: str = Path(...), _: KeycloakUser = Depends(get_current_user)):
+        async def index_settings(index: str = Path(...), user: KeycloakUser = Depends(get_current_user)):
+            authorize_or_raise(user, Action.READ, Resource.OPENSEARCH)
+
             try:
                 return self.client.indices.get_settings(index=index)
             except Exception as e:
@@ -202,7 +218,9 @@ class OpenSearchOpsController:
 
         # --------- shards
         @router.get("/os/shards", tags=["OpenSearch"], operation_id="os_shards", summary="Shards overview (cat.shards)")
-        async def cat_shards(pattern: str = Query("*"), _: KeycloakUser = Depends(get_current_user)):
+        async def cat_shards(pattern: str = Query("*"), user: KeycloakUser = Depends(get_current_user)):
+            authorize_or_raise(user, Action.READ, Resource.OPENSEARCH)
+
             try:
                 return self.client.cat.shards(index=pattern, params={"format": "json", "bytes": "mb"})
             except Exception as e:
@@ -210,7 +228,9 @@ class OpenSearchOpsController:
 
         # --------- quick green/yellow diagnostic
         @router.get("/os/diagnostics", tags=["OpenSearch"], operation_id="os_diagnostics", summary="Simple green/yellow/red summary")
-        async def diagnostics(_: KeycloakUser = Depends(get_current_user)):
+        async def diagnostics(user: KeycloakUser = Depends(get_current_user)):
+            authorize_or_raise(user, Action.READ, Resource.OPENSEARCH)
+
             try:
                 health = self.client.cluster.health()
                 shards = self.client.cat.shards(index="*", params={"format": "json"})
