@@ -27,6 +27,9 @@ class Action(Enum):
     UPDATE = "update"
     DELETE = "delete"
 
+    # Document specific actions
+    PROCESS = "process"
+
 
 class Resource(Enum):
     """Resources in the system that can have permissions applied."""

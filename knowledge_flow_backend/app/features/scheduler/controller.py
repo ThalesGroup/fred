@@ -16,7 +16,7 @@ import logging
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
-from fred_core import KeycloakUser, get_current_user, raise_internal_error
+from fred_core import Action, KeycloakUser, Resource, authorize, get_current_user, raise_internal_error
 from temporalio.client import Client
 
 from app.application_context import ApplicationContext
@@ -57,7 +57,9 @@ class SchedulerController:
             summary="Submit processing for push/pull files via Temporal",
             description="Accepts a list of files (document_uid or external_path) and launches the appropriate ingestion workflow",
         )
-        async def process_documents(req: ProcessDocumentsRequest, _: KeycloakUser = Depends(get_current_user)):
+        async def process_documents(req: ProcessDocumentsRequest, user: KeycloakUser = Depends(get_current_user)):
+            authorize(user, Action.PROCESS, Resource.DOCUMENTS)
+
             logger.info(f"Processing {len(req.files)} file(s) via Temporal pipeline")
 
             try:
@@ -77,7 +79,9 @@ class SchedulerController:
             summary="Submit processing for push/pull files via Temporal",
             description="Accepts a list of files (document_uid or external_path) and launches the appropriate ingestion workflow",
         )
-        async def schedule_documents(req: ProcessDocumentsRequest, _: KeycloakUser = Depends(get_current_user)):
+        async def schedule_documents(req: ProcessDocumentsRequest, user: KeycloakUser = Depends(get_current_user)):
+            authorize(user, Action.PROCESS, Resource.DOCUMENTS)
+
             logger.info(f"Processing {len(req.files)} file(s) via Temporal pipeline")
 
             # You may batch files per-source_tag if needed
