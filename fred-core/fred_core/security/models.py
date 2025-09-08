@@ -48,6 +48,7 @@ class Resource(Enum):
     FEEDBACK = "feedback"
     PROMPT_COMPLETIONS = "prompt_completions"
     METRICS = "metrics"
+    AGENTS = "agents"
 
 
 class AuthorizationError(Exception):

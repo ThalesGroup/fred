@@ -55,6 +55,7 @@ class RBACProvider(AuthorizationProvider):
                 },  # Can't delete or read feedback (as it would allow to read others feedbacks for now)
                 Resource.PROMPT_COMPLETIONS: {Action.CREATE},
                 Resource.METRICS: {},  # No rights (as it allows to read others sessions (conversations) for now)
+                Resource.AGENTS: READ_ONLY,  # Can't create/update/delete agents
             },
             "viewer": {
                 # Viewer can only read
