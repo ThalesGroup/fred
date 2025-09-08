@@ -40,6 +40,7 @@ class RBACProvider(AuthorizationProvider):
                 **{resource: ALL for resource in Resource}
             },
             "editor": {
+                # Knowledge Flow
                 Resource.TAGS: CRUD,
                 Resource.DOCUMENTS: CRUD,  # Can't process Document (Action.Process)
                 Resource.RESOURCES: CRUD,
@@ -48,9 +49,11 @@ class RBACProvider(AuthorizationProvider):
                 Resource.TABLES_DATABASES: CRUD,
                 Resource.KPIS: READ_ONLY,
                 Resource.OPENSEARCH: READ_ONLY,
+                # Agentic
                 Resource.FEEDBACK: {
                     Action.CREATE
                 },  # Can't manage feedback (Action.Read, Action.Delete)
+                Resource.PROMPT_COMPLETIONS: {Action.CREATE},
             },
             "viewer": {
                 # Viewer can only read

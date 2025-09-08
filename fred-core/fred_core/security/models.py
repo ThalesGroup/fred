@@ -46,6 +46,7 @@ class Resource(Enum):
 
     # Agentic Backend resources
     FEEDBACK = "feedback"
+    PROMPT_COMPLETIONS = "prompt_completions"
 
 
 class AuthorizationError(Exception):

@@ -1,8 +1,14 @@
 import logging
 
 from anyio import to_thread
-from fastapi import APIRouter, Depends, HTTPException
-from fred_core import KeycloakUser, get_current_user
+from fastapi import APIRouter, Depends
+from fred_core import (
+    Action,
+    KeycloakUser,
+    Resource,
+    authorize_or_raise,
+    get_current_user,
+)
 from pydantic import BaseModel
 
 from app.application_context import get_default_model
@@ -38,6 +44,8 @@ class PromptController:
             req: PromptCompleteRequest,
             user: KeycloakUser = Depends(get_current_user),
         ) -> PromptCompleteResponse:
+            authorize_or_raise(user, Action.CREATE, Resource.PROMPT_COMPLETIONS)
+
             # Build a simple instruction (feel free to tweak)
             instruction = (
                 "Rewrite and complete the following prompt so it is clear, specific, and well-structured. "
