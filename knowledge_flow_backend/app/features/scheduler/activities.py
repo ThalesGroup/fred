@@ -60,7 +60,7 @@ def create_pull_file_metadata(file: FileToProcess) -> DocumentMetadata:
 
         # Step 3: Extract and save metadata
         ingestion_service = IngestionService()
-        metadata = ingestion_service.extract_metadata(full_path, tags=file.tags, source_tag=file.source_tag)
+        metadata = ingestion_service.extract_metadata(TODO_PASS_REAL_USER, full_path, tags=file.tags, source_tag=file.source_tag)
         metadata.source.pull_location = file.external_path
         logger.info(f"[create_pull_file_metadata] Generated metadata: {metadata}")
 
@@ -100,7 +100,7 @@ def load_push_file(file: FileToProcess, metadata: DocumentMetadata) -> pathlib.P
     output_dir.mkdir(exist_ok=True)
 
     # 🗂️ Download input file
-    ingestion_service.get_local_copy(metadata, working_dir)
+    ingestion_service.get_local_copy(TODO_PASS_REAL_USER, metadata, working_dir)
     input_file = next(input_dir.glob("*"))
     return input_file
 
@@ -151,8 +151,8 @@ def input_process(input_file: pathlib.Path, metadata: DocumentMetadata) -> Docum
     output_dir.mkdir(exist_ok=True)
 
     # Process the file
-    ingestion_service.process_input(input_file, output_dir, metadata)
-    ingestion_service.save_output(metadata=metadata, output_dir=output_dir)
+    ingestion_service.process_input(TODO_PASS_REAL_USER, input_file, output_dir, metadata)
+    ingestion_service.save_output(TODO_PASS_REAL_USER, metadata=metadata, output_dir=output_dir)
 
     metadata.mark_stage_done(ProcessingStage.PREVIEW_READY)
     ingestion_service.save_metadata(TODO_PASS_REAL_USER, metadata=metadata)
@@ -174,10 +174,10 @@ def output_process(file: FileToProcess, metadata: DocumentMetadata, accept_memor
     ingestion_service = IngestionService()
 
     # ✅ For both push and pull, restore what was saved (input/output)
-    ingestion_service.get_local_copy(metadata, working_dir)
+    ingestion_service.get_local_copy(TODO_PASS_REAL_USER, metadata, working_dir)
 
     # 📄 Locate preview file
-    preview_file = ingestion_service.get_preview_file(metadata, output_dir)
+    preview_file = ingestion_service.get_preview_file(TODO_PASS_REAL_USER, metadata, output_dir)
 
     if not ApplicationContext.get_instance().is_tabular_file(preview_file.name):
         from app.common.structures import InMemoryVectorStorage
@@ -189,7 +189,7 @@ def output_process(file: FileToProcess, metadata: DocumentMetadata, accept_memor
                 non_retryable=True,
             )
     # Proceed with the output processing
-    metadata = ingestion_service.process_output(output_dir=output_dir, input_file_name=preview_file.name, input_file_metadata=metadata)
+    metadata = ingestion_service.process_output(TODO_PASS_REAL_USER, output_dir=output_dir, input_file_name=preview_file.name, input_file_metadata=metadata)
 
     # Save the updated metadata
     ingestion_service.save_metadata(TODO_PASS_REAL_USER, metadata=metadata)

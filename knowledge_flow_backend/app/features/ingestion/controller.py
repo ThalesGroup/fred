@@ -134,12 +134,12 @@ class IngestionController:
                 current_step = "metadata extraction"
                 try:
                     output_temp_dir = input_temp_file.parent.parent
-                    metadata = self.service.extract_metadata(file_path=input_temp_file, tags=tags, source_tag=source_tag)
+                    metadata = self.service.extract_metadata(user, file_path=input_temp_file, tags=tags, source_tag=source_tag)
                     logger.info(f"Metadata extracted for {filename}: {metadata}")
                     events.append(ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n")
 
                     current_step = "raw content saving"
-                    self.service.save_input(metadata=metadata, input_dir=output_temp_dir / "input")
+                    self.service.save_input(user, metadata=metadata, input_dir=output_temp_dir / "input")
                     events.append(ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n")
 
                     current_step = "metadata saving"
@@ -192,10 +192,10 @@ class IngestionController:
                     current_step = "metadata extraction"
                     try:
                         output_temp_dir = input_temp_file.parent.parent
-                        metadata = self.service.extract_metadata(file_path=input_temp_file, tags=tags, source_tag=source_tag)
+                        metadata = self.service.extract_metadata(user, file_path=input_temp_file, tags=tags, source_tag=source_tag)
 
                         current_step = "input content saving"
-                        self.service.save_input(metadata, output_temp_dir / "input")
+                        self.service.save_input(user, metadata=metadata, input_dir=output_temp_dir / "input")
                         events.append(ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n")
 
                         current_step = "input processing"
