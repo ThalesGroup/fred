@@ -48,6 +48,9 @@ class RBACProvider(AuthorizationProvider):
                 Resource.TABLES_DATABASES: CRUD,
                 Resource.KPIS: READ_ONLY,
                 Resource.OPENSEARCH: READ_ONLY,
+                Resource.FEEDBACK: {
+                    Action.CREATE
+                },  # Can't manage feedback (Action.Read, Action.Delete)
             },
             "viewer": {
                 # Viewer can only read

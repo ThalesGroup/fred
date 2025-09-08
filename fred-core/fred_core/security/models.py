@@ -45,7 +45,7 @@ class Resource(Enum):
     OPENSEARCH = "opensearch"
 
     # Agentic Backend resources
-    # ...
+    FEEDBACK = "feedback"
 
 
 class AuthorizationError(Exception):

@@ -15,8 +15,7 @@
 import logging
 from datetime import datetime, timezone
 
-from fred_core import KeycloakUser
-from fred_core.security.decorators import authorize
+from fred_core import KeycloakUser, authorize
 from fred_core.security.models import Action, Resource
 
 from app.application_context import ApplicationContext

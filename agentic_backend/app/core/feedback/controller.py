@@ -73,7 +73,7 @@ class FeedbackController:
                 created_at=datetime.utcnow(),
                 user_id=user.uid,
             )
-            self.service.add_feedback(feedback_record)
+            self.service.add_feedback(user, feedback_record)
             return  # implicit 204
 
         @router.get(
@@ -82,8 +82,8 @@ class FeedbackController:
             tags=["Feedback"],
             summary="List all feedback entries",
         )
-        async def get_feedback(_: KeycloakUser = Depends(get_current_user)):
-            return self.service.get_feedback()
+        async def get_feedback(user: KeycloakUser = Depends(get_current_user)):
+            return self.service.get_feedback(user)
 
         @router.delete(
             "/chatbot/feedback/{feedback_id}",
@@ -92,9 +92,9 @@ class FeedbackController:
             summary="Delete a feedback entry by ID",
         )
         async def delete_feedback(
-            feedback_id: str, _: KeycloakUser = Depends(get_current_user)
+            feedback_id: str, user: KeycloakUser = Depends(get_current_user)
         ):
-            deleted = self.service.delete_feedback(feedback_id)
+            deleted = self.service.delete_feedback(user, feedback_id)
             if not deleted:
                 raise HTTPException(status_code=404, detail="Feedback entry not found")
             return  # implicit 204
