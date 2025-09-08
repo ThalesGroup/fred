@@ -34,6 +34,7 @@ class Resource(Enum):
     # Knowledge Flow Backend resources
     TAGS = "tags"
     DOCUMENTS = "documents"
+    RESOURCES = "resources"
 
     # Agentic Backend resources
     # ...

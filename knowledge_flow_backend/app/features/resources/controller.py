@@ -131,7 +131,7 @@ class ResourceController:
             user: KeycloakUser = Depends(get_current_user),
         ) -> List[Resource]:
             try:
-                return self.service.list_resources_by_kind(kind=kind)
+                return self.service.list_resources_by_kind(kind=kind, user=user)
             except Exception as e:
                 raise handle_exception(e)
 
@@ -145,6 +145,6 @@ class ResourceController:
             user: KeycloakUser = Depends(get_current_user),
         ) -> None:
             try:
-                self.service.delete(resource_id=resource_id)
+                self.service.delete(resource_id=resource_id, user=user)
             except Exception as e:
                 raise handle_exception(e)

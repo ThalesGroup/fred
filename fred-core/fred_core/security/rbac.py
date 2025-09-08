@@ -39,7 +39,7 @@ class RBACProvider(AuthorizationProvider):
                 }
             },
             "editor": {
-                # Editor can create/read/update most resources, limited delete
+                # Editor can create/read/update/delete most resources
                 Resource.TAGS: {
                     Action.CREATE,
                     Action.READ,
@@ -49,6 +49,12 @@ class RBACProvider(AuthorizationProvider):
                 Resource.DOCUMENTS: {
                     Action.READ,
                     Action.CREATE,
+                    Action.UPDATE,
+                    Action.DELETE,
+                },
+                Resource.RESOURCES: {
+                    Action.CREATE,
+                    Action.READ,
                     Action.UPDATE,
                     Action.DELETE,
                 },

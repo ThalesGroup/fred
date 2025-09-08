@@ -1,11 +1,15 @@
 # app/features/resource/service.py
 
-from datetime import datetime, timezone
 import logging
+from datetime import datetime, timezone
+
+from fred_core import Action, KeycloakUser, authorize_decorator
+from fred_core import Resource as AuthzResource
 
 from app.application_context import ApplicationContext
 from app.features.resources.utils import build_resource_from_create
-from .structures import Resource, ResourceCreate, ResourceUpdate, ResourceKind
+
+from .structures import Resource, ResourceCreate, ResourceKind, ResourceUpdate
 
 logger = logging.getLogger(__name__)
 
@@ -17,16 +21,17 @@ def utc_now():
 class ResourceService:
     def __init__(self):
         context = ApplicationContext.get_instance()
-        self._tag_store = context.get_tag_store()
         self._resource_store = context.get_resource_store()
 
-    def create(self, *, library_tag_id: str, payload: ResourceCreate, user) -> Resource:
+    @authorize_decorator(Action.CREATE, AuthzResource.RESOURCES)
+    def create(self, *, library_tag_id: str, payload: ResourceCreate, user: KeycloakUser) -> Resource:
         resource = build_resource_from_create(payload, library_tag_id, user.username)
         res = self._resource_store.create_resource(resource=resource)
         logger.info(f"[RESOURCES] Created resource {res.id} of kind {res.kind} for user {user.username}")
         return res
 
-    def update(self, *, resource_id: str, payload: ResourceUpdate, user) -> Resource:
+    @authorize_decorator(Action.UPDATE, AuthzResource.RESOURCES)
+    def update(self, *, resource_id: str, payload: ResourceUpdate, user: KeycloakUser) -> Resource:
         res = self._resource_store.get_resource_by_id(resource_id)
         res.content = payload.content if payload.content is not None else res.content
         res.name = payload.name if payload.name is not None else res.name
@@ -36,13 +41,16 @@ class ResourceService:
         updated = self._resource_store.update_resource(resource_id=resource_id, resource=res)
         return updated
 
-    def get(self, *, resource_id: str, user) -> Resource:
+    @authorize_decorator(Action.READ, AuthzResource.RESOURCES)
+    def get(self, *, resource_id: str, user: KeycloakUser) -> Resource:
         return self._resource_store.get_resource_by_id(resource_id)
 
-    def list_resources_by_kind(self, *, kind: ResourceKind) -> list[Resource]:
+    @authorize_decorator(Action.READ, AuthzResource.RESOURCES)
+    def list_resources_by_kind(self, *, kind: ResourceKind, user: KeycloakUser) -> list[Resource]:
         return self._resource_store.get_all_resources(kind=kind)
 
-    def delete(self, *, resource_id: str) -> None:
+    @authorize_decorator(Action.DELETE, AuthzResource.RESOURCES)
+    def delete(self, *, resource_id: str, user: KeycloakUser) -> None:
         self._resource_store.delete_resource(resource_id=resource_id)
 
     # ---------- Membership helpers ----------
