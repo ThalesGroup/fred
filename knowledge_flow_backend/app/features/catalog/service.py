@@ -1,7 +1,10 @@
+from typing import List
+
+from fred_core import Action, KeycloakUser, Resource, authorize_decorator
+
 from app.application_context import ApplicationContext
 from app.common.structures import DocumentSourceConfig
 from app.core.stores.catalog.base_catalog_store import PullFileEntry
-from typing import List
 
 
 class PullSourceNotFoundError(ValueError):
@@ -15,12 +18,14 @@ class CatalogService:
         self.config = ApplicationContext.get_instance().get_config()
         self.store = ApplicationContext.get_instance().get_catalog_store()
 
-    def list_files(self, source_tag: str, offset: int = 0, limit: int = 100) -> List[PullFileEntry]:
+    @authorize_decorator(Action.READ, Resource.DOCUMENTS)
+    def list_files(self, user: KeycloakUser, source_tag: str, offset: int = 0, limit: int = 100) -> List[PullFileEntry]:
         if not self.config.document_sources or source_tag not in self.config.document_sources:
             raise PullSourceNotFoundError(source_tag)
         return self.store.list_entries(source_tag)[offset : offset + limit]
 
-    def rescan_source(self, source_tag: str) -> int:
+    @authorize_decorator(Action.UPDATE, Resource.DOCUMENTS_SOURCES)
+    def rescan_source(self, user: KeycloakUser, source_tag: str) -> int:
         if not self.config.document_sources or source_tag not in self.config.document_sources:
             raise PullSourceNotFoundError(source_tag)
         source_config = self.config.document_sources[source_tag]
@@ -31,5 +36,9 @@ class CatalogService:
         self.store.save_entries(source_tag, entries)
         return len(entries)
 
-    def get_document_sources(self) -> dict[str, DocumentSourceConfig]:
+    @authorize_decorator(Action.READ, Resource.DOCUMENTS_SOURCES)
+    def get_document_sources(
+        self,
+        user: KeycloakUser,
+    ) -> dict[str, DocumentSourceConfig]:
         return self.config.document_sources or {}

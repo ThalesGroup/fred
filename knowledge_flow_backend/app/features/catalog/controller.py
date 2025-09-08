@@ -36,10 +36,10 @@ class CatalogController:
             source_tag: str = Query(..., description="The source tag for the cataloged files"),
             offset: int = Query(0, ge=0, description="Number of entries to skip"),
             limit: int = Query(100, gt=0, le=1000, description="Max number of entries to return"),
-            _: KeycloakUser = Depends(get_current_user),
+            user: KeycloakUser = Depends(get_current_user),
         ):
             try:
-                return self.service.list_files(source_tag, offset=offset, limit=limit)
+                return self.service.list_files(user, source_tag, offset=offset, limit=limit)
             except PullSourceNotFoundError as e:
                 raise HTTPException(status_code=404, detail=str(e))
 
@@ -51,10 +51,10 @@ class CatalogController:
         )
         def rescan_catalog_source(
             source_tag: str,
-            _: KeycloakUser = Depends(get_current_user),
+            user: KeycloakUser = Depends(get_current_user),
         ):
             try:
-                files_found = self.service.rescan_source(source_tag)
+                files_found = self.service.rescan_source(user, source_tag)
                 return {"status": "success", "files_found": files_found}
             except PullSourceNotFoundError as e:
                 raise HTTPException(status_code=404, detail=str(e))
@@ -68,8 +68,8 @@ class CatalogController:
             summary="List the configured document sources",
             description=("Returns all configured document sources (push or pull).\nPull-mode sources may support catalog operations depending on the provider."),
         )
-        def list_document_sources(_: KeycloakUser = Depends(get_current_user)):
-            sources: dict[str, DocumentSourceConfig] = self.service.get_document_sources()
+        def list_document_sources(user: KeycloakUser = Depends(get_current_user)):
+            sources: dict[str, DocumentSourceConfig] = self.service.get_document_sources(user)
 
             result = []
             for tag, config in sources.items():

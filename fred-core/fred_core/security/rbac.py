@@ -58,7 +58,9 @@ class RBACProvider(AuthorizationProvider):
                     Action.UPDATE,
                     Action.DELETE,
                 },
-                # todo: complete rights
+                Resource.DOCUMENTS_SOURCES: {
+                    Action.READ,
+                },
             },
             "viewer": {
                 # Viewer can only read
