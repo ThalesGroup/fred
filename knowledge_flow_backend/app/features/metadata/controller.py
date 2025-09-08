@@ -193,7 +193,7 @@ class MetadataController:
                 return PullDocumentsResponse(documents=paginated, total=len(docs))
 
             elif config.type == "pull":
-                docs, total = self.pull_document_service.list_pull_documents(source_tag=req.source_tag, offset=req.offset, limit=req.limit)
+                docs, total = self.pull_document_service.list_pull_documents(user, source_tag=req.source_tag, offset=req.offset, limit=req.limit)
                 # You could apply extra filtering here if needed
                 return PullDocumentsResponse(documents=docs, total=total)
 
