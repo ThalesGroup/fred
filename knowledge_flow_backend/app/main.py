@@ -21,6 +21,7 @@ Entrypoint for the Knowledge Flow Backend App.
 
 import logging
 import os
+from duckdb import torch
 from rich.logging import RichHandler
 from dotenv import load_dotenv
 
@@ -85,6 +86,13 @@ def create_app() -> FastAPI:
     configure_logging(configuration.app.log_level)
     base_url = configuration.app.base_url
     logger.info(f"🛠️ create_app() called with base_url={base_url}")
+    
+    if not configuration.embedding.use_gpu:
+        os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+        os.environ["MPS_VISIBLE_DEVICES"] = "0"
+        import torch
+        torch.set_default_device("cpu")
+        logger.warning("⚠️ GPU support is disabled. Running on CPU.")
 
     ApplicationContext(configuration)
 
