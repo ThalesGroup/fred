@@ -13,11 +13,14 @@
 # limitations under the License.
 
 import functools
-from typing import Callable
+from typing import Callable, TypeVar, ParamSpec
 
 from .authorization import Action, Resource
 from .authorization import authorize as authz_check
 from .structure import KeycloakUser
+
+P = ParamSpec('P')
+T = TypeVar('T')
 
 
 def authorize(action: Action, resource: Resource):
@@ -32,7 +35,7 @@ def authorize(action: Action, resource: Resource):
             return self.document_store.get_all()
     """
 
-    def decorator(func: Callable) -> Callable:
+    def decorator(func: Callable[P, T]) -> Callable[P, T]:
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
             # Find the user parameter
