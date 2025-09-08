@@ -1,6 +1,6 @@
 from typing import List, Tuple
 
-from fred_core import Action, KeycloakUser, Resource, authorize_decorator
+from fred_core import Action, KeycloakUser, Resource, authorize
 
 from app.application_context import ApplicationContext
 from app.common.document_structures import DocumentMetadata
@@ -20,7 +20,7 @@ class PullDocumentService:
         self.catalog_store = ApplicationContext.get_instance().get_catalog_store()
         self.metadata_store = ApplicationContext.get_instance().get_metadata_store()
 
-    @authorize_decorator(action=Action.READ, resource=Resource.DOCUMENTS)
+    @authorize(action=Action.READ, resource=Resource.DOCUMENTS)
     def list_pull_documents(self, user: KeycloakUser, source_tag: str, offset: int = 0, limit: int = 50) -> Tuple[List[DocumentMetadata], int]:
         source = self.config.document_sources.get(source_tag)
         if not source or source.type != "pull":

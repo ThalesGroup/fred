@@ -15,7 +15,7 @@
 import logging
 import pathlib
 
-from fred_core import Action, KeycloakUser, Resource, authorize_decorator
+from fred_core import Action, KeycloakUser, Resource, authorize
 
 from app.application_context import ApplicationContext
 from app.common.document_structures import DocumentMetadata, ProcessingStage, SourceType
@@ -39,22 +39,22 @@ class IngestionService:
         self.content_store = ApplicationContext.get_instance().get_content_store()
         self.metadata_service = MetadataService()
 
-    @authorize_decorator(Action.CREATE, Resource.DOCUMENTS)
+    @authorize(Action.CREATE, Resource.DOCUMENTS)
     def save_input(self, user: KeycloakUser, metadata: DocumentMetadata, input_dir: pathlib.Path) -> None:
         self.content_store.save_input(metadata.document_uid, input_dir)
         metadata.mark_stage_done(ProcessingStage.RAW_AVAILABLE)
 
-    @authorize_decorator(Action.CREATE, Resource.DOCUMENTS)
+    @authorize(Action.CREATE, Resource.DOCUMENTS)
     def save_output(self, user: KeycloakUser, metadata: DocumentMetadata, output_dir: pathlib.Path) -> None:
         self.content_store.save_output(metadata.document_uid, output_dir)
         metadata.mark_stage_done(ProcessingStage.PREVIEW_READY)
 
-    @authorize_decorator(Action.CREATE, Resource.DOCUMENTS)
+    @authorize(Action.CREATE, Resource.DOCUMENTS)
     def save_metadata(self, user: KeycloakUser, metadata: DocumentMetadata) -> None:
         logger.debug(f"Saving metadata {metadata}")
         return self.metadata_service.save_document_metadata(user, metadata)
 
-    @authorize_decorator(Action.READ, Resource.DOCUMENTS)
+    @authorize(Action.READ, Resource.DOCUMENTS)
     def get_metadata(self, user: KeycloakUser, document_uid: str) -> DocumentMetadata | None:
         """
         Retrieve the metadata associated with the given document UID.
@@ -76,14 +76,14 @@ class IngestionService:
         except MetadataNotFound:
             return None
 
-    @authorize_decorator(Action.READ, Resource.DOCUMENTS)
+    @authorize(Action.READ, Resource.DOCUMENTS)
     def get_local_copy(self, user: KeycloakUser, metadata: DocumentMetadata, target_dir: pathlib.Path) -> pathlib.Path:
         """
         Downloads the file content from the store into target_dir and returns the path to the file.
         """
         return self.content_store.get_local_copy(metadata.document_uid, target_dir)
 
-    @authorize_decorator(Action.CREATE, Resource.DOCUMENTS)
+    @authorize(Action.CREATE, Resource.DOCUMENTS)
     def extract_metadata(self, user: KeycloakUser, file_path: pathlib.Path, tags: list[str], source_tag: str) -> DocumentMetadata:
         """
         Extracts metadata from the input file.
@@ -113,7 +113,7 @@ class IngestionService:
 
         return metadata
 
-    @authorize_decorator(Action.CREATE, Resource.DOCUMENTS)
+    @authorize(Action.CREATE, Resource.DOCUMENTS)
     def process_input(self, user: KeycloakUser, input_path: pathlib.Path, output_dir: pathlib.Path, metadata: DocumentMetadata) -> None:
         """
         Processes an input document from input_path and writes outputs to output_dir.
@@ -138,7 +138,7 @@ class IngestionService:
         else:
             raise RuntimeError(f"Unknown processor type for: {input_path}")
 
-    @authorize_decorator(Action.CREATE, Resource.DOCUMENTS)
+    @authorize(Action.CREATE, Resource.DOCUMENTS)
     def process_output(self, user: KeycloakUser, input_file_name: str, output_dir: pathlib.Path, input_file_metadata: DocumentMetadata) -> DocumentMetadata:
         """
         Processes data resulting from the input processing.
@@ -166,7 +166,7 @@ class IngestionService:
         file_to_process_abs_str = str(file_to_process.resolve())
         return processor.process(file_path=file_to_process_abs_str, metadata=input_file_metadata)
 
-    @authorize_decorator(Action.READ, Resource.DOCUMENTS)
+    @authorize(Action.READ, Resource.DOCUMENTS)
     def get_markdown(self, user: KeycloakUser, metadata: DocumentMetadata, target_dir: pathlib.Path) -> pathlib.Path:
         """
         Downloads the preview file (markdown or CSV) for the document and saves it into `target_dir`.
@@ -182,7 +182,7 @@ class IngestionService:
         except FileNotFoundError:
             raise RuntimeError(f"No preview available for document {metadata.document_uid} in content store")
 
-    @authorize_decorator(Action.READ, Resource.DOCUMENTS)
+    @authorize(Action.READ, Resource.DOCUMENTS)
     def get_preview_file(self, user: KeycloakUser, metadata: DocumentMetadata, output_dir: pathlib.Path) -> pathlib.Path:
         """
         Returns the preview file (output.md or table.csv) for a document.

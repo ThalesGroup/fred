@@ -49,16 +49,16 @@ from fred_core.security.authorization import (
     Action,
     AuthorizationError,
     Resource,
-    authorize,
+    authorize_or_raise,
     is_authorized,
 )
+from fred_core.security.authorization_decorator import authorize
 from fred_core.security.backend_to_backend_auth import (
     B2BAuthConfig,
     B2BBearerAuth,
     B2BTokenProvider,
     make_b2b_asgi_client,
 )
-from fred_core.security.decorators import authorize as authorize_decorator
 from fred_core.security.keycloak import (
     get_current_user,
     initialize_keycloak,
@@ -83,8 +83,8 @@ __all__ = [
     "Resource",
     "AuthorizationError",
     "is_authorized",
+    "authorize_or_raise",
     "authorize",
-    "authorize_decorator",
     "register_exception_handlers",
     "BaseModelWithId",
     "OpenSearchStoreConfig",

@@ -16,10 +16,9 @@ import logging
 import mimetypes
 from typing import BinaryIO, Tuple
 
+from fred_core import Action, KeycloakUser, Resource, authorize
+
 from app.common.document_structures import DocumentMetadata
-from fred_core import KeycloakUser
-from fred_core.security.decorators import authorize as authorize_decorator
-from fred_core.security.models import Action, Resource
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +37,7 @@ class ContentService:
         self.content_store = ApplicationContext.get_instance().get_content_store()
         self.config = ApplicationContext.get_instance().get_config()
 
-    @authorize_decorator(Action.READ, Resource.DOCUMENTS)
+    @authorize(Action.READ, Resource.DOCUMENTS)
     async def get_document_metadata(self, user: KeycloakUser, document_uid: str) -> DocumentMetadata:
         """
         Return the metadata dict for a document UID.
@@ -59,7 +58,7 @@ class ContentService:
             raise FileNotFoundError(f"No metadata found for document {document_uid}")
         return metadata
 
-    @authorize_decorator(Action.READ, Resource.DOCUMENTS)
+    @authorize(Action.READ, Resource.DOCUMENTS)
     async def get_original_content(self, user: KeycloakUser, document_uid: str) -> Tuple[BinaryIO, str, str]:
         """
         Returns binary stream of original input file, filename and content type.
@@ -74,7 +73,7 @@ class ContentService:
             raise FileNotFoundError(f"Original input file not found for document {document_uid}")
         return stream, document_name, content_type
 
-    @authorize_decorator(Action.READ, Resource.DOCUMENTS)
+    @authorize(Action.READ, Resource.DOCUMENTS)
     async def get_document_media(self, user: KeycloakUser, document_uid: str, media_id: str) -> Tuple[BinaryIO, str, str]:
         """
         Returns media file associated with a document if it exists.
@@ -88,7 +87,7 @@ class ContentService:
 
         return stream, media_id, content_type
 
-    @authorize_decorator(Action.READ, Resource.DOCUMENTS)
+    @authorize(Action.READ, Resource.DOCUMENTS)
     async def get_markdown_preview(self, user: KeycloakUser, document_uid: str) -> str:
         """
         Returns content of output.md if it exists (as markdown).

@@ -18,7 +18,7 @@ from datetime import datetime
 from typing import Iterable, Optional
 from uuid import uuid4
 
-from fred_core import Action, KeycloakUser, Resource, authorize_decorator
+from fred_core import Action, KeycloakUser, Resource, authorize
 
 from app.application_context import ApplicationContext
 from app.common.document_structures import DocumentMetadata
@@ -53,7 +53,7 @@ class TagService:
 
     # ---------- Public API ----------
 
-    @authorize_decorator(Action.READ, Resource.TAGS)
+    @authorize(Action.READ, Resource.TAGS)
     def list_all_tags_for_user(
         self,
         user: KeycloakUser,
@@ -99,7 +99,7 @@ class TagService:
             result.append(TagWithItemsId.from_tag(tag, item_ids))
         return result
 
-    @authorize_decorator(Action.READ, Resource.TAGS)
+    @authorize(Action.READ, Resource.TAGS)
     def get_tag_for_user(self, tag_id: str, user: KeycloakUser) -> TagWithItemsId:
         tag = self._tag_store.get_tag_by_id(tag_id)
         if tag.type == TagType.DOCUMENT:
@@ -112,7 +112,7 @@ class TagService:
             raise ValueError(f"Unsupported tag type: {tag.type}")
         return TagWithItemsId.from_tag(tag, item_ids)
 
-    @authorize_decorator(Action.CREATE, Resource.TAGS)
+    @authorize(Action.CREATE, Resource.TAGS)
     def create_tag_for_user(self, tag_data: TagCreate, user: KeycloakUser) -> TagWithItemsId:
         # Validate referenced items first
         if tag_data.type == TagType.DOCUMENT:
@@ -156,7 +156,7 @@ class TagService:
 
         return TagWithItemsId.from_tag(tag, tag_data.item_ids)
 
-    @authorize_decorator(Action.UPDATE, Resource.TAGS)
+    @authorize(Action.UPDATE, Resource.TAGS)
     def update_tag_for_user(self, tag_id: str, tag_data: TagUpdate, user: KeycloakUser) -> TagWithItemsId:
         tag = self._tag_store.get_tag_by_id(tag_id)
 
@@ -206,7 +206,7 @@ class TagService:
 
         return TagWithItemsId.from_tag(updated_tag, item_ids)
 
-    @authorize_decorator(Action.DELETE, Resource.TAGS)
+    @authorize(Action.DELETE, Resource.TAGS)
     def delete_tag_for_user(self, tag_id: str, user: KeycloakUser) -> None:
         tag = self._tag_store.get_tag_by_id(tag_id)
 
@@ -224,7 +224,7 @@ class TagService:
 
         self._tag_store.delete_tag_by_id(tag_id)
 
-    @authorize_decorator(Action.UPDATE, Resource.TAGS)
+    @authorize(Action.UPDATE, Resource.TAGS)
     def update_tag_timestamp(self, tag_id: str, user: KeycloakUser) -> None:
         tag = self._tag_store.get_tag_by_id(tag_id)
         tag.updated_at = datetime.now()

@@ -13,14 +13,13 @@
 # limitations under the License.
 
 import functools
-from typing import Callable, TypeVar, ParamSpec
+from typing import Callable, ParamSpec, TypeVar
 
-from .authorization import Action, Resource
-from .authorization import authorize as authz_check
+from .authorization import Action, Resource, authorize_or_raise
 from .structure import KeycloakUser
 
-P = ParamSpec('P')
-T = TypeVar('T')
+P = ParamSpec("P")
+T = TypeVar("T")
 
 
 def authorize(action: Action, resource: Resource):
@@ -57,7 +56,7 @@ def authorize(action: Action, resource: Resource):
                 )
 
             # Perform authorization check
-            authz_check(user, action, resource)
+            authorize_or_raise(user, action, resource)
 
             # Call the original function
             return func(*args, **kwargs)

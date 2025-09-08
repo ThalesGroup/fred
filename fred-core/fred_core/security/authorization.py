@@ -57,7 +57,7 @@ def is_authorized(
     return True
 
 
-def authorize(
+def authorize_or_raise(
     user: KeycloakUser,
     action: Action,
     resource: Resource,
