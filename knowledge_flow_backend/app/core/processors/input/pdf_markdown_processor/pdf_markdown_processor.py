@@ -20,7 +20,7 @@ from pypdf.errors import PdfReadError
 from docling.document_converter import DocumentConverter, PdfFormatOption
 from docling.datamodel.pipeline_options import PdfPipelineOptions
 from docling.datamodel.base_models import InputFormat
-from docling_core.types.doc import ImageRefMode
+from docling_core.types.doc.base import ImageRefMode
 
 from app.core.processors.input.common.base_image_describer import BaseImageDescriber
 from app.core.processors.input.common.base_input_processor import BaseMarkdownProcessor
