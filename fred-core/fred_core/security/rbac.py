@@ -52,12 +52,17 @@ class RBACProvider(AuthorizationProvider):
                 # Agentic
                 Resource.FEEDBACK: {
                     Action.CREATE
-                },  # Can't manage feedback (Action.Read, Action.Delete)
+                },  # Can't delete or read feedback (as it would allow to read others feedbacks for now)
                 Resource.PROMPT_COMPLETIONS: {Action.CREATE},
+                Resource.METRICS: {},  # No rights (as it allows to read others sessions (conversations) for now)
             },
             "viewer": {
                 # Viewer can only read
-                **{resource: READ_ONLY for resource in Resource}
+                **{resource: READ_ONLY for resource in Resource},
+                # Except for:
+                Resource.FEEDBACK: {Action.CREATE},
+                Resource.PROMPT_COMPLETIONS: {Action.CREATE},
+                Resource.METRICS: {},
             },
         }
 
