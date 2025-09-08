@@ -17,7 +17,7 @@ import logging
 from typing import List
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Path
-from fred_core import KeycloakUser, get_current_user
+from fred_core import Action, KeycloakUser, Resource, authorize_or_raise, get_current_user
 
 from app.application_context import ApplicationContext
 from app.features.tabular.service import TabularService
@@ -39,15 +39,17 @@ class TabularController:
 
     def _register_routes(self, router: APIRouter):
         @router.get("/tabular/databases", response_model=List[str], tags=["Tabular"], summary="List available databases", operation_id="list_tabular_databases")
-        async def list_databases(_: KeycloakUser = Depends(get_current_user)):
+        async def list_databases(user: KeycloakUser = Depends(get_current_user)):
             try:
-                return self.service.list_databases()
+                return self.service.list_databases(user)
             except Exception as e:
                 logger.exception("Failed to list databases")
                 raise e
 
         @router.get("/tabular/{db_name}/tables", response_model=List[str], tags=["Tabular"], summary="List tables in a database", operation_id="list_table_names")
-        async def list_tables(db_name: str = Path(..., description="Name of the tabular database"), _: KeycloakUser = Depends(get_current_user)):
+        async def list_tables(db_name: str = Path(..., description="Name of the tabular database"), user: KeycloakUser = Depends(get_current_user)):
+            authorize_or_raise(user, Action.READ, Resource.TABLES)
+
             try:
                 store = self.service._get_store(db_name)
                 return store.list_tables()
@@ -56,9 +58,9 @@ class TabularController:
                 raise e
 
         @router.get("/tabular/{db_name}/schemas", response_model=List[TabularSchemaResponse], tags=["Tabular"], summary="Get schemas of all tables in a database", operation_id="get_all_schemas")
-        async def get_schemas(db_name: str = Path(..., description="Name of the tabular database"), _: KeycloakUser = Depends(get_current_user)):
+        async def get_schemas(db_name: str = Path(..., description="Name of the tabular database"), user: KeycloakUser = Depends(get_current_user)):
             try:
-                return self.service.list_tables_with_schema(db_name=db_name)
+                return self.service.list_tables_with_schema(user, db_name)
             except Exception as e:
                 logger.exception(f"Failed to get schemas for {db_name}")
                 raise e
@@ -71,9 +73,9 @@ class TabularController:
             operation_id="raw_sql_query",
             description="Submit a raw SQL string. Use with caution: query is executed directly.",
         )
-        async def raw_sql_query(db_name: str = Path(..., description="Name of the tabular database"), request: RawSQLRequest = Body(...), _: KeycloakUser = Depends(get_current_user)):
+        async def raw_sql_query(db_name: str = Path(..., description="Name of the tabular database"), request: RawSQLRequest = Body(...), user: KeycloakUser = Depends(get_current_user)):
             try:
-                return self.service.query(db_name=db_name, document_name="raw_sql", request=request)
+                return self.service.query(user, db_name=db_name, document_name="raw_sql", request=request)
             except PermissionError as e:
                 logger.warning(f"[{db_name}] Forbidden SQL query attempt: {e}")
                 raise HTTPException(status_code=403, detail=str(e))
@@ -83,8 +85,10 @@ class TabularController:
 
         @router.delete("/tabular/{db_name}/tables/{table_name}", status_code=204, tags=["Tabular"], summary="Delete a table from a database", operation_id="delete_table")
         async def delete_table(
-            db_name: str = Path(..., description="Name of the tabular database"), table_name: str = Path(..., description="Table name to delete"), _: KeycloakUser = Depends(get_current_user)
+            db_name: str = Path(..., description="Name of the tabular database"), table_name: str = Path(..., description="Table name to delete"), user: KeycloakUser = Depends(get_current_user)
         ):
+            authorize_or_raise(user, Action.DELETE, Resource.TABLES)
+
             try:
                 self.service._check_write_allowed(db_name)
 

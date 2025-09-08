@@ -14,12 +14,13 @@
 
 import logging
 from datetime import datetime
-from typing import List, Dict
+from typing import Dict, List
 
+from fred_core import Action, KeycloakUser, Resource, authorize
 from fred_core.store.sql_store import SQLTableStore
 from fred_core.store.structures import StoreInfo
-from app.features.tabular.structures import TabularColumnSchema, RawSQLRequest, TabularQueryResponse, TabularSchemaResponse, DTypes
 
+from app.features.tabular.structures import DTypes, RawSQLRequest, TabularColumnSchema, TabularQueryResponse, TabularSchemaResponse
 
 logger = logging.getLogger(__name__)
 
@@ -58,15 +59,18 @@ class TabularService:
             return "integer"
         return "unknown"
 
-    def delete_table(self, db_name: str, table_name: str) -> None:
+    @authorize(action=Action.DELETE, resource=Resource.TABLES)
+    def delete_table(self, user: KeycloakUser, db_name: str, table_name: str) -> None:
         self._check_write_allowed(db_name)
         store = self._get_store(db_name)
         store.delete_table(table_name)
 
-    def list_databases(self) -> List[str]:
+    @authorize(action=Action.READ, resource=Resource.TABLES_DATABASES)
+    def list_databases(self, user: KeycloakUser) -> List[str]:
         return list(self.stores_info.keys())
 
-    def get_schema(self, db_name: str, document_name: str) -> TabularSchemaResponse:
+    @authorize(action=Action.READ, resource=Resource.TABLES)
+    def get_schema(self, user: KeycloakUser, db_name: str, document_name: str) -> TabularSchemaResponse:
         table_name = self._sanitize_table_name(document_name)
         store = self._get_store(db_name)
 
@@ -78,7 +82,8 @@ class TabularService:
 
         return TabularSchemaResponse(document_name=document_name, columns=columns, row_count=row_count)
 
-    def list_tables_with_schema(self, db_name: str) -> list[TabularSchemaResponse]:
+    @authorize(action=Action.READ, resource=Resource.TABLES)
+    def list_tables_with_schema(self, user: KeycloakUser, db_name: str) -> list[TabularSchemaResponse]:
         store = self._get_store(db_name)
         responses = []
         table_names = store.list_tables()
@@ -97,7 +102,11 @@ class TabularService:
 
         return responses
 
-    def query(self, db_name: str, document_name: str, request: RawSQLRequest) -> TabularQueryResponse:
+    @authorize(action=Action.READ, resource=Resource.TABLES)
+    @authorize(action=Action.UPDATE, resource=Resource.TABLES)
+    @authorize(action=Action.DELETE, resource=Resource.TABLES)
+    @authorize(action=Action.CREATE, resource=Resource.TABLES)
+    def query(self, user: KeycloakUser, db_name: str, document_name: str, request: RawSQLRequest) -> TabularQueryResponse:
         store = self._get_store(db_name)
         sql = request.query.strip()
 

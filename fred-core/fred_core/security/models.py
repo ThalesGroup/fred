@@ -39,6 +39,8 @@ class Resource(Enum):
     DOCUMENTS = "documents"
     DOCUMENTS_SOURCES = "documents_sources"
     RESOURCES = "resources"
+    TABLES = "tables"
+    TABLES_DATABASES = "tables_databases"
 
     # Agentic Backend resources
     # ...
