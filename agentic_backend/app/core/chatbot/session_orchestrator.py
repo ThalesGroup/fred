@@ -128,7 +128,7 @@ class SessionOrchestrator:
 
         # 1) Ensure session + rebuild minimal LC history
         session, lc_history, agent, _is_new_session = self._prepare_session_and_history(
-            user_id=user_id,
+            user=user,
             session_id=session_id,
             message=message,
             agent_name=agent_name,
@@ -328,7 +328,7 @@ class SessionOrchestrator:
     def _prepare_session_and_history(
         self,
         *,
-        user_id: str,
+        user: KeycloakUser,
         session_id: str | None,
         message: str,
         agent_name: str,
@@ -342,12 +342,12 @@ class SessionOrchestrator:
           (tools, thought traces) into the prompt.
         """
         session, is_new_session = self._get_or_create_session(
-            user_id=user_id, query=message, session_id=session_id
+            user_id=user.uid, query=message, session_id=session_id
         )
 
         # Rebuild minimal LangChain history (user/assistant/system only)
         lc_history: list[BaseMessage] = []
-        for m in self.get_session_history(session.id, user_id):
+        for m in self.get_session_history(session.id, user):
             if m.role == Role.user:
                 lc_history.append(HumanMessage(_concat_text_parts(m.parts or [])))
             elif m.role == Role.assistant:

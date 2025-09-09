@@ -2,44 +2,10 @@
     "files": {
         "./app/agents/tabular/tabular_expert.py": [
             {
-                "code": "reportArgumentType",
-                "range": {
-                    "startColumn": 46,
-                    "endColumn": 57,
-                    "lineCount": 1
-                }
-            },
-            {
                 "code": "reportOptionalMemberAccess",
                 "range": {
                     "startColumn": 40,
                     "endColumn": 47,
-                    "lineCount": 1
-                }
-            }
-        ],
-        "./app/core/agents/agent_controller.py": [
-            {
-                "code": "reportArgumentType",
-                "range": {
-                    "startColumn": 17,
-                    "endColumn": 29,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportArgumentType",
-                "range": {
-                    "startColumn": 17,
-                    "endColumn": 29,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportArgumentType",
-                "range": {
-                    "startColumn": 17,
-                    "endColumn": 29,
                     "lineCount": 1
                 }
             }
@@ -214,16 +180,6 @@
                 "range": {
                     "startColumn": 20,
                     "endColumn": 30,
-                    "lineCount": 1
-                }
-            }
-        ],
-        "./app/core/chatbot/chatbot_controller.py": [
-            {
-                "code": "reportReturnType",
-                "range": {
-                    "startColumn": 19,
-                    "endColumn": 57,
                     "lineCount": 1
                 }
             }

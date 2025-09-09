@@ -29,8 +29,8 @@ from starlette.websockets import WebSocketState
 from app.application_context import get_configuration
 from app.common.utils import log_exception
 from app.core.agents.agent_manager import AgentManager
+from app.core.agents.agentic_flow import AgenticFlow
 from app.core.agents.runtime_context import RuntimeContext
-from app.core.agents.structures import AgenticFlow
 from app.core.chatbot.chat_schema import (
     ChatAskInput,
     ChatMessage,

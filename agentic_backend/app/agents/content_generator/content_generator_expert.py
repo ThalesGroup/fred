@@ -154,7 +154,6 @@ class ContentGeneratorExpert(AgentFlow):
             f"Today's date: {self.current_date}"
         )
 
-
     async def _reasoner(self, state: MessagesState):
         """
         Send user request to the model with the base prompt so it calls MCP tools directly.

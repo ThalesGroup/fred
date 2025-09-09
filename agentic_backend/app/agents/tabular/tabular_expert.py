@@ -128,7 +128,6 @@ class TabularExpert(AgentFlow):
             )
             response = await self.model.ainvoke(messages)
 
-
             return {"messages": [response]}
 
         except Exception:
