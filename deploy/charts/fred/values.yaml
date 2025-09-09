@@ -506,6 +506,8 @@ applications:
           description: "Personal local documents available for pull-mode ingestion"
       embedding:
         type: "openai"
+        use_gpu: True
+        process_images: True
       storage:
         postgres:
           host: localhost
