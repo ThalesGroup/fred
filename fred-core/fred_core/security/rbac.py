@@ -54,7 +54,7 @@ class RBACProvider(AuthorizationProvider):
                     Action.CREATE
                 },  # Can't delete or read feedback (as it would allow to read others feedbacks for now)
                 Resource.PROMPT_COMPLETIONS: {Action.CREATE},
-                Resource.METRICS: {},  # No rights (as it allows to read others sessions (conversations) for now)
+                Resource.METRICS: set(),  # No rights (as it allows to read others sessions (conversations) for now)
                 Resource.AGENTS: READ_ONLY,  # Can't create/update/delete agents
                 Resource.SESSIONS: CRUD,
                 Resource.MESSAGE_ATTACHMENTS: {Action.CREATE},
@@ -63,11 +63,11 @@ class RBACProvider(AuthorizationProvider):
                 # Viewer can only read
                 **{resource: READ_ONLY for resource in Resource},
                 # Except for:
-                Resource.METRICS: {},
+                Resource.METRICS: set(),
+                Resource.FEEDBACK: {Action.CREATE},
                 # Viewer can chat:
                 Resource.SESSIONS: CRUD,
                 Resource.MESSAGE_ATTACHMENTS: {Action.CREATE},
-                Resource.FEEDBACK: {Action.CREATE},
                 Resource.PROMPT_COMPLETIONS: {Action.CREATE},
             },
         }
