@@ -81,6 +81,13 @@ document_sources:
 
 embedding:
   type: "openai"
+  # Set to false to disable GPU usage even if available, the pdf processor
+  # will then only use CPU. This can help if you have a GPU without enough
+  # memory to process large documents.
+  use_gpu: true
+  # Enable or disable image processing in documents
+  process_images: true
+
 
 storage:
   postgres:
@@ -122,6 +129,10 @@ storage:
   vector_store:
     type: opensearch
     index: vector-index-ada002
+    # Default bulk size for vector insertions is 500. Increase if you have
+    # enough memory and want faster ingestion. Or if run into ingestion errors
+    # while ingesting large documents.
+    bulk_size: 1000
 
   tabular_stores:
     base_database: # Minimal configuration to enable CSV document ingestion

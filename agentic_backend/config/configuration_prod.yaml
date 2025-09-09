@@ -116,13 +116,6 @@ ai:
           transport: streamable_http
           url: http://localhost:8111/knowledge-flow/v1/mcp-resources
           sse_read_timeout: 2000
-      model: 
-        provider: "azure"
-        name: "gpt-4o"
-        settings:
-          temperature: 0.1
-          max_retries: 2
-          request_timeout: 30
 
 storage:
   postgres:
