@@ -35,6 +35,7 @@ from app.common.structures import (
     LocalContentStorageConfig,
     MinioPullSource,
     MinioStorageConfig,
+    OpenSearchVectorIndexConfig,
     WeaviateVectorStorage,
 )
 from fred_core import KPIWriter
@@ -452,7 +453,7 @@ class ApplicationContext:
 
         store = self.configuration.storage.vector_store
 
-        if isinstance(store, OpenSearchIndexConfig):
+        if isinstance(store, OpenSearchVectorIndexConfig):
             opensearch_config = get_configuration().storage.opensearch
             password = opensearch_config.password
             if not password:
@@ -466,6 +467,7 @@ class ApplicationContext:
                 password=password,
                 secure=opensearch_config.secure,
                 verify_certs=opensearch_config.verify_certs,
+                bulk_size=store.bulk_size,
             )
             return self._vector_store_instance
         # elif isinstance(store, WeaviateVectorStorage):
