@@ -31,20 +31,15 @@ class JiraExpert(AgentFlow):
 
     # Class-level attributes for metadata
     name: str = "JiraExpert"
-    role: str = "Jira Expert"
     nickname: str = "Josh"
+    role: str = "Jira Expert"
     description: str = "An expert that has access to Jira API and can perform issues queries and aggregate data in a clear and concise manner"
     icon: str = "jira_agent"
-    categories: list[str] = []
+    categories: list[str] = ["Jira"]
     tag: str = "jira operator"  # Défini au niveau de la classe
 
     def __init__(self, agent_settings: AgentSettings):
-        self.agent_settings = agent_settings
-        self.name = agent_settings.name
-        self.nickname = agent_settings.nickname or agent_settings.name
-        self.role = agent_settings.role
-        self.description = agent_settings.description
-        self.current_date = datetime.now().strftime("%Y-%m-%d")
+        super().__init__(agent_settings=agent_settings)
         self.model = get_model(self.agent_settings.model)
         self.mcp = MCPRuntime(
             agent_settings=self.agent_settings,
@@ -53,31 +48,12 @@ class JiraExpert(AgentFlow):
             context_provider=(lambda: self.get_runtime_context()),
         )
         self.base_prompt = self._generate_prompt()
-        self.categories = (
-            self.agent_settings.categories
-            if self.agent_settings.categories
-            else ["Jira"]
-        )
-        if self.agent_settings.tag:
-            self.tag = self.agent_settings.tag
 
     async def async_init(self):
         self.model = get_model(self.agent_settings.model)
         await self.mcp.init()
         self.model = self.model.bind_tools(self.mcp.get_tools())
         self._graph = self.get_graph()
-
-        super().__init__(
-            name=self.name,
-            role=self.role,
-            nickname=self.nickname,
-            description=self.description,
-            icon=self.icon,
-            graph=self._graph,
-            base_prompt=self.base_prompt,
-            categories=self.categories,
-            tag=self.tag,
-        )
 
     def _generate_prompt(self) -> str:
         """

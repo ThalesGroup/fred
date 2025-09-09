@@ -81,20 +81,20 @@ class RecursionConfig(BaseModel):
 
 
 class AgentSettings(BaseModel):
-    type: Literal["mcp", "custom", "leader"] = "custom"
     name: str  # a unique name
-    class_path: Optional[str] = None
+    class_path: str
+    type: Literal["mcp", "custom", "leader"] = "custom"
     enabled: bool = True
     categories: List[str] = Field(default_factory=list)
     settings: Dict[str, Any] = Field(default_factory=dict)
-    model: ModelConfiguration
+    model: Optional[ModelConfiguration] = None
     tag: Optional[str] = None
     mcp_servers: Optional[List[MCPServerConfiguration]] = Field(default_factory=list)
     max_steps: Optional[int] = 10
-    description: str
+    description: Optional[str] = None
     base_prompt: Optional[str] = None
     nickname: Optional[str] = None  # only used for UIs defaulting to name
-    role: str
+    role: Optional[str] = None
     icon: Optional[str] = None
 
 
@@ -116,22 +116,6 @@ class AIConfig(BaseModel):
     recursion: RecursionConfig = Field(
         ..., description="Number of max recursion while using the model"
     )
-
-    def apply_default_models(self):
-        """
-        Apply default model configuration to all agents and services if not specified.
-        """
-
-        def merge(target: ModelConfiguration) -> ModelConfiguration:
-            defaults = self.default_model.model_dump(exclude_unset=True)
-            target_dict = target.model_dump(exclude_unset=True)
-            merged_dict = {**defaults, **target_dict}
-            return ModelConfiguration(**merged_dict)
-
-        for agent in self.agents:
-            if agent.enabled:
-                agent.model = merge(agent.model)
-
 
 class FrontendFlags(BaseModel):
     enableK8Features: bool = False

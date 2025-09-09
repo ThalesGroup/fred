@@ -16,6 +16,7 @@ from fastapi import (
     APIRouter,
 )
 
+
 class MonitoringController:
     def __init__(
         self,

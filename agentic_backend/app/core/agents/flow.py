@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from abc import abstractmethod
+from datetime import datetime
 import logging
 from typing import List, Optional, Sequence
 
@@ -19,6 +21,7 @@ from IPython.display import Image
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph.state import CompiledStateGraph
 from langchain_core.messages import SystemMessage, BaseMessage
+from app.common.structures import AgentSettings
 from app.core.agents.agent_state import Prepared, resolve_prepared
 from app.application_context import get_knowledge_flow_base_url
 from app.core.agents.runtime_context import RuntimeContext
@@ -86,41 +89,48 @@ class AgentFlow:
     icon: str
     tag: str
 
-    def __init__(
-        self,
-        name: str,
-        role: str,
-        nickname: str,
-        description: str,
-        icon: str,
-        graph,
-        base_prompt: str,
-        categories=None,
-        tag=None,
-    ):
+    def __init__(self, agent_settings: AgentSettings):
         """
-        Initialize the agent with its core properties.
+        Initialize an AgentFlow instance with configuration from AgentSettings.
 
+        This sets all primary properties of the agent according to the provided AgentSettings,
+        falling back to class defaults if not explicitly specified.
         Args:
-            name: The name of the agent.
-            role: The role of the agent.
-            nickname: The nickname of the agent.
-            description: A description of the agent's functionality.
-            icon: An icon reference for the agent.
-            graph: The agent's state graph.
-            base_prompt: The base prompt used by the agent.
-            categories: Optional categories the agent belongs to.
-            tag: Optional tag for the agent.
+            agent_settings: An AgentSettings instance containing agent metadata, display, and configuration options.
+                - name: The name of the agent.
+                - role: The agent's primary role or persona.
+                - nickname: Alternate short label for UI display.
+                - description: A detailed summary of agent functionality.
+                - icon: The icon used for representation in the UI.
+                - categories: (Optional) Categories that the agent is part of.
+                - tag: (Optional) Short tag identifier for the agent.
         """
-        self.name = name
-        self.role = role
-        self.nickname = nickname
-        self.description = description
-        self.icon = icon
-        self.graph = graph
-        self.base_prompt = base_prompt
-        self.categories = categories or []
-        self.tag = tag
+
+        self.agent_settings = agent_settings
+        self.name = agent_settings.name
+        self.nickname = agent_settings.nickname or agent_settings.name
+        self.role = (
+            agent_settings.role
+            if agent_settings.role is not None
+            else self.__class__.role
+        )
+        self.description = (
+            agent_settings.description
+            if agent_settings.description is not None
+            else self.__class__.description
+        )
+        self.current_date = datetime.now().strftime("%Y-%m-%d")
+        self.categories = (
+            agent_settings.categories
+            if agent_settings.categories is not None
+            else self.__class__.categories
+        )
+        self.tag = (
+            agent_settings.tag if agent_settings.tag is not None else self.__class__.tag
+        )
+        self.model = None  # Will be set in async_init
+        self.base_prompt = ""  # Will be set in async_init
+        self._graph = None  # Will be built in async_init
         self.streaming_memory = MemorySaver()
         self.compiled_graph: Optional[CompiledStateGraph] = None
         self.runtime_context: Optional[RuntimeContext] = None
@@ -174,7 +184,9 @@ class AgentFlow:
         This method is idempotent and reuses the cached compiled graph.
         """
         if self.compiled_graph is None:
-            self.compiled_graph = self.graph.compile(checkpointer=self.streaming_memory)
+            self.compiled_graph = self._graph.compile(
+                checkpointer=self.streaming_memory
+            )
         return self.compiled_graph
 
     def save_graph_image(self, path: str):
@@ -202,3 +214,10 @@ class AgentFlow:
     def __str__(self) -> str:
         """String representation of the agent."""
         return f"{self.name} ({self.nickname}): {self.description}"
+
+    @abstractmethod
+    async def async_init(self):
+        """
+        Asynchronous initialization routine that must be implemented by subclasses.
+        """
+        pass

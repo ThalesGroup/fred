@@ -28,7 +28,7 @@ from app.common.structures import ModelConfiguration
 logger = logging.getLogger(__name__)
 
 
-def get_model(model_config: ModelConfiguration):
+def get_model(model_config: ModelConfiguration | None):
     """
     Factory function to create a model instance based on configuration.
 
@@ -46,6 +46,8 @@ def get_model(model_config: ModelConfiguration):
     Returns:
         An instance of a Chat model.
     """
+
+    assert model_config is not None, ("Model configuration should not be `None` here")
     provider = model_config.provider
 
     if not provider:
@@ -53,7 +55,7 @@ def get_model(model_config: ModelConfiguration):
             "Missing mandatory model_type property in model configuration: %s",
             model_config,
         )
-        raise ValueError("Missing mandatory_model type in model configuration.")
+        raise ValueError("Missing mandatory model type in model configuration.")
     settings = (model_config.settings or {}).copy()
 
     if provider == "azure":
