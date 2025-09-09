@@ -94,13 +94,10 @@ class ChatbotController:
         @app.post(
             "/schemas/echo",
             tags=["Schemas"],
-            summary="Echo a schema (schema anchor for codegen)",
-            response_model=EchoEnvelope,
+            summary="Ignore. Not a real endpoint.",
+            description="Ignore. This endpoint is only used to include some types (mainly one used in websocket) in the OpenAPI spec, so they can be generated as typescript types for the UI. This endpoint is not really used, this is just a code generation hack.",
         )
-        def echo_schema(
-            envelope: EchoEnvelope, _: KeycloakUser = Depends(get_current_user)
-        ) -> EchoEnvelope:
-            return envelope
+        def echo_schema(envelope: EchoEnvelope) -> None: ...
 
         @app.get(
             "/config/frontend_settings",

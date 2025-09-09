@@ -101,7 +101,8 @@ def get_exempt_routes() -> Set[str]:
         "/healthz",
         "/ready",
         # Agentic specific routes
-        "/config/frontend_settings"
+        "/config/frontend_settings",
+        "/schemas/echo"
     }
 
 
