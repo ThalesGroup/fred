@@ -17,7 +17,12 @@ from fastapi import (
     WebSocket,
     WebSocketDisconnect,
 )
-from fred_core import KeycloakUser, VectorSearchHit, get_current_user
+from fred_core import (
+    TODO_PASS_REAL_USER,
+    KeycloakUser,
+    VectorSearchHit,
+    get_current_user,
+)
 from pydantic import BaseModel, Field
 from starlette.websockets import WebSocketState
 
@@ -148,7 +153,7 @@ class ChatbotController:
                             session,
                             final_messages,
                         ) = await self.session_orchestrator.chat_ask_websocket(
-                            user=user,
+                            user=TODO_PASS_REAL_USER,  # TODO: add authentication to WS and pass real user here
                             callback=ws_callback,
                             user_id=ask.user_id,
                             session_id=ask.session_id or "unknown-session",
