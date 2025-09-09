@@ -90,7 +90,7 @@ class TabularController:
             authorize_or_raise(user, Action.DELETE, Resource.TABLES)
 
             try:
-                self.service._check_writeschedule_documents_allowed(db_name)
+                self.service._check_write_allowed(db_name)
 
                 if not table_name.isidentifier():
                     raise HTTPException(status_code=400, detail="Invalid table name")
