@@ -94,6 +94,7 @@ class NoAuth(AuthBase):
 class OutboundAuth:
     auth: AuthBase
     refresh: Optional[Callable[[], None]] = None  # None = nothing to refresh
+    _token_exchanger: Optional[Any] = None
 
 
 # -------------------------------
@@ -535,10 +536,8 @@ class ApplicationContext:
         self._outbound_auth = OutboundAuth(
             auth=BearerAuth(provider),
             refresh=provider.force_refresh,
+            _token_exchanger=token_exchanger,
         )
-        
-        # Attach token exchanger for use in MCP calls
-        self._outbound_auth._token_exchanger = token_exchanger
         
         return self._outbound_auth
 
