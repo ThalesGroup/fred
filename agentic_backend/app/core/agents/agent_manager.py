@@ -251,6 +251,10 @@ class AgentManager:
         self.agent_settings.pop(name, None)
         logger.info(f"🗑️ Unregistered agent '{name}' from memory.")
 
+    # Handling authorization here because it's used directly in a controller.
+    # As it is the only method of AgentManager handling authorization,
+    # we should maybe call this from a service that would handle authorization instead
+    # (like agent service ?)
     @authorize(Action.READ, Resource.AGENTS)
     def get_agentic_flows(self, user: KeycloakUser) -> List[AgenticFlow]:
         """
