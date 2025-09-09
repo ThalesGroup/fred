@@ -88,8 +88,8 @@ def create_app() -> FastAPI:
     logger.info(f"🛠️ create_app() called with base_url={base_url}")
     
     if not configuration.embedding.use_gpu:
-        os.environ["CUDA_VISIBLE_DEVICES"] = "0"
-        os.environ["MPS_VISIBLE_DEVICES"] = "0"
+        os.environ["CUDA_VISIBLE_DEVICES"] = ""
+        os.environ["MPS_VISIBLE_DEVICES"] = ""
         import torch
         torch.set_default_device("cpu")
         logger.warning("⚠️ GPU support is disabled. Running on CPU.")

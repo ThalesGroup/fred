@@ -23,7 +23,6 @@ from fred_core import (
     SecurityConfiguration,
     PostgresStoreConfig,
     OpenSearchStoreConfig,
-    OpenSearchIndexConfig,
     StoreConfig,
 )
 
