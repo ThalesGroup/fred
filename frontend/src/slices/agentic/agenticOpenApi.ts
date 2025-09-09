@@ -490,11 +490,11 @@ export type EchoEnvelope = {
 };
 export type AgenticFlow = {
   /** Name of the agentic flow */
-  name: string;
+  name?: string | null;
   /** Human-readable role of the agentic flow */
   role: string;
   /** Human-readable nickname of the agentic flow */
-  nickname: string | null;
+  nickname?: string | null;
   /** Human-readable description of the agentic flow */
   description: string;
   /** Icon of the agentic flow */
