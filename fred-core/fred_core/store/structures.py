@@ -12,8 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import NamedTuple,Literal
+from typing import NamedTuple, Literal
 from fred_core.store.sql_store import SQLTableStore
+
 
 class StoreInfo(NamedTuple):
     store: SQLTableStore

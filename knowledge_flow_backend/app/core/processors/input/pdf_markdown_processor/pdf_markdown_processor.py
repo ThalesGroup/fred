@@ -79,7 +79,7 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
 
     def convert_file_to_markdown(self, file_path: Path, output_dir: Path, document_uid: str | None) -> dict:
         output_markdown_path = output_dir / "output.md"
-        torch.device("cpu") 
+        torch.device("cpu")
         try:
             # Initialize the DocumentConverter with PDF format options
             pipeline_options = PdfPipelineOptions()
