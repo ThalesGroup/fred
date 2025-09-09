@@ -35,6 +35,7 @@ class OpenSearchVectorStoreAdapter(BaseVectoreStore):
         password: str,
         secure: bool = False,
         verify_certs: bool = False,
+        bulk_size: int = 1000,
     ):
         self.vector_index = index
         self.embedding_model = embedding_model
@@ -43,9 +44,10 @@ class OpenSearchVectorStoreAdapter(BaseVectoreStore):
         self.password = password
         self.secure = secure
         self.verify_certs = verify_certs
-
+        self.bulk_size = bulk_size
         self._opensearch_vector_search: OpenSearchVectorSearch | None = None
         self._expected_dim: int | None = None
+        logger.info(f"🔗 OpenSearchVectorStoreAdapter initialized with index '{self.vector_index}' at '{self.host}' with bulk size {self.bulk_size}")
 
     @property
     def opensearch_vector_search(self) -> OpenSearchVectorSearch:
@@ -57,6 +59,7 @@ class OpenSearchVectorStoreAdapter(BaseVectoreStore):
                 use_ssl=self.secure,
                 verify_certs=self.verify_certs,
                 http_auth=(self.username, self.password),
+                bulk_size=self.bulk_size,
             )
 
             self._expected_dim = self._get_embedding_dimension()
