@@ -49,6 +49,8 @@ class Resource(Enum):
     PROMPT_COMPLETIONS = "prompt_completions"
     METRICS = "metrics"
     AGENTS = "agents"
+    SESSIONS = "sessions"
+    MESSAGE_ATTACHMENTS = "message_attachments"
 
 
 class AuthorizationError(Exception):

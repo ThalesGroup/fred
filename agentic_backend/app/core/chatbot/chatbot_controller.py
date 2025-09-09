@@ -119,7 +119,7 @@ class ChatbotController:
         def get_agentic_flows(
             user: KeycloakUser = Depends(get_current_user),
         ) -> List[AgenticFlow]:
-            return self.agent_manager.get_agentic_flows()
+            return self.agent_manager.get_agentic_flows(user)
 
         @app.websocket("/chatbot/query/ws")
         async def websocket_chatbot_question(websocket: WebSocket):
@@ -151,6 +151,7 @@ class ChatbotController:
                             session,
                             final_messages,
                         ) = await self.session_orchestrator.chat_ask_websocket(
+                            user=user,
                             callback=ws_callback,
                             user_id=ask.user_id,
                             session_id=ask.session_id or "unknown-session",
@@ -209,7 +210,7 @@ class ChatbotController:
             user: KeycloakUser = Depends(get_current_user),
         ) -> list[SessionWithFiles]:
             # Orchestrator owns session lifecycle surface
-            return self.session_orchestrator.get_sessions(user.uid)
+            return self.session_orchestrator.get_sessions(user)
 
         @app.get(
             "/chatbot/session/{session_id}/history",
@@ -221,7 +222,7 @@ class ChatbotController:
         def get_session_history(
             session_id: str, user: KeycloakUser = Depends(get_current_user)
         ) -> list[ChatMessage]:
-            return self.session_orchestrator.get_session_history(session_id, user.uid)
+            return self.session_orchestrator.get_session_history(session_id, user)
 
         @app.delete(
             "/chatbot/session/{session_id}",
@@ -232,7 +233,7 @@ class ChatbotController:
         def delete_session(
             session_id: str, user: KeycloakUser = Depends(get_current_user)
         ) -> bool:
-            self.session_orchestrator.delete_session(session_id, user.uid)
+            self.session_orchestrator.delete_session(session_id, user)
             return True
 
         @app.post(
@@ -242,12 +243,11 @@ class ChatbotController:
             tags=fastapi_tags,
         )
         async def upload_file(
-            user_id: str = Form(...),
             session_id: str = Form(...),
             agent_name: str = Form(...),
             file: UploadFile = File(...),
-            _: KeycloakUser = Depends(get_current_user),
+            user: KeycloakUser = Depends(get_current_user),
         ) -> dict:
             return await self.session_orchestrator.upload_file(
-                user_id, session_id, agent_name, file
+                user, session_id, agent_name, file
             )
