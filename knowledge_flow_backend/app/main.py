@@ -21,7 +21,6 @@ Entrypoint for the Knowledge Flow Backend App.
 
 import logging
 import os
-from duckdb import torch
 from rich.logging import RichHandler
 from dotenv import load_dotenv
 
