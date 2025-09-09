@@ -1,184 +1,148 @@
 {
-  "files": {
-    "./app/agents/tabular/tabular_expert.py": [
-      {
-        "code": "reportOptionalMemberAccess",
-        "range": {
-          "startColumn": 40,
-          "endColumn": 47,
-          "lineCount": 1
-        }
-      }
-    ],
-    "./app/core/agents/agent_controller.py": [
-      {
-        "code": "reportArgumentType",
-        "range": {
-          "startColumn": 17,
-          "endColumn": 29,
-          "lineCount": 1
-        }
-      },
-      {
-        "code": "reportArgumentType",
-        "range": {
-          "startColumn": 17,
-          "endColumn": 29,
-          "lineCount": 1
-        }
-      },
-      {
-        "code": "reportArgumentType",
-        "range": {
-          "startColumn": 17,
-          "endColumn": 29,
-          "lineCount": 1
-        }
-      }
-    ],
-    "./app/core/agents/agent_manager.py": [
-      {
-        "code": "reportOptionalIterable",
-        "range": {
-          "startColumn": 26,
-          "endColumn": 52,
-          "lineCount": 1
-        }
-      },
-      {
-        "code": "reportArgumentType",
-        "range": {
-          "startColumn": 28,
-          "endColumn": 38,
-          "lineCount": 1
-        }
-      },
-      {
-        "code": "reportArgumentType",
-        "range": {
-          "startColumn": 34,
-          "endColumn": 50,
-          "lineCount": 1
-        }
-      },
-      {
-        "code": "reportArgumentType",
-        "range": {
-          "startColumn": 32,
-          "endColumn": 46,
-          "lineCount": 1
-        }
-      },
-      {
-        "code": "reportArgumentType",
-        "range": {
-          "startColumn": 29,
-          "endColumn": 40,
-          "lineCount": 1
-        }
-      },
-      {
-        "code": "reportArgumentType",
-        "range": {
-          "startColumn": 28,
-          "endColumn": 38,
-          "lineCount": 1
-        }
-      },
-      {
-        "code": "reportArgumentType",
-        "range": {
-          "startColumn": 41,
-          "endColumn": 64,
-          "lineCount": 1
-        }
-      }
-    ],
-    "./app/core/agents/agent_service.py": [
-      {
-        "code": "reportCallIssue",
-        "range": {
-          "startColumn": 18,
-          "endColumn": 38,
-          "lineCount": 1
-        }
-      }
-    ],
-    "./app/core/agents/flow.py": [
-      {
-        "code": "reportAttributeAccessIssue",
-        "range": {
-          "startColumn": 46,
-          "endColumn": 53,
-          "lineCount": 1
-        }
-      },
-      {
-        "code": "reportReturnType",
-        "range": {
-          "startColumn": 15,
-          "endColumn": 34,
-          "lineCount": 1
-        }
-      },
-      {
-        "code": "reportAttributeAccessIssue",
-        "range": {
-          "startColumn": 20,
-          "endColumn": 25,
-          "lineCount": 1
-        }
-      },
-      {
-        "code": "reportArgumentType",
-        "range": {
-          "startColumn": 20,
-          "endColumn": 30,
-          "lineCount": 1
-        }
-      }
-    ],
-    "./app/core/model/azure_apim_model.py": [
-      {
-        "code": "reportArgumentType",
-        "range": {
-          "startColumn": 53,
-          "endColumn": 57,
-          "lineCount": 1
-        }
-      },
-      {
-        "code": "reportCallIssue",
-        "range": {
-          "startColumn": 36,
-          "endColumn": 55,
-          "lineCount": 1
-        }
-      },
-      {
-        "code": "reportCallIssue",
-        "range": {
-          "startColumn": 12,
-          "endColumn": 30,
-          "lineCount": 1
-        }
-      },
-      {
-        "code": "reportCallIssue",
-        "range": {
-          "startColumn": 12,
-          "endColumn": 27,
-          "lineCount": 1
-        }
-      },
-      {
-        "code": "reportCallIssue",
-        "range": {
-          "startColumn": 12,
-          "endColumn": 26,
-          "lineCount": 1
-        }
-      }
-    ]
-  }
+    "files": {
+        "./app/core/agents/agent_manager.py": [
+            {
+                "code": "reportOptionalIterable",
+                "range": {
+                    "startColumn": 26,
+                    "endColumn": 52,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportArgumentType",
+                "range": {
+                    "startColumn": 28,
+                    "endColumn": 38,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportArgumentType",
+                "range": {
+                    "startColumn": 34,
+                    "endColumn": 50,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportArgumentType",
+                "range": {
+                    "startColumn": 32,
+                    "endColumn": 46,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportArgumentType",
+                "range": {
+                    "startColumn": 29,
+                    "endColumn": 40,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportArgumentType",
+                "range": {
+                    "startColumn": 28,
+                    "endColumn": 38,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportArgumentType",
+                "range": {
+                    "startColumn": 41,
+                    "endColumn": 64,
+                    "lineCount": 1
+                }
+            }
+        ],
+        "./app/core/agents/agent_service.py": [
+            {
+                "code": "reportCallIssue",
+                "range": {
+                    "startColumn": 18,
+                    "endColumn": 38,
+                    "lineCount": 1
+                }
+            }
+        ],
+        "./app/core/agents/flow.py": [
+            {
+                "code": "reportAttributeAccessIssue",
+                "range": {
+                    "startColumn": 46,
+                    "endColumn": 53,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportReturnType",
+                "range": {
+                    "startColumn": 15,
+                    "endColumn": 34,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportAttributeAccessIssue",
+                "range": {
+                    "startColumn": 20,
+                    "endColumn": 25,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportArgumentType",
+                "range": {
+                    "startColumn": 20,
+                    "endColumn": 30,
+                    "lineCount": 1
+                }
+            }
+        ],
+        "./app/core/model/azure_apim_model.py": [
+            {
+                "code": "reportArgumentType",
+                "range": {
+                    "startColumn": 53,
+                    "endColumn": 57,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportCallIssue",
+                "range": {
+                    "startColumn": 36,
+                    "endColumn": 55,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportCallIssue",
+                "range": {
+                    "startColumn": 12,
+                    "endColumn": 30,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportCallIssue",
+                "range": {
+                    "startColumn": 12,
+                    "endColumn": 27,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportCallIssue",
+                "range": {
+                    "startColumn": 12,
+                    "endColumn": 26,
+                    "lineCount": 1
+                }
+            }
+        ]
+    }
 }
