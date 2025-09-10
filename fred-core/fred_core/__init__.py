@@ -61,7 +61,6 @@ from fred_core.security.backend_to_backend_auth import (
 )
 from fred_core.security.keycloak import (
     get_current_user,
-    get_keycloak_user_by_id,
     initialize_user_security,
     split_realm_url,
     decode_jwt,
@@ -78,7 +77,6 @@ from fred_core.store.vector_search import VectorSearchHit
 __all__ = [
     "raise_internal_error",
     "get_current_user",
-    "get_keycloak_user_by_id",
     "decode_jwt",
     "initialize_user_security",
     "KeycloakUser",

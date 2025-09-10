@@ -19,7 +19,6 @@ import json
 import base64
 from datetime import datetime, timezone
 from typing import Any, Dict, Tuple
-import httpx
 
 import jwt
 from fastapi import HTTPException, Security
@@ -271,65 +270,3 @@ def get_current_user(token: str = Security(oauth2_scheme)) -> KeycloakUser:
     # do NOT log the full token
     logger.debug("Received token prefix: %s...", token[:10])
     return decode_jwt(token)
-
-
-async def get_keycloak_user_by_id(user_id: str) -> KeycloakUser | None:
-    """
-    Fetches user information from Keycloak Admin API and returns a KeycloakUser object.
-    """
-    if not KEYCLOAK_ENABLED:
-        logger.warning("Keycloak is disabled. Cannot retrieve user by ID.")
-        # Return a mock user if authentication is disabled for development
-        return KeycloakUser(uid=user_id, username=user_id, email=f"{user_id}@localhost", roles=["admin"])
-
-    # --- Step 1: Get an admin access token ---
-    token_url = f"{KEYCLOAK_URL}/protocol/openid-connect/token"
-    client_id = "agentic"
-    client_secret = "hHl6KEqcsdXZQPQnJSyOqlJB2SgIx9Iz"
-    
-    if not client_id or not client_secret:
-        logger.error("Admin client credentials not found.")
-        return None
-    
-    try:
-        token_response = await httpx.AsyncClient().post(
-            token_url,
-            data={"grant_type": "client_credentials", "client_id": client_id, "client_secret": client_secret},
-            timeout=10,
-        )
-        token_response.raise_for_status()
-        admin_token = token_response.json()["access_token"]
-    except httpx.HTTPStatusError as e:
-        logger.error("Failed to get admin token: %s", e)
-        return None
-    
-    # --- Step 2: Call the Keycloak Admin API to get user details ---
-    base, realm = split_realm_url(KEYCLOAK_URL)
-    user_api_url = f"{base}/admin/realms/{realm}/users/{user_id}"
-    
-    headers = {"Authorization": f"Bearer {admin_token}"}
-    
-    try:
-        user_response = await httpx.AsyncClient().get(user_api_url, headers=headers, timeout=10)
-        user_response.raise_for_status()
-        user_data = user_response.json()
-        
-        # --- Step 3: Map API response to KeycloakUser model ---
-        # Note: Keycloak's 'resource_access' roles are not available in this API.
-        # You'll need to fetch them separately or rely on a different user attribute.
-        # For simplicity, we'll use a placeholder for roles.
-        # Alternatively, you could add an extra call to the roles endpoint.
-        
-        return KeycloakUser(
-            uid=user_data.get("id"),
-            username=user_data.get("username"),
-            email=user_data.get("email"),
-            roles=[],  # Placeholder; adjust this based on your Keycloak setup
-        )
-        
-    except httpx.HTTPStatusError as e:
-        if e.response.status_code == 404:
-            logger.info("User with ID %s not found.", user_id)
-        else:
-            logger.error("Failed to fetch user data for ID %s: %s", user_id, e)
-        return None

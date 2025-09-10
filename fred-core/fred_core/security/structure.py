@@ -24,6 +24,7 @@ class KeycloakUser(BaseModel):
     roles: list[str]
     email: str | None = None
 
+
 class M2MSecurity(BaseModel):
     """Configuration for machine-to-machine authentication."""
 
@@ -33,6 +34,7 @@ class M2MSecurity(BaseModel):
     audience: str | None = None
     # client_secret from ENV. WHY: never commit secrets to config files.
 
+
 class UserSecurity(BaseModel):
     """Configuration for user authentication."""
 
@@ -41,7 +43,7 @@ class UserSecurity(BaseModel):
     client_id: str
     authorized_origins: List[AnyHttpUrl] = []
 
+
 class SecurityConfiguration(BaseModel):
     m2m: M2MSecurity
     user: UserSecurity
-
