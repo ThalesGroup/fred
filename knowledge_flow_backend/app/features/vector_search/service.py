@@ -4,8 +4,7 @@ import logging
 from datetime import datetime, timezone
 from typing import List, Optional, Set, Tuple
 
-from fred_core import KeycloakUser
-from fred_core import VectorSearchHit
+from fred_core import Action, KeycloakUser, Resource, VectorSearchHit, authorize
 from langchain.schema.document import Document
 
 from app.application_context import ApplicationContext
@@ -121,6 +120,7 @@ class VectorSearchService:
             retrieval_session_id=md.get("retrieval_session_id"),
         )
 
+    @authorize(Action.READ, Resource.DOCUMENTS)
     def similarity_search_with_score(
         self,
         question: str,

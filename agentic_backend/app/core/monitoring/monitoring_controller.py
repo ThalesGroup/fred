@@ -23,7 +23,6 @@ from fastapi import (
     HTTPException,
     Query,
 )
-
 from fred_core import KeycloakUser, get_current_user
 
 from app.core.chatbot.metric_structures import MetricsResponse
@@ -83,6 +82,7 @@ class MonitoringController:
                     raise HTTPException(400, detail=f"Unsupported aggregation op: {op}")
                 agg_mapping.setdefault(field, []).append(op)
             return self.service.get_node_numerical_metrics(
+                user,
                 start=start,
                 end=end,
                 precision=precision,

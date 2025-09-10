@@ -1,9 +1,8 @@
 # app/features/kpi/controller.py
 import logging
-from fastapi import APIRouter, Depends, HTTPException
-from fred_core import KeycloakUser, get_current_user
 
-from fred_core import KPIQuery, KPIQueryResult
+from fastapi import APIRouter, Depends
+from fred_core import Action, KeycloakUser, KPIQuery, KPIQueryResult, Resource, authorize_or_raise, get_current_user
 
 from app.application_context import get_app_context
 
@@ -25,13 +24,7 @@ class KPIController:
         # Reader wraps the same OS client + index
         self.reader = get_app_context().get_kpi_store()
 
-        def handle_exception(e: Exception) -> HTTPException:
-            logger.error(f"[KPI] query error: {e}", exc_info=True)
-            return HTTPException(status_code=500, detail="Internal server error")
-
         @router.post("/kpi/query", response_model=KPIQueryResult, tags=["KPI"])
-        async def query(body: KPIQuery, _: KeycloakUser = Depends(get_current_user)):
-            try:
-                return self.reader.query(body)
-            except Exception as e:
-                raise handle_exception(e)
+        async def query(body: KPIQuery, user: KeycloakUser = Depends(get_current_user)):
+            authorize_or_raise(user, Action.READ, Resource.KPIS)
+            return self.reader.query(body)

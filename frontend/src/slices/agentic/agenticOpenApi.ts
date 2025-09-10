@@ -51,7 +51,7 @@ const injectedRtkApi = api.injectEndpoints({
       EchoSchemaAgenticV1SchemasEchoPostApiResponse,
       EchoSchemaAgenticV1SchemasEchoPostApiArg
     >({
-      query: (queryArg) => ({ url: `/agentic/v1/schemas/echo`, method: "POST", body: queryArg.echoEnvelopeInput }),
+      query: (queryArg) => ({ url: `/agentic/v1/schemas/echo`, method: "POST", body: queryArg.echoEnvelope }),
     }),
     getFrontendConfigAgenticV1ConfigFrontendSettingsGet: build.query<
       GetFrontendConfigAgenticV1ConfigFrontendSettingsGetApiResponse,
@@ -150,9 +150,9 @@ export type DeleteAgentAgenticV1AgentsNameDeleteApiResponse = /** status 200 Suc
 export type DeleteAgentAgenticV1AgentsNameDeleteApiArg = {
   name: string;
 };
-export type EchoSchemaAgenticV1SchemasEchoPostApiResponse = /** status 200 Successful Response */ EchoEnvelope;
+export type EchoSchemaAgenticV1SchemasEchoPostApiResponse = /** status 200 Successful Response */ null;
 export type EchoSchemaAgenticV1SchemasEchoPostApiArg = {
-  echoEnvelopeInput: EchoEnvelope2;
+  echoEnvelope: EchoEnvelope;
 };
 export type GetFrontendConfigAgenticV1ConfigFrontendSettingsGetApiResponse = /** status 200 Successful Response */ any;
 export type GetFrontendConfigAgenticV1ConfigFrontendSettingsGetApiArg = void;
@@ -163,7 +163,7 @@ export type GetSessionsAgenticV1ChatbotSessionsGetApiResponse =
   /** status 200 Successful Response */ SessionWithFiles[];
 export type GetSessionsAgenticV1ChatbotSessionsGetApiArg = void;
 export type GetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetApiResponse =
-  /** status 200 Successful Response */ ChatMessage[];
+  /** status 200 Successful Response */ ChatMessage2[];
 export type GetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetApiArg = {
   sessionId: string;
 };
@@ -488,6 +488,22 @@ export type EchoEnvelope = {
     | VectorSearchHit
     | RuntimeContext;
 };
+export type AgenticFlow = {
+  /** Name of the agentic flow */
+  name?: string | null;
+  /** Human-readable role of the agentic flow */
+  role: string;
+  /** Human-readable nickname of the agentic flow */
+  nickname?: string | null;
+  /** Human-readable description of the agentic flow */
+  description: string;
+  /** Icon of the agentic flow */
+  icon: string | null;
+  /** List of experts in the agentic flow */
+  experts: string[] | null;
+  /** Human-readable tag of the agentic flow */
+  tag: string | null;
+};
 export type ChatMessage2 = {
   session_id: string;
   exchange_id: string;
@@ -520,59 +536,7 @@ export type ChatMessage2 = {
   )[];
   metadata?: ChatMetadata;
 };
-export type StreamEvent2 = {
-  type?: "stream";
-  message: ChatMessage2;
-};
-export type FinalEvent2 = {
-  type?: "final";
-  messages: ChatMessage2[];
-  session: SessionSchema;
-};
-export type EchoEnvelope2 = {
-  kind:
-    | "ChatMessage"
-    | "StreamEvent"
-    | "FinalEvent"
-    | "ErrorEvent"
-    | "SessionSchema"
-    | "SessionWithFiles"
-    | "MetricsResponse"
-    | "MetricsBucket"
-    | "VectorSearchHit"
-    | "RuntimeContext";
-  /** Schema payload being echoed */
-  payload:
-    | ChatMessage2
-    | ChatAskInput
-    | StreamEvent2
-    | FinalEvent2
-    | ErrorEvent
-    | SessionSchema
-    | SessionWithFiles
-    | MetricsResponse
-    | MetricsBucket
-    | VectorSearchHit
-    | RuntimeContext;
-};
-export type AgenticFlow = {
-  /** Name of the agentic flow */
-  name: string;
-  /** Human-readable role of the agentic flow */
-  role: string;
-  /** Human-readable nickname of the agentic flow */
-  nickname: string | null;
-  /** Human-readable description of the agentic flow */
-  description: string;
-  /** Icon of the agentic flow */
-  icon: string | null;
-  /** List of experts in the agentic flow */
-  experts: string[] | null;
-  /** Human-readable tag of the agentic flow */
-  tag: string | null;
-};
 export type BodyUploadFileAgenticV1ChatbotUploadPost = {
-  user_id: string;
   session_id: string;
   agent_name: string;
   file: Blob;

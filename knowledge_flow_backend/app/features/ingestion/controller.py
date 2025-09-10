@@ -113,7 +113,7 @@ class IngestionController:
         def upload_documents_sync(
             files: List[UploadFile] = File(...),
             metadata_json: str = Form(...),
-            _: KeycloakUser = Depends(get_current_user),
+            user: KeycloakUser = Depends(get_current_user),
         ) -> Response:
             parsed_input = IngestionInput(**json.loads(metadata_json))
             tags = parsed_input.tags
@@ -134,16 +134,16 @@ class IngestionController:
                 current_step = "metadata extraction"
                 try:
                     output_temp_dir = input_temp_file.parent.parent
-                    metadata = self.service.extract_metadata(file_path=input_temp_file, tags=tags, source_tag=source_tag)
+                    metadata = self.service.extract_metadata(user, file_path=input_temp_file, tags=tags, source_tag=source_tag)
                     logger.info(f"Metadata extracted for {filename}: {metadata}")
                     events.append(ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n")
 
                     current_step = "raw content saving"
-                    self.service.save_input(metadata=metadata, input_dir=output_temp_dir / "input")
+                    self.service.save_input(user, metadata=metadata, input_dir=output_temp_dir / "input")
                     events.append(ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n")
 
                     current_step = "metadata saving"
-                    self.service.save_metadata(metadata=metadata)
+                    self.service.save_metadata(user, metadata=metadata)
                     success += 1
 
                 except Exception as e:
@@ -192,10 +192,10 @@ class IngestionController:
                     current_step = "metadata extraction"
                     try:
                         output_temp_dir = input_temp_file.parent.parent
-                        metadata = self.service.extract_metadata(file_path=input_temp_file, tags=tags, source_tag=source_tag)
+                        metadata = self.service.extract_metadata(user, file_path=input_temp_file, tags=tags, source_tag=source_tag)
 
                         current_step = "input content saving"
-                        self.service.save_input(metadata, output_temp_dir / "input")
+                        self.service.save_input(user, metadata=metadata, input_dir=output_temp_dir / "input")
                         events.append(ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n")
 
                         current_step = "input processing"

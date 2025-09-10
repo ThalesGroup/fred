@@ -1,31 +1,5 @@
 {
     "files": {
-        "./app/core/agents/agent_controller.py": [
-            {
-                "code": "reportArgumentType",
-                "range": {
-                    "startColumn": 17,
-                    "endColumn": 29,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportArgumentType",
-                "range": {
-                    "startColumn": 17,
-                    "endColumn": 29,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportArgumentType",
-                "range": {
-                    "startColumn": 17,
-                    "endColumn": 29,
-                    "lineCount": 1
-                }
-            }
-        ],
         "./app/core/agents/agent_manager.py": [
             {
                 "code": "reportOptionalIterable",
@@ -124,16 +98,6 @@
                 "range": {
                     "startColumn": 20,
                     "endColumn": 30,
-                    "lineCount": 1
-                }
-            }
-        ],
-        "./app/core/chatbot/chatbot_controller.py": [
-            {
-                "code": "reportReturnType",
-                "range": {
-                    "startColumn": 19,
-                    "endColumn": 57,
                     "lineCount": 1
                 }
             }
