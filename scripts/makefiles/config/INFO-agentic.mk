@@ -1,7 +1,7 @@
 # Project Metadata
 PROJECT_NAME        ?= agentic
 PROJECT_SLUG		?= agentic-backend
-VERSION             ?= 0.0.6
+VERSION             ?= 0.1
 PY_PACKAGE          ?= app
 
 # Docker/Registry
