@@ -157,7 +157,6 @@ class AppConfig(BaseModel):
     log_level: str = "info"
     reload: bool = False
     reload_dir: str = "."
-    security: SecurityConfiguration
     max_ingestion_workers: int = 1
 
 
@@ -297,7 +296,7 @@ class StorageConfig(BaseModel):
 
 class Configuration(BaseModel):
     app: AppConfig
-
+    security: SecurityConfiguration
     input_processors: List[ProcessorConfig]
     output_processors: Optional[List[ProcessorConfig]] = None
     content_storage: ContentStorageConfig = Field(..., description="Content Storage configuration")

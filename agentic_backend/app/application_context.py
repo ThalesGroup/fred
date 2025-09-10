@@ -500,12 +500,12 @@ class ApplicationContext:
         if self._outbound_auth is not None:
             return self._outbound_auth
 
-        sec = self.configuration.app.security
+        sec = self.configuration.security.m2m
         if not sec.enabled:
             self._outbound_auth = OutboundAuth(auth=NoAuth(), refresh=None)
             return self._outbound_auth
 
-        keycloak_base, realm = split_realm_url(sec.keycloak_url)
+        keycloak_base, realm = split_realm_url(str(sec.realm_url))
         client_id = sec.client_id
         try:
             client_secret = os.environ.get("KEYCLOAK_AGENTIC_CLIENT_SECRET")
@@ -533,7 +533,7 @@ class ApplicationContext:
         Does NOT print secrets; only presence/masked hints.
         """
         cfg = self.configuration
-        sec = cfg.app.security
+        sec = cfg.security.user
 
         logger.info("🔧 Agentic configuration summary")
         logger.info("────────────────────────────────────────────────────────────────")
@@ -617,10 +617,10 @@ class ApplicationContext:
         logger.info("  🔒 Outbound security (Agentic → Knwoledge/Third Party):")
         logger.info("     • enabled: %s", sec.enabled)
         logger.info("     • client_id: %s", sec.client_id or "<unset>")
-        logger.info("     • keycloak_url: %s", sec.keycloak_url or "<unset>")
+        logger.info("     • keycloak_url: %s", sec.realm_url or "<unset>")
         # realm parsing
         try:
-            base, realm = split_realm_url(sec.keycloak_url)
+            base, realm = split_realm_url(str(sec.realm_url))
             logger.info("     • realm: %s  (base=%s)", realm, base)
         except Exception as e:
             logger.error(

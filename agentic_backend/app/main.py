@@ -41,7 +41,7 @@ from app.core.prompts.controller import PromptController
 from dotenv import load_dotenv
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fred_core import initialize_keycloak, register_exception_handlers
+from fred_core import initialize_user_security, register_exception_handlers
 from rich.logging import RichHandler
 
 
@@ -50,6 +50,11 @@ from rich.logging import RichHandler
 # -----------------------
 
 logger = logging.getLogger(__name__)
+
+
+def _norm_origin(o) -> str:
+    # Ensure exact match with browser's Origin header (no trailing slash)
+    return str(o).rstrip("/")
 
 
 def configure_logging(log_level: str):
@@ -86,7 +91,6 @@ def create_app() -> FastAPI:
 
     ApplicationContext(configuration)
 
-    initialize_keycloak(configuration.app.security)
     agent_manager = AgentManager(configuration, get_agent_store())
     session_orchestrator = SessionOrchestrator(get_session_store(), agent_manager)
 
@@ -115,13 +119,19 @@ def create_app() -> FastAPI:
 
     # Register exception handlers
     register_exception_handlers(app)
-
+    allowed_origins = list(
+        {_norm_origin(o) for o in configuration.security.user.authorized_origins}
+    )
+    logger.info("[CORS] allow_origins=%s", allowed_origins)
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=configuration.app.security.authorized_origins,
+        allow_origins=allowed_origins,
         allow_methods=["GET", "POST", "PUT", "DELETE"],
         allow_headers=["Content-Type", "Authorization"],
     )
+
+    initialize_user_security(configuration.security.user)
+
     router = APIRouter(prefix=base_url)
     # Register controllers
     FeedbackController(router)

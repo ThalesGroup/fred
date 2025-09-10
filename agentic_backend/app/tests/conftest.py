@@ -16,6 +16,7 @@
 
 
 import pytest
+from pydantic import AnyHttpUrl, AnyUrl
 from fastapi.testclient import TestClient
 from fastapi import FastAPI, APIRouter
 
@@ -34,17 +35,33 @@ from app.common.structures import (
 )
 from app.application_context import ApplicationContext
 from fred_core import (
-    SecurityConfiguration,
     DuckdbStoreConfig,
     PostgresStoreConfig,
     OpenSearchStoreConfig,
+    SecurityConfiguration,
+    M2MSecurity,
+    UserSecurity,
 )
 
 
 @pytest.fixture(scope="session")
 def minimal_generalist_config() -> Configuration:
     duckdb_store = DuckdbStoreConfig(type="duckdb", duckdb_path="/tmp/test-duckdb.db")
-
+    fake_security_config = SecurityConfiguration(
+        m2m=M2MSecurity(
+            enabled=False,
+            realm_url=AnyUrl("http://localhost:8080/realms/fake-m2m-realm"),
+            client_id="fake-m2m-client",
+            audience="fake-audience"
+        ),
+        user=UserSecurity(
+            enabled=False,
+            realm_url=AnyUrl("http://localhost:8080/realms/fake-user-realm"),
+            client_id="fake-user-client",
+            authorized_origins=[AnyHttpUrl("http://localhost:5173")]
+        )
+    )
+ 
     return Configuration(
         app=AppConfig(
             base_url="/agentic/v1",
@@ -53,25 +70,14 @@ def minimal_generalist_config() -> Configuration:
             log_level="debug",
             reload=False,
             reload_dir=".",
-            security=SecurityConfiguration(
-                enabled=False,
-                keycloak_url="",
-                client_id="test-client",
-                authorized_origins=[],
-            ),
         ),
         frontend_settings=FrontendSettings(
             feature_flags=FrontendFlags(
                 enableK8Features=False, enableElecWarfare=False
             ),
             properties=Properties(logoName="fred"),
-            security=SecurityConfiguration(
-                enabled=False,
-                keycloak_url="",
-                client_id="test-client",
-                authorized_origins=[],
-            ),
         ),
+        security=fake_security_config,
         ai=AIConfig(
             knowledge_flow_url="http://localhost:8000/agentic/v1",
             timeout=TimeoutSettings(connect=5, read=15),

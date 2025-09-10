@@ -13,20 +13,23 @@ from fastapi import (
     Depends,
     File,
     Form,
+    HTTPException,
     UploadFile,
     WebSocket,
     WebSocketDisconnect,
 )
 from fred_core import (
-    TODO_PASS_REAL_USER,
     KeycloakUser,
     VectorSearchHit,
     get_current_user,
+    decode_jwt,
+    UserSecurity,
 )
 from pydantic import BaseModel, Field
 from starlette.websockets import WebSocketState
 
 from app.application_context import get_configuration
+from app.common.structures import FrontendSettings
 from app.common.utils import log_exception
 from app.core.agents.agent_manager import AgentManager
 from app.core.agents.agentic_flow import AgenticFlow
@@ -78,6 +81,11 @@ class EchoEnvelope(BaseModel):
     payload: EchoPayload = Field(..., description="Schema payload being echoed")
 
 
+class FrontendConfigDTO(BaseModel):
+    frontend_settings: FrontendSettings
+    user_auth: UserSecurity
+
+
 class ChatbotController:
     """
     Why this controller stays thin:
@@ -109,8 +117,17 @@ class ChatbotController:
             summary="Get the frontend dynamic configuration",
             tags=fastapi_tags,
         )
-        def get_frontend_config():
-            return get_configuration().frontend_settings
+        def get_frontend_config() -> FrontendConfigDTO:
+            cfg = get_configuration()
+            return FrontendConfigDTO(
+                frontend_settings=cfg.frontend_settings,
+                user_auth=UserSecurity(
+                    enabled=cfg.security.user.enabled,
+                    realm_url=cfg.security.user.realm_url,
+                    client_id=cfg.security.user.client_id,
+                    authorized_origins=cfg.security.user.authorized_origins,
+                ),
+            )
 
         @app.get(
             "/chatbot/agenticflows",
@@ -134,6 +151,22 @@ class ChatbotController:
               - All heavy lifting is in SessionOrchestrator.chat_ask_websocket()
             """
             await websocket.accept()
+            auth = websocket.headers.get("authorization") or ""
+            token = (
+                auth.split(" ", 1)[1]
+                if auth.lower().startswith("bearer ")
+                else websocket.query_params.get("token")
+            )
+            if not token:
+                await websocket.close(code=4401)
+                return
+
+            try:
+                user = decode_jwt(token)  # KeycloakUser avec sub en uid²
+            except HTTPException:
+                await websocket.close(code=4401)
+                return
+
             try:
                 while True:
                     client_request = None
@@ -153,9 +186,8 @@ class ChatbotController:
                             session,
                             final_messages,
                         ) = await self.session_orchestrator.chat_ask_websocket(
-                            user=TODO_PASS_REAL_USER,  # TODO: add authentication to WS and pass real user here
+                            user=user,
                             callback=ws_callback,
-                            user_id=ask.user_id,
                             session_id=ask.session_id or "unknown-session",
                             message=ask.message,
                             agent_name=ask.agent_name,

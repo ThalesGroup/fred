@@ -118,13 +118,18 @@ applications:
           keycloak_url: "http://app-keycloak:8080/realms/app"
           authorized_origins:
             -  "http://localhost:5173"
-      frontend_settings:
-        security:
-          enabled: false
+      security:
+        m2m:
+          enabled: true
+          client_id: "agentic"
+          realm_url: "http://app-keycloak:8080/realms/app"
+        user:
+          enabled: true
           client_id: "app"
-          keycloak_url: "http://app-keycloak:8080/realms/app"
+          realm_url: "http://app-keycloak:8080/realms/app"
           authorized_origins:
-            -  "http://localhost:5173"
+            - "http://localhost:5173"
+      frontend_settings:
         feature_flags:
           # If true activate the backend and frontend modules in charge of K8
           # and frugality monitoring
@@ -454,17 +459,17 @@ applications:
         log_level: "info"
         reload: false
         reload_dir: "."
-        security:
-          enabled: false
-          keycloak_url: "http://app-keycloak:8080/realms/app"
+      security:
+        m2m:
+          enabled: true
+          client_id: "knowledge-flow"
+          realm_url: "http://app-keycloak:8080/realms/app"
+        user:
+          enabled: true
           client_id: "app"
+          realm_url: "http://app-keycloak:8080/realms/app"
           authorized_origins:
             - "http://localhost:5173"
-      security:
-        enabled: false
-        keycloak_url: "http://fred-keycloak:8080/realms/fred"
-        authorized_origins:
-          - "http://localhost:5173"
       scheduler:
         enabled: true
         backend: "temporal"

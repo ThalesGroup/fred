@@ -12,7 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from pydantic import BaseModel
+from pydantic import BaseModel, AnyUrl, AnyHttpUrl
+from typing import List
 
 
 class KeycloakUser(BaseModel):
@@ -24,8 +25,25 @@ class KeycloakUser(BaseModel):
     email: str | None = None
 
 
-class SecurityConfiguration(BaseModel):
-    enabled: bool = False
-    keycloak_url: str
+class M2MSecurity(BaseModel):
+    """Configuration for machine-to-machine authentication."""
+
+    enabled: bool = True
+    realm_url: AnyUrl
     client_id: str
-    authorized_origins: list[str] = ["http://localhost:5173"]
+    audience: str | None = None
+    # client_secret from ENV. WHY: never commit secrets to config files.
+
+
+class UserSecurity(BaseModel):
+    """Configuration for user authentication."""
+
+    enabled: bool = True
+    realm_url: AnyUrl
+    client_id: str
+    authorized_origins: List[AnyHttpUrl] = []
+
+
+class SecurityConfiguration(BaseModel):
+    m2m: M2MSecurity
+    user: UserSecurity

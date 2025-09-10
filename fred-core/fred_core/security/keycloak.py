@@ -25,7 +25,7 @@ from fastapi import HTTPException, Security
 from fastapi.security import OAuth2PasswordBearer
 from jwt import PyJWKClient
 
-from fred_core.security.structure import SecurityConfiguration, KeycloakUser
+from fred_core.security.structure import KeycloakUser, UserSecurity
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +72,7 @@ def _iso(ts: int | float | None) -> str | None:
         return None
 
 
-def initialize_keycloak(config: SecurityConfiguration):
+def initialize_user_security(config: UserSecurity):
     """
     Initialize the Keycloak authentication settings from the given configuration.
     """
@@ -84,7 +84,7 @@ def initialize_keycloak(config: SecurityConfiguration):
         _JWKS_CLIENT
 
     KEYCLOAK_ENABLED = config.enabled
-    KEYCLOAK_URL = config.keycloak_url.rstrip("/")
+    KEYCLOAK_URL = str(config.realm_url).rstrip("/")
     KEYCLOAK_CLIENT_ID = config.client_id
     KEYCLOAK_JWKS_URL = f"{KEYCLOAK_URL}/protocol/openid-connect/certs"
     _JWKS_CLIENT = None  # reset; will lazy-create on first decode

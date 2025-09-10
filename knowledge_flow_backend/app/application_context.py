@@ -714,17 +714,17 @@ class ApplicationContext:
         logger.info(f"     ↳ {name} set: {'✅' if value else '❌'}")
 
     def _log_config_summary(self):
-        sec = self.configuration.app.security
+        sec = self.configuration.security.user
 
         logger.info("  🔒 security (Knowledge → Knowledge/Third Party):")
         logger.info("     • enabled: %s", sec.enabled)
         logger.info("     • client_id: %s", sec.client_id or "<unset>")
-        logger.info("     • keycloak_url: %s", sec.keycloak_url or "<unset>")
+        logger.info("     • keycloak_url: %s", sec.realm_url or "<unset>")
         # realm parsing
 
         if sec.enabled:
             try:
-                base, realm = split_realm_url(sec.keycloak_url)
+                base, realm = split_realm_url(str(sec.realm_url))
                 logger.info("     • realm: %s  (base=%s)", realm, base)
             except Exception as e:
                 logger.error("     ❌ keycloak_url invalid (expected …/realms/<realm>): %s", e)
