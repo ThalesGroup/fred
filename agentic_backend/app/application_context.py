@@ -547,7 +547,6 @@ class ApplicationContext:
         Does NOT print secrets; only presence/masked hints.
         """
         cfg = self.configuration
-        sec = cfg.security.user
 
         logger.info("🔧 Agentic configuration summary")
         logger.info("────────────────────────────────────────────────────────────────")
@@ -628,28 +627,45 @@ class ApplicationContext:
             )
 
         # Inbound security (UI -> Agentic)
-        logger.info("  🔒 Outbound security (Agentic → Knwoledge/Third Party):")
-        logger.info("     • enabled: %s", sec.enabled)
-        logger.info("     • client_id: %s", sec.client_id or "<unset>")
-        logger.info("     • keycloak_url: %s", sec.realm_url or "<unset>")
-        # realm parsing
+        user_sec = cfg.security.user
+        m2m_sec = cfg.security.m2m
+        
+        logger.info("  🔒 Inbound security (UI → Agentic):")
+        logger.info("     • enabled: %s", user_sec.enabled)
+        logger.info("     • client_id: %s", user_sec.client_id or "<unset>")
+        logger.info("     • keycloak_url: %s", user_sec.realm_url or "<unset>")
+        
+        # realm parsing for user auth
         try:
-            base, realm = split_realm_url(str(sec.realm_url))
+            base, realm = split_realm_url(str(user_sec.realm_url))
             logger.info("     • realm: %s  (base=%s)", realm, base)
         except Exception as e:
             logger.error(
                 "     ❌ keycloak_url invalid (expected …/realms/<realm>): %s", e
             )
 
-        # Heuristic warnings on client_id naming
-        if sec.client_id == "app":
+        # Heuristic warnings on client_id naming for user auth
+        if user_sec.client_id != "app":
             logger.warning(
-                "     ⚠️ client_id is 'app'. Reserve 'app' for the UI client; "
-                "Agentic should usually use a dedicated client like 'agentic'."
+                "     ⚠️ client_id is '%s'. UI client should typically use 'app'.",
+                user_sec.client_id
             )
 
-        # Outbound S2S (Agentic → Knowledge Flow)
-        logger.info("  🔑 Outbound S2S (Agentic → Knowledge Flow):")
+        # Outbound M2M security (Agentic → Knowledge Flow)
+        logger.info("  🔑 Outbound M2M security (Agentic → Knowledge Flow):")
+        logger.info("     • enabled: %s", m2m_sec.enabled)
+        logger.info("     • client_id: %s", m2m_sec.client_id or "<unset>")
+        logger.info("     • keycloak_url: %s", m2m_sec.realm_url or "<unset>")
+        
+        # realm parsing for m2m
+        try:
+            base, realm = split_realm_url(str(m2m_sec.realm_url))
+            logger.info("     • realm: %s  (base=%s)", realm, base)
+        except Exception as e:
+            logger.error(
+                "     ❌ keycloak_url invalid (expected …/realms/<realm>): %s", e
+            )
+        
         secret = os.getenv("KEYCLOAK_AGENTIC_CLIENT_SECRET", "")
         if secret:
             logger.info(
@@ -661,19 +677,19 @@ class ApplicationContext:
                 "(NoAuth). Knowledge Flow will likely return 401."
             )
 
-        # Relationship between inbound 'enabled' and outbound needs
-        if not sec.enabled and secret:
+        # Relationship between m2m 'enabled' and outbound needs
+        if not m2m_sec.enabled and secret:
             logger.info(
-                "     • Note: inbound security is disabled, but S2S secret is present. "
+                "     • Note: m2m security is disabled, but S2S secret is present. "
                 "Outbound calls will still include a bearer if your code enables it."
             )
 
-        # Final tips / quick misconfig guards
-        if secret and sec.client_id and sec.client_id != "agentic":
+        # Final tips / quick misconfig guards for m2m
+        if secret and m2m_sec.client_id and m2m_sec.client_id != "agentic":
             logger.warning(
-                "     ⚠️ Secret is present but client_id is '%s' (expected 'agentic' for S2S). "
+                "     ⚠️ Secret is present but client_id is '%s' (expected 'agentic' for M2M). "
                 "Ensure client_id matches the secret you provisioned.",
-                sec.client_id,
+                m2m_sec.client_id,
             )
 
         logger.info("────────────────────────────────────────────────────────────────")
