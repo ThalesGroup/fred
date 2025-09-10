@@ -47,7 +47,7 @@ def get_model(model_config: ModelConfiguration | None):
         An instance of a Chat model.
     """
 
-    assert model_config is not None, ("Model configuration should not be `None` here")
+    assert model_config is not None, "Model configuration should not be `None` here"
     provider = model_config.provider
 
     if not provider:

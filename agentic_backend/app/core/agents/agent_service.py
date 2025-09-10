@@ -12,13 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from fastapi.responses import JSONResponse
+from fred_core import Action, KeycloakUser, Resource, authorize
+
+from app.application_context import get_agent_store, get_app_context
 from app.common.structures import AgentSettings, ModelConfiguration
 from app.common.utils import get_class_path
 from app.core.agents.agent_manager import AgentManager
-from fastapi.responses import JSONResponse
 from app.core.agents.mcp_agent import MCPAgent
 from app.core.agents.structures import CreateAgentRequest, MCPAgentRequest
-from app.application_context import get_agent_store, get_app_context
 
 
 # --- Domain Exceptions ---
@@ -31,7 +33,10 @@ class AgentService:
         self.store = get_agent_store()
         self.agent_manager = agent_manager
 
-    async def build_and_register_mcp_agent(self, req: MCPAgentRequest):
+    @authorize(action=Action.CREATE, resource=Resource.AGENTS)
+    async def build_and_register_mcp_agent(
+        self, user: KeycloakUser, req: MCPAgentRequest
+    ):
         """
         Builds, registers, and stores the MCP agent, including updating app context and saving to DuckDB.
         """
@@ -68,7 +73,10 @@ class AgentService:
 
         return JSONResponse(content=agent_instance.to_dict())
 
-    async def update_agent(self, name: str, req: CreateAgentRequest):
+    @authorize(action=Action.UPDATE, resource=Resource.AGENTS)
+    async def update_agent(
+        self, user: KeycloakUser, name: str, req: CreateAgentRequest
+    ):
         if name != req.name:
             raise ValueError("Agent name in URL and body must match.")
 
@@ -77,9 +85,10 @@ class AgentService:
         self.store.delete(name)
 
         # Recreate it using the same logic as in create
-        return await self.build_and_register_mcp_agent(req)
+        return await self.build_and_register_mcp_agent(user, req)
 
-    def delete_agent(self, name: str):
+    @authorize(action=Action.DELETE, resource=Resource.AGENTS)
+    def delete_agent(self, user: KeycloakUser, name: str):
         # Unregister from memory
         self.agent_manager.unregister_agent(name)
 

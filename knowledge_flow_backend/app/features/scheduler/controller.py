@@ -15,12 +15,11 @@
 import logging
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException
-from fred_core import KeycloakUser, get_current_user, raise_internal_error
+from fastapi import APIRouter, Depends
+from fred_core import Action, KeycloakUser, Resource, authorize_or_raise, get_current_user, raise_internal_error
 from temporalio.client import Client
 
 from app.application_context import ApplicationContext
-from app.common.utils import log_exception
 from app.features.scheduler.activities import create_pull_file_metadata, get_push_file_metadata, input_process, load_pull_file, load_push_file, output_process
 from app.features.scheduler.structure import PipelineDefinition, ProcessDocumentsRequest
 from app.features.scheduler.workflow import Process
@@ -57,7 +56,9 @@ class SchedulerController:
             summary="Submit processing for push/pull files via Temporal",
             description="Accepts a list of files (document_uid or external_path) and launches the appropriate ingestion workflow",
         )
-        async def process_documents(req: ProcessDocumentsRequest, _: KeycloakUser = Depends(get_current_user)):
+        async def process_documents(req: ProcessDocumentsRequest, user: KeycloakUser = Depends(get_current_user)):
+            authorize_or_raise(user, Action.PROCESS, Resource.DOCUMENTS)
+
             logger.info(f"Processing {len(req.files)} file(s) via Temporal pipeline")
 
             try:
@@ -77,33 +78,30 @@ class SchedulerController:
             summary="Submit processing for push/pull files via Temporal",
             description="Accepts a list of files (document_uid or external_path) and launches the appropriate ingestion workflow",
         )
-        async def schedule_documents(req: ProcessDocumentsRequest, _: KeycloakUser = Depends(get_current_user)):
+        async def schedule_documents(req: ProcessDocumentsRequest, user: KeycloakUser = Depends(get_current_user)):
+            authorize_or_raise(user, Action.PROCESS, Resource.DOCUMENTS)
+
             logger.info(f"Processing {len(req.files)} file(s) via Temporal pipeline")
 
-            try:
-                # You may batch files per-source_tag if needed
-                definition = PipelineDefinition(
-                    name=req.pipeline_name,
-                    files=req.files,
-                )
+            # You may batch files per-source_tag if needed
+            definition = PipelineDefinition(
+                name=req.pipeline_name,
+                files=req.files,
+            )
 
-                client = await Client.connect(
-                    target_host=self.config.host,
-                    namespace=self.config.namespace,
-                )
-                workflow_id = f"{self.config.workflow_prefix}-{uuid4()}"
-                handle = await client.start_workflow(
-                    Process.run,
-                    definition,
-                    id=workflow_id,
-                    task_queue=self.config.task_queue,
-                )
-                logger.info(f"🛠️ started temporal workflow={workflow_id}")
-                return {
-                    "workflow_id": handle.id,
-                    "run_id": handle.first_execution_run_id,
-                }
-
-            except Exception as e:
-                log_exception(e, "Failed to submit process-documents workflow")
-                raise HTTPException(status_code=500, detail="Workflow submission failed")
+            client = await Client.connect(
+                target_host=self.config.host,
+                namespace=self.config.namespace,
+            )
+            workflow_id = f"{self.config.workflow_prefix}-{uuid4()}"
+            handle = await client.start_workflow(
+                Process.run,
+                definition,
+                id=workflow_id,
+                task_queue=self.config.task_queue,
+            )
+            logger.info(f"🛠️ started temporal workflow={workflow_id}")
+            return {
+                "workflow_id": handle.id,
+                "run_id": handle.first_execution_run_id,
+            }

@@ -50,13 +50,9 @@ class FeedbackController:
     def __init__(self, router: APIRouter):
         self.service = FeedbackService(get_feedback_store())
 
-        def handle_exception(e: Exception) -> HTTPException:
-            logger.error(f"[FEEDBACK] Internal error: {e}", exc_info=True)
-            return HTTPException(status_code=500, detail="Internal server error")
+        self._register_routes(router)
 
-        self._register_routes(router, handle_exception)
-
-    def _register_routes(self, router: APIRouter, handle_exception):
+    def _register_routes(self, router: APIRouter):
         @router.post(
             "/chatbot/feedback",
             tags=["Feedback"],
@@ -67,21 +63,18 @@ class FeedbackController:
             payload: FeedbackPayload,
             user: KeycloakUser = Depends(get_current_user),
         ):
-            try:
-                feedback_record = FeedbackRecord(
-                    id=str(uuid.uuid4()),
-                    session_id=payload.session_id,
-                    message_id=payload.message_id,
-                    agent_name=payload.agent_name,
-                    rating=payload.rating,
-                    comment=payload.comment,
-                    created_at=datetime.utcnow(),
-                    user_id=user.uid,
-                )
-                self.service.add_feedback(feedback_record)
-                return  # implicit 204
-            except Exception as e:
-                raise handle_exception(e)
+            feedback_record = FeedbackRecord(
+                id=str(uuid.uuid4()),
+                session_id=payload.session_id,
+                message_id=payload.message_id,
+                agent_name=payload.agent_name,
+                rating=payload.rating,
+                comment=payload.comment,
+                created_at=datetime.utcnow(),
+                user_id=user.uid,
+            )
+            self.service.add_feedback(user, feedback_record)
+            return  # implicit 204
 
         @router.get(
             "/chatbot/feedback",
@@ -89,11 +82,8 @@ class FeedbackController:
             tags=["Feedback"],
             summary="List all feedback entries",
         )
-        async def get_feedback(_: KeycloakUser = Depends(get_current_user)):
-            try:
-                return self.service.get_feedback()
-            except Exception as e:
-                raise handle_exception(e)
+        async def get_feedback(user: KeycloakUser = Depends(get_current_user)):
+            return self.service.get_feedback(user)
 
         @router.delete(
             "/chatbot/feedback/{feedback_id}",
@@ -102,14 +92,9 @@ class FeedbackController:
             summary="Delete a feedback entry by ID",
         )
         async def delete_feedback(
-            feedback_id: str, _: KeycloakUser = Depends(get_current_user)
+            feedback_id: str, user: KeycloakUser = Depends(get_current_user)
         ):
-            try:
-                deleted = self.service.delete_feedback(feedback_id)
-                if not deleted:
-                    raise HTTPException(
-                        status_code=404, detail="Feedback entry not found"
-                    )
-                return  # implicit 204
-            except Exception as e:
-                raise handle_exception(e)
+            deleted = self.service.delete_feedback(user, feedback_id)
+            if not deleted:
+                raise HTTPException(status_code=404, detail="Feedback entry not found")
+            return  # implicit 204

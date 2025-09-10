@@ -25,13 +25,17 @@ from fastapi import HTTPException, Security, Request, Depends
 from fastapi.security import OAuth2PasswordBearer
 from jwt import PyJWKClient
 
-from fred_core.security.structure import SecurityConfiguration, KeycloakUser
+from fred_core.security.structure import KeycloakUser, UserSecurity
 
 logger = logging.getLogger(__name__)
 
 # --- runtime toggles ------------------
 STRICT_ISSUER = os.getenv("FRED_STRICT_ISSUER", "false").lower() in ("1", "true", "yes")
-STRICT_AUDIENCE = os.getenv("FRED_STRICT_AUDIENCE", "false").lower() in ("1", "true", "yes")
+STRICT_AUDIENCE = os.getenv("FRED_STRICT_AUDIENCE", "false").lower() in (
+    "1",
+    "true",
+    "yes",
+)
 CLOCK_SKEW_SECONDS = int(os.getenv("FRED_JWT_CLOCK_SKEW", "0"))  # optional leeway
 
 # Initialize global variables (to be set later)
@@ -68,14 +72,19 @@ def _iso(ts: int | float | None) -> str | None:
         return None
 
 
-def initialize_keycloak(config: SecurityConfiguration):
+def initialize_user_security(config: UserSecurity):
     """
     Initialize the Keycloak authentication settings from the given configuration.
     """
-    global KEYCLOAK_ENABLED, KEYCLOAK_URL, KEYCLOAK_JWKS_URL, KEYCLOAK_CLIENT_ID, _JWKS_CLIENT
+    global \
+        KEYCLOAK_ENABLED, \
+        KEYCLOAK_URL, \
+        KEYCLOAK_JWKS_URL, \
+        KEYCLOAK_CLIENT_ID, \
+        _JWKS_CLIENT
 
     KEYCLOAK_ENABLED = config.enabled
-    KEYCLOAK_URL = config.keycloak_url.rstrip("/")
+    KEYCLOAK_URL = str(config.realm_url).rstrip("/")
     KEYCLOAK_CLIENT_ID = config.client_id
     KEYCLOAK_JWKS_URL = f"{KEYCLOAK_URL}/protocol/openid-connect/certs"
     _JWKS_CLIENT = None  # reset; will lazy-create on first decode
@@ -105,7 +114,9 @@ def split_realm_url(realm_url: str) -> tuple[str, str]:
     marker = "/realms/"
     idx = u.find(marker)
     if idx == -1:
-        raise ValueError(f"Invalid keycloak_url (expected .../realms/<realm>): {realm_url}")
+        raise ValueError(
+            f"Invalid keycloak_url (expected .../realms/<realm>): {realm_url}"
+        )
     base = u[:idx]
     realm = u[idx + len(marker) :].split("/", 1)[0]
     return base, realm
@@ -113,6 +124,7 @@ def split_realm_url(realm_url: str) -> tuple[str, str]:
 
 # OAuth2 Password Bearer
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token", auto_error=False)
+
 
 def _get_jwks_client() -> PyJWKClient:
     global _JWKS_CLIENT
@@ -126,13 +138,16 @@ def decode_jwt(token: str) -> KeycloakUser:
     """Decodes a JWT token using PyJWT and retrieves user information with rich diagnostics."""
     if not KEYCLOAK_ENABLED:
         logger.warning("Authentication is DISABLED. Returning a mock user.")
-        return KeycloakUser(uid="admin", username="admin", roles=["admin"], email="dev@localhost")
+        return KeycloakUser(
+            uid="admin", username="admin", roles=["admin"], email="dev@localhost"
+        )
 
     # quick header/claim peek for logs (never log raw token)
     header, payload_peek = _peek_header_and_claims(token)
     kid = header.get("kid")
     alg = header.get("alg")
-    logger.info("JWT peek: kid=%s alg=%s iss=%s aud=%s azp=%s sub=%s exp=%s(%s) nbf=%s(%s)",
+    logger.info(
+        "JWT peek: kid=%s alg=%s iss=%s aud=%s azp=%s sub=%s exp=%s(%s) nbf=%s(%s)",
         kid,
         alg,
         payload_peek.get("iss"),
@@ -142,21 +157,27 @@ def decode_jwt(token: str) -> KeycloakUser:
         payload_peek.get("exp"),
         _iso(payload_peek.get("exp")),
         payload_peek.get("nbf"),
-        _iso(payload_peek.get("nbf"))
+        _iso(payload_peek.get("nbf")),
     )
 
     # Soft checks (warn-only unless STRICT_* enabled)
     iss = payload_peek.get("iss")
     aud = payload_peek.get("aud")
     if iss and KEYCLOAK_URL and not str(iss).startswith(KEYCLOAK_URL):
-        logger.warning("JWT issuer mismatch (soft): iss=%s expected_prefix=%s", iss, KEYCLOAK_URL)
+        logger.warning(
+            "JWT issuer mismatch (soft): iss=%s expected_prefix=%s", iss, KEYCLOAK_URL
+        )
         if STRICT_ISSUER:
             raise HTTPException(status_code=401, detail="Invalid token issuer")
 
     if KEYCLOAK_CLIENT_ID:
         aud_list = aud if isinstance(aud, list) else [aud] if aud else []
         if KEYCLOAK_CLIENT_ID not in aud_list:
-            logger.warning("JWT audience does not include client_id (soft): aud=%s client_id=%s", aud_list, KEYCLOAK_CLIENT_ID)
+            logger.warning(
+                "JWT audience does not include client_id (soft): aud=%s client_id=%s",
+                aud_list,
+                KEYCLOAK_CLIENT_ID,
+            )
             if STRICT_AUDIENCE:
                 raise HTTPException(status_code=401, detail="Invalid token audience")
 
@@ -181,7 +202,10 @@ def decode_jwt(token: str) -> KeycloakUser:
             token,
             signing_key,
             algorithms=["RS256"],
-            options={"verify_exp": True, "verify_aud": False},  # we do soft aud check above
+            options={
+                "verify_exp": True,
+                "verify_aud": False,
+            },  # we do soft aud check above
             leeway=CLOCK_SKEW_SECONDS,
         )
         logger.debug("JWT token successfully decoded")
@@ -190,7 +214,9 @@ def decode_jwt(token: str) -> KeycloakUser:
         raise HTTPException(
             status_code=401,
             detail="Token has expired",
-            headers={"WWW-Authenticate": "Bearer error='invalid_token', error_description='token expired'"},
+            headers={
+                "WWW-Authenticate": "Bearer error='invalid_token', error_description='token expired'"
+            },
         )
     except jwt.InvalidTokenError as e:
         logger.warning("Invalid JWT token: %s", e)
@@ -229,7 +255,9 @@ def get_current_user(token: str = Security(oauth2_scheme)) -> KeycloakUser:
     """Fetches the current user from Keycloak token with robust diagnostics."""
     if not KEYCLOAK_ENABLED:
         logger.info("Authentication is DISABLED. Returning a mock user.")
-        return KeycloakUser(uid="admin", username="admin", roles=["admin"], email="admin@mail.com")
+        return KeycloakUser(
+            uid="admin", username="admin", roles=["admin"], email="admin@mail.com"
+        )
 
     if not token:
         logger.warning("No Bearer token provided on secured endpoint")

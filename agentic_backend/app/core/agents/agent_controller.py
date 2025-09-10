@@ -22,14 +22,14 @@ from app.core.agents.agent_service import AgentAlreadyExistsException, AgentServ
 from app.core.agents.structures import CreateAgentRequest
 
 
-def handle_exception(e: Exception) -> HTTPException:
+def handle_exception(e: Exception) -> HTTPException | Exception:
     if isinstance(e, AgentAlreadyExistsException):
         return HTTPException(status_code=409, detail=str(e))
     if isinstance(e, MCPClientConnectionException):
         return HTTPException(
             status_code=502, detail=f"MCP connection failed: {e.reason}"
         )
-    return HTTPException(status_code=500, detail="Internal server error")
+    return e
 
 
 class AgentController:
@@ -38,47 +38,48 @@ class AgentController:
     """
 
     def __init__(self, app: APIRouter, agent_manager: AgentManager):
-        fastapi_tags = ["Agents"]
         self.service = AgentService(agent_manager=agent_manager)
 
         @app.post(
             "/agents/create",
-            tags=fastapi_tags,
+            tags=["Agents"],
             summary="Create a Dynamic Agent that can access MCP tools",
         )
         async def create_agent(
-            req: CreateAgentRequest, _: KeycloakUser = Depends(get_current_user)
+            req: CreateAgentRequest, user: KeycloakUser = Depends(get_current_user)
         ):
             try:
-                return await self.service.build_and_register_mcp_agent(req)
+                return await self.service.build_and_register_mcp_agent(user, req)
             except Exception as e:
                 log_exception(e)
                 raise handle_exception(e)
 
         @app.put(
             "/agents/{name}",
-            tags=fastapi_tags,
+            tags=["Agents"],
             summary="Update a dynamic agent's configuration",
         )
         async def update_agent(
             name: str,
             req: CreateAgentRequest,
-            _: KeycloakUser = Depends(get_current_user),
+            user: KeycloakUser = Depends(get_current_user),
         ):
             try:
-                return await self.service.update_agent(name, req)
+                return await self.service.update_agent(user, name, req)
             except Exception as e:
                 log_exception(e)
                 raise handle_exception(e)
 
         @app.delete(
             "/agents/{name}",
-            tags=fastapi_tags,
+            tags=["Agents"],
             summary="Delete a dynamic agent by name",
         )
-        async def delete_agent(name: str, _: KeycloakUser = Depends(get_current_user)):
+        async def delete_agent(
+            name: str, user: KeycloakUser = Depends(get_current_user)
+        ):
             try:
-                return self.service.delete_agent(name)
+                return self.service.delete_agent(user, name)
             except Exception as e:
                 log_exception(e)
                 raise handle_exception(e)

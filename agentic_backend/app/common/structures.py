@@ -117,6 +117,7 @@ class AIConfig(BaseModel):
         ..., description="Number of max recursion while using the model"
     )
 
+
 class FrontendFlags(BaseModel):
     enableK8Features: bool = False
     enableElecWarfare: bool = False
@@ -129,7 +130,6 @@ class Properties(BaseModel):
 class FrontendSettings(BaseModel):
     feature_flags: FrontendFlags
     properties: Properties
-    security: SecurityConfiguration
 
 
 class AppConfig(BaseModel):
@@ -140,11 +140,11 @@ class AppConfig(BaseModel):
     log_level: str = "info"
     reload: bool = False
     reload_dir: str = "."
-    security: SecurityConfiguration
 
 
 class Configuration(BaseModel):
     app: AppConfig
+    security: SecurityConfiguration
     frontend_settings: FrontendSettings
     ai: AIConfig
     storage: StorageConfig

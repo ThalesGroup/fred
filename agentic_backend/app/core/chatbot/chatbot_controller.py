@@ -13,17 +13,26 @@ from fastapi import (
     Depends,
     File,
     Form,
+    HTTPException,
     UploadFile,
     WebSocket,
     WebSocketDisconnect,
 )
-from fred_core import KeycloakUser, VectorSearchHit, get_current_user
+from fred_core import (
+    KeycloakUser,
+    VectorSearchHit,
+    get_current_user,
+    decode_jwt,
+    UserSecurity,
+)
 from pydantic import BaseModel, Field
 from starlette.websockets import WebSocketState
 
 from app.application_context import get_configuration
+from app.common.structures import FrontendSettings
 from app.common.utils import log_exception
 from app.core.agents.agent_manager import AgentManager
+from app.core.agents.agentic_flow import AgenticFlow
 from app.core.agents.runtime_context import RuntimeContext
 from app.core.agents.structures import AgenticFlow
 from app.core.auth.user_context_helper import create_runtime_context_with_user_token
@@ -74,6 +83,11 @@ class EchoEnvelope(BaseModel):
     payload: EchoPayload = Field(..., description="Schema payload being echoed")
 
 
+class FrontendConfigDTO(BaseModel):
+    frontend_settings: FrontendSettings
+    user_auth: UserSecurity
+
+
 class ChatbotController:
     """
     Why this controller stays thin:
@@ -95,21 +109,27 @@ class ChatbotController:
         @app.post(
             "/schemas/echo",
             tags=["Schemas"],
-            summary="Echo a schema (schema anchor for codegen)",
-            response_model=EchoEnvelope,
+            summary="Ignore. Not a real endpoint.",
+            description="Ignore. This endpoint is only used to include some types (mainly one used in websocket) in the OpenAPI spec, so they can be generated as typescript types for the UI. This endpoint is not really used, this is just a code generation hack.",
         )
-        def echo_schema(
-            envelope: EchoEnvelope, _: KeycloakUser = Depends(get_current_user)
-        ) -> EchoEnvelope:
-            return envelope
+        def echo_schema(envelope: EchoEnvelope) -> None: ...
 
         @app.get(
             "/config/frontend_settings",
             summary="Get the frontend dynamic configuration",
             tags=fastapi_tags,
         )
-        def get_frontend_config():
-            return get_configuration().frontend_settings
+        def get_frontend_config() -> FrontendConfigDTO:
+            cfg = get_configuration()
+            return FrontendConfigDTO(
+                frontend_settings=cfg.frontend_settings,
+                user_auth=UserSecurity(
+                    enabled=cfg.security.user.enabled,
+                    realm_url=cfg.security.user.realm_url,
+                    client_id=cfg.security.user.client_id,
+                    authorized_origins=cfg.security.user.authorized_origins,
+                ),
+            )
 
         @app.get(
             "/chatbot/agenticflows",
@@ -120,7 +140,7 @@ class ChatbotController:
         def get_agentic_flows(
             user: KeycloakUser = Depends(get_current_user),
         ) -> List[AgenticFlow]:
-            return self.agent_manager.get_agentic_flows()
+            return self.agent_manager.get_agentic_flows(user)
 
         @app.websocket("/chatbot/query/ws")
         async def websocket_chatbot_question(websocket: WebSocket):
@@ -137,6 +157,22 @@ class ChatbotController:
             # Wait for authentication message or regular chat message
             user_token = None
             
+            auth = websocket.headers.get("authorization") or ""
+            token = (
+                auth.split(" ", 1)[1]
+                if auth.lower().startswith("bearer ")
+                else websocket.query_params.get("token")
+            )
+            if not token:
+                await websocket.close(code=4401)
+                return
+
+            try:
+                user = decode_jwt(token)  # KeycloakUser avec sub en uid²
+            except HTTPException:
+                await websocket.close(code=4401)
+                return
+
             try:
                 while True:
                     client_request = None
@@ -177,8 +213,8 @@ class ChatbotController:
                             session,
                             final_messages,
                         ) = await self.session_orchestrator.chat_ask_websocket(
+                            user=user,
                             callback=ws_callback,
-                            user_id=ask.user_id,
                             session_id=ask.session_id or "unknown-session",
                             message=ask.message,
                             agent_name=ask.agent_name,
@@ -235,7 +271,7 @@ class ChatbotController:
             user: KeycloakUser = Depends(get_current_user),
         ) -> list[SessionWithFiles]:
             # Orchestrator owns session lifecycle surface
-            return self.session_orchestrator.get_sessions(user.uid)
+            return self.session_orchestrator.get_sessions(user)
 
         @app.get(
             "/chatbot/session/{session_id}/history",
@@ -247,7 +283,7 @@ class ChatbotController:
         def get_session_history(
             session_id: str, user: KeycloakUser = Depends(get_current_user)
         ) -> list[ChatMessage]:
-            return self.session_orchestrator.get_session_history(session_id, user.uid)
+            return self.session_orchestrator.get_session_history(session_id, user)
 
         @app.delete(
             "/chatbot/session/{session_id}",
@@ -258,7 +294,7 @@ class ChatbotController:
         def delete_session(
             session_id: str, user: KeycloakUser = Depends(get_current_user)
         ) -> bool:
-            self.session_orchestrator.delete_session(session_id, user.uid)
+            self.session_orchestrator.delete_session(session_id, user)
             return True
 
         @app.post(
@@ -268,12 +304,11 @@ class ChatbotController:
             tags=fastapi_tags,
         )
         async def upload_file(
-            user_id: str = Form(...),
             session_id: str = Form(...),
             agent_name: str = Form(...),
             file: UploadFile = File(...),
-            _: KeycloakUser = Depends(get_current_user),
+            user: KeycloakUser = Depends(get_current_user),
         ) -> dict:
             return await self.session_orchestrator.upload_file(
-                user_id, session_id, agent_name, file
+                user, session_id, agent_name, file
             )

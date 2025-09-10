@@ -42,15 +42,9 @@ applications:
           port: 80
           targetPort: 8000
     ingress:
-      enabled: true
-      hosts:
-        - host: agentic-backend.dev.fred.thalesgroup.com
-          paths:
-            - path: /
-              pathType: Prefix
-              service:
-                name: agentic-backend
-                port: 80
+      enabled: false
+      className: ""
+      hosts: []
     volumeMounts:
       - name: agentic-backend-vol
         mountPath: /app/config/configuration.yaml
@@ -124,13 +118,18 @@ applications:
           keycloak_url: "http://app-keycloak:8080/realms/app"
           authorized_origins:
             -  "http://localhost:5173"
-      frontend_settings:
-        security:
-          enabled: false
+      security:
+        m2m:
+          enabled: true
+          client_id: "agentic"
+          realm_url: "http://app-keycloak:8080/realms/app"
+        user:
+          enabled: true
           client_id: "app"
-          keycloak_url: "http://app-keycloak:8080/realms/app"
+          realm_url: "http://app-keycloak:8080/realms/app"
           authorized_origins:
-            -  "http://localhost:5173"
+            - "http://localhost:5173"
+      frontend_settings:
         feature_flags:
           # If true activate the backend and frontend modules in charge of K8
           # and frugality monitoring
@@ -296,6 +295,16 @@ applications:
               service:
                 name: fred-frontend
                 port: 80
+            - path: /agentic
+              pathType: Prefix
+              service:
+                name: agentic-backend
+                port: 80
+            - path: /knowledge-flow
+              pathType: Prefix
+              service:
+                name: knowledge-flow-backend
+                port: 8000
             # # The additionnal paths might be useful if
             # # only the frontend is exposed
             # - path: /agentic
@@ -403,16 +412,9 @@ applications:
           targetPort: 8443
           protocol: TCP
     ingress:
-      enabled: true
+      enabled: false
       className: ""
-      hosts:
-        - host: knowledge-flow-backend.dev.fred.thalesgroup.com
-          paths:
-            - path: /
-              pathType: Prefix
-              service:
-                name: knowledge-flow-backend
-                port: 8000    
+      hosts: []
     volumeMounts:
       - name: knowledge-flow-backend-vol
         mountPath: /app/config/configuration.yaml
@@ -457,17 +459,17 @@ applications:
         log_level: "info"
         reload: false
         reload_dir: "."
-        security:
-          enabled: false
-          keycloak_url: "http://app-keycloak:8080/realms/app"
+      security:
+        m2m:
+          enabled: true
+          client_id: "knowledge-flow"
+          realm_url: "http://app-keycloak:8080/realms/app"
+        user:
+          enabled: true
           client_id: "app"
+          realm_url: "http://app-keycloak:8080/realms/app"
           authorized_origins:
             - "http://localhost:5173"
-      security:
-        enabled: false
-        keycloak_url: "http://fred-keycloak:8080/realms/fred"
-        authorized_origins:
-          - "http://localhost:5173"
       scheduler:
         enabled: true
         backend: "temporal"
@@ -506,6 +508,8 @@ applications:
           description: "Personal local documents available for pull-mode ingestion"
       embedding:
         type: "openai"
+        use_gpu: True
+        process_images: True
       storage:
         postgres:
           host: localhost

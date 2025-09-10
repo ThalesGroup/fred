@@ -13,11 +13,12 @@
 # limitations under the License.
 
 # Copyright Thales 2025
-
-from datetime import datetime
 import logging
-from typing import Optional, Iterable
+from datetime import datetime
+from typing import Iterable, Optional
 from uuid import uuid4
+
+from fred_core import Action, KeycloakUser, Resource, authorize
 
 from app.application_context import ApplicationContext
 from app.common.document_structures import DocumentMetadata
@@ -26,7 +27,6 @@ from app.features.metadata.service import MetadataService
 from app.features.resources.service import ResourceService
 from app.features.resources.structures import ResourceKind
 from app.features.tag.structure import Tag, TagCreate, TagType, TagUpdate, TagWithItemsId
-from fred_core import KeycloakUser
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +53,7 @@ class TagService:
 
     # ---------- Public API ----------
 
+    @authorize(Action.READ, Resource.TAGS)
     def list_all_tags_for_user(
         self,
         user: KeycloakUser,
@@ -88,7 +89,7 @@ class TagService:
         result: list[TagWithItemsId] = []
         for tag in sliced:
             if tag.type == TagType.DOCUMENT:
-                item_ids = self._retrieve_document_ids_for_tag(tag.id)
+                item_ids = self._retrieve_document_ids_for_tag(user, tag.id)
             elif tag.type == TagType.PROMPT:
                 item_ids = self.resource_service.get_resource_ids_for_tag(ResourceKind.PROMPT, tag.id)
             elif tag.type == TagType.TEMPLATE:
@@ -98,10 +99,11 @@ class TagService:
             result.append(TagWithItemsId.from_tag(tag, item_ids))
         return result
 
+    @authorize(Action.READ, Resource.TAGS)
     def get_tag_for_user(self, tag_id: str, user: KeycloakUser) -> TagWithItemsId:
         tag = self._tag_store.get_tag_by_id(tag_id)
         if tag.type == TagType.DOCUMENT:
-            item_ids = self._retrieve_document_ids_for_tag(tag_id)
+            item_ids = self._retrieve_document_ids_for_tag(user, tag_id)
         elif tag.type == TagType.PROMPT:
             item_ids = self.resource_service.get_resource_ids_for_tag(ResourceKind.PROMPT, tag.id)
         elif tag.type == TagType.TEMPLATE:
@@ -110,10 +112,11 @@ class TagService:
             raise ValueError(f"Unsupported tag type: {tag.type}")
         return TagWithItemsId.from_tag(tag, item_ids)
 
+    @authorize(Action.CREATE, Resource.TAGS)
     def create_tag_for_user(self, tag_data: TagCreate, user: KeycloakUser) -> TagWithItemsId:
         # Validate referenced items first
         if tag_data.type == TagType.DOCUMENT:
-            documents = self._retrieve_documents_metadata(tag_data.item_ids)
+            documents = self._retrieve_documents_metadata(user, tag_data.item_ids)
         elif tag_data.type in (TagType.PROMPT, TagType.TEMPLATE):
             documents = []  # not used here
         else:
@@ -141,7 +144,7 @@ class TagService:
         # Link items
         if tag.type == TagType.DOCUMENT:
             for doc in documents:
-                self.document_metadata_service.add_tag_id_to_document(metadata=doc, new_tag_id=tag.id, modified_by=user.uid)
+                self.document_metadata_service.add_tag_id_to_document(user, metadata=doc, new_tag_id=tag.id, modified_by=user.uid)
         elif tag.type in (TagType.PROMPT, TagType.TEMPLATE):
             # rk = _tagtype_to_rk(tag.type)
             for rid in tag_data.item_ids:
@@ -153,20 +156,21 @@ class TagService:
 
         return TagWithItemsId.from_tag(tag, tag_data.item_ids)
 
+    @authorize(Action.UPDATE, Resource.TAGS)
     def update_tag_for_user(self, tag_id: str, tag_data: TagUpdate, user: KeycloakUser) -> TagWithItemsId:
         tag = self._tag_store.get_tag_by_id(tag_id)
 
         # Update memberships first
         if tag.type == TagType.DOCUMENT:
-            old_item_ids = self._retrieve_document_ids_for_tag(tag_id)
+            old_item_ids = self._retrieve_document_ids_for_tag(user, tag_id)
             added, removed = self._compute_ids_diff(old_item_ids, tag_data.item_ids)
 
-            added_documents = self._retrieve_documents_metadata(added)
-            removed_documents = self._retrieve_documents_metadata(removed)
+            added_documents = self._retrieve_documents_metadata(user, added)
+            removed_documents = self._retrieve_documents_metadata(user, removed)
             for doc in added_documents:
-                self.document_metadata_service.add_tag_id_to_document(doc, tag.id, modified_by=user.uid)
+                self.document_metadata_service.add_tag_id_to_document(user, doc, tag.id, modified_by=user.uid)
             for doc in removed_documents:
-                self.document_metadata_service.remove_tag_id_from_document(doc, tag.id, modified_by=user.uid)
+                self.document_metadata_service.remove_tag_id_from_document(user, doc, tag.id, modified_by=user.uid)
 
         elif tag.type in (TagType.PROMPT, TagType.TEMPLATE):
             rk = _tagtype_to_rk(tag.type)
@@ -193,7 +197,7 @@ class TagService:
 
         # For the response, return the up-to-date list of item ids
         if tag.type == TagType.DOCUMENT:
-            item_ids = self._retrieve_document_ids_for_tag(tag_id)
+            item_ids = self._retrieve_document_ids_for_tag(user, tag_id)
         elif tag.type in (TagType.PROMPT, TagType.TEMPLATE):
             rk = _tagtype_to_rk(tag.type)
             item_ids = self.resource_service.get_resource_ids_for_tag(rk, tag_id)
@@ -202,13 +206,14 @@ class TagService:
 
         return TagWithItemsId.from_tag(updated_tag, item_ids)
 
+    @authorize(Action.DELETE, Resource.TAGS)
     def delete_tag_for_user(self, tag_id: str, user: KeycloakUser) -> None:
         tag = self._tag_store.get_tag_by_id(tag_id)
 
         if tag.type == TagType.DOCUMENT:
-            documents = self._retrieve_documents_for_tag(tag_id)
+            documents = self._retrieve_documents_for_tag(user, tag_id)
             for doc in documents:
-                self.document_metadata_service.remove_tag_id_from_document(doc, tag_id, modified_by=user.uid)
+                self.document_metadata_service.remove_tag_id_from_document(user, doc, tag_id, modified_by=user.uid)
         elif tag.type == TagType.PROMPT:
             self.resource_service.remove_tag_from_resources(ResourceKind.PROMPT, tag_id)
         elif tag.type == TagType.TEMPLATE:
@@ -219,21 +224,22 @@ class TagService:
 
         self._tag_store.delete_tag_by_id(tag_id)
 
-    def update_tag_timestamp(self, tag_id: str) -> None:
+    @authorize(Action.UPDATE, Resource.TAGS)
+    def update_tag_timestamp(self, tag_id: str, user: KeycloakUser) -> None:
         tag = self._tag_store.get_tag_by_id(tag_id)
         tag.updated_at = datetime.now()
         self._tag_store.update_tag_by_id(tag_id, tag)
 
     # ---------- Internals / helpers ----------
 
-    def _retrieve_documents_for_tag(self, tag_id: str) -> list[DocumentMetadata]:
-        return self.document_metadata_service.get_document_metadata_in_tag(tag_id)
+    def _retrieve_documents_for_tag(self, user: KeycloakUser, tag_id: str) -> list[DocumentMetadata]:
+        return self.document_metadata_service.get_document_metadata_in_tag(user, tag_id)
 
-    def _retrieve_document_ids_for_tag(self, tag_id: str) -> list[str]:
-        return [d.document_uid for d in self._retrieve_documents_for_tag(tag_id)]
+    def _retrieve_document_ids_for_tag(self, user: KeycloakUser, tag_id: str) -> list[str]:
+        return [d.document_uid for d in self._retrieve_documents_for_tag(user, tag_id)]
 
-    def _retrieve_documents_metadata(self, document_ids: Iterable[str]) -> list[DocumentMetadata]:
-        return [self.document_metadata_service.get_document_metadata(doc_id) for doc_id in document_ids]
+    def _retrieve_documents_metadata(self, user: KeycloakUser, document_ids: Iterable[str]) -> list[DocumentMetadata]:
+        return [self.document_metadata_service.get_document_metadata(user, doc_id) for doc_id in document_ids]
 
     @staticmethod
     def _compute_ids_diff(before: list[str], after: list[str]) -> tuple[list[str], list[str]]:

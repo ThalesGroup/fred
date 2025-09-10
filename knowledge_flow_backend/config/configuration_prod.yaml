@@ -18,10 +18,16 @@ app:
   log_level: "info"
   reload: false
   reload_dir: "."
-  security:
+
+security:
+  m2m:
     enabled: true
-    keycloak_url: "http://app-keycloak:8080/realms/app"
     client_id: "knowledge-flow"
+    realm_url: "http://app-keycloak:8080/realms/app"
+  user:
+    enabled: true
+    client_id: "app"
+    realm_url: "http://app-keycloak:8080/realms/app"
     authorized_origins:
       - "http://localhost:5173"
 
