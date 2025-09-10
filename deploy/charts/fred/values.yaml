@@ -237,20 +237,25 @@ applications:
           verify_certs: false
           username: admin
         feedback_store:
-          type: "opensearch"
-          index: feedback-index
+          type: "duckdb"
+          duckdb_path: "~/.fred/agentic/feedback.duckdb"
+
         agent_store:
-          type: "opensearch"
-          index: agent-index
+          type: "duckdb"
+          duckdb_path: "~/.fred/agentic/agent.duckdb"
+
         session_store:
-          type: "opensearch"
-          index: session-index
+          type: "duckdb"
+          duckdb_path: "~/.fred/agentic/session.duckdb"
+
         history_store:
-          type: "opensearch"
-          index: history-index
+          type: "duckdb"
+          duckdb_path: "~/.fred/agentic/history.duckdb"
+
         kpi_store:
-          type: "opensearch"
-          index: kpi-index
+          type: "log"
+          level: "INFO"
+
     dotenv:
       AZURE_OPENAI_ENDPOINT: ""
       KEYCLOAK_AGENTIC_CLIENT_SECRET: ""
