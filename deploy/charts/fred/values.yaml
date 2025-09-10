@@ -150,7 +150,7 @@ applications:
         properties:
           logoName: "fred"
       ai:
-        knowledge_flow_url: "http://localhost:8111/knowledge-flow/v1"
+        knowledge_flow_url: "http://knowledge-flow-backend:8111/knowledge-flow/v1"
         # Timeout settings for the client
         timeout:
           connect: 5  # Time to wait for a connection in seconds
@@ -364,8 +364,8 @@ applications:
       backend: false
     configuration:
       config_json:
-        backend_url_api: "https://agentic-backend.dev.fred.thalesgroup.com"
-        backend_url_knowledge: "https://knowledge-flow-backend.dev.fred.thalesgroup.com"
+        backend_url_api: "http://agentic-backend.dev.fred.thalesgroup.com:8080"
+        backend_url_knowledge: "https://knowledge-flow-backend.dev.fred.thalesgroup.com:8080"
         websocket_url: "ws://agentic-backend.dev.fred.thalesgroup.com/fred/chatbot/query"
 
   knowledge-flow-backend:
