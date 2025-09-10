@@ -79,12 +79,13 @@ class RBACProvider(AuthorizationProvider):
         resource: Resource,
     ) -> bool:
         """Check if user is authorized to perform action on resource."""
+
         # Check if user has any roles that allow this action on this resource
         for role in user.roles:
             if self._role_has_permission(role, action, resource):
                 return True
 
-        logger.debug(
+        logger.warning(
             "Authorization denied: user=%s roles=%s action=%s resource=%s",
             user.uid,
             user.roles,

@@ -26,7 +26,7 @@ from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi_mcp import AuthConfig, FastApiMCP
-from fred_core import get_current_user, initialize_keycloak, register_exception_handlers
+from fred_core import get_current_user, initialize_user_security, register_exception_handlers
 from rich.logging import RichHandler
 
 from app.application_context import ApplicationContext
@@ -54,6 +54,11 @@ from app.features.vector_search.controller import VectorSearchController
 # -----------------------
 
 logger = logging.getLogger(__name__)
+
+
+def _norm_origin(o) -> str:
+    # Ensure exact match with browser's Origin header (no trailing slash)
+    return str(o).rstrip("/")
 
 
 def configure_logging(log_level: str):
@@ -96,8 +101,6 @@ def create_app() -> FastAPI:
 
     ApplicationContext(configuration)
 
-    initialize_keycloak(configuration.app.security)
-
     app = FastAPI(
         docs_url=f"{configuration.app.base_url}/docs",
         redoc_url=f"{configuration.app.base_url}/redoc",
@@ -106,15 +109,18 @@ def create_app() -> FastAPI:
 
     # Register exception handlers
     register_exception_handlers(app)
-
+    allowed_origins = list({_norm_origin(o) for o in configuration.security.user.authorized_origins})
+    logger.info("[CORS] allow_origins=%s", allowed_origins)
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=configuration.app.security.authorized_origins,
-        allow_methods=["GET", "POST", "PUT", "DELETE"],
+        allow_origins=allowed_origins,
+        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         allow_headers=["Content-Type", "Authorization"],
     )
+    initialize_user_security(configuration.security.user)
+
     app.add_middleware(RequestResponseLogger)
-    # Attach FastAPI to build B2B in-process client (lives outside ApplicationContext)
+    # Attach FastAPI to build M2M in-process client (lives outside ApplicationContext)
     attach_app(app)
 
     router = APIRouter(prefix=configuration.app.base_url)

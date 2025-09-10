@@ -54,29 +54,35 @@ from fred_core.security.authorization import (
 )
 from fred_core.security.authorization_decorator import authorize
 from fred_core.security.backend_to_backend_auth import (
-    B2BAuthConfig,
-    B2BBearerAuth,
-    B2BTokenProvider,
-    make_b2b_asgi_client,
+    M2MAuthConfig,
+    M2MBearerAuth,
+    M2MTokenProvider,
+    make_m2m_asgi_client,
 )
 from fred_core.security.keycloak import (
     get_current_user,
-    initialize_keycloak,
+    initialize_user_security,
     split_realm_url,
+    decode_jwt,
 )
 from fred_core.security.outbound import BearerAuth, ClientCredentialsProvider
 from fred_core.security.structure import (
     KeycloakUser,
     SecurityConfiguration,
+    M2MSecurity,
+    UserSecurity,
 )
 from fred_core.store.vector_search import VectorSearchHit
 
 __all__ = [
     "raise_internal_error",
     "get_current_user",
-    "initialize_keycloak",
+    "decode_jwt",
+    "initialize_user_security",
     "KeycloakUser",
     "SecurityConfiguration",
+    "M2MSecurity",
+    "UserSecurity",
     "TODO_PASS_REAL_USER",
     "NO_AUTHZ_CHECK_USER",
     "Action",
@@ -112,9 +118,9 @@ __all__ = [
     "KPIWriter",
     "KPIActor",
     "LogStoreConfig",
-    "B2BAuthConfig",
-    "B2BTokenProvider",
-    "B2BBearerAuth",
-    "make_b2b_asgi_client",
+    "M2MAuthConfig",
+    "M2MTokenProvider",
+    "M2MBearerAuth",
+    "make_m2m_asgi_client",
     "split_realm_url",
 ]

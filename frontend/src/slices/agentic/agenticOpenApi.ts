@@ -154,7 +154,8 @@ export type EchoSchemaAgenticV1SchemasEchoPostApiResponse = /** status 200 Succe
 export type EchoSchemaAgenticV1SchemasEchoPostApiArg = {
   echoEnvelope: EchoEnvelope;
 };
-export type GetFrontendConfigAgenticV1ConfigFrontendSettingsGetApiResponse = /** status 200 Successful Response */ any;
+export type GetFrontendConfigAgenticV1ConfigFrontendSettingsGetApiResponse =
+  /** status 200 Successful Response */ FrontendConfigDto;
 export type GetFrontendConfigAgenticV1ConfigFrontendSettingsGetApiArg = void;
 export type GetAgenticFlowsAgenticV1ChatbotAgenticflowsGetApiResponse =
   /** status 200 Successful Response */ AgenticFlow[];
@@ -415,7 +416,6 @@ export type RuntimeContext = {
   [key: string]: any;
 };
 export type ChatAskInput = {
-  user_id: string;
   session_id?: string | null;
   message: string;
   agent_name: string;
@@ -487,6 +487,27 @@ export type EchoEnvelope = {
     | MetricsBucket
     | VectorSearchHit
     | RuntimeContext;
+};
+export type FrontendFlags = {
+  enableK8Features?: boolean;
+  enableElecWarfare?: boolean;
+};
+export type Properties = {
+  logoName?: string;
+};
+export type FrontendSettings = {
+  feature_flags: FrontendFlags;
+  properties: Properties;
+};
+export type UserSecurity = {
+  enabled?: boolean;
+  realm_url: string;
+  client_id: string;
+  authorized_origins?: string[];
+};
+export type FrontendConfigDto = {
+  frontend_settings: FrontendSettings;
+  user_auth: UserSecurity;
 };
 export type AgenticFlow = {
   /** Name of the agentic flow */

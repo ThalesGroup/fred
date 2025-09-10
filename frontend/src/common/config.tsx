@@ -12,85 +12,100 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// src/config/AppConfig.ts
+// Copyright Thales 2025
+// SPDX-License-Identifier: Apache-2.0
+
 import { createKeycloakInstance } from "../security/KeycloakService";
+import type {
+  FrontendConfigDto,
+  UserSecurity,
+  FrontendFlags,
+  Properties,
+} from "../slices/agentic/agenticOpenApi";
 
-/**
- * Interface representing the expected structure of the application configuration.
- * This defines the required backend API URLs and WebSocket URL for the frontend to work properly.
- */
-export interface SecurityConfiguration {
-  enabled: boolean;
-  keycloak_url?: string;          
-  client_id?: string;  
-}
+/** Final merged app config used by the UI. */
 export interface AppConfig {
-  backend_url_api: string; // Base URL of the backend API
-  backend_url_knowledge: string; // Base URL of the knowledge service
-  websocket_url: string; // WebSocket server URL
-  feature_flags?: Record<string, boolean>;
-  properties?: Record<string, string>;
-  security: SecurityConfiguration
-}
-
-export interface FeatureFlags {
-  enableK8Features?: boolean;
+  backend_url_api: string;        // Base URL of the Agentic backend
+  backend_url_knowledge: string;  // Base URL of the Knowledge Flow backend
+  websocket_url: string;          // WebSocket server URL
+  feature_flags: Record<string, boolean>;
+  properties: Record<string, string>;
+  user_auth: UserSecurity;        // from OpenAPI types
 }
 
 export const FeatureFlagKey = {
   ENABLE_K8_FEATURES: "enableK8Features",
   ENABLE_ELEC_WARFARE: "enableElecWarfare",
 } as const;
-
 export type FeatureFlagKeyType = (typeof FeatureFlagKey)[keyof typeof FeatureFlagKey];
 
 let config: AppConfig | null = null;
 
-/**
- * Loads the application configuration from /config.json asynchronously.
- * Must be called before the app is rendered.
- */
-export const loadConfig = async () => {
-  const response = await fetch("/config.json");
-  if (!response.ok) {
-    throw new Error(`Cannot load config file /config.json: ${response.statusText}`);
-  }
-  const baseConfig = await response.json();
+/** Helpers to normalize typed DTO parts into simple records */
+const normalizeFlags = (ff?: FrontendFlags): Record<string, boolean> => ({
+  ...(ff?.enableK8Features !== undefined ? { enableK8Features: ff.enableK8Features } : {}),
+  ...(ff?.enableElecWarfare !== undefined ? { enableElecWarfare: ff.enableElecWarfare } : {}),
+});
 
-  // then call backend for dynamic feature flags
-  const response_back = await fetch(`${baseConfig.backend_url_api}/agentic/v1/config/frontend_settings`);
-  const frontendSettings = await response_back.json();
-  console.log("Frontend Settings from the backend: ", frontendSettings);
-  config = {
-    ...baseConfig,
-    feature_flags: frontendSettings.feature_flags,
-    properties: frontendSettings.properties,
-    security: frontendSettings.security,
-  };
-  if (config.security.enabled) {
-    createKeycloakInstance(config.security.keycloak_url, config.security.client_id)
-  }
+const normalizeProps = (p?: Properties): Record<string, string> => {
+  const out: Record<string, string> = {};
+  if (p?.logoName !== undefined) out.logoName = String(p.logoName);
+  return out;
 };
 
 /**
- * Returns the loaded configuration.
- * Throws an error if config is not loaded yet.
+ * Loads /config.json then queries backend /config/frontend_settings (typed via OpenAPI).
+ * Backend returns FrontendConfigDto: { frontend_settings: { feature_flags, properties }, user_auth }
  */
-export const getConfig = (): AppConfig => {
-  if (!config) {
-    throw new Error("Config file /config.json not loaded yet.");
+export const loadConfig = async () => {
+  // 1) Static config
+  const res = await fetch("/config.json");
+  if (!res.ok) throw new Error(`Cannot load /config.json: ${res.status} ${res.statusText}`);
+  const base = (await res.json()) as {
+    backend_url_api: string;
+    backend_url_knowledge: string;
+    websocket_url: string;
+  };
+
+  // 2) Dynamic config (typed)
+  const r = await fetch(`${base.backend_url_api}/agentic/v1/config/frontend_settings`);
+  if (!r.ok) throw new Error(`Cannot load frontend settings: ${r.status} ${r.statusText}`);
+  const settings = (await r.json()) as FrontendConfigDto;
+
+  const frontend = settings.frontend_settings ?? { feature_flags: {}, properties: {} };
+
+  // Assemble final config
+  const feature_flags = normalizeFlags(frontend.feature_flags);
+  const properties = normalizeProps(frontend.properties);
+
+  config = {
+    ...base,
+    feature_flags,
+    properties,
+    user_auth: settings.user_auth,
+  };
+
+  // Initialize PKCE if enabled
+  if (config.user_auth?.enabled) {
+    const { realm_url, client_id } = config.user_auth;
+    if (!realm_url || !client_id) {
+      throw new Error("user_auth is enabled but realm_url or client_id is missing.");
+    }
+    createKeycloakInstance(realm_url, client_id);
   }
+};
+
+/** Accessor after loadConfig() */
+export const getConfig = (): AppConfig => {
+  if (!config) throw new Error("Config not loaded yet. Call loadConfig() first.");
   return config;
 };
 
-/**
- * Checks if a specific feature flag is enabled in the configuration.
- * @param flag
- * @returns
- */
-export const isFeatureEnabled = (flag: FeatureFlagKeyType): boolean => {
-  return !!getConfig().feature_flags?.[flag];
-};
+/** Feature flags helper */
+export const isFeatureEnabled = (flag: FeatureFlagKeyType): boolean =>
+  !!getConfig().feature_flags?.[flag];
 
-export const getProperty = (propertyKey: string): string => {
-  return getConfig().properties?.[propertyKey];
-};
+/** Properties helper */
+export const getProperty = (key: string): string =>
+  getConfig().properties?.[key];

@@ -12,6 +12,88 @@ let isSecurityEnabled = false;
 // single-flight so concurrent calls don’t trigger multiple refreshes
 let refreshInFlight: Promise<boolean> | null = null;
 
+// ---------- Insecure-mode dev token support ----------
+// Fred rationale: even when security is off, the frontend + backend contracts
+// still expect an Authorization: Bearer <token>. We mint a local, JWT-shaped
+// token with "admin" roles so the UI flows (headers, auth guards, role checks)
+// behave exactly like production — just without real verification.
+const DEV_TOKEN_STORAGE_KEY = "dev_admin_token";
+
+// Minimal base64url (no padding) to build a JWT-shaped string without crypto.
+function b64url(obj: unknown): string {
+  const json = typeof obj === "string" ? obj : JSON.stringify(obj);
+  // Note: window.btoa expects Latin1; for safety, escape UTF-8 properly:
+  const utf8 = unescape(encodeURIComponent(json));
+  return btoa(utf8).replace(/=+$/g, "").replace(/\+/g, "-").replace(/\//g, "_");
+}
+
+/**
+ * Build a local, unsigned JWT-shaped token.
+ * - Shape matches typical Keycloak claims so downstream code (and dev tools)
+ *   can "mouse over" tokenParsed-like content and understand the model.
+ * - Signature is a fixed string (not cryptographically valid). That's OK:
+ *   in insecure mode the backend shouldn't verify it.
+ */
+function buildDevAdminToken(): string {
+  const now = Math.floor(Date.now() / 1000);
+  const oneWeek = 7 * 24 * 60 * 60;
+
+  const header = { alg: "none", typ: "JWT" };
+
+  const payload = {
+    exp: now + oneWeek,
+    iat: now,
+    // Mirror common KC fields so getters remain predictable in dev:
+    iss: "http://dev-keycloak/realms/dev",
+    typ: "Bearer",
+    azp: "app",
+    scope: "openid profile email",
+    email_verified: true,
+    name: "Administrator",
+    preferred_username: "admin",
+    given_name: "Admin",
+    family_name: "User",
+    email: "admin@mail.com",
+    sub: "admin", // stable ID used by UI and logs in dev
+    realm_access: { roles: ["admin"] },
+    resource_access: {
+      app: { roles: ["admin"] },
+    },
+  };
+
+  // JWT-shape: header.payload.signature — signature is intentionally dummy
+  return `${b64url(header)}.${b64url(payload)}.devsig`;
+}
+
+function base64UrlToUtf8Json(b64url: string): any {
+  // Convert base64url -> base64
+  const b64 = b64url.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((b64url.length + 3) % 4);
+  // Decode to UTF-8 string
+  const jsonStr = decodeURIComponent(escape(atob(b64)));
+  return JSON.parse(jsonStr);
+}
+
+function parseJwtPayload(token: string | null | undefined): any | null {
+  if (!token) return null;
+  const parts = token.split(".");
+  if (parts.length < 2) return null;
+  try {
+    return base64UrlToUtf8Json(parts[1]); // payload
+  } catch {
+    return null;
+  }
+}
+
+function getOrCreateDevToken(): string {
+  let tok = localStorage.getItem(DEV_TOKEN_STORAGE_KEY);
+  if (tok) return tok;
+  tok = buildDevAdminToken();
+  localStorage.setItem(DEV_TOKEN_STORAGE_KEY, tok);
+  return tok;
+}
+
+// -----------------------------------------------------
+
 /**
  * Parse a full KC realm URL like:
  *   http://kc:8080/realms/myrealm
@@ -43,9 +125,17 @@ export function createKeycloakInstance(keycloak_url: string, keycloak_client_id:
 
 /**
  * Call on app startup (after createKeycloakInstance).
+ *
+ * Fred architecture note:
+ * - In prod, we delegate identity to Keycloak (OIDC, PKCE, refresh).
+ * - In dev/insecure mode, we *still* surface a token + roles so the rest
+ *   of the app (RTK Query baseQuery, guards, UX) behaves identically.
  */
 const Login = (onAuthenticatedCallback: Function) => {
   if (!isSecurityEnabled) {
+    // In insecure mode we "log in" by minting a local dev admin token.
+    const devToken = getOrCreateDevToken();
+    localStorage.setItem("keycloak_token", devToken);
     onAuthenticatedCallback();
     return;
   }
@@ -70,7 +160,20 @@ const Login = (onAuthenticatedCallback: Function) => {
 };
 
 const Logout = () => {
-  if (!isSecurityEnabled || !keycloakInstance) return;
+  if (!isSecurityEnabled) {
+    // Clear dev token + app state, stay on homepage.
+    try {
+      sessionStorage.clear();
+      localStorage.removeItem("keycloak_token");
+      localStorage.removeItem(DEV_TOKEN_STORAGE_KEY);
+    } finally {
+      // No KC logout redirect in insecure mode.
+      window.location.assign("/");
+    }
+    return;
+  }
+
+  if (!keycloakInstance) return;
   try {
     sessionStorage.clear();
     localStorage.removeItem("keycloak_token");
@@ -82,6 +185,9 @@ const Logout = () => {
 /**
  * Ensure token validity (minValidity seconds).
  * Returns true if token is valid or refreshed, false if refresh failed.
+ *
+ * In insecure mode this is trivially true — the token is local and
+ * intentionally long-lived to avoid surprising dev UX during demos.
  */
 export async function ensureFreshToken(minValidity = 30): Promise<boolean> {
   if (!isSecurityEnabled || !keycloakInstance) return true;
@@ -143,15 +249,33 @@ const GetUserId = (): string | null => {
   return (keycloakInstance.tokenParsed as any).sub || null;
 };
 
+/**
+ * Always return a Bearer token:
+ * - prod: real KC token
+ * - dev: local, JWT-shaped dev admin token
+ *
+ * Why? Because downstream code (RTK Query baseQuery, HTTP middlewares,
+ * and sometimes backend logs) assume a token is present. Keeping that
+ * invariant reduces branches and keeps the app “prod-shaped” in dev.
+ */
 const GetToken = (): string | null => {
-  if (!isSecurityEnabled) return null;
+  if (!isSecurityEnabled) {
+    const tok = getOrCreateDevToken();
+    // Keep key name consistent so other places only read "keycloak_token".
+    localStorage.setItem("keycloak_token", tok);
+    return tok;
+  }
   return keycloakInstance?.token || localStorage.getItem("keycloak_token");
 };
 
 const GetTokenParsed = (): any => {
-  if (!isSecurityEnabled) return null;
+  if (!isSecurityEnabled) {
+    const tok = GetToken();                // returns our dev token in insecure mode
+    return parseJwtPayload(tok);           // <- decode and return payload JSON
+  }
   return keycloakInstance?.tokenParsed ?? null;
 };
+
 
 export const KeyCloakService = {
   CallLogin: Login,

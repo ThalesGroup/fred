@@ -41,7 +41,7 @@ from fastapi import FastAPI
 # ──────────────────────────────────────────────────────────────────────────────
 
 
-class B2BAuthConfig(BaseModel):
+class M2MAuthConfig(BaseModel):
     """
     Minimal config for client-credentials flow.
     keycloak_realm_url: the *realm* URL, same one you already use for JWKS
@@ -62,13 +62,13 @@ class B2BAuthConfig(BaseModel):
         return f"{self.keycloak_realm_url}/protocol/openid-connect/token"
 
 
-class B2BTokenProvider:
+class M2MTokenProvider:
     """
     Caches and refreshes a Keycloak client-credentials token.
     Thread-safe (async) and cheap to reuse across calls.
     """
 
-    def __init__(self, cfg: B2BAuthConfig):
+    def __init__(self, cfg: M2MAuthConfig):
         self.cfg = cfg
         self._secret = os.getenv(cfg.secret_env, "")
         self._lock = asyncio.Lock()
@@ -119,7 +119,7 @@ class B2BTokenProvider:
             return self._token
 
 
-class B2BBearerAuth(httpx.Auth):
+class M2MBearerAuth(httpx.Auth):
     """
     httpx.Auth that injects 'Authorization: Bearer <service_token>'.
 
@@ -130,7 +130,7 @@ class B2BBearerAuth(httpx.Auth):
     requires_request_body = True
     requires_response_body = False
 
-    def __init__(self, provider: B2BTokenProvider):
+    def __init__(self, provider: M2MTokenProvider):
         self._provider = provider
 
     async def async_auth_flow(
@@ -141,7 +141,7 @@ class B2BBearerAuth(httpx.Auth):
         yield request  # httpx performs the request; we don't need the response hook here.
 
 
-def make_b2b_asgi_client(app: FastAPI, auth: httpx.Auth) -> httpx.AsyncClient:
+def make_m2m_asgi_client(app: FastAPI, auth: httpx.Auth) -> httpx.AsyncClient:
     """
     In-process client for self-calls via ASGITransport (no network).
     """
