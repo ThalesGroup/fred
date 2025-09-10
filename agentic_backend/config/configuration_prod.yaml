@@ -116,6 +116,12 @@ ai:
           transport: streamable_http
           url: http://localhost:8111/knowledge-flow/v1/mcp-resources
           sse_read_timeout: 2000
+    - name: "Scribo"
+      role: "Simple Report generator"
+      description: >
+        Generates reports using a hard coded templates. A great starting point to elaborate full fledged report assistants.
+      class_path: "app.agents.content_generator.report_starter.ReportStarter"
+      enabled: true
 
 storage:
   postgres:
