@@ -16,7 +16,7 @@
 Application-scoped runtime state (FastAPI-bound).
 - Owns the in-process httpx client used for backend↔backend/self calls.
 - Keeps FastAPI imports out of ApplicationContext (safe for Temporal/sandbox code).
-- Propagates user bearer when present; falls back to B2B service token.
+- Propagates user bearer when present; falls back to M2M service token.
 """
 
 from __future__ import annotations
@@ -25,10 +25,10 @@ import httpx
 from fastapi import FastAPI
 
 from fred_core import (
-    B2BAuthConfig,
-    B2BTokenProvider,
-    B2BBearerAuth,
-    make_b2b_asgi_client,
+    M2MAuthConfig,
+    M2MTokenProvider,
+    M2MBearerAuth,
+    make_m2m_asgi_client,
 )
 
 from app.application_context import get_configuration
@@ -37,8 +37,8 @@ from app.application_context import get_configuration
 class _AppState:
     def __init__(self) -> None:
         self._app: Optional[FastAPI] = None
-        self._b2b_client: Optional[httpx.AsyncClient] = None
-        self._b2b_provider: Optional[B2BTokenProvider] = None
+        self._m2m_client: Optional[httpx.AsyncClient] = None
+        self._m2m_provider: Optional[M2MTokenProvider] = None
 
     def attach_app(self, app: FastAPI) -> None:
         """
@@ -47,35 +47,35 @@ class _AppState:
         - Keeps internal calls fast (no network) and always authenticated (service bearer).
         """
         self._app = app
-        self._init_b2b_client()
+        self._init_m2m_client()
 
-    def _init_b2b_client(self) -> None:
+    def _init_m2m_client(self) -> None:
         if self._app is None:
             return  # not attach_app'ed yet
 
-        # Read the same Keycloak values you use in initialize_keycloak()
-        get_configuration().app.security.client_id
-        realm_url = get_configuration().app.security.keycloak_url
-        client_id = get_configuration().app.security.client_id
+        # Read the same Keycloak values you use in initialize_user_security()
+        get_configuration().security.m2m.client_id
+        realm_url = get_configuration().security.m2m.realm_url
+        client_id = get_configuration().security.m2m.client_id
         token_env_var_name = "KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET"  # nosec B105
 
         if not realm_url or not client_id:
-            # Soft-fail: allows tests/dev without B2B; errors only when accessed.
+            # Soft-fail: allows tests/dev without M2M; errors only when accessed.
             return
 
-        cfg = B2BAuthConfig(
-            keycloak_realm_url=realm_url,
+        cfg = M2MAuthConfig(
+            keycloak_realm_url=str(realm_url),
             client_id=client_id,
             secret_env=token_env_var_name,
         )
-        self._b2b_provider = B2BTokenProvider(cfg)
-        auth = B2BBearerAuth(self._b2b_provider)
-        self._b2b_client = make_b2b_asgi_client(self._app, auth)
+        self._m2m_provider = M2MTokenProvider(cfg)
+        auth = M2MBearerAuth(self._m2m_provider)
+        self._m2m_client = make_m2m_asgi_client(self._app, auth)
 
-    def get_b2b_client(self) -> httpx.AsyncClient:
-        if self._b2b_client is None:
-            raise RuntimeError("B2B client not initialized. Call application_state.attach_app(app) at startup and set Keycloak configuration and environment variables.")
-        return self._b2b_client
+    def get_m2m_client(self) -> httpx.AsyncClient:
+        if self._m2m_client is None:
+            raise RuntimeError("M2M client not initialized. Call application_state.attach_app(app) at startup and set Keycloak configuration and environment variables.")
+        return self._m2m_client
 
     async def internal_request(
         self,
@@ -89,9 +89,9 @@ class _AppState:
         """
         Preferred self-call:
         - If user bearer exists → propagate it (keeps user context/audit).
-        - Else → use service bearer via shared B2B client.
+        - Else → use service bearer via shared M2M client.
         """
-        client = self.get_b2b_client()
+        client = self.get_m2m_client()
         hdrs = dict(headers or {})
         if user_authorization:
             hdrs["Authorization"] = user_authorization
@@ -99,9 +99,9 @@ class _AppState:
 
     async def shutdown(self) -> None:
         """Close the shared httpx client cleanly on app shutdown."""
-        if self._b2b_client is not None:
-            await self._b2b_client.aclose()
-            self._b2b_client = None
+        if self._m2m_client is not None:
+            await self._m2m_client.aclose()
+            self._m2m_client = None
 
 
 # Module-level singleton (simple and explicit)
@@ -113,8 +113,8 @@ def attach_app(app: FastAPI) -> None:
     _STATE.attach_app(app)
 
 
-def get_b2b_client() -> httpx.AsyncClient:
-    return _STATE.get_b2b_client()
+def get_m2m_client() -> httpx.AsyncClient:
+    return _STATE.get_m2m_client()
 
 
 async def internal_get(path: str, *, user_authorization: Optional[str] = None, **kw) -> httpx.Response:
