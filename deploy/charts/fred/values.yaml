@@ -26,7 +26,18 @@ applications:
       pullPolicy: IfNotPresent
     command:
       enabled: true
-      data: ["uvicorn", "app.main:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000", "--log-level", "info", "--loop", "asyncio"]
+      data:
+        - "uvicorn"
+        - "app.main:create_app"
+        - "--factory"
+        - "--host"
+        - "0.0.0.0"
+        - "--port"
+        - "8000"
+        - "--log-level"
+        - "info"
+        - "--loop"
+        - "asyncio"    
     env:
       - name: CONFIG_FILE
         value: "/app/config/configuration.yaml"
