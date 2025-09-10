@@ -167,7 +167,7 @@ applications:
         recursion:
           recursion_limit: 40 # Number or max recursion use by the agents while using the model
         agents:
-          - name: "Fred"
+          - name: "Freddy"
             role: "Multi-Agent Orchestrator"
             class_path: "app.agents.leader.leader.Leader"
             enabled: true
