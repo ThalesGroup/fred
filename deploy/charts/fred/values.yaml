@@ -269,7 +269,7 @@ applications:
       OPENAI_API_KEY: ""
       OPENSEARCH_PASSWORD: ""
 
-  fred-frontend:
+  frontend:
     enabled: true
     applicationName: frontend
     deployment:
@@ -309,7 +309,7 @@ applications:
       enabled: true
       className: "nginx"
       hosts:
-        - host: fred.dev.local
+        - host: fred.dev.fred.thalesgroup.com
           paths:
             - path: /
               pathType: Prefix
