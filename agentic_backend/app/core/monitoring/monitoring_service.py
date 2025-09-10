@@ -3,6 +3,8 @@ from __future__ import annotations
 import logging
 from typing import Dict, List
 
+from fred_core import Action, KeycloakUser, Resource, authorize
+
 from app.application_context import get_history_store
 from app.core.chatbot.metric_structures import MetricsResponse
 
@@ -18,8 +20,10 @@ class AppMonitoringMetricsService:
     def __init__(self):
         self.history_store = get_history_store()
 
+    @authorize(action=Action.READ, resource=Resource.METRICS)
     def get_node_numerical_metrics(
         self,
+        user: KeycloakUser,
         start: str,
         end: str,
         user_id: str,

@@ -12,13 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from datetime import datetime, timezone
 import logging
+from datetime import datetime, timezone
 
-from app.common.document_structures import DocumentMetadata
-from app.core.stores.metadata.base_metadata_store import MetadataDeserializationError
+from fred_core import KeycloakUser, authorize
+from fred_core.security.models import Action, Resource
+
 from app.application_context import ApplicationContext
+from app.common.document_structures import DocumentMetadata
 from app.common.utils import sanitize_sql_name
+from app.core.stores.metadata.base_metadata_store import MetadataDeserializationError
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +52,8 @@ class MetadataService:
         self.csv_input_store = None
         self.vector_store = None
 
-    def get_documents_metadata(self, filters_dict: dict) -> list[DocumentMetadata]:
+    @authorize(Action.READ, Resource.DOCUMENTS)
+    def get_documents_metadata(self, user: KeycloakUser, filters_dict: dict) -> list[DocumentMetadata]:
         try:
             return self.metadata_store.get_all_metadata(filters_dict)
         except MetadataDeserializationError as e:
@@ -60,7 +64,8 @@ class MetadataService:
             logger.error(f"Error retrieving document metadata: {e}")
             raise MetadataUpdateError(f"Failed to retrieve metadata: {e}")
 
-    def get_document_metadata_in_tag(self, tag_id: str) -> list[DocumentMetadata]:
+    @authorize(Action.READ, Resource.DOCUMENTS)
+    def get_document_metadata_in_tag(self, user: KeycloakUser, tag_id: str) -> list[DocumentMetadata]:
         """
         Return all metadata entries associated with a specific tag.
         """
@@ -70,7 +75,8 @@ class MetadataService:
             logger.error(f"Error retrieving metadata for tag {tag_id}: {e}")
             raise MetadataUpdateError(f"Failed to retrieve metadata for tag {tag_id}: {e}")
 
-    def get_document_metadata(self, document_uid: str) -> DocumentMetadata:
+    @authorize(Action.READ, Resource.DOCUMENTS)
+    def get_document_metadata(self, user: KeycloakUser, document_uid: str) -> DocumentMetadata:
         if not document_uid:
             raise InvalidMetadataRequest("Document UID cannot be empty")
         try:
@@ -84,7 +90,8 @@ class MetadataService:
 
         return metadata
 
-    def add_tag_id_to_document(self, metadata: DocumentMetadata, new_tag_id: str, modified_by: str) -> None:
+    @authorize(Action.UPDATE, Resource.DOCUMENTS)
+    def add_tag_id_to_document(self, user: KeycloakUser, metadata: DocumentMetadata, new_tag_id: str, modified_by: str) -> None:
         try:
             if metadata.tags is None:
                 raise MetadataUpdateError("DocumentMetadata.tags is not initialized")
@@ -105,7 +112,8 @@ class MetadataService:
             logger.error(f"Error updating retrievable flag for {metadata.document_name}: {e}")
             raise MetadataUpdateError(f"Failed to update retrievable flag: {e}")
 
-    def remove_tag_id_from_document(self, metadata: DocumentMetadata, tag_id_to_remove: str, modified_by: str) -> None:
+    @authorize(Action.UPDATE, Resource.DOCUMENTS)
+    def remove_tag_id_from_document(self, user: KeycloakUser, metadata: DocumentMetadata, tag_id_to_remove: str, modified_by: str) -> None:
         try:
             if not metadata.tags or not metadata.tags.tag_ids or tag_id_to_remove not in metadata.tags.tag_ids:
                 logger.info(f"[METADATA] Tag '{tag_id_to_remove}' not found on document '{metadata.document_name}' — nothing to remove.")
@@ -141,7 +149,8 @@ class MetadataService:
             logger.error(f"Failed to remove tag '{tag_id_to_remove}' from document '{metadata.document_name}': {e}")
             raise MetadataUpdateError(f"Failed to remove tag: {e}")
 
-    def update_document_retrievable(self, document_uid: str, value: bool, modified_by: str) -> None:
+    @authorize(Action.UPDATE, Resource.DOCUMENTS)
+    def update_document_retrievable(self, user: KeycloakUser, document_uid: str, value: bool, modified_by: str) -> None:
         if not document_uid:
             raise InvalidMetadataRequest("Document UID cannot be empty")
 
@@ -161,7 +170,8 @@ class MetadataService:
             logger.error(f"Error updating retrievable flag for {document_uid}: {e}")
             raise MetadataUpdateError(f"Failed to update retrievable flag: {e}")
 
-    def save_document_metadata(self, metadata: DocumentMetadata) -> None:
+    @authorize(Action.CREATE, Resource.DOCUMENTS)
+    def save_document_metadata(self, user: KeycloakUser, metadata: DocumentMetadata) -> None:
         """
         Save document metadata and update tag timestamps for any assigned tags.
         This is an internal method only called by other services
@@ -172,20 +182,20 @@ class MetadataService:
 
             # Update tag timestamps for any tags assigned to this document
             if metadata.tags:
-                self._update_tag_timestamps(metadata.tags.tag_ids)
+                self._update_tag_timestamps(user, metadata.tags.tag_ids)
 
         except Exception as e:
             logger.error(f"Error saving metadata for {metadata.document_uid}: {e}")
             raise MetadataUpdateError(f"Failed to save metadata: {e}")
 
-    def _handle_tag_timestamp_updates(self, document_uid: str, new_tags: list[str]) -> None:
+    def _handle_tag_timestamp_updates(self, user: KeycloakUser, document_uid: str, new_tags: list[str]) -> None:
         """
         Update tag timestamps when document tags are modified.
         """
         try:
             # Get old tags from current document metadata
-            old_document = self.get_document_metadata(document_uid)
-            old_tags = (old_document.tags.tag_ids if old_document.tags else []) or []
+            old_document = self.metadata_store.get_metadata_by_uid(document_uid)
+            old_tags = (old_document.tags.tag_ids if old_document and old_document.tags else []) or []
 
             # Find tags that were added or removed
             old_tags_set = set(old_tags)
@@ -195,12 +205,12 @@ class MetadataService:
 
             # Update timestamps for affected tags
             if affected_tags:
-                self._update_tag_timestamps(list(affected_tags))
+                self._update_tag_timestamps(user, list(affected_tags))
 
         except Exception as e:
             logger.warning(f"Failed to handle tag timestamp updates for {document_uid}: {e}")
 
-    def _update_tag_timestamps(self, tag_ids: list[str]) -> None:
+    def _update_tag_timestamps(self, user: KeycloakUser, tag_ids: list[str]) -> None:
         """
         Update timestamps for a list of tag IDs.
         """
@@ -212,7 +222,7 @@ class MetadataService:
 
             for tag_id in tag_ids:
                 try:
-                    tag_service.update_tag_timestamp(tag_id)
+                    tag_service.update_tag_timestamp(tag_id, user)
                 except Exception as tag_error:
                     logger.warning(f"Failed to update timestamp for tag {tag_id}: {tag_error}")
 

@@ -14,6 +14,8 @@
 
 from typing import List
 
+from fred_core import Action, KeycloakUser, Resource, authorize
+
 from app.core.feedback.store.base_feedback_store import BaseFeedbackStore
 from app.core.feedback.structures import FeedbackRecord
 
@@ -27,26 +29,32 @@ class FeedbackService:
     def __init__(self, store: BaseFeedbackStore):
         self.store = store
 
-    def get_feedback(self) -> List[FeedbackRecord]:
+    @authorize(action=Action.READ, resource=Resource.FEEDBACK)
+    def get_feedback(self, user: KeycloakUser) -> List[FeedbackRecord]:
         """
         Returns all feedback entries stored.
         """
         return self.store.list()
 
-    def add_feedback(self, feedback: FeedbackRecord) -> None:
+    @authorize(action=Action.CREATE, resource=Resource.FEEDBACK)
+    def add_feedback(self, user: KeycloakUser, feedback: FeedbackRecord) -> None:
         """
         Adds a new feedback entry with a UUID and timestamp.
         """
         self.store.save(feedback)
 
-    def delete_feedback(self, feedback_id: str) -> None:
+    @authorize(action=Action.DELETE, resource=Resource.FEEDBACK)
+    def delete_feedback(self, user: KeycloakUser, feedback_id: str) -> None:
         """
         Deletes a feedback entry by ID.
         Returns True if the entry was deleted, False if it was not found.
         """
         self.store.delete(feedback_id)
 
-    def get_feedback_by_id(self, feedback_id: str) -> FeedbackRecord | None:
+    @authorize(action=Action.READ, resource=Resource.FEEDBACK)
+    def get_feedback_by_id(
+        self, user: KeycloakUser, feedback_id: str
+    ) -> FeedbackRecord | None:
         """
         Returns a single feedback entry by ID, or None if not found.
         """

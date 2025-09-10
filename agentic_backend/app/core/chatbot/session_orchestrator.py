@@ -14,6 +14,7 @@ from typing import Awaitable, Callable, List, Optional, Tuple
 from uuid import uuid4
 
 from fastapi import UploadFile
+from fred_core import Action, KeycloakUser, KPIActor, KPIWriter, Resource, authorize
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 
 from app.application_context import (
@@ -26,9 +27,9 @@ from app.core.agents.agent_manager import AgentManager
 from app.core.agents.flow import AgentFlow
 from app.core.agents.runtime_context import RuntimeContext
 from app.core.chatbot.chat_schema import (
+    Channel,
     ChatMessage,
     ChatMetadata,
-    Channel,
     Role,
     SessionSchema,
     SessionWithFiles,
@@ -38,7 +39,6 @@ from app.core.chatbot.metric_structures import MetricsResponse
 from app.core.chatbot.stream_transcoder import StreamTranscoder
 from app.core.session.attachement_processing import AttachementProcessing
 from app.core.session.stores.base_session_store import BaseSessionStore
-from fred_core import KPIWriter, KPIActor
 
 logger = logging.getLogger(__name__)
 
@@ -81,9 +81,12 @@ class SessionOrchestrator:
 
     # ---------------- Public API (used by WS layer) ----------------
 
+    @authorize(action=Action.CREATE, resource=Resource.SESSIONS)
+    @authorize(action=Action.UPDATE, resource=Resource.SESSIONS)
     async def chat_ask_websocket(
         self,
         *,
+        user: KeycloakUser,
         callback: CallbackType,
         user_id: str,
         session_id: str,
@@ -125,7 +128,7 @@ class SessionOrchestrator:
 
         # 1) Ensure session + rebuild minimal LC history
         session, lc_history, agent, _is_new_session = self._prepare_session_and_history(
-            user_id=user_id,
+            user=user,
             session_id=session_id,
             message=message,
             agent_name=agent_name,
@@ -208,16 +211,20 @@ class SessionOrchestrator:
 
     # ---------------- Session/History helpers (intentionally here) ----------------
 
-    def get_sessions(self, user_id: str) -> List[SessionWithFiles]:
+    @authorize(action=Action.READ, resource=Resource.SESSIONS)
+    def get_sessions(
+        self,
+        user: KeycloakUser,
+    ) -> List[SessionWithFiles]:
         """
         Why here:
           Listing sessions is part of the conversational lifecycle exposed to the UI.
           Keeping it on the orchestrator avoids leaking session_store details upward.
         """
-        sessions = self.session_store.get_for_user(user_id)
+        sessions = self.session_store.get_for_user(user.uid)
         enriched: List[SessionWithFiles] = []
         for session in sessions:
-            session_folder = self.get_session_temp_folder(session.id)
+            session_folder = self._get_session_temp_folder(session.id)
             file_names = (
                 [f.name for f in session_folder.iterdir() if f.is_file()]
                 if session_folder.exists()
@@ -228,30 +235,32 @@ class SessionOrchestrator:
             )
         return enriched
 
-    def get_session_history(self, session_id: str, user_id: str) -> List[ChatMessage]:
+    @authorize(action=Action.READ, resource=Resource.SESSIONS)
+    def get_session_history(
+        self, session_id: str, user: KeycloakUser
+    ) -> List[ChatMessage]:
+        # TODO: check session belongs to user
         return self.history_store.get(session_id) or []
 
-    def delete_session(self, session_id: str, user_id: str) -> None:
+    @authorize(action=Action.DELETE, resource=Resource.SESSIONS)
+    def delete_session(self, session_id: str, user: KeycloakUser) -> None:
+        # TODO: check session belongs to user
         self.session_store.delete(session_id)
 
     # ---------------- File uploads (kept for backward compatibility) ----------------
 
-    def get_session_temp_folder(self, session_id: str) -> Path:
-        base_temp_dir = Path(tempfile.gettempdir()) / "chatbot_uploads"
-        session_folder = base_temp_dir / session_id
-        session_folder.mkdir(parents=True, exist_ok=True)
-        return session_folder
-
+    @authorize(action=Action.CREATE, resource=Resource.MESSAGE_ATTACHMENTS)
     async def upload_file(
-        self, user_id: str, session_id: str, agent_name: str, file: UploadFile
+        self, user: KeycloakUser, session_id: str, agent_name: str, file: UploadFile
     ) -> dict:
         """
         Purpose:
           Keep simple "drop a file into this session's temp area" behavior unchanged,
           so the UI doesn't need to move right now. Can be split later to a dedicated service.
         """
+        # TODO: check session belongs to user
         try:
-            session_folder = self.get_session_temp_folder(session_id)
+            session_folder = self._get_session_temp_folder(session_id)
             if file.filename is None:
                 raise ValueError("Uploaded file must have a filename.")
             file_path = session_folder / file.filename
@@ -279,6 +288,7 @@ class SessionOrchestrator:
 
     # ---------------- Metrics passthrough ----------------
 
+    @authorize(action=Action.READ, resource=Resource.SESSIONS)
     def get_metrics(
         self,
         start: str,
@@ -299,6 +309,12 @@ class SessionOrchestrator:
 
     # ---------------- internals ----------------
 
+    def _get_session_temp_folder(self, session_id: str) -> Path:
+        base_temp_dir = Path(tempfile.gettempdir()) / "chatbot_uploads"
+        session_folder = base_temp_dir / session_id
+        session_folder.mkdir(parents=True, exist_ok=True)
+        return session_folder
+
     async def _emit(self, callback: CallbackType, message: ChatMessage) -> None:
         """
         Purpose:
@@ -312,7 +328,7 @@ class SessionOrchestrator:
     def _prepare_session_and_history(
         self,
         *,
-        user_id: str,
+        user: KeycloakUser,
         session_id: str | None,
         message: str,
         agent_name: str,
@@ -326,12 +342,12 @@ class SessionOrchestrator:
           (tools, thought traces) into the prompt.
         """
         session, is_new_session = self._get_or_create_session(
-            user_id=user_id, query=message, session_id=session_id
+            user_id=user.uid, query=message, session_id=session_id
         )
 
         # Rebuild minimal LangChain history (user/assistant/system only)
         lc_history: list[BaseMessage] = []
-        for m in self.get_session_history(session.id, user_id):
+        for m in self.get_session_history(session.id, user):
             if m.role == Role.user:
                 lc_history.append(HumanMessage(_concat_text_parts(m.parts or [])))
             elif m.role == Role.assistant:

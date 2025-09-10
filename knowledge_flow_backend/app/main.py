@@ -21,33 +21,33 @@ Entrypoint for the Knowledge Flow Backend App.
 
 import logging
 import os
-from rich.logging import RichHandler
-from dotenv import load_dotenv
 
+from dotenv import load_dotenv
+from fastapi import APIRouter, Depends, FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi_mcp import AuthConfig, FastApiMCP
+from fred_core import get_current_user, initialize_keycloak, register_exception_handlers
+from rich.logging import RichHandler
+
+from app.application_context import ApplicationContext
 from app.application_state import attach_app
 from app.common.http_logging import RequestResponseLogger
+from app.common.structures import Configuration
+from app.common.utils import parse_server_configuration
+from app.core.monitoring.monitoring_controller import MonitoringController
 from app.features.catalog.controller import CatalogController
+from app.features.content.controller import ContentController
+from app.features.ingestion.controller import IngestionController
 from app.features.kpi.kpi_controller import KPIController
 from app.features.kpi.opensearch_controller import OpenSearchOpsController
+from app.features.metadata.controller import MetadataController
 from app.features.pull.controller import PullDocumentController
 from app.features.pull.service import PullDocumentService
 from app.features.resources.controller import ResourceController
 from app.features.scheduler.controller import SchedulerController
-from fastapi import APIRouter, Depends, FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi_mcp import AuthConfig, FastApiMCP
-from fred_core import get_current_user, initialize_keycloak
-
-from app.application_context import ApplicationContext
-from app.common.structures import Configuration
-from app.common.utils import parse_server_configuration
-from app.features.content.controller import ContentController
-from app.features.metadata.controller import MetadataController
 from app.features.tabular.controller import TabularController
 from app.features.tag.controller import TagController
 from app.features.vector_search.controller import VectorSearchController
-from app.features.ingestion.controller import IngestionController
-from app.core.monitoring.monitoring_controller import MonitoringController
 
 # -----------------------
 # LOGGING + ENVIRONMENT
@@ -85,11 +85,12 @@ def create_app() -> FastAPI:
     configure_logging(configuration.app.log_level)
     base_url = configuration.app.base_url
     logger.info(f"🛠️ create_app() called with base_url={base_url}")
-    
+
     if not configuration.embedding.use_gpu:
         os.environ["CUDA_VISIBLE_DEVICES"] = ""
         os.environ["MPS_VISIBLE_DEVICES"] = ""
         import torch
+
         torch.set_default_device("cpu")
         logger.warning("⚠️ GPU support is disabled. Running on CPU.")
 
@@ -102,6 +103,9 @@ def create_app() -> FastAPI:
         redoc_url=f"{configuration.app.base_url}/redoc",
         openapi_url=f"{configuration.app.base_url}/openapi.json",
     )
+
+    # Register exception handlers
+    register_exception_handlers(app)
 
     app.add_middleware(
         CORSMiddleware,
@@ -126,7 +130,7 @@ def create_app() -> FastAPI:
     IngestionController(router)
     TabularController(router)
     # CodeSearchController(router)
-    TagController(router)
+    TagController(app, router)
     ResourceController(router)
     VectorSearchController(router)
     KPIController(router)
