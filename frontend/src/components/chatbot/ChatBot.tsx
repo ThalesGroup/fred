@@ -441,9 +441,6 @@ const ChatBot = ({
     console.log(`[📤 ChatBot] Sending message: ${input}`);
 
     const eventBase: ChatAskInput = {
-      user_id: KeyCloakService.GetUserId(), // TODO: backend should infer from JWT; front sends for now
-      user_name: KeyCloakService.GetUserName() || "unknown",
-
       message: input,
       agent_name: agent ? agent.name : currentAgenticFlow.name,
       session_id: currentChatBotSession?.id,
