@@ -88,7 +88,6 @@ class SessionOrchestrator:
         *,
         user: KeycloakUser,
         callback: CallbackType,
-        user_id: str,
         session_id: str,
         message: str,
         agent_name: str,
@@ -106,13 +105,13 @@ class SessionOrchestrator:
         """
         logger.info(
             "chat_ask_websocket user_id=%s session_id=%s agent=%s",
-            user_id,
+            user.uid,
             session_id,
             agent_name,
         )
 
         # KPI: count incoming question early (before any work)
-        actor = KPIActor(type="human", user_id=user_id)
+        actor = KPIActor(type="human", user_id=user.uid)
         exchange_id = client_exchange_id or str(uuid4())
         self.kpi.count(
             "chat.user_message_total",
@@ -161,7 +160,7 @@ class SessionOrchestrator:
                 "chat.exchange_latency_ms",
                 dims={
                     "agent_id": agent_name,
-                    "user_id": user_id,
+                    "user_id": user.uid,
                     "session_id": session.id,
                     "exchange_id": exchange_id,
                 },
@@ -193,7 +192,7 @@ class SessionOrchestrator:
                 1,
                 dims={
                     "agent_id": agent_name,
-                    "user_id": user_id,
+                    "user_id": user.uid,
                     "session_id": session.id,
                     "exchange_id": exchange_id,
                     "status": "ok" if saw_final_assistant else "error",
@@ -204,8 +203,8 @@ class SessionOrchestrator:
         # 4) Persist session + history
         session.updated_at = _utcnow_dt()
         self.session_store.save(session)
-        assert session.user_id == user_id, "Session/user mismatch"
-        self.history_store.save(session.id, prior + all_msgs, user_id)
+        assert session.user_id == user.uid, "Session/user mismatch"
+        self.history_store.save(session.id, prior + all_msgs, user.uid)
 
         return session, all_msgs
 

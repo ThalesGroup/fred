@@ -90,6 +90,7 @@ const ChatBot = ({
   const webSocketRef = useRef<WebSocket | null>(null);
   const [postTranscribeAudio] = usePostTranscribeAudioMutation();
   const [webSocket, setWebSocket] = useState<WebSocket | null>(null);
+  const wsTokenRef = useRef<string | null>(null);
 
   // Noms des libs / prompts / templates
   const { data: docLibs = [] } = useListAllTagsKnowledgeFlowV1TagsGetQuery({ type: "document" as TagType });
@@ -135,27 +136,33 @@ const ChatBot = ({
 
   const setupWebSocket = async (): Promise<WebSocket | null> => {
     const current = webSocketRef.current;
-
-    if (current && current.readyState === WebSocket.OPEN) {
-      return current;
-    }
+    if (current && current.readyState === WebSocket.OPEN) return current;
     if (current && (current.readyState === WebSocket.CLOSING || current.readyState === WebSocket.CLOSED)) {
       console.warn("[🔄 ChatBot] WebSocket was closed or closing. Resetting...");
       webSocketRef.current = null;
     }
     console.debug("[📩 ChatBot] initiate new connection:");
 
+    // ✅ Pourquoi: on authentifie la *connexion* WS une fois pour toutes,
+    //    exactement comme les autres endpoints HTTP (JWT). Le backend va décoder
+    //    ce token au handshake et ignorer tout user_id client.
+    await KeyCloakService.ensureFreshToken(30);
+    const token = KeyCloakService.GetToken();
+
     return new Promise((resolve, reject) => {
-      const wsUrl = toWsUrl(getConfig().backend_url_api, "/agentic/v1/chatbot/query/ws");
-      const socket = new WebSocket(wsUrl);
+      const rawWsUrl = toWsUrl(getConfig().backend_url_api, "/agentic/v1/chatbot/query/ws");
+      const url = new URL(rawWsUrl);
+      if (token) url.searchParams.set("token", token); // ⚠️ nécessite WSS en prod + logs sans query
+
+      const socket = new WebSocket(url.toString());
+      wsTokenRef.current = token || null; // mémo pour détection simple de changement
 
       socket.onopen = () => {
         console.log("[✅ ChatBot] WebSocket connected");
         webSocketRef.current = socket;
-        setWebSocket(socket); // ensure unmount cleanup closes the right instance
+        setWebSocket(socket);
         resolve(socket);
       };
-
       socket.onmessage = (event) => {
         try {
           const response = JSON.parse(event.data);
@@ -435,6 +442,8 @@ const ChatBot = ({
 
     const eventBase: ChatAskInput = {
       user_id: KeyCloakService.GetUserId(), // TODO: backend should infer from JWT; front sends for now
+      user_name: KeyCloakService.GetUserName() || "unknown",
+
       message: input,
       agent_name: agent ? agent.name : currentAgenticFlow.name,
       session_id: currentChatBotSession?.id,

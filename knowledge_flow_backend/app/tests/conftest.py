@@ -1,5 +1,6 @@
 # app/tests/conftest.py
 
+from pydantic import AnyHttpUrl, AnyUrl
 import pytest
 from fastapi.testclient import TestClient
 from langchain_community.embeddings import FakeEmbeddings
@@ -22,10 +23,12 @@ from app.common.structures import (
 from app.core.processors.output.vectorization_processor.embedder import Embedder
 from app.tests.test_utils.test_processors import TestOutputProcessor, TestMarkdownProcessor, TestTabularProcessor
 from fred_core import (
-    SecurityConfiguration,
     DuckdbStoreConfig,
     PostgresStoreConfig,
     OpenSearchStoreConfig,
+    SecurityConfiguration,
+    M2MSecurity,
+    UserSecurity,
 )
 
 
@@ -46,7 +49,10 @@ def app_context(monkeypatch, fake_embedder):
     monkeypatch.setenv("OPENAI_API_KEY", "test")
 
     duckdb = DuckdbStoreConfig(type="duckdb", duckdb_path="/tmp/testdb.duckdb")
-
+    fake_security_config = SecurityConfiguration(
+        m2m=M2MSecurity(enabled=False, realm_url=AnyUrl("http://localhost:8080/realms/fake-m2m-realm"), client_id="fake-m2m-client", audience="fake-audience"),
+        user=UserSecurity(enabled=False, realm_url=AnyUrl("http://localhost:8080/realms/fake-user-realm"), client_id="fake-user-client", authorized_origins=[AnyHttpUrl("http://localhost:5173")]),
+    )
     config = Configuration(
         app=AppConfig(
             base_url="/knowledge-flow/v1",
@@ -55,8 +61,8 @@ def app_context(monkeypatch, fake_embedder):
             log_level="debug",
             reload=False,
             reload_dir=".",
-            security=SecurityConfiguration(enabled=False, keycloak_url="", client_id="app", authorized_origins=[]),
         ),
+        security=fake_security_config,
         scheduler=SchedulerConfig(
             enabled=False,
             backend="temporal",

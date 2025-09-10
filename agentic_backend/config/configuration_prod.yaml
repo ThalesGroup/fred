@@ -18,20 +18,20 @@ app:
   log_level: "info"
   reload: false
   reload_dir: "."
-  security:
+  
+security:
+  m2m:
     enabled: true
     client_id: "agentic"
-    keycloak_url: "http://app-keycloak:8080/realms/app"
+    realm_url: "http://app-keycloak:8080/realms/app"
+  user:
+    enabled: true
+    client_id: "app"
+    realm_url: "http://app-keycloak:8080/realms/app"
     authorized_origins:
       - "http://localhost:5173"
 
 frontend_settings:
-  security:
-    enabled: true
-    client_id: "app"
-    keycloak_url: "http://app-keycloak:8080/realms/app"
-    authorized_origins:
-      - "http://localhost:5173"
   feature_flags:
     # If true activate the backend and frontend modules in charge of K8
     # and frugality monitoring
