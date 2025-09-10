@@ -250,7 +250,7 @@ applications:
 
   fred-frontend:
     enabled: true
-    applicationName: fred-frontend
+    applicationName: frontend
     deployment:
       enabled: true
     statefulset:
@@ -293,7 +293,7 @@ applications:
             - path: /
               pathType: Prefix
               service:
-                name: fred-frontend
+                name: frontend
                 port: 80
             - path: /agentic
               pathType: Prefix
@@ -305,33 +305,21 @@ applications:
               service:
                 name: knowledge-flow-backend
                 port: 8000
-            # # The additionnal paths might be useful if
-            # # only the frontend is exposed
-            # - path: /agentic
-            #   pathType: Prefix
-            #   service:
-            #     name: agentic-backend
-            #     port: 80
-            # - path: /knowledge-flow
-            #   pathType: Prefix
-            #   service:
-            #     name: knowledge-flow-backend
-            #     port: 8080
       tls:
-        - secretName: fred-frontend-crt
+        - secretName: frontend-crt
           hosts:
-            - fred.dev.local
+            - fred.dev.fred.thalesgroup.com
     volumeMounts:
-      - name: fred-frontend-config-vol
+      - name: frontend-config-vol
         mountPath: /usr/share/nginx/html/config.json
         subPath: config.json
-      - name: fred-frontend-config-vol
+      - name: frontend-config-vol
         mountPath: /usr/share/nginx/html/keycloak.json
         subPath: keycloak.json
     volumes:
-      - name: fred-frontend-config-vol
+      - name: frontend-config-vol
         configMap:
-          name: fred-frontend-front
+          name: frontend-front
     probes:
       lifecycle:
         enabled: false
