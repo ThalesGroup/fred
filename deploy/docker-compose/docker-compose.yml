@@ -31,7 +31,7 @@ services:
 
   frontend:
     image: ghcr.io/thalesgroup/fred-agent/frontend:0.1
-    container_name: fred-frontend
+    container_name: frontend
     build:
       context: ../../
       dockerfile: frontend/dockerfiles/Dockerfile-dev
