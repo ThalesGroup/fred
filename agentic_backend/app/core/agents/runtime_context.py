@@ -28,6 +28,10 @@ class RuntimeContext(BaseModel):
     selected_document_libraries_ids: list[str] | None = None
     selected_prompt_ids: list[str] | None = None
     selected_template_ids: list[str] | None = None
+    
+    # User authentication token for OAuth2 Token Exchange
+    # This is the original user's JWT token used for token exchange
+    user_token: str | None = None
 
 
 # Type alias for context provider functions
@@ -53,3 +57,10 @@ def get_template_libraries_ids(context: RuntimeContext | None) -> list[str] | No
     if not context:
         return None
     return context.selected_template_ids
+
+
+def get_user_token(context: RuntimeContext | None) -> str | None:
+    """Helper to extract user token from context for OAuth2 token exchange."""
+    if not context:
+        return None
+    return context.user_token

@@ -238,7 +238,7 @@ class MCPRuntime:
         `get_mcp_client_for_agent()`. On success, the agent should bind the
         model’s tools using `self.get_tools()`.
         """
-        self.mcp_client = await get_mcp_client_for_agent(self.agent_settings)
+        self.mcp_client = await get_mcp_client_for_agent(self.agent_settings, self.context_provider)
         self.toolkit = McpToolkit(self.mcp_client, self.context_provider)
         self._snapshot("init")
 
@@ -277,7 +277,7 @@ class MCPRuntime:
             self._snapshot("refresh/before")
             old = self.mcp_client
             try:
-                new_client = await get_mcp_client_for_agent(self.agent_settings)
+                new_client = await get_mcp_client_for_agent(self.agent_settings, self.context_provider)
                 new_toolkit = McpToolkit(new_client, self.context_provider)
             except Exception:
                 logger.exception("[MCP] Refresh failed; keeping previous client.")

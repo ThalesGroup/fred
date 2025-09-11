@@ -21,7 +21,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Tuple
 
 import jwt
-from fastapi import HTTPException, Security
+from fastapi import HTTPException, Security, Request, Depends
 from fastapi.security import OAuth2PasswordBearer
 from jwt import PyJWKClient
 

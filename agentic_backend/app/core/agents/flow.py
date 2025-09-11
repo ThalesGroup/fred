@@ -25,6 +25,7 @@ from app.common.structures import AgentSettings
 from app.core.agents.agent_state import Prepared, resolve_prepared
 from app.application_context import get_knowledge_flow_base_url
 from app.core.agents.runtime_context import RuntimeContext
+from app.common.mcp_runtime import MCPRuntime
 
 logger = logging.getLogger(__name__)
 
@@ -134,6 +135,19 @@ class AgentFlow:
         self.streaming_memory = MemorySaver()
         self.compiled_graph: Optional[CompiledStateGraph] = None
         self.runtime_context: Optional[RuntimeContext] = None
+        self.mcp: Optional[MCPRuntime] = None
+
+    async def create_mcp_runtime(self, runtime_context: RuntimeContext) -> MCPRuntime:
+        """Crée et initialise une instance de MCPRuntime pour cette requête."""
+        if not runtime_context:
+            raise ValueError("Le runtime_context est requis pour créer MCPRuntime.")
+        
+        mcp_runtime = MCPRuntime(
+            self.agent_settings,
+            context_provider=lambda: runtime_context,
+        )
+        await mcp_runtime.init()
+        return mcp_runtime
 
     def use_fred_prompts(self, messages: Sequence[BaseMessage]) -> List[BaseMessage]:
         """

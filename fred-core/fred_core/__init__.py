@@ -65,7 +65,7 @@ from fred_core.security.keycloak import (
     split_realm_url,
     decode_jwt,
 )
-from fred_core.security.outbound import BearerAuth, ClientCredentialsProvider
+from fred_core.security.outbound import BearerAuth, ClientCredentialsProvider, TokenExchangeProvider
 from fred_core.security.structure import (
     KeycloakUser,
     SecurityConfiguration,
@@ -103,6 +103,7 @@ __all__ = [
     "VectorSearchHit",
     "ClientCredentialsProvider",
     "BearerAuth",
+    "TokenExchangeProvider",
     "OpenSearchKPIStore",
     "KPIEvent",
     "Metric",

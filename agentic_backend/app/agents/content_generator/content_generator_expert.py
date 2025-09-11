@@ -48,7 +48,7 @@ class ContentGeneratorExpert(AgentFlow):
             agent_settings=self.agent_settings,
             # If you expose runtime filtering (tenant/library/time window),
             # pass a provider: lambda: self.get_runtime_context()
-            context_provider=(lambda: self.get_runtime_context()),
+            context_provider=self.get_runtime_context,
         )
         self.base_prompt = self._generate_prompt()
 
