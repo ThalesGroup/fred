@@ -361,9 +361,8 @@ class SessionOrchestrator:
                 lc_history.append(SystemMessage(_concat_text_parts(m.parts or [])))
             # Role.tool is ignored for prompt cleanliness.
 
-        agent: AgentFlow = self.agent_manager.get_agent_instance(
-            agent_name, runtime_context
-        )
+        agent: AgentFlow = self.agent_manager.get_agent_instance(agent_name, runtime_context)
+
         return session, lc_history, agent, is_new_session
 
     def _get_or_create_session(

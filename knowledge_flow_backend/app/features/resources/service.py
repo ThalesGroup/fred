@@ -21,9 +21,9 @@ from app.application_context import ApplicationContext
 from app.features.resources.utils import build_resource_from_create
 
 from .structures import Resource, ResourceCreate, ResourceKind, ResourceUpdate
+import logging
 
 logger = logging.getLogger(__name__)
-
 
 def utc_now():
     return datetime.now(timezone.utc)

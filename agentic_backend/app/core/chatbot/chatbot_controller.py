@@ -34,8 +34,6 @@ from app.common.utils import log_exception
 from app.core.agents.agent_manager import AgentManager
 from app.core.agents.agentic_flow import AgenticFlow
 from app.core.agents.runtime_context import RuntimeContext
-from app.core.agents.structures import AgenticFlow
-from app.core.auth.user_context_helper import create_runtime_context_with_user_token
 from app.core.chatbot.chat_schema import (
     ChatAskInput,
     ChatMessage,
@@ -168,7 +166,7 @@ class ChatbotController:
                 return
 
             try:
-                user = decode_jwt(token)  # KeycloakUser avec sub en uid²
+                user = decode_jwt(token)  # KeycloakUser avec sub en uid
             except HTTPException:
                 await websocket.close(code=4401)
                 return
