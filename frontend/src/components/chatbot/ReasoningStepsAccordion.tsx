@@ -98,7 +98,7 @@ function summarizeToolResult(m: ChatMessage): string | undefined {
   return asPlainText(p.content, 60);
 }
 
-export default function ReasoningTraceAccordion({ steps, isOpenByDefault = true }: Props) {
+export default function ReasoningTraceAccordion({ steps, isOpenByDefault = false }: Props) {
   const theme = useTheme();
   const ordered = useMemo(
     () => steps.filter((m) => TRACE_CHANNELS.includes(m.channel)).sort((a, b) => a.rank - b.rank),
