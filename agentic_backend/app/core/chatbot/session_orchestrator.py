@@ -26,6 +26,8 @@ from app.application_context import (
 from app.core.agents.agent_manager import AgentManager
 from app.core.agents.flow import AgentFlow
 from app.core.agents.runtime_context import RuntimeContext
+from app.common.mcp_runtime import MCPRuntime
+
 from app.core.chatbot.chat_schema import (
     Channel,
     ChatMessage,
@@ -92,6 +94,7 @@ class SessionOrchestrator:
         message: str,
         agent_name: str,
         runtime_context: Optional[RuntimeContext] = None,
+        mcp_runtime: MCPRuntime | None,
         client_exchange_id: Optional[str] = None,
     ) -> Tuple[SessionSchema, List[ChatMessage]]:
         """
@@ -133,6 +136,9 @@ class SessionOrchestrator:
             agent_name=agent_name,
             runtime_context=runtime_context,
         )
+        
+        if mcp_runtime:
+            agent.mcp = mcp_runtime
 
         # Rank base = current stored history length
         prior: List[ChatMessage] = self.history_store.get(session.id) or []

@@ -174,6 +174,7 @@ class ChatbotController:
             try:
                 while True:
                     client_request = None
+                    mcp_runtime = None
                     try:
                         client_request = await websocket.receive_json()
                         
@@ -199,6 +200,10 @@ class ChatbotController:
                                 enhanced_runtime_context = RuntimeContext(user_token=user_token)
                             logger.debug("Enhanced runtime context with user token for OAuth2 Token Exchange")
 
+                            agent = self.agent_manager.get_agent_instance(ask.agent_name, enhanced_runtime_context)
+                            if enhanced_runtime_context is not None:
+                                mcp_runtime = await agent.create_mcp_runtime(enhanced_runtime_context)
+
                         async def ws_callback(msg_dict: dict):
                             # Stream every ChatMessage as a StreamEvent over WS
                             event = StreamEvent(
@@ -217,6 +222,7 @@ class ChatbotController:
                             message=ask.message,
                             agent_name=ask.agent_name,
                             runtime_context=enhanced_runtime_context,
+                            mcp_runtime=mcp_runtime,
                             client_exchange_id=ask.client_exchange_id,
                         )
 
@@ -248,6 +254,9 @@ class ChatbotController:
                         else:
                             logger.error("[🔌 WebSocket] Connection closed by client.")
                             break
+                    finally:
+                        if mcp_runtime:
+                            await mcp_runtime.aclose()
             except Exception as e:
                 summary = log_exception(
                     e, "EXTERNAL Error processing chatbot client query"
