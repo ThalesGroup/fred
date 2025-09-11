@@ -35,7 +35,7 @@ WORKDIR /app
 # Copy pyproject & lock to install deps
 COPY agentic_backend/pyproject.toml agentic_backend/uv.lock* /app/
 COPY fred-core /fred-core
-COPY agentic_backend/* /app/
+COPY agentic_backend/. /app/
 COPY scripts /scripts
 
 # Install only dependencies
