@@ -9,7 +9,8 @@ authors = [
 requires-python = ">=3.12,<3.13"
 
 dependencies = [
-  "fastapi==0.115.7",
+  "fastapi==0.116.1",
+  "fastapi-mcp==0.4.0",
   "PyYAML==6.0.1",
   "uvicorn[standard]>=0.30.6,<0.31.0",
   "croniter==2.0.2",
@@ -37,6 +38,7 @@ dependencies = [
   "cryptography>=45.0.4",
   "fred-core",
   "azure-identity>=1.23.1",
+  "uv",
 ]
 
 [project.optional-dependencies]

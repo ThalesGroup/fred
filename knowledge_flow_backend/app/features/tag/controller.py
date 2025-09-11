@@ -13,17 +13,18 @@
 # limitations under the License.
 
 # Copyright Thales 2025
-from typing import Annotated, Optional
 import logging
+from typing import Annotated, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, FastAPI, Request, status
 from fastapi.params import Query
+from fastapi.responses import JSONResponse
+from fred_core import KeycloakUser, get_current_user
 
 from app.core.stores.tags.base_tag_store import TagAlreadyExistsError, TagNotFoundError
 from app.features.metadata.service import MetadataNotFound
 from app.features.tag.service import TagService
-from app.features.tag.structure import TagCreate, TagUpdate, TagWithItemsId, TagType
-from fred_core import KeycloakUser, get_current_user
+from app.features.tag.structure import TagCreate, TagType, TagUpdate, TagWithItemsId
 
 logger = logging.getLogger(__name__)
 
@@ -35,22 +36,27 @@ class TagController:
     The TagController provides endpoints to easily retrieve tags with their items.
     """
 
-    def __init__(self, router: APIRouter):
+    def __init__(self, app: FastAPI, router: APIRouter):
         self.service = TagService()
+        self._register_exception_handlers(app)
+        self._register_routes(router)
 
-        def handle_exception(e: Exception) -> HTTPException:
-            if isinstance(e, TagNotFoundError):
-                return HTTPException(status_code=404, detail="Tag not found")
-            if isinstance(e, TagAlreadyExistsError):
-                return HTTPException(status_code=409, detail="Tag already exists")
-            if isinstance(e, MetadataNotFound):
-                return HTTPException(status_code=404, detail=str(e))
-            logger.error(f"Internal server error: {e}", exc_info=True)
-            return HTTPException(status_code=500, detail="Internal server error")
+    def _register_exception_handlers(self, app: FastAPI):
+        """Register specific exception handlers for tag-related exceptions."""
 
-        self._register_routes(router, handle_exception)
+        @app.exception_handler(TagNotFoundError)
+        async def tag_not_found_handler(request: Request, exc: TagNotFoundError) -> JSONResponse:
+            return JSONResponse(status_code=404, content={"detail": "Tag not found"})
 
-    def _register_routes(self, router: APIRouter, handle_exception):
+        @app.exception_handler(TagAlreadyExistsError)
+        async def tag_already_exists_handler(request: Request, exc: TagAlreadyExistsError) -> JSONResponse:
+            return JSONResponse(status_code=409, content={"detail": "Tag already exists"})
+
+        @app.exception_handler(MetadataNotFound)
+        async def metadata_not_found_handler(request: Request, exc: MetadataNotFound) -> JSONResponse:
+            return JSONResponse(status_code=404, content={"detail": str(exc)})
+
+    def _register_routes(self, router: APIRouter):
         @router.get(
             "/tags",
             response_model=list[TagWithItemsId],
@@ -65,16 +71,13 @@ class TagController:
             offset: Annotated[int, Query(ge=0, description="Items to skip")] = 0,
             user: KeycloakUser = Depends(get_current_user),
         ) -> list[TagWithItemsId]:
-            try:
-                return self.service.list_all_tags_for_user(
-                    user,
-                    tag_type=type,
-                    path_prefix=path_prefix,
-                    limit=limit,
-                    offset=offset,
-                )
-            except Exception as e:
-                raise handle_exception(e)
+            return self.service.list_all_tags_for_user(
+                user,
+                tag_type=type,
+                path_prefix=path_prefix,
+                limit=limit,
+                offset=offset,
+            )
 
         @router.get(
             "/tags/{tag_id}",
@@ -84,10 +87,7 @@ class TagController:
             summary="Get a tag by ID",
         )
         async def get_tag(tag_id: str, user: KeycloakUser = Depends(get_current_user)):
-            try:
-                return self.service.get_tag_for_user(tag_id, user)
-            except Exception as e:
-                raise handle_exception(e)
+            return self.service.get_tag_for_user(tag_id, user)
 
         @router.post(
             "/tags",
@@ -98,12 +98,9 @@ class TagController:
             summary="Create a new tag",
         )
         async def create_tag(tag: TagCreate, user: KeycloakUser = Depends(get_current_user)):
-            try:
-                # Consider normalizing tag.path in the service if not already done
-                logger.info(f"Creating tag: {tag} for user: {user.username}")
-                return self.service.create_tag_for_user(tag, user)
-            except Exception as e:
-                raise handle_exception(e)
+            # Consider normalizing tag.path in the service if not already done
+            logger.info(f"Creating tag: {tag} for user: {user.username}")
+            return self.service.create_tag_for_user(tag, user)
 
         @router.put(
             "/tags/{tag_id}",
@@ -113,10 +110,7 @@ class TagController:
             summary="Update a tag (can rename/move via name/path)",
         )
         async def update_tag(tag_id: str, tag: TagUpdate, user: KeycloakUser = Depends(get_current_user)):
-            try:
-                return self.service.update_tag_for_user(tag_id, tag, user)
-            except Exception as e:
-                raise handle_exception(e)
+            return self.service.update_tag_for_user(tag_id, tag, user)
 
         @router.delete(
             "/tags/{tag_id}",
@@ -125,8 +119,4 @@ class TagController:
             summary="Delete a tag",
         )
         async def delete_tag(tag_id: str, user: KeycloakUser = Depends(get_current_user)):
-            try:
-                self.service.delete_tag_for_user(tag_id, user)
-                return
-            except Exception as e:
-                raise handle_exception(e)
+            self.service.delete_tag_for_user(tag_id, user)

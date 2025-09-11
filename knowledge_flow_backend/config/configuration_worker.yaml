@@ -8,12 +8,17 @@ app:
   reload: false
   reload_dir: "."
 
-# Enable or disable the security layer
 security:
-  enabled: false
-  keycloak_url: "http://fred-keycloak:8080/realms/fred"
-  authorized_origins:
-  - "http://localhost:5173"
+  m2m:
+    enabled: false
+    client_id: "knowledge-flow"
+    realm_url: "http://app-keycloak:8080/realms/app"
+  user:
+    enabled: false
+    client_id: "app"
+    realm_url: "http://app-keycloak:8080/realms/app"
+    authorized_origins:
+      - "http://localhost:5173"
 
 scheduler:
   enabled: true
@@ -172,7 +177,7 @@ embedding:
   # BACKEND: "azureopenai"
   # -------------------------------------
   # - AZURE_OPENAI_API_KEY
-  # - AZURE_OPENAI_BASE_URL
+  # - AZURE_OPENAI_ENDPOINT
   # - AZURE_API_VERSION
   # - AZURE_DEPLOYMENT_EMBEDDING
   #

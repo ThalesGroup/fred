@@ -21,34 +21,44 @@ Entrypoint for the Knowledge Flow Backend App.
 
 import logging
 import os
-from rich.logging import RichHandler
-from dotenv import load_dotenv
 
+from dotenv import load_dotenv
+from fastapi import APIRouter, Depends, FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi_mcp import AuthConfig, FastApiMCP
+from fred_core import get_current_user, initialize_user_security, register_exception_handlers
+from rich.logging import RichHandler
+
+from app.application_context import ApplicationContext
+from app.application_state import attach_app
+from app.common.http_logging import RequestResponseLogger
+from app.common.structures import Configuration
+from app.common.utils import parse_server_configuration
+from app.core.monitoring.monitoring_controller import MonitoringController
 from app.features.catalog.controller import CatalogController
+from app.features.content.controller import ContentController
+from app.features.ingestion.controller import IngestionController
+from app.features.kpi.kpi_controller import KPIController
+from app.features.kpi.opensearch_controller import OpenSearchOpsController
+from app.features.metadata.controller import MetadataController
 from app.features.pull.controller import PullDocumentController
 from app.features.pull.service import PullDocumentService
 from app.features.resources.controller import ResourceController
 from app.features.scheduler.controller import SchedulerController
-from fastapi import APIRouter, FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi_mcp import FastApiMCP
-from fred_core import initialize_keycloak
-
-from app.application_context import ApplicationContext
-from app.common.structures import Configuration
-from app.common.utils import parse_server_configuration
-from app.features.content.controller import ContentController
-from app.features.metadata.controller import MetadataController
 from app.features.tabular.controller import TabularController
 from app.features.tag.controller import TagController
 from app.features.vector_search.controller import VectorSearchController
-from app.features.ingestion.controller import IngestionController
 
 # -----------------------
 # LOGGING + ENVIRONMENT
 # -----------------------
 
 logger = logging.getLogger(__name__)
+
+
+def _norm_origin(o) -> str:
+    # Ensure exact match with browser's Origin header (no trailing slash)
+    return str(o).rstrip("/")
 
 
 def configure_logging(log_level: str):
@@ -81,9 +91,15 @@ def create_app() -> FastAPI:
     base_url = configuration.app.base_url
     logger.info(f"🛠️ create_app() called with base_url={base_url}")
 
-    ApplicationContext(configuration)
+    if not configuration.embedding.use_gpu:
+        os.environ["CUDA_VISIBLE_DEVICES"] = ""
+        os.environ["MPS_VISIBLE_DEVICES"] = ""
+        import torch
 
-    initialize_keycloak(configuration.app.security)
+        torch.set_default_device("cpu")
+        logger.warning("⚠️ GPU support is disabled. Running on CPU.")
+
+    ApplicationContext(configuration)
 
     app = FastAPI(
         docs_url=f"{configuration.app.base_url}/docs",
@@ -91,14 +107,25 @@ def create_app() -> FastAPI:
         openapi_url=f"{configuration.app.base_url}/openapi.json",
     )
 
+    # Register exception handlers
+    register_exception_handlers(app)
+    allowed_origins = list({_norm_origin(o) for o in configuration.security.user.authorized_origins})
+    logger.info("[CORS] allow_origins=%s", allowed_origins)
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=configuration.app.security.authorized_origins,
-        allow_methods=["GET", "POST", "PUT", "DELETE"],
+        allow_origins=allowed_origins,
+        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         allow_headers=["Content-Type", "Authorization"],
     )
+    initialize_user_security(configuration.security.user)
+
+    app.add_middleware(RequestResponseLogger)
+    # Attach FastAPI to build M2M in-process client (lives outside ApplicationContext)
+    attach_app(app)
 
     router = APIRouter(prefix=configuration.app.base_url)
+
+    MonitoringController(router)
 
     pull_document_service = PullDocumentService()
     # Register controllers
@@ -109,9 +136,11 @@ def create_app() -> FastAPI:
     IngestionController(router)
     TabularController(router)
     # CodeSearchController(router)
-    TagController(router)
+    TagController(app, router)
     ResourceController(router)
     VectorSearchController(router)
+    KPIController(router)
+    OpenSearchOpsController(router)
 
     if configuration.scheduler.enabled:
         logger.info("🧩 Activating ingestion scheduler controller.")
@@ -119,52 +148,128 @@ def create_app() -> FastAPI:
 
     logger.info("🧩 All controllers registered.")
     app.include_router(router)
+    mcp_prefix = "/knowledge-flow/v1"
+    mcp_opensearch_ops = FastApiMCP(
+        app,
+        name="Knowledge Flow OpenSearch Ops MCP",
+        description=("Read-only operational tools for OpenSearch: cluster health, nodes, shards, indices, mappings, and sample docs. Monitoring/diagnostics only."),
+        include_tags=["OpenSearch"],  # <-- only export routes tagged OpenSearch as MCP tools
+        describe_all_responses=True,
+        describe_full_response_schema=True,
+        auth_config=AuthConfig(  # <-- protect with your user auth as a normal dependency
+            dependencies=[Depends(get_current_user)]
+        ),
+    )
+    # Mount via HTTP at a clear, versioned path:
+    mcp_mount_path = f"{mcp_prefix}/mcp-opensearch-ops"
+    mcp_opensearch_ops.mount_http(mount_path=mcp_mount_path)
+    logger.info(f"🔌 MCP OpenSearch Ops mounted at {mcp_mount_path}")
+    mcp_kpi = FastApiMCP(
+        app,
+        name="Knowledge Flow KPI MCP",
+        description=(
+            "Query interface for application KPIs. "
+            "Use these endpoints to run structured aggregations over metrics "
+            "(e.g. vectorization latency, LLM usage, token costs, error counts). "
+            "Provides schema, presets, and query compilation helpers so agents can "
+            "form valid KPI queries without guessing."
+        ),
+        include_tags=["KPI"],
+        describe_all_responses=True,
+        describe_full_response_schema=True,
+        auth_config=AuthConfig(  # <-- protect with your user auth as a normal dependency
+            dependencies=[Depends(get_current_user)]
+        ),
+    )
+    mcp_kpi.mount_http(mount_path=f"{mcp_prefix}/mcp-kpi")
 
     mcp_tabular = FastApiMCP(
         app,
         name="Knowledge Flow Tabular MCP",
-        description="MCP server for Knowledge Flow Tabular",
+        description=(
+            "SQL access layer exposed through SQLAlchemy. "
+            "Provides agents with read and query capabilities over relational data "
+            "from configured backends (e.g. PostgreSQL, MySQL, SQLite). "
+            "Use this MCP to explore table schemas, run SELECT queries, and analyze tabular datasets. "
+            "Create, update and drop tables if asked by the user if allowed."
+        ),
         include_tags=["Tabular"],
         describe_all_responses=True,
         describe_full_response_schema=True,
+        auth_config=AuthConfig(  # <-- protect with your user auth as a normal dependency
+            dependencies=[Depends(get_current_user)]
+        ),
     )
-    mcp_tabular.mount(mount_path="/mcp_tabular")
+    mcp_tabular.mount_http(mount_path=f"{mcp_prefix}/mcp-tabular")
+
     mcp_text = FastApiMCP(
         app,
         name="Knowledge Flow Text MCP",
-        description="MCP server for Knowledge Flow Text",
+        description=(
+            "Semantic text search interface backed by the vector store. "
+            "Use this MCP to perform vector similarity search over ingested documents, "
+            "retrieve relevant passages, and ground answers in source material. "
+            "It supports queries by text embedding rather than keyword match."
+        ),
         include_tags=["Vector Search"],
         describe_all_responses=True,
         describe_full_response_schema=True,
+        auth_config=AuthConfig(  # <-- protect with your user auth as a normal dependency
+            dependencies=[Depends(get_current_user)]
+        ),
     )
-    mcp_text.mount(mount_path="/mcp_text")
+    mcp_text.mount_http(mount_path=f"{mcp_prefix}/mcp-text")
+
     mcp_template = FastApiMCP(
         app,
         name="Knowledge Flow Text MCP",
         description="MCP server for Knowledge Flow Text",
-        include_tags=["Vector Search"],
+        include_tags=["Templates", "Prompts"],
         describe_all_responses=True,
         describe_full_response_schema=True,
+        auth_config=AuthConfig(  # <-- protect with your user auth as a normal dependency
+            dependencies=[Depends(get_current_user)]
+        ),
     )
-    mcp_template.mount(mount_path="/mcp_template")
+    mcp_template.mount_http(mount_path=f"{mcp_prefix}/mcp-template")
+
     mcp_code = FastApiMCP(
         app,
         name="Knowledge Flow Code MCP",
-        description="MCP server for Knowledge Flow Codebase features",
+        description=(
+            "Codebase exploration and search interface. "
+            "Use this MCP to scan and query code repositories, find relevant files, "
+            "and retrieve snippets or definitions. "
+            "Currently supports basic search, with planned improvements for deeper analysis "
+            "such as symbol navigation, dependency mapping, and code understanding."
+        ),
         include_tags=["Code Search"],
         describe_all_responses=True,
         describe_full_response_schema=True,
+        auth_config=AuthConfig(  # <-- protect with your user auth as a normal dependency
+            dependencies=[Depends(get_current_user)]
+        ),
     )
-    mcp_code.mount(mount_path="/mcp_code")
+    mcp_code.mount_http(mount_path=f"{mcp_prefix}/mcp-code")
+
     mcp_resources = FastApiMCP(
         app,
-        name="Knowledge Flow resource MCP",
-        description="MCP server for Knowledge Flow resources features",
-        include_tags=["Resources"],
+        name="Knowledge Flow Resources MCP",
+        description=(
+            "Access to reusable resources for agents. "
+            "Provides prompts, templates, and other content assets that can be used "
+            "to customize agent behavior or generate well-structured custom reports. "
+            "Use this MCP to browse, retrieve, and apply predefined resources when composing answers or building workflows."
+        ),
+        include_tags=["Resources", "Tags"],
         describe_all_responses=True,
         describe_full_response_schema=True,
+        auth_config=AuthConfig(  # <-- protect with your user auth as a normal dependency
+            dependencies=[Depends(get_current_user)]
+        ),
     )
-    mcp_resources.mount(mount_path="/mcp_resource")
+    mcp_resources.mount_http(mount_path=f"{mcp_prefix}/mcp-resources")
+
     return app
 
 
@@ -174,4 +279,4 @@ def create_app() -> FastAPI:
 
 if __name__ == "__main__":
     print("To start the app, use uvicorn cli with:")
-    print("uv run uvicorn --factory app.main:create_app ...")
+    print("uv run uvicorn app.main:create_app --factory ...")

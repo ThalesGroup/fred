@@ -13,20 +13,19 @@
 # limitations under the License.
 
 import logging
+from threading import Lock
 from typing import Any, Dict, List, Literal, Optional
 
-from fred_core import KeycloakUser, get_current_user
-from app.common.document_structures import DocumentMetadata
-from app.common.utils import log_exception
-from app.features.pull.controller import PullDocumentsResponse
-from app.features.pull.service import PullDocumentService
 from fastapi import APIRouter, Body, Depends, HTTPException
+from fred_core import KeycloakUser, get_current_user
+from pydantic import BaseModel, Field
 
 from app.application_context import ApplicationContext
+from app.common.document_structures import DocumentMetadata
+from app.common.utils import log_exception
 from app.features.metadata.service import InvalidMetadataRequest, MetadataNotFound, MetadataService, MetadataUpdateError
-from threading import Lock
-
-from pydantic import BaseModel, Field
+from app.features.pull.controller import PullDocumentsResponse
+from app.features.pull.service import PullDocumentService
 
 
 class SortOption(BaseModel):
@@ -47,14 +46,15 @@ class BrowseDocumentsRequest(BaseModel):
     sort_by: Optional[List[SortOption]] = None
 
 
-def handle_exception(e: Exception) -> HTTPException:
+def handle_exception(e: Exception) -> HTTPException | Exception:
     if isinstance(e, MetadataNotFound):
         return HTTPException(status_code=404, detail=str(e))
     elif isinstance(e, InvalidMetadataRequest):
         return HTTPException(status_code=400, detail=str(e))
     elif isinstance(e, MetadataUpdateError):
-        return HTTPException(status_code=500, detail=str(e))
-    return HTTPException(status_code=500, detail="Internal server error")
+        return e  # Will be handled by generic_exception_handler as 500
+
+    return e
 
 
 class MetadataController:
@@ -113,7 +113,7 @@ class MetadataController:
         )
         def search_document_metadata(filters: Dict[str, Any] = Body(default={}), user: KeycloakUser = Depends(get_current_user)):
             try:
-                return self.service.get_documents_metadata(filters)
+                return self.service.get_documents_metadata(user, filters)
             except Exception as e:
                 log_exception(e)
                 raise handle_exception(e)
@@ -129,9 +129,9 @@ class MetadataController:
                 "Use `/documents/pull` to inspect discovered-but-unprocessed files."
             ),
         )
-        def get_document_metadata(document_uid: str):
+        def get_document_metadata(document_uid: str, user: KeycloakUser = Depends(get_current_user)):
             try:
-                return self.service.get_document_metadata(document_uid)
+                return self.service.get_document_metadata(user, document_uid)
             except Exception as e:
                 raise handle_exception(e)
 
@@ -153,7 +153,7 @@ class MetadataController:
             user: KeycloakUser = Depends(get_current_user),
         ):
             try:
-                self.service.update_document_retrievable(document_uid, retrievable, user.username)
+                self.service.update_document_retrievable(user, document_uid, retrievable, user.username)
             except Exception as e:
                 raise handle_exception(e)
 
@@ -172,35 +172,30 @@ class MetadataController:
             **Example filters:** `tags`, `retrievable`, `title`, etc.
             """,
         )
-        def browse_documents(req: BrowseDocumentsRequest):
+        def browse_documents(req: BrowseDocumentsRequest, user: KeycloakUser = Depends(get_current_user)):
             config = self.context.get_config().document_sources.get(req.source_tag)
             if not config:
                 raise HTTPException(status_code=404, detail=f"Source tag '{req.source_tag}' not found")
 
-            try:
-                if config.type == "push":
-                    filters = req.filters or {}
-                    filters["source_tag"] = req.source_tag
-                    docs = self.service.get_documents_metadata(filters)
-                    sort_by = req.sort_by or [SortOption(field="document_name", direction="asc")]
+            if config.type == "push":
+                filters = req.filters or {}
+                filters["source_tag"] = req.source_tag
+                docs = self.service.get_documents_metadata(user, filters)
+                sort_by = req.sort_by or [SortOption(field="document_name", direction="asc")]
 
-                    for sort in reversed(sort_by):  # Apply last sort first for correct multi-field sorting
-                        docs.sort(
-                            key=lambda d: getattr(d, sort.field, "") or "",  # fallback to empty string
-                            reverse=(sort.direction == "desc"),
-                        )
+                for sort in reversed(sort_by):  # Apply last sort first for correct multi-field sorting
+                    docs.sort(
+                        key=lambda d: getattr(d, sort.field, "") or "",  # fallback to empty string
+                        reverse=(sort.direction == "desc"),
+                    )
 
-                    paginated = docs[req.offset : req.offset + req.limit]
-                    return PullDocumentsResponse(documents=paginated, total=len(docs))
+                paginated = docs[req.offset : req.offset + req.limit]
+                return PullDocumentsResponse(documents=paginated, total=len(docs))
 
-                elif config.type == "pull":
-                    docs, total = self.pull_document_service.list_pull_documents(source_tag=req.source_tag, offset=req.offset, limit=req.limit)
-                    # You could apply extra filtering here if needed
-                    return PullDocumentsResponse(documents=docs, total=total)
+            elif config.type == "pull":
+                docs, total = self.pull_document_service.list_pull_documents(user, source_tag=req.source_tag, offset=req.offset, limit=req.limit)
+                # You could apply extra filtering here if needed
+                return PullDocumentsResponse(documents=docs, total=total)
 
-                else:
-                    raise HTTPException(status_code=400, detail=f"Unsupported source type '{config.type}'")
-
-            except Exception as e:
-                log_exception(e, "An unexpected error occurred while rbrowsing document")
-                raise HTTPException(status_code=500, detail="Internal server error")
+            else:
+                raise HTTPException(status_code=400, detail=f"Unsupported source type '{config.type}'")

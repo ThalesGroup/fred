@@ -12,8 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import Annotated, List, Literal, Optional, Union
+
 from pydantic import BaseModel, Field
-from typing import Literal, List, Optional, Union, Annotated
+
 from app.common.structures import MCPServerConfiguration
 
 
@@ -44,23 +46,3 @@ class MCPAgentRequest(BaseAgentRequest):
 CreateAgentRequest = Annotated[
     Union[MCPAgentRequest], Field(discriminator="agent_type")
 ]
-
-
-class AgenticFlow(BaseModel):
-    """
-    Agentic flow structure
-    """
-
-    name: str = Field(description="Name of the agentic flow")
-    role: str = Field(description="Human-readable role of the agentic flow")
-    nickname: Optional[str] = Field(
-        description="Human-readable nickname of the agentic flow"
-    )
-    description: str = Field(
-        description="Human-readable description of the agentic flow"
-    )
-    icon: Optional[str] = Field(description="Icon of the agentic flow")
-    experts: Optional[list[str]] = Field(
-        description="List of experts in the agentic flow"
-    )
-    tag: Optional[str] = Field(description="Human-readable tag of the agentic flow")

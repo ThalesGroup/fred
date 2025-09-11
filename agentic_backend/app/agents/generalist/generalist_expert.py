@@ -14,9 +14,9 @@
 
 import logging
 from datetime import datetime
+from typing import List
 
 from langgraph.graph import START, END, MessagesState, StateGraph
-from langchain_core.messages import SystemMessage
 from app.common.structures import AgentSettings
 from app.core.model.model_factory import get_model
 from app.core.agents.flow import AgentFlow
@@ -31,41 +31,24 @@ class GeneralistExpert(AgentFlow):
     """
 
     # Class-level metadata
-    name: str
-    role: str
-    nickname: str
-    description: str
+    name: str | None = "GeneralistExpert"
+    nickname: str | None = "Georges"
+    role: str | None = "Fallback Generalist Expert"
+    description: (
+        str | None
+    ) = """Provides broad, high-level guidance when no specific expert is better suited. 
+        Acts as a default agent to assist with general questions across all domains."""
     icon: str = "generalist_agent"
-    tag: str = "Generalist"
+    categories: List[str] = ["General"]
+    tag: str = "generalist"
 
     def __init__(self, agent_settings: AgentSettings):
-        self.agent_settings = agent_settings
-        self.name = agent_settings.name
-        self.nickname = agent_settings.nickname or agent_settings.name
-        self.role = agent_settings.role
-        self.description = agent_settings.description
-        self.current_date = datetime.now().strftime("%Y-%m-%d")
-        self.categories = agent_settings.categories or ["General"]
-        self.model = None  # Will be set in async_init
-        self.base_prompt = ""  # Will be set in async_init
-        self._graph = None  # Will be built in async_init
+        super().__init__(agent_settings=agent_settings)
 
     async def async_init(self):
         self.model = get_model(self.agent_settings.model)
         self.base_prompt = self._generate_prompt()
         self._graph = self._build_graph()
-
-        super().__init__(
-            name=self.name,
-            role=self.role,
-            nickname=self.nickname,
-            description=self.description,
-            icon=self.icon,
-            graph=self._graph,
-            base_prompt=self.base_prompt,
-            categories=self.categories,
-            tag=self.tag,
-        )
 
     def _generate_prompt(self) -> str:
         today = datetime.now().strftime("%Y-%m-%d")
@@ -87,9 +70,7 @@ class GeneralistExpert(AgentFlow):
         return builder
 
     async def reasoner(self, state: MessagesState):
-        messages = self.use_fred_prompts(
-            [SystemMessage(content=self.base_prompt)] + state["messages"]
-        )
+        messages = self.use_fred_prompts(state["messages"])
         assert self.model is not None
         response = await self.model.ainvoke(messages)
         return {"messages": [response]}

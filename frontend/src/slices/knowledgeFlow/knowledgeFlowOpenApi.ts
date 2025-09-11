@@ -1,6 +1,18 @@
 import { knowledgeFlowApi as api } from "./knowledgeFlowApi";
 const injectedRtkApi = api.injectEndpoints({
   endpoints: (build) => ({
+    healthzKnowledgeFlowV1HealthzGet: build.query<
+      HealthzKnowledgeFlowV1HealthzGetApiResponse,
+      HealthzKnowledgeFlowV1HealthzGetApiArg
+    >({
+      query: () => ({ url: `/knowledge-flow/v1/healthz` }),
+    }),
+    readyKnowledgeFlowV1ReadyGet: build.query<
+      ReadyKnowledgeFlowV1ReadyGetApiResponse,
+      ReadyKnowledgeFlowV1ReadyGetApiArg
+    >({
+      query: () => ({ url: `/knowledge-flow/v1/ready` }),
+    }),
     searchDocumentMetadataKnowledgeFlowV1DocumentsMetadataSearchPost: build.mutation<
       SearchDocumentMetadataKnowledgeFlowV1DocumentsMetadataSearchPostApiResponse,
       SearchDocumentMetadataKnowledgeFlowV1DocumentsMetadataSearchPostApiArg
@@ -115,14 +127,27 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.bodyProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPost,
       }),
     }),
+    listTabularDatabases: build.query<ListTabularDatabasesApiResponse, ListTabularDatabasesApiArg>({
+      query: () => ({ url: `/knowledge-flow/v1/tabular/databases` }),
+    }),
     listTableNames: build.query<ListTableNamesApiResponse, ListTableNamesApiArg>({
-      query: () => ({ url: `/knowledge-flow/v1/tabular/tables` }),
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/tabular/${queryArg.dbName}/tables` }),
     }),
     getAllSchemas: build.query<GetAllSchemasApiResponse, GetAllSchemasApiArg>({
-      query: () => ({ url: `/knowledge-flow/v1/tabular/schemas` }),
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/tabular/${queryArg.dbName}/schemas` }),
     }),
     rawSqlQuery: build.mutation<RawSqlQueryApiResponse, RawSqlQueryApiArg>({
-      query: (queryArg) => ({ url: `/knowledge-flow/v1/tabular/sql`, method: "POST", body: queryArg.rawSqlRequest }),
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/tabular/${queryArg.dbName}/sql`,
+        method: "POST",
+        body: queryArg.rawSqlRequest,
+      }),
+    }),
+    deleteTable: build.mutation<DeleteTableApiResponse, DeleteTableApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/tabular/${queryArg.dbName}/tables/${queryArg.tableName}`,
+        method: "DELETE",
+      }),
     }),
     listAllTagsKnowledgeFlowV1TagsGet: build.query<
       ListAllTagsKnowledgeFlowV1TagsGetApiResponse,
@@ -224,6 +249,66 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/knowledge-flow/v1/vector/search`, method: "POST", body: queryArg.searchRequest }),
     }),
+    queryKnowledgeFlowV1KpiQueryPost: build.mutation<
+      QueryKnowledgeFlowV1KpiQueryPostApiResponse,
+      QueryKnowledgeFlowV1KpiQueryPostApiArg
+    >({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/kpi/query`, method: "POST", body: queryArg.kpiQuery }),
+    }),
+    osHealth: build.query<OsHealthApiResponse, OsHealthApiArg>({
+      query: () => ({ url: `/knowledge-flow/v1/os/health` }),
+    }),
+    osPendingTasks: build.query<OsPendingTasksApiResponse, OsPendingTasksApiArg>({
+      query: () => ({ url: `/knowledge-flow/v1/os/pending_tasks` }),
+    }),
+    osAllocationExplain: build.query<OsAllocationExplainApiResponse, OsAllocationExplainApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/os/allocation/explain`,
+        params: {
+          index: queryArg.index,
+          shard: queryArg.shard,
+          primary: queryArg.primary,
+          include_disk_info: queryArg.includeDiskInfo,
+        },
+      }),
+    }),
+    osNodesStats: build.query<OsNodesStatsApiResponse, OsNodesStatsApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/os/nodes/stats`,
+        params: {
+          metric: queryArg.metric,
+        },
+      }),
+    }),
+    osIndices: build.query<OsIndicesApiResponse, OsIndicesApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/os/indices`,
+        params: {
+          pattern: queryArg.pattern,
+          bytes: queryArg.bytes,
+        },
+      }),
+    }),
+    osIndexStats: build.query<OsIndexStatsApiResponse, OsIndexStatsApiArg>({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/os/index/${queryArg.index}/stats` }),
+    }),
+    osIndexMapping: build.query<OsIndexMappingApiResponse, OsIndexMappingApiArg>({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/os/index/${queryArg.index}/mapping` }),
+    }),
+    osIndexSettings: build.query<OsIndexSettingsApiResponse, OsIndexSettingsApiArg>({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/os/index/${queryArg.index}/settings` }),
+    }),
+    osShards: build.query<OsShardsApiResponse, OsShardsApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/os/shards`,
+        params: {
+          pattern: queryArg.pattern,
+        },
+      }),
+    }),
+    osDiagnostics: build.query<OsDiagnosticsApiResponse, OsDiagnosticsApiArg>({
+      query: () => ({ url: `/knowledge-flow/v1/os/diagnostics` }),
+    }),
     processDocumentsKnowledgeFlowV1ProcessDocumentsPost: build.mutation<
       ProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostApiResponse,
       ProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostApiArg
@@ -248,6 +333,10 @@ const injectedRtkApi = api.injectEndpoints({
   overrideExisting: false,
 });
 export { injectedRtkApi as knowledgeFlowApi };
+export type HealthzKnowledgeFlowV1HealthzGetApiResponse = /** status 200 Successful Response */ any;
+export type HealthzKnowledgeFlowV1HealthzGetApiArg = void;
+export type ReadyKnowledgeFlowV1ReadyGetApiResponse = /** status 200 Successful Response */ any;
+export type ReadyKnowledgeFlowV1ReadyGetApiArg = void;
 export type SearchDocumentMetadataKnowledgeFlowV1DocumentsMetadataSearchPostApiResponse =
   /** status 200 Successful Response */ DocumentMetadata[];
 export type SearchDocumentMetadataKnowledgeFlowV1DocumentsMetadataSearchPostApiArg = {
@@ -325,13 +414,30 @@ export type ProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPostApiResp
 export type ProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPostApiArg = {
   bodyProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPost: BodyProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPost;
 };
+export type ListTabularDatabasesApiResponse = /** status 200 Successful Response */ string[];
+export type ListTabularDatabasesApiArg = void;
 export type ListTableNamesApiResponse = /** status 200 Successful Response */ string[];
-export type ListTableNamesApiArg = void;
+export type ListTableNamesApiArg = {
+  /** Name of the tabular database */
+  dbName: string;
+};
 export type GetAllSchemasApiResponse = /** status 200 Successful Response */ TabularSchemaResponse[];
-export type GetAllSchemasApiArg = void;
+export type GetAllSchemasApiArg = {
+  /** Name of the tabular database */
+  dbName: string;
+};
 export type RawSqlQueryApiResponse = /** status 200 Successful Response */ TabularQueryResponse;
 export type RawSqlQueryApiArg = {
+  /** Name of the tabular database */
+  dbName: string;
   rawSqlRequest: RawSqlRequest;
+};
+export type DeleteTableApiResponse = unknown;
+export type DeleteTableApiArg = {
+  /** Name of the tabular database */
+  dbName: string;
+  /** Table name to delete */
+  tableName: string;
 };
 export type ListAllTagsKnowledgeFlowV1TagsGetApiResponse = /** status 200 Successful Response */ TagWithItemsId[];
 export type ListAllTagsKnowledgeFlowV1TagsGetApiArg = {
@@ -397,6 +503,52 @@ export type SearchDocumentsUsingVectorizationApiResponse = /** status 200 Succes
 export type SearchDocumentsUsingVectorizationApiArg = {
   searchRequest: SearchRequest;
 };
+export type QueryKnowledgeFlowV1KpiQueryPostApiResponse = /** status 200 Successful Response */ KpiQueryResult;
+export type QueryKnowledgeFlowV1KpiQueryPostApiArg = {
+  kpiQuery: KpiQuery;
+};
+export type OsHealthApiResponse = /** status 200 Successful Response */ any;
+export type OsHealthApiArg = void;
+export type OsPendingTasksApiResponse = /** status 200 Successful Response */ any;
+export type OsPendingTasksApiArg = void;
+export type OsAllocationExplainApiResponse = /** status 200 Successful Response */ any;
+export type OsAllocationExplainApiArg = {
+  /** Index name (optional) */
+  index?: string | null;
+  /** Shard number (optional) */
+  shard?: number | null;
+  /** Whether primary shard (optional) */
+  primary?: boolean | null;
+  /** Include disk info in explanation */
+  includeDiskInfo?: boolean;
+};
+export type OsNodesStatsApiResponse = /** status 200 Successful Response */ any;
+export type OsNodesStatsApiArg = {
+  metric?: string;
+};
+export type OsIndicesApiResponse = /** status 200 Successful Response */ any;
+export type OsIndicesApiArg = {
+  pattern?: string;
+  bytes?: string;
+};
+export type OsIndexStatsApiResponse = /** status 200 Successful Response */ any;
+export type OsIndexStatsApiArg = {
+  index: string;
+};
+export type OsIndexMappingApiResponse = /** status 200 Successful Response */ any;
+export type OsIndexMappingApiArg = {
+  index: string;
+};
+export type OsIndexSettingsApiResponse = /** status 200 Successful Response */ any;
+export type OsIndexSettingsApiArg = {
+  index: string;
+};
+export type OsShardsApiResponse = /** status 200 Successful Response */ any;
+export type OsShardsApiArg = {
+  pattern?: string;
+};
+export type OsDiagnosticsApiResponse = /** status 200 Successful Response */ any;
+export type OsDiagnosticsApiArg = void;
 export type ProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostApiResponse = /** status 200 Successful Response */ any;
 export type ProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostApiArg = {
   processDocumentsRequest: ProcessDocumentsRequest;
@@ -542,6 +694,7 @@ export type TabularSchemaResponse = {
   row_count?: number | null;
 };
 export type TabularQueryResponse = {
+  db_name: string;
   sql_query: string;
   rows?:
     | {
@@ -651,6 +804,74 @@ export type SearchRequest = {
   /** Optional list of tags to filter documents. Only chunks in a document with at least one of these tags will be returned. */
   tags?: string[] | null;
 };
+export type KpiQueryResultRow = {
+  group: {
+    [key: string]: any;
+  };
+  metrics: {
+    [key: string]: number;
+  };
+  doc_count: number;
+};
+export type KpiQueryResult = {
+  rows?: KpiQueryResultRow[];
+};
+export type FilterTerm = {
+  field:
+    | "metric.name"
+    | "metric.type"
+    | "dims.status"
+    | "dims.user_id"
+    | "dims.agent_id"
+    | "dims.doc_uid"
+    | "dims.file_type"
+    | "dims.http_status"
+    | "dims.error_code"
+    | "dims.model";
+  value: string;
+};
+export type SelectMetric = {
+  /** name in response, e.g. 'p95' or 'cost_usd' */
+  alias: string;
+  op: "sum" | "avg" | "min" | "max" | "count" | "value_count" | "percentile";
+  /** Required except for count/percentile */
+  field?: ("metric.value" | "cost.tokens_total" | "cost.usd" | "cost.tokens_prompt" | "cost.tokens_completion") | null;
+  /** Percentile, e.g. 95 */
+  p?: number | null;
+};
+export type TimeBucket = {
+  /** e.g. '1h', '1d', '15m' */
+  interval: string;
+  /** IANA TZ, e.g. 'Europe/Paris' */
+  timezone?: string | null;
+};
+export type OrderBy = {
+  by?: "doc_count" | "metric";
+  metric_alias?: string | null;
+  direction?: "asc" | "desc";
+};
+export type KpiQuery = {
+  /** ISO or 'now-24h' */
+  since: string;
+  until?: string | null;
+  filters?: FilterTerm[];
+  select: SelectMetric[];
+  group_by?: (
+    | "dims.file_type"
+    | "dims.doc_uid"
+    | "dims.doc_source"
+    | "dims.user_id"
+    | "dims.agent_id"
+    | "dims.tool_name"
+    | "dims.model"
+    | "dims.http_status"
+    | "dims.error_code"
+    | "dims.status"
+  )[];
+  time_bucket?: TimeBucket | null;
+  limit?: number;
+  order_by?: OrderBy | null;
+};
 export type FileToProcess = {
   source_tag: string;
   tags?: string[];
@@ -666,6 +887,10 @@ export type ProcessDocumentsRequest = {
   pipeline_name: string;
 };
 export const {
+  useHealthzKnowledgeFlowV1HealthzGetQuery,
+  useLazyHealthzKnowledgeFlowV1HealthzGetQuery,
+  useReadyKnowledgeFlowV1ReadyGetQuery,
+  useLazyReadyKnowledgeFlowV1ReadyGetQuery,
   useSearchDocumentMetadataKnowledgeFlowV1DocumentsMetadataSearchPostMutation,
   useGetDocumentMetadataKnowledgeFlowV1DocumentsMetadataDocumentUidGetQuery,
   useLazyGetDocumentMetadataKnowledgeFlowV1DocumentsMetadataDocumentUidGetQuery,
@@ -686,11 +911,14 @@ export const {
   useLazyDownloadDocumentKnowledgeFlowV1RawContentDocumentUidGetQuery,
   useUploadDocumentsSyncKnowledgeFlowV1UploadDocumentsPostMutation,
   useProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPostMutation,
+  useListTabularDatabasesQuery,
+  useLazyListTabularDatabasesQuery,
   useListTableNamesQuery,
   useLazyListTableNamesQuery,
   useGetAllSchemasQuery,
   useLazyGetAllSchemasQuery,
   useRawSqlQueryMutation,
+  useDeleteTableMutation,
   useListAllTagsKnowledgeFlowV1TagsGetQuery,
   useLazyListAllTagsKnowledgeFlowV1TagsGetQuery,
   useCreateTagKnowledgeFlowV1TagsPostMutation,
@@ -708,6 +936,27 @@ export const {
   useLazyGetResourceKnowledgeFlowV1ResourcesResourceIdGetQuery,
   useDeleteResourceKnowledgeFlowV1ResourcesResourceIdDeleteMutation,
   useSearchDocumentsUsingVectorizationMutation,
+  useQueryKnowledgeFlowV1KpiQueryPostMutation,
+  useOsHealthQuery,
+  useLazyOsHealthQuery,
+  useOsPendingTasksQuery,
+  useLazyOsPendingTasksQuery,
+  useOsAllocationExplainQuery,
+  useLazyOsAllocationExplainQuery,
+  useOsNodesStatsQuery,
+  useLazyOsNodesStatsQuery,
+  useOsIndicesQuery,
+  useLazyOsIndicesQuery,
+  useOsIndexStatsQuery,
+  useLazyOsIndexStatsQuery,
+  useOsIndexMappingQuery,
+  useLazyOsIndexMappingQuery,
+  useOsIndexSettingsQuery,
+  useLazyOsIndexSettingsQuery,
+  useOsShardsQuery,
+  useLazyOsShardsQuery,
+  useOsDiagnosticsQuery,
+  useLazyOsDiagnosticsQuery,
   useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation,
   useScheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPostMutation,
 } = injectedRtkApi;

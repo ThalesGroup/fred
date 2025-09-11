@@ -1,4 +1,5 @@
 import { ChatMessage } from "../../slices/agentic/agenticOpenApi";
+import React from "react";
 
 // Replace-or-insert one message, then keep array sorted by (rank asc, timestamp asc as tiebreaker)
 export const upsertOne = (all: ChatMessage[], m: ChatMessage) => {
@@ -36,7 +37,6 @@ export const toWsUrl = (base: string | undefined, path: string) => {
   return url.toString();
 };
 
-
 export const keyOf = (m: ChatMessage) =>
   `${m.session_id}|${m.exchange_id}|${m.rank}|${m.role}|${m.channel}`;
 
@@ -47,14 +47,14 @@ export const isToolResult = (m: ChatMessage) =>
   m.role === "tool" && m.channel === "tool_result" && m.parts?.[0]?.type === "tool_result";
 
 export const hasNonEmptyText = (m: ChatMessage) =>
-  (m.parts ?? []).some(p => p.type === "text" && p.text && p.text.trim().length > 0);
+  (m.parts ?? []).some((p) => p.type === "text" && p.text && p.text.trim().length > 0);
 
 export const getExtras = (m: ChatMessage) => m.metadata?.extras ?? {};
 
 export const toolId = (m: ChatMessage) =>
   (m.parts?.[0] as any)?.call_id ?? (m.parts?.[0] as any)?.id ?? "";
 
-
+// ---- Parts typing ----
 type Part =
   | ({ type: "text"; text: string } & Record<string, unknown>)
   | ({ type: "code"; code: string; language?: string } & Record<string, unknown>)
@@ -64,22 +64,52 @@ type Part =
 
 const isTextPart = (p: Part): p is Extract<Part, { type: "text" }> => p.type === "text";
 const isToolCallPart = (p: Part): p is Extract<Part, { type: "tool_call" }> => p.type === "tool_call";
-const isToolResultPart = (p: Part): p is Extract<Part, { type: "tool_result" }> => p.type === "tool_result";
+const isToolResultPart = (p: Part): p is Extract<Part, { type: "tool_result" }> =>
+  p.type === "tool_result";
 
 /** Safe truncate helper */
 const ellipsize = (s: string, max: number) => (s.length > max ? `${s.slice(0, max)}…` : s);
 
-export function textPreview(m: ChatMessage, max = 280) {
+// ---- Minimal status dot + text ----
+function StatusBadge({
+  ok,
+  text,
+  title,
+}: {
+  ok: boolean | undefined | null;
+  text: string;
+  title?: string;
+}) {
+  const dotClass =
+    ok === true ? "bg-green-500" : ok === false ? "bg-red-500" : "bg-gray-400";
+
+  const aria =
+    ok === true ? "Succeeded" : ok === false ? "Failed" : "Unknown status";
+
+  return (
+    <span
+      className="inline-flex items-center gap-2 text-sm text-muted-foreground"
+      aria-label={`Tool result: ${aria}`}
+      title={title ?? aria}
+    >
+      <span className={`h-2 w-2 rounded-full ${dotClass}`} />
+      <span className="truncate max-w-[32ch]">{text}</span>
+    </span>
+  );
+}
+
+// Returns a ReactNode so you can render either plain text or JSX badges.
+export function textPreview(m: ChatMessage): React.ReactNode {
   const parts = (m.parts ?? []) as Part[];
 
   // Prefer concatenated text parts
   const txt = parts
     .filter(isTextPart)
-    .map(p => (p.text ?? "").trim())
+    .map((p) => (p.text ?? "").trim())
     .filter(Boolean)
     .join(" ");
 
-  if (txt) return ellipsize(txt, max);
+  if (txt) return ellipsize(txt, 40);
 
   // Tool call / result quick previews
   const p0 = parts[0];
@@ -87,24 +117,32 @@ export function textPreview(m: ChatMessage, max = 280) {
   if (p0 && isToolCallPart(p0)) {
     const name = p0.name || "tool";
     const argsStr = p0.args !== undefined ? JSON.stringify(p0.args) : "";
-    return `${name}(${ellipsize(argsStr, 120)})`;
+    return `${name}(${ellipsize(argsStr, 40)})`;
   }
 
   if (p0 && isToolResultPart(p0)) {
-    const ok = p0.ok;
-    const content = p0.content ?? "";
-    return `${ok === false ? "❌" : "✅"} ${ellipsize(content, 160)}`;
+    const ok = p0.ok ?? null;
+    const content = ellipsize(p0.content ?? "", 40);
+    return <StatusBadge ok={ok} text={content} />;
   }
 
   // Fallbacks by channel
   switch (m.channel) {
-    case "plan": return "Plan";
-    case "thought": return "Thought";
-    case "observation": return "Observation";
-    case "tool_call": return "Tool call";
-    case "tool_result": return "Tool result";
-    case "system_note": return "System note";
-    case "error": return "Error";
-    default: return m.channel;
+    case "plan":
+      return "Plan";
+    case "thought":
+      return "Thought";
+    case "observation":
+      return "Observation";
+    case "tool_call":
+      return "Tool call";
+    case "tool_result":
+      return "Tool result";
+    case "system_note":
+      return "System note";
+    case "error":
+      return "Error";
+    default:
+      return m.channel;
   }
 }

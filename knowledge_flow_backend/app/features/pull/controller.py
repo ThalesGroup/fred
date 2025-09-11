@@ -1,6 +1,9 @@
-from fastapi import APIRouter, HTTPException, Query
 from typing import List
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fred_core import KeycloakUser, get_current_user
 from pydantic import BaseModel
+
 from app.common.document_structures import DocumentMetadata
 from app.features.pull.service import PullDocumentService, SourceNotFoundError
 
@@ -53,9 +56,10 @@ class PullDocumentController:
             source_tag: str = Query(..., description="The pull source tag to list documents from"),
             offset: int = Query(0, ge=0, description="Start offset for pagination"),
             limit: int = Query(50, gt=0, le=500, description="Maximum number of documents to return"),
+            user: KeycloakUser = Depends(get_current_user),
         ):
             try:
-                documents, total = self.pull_document_service.list_pull_documents(source_tag, offset=offset, limit=limit)
+                documents, total = self.pull_document_service.list_pull_documents(user, source_tag, offset=offset, limit=limit)
                 return PullDocumentsResponse(documents=documents, total=total)
             except SourceNotFoundError as e:
                 raise HTTPException(status_code=404, detail=str(e))

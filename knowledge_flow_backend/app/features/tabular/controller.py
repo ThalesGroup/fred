@@ -1,66 +1,108 @@
+# Copyright Thales 2025
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
 import logging
 from typing import List
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException, Path
+from fred_core import Action, KeycloakUser, Resource, authorize_or_raise, get_current_user
 
+from app.application_context import ApplicationContext
 from app.features.tabular.service import TabularService
 from app.features.tabular.structures import RawSQLRequest, TabularQueryResponse, TabularSchemaResponse
-from app.features.tabular.utils import extract_safe_sql_query
 
 logger = logging.getLogger(__name__)
 
 
 class TabularController:
     """
-    Lightweight API controller to expose tabular tools to LLM agents:
-      - List available tables
-      - Get full schema for each table
-      - Execute a SQLQueryPlan
+    API controller to expose tabular tools (read and write) for multiple databases.
     """
 
     def __init__(self, router: APIRouter):
-        self.service = TabularService()
+        self.context = ApplicationContext.get_instance()
+        stores = self.context.get_tabular_stores()
+        self.service = TabularService(stores)
         self._register_routes(router)
 
     def _register_routes(self, router: APIRouter):
-        @router.get("/tabular/tables", response_model=List[str], tags=["Tabular"], operation_id="list_table_names", summary="List all available table names")
-        async def list_tables():
-            logger.info("Listing all available table names")
+        @router.get("/tabular/databases", response_model=List[str], tags=["Tabular"], summary="List available databases", operation_id="list_tabular_databases")
+        async def list_databases(user: KeycloakUser = Depends(get_current_user)):
             try:
-                if self.service.tabular_store is None:
-                    raise RuntimeError("tabular_store is not initialized")
-                return self.service.tabular_store.list_tables()
+                return self.service.list_databases(user)
             except Exception as e:
-                logger.exception("Failed to list table names")
-                raise HTTPException(status_code=500, detail=str(e))
+                logger.exception("Failed to list databases")
+                raise e
 
-        @router.get("/tabular/schemas", response_model=List[TabularSchemaResponse], tags=["Tabular"], operation_id="get_all_schemas", summary="Get schemas for all available tables")
-        async def get_schemas():
-            logger.info("Fetching schemas for all datasets")
+        @router.get("/tabular/{db_name}/tables", response_model=List[str], tags=["Tabular"], summary="List tables in a database", operation_id="list_table_names")
+        async def list_tables(db_name: str = Path(..., description="Name of the tabular database"), user: KeycloakUser = Depends(get_current_user)):
+            authorize_or_raise(user, Action.READ, Resource.TABLES)
+
             try:
-                return self.service.list_datasets_with_schema()
+                store = self.service._get_store(db_name)
+                return store.list_tables()
             except Exception as e:
-                logger.exception("Failed to get schemas")
-                raise HTTPException(status_code=500, detail=str(e))
+                logger.exception(f"Failed to list tables for {db_name}")
+                raise e
+
+        @router.get("/tabular/{db_name}/schemas", response_model=List[TabularSchemaResponse], tags=["Tabular"], summary="Get schemas of all tables in a database", operation_id="get_all_schemas")
+        async def get_schemas(db_name: str = Path(..., description="Name of the tabular database"), user: KeycloakUser = Depends(get_current_user)):
+            try:
+                return self.service.list_tables_with_schema(user, db_name)
+            except Exception as e:
+                logger.exception(f"Failed to get schemas for {db_name}")
+                raise e
 
         @router.post(
-            "/tabular/sql",
+            "/tabular/{db_name}/sql",
             response_model=TabularQueryResponse,
             tags=["Tabular"],
+            summary="Execute raw SQL query in a database",
             operation_id="raw_sql_query",
-            summary="Execute raw SQL query directly",
-            description="Submit a raw SQL string. Use this with caution: the query is executed directly.",
+            description="Submit a raw SQL string. Use with caution: query is executed directly.",
         )
-        async def raw_sql_query(request: RawSQLRequest):
+        async def raw_sql_query(db_name: str = Path(..., description="Name of the tabular database"), request: RawSQLRequest = Body(...), user: KeycloakUser = Depends(get_current_user)):
             try:
-                sql = extract_safe_sql_query(request.query)
-                logger.info(f"Executing raw SQL: {sql}")
-                return self.service.query(document_name="raw_sql", request=RawSQLRequest(query=sql))
-
+                return self.service.query(user, db_name=db_name, document_name="raw_sql", request=request)
             except PermissionError as e:
-                logger.warning(f"Forbidden SQL query attempt: {e}")
+                logger.warning(f"[{db_name}] Forbidden SQL query attempt: {e}")
                 raise HTTPException(status_code=403, detail=str(e))
+            except Exception as e:
+                logger.exception(f"[{db_name}] Raw SQL execution failed")
+                raise e
 
-            except Exception:
-                logger.exception("Raw SQL execution failed")
-                raise HTTPException(status_code=500, detail="Internal server error")
+        @router.delete("/tabular/{db_name}/tables/{table_name}", status_code=204, tags=["Tabular"], summary="Delete a table from a database", operation_id="delete_table")
+        async def delete_table(
+            db_name: str = Path(..., description="Name of the tabular database"), table_name: str = Path(..., description="Table name to delete"), user: KeycloakUser = Depends(get_current_user)
+        ):
+            authorize_or_raise(user, Action.DELETE, Resource.TABLES)
+
+            try:
+                self.service._check_write_allowed(db_name)
+
+                if not table_name.isidentifier():
+                    raise HTTPException(status_code=400, detail="Invalid table name")
+
+                store = self.service._get_store(db_name)
+                store.delete_table(table_name)
+                logger.info(f"[{db_name}] Table '{table_name}' deleted successfully.")
+            except PermissionError as pe:
+                logger.warning(f"[{db_name}] Forbidden delete attempt: {pe}")
+                raise HTTPException(status_code=403, detail=str(pe))
+            except ValueError as ve:
+                raise HTTPException(status_code=400, detail=str(ve))
+            except Exception as e:
+                logger.exception(f"[{db_name}] Failed to delete table '{table_name}'")
+                raise e

@@ -16,12 +16,11 @@ import logging
 import pathlib
 import tempfile
 
+from fred_core import TODO_PASS_REAL_USER
+from temporalio import activity, exceptions
+
 from app.common.document_structures import DocumentMetadata, ProcessingStage
-
-
 from app.features.scheduler.structure import FileToProcess
-from temporalio import activity
-from temporalio import exceptions
 
 logger = logging.getLogger(__name__)
 
@@ -61,11 +60,11 @@ def create_pull_file_metadata(file: FileToProcess) -> DocumentMetadata:
 
         # Step 3: Extract and save metadata
         ingestion_service = IngestionService()
-        metadata = ingestion_service.extract_metadata(full_path, tags=file.tags, source_tag=file.source_tag)
+        metadata = ingestion_service.extract_metadata(TODO_PASS_REAL_USER, full_path, tags=file.tags, source_tag=file.source_tag)
         metadata.source.pull_location = file.external_path
         logger.info(f"[create_pull_file_metadata] Generated metadata: {metadata}")
 
-        ingestion_service.save_metadata(metadata=metadata)
+        ingestion_service.save_metadata(TODO_PASS_REAL_USER, metadata=metadata)
 
         logger.info(f"[create_pull_file_metadata] Metadata extracted and saved for pull file: {metadata.document_uid}")
         return metadata
@@ -80,7 +79,7 @@ def get_push_file_metadata(file: FileToProcess) -> DocumentMetadata:
     ingestion_service = IngestionService()
     logger.info(f"[get_push_file_metadata] push file UID: {file.document_uid}.")
     assert file.document_uid, "Push files must have a document UID"
-    metadata = ingestion_service.get_metadata(file.document_uid)
+    metadata = ingestion_service.get_metadata(TODO_PASS_REAL_USER, file.document_uid)
     if metadata is None:
         logger.error(f"[get_push_file_metadata] Metadata not found for push file UID: {file.document_uid}")
         raise RuntimeError(f"Metadata missing for push file: {file.document_uid}")
@@ -101,7 +100,7 @@ def load_push_file(file: FileToProcess, metadata: DocumentMetadata) -> pathlib.P
     output_dir.mkdir(exist_ok=True)
 
     # 🗂️ Download input file
-    ingestion_service.get_local_copy(metadata, working_dir)
+    ingestion_service.get_local_copy(TODO_PASS_REAL_USER, metadata, working_dir)
     input_file = next(input_dir.glob("*"))
     return input_file
 
@@ -152,11 +151,11 @@ def input_process(input_file: pathlib.Path, metadata: DocumentMetadata) -> Docum
     output_dir.mkdir(exist_ok=True)
 
     # Process the file
-    ingestion_service.process_input(input_file, output_dir, metadata)
-    ingestion_service.save_output(metadata=metadata, output_dir=output_dir)
+    ingestion_service.process_input(TODO_PASS_REAL_USER, input_file, output_dir, metadata)
+    ingestion_service.save_output(TODO_PASS_REAL_USER, metadata=metadata, output_dir=output_dir)
 
     metadata.mark_stage_done(ProcessingStage.PREVIEW_READY)
-    ingestion_service.save_metadata(metadata=metadata)
+    ingestion_service.save_metadata(TODO_PASS_REAL_USER, metadata=metadata)
 
     logger.info(f"[input_process] Done for UID: {metadata.document_uid}")
     return metadata
@@ -167,18 +166,18 @@ def output_process(file: FileToProcess, metadata: DocumentMetadata, accept_memor
     logger = activity.logger
     logger.info(f"[output_process] Starting for UID: {metadata.document_uid}")
 
-    from app.features.ingestion.service import IngestionService
     from app.application_context import ApplicationContext
+    from app.features.ingestion.service import IngestionService
 
     working_dir = prepare_working_dir(metadata.document_uid)
     output_dir = working_dir / "output"
     ingestion_service = IngestionService()
 
     # ✅ For both push and pull, restore what was saved (input/output)
-    ingestion_service.get_local_copy(metadata, working_dir)
+    ingestion_service.get_local_copy(TODO_PASS_REAL_USER, metadata, working_dir)
 
     # 📄 Locate preview file
-    preview_file = ingestion_service.get_preview_file(metadata, output_dir)
+    preview_file = ingestion_service.get_preview_file(TODO_PASS_REAL_USER, metadata, output_dir)
 
     if not ApplicationContext.get_instance().is_tabular_file(preview_file.name):
         from app.common.structures import InMemoryVectorStorage
@@ -190,10 +189,10 @@ def output_process(file: FileToProcess, metadata: DocumentMetadata, accept_memor
                 non_retryable=True,
             )
     # Proceed with the output processing
-    metadata = ingestion_service.process_output(output_dir=output_dir, input_file_name=preview_file.name, input_file_metadata=metadata)
+    metadata = ingestion_service.process_output(TODO_PASS_REAL_USER, output_dir=output_dir, input_file_name=preview_file.name, input_file_metadata=metadata)
 
     # Save the updated metadata
-    ingestion_service.save_metadata(metadata=metadata)
+    ingestion_service.save_metadata(TODO_PASS_REAL_USER, metadata=metadata)
 
     logger.info(f"[output_process] Done for UID: {metadata.document_uid}")
     return metadata

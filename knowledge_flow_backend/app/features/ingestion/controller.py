@@ -18,11 +18,14 @@ import pathlib
 import shutil
 import tempfile
 from typing import List, Optional
-from app.common.structures import Status
-from fastapi import APIRouter, Response, UploadFile, File, Form
+
+from fastapi import APIRouter, Depends, File, Form, Response, UploadFile
 from fastapi.responses import StreamingResponse
+from fred_core import KeycloakUser, KPIActor, KPIWriter, get_current_user
 from pydantic import BaseModel
 
+from app.application_context import get_kpi_writer
+from app.common.structures import Status
 from app.features.ingestion.service import IngestionService
 from app.features.scheduler.activities import input_process, output_process
 from app.features.scheduler.structure import FileToProcess
@@ -110,6 +113,7 @@ class IngestionController:
         def upload_documents_sync(
             files: List[UploadFile] = File(...),
             metadata_json: str = Form(...),
+            user: KeycloakUser = Depends(get_current_user),
         ) -> Response:
             parsed_input = IngestionInput(**json.loads(metadata_json))
             tags = parsed_input.tags
@@ -130,16 +134,16 @@ class IngestionController:
                 current_step = "metadata extraction"
                 try:
                     output_temp_dir = input_temp_file.parent.parent
-                    metadata = self.service.extract_metadata(file_path=input_temp_file, tags=tags, source_tag=source_tag)
+                    metadata = self.service.extract_metadata(user, file_path=input_temp_file, tags=tags, source_tag=source_tag)
                     logger.info(f"Metadata extracted for {filename}: {metadata}")
                     events.append(ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n")
 
                     current_step = "raw content saving"
-                    self.service.save_input(metadata=metadata, input_dir=output_temp_dir / "input")
+                    self.service.save_input(user, metadata=metadata, input_dir=output_temp_dir / "input")
                     events.append(ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n")
 
                     current_step = "metadata saving"
-                    self.service.save_metadata(metadata=metadata)
+                    self.service.save_metadata(user, metadata=metadata)
                     success += 1
 
                 except Exception as e:
@@ -160,54 +164,73 @@ class IngestionController:
         def process_documents_sync(
             files: List[UploadFile] = File(...),
             metadata_json: str = Form(...),
+            user: KeycloakUser = Depends(get_current_user),
+            kpi: KPIWriter = Depends(get_kpi_writer),
         ) -> Response:
-            parsed_input = IngestionInput(**json.loads(metadata_json))
-            tags = parsed_input.tags
-            source_tag = parsed_input.source_tag
+            # Start a timer for the whole call (actor=user). We’ll set final status at the end.
+            with kpi.timer(
+                "api.request_latency_ms",
+                dims={"route": "/upload-process-documents", "method": "POST"},
+                actor=KPIActor(type="human", user_id=user.uid),
+            ) as t:
+                parsed_input = IngestionInput(**json.loads(metadata_json))
+                tags = parsed_input.tags
+                source_tag = parsed_input.source_tag
 
-            preloaded_files = []
-            for file in files:
-                raw_path = uploadfile_to_path(file)
-                input_temp_file = save_file_to_temp(raw_path)
-                logger.info(f"File {file.filename} saved to temp storage at {input_temp_file}")
-                preloaded_files.append((file.filename, input_temp_file))
+                preloaded_files = []
+                for file in files:
+                    raw_path = uploadfile_to_path(file)
+                    input_temp_file = save_file_to_temp(raw_path)
+                    logger.info(f"File {file.filename} saved to temp storage at {input_temp_file}")
+                    preloaded_files.append((file.filename, input_temp_file))
 
-            total = len(preloaded_files)
-            success = 0
-            events = []
+                total = len(preloaded_files)
+                success = 0
+                events = []
 
-            for filename, input_temp_file in preloaded_files:
-                current_step = "metadata extraction"
-                try:
-                    output_temp_dir = input_temp_file.parent.parent
-                    metadata = self.service.extract_metadata(file_path=input_temp_file, tags=tags, source_tag=source_tag)
+                for filename, input_temp_file in preloaded_files:
+                    current_step = "metadata extraction"
+                    try:
+                        output_temp_dir = input_temp_file.parent.parent
+                        metadata = self.service.extract_metadata(user, file_path=input_temp_file, tags=tags, source_tag=source_tag)
 
-                    current_step = "input content saving"
-                    self.service.save_input(metadata, output_temp_dir / "input")
-                    events.append(ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n")
+                        current_step = "input content saving"
+                        self.service.save_input(user, metadata=metadata, input_dir=output_temp_dir / "input")
+                        events.append(ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n")
 
-                    current_step = "input processing"
-                    metadata = input_process(input_file=input_temp_file, metadata=metadata)
-                    events.append(ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n")
+                        current_step = "input processing"
+                        metadata = input_process(input_file=input_temp_file, metadata=metadata)
+                        events.append(ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n")
 
-                    current_step = "output processing"
-                    file_to_process = FileToProcess(
-                        document_uid=metadata.document_uid,
-                        external_path=None,
-                        source_tag=source_tag,
-                        tags=tags,
-                    )
-                    metadata = output_process(file=file_to_process, metadata=metadata, accept_memory_storage=True)
-                    events.append(ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n")
+                        current_step = "output processing"
+                        file_to_process = FileToProcess(
+                            document_uid=metadata.document_uid,
+                            external_path=None,
+                            source_tag=source_tag,
+                            tags=tags,
+                        )
+                        metadata = output_process(file=file_to_process, metadata=metadata, accept_memory_storage=True)
+                        events.append(ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n")
 
-                    current_step = "metadata saving (done)"
-                    success += 1
+                        current_step = "metadata saving (done)"
+                        success += 1
 
-                except Exception as e:
-                    logger.exception(f"Failed to process {filename}")
-                    error_message = f"{type(e).__name__}: {str(e).strip() or 'No error message'}"
-                    events.append(ProcessingProgress(step=current_step, status=Status.ERROR, error=error_message, filename=filename).model_dump_json() + "\n")
+                    except Exception as e:
+                        logger.exception(f"Failed to process {filename}")
+                        error_message = f"{type(e).__name__}: {str(e).strip() or 'No error message'}"
+                        events.append(ProcessingProgress(step=current_step, status=Status.ERROR, error=error_message, filename=filename).model_dump_json() + "\n")
 
-            overall_status = Status.SUCCESS if success == total else Status.ERROR
-            events.append(json.dumps({"step": "done", "status": overall_status}) + "\n")
-            return Response("".join(events), status_code=(200 if success == total else 422), media_type="application/x-ndjson")
+                # override timer status based on outcome (no exception at top-level)
+                t.dims["status"] = "ok" if success == total else "error"
+
+                # (Optional) if you have a clear scope for the whole call, add it here:
+                # t.dims["scope_type"] = "library"
+                # t.dims["scope_id"] = source_tag
+
+                overall_status = Status.SUCCESS if success == total else Status.ERROR
+                events.append(json.dumps({"step": "done", "status": overall_status}) + "\n")
+                return Response(
+                    "".join(events),
+                    status_code=(200 if success == total else 422),
+                    media_type="application/x-ndjson",
+                )

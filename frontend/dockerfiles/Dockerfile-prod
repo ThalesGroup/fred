@@ -5,7 +5,8 @@ FROM mirror.gcr.io/node:22.13.0 AS builder
 
 # Install dependencies
 RUN apt-get update && \
-    apt-get install -y make
+    apt-get install -y make curl dnsutils iproute2 && \
+    rm -rf /var/lib/apt/lists/*
 
 # Move to project directory
 WORKDIR /app
@@ -13,6 +14,18 @@ WORKDIR /app
 # Copy project files
 COPY frontend/ /app/
 COPY scripts/ /scripts/
+ARG DIAG=1
+RUN if [ "$DIAG" = "1" ]; then \
+      echo "== TIMESTAMP ==" && date -u; \
+      echo "== NODE/NPM ==" && node -v && npm -v; \
+      echo "== NPM CONFIG ==" && npm config list; \
+      echo "== .npmrc (if any) ==" && { [ -f /app/.npmrc ] && sed -n '1,200p' /app/.npmrc || echo "no .npmrc"; }; \
+      echo "== REGISTRY ==" && npm config get registry && npm ping || true; \
+      echo "== DNS =="/bin/true && cat /etc/resolv.conf && getent hosts registry.npmjs.org || true; \
+      echo "== CURL TEST ==" && curl -Iv https://registry.npmjs.org/ || true; \
+      echo "== ROUTING ==" && ip route || true; \
+      echo "== PROXY/ENV ==" && env | grep -E 'HTTP|PROXY|NO_PROXY' || true; \
+    fi
 
 # Build web app
 RUN make build
@@ -24,6 +37,10 @@ FROM mirror.gcr.io/nginx:1.27.3-alpine AS runtime
 
 # Copy web app from builder to nginx html directory
 COPY --from=builder --chown=nginx:nginx /app/dist /usr/share/nginx/html
+
+# Set permissions to nginx html directory
+RUN chown -R nginx: /usr/share/nginx/html && \
+    sed -i '/location \/ {/a \\ttry_files $uri /index.html;' /etc/nginx/conf.d/default.conf
 
 # Expose default nginx port
 EXPOSE 80

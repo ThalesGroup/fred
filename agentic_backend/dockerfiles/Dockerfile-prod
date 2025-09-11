@@ -35,7 +35,7 @@ WORKDIR /app
 # Copy pyproject & lock to install deps
 COPY agentic_backend/pyproject.toml agentic_backend/uv.lock* /app/
 COPY fred-core /fred-core
-COPY agentic_backend/* /app/
+COPY agentic_backend/. /app/
 COPY scripts /scripts
 
 # Install only dependencies
@@ -96,4 +96,4 @@ EXPOSE 8000
 
 # Entrypoint without make
 ENTRYPOINT ["uvicorn", "app.main:create_app", "--factory"]
-CMD ["--port", "8000", "--host", "0.0.0.0", "--env-file", "/app/config/.env", "--log-level", "info", "--loop", "asyncio"]
+CMD ["--port", "8000", "--host", "0.0.0.0", "--log-level", "info", "--loop", "asyncio"]

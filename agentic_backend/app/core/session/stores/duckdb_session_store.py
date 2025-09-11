@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import List, Optional
 from datetime import datetime, timezone
 
-from app.core.session.session_manager import SessionSchema
+from app.core.chatbot.chat_schema import SessionSchema
 from app.core.session.stores.base_session_store import BaseSessionStore
 from fred_core.store.duckdb_store import DuckDBTableStore
 

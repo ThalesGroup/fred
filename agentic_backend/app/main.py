@@ -19,11 +19,13 @@
 Entrypoint for the Agentic Backend App.
 """
 
+import asyncio
 from contextlib import asynccontextmanager
 import logging
 import os
 
 from app.core.agents.agent_manager import AgentManager
+from app.core.chatbot.session_orchestrator import SessionOrchestrator
 from app.core.feedback.controller import FeedbackController
 from app.core.agents.agent_controller import AgentController
 from app.application_context import (
@@ -34,12 +36,12 @@ from app.application_context import (
 from app.core.chatbot.chatbot_controller import ChatbotController
 from app.common.structures import Configuration
 from app.common.utils import parse_server_configuration
+from app.core.monitoring.monitoring_controller import MonitoringController
 from app.core.prompts.controller import PromptController
-from app.core.session.session_manager import SessionManager
 from dotenv import load_dotenv
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fred_core import initialize_keycloak
+from fred_core import initialize_user_security, register_exception_handlers
 from rich.logging import RichHandler
 
 
@@ -48,6 +50,11 @@ from rich.logging import RichHandler
 # -----------------------
 
 logger = logging.getLogger(__name__)
+
+
+def _norm_origin(o) -> str:
+    # Ensure exact match with browser's Origin header (no trailing slash)
+    return str(o).rstrip("/")
 
 
 def configure_logging(log_level: str):
@@ -84,18 +91,24 @@ def create_app() -> FastAPI:
 
     ApplicationContext(configuration)
 
-    initialize_keycloak(configuration.app.security)
     agent_manager = AgentManager(configuration, get_agent_store())
-    session_manager = SessionManager(
-        session_store=get_session_store(), agent_manager=agent_manager
-    )
+    session_orchestrator = SessionOrchestrator(get_session_store(), agent_manager)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        await agent_manager.load_agents()
-        agent_manager.start_retry_loop()
-        logger.info("🚀 AgentManager fully loaded.")
-        yield
+        try:
+            await agent_manager.load_agents()
+            agent_manager.start_retry_loop()
+            logger.info("🚀 AgentManager fully loaded.")
+            yield
+        except asyncio.CancelledError as e:
+            logger.warning(
+                "🧯 Lifespan CancelledError caught (expected on shutdown): %r", e
+            )
+            # IMPORTANT: do NOT re-raise; cancellation is a control signal.
+            # Swallowing it here prevents the noisy traceback you observed.
+        finally:
+            logger.info("🧹 Lifespan exit.")
 
     app = FastAPI(
         docs_url=f"{base_url}/docs",
@@ -104,20 +117,31 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
+    # Register exception handlers
+    register_exception_handlers(app)
+    allowed_origins = list(
+        {_norm_origin(o) for o in configuration.security.user.authorized_origins}
+    )
+    logger.info("[CORS] allow_origins=%s", allowed_origins)
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=configuration.app.security.authorized_origins,
+        allow_origins=allowed_origins,
         allow_methods=["GET", "POST", "PUT", "DELETE"],
         allow_headers=["Content-Type", "Authorization"],
     )
+
+    initialize_user_security(configuration.security.user)
+
     router = APIRouter(prefix=base_url)
     # Register controllers
     FeedbackController(router)
     PromptController(router)
     AgentController(router, agent_manager=agent_manager)
+
     ChatbotController(
-        router, session_manager=session_manager, agent_manager=agent_manager
+        router, session_orchestrator=session_orchestrator, agent_manager=agent_manager
     )
+    MonitoringController(router)
     app.include_router(router)
     logger.info("🧩 All controllers registered.")
     return app
@@ -125,4 +149,4 @@ def create_app() -> FastAPI:
 
 if __name__ == "__main__":
     print("To start the app, use uvicorn cli with:")
-    print("uv run uvicorn --factory app.main:create_app ...")
+    print("uv run uvicorn app.main:create_app --factory ...")

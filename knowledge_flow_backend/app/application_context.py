@@ -17,25 +17,28 @@ import logging
 import os
 from pathlib import Path
 from typing import Dict, Type, Union, Optional
-from fred_core import (
-    OpenSearchIndexConfig,
-    DuckdbStoreConfig,
-)
+from fred_core import LogStoreConfig, OpenSearchIndexConfig, DuckdbStoreConfig, OpenSearchKPIStore, BaseKPIStore, KpiLogStore, split_realm_url
+from opensearchpy import OpenSearch, RequestsHttpConnection
 from app.core.stores.catalog.opensearch_catalog_store import OpenSearchCatalogStore
 from app.core.stores.content.base_content_loader import BaseContentLoader
 from app.core.stores.content.filesystem_content_loader import FileSystemContentLoader
 from app.core.stores.content.minio_content_loader import MinioContentLoader
-from fred_core.store.duckdb_store import DuckDBTableStore
-from fred_core.store.sql_store import SQLTableStore, create_empty_duckdb_store
+from fred_core.store.sql_store import SQLTableStore
+from fred_core.store.structures import StoreInfo
+
+from fred_core.common.structures import SQLStorageConfig
 from app.common.structures import (
     Configuration,
+    EmbeddingProvider,
     InMemoryVectorStorage,
     FileSystemPullSource,
     LocalContentStorageConfig,
     MinioPullSource,
     MinioStorageConfig,
+    OpenSearchVectorIndexConfig,
     WeaviateVectorStorage,
 )
+from fred_core import KPIWriter
 from app.common.utils import validate_settings_or_exit
 from app.config.embedding_azure_apim_settings import EmbeddingAzureApimSettings
 from app.config.embedding_azure_openai_settings import EmbeddingAzureOpenAISettings
@@ -77,7 +80,6 @@ BaseProcessorType = Union[BaseMarkdownProcessor, BaseTabularProcessor]
 DEFAULT_OUTPUT_PROCESSORS = {
     "markdown": "app.core.processors.output.vectorization_processor.vectorization_processor.VectorizationProcessor",
     "tabular": "app.core.processors.output.tabular_processor.tabular_processor.TabularProcessor",
-    "duckdb": "app.core.processors.output.duckdb_processor.duckdb_processor.DuckDBProcessor",
 }
 
 # Mapping file extensions to categories
@@ -92,9 +94,18 @@ EXTENSION_CATEGORY = {
     ".xls": "tabular",
     ".xlsm": "tabular",
     ".duckdb": "duckdb",
+    ".jsonl": "markdown",
 }
 
 logger = logging.getLogger(__name__)
+
+
+def _mask(value: Optional[str], left: int = 4, right: int = 4) -> str:
+    if not value:
+        return "<empty>"
+    if len(value) <= left + right:
+        return "<hidden>"
+    return f"{value[:left]}…{value[-right:]}"
 
 
 def get_configuration() -> Configuration:
@@ -105,6 +116,16 @@ def get_configuration() -> Configuration:
         Configuration: The singleton application configuration.
     """
     return get_app_context().configuration
+
+
+def get_kpi_writer() -> KPIWriter:
+    """
+    Retrieves the global KPI writer instance.
+
+    Returns:
+        KPIWriter: The singleton KPI writer instance.
+    """
+    return get_app_context().get_kpi_writer()
 
 
 def get_app_context() -> "ApplicationContext":
@@ -160,10 +181,13 @@ class ApplicationContext:
     _vector_store_instance: Optional[BaseVectoreStore] = None
     _metadata_store_instance: Optional[BaseMetadataStore] = None
     _tag_store_instance: Optional[BaseTagStore] = None
+    _kpi_store_instance: Optional[BaseKPIStore] = None
+    _opensearch_client: Optional[OpenSearch] = None
     _resource_store_instance: Optional[BaseResourceStore] = None
-    _tabular_store_instance: Optional[Union[DuckDBTableStore, SQLTableStore]] = None
+    _tabular_stores: Optional[Dict[str, StoreInfo]] = None
     _catalog_store_instance: Optional[BaseCatalogStore] = None
     _file_store_instance: Optional[BaseFileStore] = None
+    _kpi_writer: Optional[KPIWriter] = None
 
     def __init__(self, configuration: Configuration):
         # Allow reuse if already initialized with same config
@@ -368,7 +392,7 @@ class ApplicationContext:
         """
         backend_type = self.configuration.embedding.type
 
-        if backend_type == "openai":
+        if backend_type == EmbeddingProvider.OPENAI:
             settings = EmbeddingOpenAISettings()  # type: ignore[call-arg]
             embedding_params = {
                 "model": settings.openai_model_name,
@@ -383,23 +407,23 @@ class ApplicationContext:
 
             return Embedder(OpenAIEmbeddings(**embedding_params))  # type: ignore[call-arg]
 
-        elif backend_type == "azureopenai":
+        elif backend_type == EmbeddingProvider.AZUREOPENAI:
             openai_settings = EmbeddingAzureOpenAISettings()  # type: ignore[call-arg]
             return Embedder(
                 AzureOpenAIEmbeddings(
                     deployment=openai_settings.azure_deployment_embedding,
                     openai_api_type="azure",
-                    azure_endpoint=openai_settings.azure_openai_base_url,
+                    azure_endpoint=openai_settings.azure_openai_endpoint,
                     openai_api_version=openai_settings.azure_api_version,
                     openai_api_key=openai_settings.azure_openai_api_key,
                 )
             )  # type: ignore[call-arg]
 
-        elif backend_type == "azureapim":
+        elif backend_type == EmbeddingProvider.AZUREAPIM:
             settings = validate_settings_or_exit(EmbeddingAzureApimSettings, "Azure APIM Embedding Settings")
             return AzureApimEmbedder(settings)
 
-        elif backend_type == "ollama":
+        elif backend_type == EmbeddingProvider.OLLAMA:
             ollama_settings = OllamaSettings()
             embedding_params = {
                 "model": ollama_settings.embedding_model_name,
@@ -429,7 +453,7 @@ class ApplicationContext:
 
         store = self.configuration.storage.vector_store
 
-        if isinstance(store, OpenSearchIndexConfig):
+        if isinstance(store, OpenSearchVectorIndexConfig):
             opensearch_config = get_configuration().storage.opensearch
             password = opensearch_config.password
             if not password:
@@ -443,6 +467,7 @@ class ApplicationContext:
                 password=password,
                 secure=opensearch_config.secure,
                 verify_certs=opensearch_config.verify_certs,
+                bulk_size=store.bulk_size,
             )
             return self._vector_store_instance
         # elif isinstance(store, WeaviateVectorStorage):
@@ -479,6 +504,51 @@ class ApplicationContext:
         else:
             raise ValueError("Unsupported metadata storage backend")
         return self._metadata_store_instance
+
+    def get_opensearch_client(self) -> OpenSearch:
+        if self._opensearch_client is not None:
+            return self._opensearch_client
+
+        opensearch_config = get_configuration().storage.opensearch
+        self._opensearch_client = OpenSearch(
+            opensearch_config.host,
+            http_auth=(opensearch_config.username, opensearch_config.password),
+            use_ssl=opensearch_config.secure,
+            verify_certs=opensearch_config.verify_certs,
+            connection_class=RequestsHttpConnection,
+        )
+        return self._opensearch_client
+
+    def get_kpi_writer(self) -> KPIWriter:
+        if self._kpi_writer is not None:
+            return self._kpi_writer
+
+        self._kpi_writer = KPIWriter(store=self.get_kpi_store())
+        return self._kpi_writer
+
+    def get_kpi_store(self) -> BaseKPIStore:
+        if self._kpi_store_instance is not None:
+            return self._kpi_store_instance
+
+        store_config = get_configuration().storage.kpi_store
+        if isinstance(store_config, OpenSearchIndexConfig):
+            opensearch_config = get_configuration().storage.opensearch
+            password = opensearch_config.password
+            if not password:
+                raise ValueError("Missing OpenSearch credentials: OPENSEARCH_PASSWORD")
+            self._kpi_store_instance = OpenSearchKPIStore(
+                host=opensearch_config.host,
+                username=opensearch_config.username,
+                password=password,
+                secure=opensearch_config.secure,
+                verify_certs=opensearch_config.verify_certs,
+                index=store_config.index,
+            )
+        elif isinstance(store_config, LogStoreConfig):
+            self._kpi_store_instance = KpiLogStore(level=store_config.level)
+        else:
+            raise ValueError("Unsupported KPI storage backend")
+        return self._kpi_store_instance
 
     def get_tag_store(self) -> BaseTagStore:
         if self._tag_store_instance is not None:
@@ -530,30 +600,44 @@ class ApplicationContext:
             raise ValueError(f"Unsupported tag storage backend: {store_config.type}")
         return self._resource_store_instance
 
-    def get_tabular_store(self):
-        if hasattr(self, "_tabular_store_instance") and self._tabular_store_instance is not None:
-            return self._tabular_store_instance
+    def get_tabular_stores(self) -> Dict[str, StoreInfo]:
+        if self._tabular_stores is not None:
+            return self._tabular_stores
 
-        store_config = get_configuration().storage.tabular_store
+        config_map = get_configuration().storage.tabular_stores or {}
+        stores = {}
 
-        if store_config is None:
-            logger.warning("No tabular store configured")
-            self._tabular_store_instance = create_empty_duckdb_store()
+        for name, cfg in config_map.items():
+            if isinstance(cfg, SQLStorageConfig):
+                try:
+                    database_name = cfg.database
+                    if cfg.path is not None:
+                        store = SQLTableStore(driver=cfg.driver, path=Path(cfg.path))
+                    else:
+                        raise ValueError("The path must not be None")
 
-        else:
-            if store_config.type == "duckdb":
-                db_path = Path(store_config.duckdb_path).expanduser()
-                self._tabular_store_instance = DuckDBTableStore(db_path, prefix="tabular_")
+                    stores[database_name] = StoreInfo(store=store, mode=cfg.mode)
+                    logger.info(f"[{database_name}] Connected to {cfg.driver} ({cfg.mode}) at {cfg.path}")
+                except Exception as e:
+                    logger.warning(f"[{name}] Failed to connect to {cfg.driver}: {e}")
 
-            elif store_config.type == "sql":
-                if store_config.path:
-                    path = Path(store_config.path)
-                    self._tabular_store_instance = SQLTableStore(driver=store_config.driver, path=path)
+        self._tabular_stores = stores
+        return stores
 
-            else:
-                raise ValueError("Unsupported tabular storage backend")
+    def get_csv_input_store(self) -> SQLTableStore:
+        """
+        Returns the store named 'base_database' if it exists,
+        otherwise returns the first store with mode 'read_and_write'.
+        """
+        stores = self.get_tabular_stores()
 
-        return self._tabular_store_instance
+        if "base_database" in stores:
+            return stores["base_database"].store
+
+        for store_info in stores.values():
+            if store_info.mode == "read_and_write":
+                return store_info.store
+        raise ValueError("No tabular_stores with mode 'read_and_write' found. Please check the knowledge flow configuration.")
 
     def get_catalog_store(self) -> BaseCatalogStore:
         """
@@ -630,21 +714,46 @@ class ApplicationContext:
         logger.info(f"     ↳ {name} set: {'✅' if value else '❌'}")
 
     def _log_config_summary(self):
+        sec = self.configuration.security.user
+
+        logger.info("  🔒 security (Knowledge → Knowledge/Third Party):")
+        logger.info("     • enabled: %s", sec.enabled)
+        logger.info("     • client_id: %s", sec.client_id or "<unset>")
+        logger.info("     • keycloak_url: %s", sec.realm_url or "<unset>")
+        # realm parsing
+
+        if sec.enabled:
+            try:
+                base, realm = split_realm_url(str(sec.realm_url))
+                logger.info("     • realm: %s  (base=%s)", realm, base)
+            except Exception as e:
+                logger.error("     ❌ keycloak_url invalid (expected …/realms/<realm>): %s", e)
+                raise ValueError("Invalid Keycloak URL") from e
+
+            secret = os.getenv("KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET", "")
+            if secret:
+                logger.info("     • KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET: present  (%s)", _mask(secret))
+            else:
+                logger.error(
+                    "     ⚠️  KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET is not set — external or recursive MCP or REST calls will not be protected (NoAuth). Knowledge Flow will likely suffer from 401."
+                )
+                raise ValueError("Missing KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET environment variable")
+
         backend = self.configuration.embedding.type
         logger.info("🔧 Application configuration summary:")
         logger.info("--------------------------------------------------")
-        logger.info(f"  📦 Embedding backend: {backend}")
+        logger.info(f"  📦 Embedding backend: {backend.value}")
 
-        if backend == "openai":
+        if backend == EmbeddingProvider.OPENAI:
             s = validate_settings_or_exit(EmbeddingOpenAISettings, "OpenAI Embedding Settings")
             self._log_sensitive("OPENAI_API_KEY", s.openai_api_key)
             logger.info(f"     ↳ Model: {s.openai_model_name}")
-        elif backend == "azureopenai":
+        elif backend == EmbeddingProvider.AZUREOPENAI:
             s = validate_settings_or_exit(EmbeddingAzureOpenAISettings, "Azure OpenAI Embedding Settings")
             self._log_sensitive("AZURE_OPENAI_API_KEY", s.azure_openai_api_key)
             logger.info(f"     ↳ Deployment: {s.azure_deployment_embedding}")
             logger.info(f"     ↳ API Version: {s.azure_api_version}")
-        elif backend == "azureapim":
+        elif backend == EmbeddingProvider.AZUREAPIM:
             try:
                 s = validate_settings_or_exit(EmbeddingAzureApimSettings, "Azure APIM Embedding Settings")
                 self._log_sensitive("AZURE_CLIENT_ID", s.azure_client_id)
@@ -654,7 +763,7 @@ class ApplicationContext:
                 logger.info(f"     ↳ Deployment: {s.azure_deployment_embedding}")
             except Exception:
                 logger.warning("⚠️ Failed to load Azure APIM settings — some variables may be missing.")
-        elif backend == "ollama":
+        elif backend == EmbeddingProvider.OLLAMA:
             s = validate_settings_or_exit(OllamaSettings, "Ollama Embedding Settings")
             logger.info(f"     ↳ Model: {s.embedding_model_name}")
             logger.info(f"     ↳ API URL: {s.api_url if s.api_url else 'default'}")
@@ -682,21 +791,36 @@ class ApplicationContext:
         except Exception:
             logger.warning("⚠️ Failed to load vector store settings — some variables may be missing or misconfigured.")
 
-        logger.info(f"  🗃️ Metadata storage backend: {self.configuration.storage.metadata_store.type}")
-        if isinstance(self.configuration.storage.metadata_store, DuckdbStoreConfig):
-            logger.info(f"     ↳ DB Path: {self.configuration.storage.metadata_store.duckdb_path}")
+        try:
+            st = self.configuration.storage
+            logger.info("  🗄️  Storage:")
 
-        logger.info(f"  🗃️ Catalog storage backend: {self.configuration.storage.catalog_store.type}")
-        if isinstance(self.configuration.storage.catalog_store, DuckdbStoreConfig):
-            logger.info(f"     ↳ DB Path: {self.configuration.storage.catalog_store.duckdb_path}")
+            def _describe(label: str, store_cfg):
+                if isinstance(store_cfg, DuckdbStoreConfig):
+                    logger.info("     • %-14s DuckDB  path=%s", label, store_cfg.duckdb_path)
+                elif isinstance(store_cfg, OpenSearchIndexConfig):
+                    # These carry index name + opensearch global section
+                    os_cfg = self.configuration.storage.opensearch
+                    logger.info(
+                        "     • %-14s OpenSearch host=%s index=%s secure=%s verify=%s",
+                        label,
+                        os_cfg.host,
+                        store_cfg.index,
+                        os_cfg.secure,
+                        os_cfg.verify_certs,
+                    )
+                else:
+                    # Generic store types from your pydantic StoreConfig could land here
+                    logger.info("     • %-14s %s", label, type(store_cfg).__name__)
 
-        logger.info(f"  📂 Resource storage backend: {self.configuration.storage.resource_store.type}")
-        if isinstance(self.configuration.storage.resource_store, DuckdbStoreConfig):
-            logger.info(f"     ↳ DB Path: {self.configuration.storage.resource_store.duckdb_path}")
-
-        logger.info(f"  📂 Tag storage backend: {self.configuration.storage.tag_store.type}")
-        if isinstance(self.configuration.storage.tag_store, DuckdbStoreConfig):
-            logger.info(f"     ↳ DB Path: {self.configuration.storage.tag_store.duckdb_path}")
+            _describe("agent_store", st.tag_store)
+            _describe("session_store", st.kpi_store)
+            _describe("feedback_store", st.catalog_store)
+            _describe("feedback_store", st.metadata_store)
+            _describe("feedback_store", st.vector_store)
+            _describe("feedback_store", st.resource_store)
+        except Exception:
+            logger.warning("  ⚠️ Failed to read storage section (some variables may be missing).")
 
         logger.info(f"  📁 Content storage backend: {self.configuration.content_storage.type}")
         if isinstance(self.configuration.content_storage, MinioStorageConfig):

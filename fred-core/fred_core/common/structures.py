@@ -17,33 +17,49 @@ from pathlib import Path
 from typing import Annotated, Literal, Optional, Union
 from pydantic import BaseModel, Field, model_validator
 
+
 class BaseModelWithId(BaseModel):
     id: str
+
 
 class OpenSearchStoreConfig(BaseModel):
     host: str = Field(..., description="OpenSearch host URL")
     username: str = Field(..., description="Username from env")
-    password: Optional[str] = Field(default_factory=lambda: os.getenv("OPENSEARCH_PASSWORD"), description="Password from env")
+    password: Optional[str] = Field(
+        default_factory=lambda: os.getenv("OPENSEARCH_PASSWORD"),
+        description="Password from env",
+    )
     secure: bool = Field(default=False, description="Use TLS (https)")
     verify_certs: bool = Field(default=False, description="Verify TLS certs")
+
 
 class OpenSearchIndexConfig(BaseModel):
     type: Literal["opensearch"]
     index: str = Field(..., description="OpenSearch index name")
 
+
+class LogStoreConfig(BaseModel):
+    type: Literal["log"]
+    level: str = Field(..., description="Logging level")
+
+
 class DuckdbStoreConfig(BaseModel):
     type: Literal["duckdb"]
-    duckdb_path: str = Field(...,description="Path to the DuckDB database file.")
+    duckdb_path: str = Field(..., description="Path to the DuckDB database file.")
+
 
 class PostgresStoreConfig(BaseModel):
     host: str = Field(..., description="PostgreSQL host")
     port: int = 5432
     database: str
     username: str
-    password: Optional[str] = Field(default_factory=lambda: os.getenv("POSTGRES_PASSWORD"))
+    password: Optional[str] = Field(
+        default_factory=lambda: os.getenv("POSTGRES_PASSWORD")
+    )
 
     def dsn(self) -> str:
         return f"postgresql://{self.username}:{self.password}@{self.host}:{self.port}/{self.database}"
+
 
 class PostgresTableConfig(BaseModel):
     type: Literal["postgres"]
@@ -53,13 +69,14 @@ class PostgresTableConfig(BaseModel):
 class SQLStorageConfig(BaseModel):
     type: Literal["sql"] = "sql"
     driver: str
+    mode: Literal["read_and_write", "read_only"]
     database: Optional[str] = None
     host: Optional[str] = None
     port: Optional[int] = None
     username: Optional[str] = Field(default_factory=lambda: os.getenv("SQL_USERNAME"))
     password: Optional[str] = Field(default_factory=lambda: os.getenv("SQL_PASSWORD"))
     path: Optional[str] = None
-    
+
     @model_validator(mode="after")
     def build_path(self) -> "SQLStorageConfig":
         if not self.driver:
@@ -87,6 +104,12 @@ class SQLStorageConfig(BaseModel):
 
 
 StoreConfig = Annotated[
-    Union[DuckdbStoreConfig, PostgresTableConfig, OpenSearchIndexConfig, SQLStorageConfig],
-    Field(discriminator="type")
+    Union[
+        DuckdbStoreConfig,
+        PostgresTableConfig,
+        OpenSearchIndexConfig,
+        SQLStorageConfig,
+        LogStoreConfig,
+    ],
+    Field(discriminator="type"),
 ]

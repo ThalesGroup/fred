@@ -14,9 +14,9 @@
 
 import logging
 from typing import List
-from opensearchpy import OpenSearch, RequestsHttpConnection
+from opensearchpy import NotFoundError, OpenSearch, RequestsHttpConnection
+from app.core.chatbot.chat_schema import SessionSchema
 from app.core.session.stores.base_session_store import BaseSessionStore
-from app.core.session.session_manager import SessionSchema
 from fred_core import ThreadSafeLRUCache
 
 logger = logging.getLogger(__name__)
@@ -87,6 +87,10 @@ class OpensearchSessionStore(BaseSessionStore):
             response = self.client.get(index=self.index, id=session_id)
             session_data = response["_source"]
             return SessionSchema(**session_data)
+        except NotFoundError:
+            # a missing doc is not an error; be quiet or use debug
+            logger.debug(f"[not found] session_id={session_id}")
+            return None
         except Exception as e:
             logger.error(f"Failed to retrieve session {session_id}: {e}")
             return None

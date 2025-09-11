@@ -23,7 +23,6 @@ from fred_core import (
     SecurityConfiguration,
     PostgresStoreConfig,
     OpenSearchStoreConfig,
-    OpenSearchIndexConfig,
     StoreConfig,
 )
 
@@ -32,6 +31,13 @@ This module defines the top level data structures used by controllers, processor
 unit tests. It helps to decouple the different components of the application and allows
 to define clear workflows and data structures.
 """
+
+
+class EmbeddingProvider(str, Enum):
+    OPENAI = "openai"
+    AZUREOPENAI = "azureopenai"
+    AZUREAPIM = "azureapim"
+    OLLAMA = "ollama"
 
 
 class Status(str, Enum):
@@ -114,11 +120,19 @@ class WeaviateVectorStorage(BaseModel):
     index_name: str = Field(default="CodeDocuments", description="Weaviate class (collection) name")
 
 
-VectorStorageConfig = Annotated[Union[InMemoryVectorStorage, OpenSearchIndexConfig, WeaviateVectorStorage], Field(discriminator="type")]
+class OpenSearchVectorIndexConfig(BaseModel):
+    type: Literal["opensearch"]
+    index: str = Field(..., description="OpenSearch index name")
+    bulk_size: int = Field(default=1000, description="Number of documents to send in each bulk insert request")
+
+
+VectorStorageConfig = Annotated[Union[InMemoryVectorStorage, OpenSearchVectorIndexConfig, WeaviateVectorStorage], Field(discriminator="type")]
 
 
 class EmbeddingConfig(BaseModel):
-    type: str = Field(..., description="The embedding backend to use (e.g., 'openai', 'azureopenai')")
+    type: EmbeddingProvider = Field(..., description="The embedding backend to use (e.g., 'openai', 'azureopenai')")
+    use_gpu: bool = Field(default=True, description="Set to True to use GPU acceleration if available")
+    process_images: bool = Field(default=True, description="Set to True to process images")
 
 
 class TemporalSchedulerConfig(BaseModel):
@@ -143,7 +157,7 @@ class AppConfig(BaseModel):
     log_level: str = "info"
     reload: bool = False
     reload_dir: str = "."
-    security: SecurityConfiguration
+    max_ingestion_workers: int = 1
 
 
 class PullProvider(str, Enum):
@@ -273,15 +287,16 @@ class StorageConfig(BaseModel):
     opensearch: OpenSearchStoreConfig
     resource_store: StoreConfig
     tag_store: StoreConfig
+    kpi_store: StoreConfig
     metadata_store: StoreConfig
     catalog_store: StoreConfig
-    tabular_store: Optional[StoreConfig] = Field(default=None, description="Optional tabular store")
+    tabular_stores: Optional[Dict[str, StoreConfig]] = Field(default=None, description="Optional tabular store")
     vector_store: VectorStorageConfig
 
 
 class Configuration(BaseModel):
     app: AppConfig
-
+    security: SecurityConfiguration
     input_processors: List[ProcessorConfig]
     output_processors: Optional[List[ProcessorConfig]] = None
     content_storage: ContentStorageConfig = Field(..., description="Content Storage configuration")

@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import asyncio
 import importlib
 import logging
@@ -19,6 +18,7 @@ from builtins import ExceptionGroup
 from inspect import iscoroutinefunction
 from typing import Callable, Dict, List, Type
 
+from fred_core import Action, KeycloakUser, Resource, authorize
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from tenacity import RetryError, retry, stop_after_delay, wait_fixed
 
@@ -102,6 +102,7 @@ class AgentManager:
             instance = cls(agent_settings=agent_cfg)
             if iscoroutinefunction(getattr(instance, "async_init", None)):
                 await instance.async_init()
+
             self._register_loaded_agent(agent_cfg.name, instance, agent_cfg)
             logger.info(
                 f"✅ Registered static agent '{agent_cfg.name}' from configuration."
@@ -251,7 +252,12 @@ class AgentManager:
         self.agent_settings.pop(name, None)
         logger.info(f"🗑️ Unregistered agent '{name}' from memory.")
 
-    def get_agentic_flows(self) -> List[AgenticFlow]:
+    # Handling authorization here because it's used directly in a controller.
+    # As it is the only method of AgentManager handling authorization,
+    # we should maybe call this from a service that would handle authorization instead
+    # (like agent service ?)
+    @authorize(Action.READ, Resource.AGENTS)
+    def get_agentic_flows(self, user: KeycloakUser) -> List[AgenticFlow]:
         """
         Returns a list of all expert agents (AgentFlows) that are currently registered.
         Used by the frontend to display selectable agents.
@@ -360,7 +366,7 @@ class AgentManager:
         while True:
             await asyncio.sleep(10)
             if not self.failed_agents:
-                logger.debug("🔄 Agent retry all is all right.")
+                logger.debug("🔄 Agent retry is all right.")
                 continue
 
             try:

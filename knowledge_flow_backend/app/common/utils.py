@@ -19,6 +19,7 @@ from pydantic import ValidationError
 from pydantic_settings import BaseSettings
 import tiktoken
 import yaml
+import re
 from typing import Dict, Optional, TypeVar
 
 from app.common.structures import Configuration
@@ -194,3 +195,17 @@ def count_tokens(text: str) -> int:
         logger.warning(f"Fallback to cl100k_base tokenizer due to error: {e}")
         encoding = tiktoken.get_encoding("cl100k_base")
         return len(encoding.encode(text))
+
+
+def sanitize_sql_name(name: str) -> str:
+    """
+    Sanitize a table or column name to be SQL-friendly:
+    - Lowercase
+    - Replace spaces and invalid characters with underscores
+    - Remove leading/trailing underscores
+    """
+    name = name.lower()
+    name = re.sub(r"[^a-z0-9_]", "_", name)
+    name = re.sub(r"_+", "_", name)
+    name = name.strip("_")
+    return name

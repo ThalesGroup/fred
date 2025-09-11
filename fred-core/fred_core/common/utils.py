@@ -55,6 +55,5 @@ def raise_internal_error(logger: logging.Logger, msg: str, exc: Exception):
     error_id = str(uuid.uuid4())[:8]
     logger.exception(f"[{error_id}] {msg}")
     raise HTTPException(
-        status_code=500,
-        detail=f"{msg}. Contact support with error ID: {error_id}."
+        status_code=500, detail=f"{msg}. Contact support with error ID: {error_id}."
     )

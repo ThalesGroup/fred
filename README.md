@@ -1,9 +1,13 @@
 # Fred
 
+- [Fred](#fred)
   - [Core Architecture and Licensing Clarity](#core-architecture-and-licensing-clarity)
+    - [Licensing Note](#licensing-note)
   - [Getting started](#getting-started)
     - [Local (Native) Mode](#local-native-mode)
       - [1 · Prerequisites](#1--prerequisites)
+        - [Required](#required)
+        - [Optional](#optional)
       - [2 · Clone](#2--clone)
       - [3 · Add your OpenAI key](#3--add-your-openai-key)
       - [4 · Run the services](#4--run-the-services)
@@ -72,11 +76,48 @@ Production services and databases can be added later or via the **deployment fac
 
 ##### Required 
 
-| Tool   | Version | Install hint           |
-| ------ | ------- | ---------------------- |
-| Python | 3.12.8  | `pyenv install 3.12.8` |
-| Node   | 22.13.0 | `nvm install 22.13.0`  |
-| Make   | any     | install from your OS   |
+| Tool         | Type                       | Version  | Install hint                                                                                   |
+| ------------ | -------------------------- | -------- | ---------------------------------------------------------------------------------------------- |
+| Pyenv        | Python installer           | latest   | [Pyenv installation instructions](https://github.com/pyenv/pyenv#installation)                 |
+| Python       | Programming Language       | 3.12.8   | Use `pyenv install 3.12.8`                                                                     |
+| python3-venv | Python venv module/package | matching | Already bundled with Python 3 on most systems; else `apt install python3-venv` (Debian/Ubuntu) |
+| nvm          | Node installer             | latest   | [nvm installation instructions](https://github.com/nvm-sh/nvm#installing-and-updating)         |
+| Node.js      | Programming Language       | 22.13.0  | Use `nvm install 22.13.0`                                                                      |
+| Make         | Utility                    | system   | Install via system package manager (e.g. `apt install make`, `brew install make`)              |
+
+```mermaid
+graph TD
+    Agentic["agentic_backend"]
+    Knowledge["knowledge_flow_backend"]
+    Frontend["frontend"]
+    Python["Python 3.12.8"]
+    Venv["python3-venv"]
+    Node["Node 22.13.0"]
+    Pyenv["Pyenv (Python installer)"]
+    NVM["nvm (Node installer)"]
+    Make["Make utility"]
+    OS["Operating System"]
+
+    Agentic --> Python
+    Agentic --> Venv
+    Agentic --> Make
+
+    Knowledge --> Python
+    Knowledge --> Venv
+    Knowledge --> Make
+
+    Frontend --> Node
+    Frontend --> Make
+
+    Python --> Pyenv
+    Venv --> OS
+
+    Node --> NVM
+
+    Pyenv --> OS
+    NVM --> OS
+    Make --> OS
+```
 
 ##### Optional
 
@@ -229,8 +270,10 @@ See `agentic_backend/config/configuration.yaml` (section `ai:`) for concrete exa
 * Main docs: <https://fredk8.dev/docs>  
 * [Agentic backend README](./agentic_backend/README.md)  
 * [Agentic backend agentic design](./agentic_backend/docs/AGENTS.md)  
+* [MCP](./agentic_backend/docs/MCP.md)
 * [Frontend README](./frontend/README.md)  
 * [Knowledge Flow backend README](./knowledge_flow_backend/README.md)
+* [Keycloak](./docs/KEYCLOAK.md)
 * [Developer Tools](./developer_tools/README.md)    
 * [Code of Conduct](./docs/CODE_OF_CONDUCT.md) 
 * [License](./docs/LICENSE.md)  

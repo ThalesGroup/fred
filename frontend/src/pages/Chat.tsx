@@ -1,149 +1,68 @@
 // Copyright Thales 2025
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
-// ...
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 import { Grid2 } from "@mui/material";
 import "dayjs/locale/en-gb";
-import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
-import LoadingWithProgress from "../components/LoadingWithProgress.tsx";
-import ChatBot from "../components/chatbot/ChatBot.tsx";
-import { Settings } from "../components/chatbot/Settings.tsx";
-
-import {
-  AgenticFlow,
-  SessionSchema,
-  useGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery,
-  useGetSessionsAgenticV1ChatbotSessionsGetQuery,
-  useDeleteSessionAgenticV1ChatbotSessionSessionIdDeleteMutation,
-} from "../slices/agentic/agenticOpenApi.ts";
+import LoadingWithProgress from "../components/LoadingWithProgress";
+import ChatBot from "../components/chatbot/ChatBot";
+import { Settings } from "../components/chatbot/Settings";
+import { useSessionController } from "../hooks/sessionController";
 
 export const Chat = () => {
   const [searchParams] = useSearchParams();
   const cluster = searchParams.get("cluster") || undefined;
 
-  // --- Queries (new OpenAPI hooks) ---
   const {
-    data: flowsData,
-    isLoading: flowsLoading,
-  } = useGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery();
+    loading,
+    agenticFlows,
+    sessions,
+    currentSession,
+    currentAgenticFlow,
+    isCreatingNewConversation,
 
-  const {
-    data: sessionsData,
-    isLoading: sessionsLoading,
-    refetch: refetchSessions,
-  } = useGetSessionsAgenticV1ChatbotSessionsGetQuery();
+    selectSession,
+    selectAgenticFlowForCurrentSession,
+    startNewConversation,
+    updateOrAddSession,
+    deleteSession,
+  } = useSessionController();
 
-  const [deleteSession] =
-    useDeleteSessionAgenticV1ChatbotSessionSessionIdDeleteMutation();
+  // ---- DEBUG LOGGING ----
+  console.groupCollapsed("🔍 Chat Page State");
+  console.log("loading:", loading);
+  console.log("agenticFlows:", agenticFlows);
+  console.log("sessions:", sessions);
+  console.log("currentSession:", currentSession);
+  console.log("currentAgenticFlow:", currentAgenticFlow);
+  console.log("isCreatingNewConversation:", isCreatingNewConversation);
+  console.groupEnd();
+  // -----------------------
 
-  // --- Local state (UI selection/persistence) ---
-  const [agenticFlows, setAgenticFlows] = useState<AgenticFlow[]>([]);
-  const [currentAgenticFlow, setCurrentAgenticFlow] = useState<AgenticFlow | null>(null);
+  if (loading) {
+    console.info("⏳ Still loading flows or sessions…");
+    return <LoadingWithProgress />;
+  }
 
-  const [chatBotSessions, setChatBotSessions] = useState<SessionSchema[]>([]);
-  const [currentChatBotSession, setCurrentChatBotSession] = useState<SessionSchema | null>(null);
-
-  const [isCreatingNewConversation, setIsCreatingNewConversation] = useState(false);
-
-  // --- Effects: hydrate state from queries + sessionStorage ---
-  useEffect(() => {
-    if (!flowsLoading && flowsData) {
-      setAgenticFlows(flowsData);
-
-      const savedFlowStr = sessionStorage.getItem("currentAgenticFlow");
-      if (savedFlowStr) {
-        try {
-          const savedFlow: AgenticFlow = JSON.parse(savedFlowStr);
-          const exists = flowsData.find((f) => f.name === savedFlow.name);
-          setCurrentAgenticFlow(exists || flowsData[0] || null);
-        } catch {
-          setCurrentAgenticFlow(flowsData[0] || null);
-        }
-      } else {
-        setCurrentAgenticFlow(flowsData[0] || null);
-      }
-    }
-  }, [flowsLoading, flowsData]);
-
-  useEffect(() => {
-    if (!sessionsLoading && sessionsData) {
-      setChatBotSessions(sessionsData);
-
-      const savedSessionStr = sessionStorage.getItem("currentChatBotSession");
-      if (savedSessionStr) {
-        try {
-          const saved: SessionSchema = JSON.parse(savedSessionStr);
-          const exists = sessionsData.find((s) => s.id === saved.id);
-          setCurrentChatBotSession(exists || null);
-        } catch {
-          setCurrentChatBotSession(null);
-        }
-      }
-    }
-  }, [sessionsLoading, sessionsData]);
-
-  // Keep “new conversation” flag sane when a session gets selected
-  useEffect(() => {
-    if (isCreatingNewConversation && currentChatBotSession !== null) {
-      setIsCreatingNewConversation(false);
-    }
-  }, [isCreatingNewConversation, currentChatBotSession]);
-
-  // --- Handlers ---
-  const handleSelectAgenticFlow = (flow: AgenticFlow) => {
-    setCurrentAgenticFlow(flow);
-    sessionStorage.setItem("currentAgenticFlow", JSON.stringify(flow));
-  };
-
-  const handleSelectSession = (session: SessionSchema) => {
-    setCurrentChatBotSession(session);
-    sessionStorage.setItem("currentChatBotSession", JSON.stringify(session));
-    // user navigated into an existing conversation
-    setIsCreatingNewConversation(false);
-  };
-
-  const handleCreateNewConversation = () => {
-    setCurrentChatBotSession(null);
-    setIsCreatingNewConversation(true);
-    sessionStorage.removeItem("currentChatBotSession");
-  };
-
-  const handleDeleteSession = async (session: SessionSchema) => {
-    try {
-      await deleteSession({ sessionId: session.id }).unwrap();
-      // Optimistic local update
-      setChatBotSessions((prev) => prev.filter((s) => s.id !== session.id));
-      if (currentChatBotSession?.id === session.id) {
-        setCurrentChatBotSession(null);
-        sessionStorage.removeItem("currentChatBotSession");
-      }
-      // Optionally refetch to stay in sync with backend
-      refetchSessions();
-    } catch (e) {
-      // eslint-disable-next-line no-console
-      console.error("Failed to delete session:", e);
-    }
-  };
-
-  // Upsert/replace session coming back from the chatbot “final” event
-  const handleUpdateOrAddSession = (session: SessionSchema) => {
-    setChatBotSessions((prev) => {
-      const exists = prev.some((s) => s.id === session.id);
-      return exists ? prev.map((s) => (s.id === session.id ? session : s)) : [...prev, session];
-    });
-    if (!currentChatBotSession || currentChatBotSession.id !== session.id) {
-      handleSelectSession(session);
-    }
-  };
-
-  // --- Loading / Error states ---
-  const loading = flowsLoading || sessionsLoading;
-  if (loading) return <LoadingWithProgress />;
   if (!currentAgenticFlow) {
-    // Loaded but no flows found (or error)
+    console.error("❌ No currentAgenticFlow resolved!", {
+      agenticFlowsCount: agenticFlows.length,
+      currentSession,
+      sessionsCount: sessions.length,
+    });
     return <LoadingWithProgress />;
   }
 
@@ -151,24 +70,26 @@ export const Chat = () => {
     <Grid2 container display="flex" flexDirection="row">
       <Grid2 size="grow">
         <ChatBot
-          currentChatBotSession={currentChatBotSession as SessionSchema | null}
-          currentAgenticFlow={currentAgenticFlow as AgenticFlow}
+          currentChatBotSession={currentSession}
+          currentAgenticFlow={currentAgenticFlow}
           agenticFlows={agenticFlows}
-          onUpdateOrAddSession={handleUpdateOrAddSession}
+          onUpdateOrAddSession={updateOrAddSession}
           isCreatingNewConversation={isCreatingNewConversation}
           runtimeContext={{ cluster }}
         />
       </Grid2>
+
       <Grid2 size="auto">
         <Settings
-          sessions={chatBotSessions}
-          currentSession={currentChatBotSession}
-          onSelectSession={handleSelectSession}
-          onCreateNewConversation={handleCreateNewConversation}
+          sessions={sessions}
+          currentSession={currentSession}
+          onSelectSession={selectSession}
+          onCreateNewConversation={startNewConversation}
           agenticFlows={agenticFlows}
           currentAgenticFlow={currentAgenticFlow}
-          onSelectAgenticFlow={handleSelectAgenticFlow}
-          onDeleteSession={handleDeleteSession}
+          onSelectAgenticFlow={selectAgenticFlowForCurrentSession}
+          onDeleteSession={deleteSession}
+          isCreatingNewConversation={isCreatingNewConversation}
         />
       </Grid2>
     </Grid2>

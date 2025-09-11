@@ -1,4 +1,8 @@
 {
+  "common": {
+    "add": "Ajouter",
+    "noneSelected": "Aucune sélection"
+  },
   "resource": {
     "kind": {
       "prompt":   { "one": "prompt",   "other": "prompts" },
@@ -95,6 +99,20 @@
     }
   },
   "chatbot": {
+    "menu": {
+      "addToSetup": "Ajouter à la configuration de la conversation"
+    },
+    "input": {
+      "placeholder": "Écrivez votre message…  Entrée pour envoyer • Maj+Entrée pour un saut de ligne"
+    },
+    "attachFiles": "Joindre des fichiers",
+    "attachments": {
+      "count": "{{count}} joints"
+    },
+    "recordAudio": "Enregistrer de l'audio",
+    "stopRecording": "Arrêter l'enregistrement",
+    "audioChip": "Enregistrement audio",
+    "hideAudio": "Masquer le contrôleur audio",
     "searchDocumentLibraries": "Rechercher dans les bibliothèques de documents...",
     "searchPromptLibraries": "Rechercher dans les bibliothèques de prompts...",
     "startNew": "Commencer une nouvelle conversation avec {{name}}",
@@ -104,6 +122,15 @@
       "tokenCount": "Cette conversation a utilisé {{total}} jetons",
       "selectDocumentLibraries": "Sélectionnez les bibliothèques de documents à utiliser dans cette conversation",
       "selectPromptLibraries": "Sélectionnez les bibliothèques de prompts à utiliser dans cette conversation"
+    },
+    "knowledgePanel": {
+      "title": "Contexte sélectionné",
+      "files": "Fichiers ({{count}})",
+      "audio": "Audio",
+      "oneRecording": "1 enregistrement",
+      "libraries": "Bibliothèques ({{count}})",
+      "prompts": "Prompts ({{count}})",
+      "templates": "Templates ({{count}})"
     }
   },
   "settings": {
@@ -111,7 +138,9 @@
     "conversations": "Conversations",
     "newConversation": "Nouvelle conversation",
     "noConversation": "Aucune conversation",
-    "delete": "Supprimer"
+    "delete": "Supprimer",
+    "newConversationHelp": "Commencer une nouvelle conversation (non encore enregistrée)",
+    "draftNotSaved": "Brouillon • non encore enregistré"
   },
   "monitoring": {
     "title": "Surveillance des agents et services IA",
@@ -263,7 +292,13 @@
     "collapseAll": "Tout réduire",
     "expandAll": "Tout développer",
     "folderDeleteSuccess": "Dossier supprimé",
-    "folderDeleteDetail": "Le dossier « {{name}} » a été supprimé."
+    "folderDeleteDetail": "Le dossier « {{name}} » a été supprimé.",
+    "searchPlaceholder":"Rechercher un(e) {{typeOne}}",
+    "importDrawerTitle": "Importer un(e) {{typeOne}}",
+    "dropFiles":"Deposez vos {{typePlural}} ici",
+    "noFiles": "Aucun(e) {{typeOne}} trouvé(e)",
+    "import": "Importer"
+
   },
   "documentTable": {
     "selectedCount": "{{count}} sélectionné(s)",

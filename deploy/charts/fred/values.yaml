@@ -22,11 +22,22 @@ applications:
       maxUnavailable: 0
     image:
       repository: ghcr.io/thalesgroup/fred-agent/agentic-backend
-      tag: "v0.0.6"
+      tag: "0.1"
       pullPolicy: IfNotPresent
     command:
       enabled: true
-      data: ["uvicorn", "app.main:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000", "--env-file", "/app/config/.env", "--log-level", "info", "--loop", "asyncio"]
+      data:
+        - "uvicorn"
+        - "app.main:create_app"
+        - "--factory"
+        - "--host"
+        - "0.0.0.0"
+        - "--port"
+        - "8000"
+        - "--log-level"
+        - "info"
+        - "--loop"
+        - "asyncio"    
     env:
       - name: CONFIG_FILE
         value: "/app/config/configuration.yaml"
@@ -42,15 +53,9 @@ applications:
           port: 80
           targetPort: 8000
     ingress:
-      enabled: true
-      hosts:
-        - host: agentic-backend.dev.fred.thalesgroup.com
-          paths:
-            - path: /
-              pathType: Prefix
-              service:
-                name: agentic-backend
-                port: 80
+      enabled: false
+      className: ""
+      hosts: []
     volumeMounts:
       - name: agentic-backend-vol
         mountPath: /app/config/configuration.yaml
@@ -123,14 +128,19 @@ applications:
           client_id: "app"
           keycloak_url: "http://app-keycloak:8080/realms/app"
           authorized_origins:
-            -  "http://localhost:5173"
-      frontend_settings:
-        security:
-          enabled: false
+            -  "http://fred.dev.fred.thalesgroup.com:80"
+      security:
+        m2m:
+          enabled: true
+          client_id: "agentic"
+          realm_url: "http://app-keycloak:8080/realms/app"
+        user:
+          enabled: true
           client_id: "app"
-          keycloak_url: "http://app-keycloak:8080/realms/app"
+          realm_url: "http://app-keycloak:8080/realms/app"
           authorized_origins:
-            -  "http://localhost:5173"
+            - "http://fred.dev.fred.thalesgroup.com:80"
+      frontend_settings:
         feature_flags:
           # If true activate the backend and frontend modules in charge of K8
           # and frugality monitoring
@@ -140,6 +150,7 @@ applications:
         properties:
           logoName: "fred"
       ai:
+        knowledge_flow_url: "http://knowledge-flow-backend:8111/knowledge-flow/v1"
         # Timeout settings for the client
         timeout:
           connect: 5  # Time to wait for a connection in seconds
@@ -156,65 +167,64 @@ applications:
         recursion:
           recursion_limit: 40 # Number or max recursion use by the agents while using the model
         agents:
-          - name: "Fred"
+          - name: "Freddy"
             role: "Multi-Agent Orchestrator"
-            description: >
-              Handles complex, ambiguous, or multi-step user queries. Delegates tasks to the most suitable experts 
-              based on context, capabilities, and relevance. Ensures coherent, high-quality responses by coordinating the expert team.
             class_path: "app.agents.leader.leader.Leader"
-            type: "leader"
             enabled: true
+            type: "leader"
             max_steps: 5
-            model: {}
-          - name: "GeneralistExpert"
-            role: "Fallback Generalist Expert"
-            description: >
-              Provides broad, high-level guidance when no specific expert is better suited. 
-              Acts as a default agent to assist with general questions across all domains.
+          - name: "Samy"
+            role: "Opensearch instance monitoring expert"
+            mcp_servers:
+              - name: knowledge-flow-mcp-server
+                transport: streamable_http
+                url: http://knowledge-flow-backend:80/knowledge-flow/v1/mcp-opensearch-ops
+                sse_read_timeout: 2000
+            class_path: "app.agents.sentinel.sentinel_expert.SentinelExpert"
+            enabled: true
+          - name: "Georges"
             class_path: "app.agents.generalist.generalist_expert.GeneralistExpert"
             enabled: true
-            model: {}
-          - name: "TabularExpert"
+          - name: "Tessa"
             role: "Data Query and SQL Expert"
-            description: >
-              Executes advanced SQL queries (including joins and aggregations) 
-              over structured datasets like CSVs, Postgres exports, or DuckDB files. 
-              Ideal for analyzing tabular data ingested into the platform.
             class_path: "app.agents.tabular.tabular_expert.TabularExpert"
             enabled: true
             mcp_servers:
               - name: knowledge-flow-mcp-server
-                transport: sse
-                url: http://localhost:8111/mcp_tabular
+                transport: streamable_http
+                url: http://knowledge-flow-backend:80/knowledge-flow/v1/mcp-tabular
                 sse_read_timeout: 2000
-            model: {}
-          - name: "RicoProExpert"
-            role: "Document Retrieval Expert"
-            description: >
-              Answers user questions by retrieving relevant information from ingested document corpora.
-              Uses a vector-based retrieval pipeline to ground responses in internal or uploaded knowledge.
-            class_path: "app.agents.rags.rico_pro_expert.RicoProExpert"
+          - name: "Rico Senior"
+            class_path: "app.agents.rags.advanced_rag_expert.AdvancedRagExpert"
             enabled: true
-            categories:
-              - "rag"
             settings:
               chunk_size: 512
               chunk_overlap: 64
-              knowledge_flow_url: "http://localhost:8111/knowledge-flow/v1"
-            model: {}
-          - name: "RicoExpert"
+              knowledge_flow_url: "http://knowledge-flow-backend:80/knowledge-flow/v1"
+          - name: "Rico Jr."
             role: "Document Retrieval Expert"
-            description: >
-              Provides quick answers based on document content, using direct retrieval and generation.
-            class_path: "app.agents.rags.rico_expert.RicoExpert"
+            class_path: "app.agents.rags.rag_expert.RagExpert"
             enabled: true
+            # TODO: It seems that categories are not used in the UI
             categories:
-              - "rag"
+              - "Retrieval-Augmented Generation"
             settings:
               chunk_size: 512
               chunk_overlap: 64
-              knowledge_flow_url: "http://localhost:8111/knowledge-flow/v1"
-            model: {}
+              knowledge_flow_url: "http://knowledge-flow-backend:80/knowledge-flow/v1"
+          - name: "Brontë"
+            role: "Content generator expert"
+            description: >
+              Generates some content based on some templates she manages 
+              to get from the knowledge-flow backend.
+            class_path: "app.agents.content_generator.content_generator_expert.ContentGeneratorExpert"
+            enabled: true
+            mcp_servers:
+              - name: knowledge-flow-mcp-server
+                transport: streamable_http
+                url: http://knowledge-flow-backend:80/knowledge-flow/v1/mcp-resources
+                sse_read_timeout: 2000
+
       storage:
         postgres:
           host: localhost
@@ -229,16 +239,26 @@ applications:
         feedback_store:
           type: "duckdb"
           duckdb_path: "~/.fred/agentic/feedback.duckdb"
+
         agent_store:
           type: "duckdb"
           duckdb_path: "~/.fred/agentic/agent.duckdb"
+
         session_store:
           type: "duckdb"
           duckdb_path: "~/.fred/agentic/session.duckdb"
+
         history_store:
           type: "duckdb"
           duckdb_path: "~/.fred/agentic/history.duckdb"
+
+        kpi_store:
+          type: "log"
+          level: "INFO"
+
     dotenv:
+      AZURE_OPENAI_ENDPOINT: ""
+      KEYCLOAK_AGENTIC_CLIENT_SECRET: ""
       AZURE_TENANT_ID: ""  
       AZURE_CLIENT_ID: ""  
       AZURE_CLIENT_SECRET: ""
@@ -249,9 +269,9 @@ applications:
       OPENAI_API_KEY: ""
       OPENSEARCH_PASSWORD: ""
 
-  fred-frontend:
+  frontend:
     enabled: true
-    applicationName: fred-frontend
+    applicationName: frontend
     deployment:
       enabled: true
     statefulset:
@@ -263,7 +283,7 @@ applications:
       maxUnavailable: 0
     image:
       repository: ghcr.io/thalesgroup/fred-agent/frontend
-      tag: "v0.0.6"
+      tag: "0.1"
       pullPolicy: IfNotPresent
     command:
       enabled: false
@@ -289,40 +309,38 @@ applications:
       enabled: true
       className: "nginx"
       hosts:
-        - host: fred.dev.local
+        - host: fred.dev.fred.thalesgroup.com
           paths:
             - path: /
               pathType: Prefix
               service:
-                name: fred-frontend
+                name: frontend
                 port: 80
-            # # The additionnal paths might be useful if
-            # # only the frontend is exposed
-            # - path: /agentic
-            #   pathType: Prefix
-            #   service:
-            #     name: agentic-backend
-            #     port: 80
-            # - path: /knowledge-flow
-            #   pathType: Prefix
-            #   service:
-            #     name: knowledge-flow-backend
-            #     port: 8080
+            - path: /agentic
+              pathType: Prefix
+              service:
+                name: agentic-backend
+                port: 80
+            - path: /knowledge-flow
+              pathType: Prefix
+              service:
+                name: knowledge-flow-backend
+                port: 8000
       tls:
-        - secretName: fred-frontend-crt
+        - secretName: frontend-crt
           hosts:
-            - fred.dev.local
+            - fred.dev.fred.thalesgroup.com
     volumeMounts:
-      - name: fred-frontend-config-vol
+      - name: frontend-config-vol
         mountPath: /usr/share/nginx/html/config.json
         subPath: config.json
-      - name: fred-frontend-config-vol
+      - name: frontend-config-vol
         mountPath: /usr/share/nginx/html/keycloak.json
         subPath: keycloak.json
     volumes:
-      - name: fred-frontend-config-vol
+      - name: frontend-config-vol
         configMap:
-          name: fred-frontend-front
+          name: frontend-front
     probes:
       lifecycle:
         enabled: false
@@ -346,8 +364,8 @@ applications:
       backend: false
     configuration:
       config_json:
-        backend_url_api: "https://agentic-backend.dev.fred.thalesgroup.com"
-        backend_url_knowledge: "https://knowledge-flow-backend.dev.fred.thalesgroup.com"
+        backend_url_api: "http://agentic-backend.dev.fred.thalesgroup.com:8080"
+        backend_url_knowledge: "https://knowledge-flow-backend.dev.fred.thalesgroup.com:8080"
         websocket_url: "ws://agentic-backend.dev.fred.thalesgroup.com/fred/chatbot/query"
 
   knowledge-flow-backend:
@@ -364,7 +382,7 @@ applications:
       maxUnavailable: 0
     image:
       repository: ghcr.io/thalesgroup/fred-agent/knowledge-flow-backend
-      tag: "v0.0.6"
+      tag: "0.1"
     command:
       enabled: true
       data:
@@ -375,8 +393,6 @@ applications:
         - "0.0.0.0"
         - "--port"
         - "8111"
-        - "--env-file"
-        - "/app/config/.env"
         - "--log-level"
         - "info"
         - "--loop"
@@ -405,16 +421,9 @@ applications:
           targetPort: 8443
           protocol: TCP
     ingress:
-      enabled: true
+      enabled: false
       className: ""
-      hosts:
-        - host: knowledge-flow-backend.dev.fred.thalesgroup.com
-          paths:
-            - path: /
-              pathType: Prefix
-              service:
-                name: knowledge-flow-backend
-                port: 8000    
+      hosts: []
     volumeMounts:
       - name: knowledge-flow-backend-vol
         mountPath: /app/config/configuration.yaml
@@ -459,17 +468,17 @@ applications:
         log_level: "info"
         reload: false
         reload_dir: "."
-        security:
-          enabled: false
-          keycloak_url: "http://app-keycloak:8080/realms/app"
-          client_id: "app"
-          authorized_origins:
-            - "http://localhost:5173"
       security:
-        enabled: false
-        keycloak_url: "http://fred-keycloak:8080/realms/fred"
-        authorized_origins:
-          - "http://localhost:5173"
+        m2m:
+          enabled: true
+          client_id: "knowledge-flow"
+          realm_url: "http://app-keycloak:8080/realms/app"
+        user:
+          enabled: true
+          client_id: "app"
+          realm_url: "http://app-keycloak:8080/realms/app"
+          authorized_origins:
+            - "http://fred.dev.fred.thalesgroup.com:80"
       scheduler:
         enabled: true
         backend: "temporal"
@@ -494,9 +503,11 @@ applications:
           class_path: app.core.processors.input.markdown_markdown_processor.markdown_markdown_processor.MarkdownMarkdownProcessor
         - prefix: ".xlsm"
           class_path: app.core.processors.input.pps_tabular_processor.pps_tabular_processor.PpsTabularProcessor
+        - prefix: ".jsonl"
+          class_path: app.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor
       content_storage:
         type: local
-        root_path: ~/.fred/knowledge-flow/content-store
+        root_path: ~/.fred/knowledge-flow/content-storage
       document_sources:
         fred:
           type: push
@@ -508,6 +519,8 @@ applications:
           description: "Personal local documents available for pull-mode ingestion"
       embedding:
         type: "openai"
+        use_gpu: True
+        process_images: True
       storage:
         postgres:
           host: localhost
@@ -519,35 +532,37 @@ applications:
           secure: true
           verify_certs: false
           username: admin
-        tabular_store:
-          type: "duckdb"
-          duckdb_path: "~/.fred/knowledge-flow/tabular.duckdb"
-          # Local DB 
-          # type: "sql"
-          # driver: "duckdb"
-          # path: "~/.fred/knowledge-flow/db.duckdb"
-          ## Servor DB
-          # type: "sql"
-          # driver: "postgresql+psycopg2"
-          # port: 5433
-          # database: "test_db_postgre_sql"
-          # username: "my_username" # Overrides the one specified as "SQL_USERNAME" in the .env file
-          # password: "my_password" # Overrides the one specified as "SQL_PASSWORD" in the .env file
         catalog_store:
           type: "duckdb"
           duckdb_path: "~/.fred/knowledge-flow/catalog.duckdb"
         prompt_store:
           type: "duckdb"
           duckdb_path: "~/.fred/knowledge-flow/prompt.duckdb"
+        resource_store:
+          type: "duckdb"
+          duckdb_path: "~/.fred/knowledge-flow/resource.duckdb"
+        kpi_store:
+          type: "log"
+          level: "INFO"
         tag_store:
           type: "duckdb"
           duckdb_path: "~/.fred/knowledge-flow/tag.duckdb"
         metadata_store:
           type: "duckdb"
           duckdb_path: "~/.fred/knowledge-flow/metadata.duckdb"
+
         vector_store:
           type: in_memory
+        tabular_stores:
+          base_database:                            # Minimal configuration to enable CSV document ingestion
+            type: "sql"
+            driver: "duckdb"
+            database: "base_database"
+            path: "~/.fred/knowledge-flow/db.duckdb"
+            mode: "read_and_write"
+
     dotenv:
+      KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET: ""
       AZURE_TENANT_ID: ""
       AZURE_CLIENT_ID: ""
       AZURE_CLIENT_SECRET: ""
@@ -557,7 +572,7 @@ applications:
       AZURE_RESOURCE_PATH_EMBEDDINGS: ""
       AZURE_RESOURCE_PATH_LLM: ""
       AZURE_APIM_KEY: ""
-      AZURE_OPENAI_BASE_URL: ""
+      AZURE_OPENAI_ENDPOINT: ""
       AZURE_OPENAI_API_KEY: ""
       AZURE_DEPLOYMENT_LLM: ""
       AZURE_DEPLOYMENT_EMBEDDING: ""

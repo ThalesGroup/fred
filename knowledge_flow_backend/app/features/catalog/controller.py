@@ -1,9 +1,12 @@
-from app.common.structures import DocumentSourceConfig
-from fastapi import APIRouter, HTTPException, Query
 from typing import List, Literal, Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fred_core import KeycloakUser, get_current_user
+from pydantic import BaseModel
+
+from app.common.structures import DocumentSourceConfig
 from app.core.stores.catalog.base_catalog_store import PullFileEntry
 from app.features.catalog.service import CatalogService, PullSourceNotFoundError
-from pydantic import BaseModel
 
 
 class DocumentSourceInfo(BaseModel):
@@ -33,9 +36,10 @@ class CatalogController:
             source_tag: str = Query(..., description="The source tag for the cataloged files"),
             offset: int = Query(0, ge=0, description="Number of entries to skip"),
             limit: int = Query(100, gt=0, le=1000, description="Max number of entries to return"),
+            user: KeycloakUser = Depends(get_current_user),
         ):
             try:
-                return self.service.list_files(source_tag, offset=offset, limit=limit)
+                return self.service.list_files(user, source_tag, offset=offset, limit=limit)
             except PullSourceNotFoundError as e:
                 raise HTTPException(status_code=404, detail=str(e))
 
@@ -45,16 +49,17 @@ class CatalogController:
             summary="Rescan a pull-mode source and update its catalog",
             description="Only supported for sources with `type: pull` and a compatible `provider`. Returns 404 if the source tag is unknown or not a pull-mode source.",
         )
-        def rescan_catalog_source(source_tag: str):
+        def rescan_catalog_source(
+            source_tag: str,
+            user: KeycloakUser = Depends(get_current_user),
+        ):
             try:
-                files_found = self.service.rescan_source(source_tag)
+                files_found = self.service.rescan_source(user, source_tag)
                 return {"status": "success", "files_found": files_found}
             except PullSourceNotFoundError as e:
                 raise HTTPException(status_code=404, detail=str(e))
             except NotImplementedError as e:
                 raise HTTPException(status_code=501, detail=str(e))
-            except Exception as e:
-                raise HTTPException(status_code=500, detail=f"Scan failed: {e}")
 
         @router.get(
             "/documents/sources",
@@ -63,8 +68,8 @@ class CatalogController:
             summary="List the configured document sources",
             description=("Returns all configured document sources (push or pull).\nPull-mode sources may support catalog operations depending on the provider."),
         )
-        def list_document_sources():
-            sources: dict[str, DocumentSourceConfig] = self.service.get_document_sources()
+        def list_document_sources(user: KeycloakUser = Depends(get_current_user)):
+            sources: dict[str, DocumentSourceConfig] = self.service.get_document_sources(user)
 
             result = []
             for tag, config in sources.items():

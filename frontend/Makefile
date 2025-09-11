@@ -86,7 +86,7 @@ clean: ## Clean requirements and build files
 
 .PHONY: clean-docker
 clean-docker: ## Clean up Docker-related artifacts
-	docker rm -f fred-frontend || true
+	docker rm -f frontend || true
 	docker image prune -f
 
 .PHONY: full-clean

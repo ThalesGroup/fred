@@ -14,8 +14,10 @@
 
 import logging
 from typing import Any, Dict
-from fastapi import APIRouter, HTTPException
+
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
+from fred_core import KeycloakUser, get_current_user
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
@@ -113,21 +115,18 @@ class ContentController:
         """,
             response_model=MarkdownContentResponse,
         )
-        async def get_markdown_preview(document_uid: str):
+        async def get_markdown_preview(document_uid: str, user: KeycloakUser = Depends(get_current_user)):
             """
             Endpoint to retrieve a complete document including its content.
             """
             try:
                 logger.info(f"Retrieving full document: {document_uid}")
-                content = await self.service.get_markdown_preview(document_uid)
+                content = await self.service.get_markdown_preview(user, document_uid)
                 return {"content": content}
             except ValueError as e:
                 raise HTTPException(status_code=400, detail=str(e))
             except FileNotFoundError as e:
                 raise HTTPException(status_code=404, detail=str(e))
-            except Exception:
-                logger.exception("Unexpected error in get_document_preview")
-                raise HTTPException(status_code=500, detail="Internal server error")
 
         @router.get(
             "/markdown/{document_uid}/media/{media_id}",
@@ -142,16 +141,13 @@ class ContentController:
         Used by the frontend when rendering previews that link to original embedded media.
         """,
         )
-        async def download_document_media(document_uid: str, media_id: str):
+        async def download_document_media(document_uid: str, media_id: str, user: KeycloakUser = Depends(get_current_user)):
             try:
-                stream, file_name, content_type = await self.service.get_document_media(document_uid, media_id)
+                stream, file_name, content_type = await self.service.get_document_media(user, document_uid, media_id)
 
                 return StreamingResponse(content=stream, media_type=content_type, headers={"Content-Disposition": f'attachment; filename="{file_name}"'})
             except FileNotFoundError as e:
                 raise HTTPException(status_code=404, detail=str(e))
-            except Exception:
-                logger.exception("Unexpected error in download_document")
-                raise HTTPException(status_code=500, detail="Internal server error")
 
         @router.get(
             "/raw_content/{document_uid}",
@@ -164,6 +160,6 @@ class ContentController:
                 }
             },
         )
-        async def download_document(document_uid: str):
-            stream, file_name, content_type = await self.service.get_original_content(document_uid)
+        async def download_document(document_uid: str, user: KeycloakUser = Depends(get_current_user)):
+            stream, file_name, content_type = await self.service.get_original_content(user, document_uid)
             return StreamingResponse(content=stream, media_type=content_type, headers={"Content-Disposition": f'attachment; filename="{file_name}"'})

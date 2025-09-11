@@ -1,21 +1,12 @@
+# app/core/chatbot/chatbot_controller.py
 # Copyright Thales 2025
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# Licensed under the Apache License, Version 2.0
 
+from __future__ import annotations
 
 import logging
 from enum import Enum
-from typing import Dict, List, Literal, Union
+from typing import List, Literal, Union
 
 from fastapi import (
     APIRouter,
@@ -23,21 +14,26 @@ from fastapi import (
     File,
     Form,
     HTTPException,
-    Query,
     UploadFile,
     WebSocket,
     WebSocketDisconnect,
 )
+from fred_core import (
+    KeycloakUser,
+    VectorSearchHit,
+    get_current_user,
+    decode_jwt,
+    UserSecurity,
+)
+from pydantic import BaseModel, Field
 from starlette.websockets import WebSocketState
 
-from pydantic import BaseModel, Field
-from fred_core import KeycloakUser, get_current_user, VectorSearchHit
-
 from app.application_context import get_configuration
+from app.common.structures import FrontendSettings
 from app.common.utils import log_exception
 from app.core.agents.agent_manager import AgentManager
+from app.core.agents.agentic_flow import AgenticFlow
 from app.core.agents.runtime_context import RuntimeContext
-from app.core.agents.structures import AgenticFlow
 from app.core.chatbot.chat_schema import (
     ChatAskInput,
     ChatMessage,
@@ -48,7 +44,7 @@ from app.core.chatbot.chat_schema import (
     StreamEvent,
 )
 from app.core.chatbot.metric_structures import MetricsBucket, MetricsResponse
-from app.core.session.session_manager import SessionManager
+from app.core.chatbot.session_orchestrator import SessionOrchestrator
 
 logger = logging.getLogger(__name__)
 
@@ -85,33 +81,53 @@ class EchoEnvelope(BaseModel):
     payload: EchoPayload = Field(..., description="Schema payload being echoed")
 
 
+class FrontendConfigDTO(BaseModel):
+    frontend_settings: FrontendSettings
+    user_auth: UserSecurity
+
+
 class ChatbotController:
+    """
+    Why this controller stays thin:
+      - It exposes HTTP/WS endpoints and delegates *all* chat orchestration
+        (session lifecycle, KPI, persistence, streaming) to SessionOrchestrator.
+      - This keeps transport concerns (WS/HTTP) separate from agent/runtime logic.
+    """
+
     def __init__(
         self,
         app: APIRouter,
-        session_manager: SessionManager,
+        session_orchestrator: SessionOrchestrator,
         agent_manager: AgentManager,
     ):
         self.agent_manager = agent_manager
-        self.session_manager = session_manager
+        self.session_orchestrator = session_orchestrator
         fastapi_tags: list[str | Enum] = ["Frontend"]
 
         @app.post(
             "/schemas/echo",
             tags=["Schemas"],
-            summary="Echo a schema (schema anchor for codegen)",
-            response_model=EchoEnvelope,
+            summary="Ignore. Not a real endpoint.",
+            description="Ignore. This endpoint is only used to include some types (mainly one used in websocket) in the OpenAPI spec, so they can be generated as typescript types for the UI. This endpoint is not really used, this is just a code generation hack.",
         )
-        def echo_schema(envelope: EchoEnvelope) -> EchoEnvelope:
-            return envelope
+        def echo_schema(envelope: EchoEnvelope) -> None: ...
 
         @app.get(
             "/config/frontend_settings",
             summary="Get the frontend dynamic configuration",
             tags=fastapi_tags,
         )
-        def get_frontend_config():
-            return get_configuration().frontend_settings
+        def get_frontend_config() -> FrontendConfigDTO:
+            cfg = get_configuration()
+            return FrontendConfigDTO(
+                frontend_settings=cfg.frontend_settings,
+                user_auth=UserSecurity(
+                    enabled=cfg.security.user.enabled,
+                    realm_url=cfg.security.user.realm_url,
+                    client_id=cfg.security.user.client_id,
+                    authorized_origins=cfg.security.user.authorized_origins,
+                ),
+            )
 
         @app.get(
             "/chatbot/agenticflows",
@@ -122,11 +138,35 @@ class ChatbotController:
         def get_agentic_flows(
             user: KeycloakUser = Depends(get_current_user),
         ) -> List[AgenticFlow]:
-            return self.agent_manager.get_agentic_flows()
+            return self.agent_manager.get_agentic_flows(user)
 
         @app.websocket("/chatbot/query/ws")
         async def websocket_chatbot_question(websocket: WebSocket):
+            """
+            Transport-only:
+              - Accept WS
+              - Parse ChatAskInput
+              - Provide a callback that forwards StreamEvents
+              - Send FinalEvent or ErrorEvent
+              - All heavy lifting is in SessionOrchestrator.chat_ask_websocket()
+            """
             await websocket.accept()
+            auth = websocket.headers.get("authorization") or ""
+            token = (
+                auth.split(" ", 1)[1]
+                if auth.lower().startswith("bearer ")
+                else websocket.query_params.get("token")
+            )
+            if not token:
+                await websocket.close(code=4401)
+                return
+
+            try:
+                user = decode_jwt(token)  # KeycloakUser avec sub en uid²
+            except HTTPException:
+                await websocket.close(code=4401)
+                return
+
             try:
                 while True:
                     client_request = None
@@ -135,17 +175,19 @@ class ChatbotController:
                         ask = ChatAskInput(**client_request)
 
                         async def ws_callback(msg_dict: dict):
+                            # Stream every ChatMessage as a StreamEvent over WS
                             event = StreamEvent(
                                 type="stream", message=ChatMessage(**msg_dict)
                             )
                             await websocket.send_text(event.model_dump_json())
 
+                        # Delegate the whole exchange to the orchestrator
                         (
                             session,
                             final_messages,
-                        ) = await self.session_manager.chat_ask_websocket(
+                        ) = await self.session_orchestrator.chat_ask_websocket(
+                            user=user,
                             callback=ws_callback,
-                            user_id=ask.user_id,
                             session_id=ask.session_id or "unknown-session",
                             message=ask.message,
                             agent_name=ask.agent_name,
@@ -153,6 +195,7 @@ class ChatbotController:
                             client_exchange_id=ask.client_exchange_id,
                         )
 
+                        # Send final “bundle”
                         await websocket.send_text(
                             FinalEvent(
                                 type="final", messages=final_messages, session=session
@@ -200,7 +243,8 @@ class ChatbotController:
         def get_sessions(
             user: KeycloakUser = Depends(get_current_user),
         ) -> list[SessionWithFiles]:
-            return self.session_manager.get_sessions(user.uid)
+            # Orchestrator owns session lifecycle surface
+            return self.session_orchestrator.get_sessions(user)
 
         @app.get(
             "/chatbot/session/{session_id}/history",
@@ -212,7 +256,7 @@ class ChatbotController:
         def get_session_history(
             session_id: str, user: KeycloakUser = Depends(get_current_user)
         ) -> list[ChatMessage]:
-            return self.session_manager.get_session_history(session_id, user.uid)
+            return self.session_orchestrator.get_session_history(session_id, user)
 
         @app.delete(
             "/chatbot/session/{session_id}",
@@ -223,7 +267,7 @@ class ChatbotController:
         def delete_session(
             session_id: str, user: KeycloakUser = Depends(get_current_user)
         ) -> bool:
-            self.session_manager.delete_session(session_id, user.uid)
+            self.session_orchestrator.delete_session(session_id, user)
             return True
 
         @app.post(
@@ -233,45 +277,11 @@ class ChatbotController:
             tags=fastapi_tags,
         )
         async def upload_file(
-            user_id: str = Form(...),
             session_id: str = Form(...),
             agent_name: str = Form(...),
             file: UploadFile = File(...),
-        ) -> dict:
-            return await self.session_manager.upload_file(
-                user_id, session_id, agent_name, file
-            )
-
-        @app.get(
-            "/metrics/chatbot/numerical",
-            summary="Get aggregated numerical chatbot metrics",
-            tags=fastapi_tags,
-            response_model=MetricsResponse,
-        )
-        def get_node_numerical_metrics(
-            start: str,
-            end: str,
-            precision: str = "hour",
-            agg: List[str] = Query(default=[]),
-            groupby: List[str] = Query(default=[]),
             user: KeycloakUser = Depends(get_current_user),
-        ) -> MetricsResponse:
-            SUPPORTED_OPS = {"mean", "sum", "min", "max", "values"}
-            agg_mapping: Dict[str, List[str]] = {}
-            for item in agg:
-                if ":" not in item:
-                    raise HTTPException(
-                        400, detail=f"Invalid agg parameter format: {item}"
-                    )
-                field, op = item.split(":")
-                if op not in SUPPORTED_OPS:
-                    raise HTTPException(400, detail=f"Unsupported aggregation op: {op}")
-                agg_mapping.setdefault(field, []).append(op)
-            return self.session_manager.get_metrics(
-                start=start,
-                end=end,
-                precision=precision,
-                groupby=groupby,
-                agg_mapping=agg_mapping,
-                user_id=user.uid,
+        ) -> dict:
+            return await self.session_orchestrator.upload_file(
+                user, session_id, agent_name, file
             )

@@ -1,4 +1,9 @@
 {
+  "common": {
+    "add": "Add",
+    "noneSelected": "None selected"
+  },
+
   "resource": {
     "kind": {
       "prompt":   { "one": "prompt",   "other": "prompts" },
@@ -95,6 +100,20 @@
     }
   },
   "chatbot": {
+    "menu": {
+      "addToSetup": "Add to conversation setup"
+    },
+    "input": {
+      "placeholder": "Write your message…  Enter to send • Shift+Enter for newline"
+    },
+    "attachFiles": "Attach files",
+    "attachments": {
+      "count": "{{count}} attached"
+    },
+    "recordAudio": "Record audio",
+    "stopRecording": "Stop recording",
+    "audioChip": "Audio recording",
+    "hideAudio": "Hide audio controller",
     "searchDocumentLibraries": "Search document libraries...",
     "searchPromptLibraries": "Search prompt libraries...",
     "startNew": "Start a new conversation with {{name}}",
@@ -104,6 +123,15 @@
       "tokenCount": "This conversation has used {{total}} tokens",
       "selectDocumentLibraries": "Select the documents libraries to use in this conversation",
       "selectPromptLibraries": "Select the prompt libraries to use in this conversation"
+    },
+    "knowledgePanel": {
+      "title": "Selected knowledge",
+      "files": "Files ({{count}})",
+      "audio": "Audio",
+      "oneRecording": "1 recording",
+      "libraries": "Libraries ({{count}})",
+      "prompts": "Prompts ({{count}})",
+      "templates": "Templates ({{count}})"
     }
   },
   "settings": {
@@ -266,7 +294,12 @@
     "collapseAll": "Collapse all",
     "expandAll": "Expand all",
     "folderDeleteSuccess": "Folder deleted",
-    "folderDeleteDetail": "The folder « {{name}} » has been deleted."
+    "folderDeleteDetail": "The folder « {{name}} » has been deleted.",
+    "searchPlaceholder":"Search a {{typeOne}}",
+    "importDrawerTitle": "Import {{typeOne}}",
+    "dropFiles":"Drop your {{typePlural}} here",
+    "noFiles": "No {{typeOne}} found",
+    "import": "Import"
   },
   "documentTable": {
     "selectedCount": "{{count}} selected",

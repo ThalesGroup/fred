@@ -17,10 +17,10 @@ import logging
 from app.core.model.azure_apim_model import AzureApimModel
 from langchain_openai import AzureChatOpenAI, ChatOpenAI
 from langchain_ollama import ChatOllama
-from langchain_core.prompts import PromptTemplate
-from langchain_core.runnables import RunnableLambda
 from pydantic import BaseModel
-from typing import Type, Any
+from typing import Type
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.output_parsers import PydanticOutputParser
 
 
 from app.common.structures import ModelConfiguration
@@ -28,7 +28,7 @@ from app.common.structures import ModelConfiguration
 logger = logging.getLogger(__name__)
 
 
-def get_model(model_config: ModelConfiguration):
+def get_model(model_config: ModelConfiguration | None):
     """
     Factory function to create a model instance based on configuration.
 
@@ -46,6 +46,8 @@ def get_model(model_config: ModelConfiguration):
     Returns:
         An instance of a Chat model.
     """
+
+    assert model_config is not None, "Model configuration should not be `None` here"
     provider = model_config.provider
 
     if not provider:
@@ -53,7 +55,7 @@ def get_model(model_config: ModelConfiguration):
             "Missing mandatory model_type property in model configuration: %s",
             model_config,
         )
-        raise ValueError("Missing mandatory_model type in model configuration.")
+        raise ValueError("Missing mandatory model type in model configuration.")
     settings = (model_config.settings or {}).copy()
 
     if provider == "azure":
@@ -72,9 +74,25 @@ def get_model(model_config: ModelConfiguration):
 
     elif provider == "openai":
         logger.info("Creating OpenAI Chat model instance with config %s", model_config)
+        if not model_config.name:
+            logger.error(
+                "Missing model name for OpenAI provider in model configuration: %s",
+                model_config,
+            )
+            raise ValueError(
+                "Missing model name for OpenAI provider in model configuration."
+            )
         return ChatOpenAI(model=model_config.name, **settings)
     elif provider == "ollama":
         logger.info("Creating Ollama Chat model instance with config %s", model_config)
+        if not model_config.name:
+            logger.error(
+                "Missing model name for Ollama provider in model configuration: %s",
+                model_config,
+            )
+            raise ValueError(
+                "Missing model name for Ollama provider in model configuration."
+            )
         return ChatOllama(
             model=model_config.name, base_url=settings.pop("base_url", None), **settings
         )
@@ -83,59 +101,33 @@ def get_model(model_config: ModelConfiguration):
         raise ValueError(f"Unknown model provider {provider}")
 
 
-def get_structured_chain(
-    schema: Type[BaseModel], model_config: ModelConfiguration
-) -> Any:
-    """
-    Returns a LangChain chain for structured output, with fallback for unsupported providers.
-
-    Args:
-        schema (Type[BaseModel]): The Pydantic schema to extract.
-        model_config (ModelConfiguration): The model configuration object.
-
-    Returns:
-        A chain that extracts structured output as an instance of the schema.
-    """
+def get_structured_chain(schema: Type[BaseModel], model_config: ModelConfiguration):
     model = get_model(model_config)
-    provider = model_config.provider
-    schema_name = schema.__name__
+    provider = (model_config.provider or "").lower()
+
+    passthrough = ChatPromptTemplate.from_messages([MessagesPlaceholder("messages")])
 
     if provider in {"openai", "azure"}:
-        logger.debug(
-            f"Using function_calling for schema {schema_name} with provider '{provider}'"
-        )
-        return model.with_structured_output(schema, method="function_calling")
-
-    logger.debug(
-        f"Falling back to prompt-based structured output for schema {schema_name} with provider '{provider}'"
-    )
-
-    field_names = list(schema.model_fields.keys())
-    prompt = PromptTemplate(
-        template=(
-            "You are an assistant that extracts structured information.\n"
-            "Based on the following input:\n\n"
-            "{input}\n\n"
-            "Please return a valid JSON with the following fields:\n"
-            "{fields}"
-        ),
-        input_variables=["input", "fields"],
-    )
-
-    def parse_fallback(inputs):
-        prompt_input = {"input": inputs["input"], "fields": ", ".join(field_names)}
-
-        raw_response = model.invoke(prompt_input)
         try:
-            return schema.model_validate_json(raw_response)
-        except Exception as e:
-            logger.warning(
-                f"Failed to parse fallback structured output for {schema_name}"
+            structured = model.with_structured_output(schema, method="function_calling")
+            return passthrough | structured
+        except Exception:
+            logger.debug(
+                "Function calling not supported, falling back to prompt-based parsing"
             )
-            logger.warning("Raw model response: %s", raw_response)
-            logger.exception(e)
-            raise RuntimeError(
-                f"Structured output parsing failed for schema: {schema_name}"
-            )
+            pass  # fall back below
 
-    return prompt | RunnableLambda(parse_fallback)
+    parser = PydanticOutputParser(pydantic_object=schema)
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            MessagesPlaceholder("messages"),
+            (
+                "system",
+                "Return ONLY JSON that conforms to this schema:\n{schema}\n\n{format}",
+            ),
+        ]
+    ).partial(
+        schema=schema.model_json_schema(), format=parser.get_format_instructions()
+    )
+
+    return prompt | model | parser

@@ -26,6 +26,9 @@ import {
   ListItem,
   ClickAwayListener,
   Fade,
+  ListItemButton,
+  ListItemText,
+  Divider,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
@@ -46,6 +49,7 @@ export const Settings = ({
   currentAgenticFlow,
   onSelectAgenticFlow,
   onDeleteSession,
+  isCreatingNewConversation,
 }: {
   sessions: SessionSchema[];
   currentSession: SessionSchema | null;
@@ -55,6 +59,7 @@ export const Settings = ({
   currentAgenticFlow: AgenticFlow;
   onSelectAgenticFlow: (flow: AgenticFlow) => void;
   onDeleteSession: (session: SessionSchema) => void;
+  isCreatingNewConversation: boolean; // ← new
 }) => {
   // Récupération du thème pour l'adaptation des couleurs
   const theme = useTheme<Theme>();
@@ -167,81 +172,107 @@ export const Settings = ({
 
           {currentAgenticFlow && (
             <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
-              {agenticFlows.map((flow) => {
-                const isSelected = flow.name === currentAgenticFlow.name;
-                return (
-                  <Box
-                    key={flow.name}
-                    onClick={() => onSelectAgenticFlow(flow)}
-                    sx={{
-                      display: "flex",
-                      alignItems: "center",
-                      padding: "8px 12px",
-                      borderRadius: "10px",
-                      cursor: "pointer",
-                      border: isSelected
-                        ? `2px solid ${theme.palette.primary.main}`
-                        : `1px solid ${theme.palette.divider}`,
-                      backgroundColor: isSelected
-                        ? isDarkTheme
-                          ? "rgba(25, 118, 210, 0.12)"
-                          : "rgba(25, 118, 210, 0.05)"
-                        : isDarkTheme
-                          ? "rgba(255,255,255,0.03)"
-                          : "rgba(0,0,0,0.02)",
-                      transition: "all 0.2s",
-                      "&:hover": {
-                        backgroundColor: isSelected
-                          ? isDarkTheme
-                            ? "rgba(25, 118, 210, 0.15)"
-                            : "rgba(25, 118, 210, 0.08)"
-                          : isDarkTheme
-                            ? "rgba(255,255,255,0.05)"
-                            : "rgba(0,0,0,0.04)",
-                      },
-                    }}
-                  >
-                    <Box sx={{ mr: 2 }}>{getAgentBadge(flow.nickname)}</Box>
-                    <Box
-                      sx={{
-                        display: "flex",
-                        flexDirection: "column",
-                        flexGrow: 1,
-                      }}
-                    >
-                      <Typography
-                        variant="body1"
-                        sx={{
-                          fontWeight: isSelected ? 500 : 400,
-                          color: isSelected ? theme.palette.primary.main : "text.primary",
-                        }}
-                      >
+              {/* Fred rationale:
+       - Uniform, vertical, compact list.
+       - Tooltip shows role + description without stealing clicks.
+       - Selected line uses a clear border + subtle bg.
+    */}
+              <List dense disablePadding>
+                {agenticFlows.map((flow) => {
+                  const isSelected = flow.name === currentAgenticFlow.name;
+
+                  // Tooltip content: nickname (title), then role + description
+                  const tooltipContent = (
+                    <Box sx={{ maxWidth: 460 }}>
+                      {/* Nickname */}
+                      <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 0.75 }}>
                         {flow.nickname}
                       </Typography>
-                      <Typography
-                        variant="caption"
-                        sx={{
-                          color: "text.secondary",
-                          lineHeight: 1.2,
-                        }}
-                      >
-                        {flow.role}
-                      </Typography>
-                    </Box>
-                    {isSelected && (
+
+                      {/* Subtle separator */}
+                      <Divider sx={{ opacity: 0.5, mb: 0.75 }} />
+
+                      {/* Role + description grouped with a thin left accent */}
                       <Box
-                        sx={{
-                          width: 8,
-                          height: 8,
-                          borderRadius: "50%",
-                          backgroundColor: theme.palette.primary.main,
-                          ml: 1,
-                        }}
-                      />
-                    )}
-                  </Box>
-                );
-              })}
+                        sx={(theme) => ({
+                          pl: 1.25,
+                          borderLeft: `2px solid ${theme.palette.divider}`,
+                        })}
+                      >
+                        <Typography
+                          variant="body2"
+                          color="text.secondary"
+                          sx={{ fontStyle: "italic", mb: flow.description ? 0.25 : 0 }}
+                        >
+                          {flow.role}
+                        </Typography>
+
+                        {flow.description && (
+                          <Typography variant="body2" color="text.secondary">
+                            {flow.description}
+                          </Typography>
+                        )}
+                      </Box>
+                    </Box>
+                  );
+
+                  return (
+                    <ListItem key={flow.name} disableGutters sx={{ mb: 0 }}>
+                      <Tooltip title={tooltipContent} placement="right" arrow
+                        slotProps={{ tooltip: { sx: { maxWidth: 460 } } }}
+                      >
+                        <ListItemButton
+                          dense
+                          onClick={() => onSelectAgenticFlow(flow)}
+                          selected={isSelected}
+                          sx={{
+                            // Compact, consistent row height
+                            //minHeight: 30,
+                            borderRadius: 1,
+                            px: 1,
+                            py: 0,
+                            border: `1px solid ${isSelected ? theme.palette.primary.main : theme.palette.divider}`,
+                            backgroundColor: isSelected
+                              ? theme.palette.mode === "dark"
+                                ? "rgba(25,118,210,0.12)"
+                                : "rgba(25,118,210,0.06)"
+                              : "transparent",
+                            "&:hover": {
+                              backgroundColor: isSelected
+                                ? theme.palette.mode === "dark"
+                                  ? "rgba(25,118,210,0.16)"
+                                  : "rgba(25,118,210,0.1)"
+                                : theme.palette.mode === "dark"
+                                  ? "rgba(255,255,255,0.04)"
+                                  : "rgba(0,0,0,0.03)",
+                            },
+                          }}
+                        >
+                          {/* Keep your badge (with ⭐), scaled down */}
+                          <Box sx={{ mr: 1, transform: "scale(0.8)", transformOrigin: "center", lineHeight: 0 }}>
+                            {getAgentBadge(flow.nickname)}
+                          </Box>
+
+                          <ListItemText
+                            primary={flow.nickname}
+                            secondary={flow.role}
+                            primaryTypographyProps={{
+                              variant: "body2",
+                              fontWeight: isSelected ? 600 : 500,
+                              noWrap: true,
+                            }}
+                            secondaryTypographyProps={{
+                              variant: "caption",
+                              color: "text.secondary",
+                              noWrap: true,
+                            }}
+                          />
+                        </ListItemButton>
+                      </Tooltip>
+                    </ListItem>
+                  );
+                })}
+              </List>
             </Box>
           )}
         </Box>
@@ -303,6 +334,49 @@ export const Settings = ({
             },
           }}
         >
+          {/* === Pseudo-item for "New Conversation" === */}
+          <ListItem
+            key="__draft__"
+            disablePadding
+            sx={{
+              mb: 0.8,
+              borderRadius: "8px",
+              backgroundColor: isCreatingNewConversation || !currentSession ? activeItemBgColor : "transparent",
+              transition: "all 0.2s",
+              position: "relative",
+              height: 44,
+              "&:hover": {
+                backgroundColor: isCreatingNewConversation || !currentSession ? activeItemBgColor : hoverColor,
+              },
+            }}
+          >
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                width: "100%",
+                justifyContent: "space-between",
+                padding: "0 12px",
+                borderRadius: "8px",
+                height: "100%",
+                cursor: "pointer",
+                color: isCreatingNewConversation || !currentSession ? activeItemTextColor : "text.secondary",
+                "&:hover": { backgroundColor: hoverColor },
+              }}
+              onClick={() => onCreateNewConversation()}
+            >
+              <Box
+                sx={{ display: "flex", flexDirection: "column", flexGrow: 1, overflow: "hidden", textAlign: "left" }}
+              >
+                <Typography variant="body2" sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {t("settings.newConversation")}
+                </Typography>
+                <Typography variant="caption" sx={{ color: "text.disabled" }}>
+                  {t("settings.draftNotSaved")}
+                </Typography>
+              </Box>
+            </Box>
+          </ListItem>
           {[...sessions]
             .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
             .map((session) => {

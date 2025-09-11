@@ -20,12 +20,13 @@ from pypdf.errors import PdfReadError
 from docling.document_converter import DocumentConverter, PdfFormatOption
 from docling.datamodel.pipeline_options import PdfPipelineOptions
 from docling.datamodel.base_models import InputFormat
-from docling_core.types.doc import ImageRefMode
+from docling_core.types.doc.base import ImageRefMode
 
+from app.application_context import get_configuration
 from app.core.processors.input.common.base_image_describer import BaseImageDescriber
 from app.core.processors.input.common.base_input_processor import BaseMarkdownProcessor
 import re
-
+import torch
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +35,7 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
     def __init__(self, image_describer: BaseImageDescriber | None = None):
         super().__init__()
         self.image_describer = image_describer
+        self.process_images = get_configuration().embedding.process_images
 
     def check_file_validity(self, file_path: Path) -> bool:
         """Checks if the PDF is readable and contains at least one page."""
@@ -77,6 +79,7 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
 
     def convert_file_to_markdown(self, file_path: Path, output_dir: Path, document_uid: str | None) -> dict:
         output_markdown_path = output_dir / "output.md"
+        torch.device("cpu")
         try:
             # Initialize the DocumentConverter with PDF format options
             pipeline_options = PdfPipelineOptions()
@@ -99,9 +102,16 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
             pictures_desc = []
             if not doc.pictures:
                 logger.info("No pictures found in document.")
-            else:
+            elif self.process_images:
                 for pic in doc.pictures:
-                    base64 = pic.image.uri.path.split(",")[1]  # Extract base64 part from the data URI
+                    if not pic.image or not pic.image.uri:
+                        pictures_desc.append("Image data not available.")
+                        continue
+                    data_uri = str(pic.image.uri)
+                    if "," not in data_uri:
+                        pictures_desc.append("Image data not available.")
+                        continue
+                    base64 = data_uri.split(",", 1)[1]  # Extract base64 part from the data URI
                     if self.image_describer:
                         try:
                             description = self.image_describer.describe(base64)

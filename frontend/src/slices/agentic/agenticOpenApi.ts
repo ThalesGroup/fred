@@ -51,7 +51,7 @@ const injectedRtkApi = api.injectEndpoints({
       EchoSchemaAgenticV1SchemasEchoPostApiResponse,
       EchoSchemaAgenticV1SchemasEchoPostApiArg
     >({
-      query: (queryArg) => ({ url: `/agentic/v1/schemas/echo`, method: "POST", body: queryArg.echoEnvelopeInput }),
+      query: (queryArg) => ({ url: `/agentic/v1/schemas/echo`, method: "POST", body: queryArg.echoEnvelope }),
     }),
     getFrontendConfigAgenticV1ConfigFrontendSettingsGet: build.query<
       GetFrontendConfigAgenticV1ConfigFrontendSettingsGetApiResponse,
@@ -92,6 +92,12 @@ const injectedRtkApi = api.injectEndpoints({
         method: "POST",
         body: queryArg.bodyUploadFileAgenticV1ChatbotUploadPost,
       }),
+    }),
+    healthzAgenticV1HealthzGet: build.query<HealthzAgenticV1HealthzGetApiResponse, HealthzAgenticV1HealthzGetApiArg>({
+      query: () => ({ url: `/agentic/v1/healthz` }),
+    }),
+    readyAgenticV1ReadyGet: build.query<ReadyAgenticV1ReadyGetApiResponse, ReadyAgenticV1ReadyGetApiArg>({
+      query: () => ({ url: `/agentic/v1/ready` }),
     }),
     getNodeNumericalMetricsAgenticV1MetricsChatbotNumericalGet: build.query<
       GetNodeNumericalMetricsAgenticV1MetricsChatbotNumericalGetApiResponse,
@@ -144,11 +150,12 @@ export type DeleteAgentAgenticV1AgentsNameDeleteApiResponse = /** status 200 Suc
 export type DeleteAgentAgenticV1AgentsNameDeleteApiArg = {
   name: string;
 };
-export type EchoSchemaAgenticV1SchemasEchoPostApiResponse = /** status 200 Successful Response */ EchoEnvelope;
+export type EchoSchemaAgenticV1SchemasEchoPostApiResponse = /** status 200 Successful Response */ null;
 export type EchoSchemaAgenticV1SchemasEchoPostApiArg = {
-  echoEnvelopeInput: EchoEnvelope2;
+  echoEnvelope: EchoEnvelope;
 };
-export type GetFrontendConfigAgenticV1ConfigFrontendSettingsGetApiResponse = /** status 200 Successful Response */ any;
+export type GetFrontendConfigAgenticV1ConfigFrontendSettingsGetApiResponse =
+  /** status 200 Successful Response */ FrontendConfigDto;
 export type GetFrontendConfigAgenticV1ConfigFrontendSettingsGetApiArg = void;
 export type GetAgenticFlowsAgenticV1ChatbotAgenticflowsGetApiResponse =
   /** status 200 Successful Response */ AgenticFlow[];
@@ -157,7 +164,7 @@ export type GetSessionsAgenticV1ChatbotSessionsGetApiResponse =
   /** status 200 Successful Response */ SessionWithFiles[];
 export type GetSessionsAgenticV1ChatbotSessionsGetApiArg = void;
 export type GetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetApiResponse =
-  /** status 200 Successful Response */ ChatMessage[];
+  /** status 200 Successful Response */ ChatMessage2[];
 export type GetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetApiArg = {
   sessionId: string;
 };
@@ -172,6 +179,10 @@ export type UploadFileAgenticV1ChatbotUploadPostApiResponse = /** status 200 Suc
 export type UploadFileAgenticV1ChatbotUploadPostApiArg = {
   bodyUploadFileAgenticV1ChatbotUploadPost: BodyUploadFileAgenticV1ChatbotUploadPost;
 };
+export type HealthzAgenticV1HealthzGetApiResponse = /** status 200 Successful Response */ any;
+export type HealthzAgenticV1HealthzGetApiArg = void;
+export type ReadyAgenticV1ReadyGetApiResponse = /** status 200 Successful Response */ any;
+export type ReadyAgenticV1ReadyGetApiArg = void;
 export type GetNodeNumericalMetricsAgenticV1MetricsChatbotNumericalGetApiResponse =
   /** status 200 Successful Response */ MetricsResponse;
 export type GetNodeNumericalMetricsAgenticV1MetricsChatbotNumericalGetApiArg = {
@@ -267,10 +278,31 @@ export type CodePart = {
   language?: string | null;
   code: string;
 };
+export type GeoPart = {
+  type?: "geo";
+  geojson: {
+    [key: string]: any;
+  };
+  popup_property?: string | null;
+  fit_bounds?: boolean;
+  style?: {
+    [key: string]: any;
+  } | null;
+};
 export type ImageUrlPart = {
   type?: "image_url";
   url: string;
   alt?: string | null;
+};
+export type LinkKind = "citation" | "download" | "external" | "dashboard" | "related";
+export type LinkPart = {
+  type?: "link";
+  href: string;
+  title?: string | null;
+  kind?: LinkKind;
+  rel?: string | null;
+  mime?: string | null;
+  source_id?: string | null;
 };
 export type TextPart = {
   type?: "text";
@@ -357,8 +389,14 @@ export type ChatMessage = {
         type: "code";
       } & CodePart)
     | ({
+        type: "geo";
+      } & GeoPart)
+    | ({
         type: "image_url";
       } & ImageUrlPart)
+    | ({
+        type: "link";
+      } & LinkPart)
     | ({
         type: "text";
       } & TextPart)
@@ -378,7 +416,6 @@ export type RuntimeContext = {
   [key: string]: any;
 };
 export type ChatAskInput = {
-  user_id: string;
   session_id?: string | null;
   message: string;
   agent_name: string;
@@ -451,6 +488,43 @@ export type EchoEnvelope = {
     | VectorSearchHit
     | RuntimeContext;
 };
+export type FrontendFlags = {
+  enableK8Features?: boolean;
+  enableElecWarfare?: boolean;
+};
+export type Properties = {
+  logoName?: string;
+};
+export type FrontendSettings = {
+  feature_flags: FrontendFlags;
+  properties: Properties;
+};
+export type UserSecurity = {
+  enabled?: boolean;
+  realm_url: string;
+  client_id: string;
+  authorized_origins?: string[];
+};
+export type FrontendConfigDto = {
+  frontend_settings: FrontendSettings;
+  user_auth: UserSecurity;
+};
+export type AgenticFlow = {
+  /** Name of the agentic flow */
+  name?: string | null;
+  /** Human-readable role of the agentic flow */
+  role: string;
+  /** Human-readable nickname of the agentic flow */
+  nickname?: string | null;
+  /** Human-readable description of the agentic flow */
+  description: string;
+  /** Icon of the agentic flow */
+  icon: string | null;
+  /** List of experts in the agentic flow */
+  experts: string[] | null;
+  /** Human-readable tag of the agentic flow */
+  tag: string | null;
+};
 export type ChatMessage2 = {
   session_id: string;
   exchange_id: string;
@@ -463,8 +537,14 @@ export type ChatMessage2 = {
         type: "code";
       } & CodePart)
     | ({
+        type: "geo";
+      } & GeoPart)
+    | ({
         type: "image_url";
       } & ImageUrlPart)
+    | ({
+        type: "link";
+      } & LinkPart)
     | ({
         type: "text";
       } & TextPart)
@@ -477,59 +557,7 @@ export type ChatMessage2 = {
   )[];
   metadata?: ChatMetadata;
 };
-export type StreamEvent2 = {
-  type?: "stream";
-  message: ChatMessage2;
-};
-export type FinalEvent2 = {
-  type?: "final";
-  messages: ChatMessage2[];
-  session: SessionSchema;
-};
-export type EchoEnvelope2 = {
-  kind:
-    | "ChatMessage"
-    | "StreamEvent"
-    | "FinalEvent"
-    | "ErrorEvent"
-    | "SessionSchema"
-    | "SessionWithFiles"
-    | "MetricsResponse"
-    | "MetricsBucket"
-    | "VectorSearchHit"
-    | "RuntimeContext";
-  /** Schema payload being echoed */
-  payload:
-    | ChatMessage2
-    | ChatAskInput
-    | StreamEvent2
-    | FinalEvent2
-    | ErrorEvent
-    | SessionSchema
-    | SessionWithFiles
-    | MetricsResponse
-    | MetricsBucket
-    | VectorSearchHit
-    | RuntimeContext;
-};
-export type AgenticFlow = {
-  /** Name of the agentic flow */
-  name: string;
-  /** Human-readable role of the agentic flow */
-  role: string;
-  /** Human-readable nickname of the agentic flow */
-  nickname: string | null;
-  /** Human-readable description of the agentic flow */
-  description: string;
-  /** Icon of the agentic flow */
-  icon: string | null;
-  /** List of experts in the agentic flow */
-  experts: string[] | null;
-  /** Human-readable tag of the agentic flow */
-  tag: string | null;
-};
 export type BodyUploadFileAgenticV1ChatbotUploadPost = {
-  user_id: string;
   session_id: string;
   agent_name: string;
   file: Blob;
@@ -554,6 +582,10 @@ export const {
   useLazyGetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetQuery,
   useDeleteSessionAgenticV1ChatbotSessionSessionIdDeleteMutation,
   useUploadFileAgenticV1ChatbotUploadPostMutation,
+  useHealthzAgenticV1HealthzGetQuery,
+  useLazyHealthzAgenticV1HealthzGetQuery,
+  useReadyAgenticV1ReadyGetQuery,
+  useLazyReadyAgenticV1ReadyGetQuery,
   useGetNodeNumericalMetricsAgenticV1MetricsChatbotNumericalGetQuery,
   useLazyGetNodeNumericalMetricsAgenticV1MetricsChatbotNumericalGetQuery,
 } = injectedRtkApi;
