@@ -4,7 +4,8 @@ from typing import List, Optional
 
 from fred_core import KeycloakUser
 from fred_core.store.duckdb_store import DuckDBTableStore
-from app.core.stores.tags.base_tag_store import BaseTagStore, TagNotFoundError, TagAlreadyExistsError
+
+from app.core.stores.tags.base_tag_store import BaseTagStore, TagAlreadyExistsError, TagNotFoundError
 from app.features.tag.structure import Tag, TagType
 
 logger = logging.getLogger(__name__)
@@ -92,10 +93,8 @@ class DuckdbTagStore(BaseTagStore):
                     f"""
                     SELECT id, created_at, updated_at, owner_id, name, path, description, type
                     FROM {self._table()}
-                    WHERE owner_id = ?
                     ORDER BY COALESCE(path, ''), name
                     """,
-                    [user.uid],
                 ).fetchall()
             return [self._deserialize(row) for row in rows]
         except Exception as e:
