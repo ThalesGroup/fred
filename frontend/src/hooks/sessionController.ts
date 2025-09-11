@@ -28,7 +28,8 @@ function resolveFlowForSession(
   flows: AgenticFlow[],
   map: AgentBySessionMap
 ): AgenticFlow | null {
-  if (!session || flows.length === 0) return null;
+  if (flows.length === 0) return null;
+  if (!session) return flows[0]; 
   const name = map[session.id];
   return flows.find((f) => f.name === name) ?? flows[0] ?? null;
 }
