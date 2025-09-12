@@ -52,16 +52,16 @@ def minimal_generalist_config() -> Configuration:
             enabled=False,
             realm_url=AnyUrl("http://localhost:8080/realms/fake-m2m-realm"),
             client_id="fake-m2m-client",
-            audience="fake-audience"
+            audience="fake-audience",
         ),
         user=UserSecurity(
             enabled=False,
             realm_url=AnyUrl("http://localhost:8080/realms/fake-user-realm"),
             client_id="fake-user-client",
-            authorized_origins=[AnyHttpUrl("http://localhost:5173")]
-        )
+            authorized_origins=[AnyHttpUrl("http://localhost:5173")],
+        ),
     )
- 
+
     return Configuration(
         app=AppConfig(
             base_url="/agentic/v1",

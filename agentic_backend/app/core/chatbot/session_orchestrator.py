@@ -362,7 +362,7 @@ class SessionOrchestrator:
             # Role.tool is ignored for prompt cleanliness.
 
         agent: AgentFlow = self.agent_manager.get_agent_instance(
-            agent_name, runtime_context
+            name=agent_name, runtime_context=runtime_context
         )
         return session, lc_history, agent, is_new_session
 

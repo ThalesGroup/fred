@@ -81,16 +81,16 @@ class AgentService:
             raise ValueError("Agent name in URL and body must match.")
 
         # Delete existing agent (if any)
-        self.agent_manager.unregister_agent(name)
+        await self.agent_manager.unregister_agent(name)
         self.store.delete(name)
 
         # Recreate it using the same logic as in create
         return await self.build_and_register_mcp_agent(user, req)
 
     @authorize(action=Action.DELETE, resource=Resource.AGENTS)
-    def delete_agent(self, user: KeycloakUser, name: str):
+    async def delete_agent(self, user: KeycloakUser, name: str):
         # Unregister from memory
-        self.agent_manager.unregister_agent(name)
+        await self.agent_manager.unregister_agent(name)
 
         # Delete from DuckDB
         self.store.delete(name)
