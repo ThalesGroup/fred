@@ -29,7 +29,7 @@ from app.core.agents import agent_controller
 from app.core.agents.agent_manager import AgentManager
 from app.core.chatbot import chatbot_controller
 from app.core.chatbot.session_orchestrator import SessionOrchestrator
-from app.core.feedback.controller import FeedbackController
+from app.core.feedback import feedback_controller
 from app.application_context import (
     ApplicationContext,
     get_agent_store,
@@ -37,8 +37,7 @@ from app.application_context import (
 )
 from app.common.structures import Configuration
 from app.common.utils import parse_server_configuration
-from app.core.monitoring.monitoring_controller import MonitoringController
-from app.core.prompts.controller import PromptController
+from app.core.monitoring import monitoring_controller
 from dotenv import load_dotenv
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -154,12 +153,10 @@ def create_app() -> FastAPI:
     initialize_user_security(configuration.security.user)
 
     router = APIRouter(prefix=base_url)
-    # Register controllers
-    FeedbackController(router)
-    PromptController(router)
     router.include_router(agent_controller.router)
     router.include_router(chatbot_controller.router)
-    MonitoringController(router)
+    router.include_router(monitoring_controller.router)
+    router.include_router(feedback_controller.router)
     app.include_router(router)
     logger.info("🧩 All controllers registered.")
     return app

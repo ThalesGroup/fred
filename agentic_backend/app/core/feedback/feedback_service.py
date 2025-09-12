@@ -16,8 +16,8 @@ from typing import List
 
 from fred_core import Action, KeycloakUser, Resource, authorize
 
+from app.core.feedback.feedback_structures import FeedbackRecord
 from app.core.feedback.store.base_feedback_store import BaseFeedbackStore
-from app.core.feedback.structures import FeedbackRecord
 
 
 class FeedbackService:

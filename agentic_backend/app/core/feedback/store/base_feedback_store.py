@@ -16,7 +16,7 @@
 from abc import ABC, abstractmethod
 from typing import List
 
-from app.core.feedback.structures import FeedbackRecord
+from app.core.feedback.feedback_structures import FeedbackRecord
 
 
 class BaseFeedbackStore(ABC):

@@ -105,6 +105,7 @@ def get_session_orchestrator(request: Request) -> SessionOrchestrator:
     """Dependency to get the session_orchestrator from app.state."""
     return request.app.state.session_orchestrator
 
+
 def get_agent_manager_ws(websocket: WebSocket) -> AgentManager:
     """Dependency to get the agent_manager from app.state for WebSocket."""
     return websocket.app.state.agent_manager
@@ -113,6 +114,7 @@ def get_agent_manager_ws(websocket: WebSocket) -> AgentManager:
 def get_session_orchestrator_ws(websocket: WebSocket) -> SessionOrchestrator:
     """Dependency to get the session_orchestrator from app.state for WebSocket."""
     return websocket.app.state.session_orchestrator
+
 
 # Create an APIRouter instance here
 router = APIRouter(tags=["Frontend"])
@@ -160,8 +162,12 @@ def get_agentic_flows(
 @router.websocket("/chatbot/query/ws")
 async def websocket_chatbot_question(
     websocket: WebSocket,
-    agent_manager: AgentManager = Depends(get_agent_manager_ws),  # Use WebSocket-specific dependency
-    session_orchestrator: SessionOrchestrator = Depends(get_session_orchestrator_ws), # Use WebSocket-specific dependency
+    agent_manager: AgentManager = Depends(
+        get_agent_manager_ws
+    ),  # Use WebSocket-specific dependency
+    session_orchestrator: SessionOrchestrator = Depends(
+        get_session_orchestrator_ws
+    ),  # Use WebSocket-specific dependency
 ):
     """
     Transport-only:
