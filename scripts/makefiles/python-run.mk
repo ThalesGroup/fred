@@ -27,10 +27,8 @@ run-local: ## Run the app assuming dependencies already exist
 
 
 .PHONY: run
-run: dev ## Install dependencies and run the app with the dev storages activated (duckDB)
-	$(MAKE) run-local 
+run: dev run-local ## Install dependencies and run the app with the dev storages activated (duckDB)
 
 .PHONY: run-prod
-
-run-prod: dev ## Install dependencies and run the app with the prod storages activated (OpenSearch, MinIO & cie.)
-	CONFIG_FILE=$(CONFIG_FILE_PROD) $(MAKE) run-local 
+run-prod: CONFIG_FILE=$(CONFIG_FILE_PROD)
+run-prod: run ## Install dependencies and run the app with the prod storages activated (OpenSearch, MinIO & cie.)

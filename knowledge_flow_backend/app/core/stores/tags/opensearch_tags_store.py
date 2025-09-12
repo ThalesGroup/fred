@@ -15,9 +15,7 @@
 import logging
 from typing import List, Optional
 
-from fred_core import KeycloakUser
-from fred_core import ThreadSafeLRUCache
-
+from fred_core import KeycloakUser, ThreadSafeLRUCache
 from opensearchpy import ConflictError, NotFoundError, OpenSearch, RequestsHttpConnection
 
 from app.core.stores.tags.base_tag_store import BaseTagStore, TagAlreadyExistsError, TagNotFoundError
@@ -87,7 +85,6 @@ class OpenSearchTagStore(BaseTagStore):
     """
     OpenSearch implementation of BaseTagStore.
     Automatically creates the index if it doesn't exist.
-    Tags are scoped per user via `owner_id`.
     """
 
     default_params: dict[str, str] = {
@@ -128,7 +125,7 @@ class OpenSearchTagStore(BaseTagStore):
                 "query": {
                     "bool": {
                         "must": [
-                            {"term": {"owner_id": user.uid}}
+                            # {"term": {"owner_id": user.uid}} # Tag will be public until we add ReBAC
                             # {"term": {"type": tag_type.value}},
                         ]
                     }
@@ -214,7 +211,7 @@ class OpenSearchTagStore(BaseTagStore):
             "query": {
                 "bool": {
                     "filter": [
-                        {"term": {"owner_id": owner_id}},
+                        # {"term": {"owner_id": owner_id}}, # Tag will be public until we add ReBAC
                         {"term": {"type": tag_type.value}},
                         {"term": {"full_path": full_path}},
                     ]
