@@ -31,7 +31,7 @@ import {
 import dayjs from "dayjs";
 import React, { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { DOCUMENT_PROCESSING_STAGES } from "../../../slices/documentApi";
+
 import {
   DocumentMetadata,
   TagType,
@@ -42,6 +42,7 @@ import { CustomRowAction, DocumentTableRowActionsMenu } from "./DocumentOperatio
 import { CustomBulkAction, DocumentOperationsTableSelectionToolbar } from "./DocumentOperationsTableSelectionToolbar";
 import { useDocumentActions } from "../common/useDocumentActions";
 import { getDocumentIcon } from "../common/DocumentIcon";
+import { DOCUMENT_PROCESSING_STAGES } from "../../../utils/const";
 
 // Todo: use `DocumentMetadata` directly (as `DocumentMetadata` is auto-generated from OpenAPI spec)
 
@@ -156,7 +157,6 @@ export const DocumentOperationsTable: React.FC<DocumentOperationsTableProps> = (
   const handleToggleAll = (checked: boolean) => {
     setSelectedFiles(checked ? [...files] : []);
   };
-
 
   // If actions are undefined, use default actions from useDocumentActions
   const { defaultBulkActions, defaultRowActions } = useDocumentActions();
