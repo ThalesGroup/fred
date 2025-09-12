@@ -20,7 +20,7 @@ import { useSearchParams } from "react-router-dom";
 import LoadingWithProgress from "../components/LoadingWithProgress";
 import ChatBot from "../components/chatbot/ChatBot";
 import { Settings } from "../components/chatbot/Settings";
-import { useSessionController } from "../hooks/sessionController";
+import { useSessionController } from "../hooks/useSessionController";
 
 export const Chat = () => {
   const [searchParams] = useSearchParams();
@@ -39,6 +39,7 @@ export const Chat = () => {
     startNewConversation,
     updateOrAddSession,
     deleteSession,
+    bindDraftAgentToSessionId,
   } = useSessionController();
 
   // ---- DEBUG LOGGING ----
@@ -57,25 +58,24 @@ export const Chat = () => {
     return <LoadingWithProgress />;
   }
 
-  if (!currentAgenticFlow) {
-    console.error("❌ No currentAgenticFlow resolved!", {
-      agenticFlowsCount: agenticFlows.length,
-      currentSession,
-      sessionsCount: sessions.length,
-    });
-    return <LoadingWithProgress />;
+  const effectiveAgenticFlow = currentAgenticFlow ?? agenticFlows[0]; // safe default
+  if (!effectiveAgenticFlow) {
+    console.error("❌ No agentic flow available at all!");
+    return <div>No agentic flow available</div>;
   }
 
+  console.info("✅ Flows and sessions loaded.");
   return (
     <Grid2 container display="flex" flexDirection="row">
       <Grid2 size="grow">
         <ChatBot
           currentChatBotSession={currentSession}
-          currentAgenticFlow={currentAgenticFlow}
+          currentAgenticFlow={effectiveAgenticFlow}
           agenticFlows={agenticFlows}
           onUpdateOrAddSession={updateOrAddSession}
           isCreatingNewConversation={isCreatingNewConversation}
           runtimeContext={{ cluster }}
+          onBindDraftAgentToSessionId={bindDraftAgentToSessionId}  
         />
       </Grid2>
 
@@ -86,7 +86,7 @@ export const Chat = () => {
           onSelectSession={selectSession}
           onCreateNewConversation={startNewConversation}
           agenticFlows={agenticFlows}
-          currentAgenticFlow={currentAgenticFlow}
+          currentAgenticFlow={effectiveAgenticFlow}
           onSelectAgenticFlow={selectAgenticFlowForCurrentSession}
           onDeleteSession={deleteSession}
           isCreatingNewConversation={isCreatingNewConversation}

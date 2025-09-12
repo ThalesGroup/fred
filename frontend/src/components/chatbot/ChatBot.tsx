@@ -58,6 +58,7 @@ export interface ChatBotProps {
   onUpdateOrAddSession: (session: SessionSchema) => void;
   isCreatingNewConversation: boolean;
   runtimeContext?: RuntimeContext;
+  onBindDraftAgentToSessionId?: (sessionId: string) => void;
 }
 
 const ChatBot = ({
@@ -67,6 +68,7 @@ const ChatBot = ({
   onUpdateOrAddSession,
   isCreatingNewConversation,
   runtimeContext: baseRuntimeContext,
+  onBindDraftAgentToSessionId,
 }: ChatBotProps) => {
   const theme = useTheme();
   const { t } = useTranslation();
@@ -199,6 +201,11 @@ const ChatBot = ({
               messagesRef.current = mergeAuthoritative(messagesRef.current, finalEvent.messages);
               setMessages(messagesRef.current);
 
+              const sid = finalEvent.session.id;
+              if (sid) {
+                console.log("[🔗 ChatBot] Binding draft agent to session id from final event:", sid);
+                onBindDraftAgentToSessionId?.(sid);
+              }
               // Accept session update if backend created/switched it
               if (finalEvent.session.id !== currentChatBotSession?.id) {
                 onUpdateOrAddSession(finalEvent.session);
@@ -289,6 +296,9 @@ const ChatBot = ({
         console.groupEnd();
 
         setAllMessages(sortMessages(serverMessages)); // layout effect will scroll
+        // NEW — If this is the first time we "see" this id, bind draft now.
+        console.log("[🔗 ChatBot] Binding draft agent to session id from history load:", id);
+        onBindDraftAgentToSessionId?.(id);
       })
       .catch((e) => {
         console.error("[❌ ChatBot] Failed to load messages:", e);
