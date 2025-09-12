@@ -25,9 +25,9 @@ class ResourceService:
 
     @authorize(Action.CREATE, AuthzResource.RESOURCES)
     def create(self, *, library_tag_id: str, payload: ResourceCreate, user: KeycloakUser) -> Resource:
-        resource = build_resource_from_create(payload, library_tag_id, user.username)
+        resource = build_resource_from_create(payload, library_tag_id, user.uid)
         res = self._resource_store.create_resource(resource=resource)
-        logger.info(f"[RESOURCES] Created resource {res.id} of kind {res.kind} for user {user.username}")
+        logger.info(f"[RESOURCES] Created resource {res.id} of kind {res.kind} for user {user.uid}")
         return res
 
     @authorize(Action.UPDATE, AuthzResource.RESOURCES)
