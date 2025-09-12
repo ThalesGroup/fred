@@ -7,7 +7,8 @@
   "resource": {
     "kind": {
       "prompt":   { "one": "prompt",   "other": "prompts" },
-      "template": { "one": "template", "other": "templates" }
+      "template": { "one": "template", "other": "templates" },
+      "profile": { "one" : "profile", "other": "profiles"}
     }
   },
   "validation": {
@@ -27,7 +28,7 @@
     "optimize": "Optimize",
     "chat": "Chat",
     "monitoring": "Monitoring",
-    "knowledge": "Knowledge",
+    "knowledge": "Resources",
     "agent": "Agents",
     "workspaces": "Workspaces",
     "account": "Profile",
@@ -139,7 +140,8 @@
     "conversations": "Conversations",
     "newConversation": "New conversation",
     "noConversation": "No conversation",
-    "delete": "Delete"
+    "delete": "Delete",
+    "profile": "Profile"
   },
   "monitoring": {
     "title": "Agent & AI Service Monitoring",
@@ -226,7 +228,8 @@
       "templates": "Templates",
       "prompts": "Prompts",
       "documents": "Documents",
-      "operations": "Operations"
+      "operations": "Operations",
+      "profiles": "Profiles"
     }
   },
   "documentLibrary": {

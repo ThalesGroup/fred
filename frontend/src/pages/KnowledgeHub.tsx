@@ -22,7 +22,7 @@ import InvisibleLink from "../components/InvisibleLink";
 import DocumentLibraryList from "../components/documents/libraries/DocumentLibraryList";
 import ResourceLibraryList from "../components/resources/ResourceLibraryList";
 
-const knowledgeHubViews = ["templates", "prompts", "operations", "documents"] as const;
+const knowledgeHubViews = ["templates", "prompts", "operations", "documents", "profiles"] as const;
 type KnowledgeHubView = (typeof knowledgeHubViews)[number];
 
 function isKnowledgeHubView(value: string): value is KnowledgeHubView {
@@ -50,6 +50,11 @@ export const KnowledgeHub = () => {
       <TopBar title={t("knowledge.title")} description={t("knowledge.description")}>
         <Box>
           <ButtonGroup variant="outlined" color="primary" size="small">
+            <InvisibleLink to="/knowledge?view=profiles">
+              <Button variant={selectedView === "profiles" ? "contained" : "outlined"}>
+                {t("knowledge.viewSelector.profiles")}
+              </Button>
+            </InvisibleLink>
             <InvisibleLink to="/knowledge?view=templates">
               <Button variant={selectedView === "templates" ? "contained" : "outlined"}>
                 {t("knowledge.viewSelector.templates")}
@@ -75,6 +80,11 @@ export const KnowledgeHub = () => {
       </TopBar>
 
       <Box sx={{ mb: 3 }}>
+        {selectedView === "profiles" && (
+          <Container maxWidth="xl">
+            <ResourceLibraryList kind="profile"  />
+          </Container>
+        )}
         {selectedView === "documents" && (
           <Container maxWidth="xl">
             <DocumentLibraryList />

@@ -37,9 +37,10 @@ import { ResourcePreviewModal } from "./ResourcePreviewModal";
 import { ResourceImportDrawer } from "./ResourceImportDrawer";
 import { useConfirmationDialog } from "../ConfirmationDialogProvider";
 import { useTagCommands } from "../../common/useTagCommands";
+import { ProfileEditorModal } from "./ProfileEditorModal";
 
 /** Small i18n helper */
-export const useKindLabels = (kind: "prompt" | "template") => {
+export const useKindLabels = (kind: "prompt" | "template" | "profile") => {
   const { t } = useTranslation();
   return {
     one: t(`resource.kind.${kind}.one`),
@@ -98,7 +99,7 @@ export default function ResourceLibraryList({ kind }: Props) {
   const clearSelection = React.useCallback(() => setSelectedItems({}), []);
 
   /** ---------------- Data fetching ---------------- */
-  // 1) Tags for this kind (prompt | template)
+  // 1) Tags for this kind (prompt | template | porfile)
   const {
     data: allTags,
     isLoading,
@@ -374,7 +375,7 @@ export default function ResourceLibraryList({ kind }: Props) {
       )}
 
       {/* Create modals */}
-      {kind === "template" ? (
+      {kind === "template" && (
         <TemplateEditorModal
           isOpen={openCreateResource}
           onClose={() => setOpenCreateResource(false)}
@@ -385,8 +386,21 @@ export default function ResourceLibraryList({ kind }: Props) {
             await Promise.all([refetchTags(), refetchResources()]);
           }}
         />
-      ) : (
+      )}
+       {kind === "prompt" && (
         <PromptEditorModal
+          isOpen={openCreateResource}
+          onClose={() => setOpenCreateResource(false)}
+          onSave={async (payload) => {
+            if (!uploadTargetTagId) return;
+            await createResource(payload, uploadTargetTagId);
+            setOpenCreateResource(false);
+            await Promise.all([refetchTags(), refetchResources()]);
+          }}
+        />
+      )}
+      {kind === "profile" && (
+        <ProfileEditorModal
           isOpen={openCreateResource}
           onClose={() => setOpenCreateResource(false)}
           onSave={async (payload) => {

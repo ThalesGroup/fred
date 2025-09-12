@@ -6,7 +6,8 @@
   "resource": {
     "kind": {
       "prompt":   { "one": "prompt",   "other": "prompts" },
-      "template": { "one": "modèle", "other": "modèles" }
+      "template": { "one": "modèle", "other": "modèles" },
+      "profile": { "one" : "profil", "other": "profils"}
     }
   },
   "validation": {
@@ -25,7 +26,7 @@
     "audit": "Audit",
     "optimize": "Optimiser",
     "chat": "Discussion",
-    "monitoring": "Supervision",
+    "monitoring": "Ressources",
     "knowledge": "Savoir",
     "agent": "Hub Agent",
     "workspaces": "Espaces de travail",
@@ -140,7 +141,8 @@
     "noConversation": "Aucune conversation",
     "delete": "Supprimer",
     "newConversationHelp": "Commencer une nouvelle conversation (non encore enregistrée)",
-    "draftNotSaved": "Brouillon • non encore enregistré"
+    "draftNotSaved": "Brouillon • non encore enregistré",
+    "profile": "Profil"
   },
   "monitoring": {
     "title": "Surveillance des agents et services IA",
@@ -227,7 +229,9 @@
        "templates": "Modèles",
       "prompts": "Prompts",
       "documents": "Documents",
-      "operations": "Opérations"
+      "operations": "Opérations",
+      "profiles": "Profils"
+
     }
   },
   "documentLibrary": {

@@ -36,6 +36,8 @@ def _tagtype_to_rk(tag_type: TagType) -> ResourceKind:
         return ResourceKind.PROMPT
     if tag_type == TagType.TEMPLATE:
         return ResourceKind.TEMPLATE
+    if tag_type == TagType.PROFILE:
+        return ResourceKind.PROFILE
     raise ValueError(f"Unsupported TagType for resources: {tag_type}")
 
 
@@ -94,6 +96,8 @@ class TagService:
                 item_ids = self.resource_service.get_resource_ids_for_tag(ResourceKind.PROMPT, tag.id)
             elif tag.type == TagType.TEMPLATE:
                 item_ids = self.resource_service.get_resource_ids_for_tag(ResourceKind.TEMPLATE, tag.id)
+            elif tag.type == TagType.PROFILE:
+                item_ids = self.resource_service.get_resource_ids_for_tag(ResourceKind.PROFILE, tag.id)
             else:
                 raise ValueError(f"Unsupported tag type: {tag.type}")
             result.append(TagWithItemsId.from_tag(tag, item_ids))
@@ -108,6 +112,8 @@ class TagService:
             item_ids = self.resource_service.get_resource_ids_for_tag(ResourceKind.PROMPT, tag.id)
         elif tag.type == TagType.TEMPLATE:
             item_ids = self.resource_service.get_resource_ids_for_tag(ResourceKind.TEMPLATE, tag.id)
+        elif tag.type == TagType.PROFILE:
+            item_ids = self.resource_service.get_resource_ids_for_tag(ResourceKind.PROFILE, tag.id)
         else:
             raise ValueError(f"Unsupported tag type: {tag.type}")
         return TagWithItemsId.from_tag(tag, item_ids)
@@ -117,7 +123,7 @@ class TagService:
         # Validate referenced items first
         if tag_data.type == TagType.DOCUMENT:
             documents = self._retrieve_documents_metadata(user, tag_data.item_ids)
-        elif tag_data.type in (TagType.PROMPT, TagType.TEMPLATE):
+        elif tag_data.type in (TagType.PROMPT, TagType.TEMPLATE, TagType.PROFILE):
             documents = []  # not used here
         else:
             raise ValueError(f"Unsupported tag type: {tag_data.type}")

@@ -53,12 +53,14 @@ export interface UserInputContent {
   documentLibraryIds?: string[];
   promptResourceIds?: string[];
   templateResourceIds?: string[];
+  profileResourceIds?: string[];
 }
 
 type PersistedCtx = {
   documentLibraryIds?: string[];
   promptResourceIds?: string[];
   templateResourceIds?: string[];
+  profileResourceIds?: string[];
 };
 
 function makeStorageKey(sessionId?: string) {

@@ -25,7 +25,8 @@ import {
 } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 
 export interface ResourceLibrariesSelectionCardProps {
-  libraryType: TagType; // "prompt" | "template"
+  // ⬅️ ajoute "profile" au type accepté par le composant (sans casser TagType global)
+  libraryType: TagType | "profile"; // "prompt" | "template" | "profile"
   selectedResourceIds: string[];
   setSelectedResourceIds: (ids: string[]) => void;
 }
@@ -40,11 +41,18 @@ export function ChatResourcesSelectionCard({
   const { t } = useTranslation();
 
   // Libraries (as groups to browse)
-  const { data: tags = [], isLoading, isError } = useListAllTagsKnowledgeFlowV1TagsGetQuery({ type: libraryType });
+  const { data: tags = [], isLoading, isError } = useListAllTagsKnowledgeFlowV1TagsGetQuery({
+    // si le backend n'a pas encore "profile" dans TagType, le cast évite une erreur TS
+    type: libraryType as TagType,
+  });
 
   // Fetch resources of that kind
-  const resourceKind: ResourceKind | undefined =
-    libraryType === "prompt" ? "prompt" : libraryType === "template" ? "template" : undefined;
+  const resourceKind: ResourceKind | undefined = (() => {
+    if (libraryType === "prompt") return "prompt" as ResourceKind;
+    if (libraryType === "template") return "template" as ResourceKind;
+    if (libraryType === "profile") return "profile" as ResourceKind;
+    return undefined;
+  })();
 
   const { data: fetchedResources = [] } =
     resourceKind
@@ -98,6 +106,12 @@ export function ChatResourcesSelectionCard({
 
   const toggleOpen = (id: string) => setOpenMap((m) => ({ ...m, [id]: !m[id] }));
 
+  const searchLabel = useMemo(() => {
+    if (libraryType === "template") return t("chatbot.searchTemplateLibraries", "Search template libraries");
+    if (libraryType === "profile") return t("chatbot.searchProfileLibraries", "Search profile libraries");
+    return t("chatbot.searchPromptLibraries", "Search prompt libraries");
+  }, [libraryType, t]);
+
   return (
     <Box sx={{ width: 420, height: 460, display: "flex", flexDirection: "column" }}>
       {/* Search libraries */}
@@ -106,11 +120,7 @@ export function ChatResourcesSelectionCard({
           autoFocus
           size="small"
           fullWidth
-          label={
-            libraryType === "template"
-              ? t("chatbot.searchTemplateLibraries", "Search template libraries")
-              : t("chatbot.searchPromptLibraries", "Search prompt libraries")
-          }
+          label={searchLabel}
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
@@ -158,9 +168,7 @@ export function ChatResourcesSelectionCard({
                     }
                   >
                     <ListItemButton onClick={() => toggleOpen(lib.id)}>
-                      <ListItemText
-                        primary={lib.name}
-                        />
+                      <ListItemText primary={lib.name} />
                     </ListItemButton>
                   </ListItem>
 
@@ -170,7 +178,7 @@ export function ChatResourcesSelectionCard({
                       {contents.map((r) => {
                         const resChecked = selectedResourceIds.includes(r.id);
                         return (
-                          <ListItem key={r.id} dense >
+                          <ListItem key={r.id} dense>
                             <ListItemButton onClick={() => toggleSelectResource(r.id)} selected={resChecked}>
                               <ListItemIcon sx={{ minWidth: 36 }}>
                                 <Checkbox
@@ -181,9 +189,7 @@ export function ChatResourcesSelectionCard({
                                   onChange={() => toggleSelectResource(r.id)}
                                 />
                               </ListItemIcon>
-                              <ListItemText
-                                primary={r.name}
-                              />
+                              <ListItemText primary={r.name} />
                             </ListItemButton>
                           </ListItem>
                         );
