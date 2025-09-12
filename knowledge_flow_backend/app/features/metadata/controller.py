@@ -153,7 +153,7 @@ class MetadataController:
             user: KeycloakUser = Depends(get_current_user),
         ):
             try:
-                self.service.update_document_retrievable(user, document_uid, retrievable, user.username)
+                self.service.update_document_retrievable(user, document_uid, retrievable, user.uid)
             except Exception as e:
                 raise handle_exception(e)
 

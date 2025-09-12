@@ -144,7 +144,7 @@ class TagService:
         # Link items
         if tag.type == TagType.DOCUMENT:
             for doc in documents:
-                self.document_metadata_service.add_tag_id_to_document(user, metadata=doc, new_tag_id=tag.id, modified_by=user.username)
+                self.document_metadata_service.add_tag_id_to_document(user, metadata=doc, new_tag_id=tag.id, modified_by=user.uid)
         elif tag.type in (TagType.PROMPT, TagType.TEMPLATE):
             # rk = _tagtype_to_rk(tag.type)
             for rid in tag_data.item_ids:
@@ -168,9 +168,9 @@ class TagService:
             added_documents = self._retrieve_documents_metadata(user, added)
             removed_documents = self._retrieve_documents_metadata(user, removed)
             for doc in added_documents:
-                self.document_metadata_service.add_tag_id_to_document(user, doc, tag.id, modified_by=user.username)
+                self.document_metadata_service.add_tag_id_to_document(user, doc, tag.id, modified_by=user.uid)
             for doc in removed_documents:
-                self.document_metadata_service.remove_tag_id_from_document(user, doc, tag.id, modified_by=user.username)
+                self.document_metadata_service.remove_tag_id_from_document(user, doc, tag.id, modified_by=user.uid)
 
         elif tag.type in (TagType.PROMPT, TagType.TEMPLATE):
             rk = _tagtype_to_rk(tag.type)
@@ -213,7 +213,7 @@ class TagService:
         if tag.type == TagType.DOCUMENT:
             documents = self._retrieve_documents_for_tag(user, tag_id)
             for doc in documents:
-                self.document_metadata_service.remove_tag_id_from_document(user, doc, tag_id, modified_by=user.username)
+                self.document_metadata_service.remove_tag_id_from_document(user, doc, tag_id, modified_by=user.uid)
         elif tag.type == TagType.PROMPT:
             self.resource_service.remove_tag_from_resources(ResourceKind.PROMPT, tag_id)
         elif tag.type == TagType.TEMPLATE:
