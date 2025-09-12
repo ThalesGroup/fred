@@ -29,21 +29,16 @@ import {
   ListItemButton,
   ListItemText,
   Divider,
-  Chip,
-  Avatar, // ← ADDED
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import MoreHorizIcon from "@mui/icons-material/MoreHoriz";
-import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown"; // ← kept (elsewhere)
 import { useEffect, useState, useMemo } from "react";
 import { getAgentBadge } from "../../utils/avatar.tsx";
 import React from "react";
 import { StyledMenu } from "../../utils/styledMenu.tsx";
 import { useTranslation } from "react-i18next";
 import { AgenticFlow, SessionSchema } from "../../slices/agentic/agenticOpenApi.ts";
-
-// ⬇️ For profile picker via card
 import Popover from "@mui/material/Popover";
 import { useGetResourceKnowledgeFlowV1ResourcesResourceIdGetQuery } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi.ts";
 import { ChatResourcesSelectionCard } from "./ChatResourcesSelectionCard.tsx";
