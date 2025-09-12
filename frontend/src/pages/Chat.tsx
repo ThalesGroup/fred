@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
+import { useState } from "react";
 import { Grid2 } from "@mui/material";
 import "dayjs/locale/en-gb";
 import { useSearchParams } from "react-router-dom";
@@ -41,7 +41,8 @@ export const Chat = () => {
     deleteSession,
   } = useSessionController();
 
-  // ---- DEBUG LOGGING ----
+  const [baseRuntimeContext, setBaseRuntimeContext] = useState<Record<string, any>>({});
+
   console.groupCollapsed("🔍 Chat Page State");
   console.log("loading:", loading);
   console.log("agenticFlows:", agenticFlows);
@@ -50,7 +51,6 @@ export const Chat = () => {
   console.log("currentAgenticFlow:", currentAgenticFlow);
   console.log("isCreatingNewConversation:", isCreatingNewConversation);
   console.groupEnd();
-  // -----------------------
 
   if (loading) {
     console.info("⏳ Still loading flows or sessions…");
@@ -75,7 +75,7 @@ export const Chat = () => {
           agenticFlows={agenticFlows}
           onUpdateOrAddSession={updateOrAddSession}
           isCreatingNewConversation={isCreatingNewConversation}
-          runtimeContext={{ cluster }}
+          runtimeContext={{ cluster, ...baseRuntimeContext }}
         />
       </Grid2>
 
@@ -90,6 +90,12 @@ export const Chat = () => {
           onSelectAgenticFlow={selectAgenticFlowForCurrentSession}
           onDeleteSession={deleteSession}
           isCreatingNewConversation={isCreatingNewConversation}
+          onChangeSelectedProfileIds={(ids) =>
+            setBaseRuntimeContext((ctx) => ({
+              ...ctx,
+              selected_profile_ids: ids.length ? ids : undefined,
+            }))
+          }
         />
       </Grid2>
     </Grid2>

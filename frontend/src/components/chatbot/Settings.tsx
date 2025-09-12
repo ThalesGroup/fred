@@ -29,16 +29,24 @@ import {
   ListItemButton,
   ListItemText,
   Divider,
+  Chip,
+  Avatar, // ← ADDED
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import MoreHorizIcon from "@mui/icons-material/MoreHoriz";
-import { useEffect, useState } from "react";
+import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown"; // ← kept (elsewhere)
+import { useEffect, useState, useMemo } from "react";
 import { getAgentBadge } from "../../utils/avatar.tsx";
 import React from "react";
 import { StyledMenu } from "../../utils/styledMenu.tsx";
 import { useTranslation } from "react-i18next";
 import { AgenticFlow, SessionSchema } from "../../slices/agentic/agenticOpenApi.ts";
+
+// ⬇️ For profile picker via card
+import Popover from "@mui/material/Popover";
+import { useGetResourceKnowledgeFlowV1ResourcesResourceIdGetQuery } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi.ts";
+import { ChatResourcesSelectionCard } from "./ChatResourcesSelectionCard.tsx";
 
 export const Settings = ({
   sessions,
@@ -50,6 +58,7 @@ export const Settings = ({
   onSelectAgenticFlow,
   onDeleteSession,
   isCreatingNewConversation,
+  onChangeSelectedProfileIds,
 }: {
   sessions: SessionSchema[];
   currentSession: SessionSchema | null;
@@ -60,6 +69,7 @@ export const Settings = ({
   onSelectAgenticFlow: (flow: AgenticFlow) => void;
   onDeleteSession: (session: SessionSchema) => void;
   isCreatingNewConversation: boolean; // ← new
+  onChangeSelectedProfileIds?: (ids: string[]) => void;
 }) => {
   // Récupération du thème pour l'adaptation des couleurs
   const theme = useTheme<Theme>();
@@ -82,6 +92,27 @@ export const Settings = ({
   const [editText, setEditText] = useState("");
   const [isEditing, setIsEditing] = useState(false);
   const [showElements, setShowElements] = useState(false);
+
+  // === Profile selection via card (no dropdown) ===
+  const [selectedProfileIds, setSelectedProfileIds] = useState<string[]>([]);
+  const [profilePickerAnchor, setProfilePickerAnchor] = useState<HTMLElement | null>(null);
+  const selectedProfileId = selectedProfileIds[0] ?? null;
+  const { data: selectedProfileResource } =
+    useGetResourceKnowledgeFlowV1ResourcesResourceIdGetQuery(
+      { resourceId: selectedProfileId as string },
+      { skip: !selectedProfileId }
+    );
+  const hasSelectedProfile = !!selectedProfileId; // ← clé pour éviter l'effet de cache RTK
+
+  const profileBodyPreview = useMemo(() => {
+    const c = selectedProfileResource?.content ?? "";
+    const sep = "\n---\n";
+    const i = c.indexOf(sep);
+    const body = (i !== -1 ? c.slice(i + sep.length) : c).replace(/\r\n/g, "\n").trim();
+    if (!body) return null;
+    const oneline = body.split("\n").filter(Boolean).slice(0, 2).join(" ");
+    return oneline.length > 180 ? oneline.slice(0, 180) + "…" : oneline;
+  }, [selectedProfileResource]);
 
   // Gestion du menu chatProfileuel
   const openMenu = (event: React.MouseEvent<HTMLElement>, session: SessionSchema) => {
@@ -134,6 +165,18 @@ export const Settings = ({
     setShowElements(true);
   }, []);
 
+  useEffect(() => {
+  if (!selectedProfileId) {
+    setProfilePickerAnchor(null);
+  }
+}, [selectedProfileId]);
+
+  const applyProfileSelection = (ids: string[]) => {
+    setSelectedProfileIds(ids);
+    onChangeSelectedProfileIds?.(ids);
+    setProfilePickerAnchor(null);
+  };
+
   return (
     <Box
       sx={{
@@ -152,6 +195,120 @@ export const Settings = ({
         boxShadow: "None",
       }}
     >
+      <Fade in={showElements} timeout={900}>
+        <Box
+          sx={{
+            py: 2.5,
+            px: 2,
+            borderBottom: `1px solid ${theme.palette.divider}`,
+          }}
+        >
+          {/* Titre + action à droite */}
+          <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <Typography
+              variant="subtitle1"
+              sx={{
+                fontWeight: 500,
+              }}
+            >
+              {t("settings.profile")}
+            </Typography>
+
+            {/* À droite : '+' si aucun profil */}
+            {!hasSelectedProfile && (
+              <Tooltip title={t("settings.selectProfile", "Select a profile")}>
+                <IconButton
+                  size="small"
+                  onClick={(e) => setProfilePickerAnchor(e.currentTarget)}
+                  sx={{ borderRadius: 1.5 }}
+                >
+                  <AddIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            )}
+          </Box>
+
+          {/* Popover de sélection/modification */}
+          <Popover
+            open={Boolean(profilePickerAnchor)}
+            anchorEl={profilePickerAnchor}
+            onClose={() => setProfilePickerAnchor(null)}
+            anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+            transformOrigin={{ vertical: "top", horizontal: "right" }}
+            PaperProps={{ sx: { p: 1 } }}
+          >
+            <ChatResourcesSelectionCard
+              libraryType={"profile"}
+              selectedResourceIds={selectedProfileIds}
+              setSelectedResourceIds={(ids) => {
+                const next = ids.length > 0 ? [ids[ids.length - 1]] : [];
+                applyProfileSelection(next);
+              }}
+            />
+          </Popover>
+
+          {hasSelectedProfile && (
+            <List dense disablePadding sx={{ mt: 1 }}>
+              <ListItem disableGutters sx={{ mb: 0 }}>
+                <ListItemButton
+                  dense
+                  selected
+                  onClick={(e) => setProfilePickerAnchor(e.currentTarget)}
+                  sx={{
+                    borderRadius: 1,
+                    px: 1,
+                    py: 0.75,
+                    alignItems: "flex-start",
+                    border: `1px solid ${theme.palette.primary.main}`,
+                    backgroundColor:
+                      theme.palette.mode === "dark"
+                        ? "rgba(25,118,210,0.06)"
+                        : "rgba(25,118,210,0.04)",
+                    "&:hover": {
+                      backgroundColor:
+                        theme.palette.mode === "dark"
+                          ? "rgba(25,118,210,0.1)"
+                          : "rgba(25,118,210,0.08)",
+                    },
+                  }}
+                >
+                  <Box sx={{ width: "100%", minWidth: 0 }}>
+                    <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>
+                      {selectedProfileResource?.name}
+                    </Typography>
+
+                    {Array.isArray(selectedProfileResource?.labels) &&
+                      selectedProfileResource!.labels.length > 0 && (
+                        <Typography variant="caption" color="text.secondary" sx={{ display: "block" }} noWrap>
+                          {selectedProfileResource!.labels.join(" · ")}
+                        </Typography>
+                      )}
+
+                    {profileBodyPreview && (
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        sx={{
+                          mt: 0.5,
+                          display: "-webkit-box",
+                          WebkitLineClamp: "2",
+                          WebkitBoxOrient: "vertical",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "normal",
+                        } as any}
+                      >
+                        {profileBodyPreview}
+                      </Typography>
+                    )}
+                  </Box>
+                </ListItemButton>
+              </ListItem>
+            </List>
+          )}
+        </Box>
+      </Fade>
+
       <Fade in={showElements} timeout={900}>
         <Box
           sx={{
@@ -207,7 +364,7 @@ export const Settings = ({
                           {flow.role}
                         </Typography>
 
-                        {flow.description && (
+                          {flow.description && (
                           <Typography variant="body2" color="text.secondary">
                             {flow.description}
                           </Typography>
@@ -218,7 +375,10 @@ export const Settings = ({
 
                   return (
                     <ListItem key={flow.name} disableGutters sx={{ mb: 0 }}>
-                      <Tooltip title={tooltipContent} placement="right" arrow
+                      <Tooltip
+                        title={tooltipContent}
+                        placement="right"
+                        arrow
                         slotProps={{ tooltip: { sx: { maxWidth: 460 } } }}
                       >
                         <ListItemButton

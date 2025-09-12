@@ -23,6 +23,7 @@ from fred_core import BaseModelWithId
 class ResourceKind(str, Enum):
     PROMPT = "prompt"
     TEMPLATE = "template"
+    PROFILE = "profile"
 
 
 class ResourceUpdate(BaseModel):

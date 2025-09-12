@@ -380,6 +380,9 @@ const ChatBot = ({
     if (content.templateResourceIds?.length) {
       runtimeContext.selected_template_ids = content.templateResourceIds;
     }
+    if (content.profileResourceIds?.length) {
+      runtimeContext.selected_profile_ids = content.profileResourceIds;
+    }
 
     // Files upload
     if (content.files?.length) {
