@@ -1,11 +1,20 @@
-# app/core/chatbot/chatbot_controller.py
 # Copyright Thales 2025
-# Licensed under the Apache License, Version 2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 from __future__ import annotations
 
 import logging
-from enum import Enum
 from typing import List, Literal, Union
 
 from fastapi import (
@@ -14,6 +23,7 @@ from fastapi import (
     File,
     Form,
     HTTPException,
+    Request,
     UploadFile,
     WebSocket,
     WebSocketDisconnect,
@@ -86,202 +96,218 @@ class FrontendConfigDTO(BaseModel):
     user_auth: UserSecurity
 
 
-class ChatbotController:
+def get_agent_manager(request: Request) -> AgentManager:
+    """Dependency to get the agent_manager from app.state."""
+    return request.app.state.agent_manager
+
+
+def get_session_orchestrator(request: Request) -> SessionOrchestrator:
+    """Dependency to get the session_orchestrator from app.state."""
+    return request.app.state.session_orchestrator
+
+
+def get_agent_manager_ws(websocket: WebSocket) -> AgentManager:
+    """Dependency to get the agent_manager from app.state for WebSocket."""
+    return websocket.app.state.agent_manager
+
+
+def get_session_orchestrator_ws(websocket: WebSocket) -> SessionOrchestrator:
+    """Dependency to get the session_orchestrator from app.state for WebSocket."""
+    return websocket.app.state.session_orchestrator
+
+
+# Create an APIRouter instance here
+router = APIRouter(tags=["Frontend"])
+
+
+@router.post(
+    "/schemas/echo",
+    tags=["Schemas"],
+    summary="Ignore. Not a real endpoint.",
+    description="Ignore. This endpoint is only used to include some types (mainly one used in websocket) in the OpenAPI spec, so they can be generated as typescript types for the UI. This endpoint is not really used, this is just a code generation hack.",
+)
+def echo_schema(envelope: EchoEnvelope) -> None:
+    pass
+
+
+@router.get(
+    "/config/frontend_settings",
+    summary="Get the frontend dynamic configuration",
+)
+def get_frontend_config() -> FrontendConfigDTO:
+    cfg = get_configuration()
+    return FrontendConfigDTO(
+        frontend_settings=cfg.frontend_settings,
+        user_auth=UserSecurity(
+            enabled=cfg.security.user.enabled,
+            realm_url=cfg.security.user.realm_url,
+            client_id=cfg.security.user.client_id,
+            authorized_origins=cfg.security.user.authorized_origins,
+        ),
+    )
+
+
+@router.get(
+    "/chatbot/agenticflows",
+    description="Get the list of available agentic flows",
+    summary="Get the list of available agentic flows",
+)
+def get_agentic_flows(
+    user: KeycloakUser = Depends(get_current_user),
+    agent_manager: AgentManager = Depends(get_agent_manager),  # Inject the dependency
+) -> List[AgenticFlow]:
+    return agent_manager.get_agentic_flows()
+
+
+@router.websocket("/chatbot/query/ws")
+async def websocket_chatbot_question(
+    websocket: WebSocket,
+    agent_manager: AgentManager = Depends(
+        get_agent_manager_ws
+    ),  # Use WebSocket-specific dependency
+    session_orchestrator: SessionOrchestrator = Depends(
+        get_session_orchestrator_ws
+    ),  # Use WebSocket-specific dependency
+):
     """
-    Why this controller stays thin:
-      - It exposes HTTP/WS endpoints and delegates *all* chat orchestration
-        (session lifecycle, KPI, persistence, streaming) to SessionOrchestrator.
-      - This keeps transport concerns (WS/HTTP) separate from agent/runtime logic.
+    Transport-only:
+      - Accept WS
+      - Parse ChatAskInput
+      - Provide a callback that forwards StreamEvents
+      - Send FinalEvent or ErrorEvent
+      - All heavy lifting is in SessionOrchestrator.chat_ask_websocket()
     """
+    # All other code is the same, but it now uses the injected dependencies
+    # `agent_manager` and `session_orchestrator` which are guaranteed to be
+    # the correct, lifespan-managed instances.
+    await websocket.accept()
+    auth = websocket.headers.get("authorization") or ""
+    token = (
+        auth.split(" ", 1)[1]
+        if auth.lower().startswith("bearer ")
+        else websocket.query_params.get("token")
+    )
+    if not token:
+        await websocket.close(code=4401)
+        return
 
-    def __init__(
-        self,
-        app: APIRouter,
-        session_orchestrator: SessionOrchestrator,
-        agent_manager: AgentManager,
-    ):
-        self.agent_manager = agent_manager
-        self.session_orchestrator = session_orchestrator
-        fastapi_tags: list[str | Enum] = ["Frontend"]
+    try:
+        user = decode_jwt(token)
+    except HTTPException:
+        await websocket.close(code=4401)
+        return
 
-        @app.post(
-            "/schemas/echo",
-            tags=["Schemas"],
-            summary="Ignore. Not a real endpoint.",
-            description="Ignore. This endpoint is only used to include some types (mainly one used in websocket) in the OpenAPI spec, so they can be generated as typescript types for the UI. This endpoint is not really used, this is just a code generation hack.",
-        )
-        def echo_schema(envelope: EchoEnvelope) -> None: ...
-
-        @app.get(
-            "/config/frontend_settings",
-            summary="Get the frontend dynamic configuration",
-            tags=fastapi_tags,
-        )
-        def get_frontend_config() -> FrontendConfigDTO:
-            cfg = get_configuration()
-            return FrontendConfigDTO(
-                frontend_settings=cfg.frontend_settings,
-                user_auth=UserSecurity(
-                    enabled=cfg.security.user.enabled,
-                    realm_url=cfg.security.user.realm_url,
-                    client_id=cfg.security.user.client_id,
-                    authorized_origins=cfg.security.user.authorized_origins,
-                ),
-            )
-
-        @app.get(
-            "/chatbot/agenticflows",
-            description="Get the list of available agentic flows",
-            summary="Get the list of available agentic flows",
-            tags=fastapi_tags,
-        )
-        def get_agentic_flows(
-            user: KeycloakUser = Depends(get_current_user),
-        ) -> List[AgenticFlow]:
-            return self.agent_manager.get_agentic_flows(user)
-
-        @app.websocket("/chatbot/query/ws")
-        async def websocket_chatbot_question(websocket: WebSocket):
-            """
-            Transport-only:
-              - Accept WS
-              - Parse ChatAskInput
-              - Provide a callback that forwards StreamEvents
-              - Send FinalEvent or ErrorEvent
-              - All heavy lifting is in SessionOrchestrator.chat_ask_websocket()
-            """
-            await websocket.accept()
-            auth = websocket.headers.get("authorization") or ""
-            token = (
-                auth.split(" ", 1)[1]
-                if auth.lower().startswith("bearer ")
-                else websocket.query_params.get("token")
-            )
-            if not token:
-                await websocket.close(code=4401)
-                return
-
+    try:
+        while True:
+            client_request = None
             try:
-                user = decode_jwt(token)  # KeycloakUser avec sub en uid²
-            except HTTPException:
-                await websocket.close(code=4401)
-                return
+                client_request = await websocket.receive_json()
+                ask = ChatAskInput(**client_request)
 
-            try:
-                while True:
-                    client_request = None
-                    try:
-                        client_request = await websocket.receive_json()
-                        ask = ChatAskInput(**client_request)
+                async def ws_callback(msg_dict: dict):
+                    event = StreamEvent(type="stream", message=ChatMessage(**msg_dict))
+                    await websocket.send_text(event.model_dump_json())
 
-                        async def ws_callback(msg_dict: dict):
-                            # Stream every ChatMessage as a StreamEvent over WS
-                            event = StreamEvent(
-                                type="stream", message=ChatMessage(**msg_dict)
-                            )
-                            await websocket.send_text(event.model_dump_json())
+                (
+                    session,
+                    final_messages,
+                ) = await session_orchestrator.chat_ask_websocket(  # Use injected object
+                    user=user,
+                    callback=ws_callback,
+                    session_id=ask.session_id or "unknown-session",
+                    message=ask.message,
+                    agent_name=ask.agent_name,
+                    runtime_context=ask.runtime_context,
+                    client_exchange_id=ask.client_exchange_id,
+                )
 
-                        # Delegate the whole exchange to the orchestrator
-                        (
-                            session,
-                            final_messages,
-                        ) = await self.session_orchestrator.chat_ask_websocket(
-                            user=user,
-                            callback=ws_callback,
-                            session_id=ask.session_id or "unknown-session",
-                            message=ask.message,
-                            agent_name=ask.agent_name,
-                            runtime_context=ask.runtime_context,
-                            client_exchange_id=ask.client_exchange_id,
-                        )
+                await websocket.send_text(
+                    FinalEvent(
+                        type="final", messages=final_messages, session=session
+                    ).model_dump_json()
+                )
 
-                        # Send final “bundle”
-                        await websocket.send_text(
-                            FinalEvent(
-                                type="final", messages=final_messages, session=session
-                            ).model_dump_json()
-                        )
-
-                    except WebSocketDisconnect:
-                        logger.debug("Client disconnected from chatbot WebSocket")
-                        break
-                    except Exception as e:
-                        summary = log_exception(
-                            e, "INTERNAL Error processing chatbot client query"
-                        )
-                        session_id = (
-                            client_request.get("session_id", "unknown-session")
-                            if client_request
-                            else "unknown-session"
-                        )
-                        if websocket.client_state == WebSocketState.CONNECTED:
-                            await websocket.send_text(
-                                ErrorEvent(
-                                    type="error", content=summary, session_id=session_id
-                                ).model_dump_json()
-                            )
-                        else:
-                            logger.error("[🔌 WebSocket] Connection closed by client.")
-                            break
+            except WebSocketDisconnect:
+                logger.debug("Client disconnected from chatbot WebSocket")
+                break
             except Exception as e:
                 summary = log_exception(
-                    e, "EXTERNAL Error processing chatbot client query"
+                    e, "INTERNAL Error processing chatbot client query"
+                )
+                session_id = (
+                    client_request.get("session_id", "unknown-session")
+                    if client_request
+                    else "unknown-session"
                 )
                 if websocket.client_state == WebSocketState.CONNECTED:
                     await websocket.send_text(
                         ErrorEvent(
-                            type="error", content=summary, session_id="unknown-session"
+                            type="error", content=summary, session_id=session_id
                         ).model_dump_json()
                     )
-
-        @app.get(
-            "/chatbot/sessions",
-            tags=fastapi_tags,
-            description="Get the list of active chatbot sessions.",
-            summary="Get the list of active chatbot sessions.",
-        )
-        def get_sessions(
-            user: KeycloakUser = Depends(get_current_user),
-        ) -> list[SessionWithFiles]:
-            # Orchestrator owns session lifecycle surface
-            return self.session_orchestrator.get_sessions(user)
-
-        @app.get(
-            "/chatbot/session/{session_id}/history",
-            description="Get the history of a chatbot session.",
-            summary="Get the history of a chatbot session.",
-            tags=fastapi_tags,
-            response_model=List[ChatMessage],
-        )
-        def get_session_history(
-            session_id: str, user: KeycloakUser = Depends(get_current_user)
-        ) -> list[ChatMessage]:
-            return self.session_orchestrator.get_session_history(session_id, user)
-
-        @app.delete(
-            "/chatbot/session/{session_id}",
-            description="Delete a chatbot session.",
-            summary="Delete a chatbot session.",
-            tags=fastapi_tags,
-        )
-        def delete_session(
-            session_id: str, user: KeycloakUser = Depends(get_current_user)
-        ) -> bool:
-            self.session_orchestrator.delete_session(session_id, user)
-            return True
-
-        @app.post(
-            "/chatbot/upload",
-            description="Upload a file to be attached to a chatbot conversation",
-            summary="Upload a file",
-            tags=fastapi_tags,
-        )
-        async def upload_file(
-            session_id: str = Form(...),
-            agent_name: str = Form(...),
-            file: UploadFile = File(...),
-            user: KeycloakUser = Depends(get_current_user),
-        ) -> dict:
-            return await self.session_orchestrator.upload_file(
-                user, session_id, agent_name, file
+                else:
+                    logger.error("[🔌 WebSocket] Connection closed by client.")
+                    break
+    except Exception as e:
+        summary = log_exception(e, "EXTERNAL Error processing chatbot client query")
+        if websocket.client_state == WebSocketState.CONNECTED:
+            await websocket.send_text(
+                ErrorEvent(
+                    type="error", content=summary, session_id="unknown-session"
+                ).model_dump_json()
             )
+
+
+@router.get(
+    "/chatbot/sessions",
+    description="Get the list of active chatbot sessions.",
+    summary="Get the list of active chatbot sessions.",
+)
+def get_sessions(
+    user: KeycloakUser = Depends(get_current_user),
+    session_orchestrator: SessionOrchestrator = Depends(get_session_orchestrator),
+) -> list[SessionWithFiles]:
+    return session_orchestrator.get_sessions(user)
+
+
+@router.get(
+    "/chatbot/session/{session_id}/history",
+    description="Get the history of a chatbot session.",
+    summary="Get the history of a chatbot session.",
+    response_model=List[ChatMessage],
+)
+def get_session_history(
+    session_id: str,
+    user: KeycloakUser = Depends(get_current_user),
+    session_orchestrator: SessionOrchestrator = Depends(get_session_orchestrator),
+) -> list[ChatMessage]:
+    return session_orchestrator.get_session_history(session_id, user)
+
+
+@router.delete(
+    "/chatbot/session/{session_id}",
+    description="Delete a chatbot session.",
+    summary="Delete a chatbot session.",
+)
+def delete_session(
+    session_id: str,
+    user: KeycloakUser = Depends(get_current_user),
+    session_orchestrator: SessionOrchestrator = Depends(get_session_orchestrator),
+) -> bool:
+    session_orchestrator.delete_session(session_id, user)
+    return True
+
+
+@router.post(
+    "/chatbot/upload",
+    description="Upload a file to be attached to a chatbot conversation",
+    summary="Upload a file",
+)
+async def upload_file(
+    session_id: str = Form(...),
+    agent_name: str = Form(...),
+    file: UploadFile = File(...),
+    user: KeycloakUser = Depends(get_current_user),
+    session_orchestrator: SessionOrchestrator = Depends(get_session_orchestrator),
+) -> dict:
+    return await session_orchestrator.upload_file(user, session_id, agent_name, file)
