@@ -11,21 +11,16 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 import asyncio
 import importlib
 import logging
-from builtins import ExceptionGroup
 from inspect import iscoroutinefunction
-from typing import Callable, Dict, List, Type
+from typing import Dict, List, Type
 
-from fred_core import Action, KeycloakUser, Resource, authorize
-from langchain_mcp_adapters.client import MultiServerMCPClient
-from tenacity import RetryError, retry, stop_after_delay, wait_fixed
-
-from app.agents.leader.leader import Leader
-from app.application_context import get_configuration
-from app.common.error import UnsupportedTransportError
 from app.common.structures import AgentSettings, Configuration
+from app.core.agents.agent_loader import AgentLoader
+from app.core.agents.agent_supervisor import AgentSupervisor
 from app.core.agents.agentic_flow import AgenticFlow
 from app.core.agents.flow import AgentFlow
 from app.core.agents.runtime_context import RuntimeContext
@@ -50,36 +45,93 @@ class AgentManager:
     """
 
     def __init__(self, config: Configuration, store: BaseAgentStore):
-        self.config = get_configuration()
+        self.config = config
         self.store = store
+        self.loader = AgentLoader(config=self.config, store=self.store)
+        self.supervisor = AgentSupervisor()
 
-        self.agent_constructors: Dict[str, Callable[[], AgentFlow]] = {}
-        self.agent_classes: Dict[str, Type[AgentFlow]] = {}
+        # In-memory registries
+        self.agent_instances: Dict[str, AgentFlow] = {}
         self.agent_settings: Dict[str, AgentSettings] = {}
         self.failed_agents: Dict[str, AgentSettings] = {}
-        self._retry_task: asyncio.Task | None = None
+        self.agent_classes: Dict[str, Type[AgentFlow]] = {}
 
-    def start_retry_loop(self):
-        if self._retry_task is None:
-            self._retry_task = asyncio.create_task(self._retry_failed_agents_loop())
+    async def initialize_and_start_retries(self):
+        """
+        The main async entry point for application startup.
+        """
+        # Phase 1: Initial load
+        static_instances, failed_static = await self.loader.load_static()
+        for inst in static_instances:
+            self._register_loaded_agent(inst.name, inst, inst.agent_settings)
+        self.failed_agents.update(failed_static)
 
-    async def load_agents(self):
+        persisted_instances = await self.loader.load_persisted()
+        for inst in persisted_instances:
+            self._register_loaded_agent(inst.name, inst, inst.agent_settings)
+
+        self.supervisor.inject_experts_into_leaders(
+            agents_by_name=self.agent_instances,
+            settings_by_name=self.agent_settings,
+            classes_by_name=self.agent_classes,
+        )
+
+        # Phase 2: Start the background retry loop managed by the supervisor
+        # The retry loop is a long-lived coroutine, which we spawn as a task.
+        asyncio.create_task(
+            self.supervisor.run_retry_loop(self._retry_failed_agents_logic)
+        )
+
+        logger.info("✅ AgentManager startup tasks launched.")
+
+    async def _retry_failed_agents_logic(self):
         """
-        Called at application startup.
-        - Seeds static agents from configuration.yaml if missing in storage.
-        - Loads all persisted agents from DuckDB and instantiates them.
-        - Registers them in memory and injects experts into leaders.
+        Called by the supervisor's background loop.
+        Simple asyncio-based fan-out/fan-in:
+        - snapshot and clear the current failures
+        - retry them concurrently
+        - if any retry task crashes unexpectedly, requeue that agent
         """
-        for agent_cfg in self.config.ai.agents:
-            if not agent_cfg.enabled:
-                continue
-            success = await self._register_static_agent(agent_cfg)
-            if not success:
-                self.failed_agents[agent_cfg.name] = (
-                    agent_cfg  # ✅ ensure failed ones are tracked
+        if not self.failed_agents:
+            return
+
+        agents_to_retry = list(self.failed_agents.values())
+        self.failed_agents.clear()
+        logger.info("🔁 Retrying failed agents (count=%d)...", len(agents_to_retry))
+
+        # Launch retries concurrently with asyncio, not anyio
+        tasks = [
+            asyncio.create_task(self._handle_single_agent_retry(cfg))
+            for cfg in agents_to_retry
+        ]
+
+        # Gather; if a task crashes despite our internal try/except, requeue it
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        for cfg, res in zip(agents_to_retry, results):
+            if isinstance(res, BaseException):
+                logger.exception(
+                    "⚠️ Retry task crashed for '%s': %s", cfg.name, type(res).__name__
                 )
-        await self._load_all_persisted_agents()
-        self._inject_experts_into_leaders()
+                self.failed_agents[cfg.name] = cfg  # requeue for next loop
+
+    async def _handle_single_agent_retry(self, agent_cfg: AgentSettings):
+        """
+        Tries to initialize and register a single agent.
+        If it fails, it adds it back to the `failed_agents` dict.
+        """
+        try:
+            # Re-run the core initialization logic (import, instantiate, async_init)
+            cls = self.loader._import_agent_class(agent_cfg.class_path)
+            instance = cls(agent_settings=agent_cfg)
+            if iscoroutinefunction(getattr(instance, "async_init", None)):
+                await instance.async_init()
+
+            self._register_loaded_agent(instance.name, instance, agent_cfg)
+            logger.info(f"✅ Recovered agent '{instance.name}' on retry.")
+
+        except Exception as e:
+            logger.exception(f"❌ Failed to recover agent '{agent_cfg.name}': {e}")
+            self.failed_agents[agent_cfg.name] = agent_cfg
 
     async def _register_static_agent(self, agent_cfg: AgentSettings) -> bool:
         try:
@@ -148,75 +200,6 @@ class AgentManager:
         except Exception as e:
             logger.error(f"❌ Failed to save agent '{agent_cfg.name}': {e}")
 
-    async def _load_all_persisted_agents(self):
-        """
-        Loads all AgentSettings from persistent storage (e.g., DuckDB),
-        dynamically imports their class, instantiates them, and (if needed) calls `async_init()`.
-
-        On success, the agent is fully usable and added to the in-memory registry.
-        """
-        for agent_settings in self.store.load_all():
-            if not agent_settings.class_path:
-                logger.warning(
-                    f"No class_path for agent '{agent_settings.name}' — skipping."
-                )
-                continue
-
-            try:
-                module_name, class_name = agent_settings.class_path.rsplit(".", 1)
-                module = importlib.import_module(module_name)
-                cls = getattr(module, class_name)
-
-                if not issubclass(cls, (AgentFlow)):
-                    logger.error(f"Class '{cls}' is not a supported Flow or AgentFlow.")
-                    continue
-
-                instance = cls(agent_settings=agent_settings)
-
-                if iscoroutinefunction(getattr(instance, "async_init", None)):
-                    await instance.async_init()
-
-                self._register_loaded_agent(
-                    agent_settings.name, instance, agent_settings
-                )
-
-                logger.info(
-                    f"✅ Loaded expert agent '{agent_settings.name}' ({agent_settings.class_path})"
-                )
-
-            except Exception as e:
-                logger.exception(
-                    f"❌ Failed to load agent '{agent_settings.name}': {e}"
-                )
-
-    def _inject_experts_into_leaders(self):
-        """
-        After all agents are loaded and registered:
-        - Inject each expert agent (AgentFlow) into each leader agent (Flow with type='leader')
-        - Only injects if the leader supports `add_expert()`
-        """
-        for leader_name, leader_settings in self.agent_settings.items():
-            if leader_settings.type != "leader":
-                continue
-
-            leader_instance = self.get_agent_instance(leader_name)
-            if not isinstance(leader_instance, Leader):
-                continue
-
-            for expert_name, expert_settings in self.agent_settings.items():
-                if expert_name == leader_name:
-                    continue
-                if not issubclass(self.agent_classes[expert_name], AgentFlow):
-                    continue
-
-                expert_instance = self.get_agent_instance(expert_name)
-                compiled_graph = expert_instance.get_compiled_graph()
-
-                leader_instance.add_expert(expert_name, expert_instance, compiled_graph)
-                logger.info(
-                    f"👥 Added expert '{expert_name}' to leader '{leader_name}'"
-                )
-
     def _register_loaded_agent(
         self, name: str, instance: AgentFlow, settings: AgentSettings
     ):
@@ -224,9 +207,9 @@ class AgentManager:
         Internal helper: registers an already-initialized agent (typically at startup).
         Adds it to the runtime maps so it's discoverable and usable.
         """
-        self.agent_constructors[name] = lambda a=instance: a
         self.agent_classes[name] = type(instance)
         self.agent_settings[name] = settings
+        self.agent_instances[name] = instance
 
     def register_dynamic_agent(self, instance: AgentFlow, settings: AgentSettings):
         """
@@ -236,35 +219,32 @@ class AgentManager:
         Should be called after the agent has been fully initialized (including async_init).
         """
         name = settings.name
-        self.agent_constructors[name] = lambda a=instance: a
         self.agent_classes[name] = type(instance)
         self.agent_settings[name] = settings
         logger.info(
             f"✅ Registered dynamic agent '{name}' ({type(instance).__name__}) in memory."
         )
 
-    def unregister_agent(self, name: str):
+    async def unregister_agent(self, name: str):
         """
-        Removes an agent from in-memory maps. Does not affect persisted storage.
+        Removes an agent from memory. Does NOT affect persisted storage.
+        Ensures long-lived tasks are stopped before dropping references.
         """
-        self.agent_constructors.pop(name, None)
+        try:
+            agent = self.get_agent_instance(name)
+            close = getattr(agent, "aclose", None)
+            if close and iscoroutinefunction(close):
+                # best-effort; do not fail unregister on cleanup issues
+                await close()
+        except Exception:
+            logger.debug("Unregister: aclose for %s failed/ignored.", name)
         self.agent_classes.pop(name, None)
         self.agent_settings.pop(name, None)
         logger.info(f"🗑️ Unregistered agent '{name}' from memory.")
 
-    # Handling authorization here because it's used directly in a controller.
-    # As it is the only method of AgentManager handling authorization,
-    # we should maybe call this from a service that would handle authorization instead
-    # (like agent service ?)
-    @authorize(Action.READ, Resource.AGENTS)
-    def get_agentic_flows(self, user: KeycloakUser) -> List[AgenticFlow]:
-        """
-        Returns a list of all expert agents (AgentFlows) that are currently registered.
-        Used by the frontend to display selectable agents.
-        """
+    def get_agentic_flows(self) -> List[AgenticFlow]:
         flows = []
-        for name, constructor in self.agent_constructors.items():
-            instance = constructor()
+        for name, instance in self.agent_instances.items():
             flows.append(
                 AgenticFlow(
                     name=instance.name,
@@ -281,15 +261,11 @@ class AgentManager:
     def get_agent_instance(
         self, name: str, runtime_context: RuntimeContext | None = None
     ) -> AgentFlow:
-        constructor = self.agent_constructors.get(name)
-        if not constructor:
-            raise ValueError(f"No agent constructor for '{name}'")
-        instance = constructor()
-
-        # Inject runtime context if provided and supported
+        instance = self.agent_instances.get(name)
+        if not instance:
+            raise ValueError(f"No agent instance for '{name}'")
         if runtime_context:
             instance.set_runtime_context(runtime_context)
-
         return instance
 
     def get_agent_settings(self, name: str) -> AgentSettings:
@@ -301,87 +277,33 @@ class AgentManager:
     def get_agent_classes(self) -> Dict[str, Type[AgentFlow]]:
         return self.agent_classes
 
-    def get_enabled_agent_names(self) -> List[str]:
-        return list(self.agent_constructors.keys())
+    async def aclose_single(self, name: str) -> bool:
+        """
+        Gracefully shuts down and unregisters a single agent.
+        Returns True if the agent was found and closed, False otherwise.
+        """
+        instance = self.agent_instances.pop(name, None)
+        self.agent_settings.pop(name, None)
+        self.agent_classes.pop(name, None)
 
-    def get_mcp_client(self, agent_name: str) -> MultiServerMCPClient:
-        agent_settings = self.get_agent_settings(agent_name)
-        import asyncio
+        if not instance:
+            logger.warning(f"Attempted to close non-existent agent '{name}'.")
+            return False
 
-        import nest_asyncio
+        await self.supervisor.close_agents([instance])
+        logger.info(f"🗑️ Unregistered agent '{name}' from memory.")
+        return True
 
-        nest_asyncio.apply()
+    async def aclose(self):
+        """
+        Shuts down all agents.
+        """
+        # Iterate over a copy of keys to avoid RuntimeError
+        for name in list(self.agent_instances.keys()):
+            await self.aclose_single(name)
 
-        client = MultiServerMCPClient()
-        loop = asyncio.get_event_loop()
-
-        async def connect_all():
-            exceptions = []
-            for server in agent_settings.mcp_servers:
-                if server.transport not in SUPPORTED_TRANSPORTS:
-                    raise UnsupportedTransportError(
-                        f"Unsupported transport: {server.transport}"
-                    )
-                try:
-                    await client.connect_to_server(
-                        server_name=server.name,
-                        url=server.url,
-                        transport=server.transport,
-                        command=server.command,
-                        args=server.args,
-                        env=server.env,
-                        sse_read_timeout=server.sse_read_timeout,
-                    )
-                    logger.info(
-                        f"✅ Connected to MCP server '{server.name}' at '{server.url}'"
-                    )
-                except Exception as eg:
-                    logger.warning(
-                        f"⚠️ Failed to connect to MCP server '{server.name}': {eg}"
-                    )
-                    exceptions.extend(getattr(eg, "exceptions", [eg]))
-            if exceptions:
-                raise ExceptionGroup("Some MCP connections failed", exceptions)
-
-        @retry(wait=wait_fixed(2), stop=stop_after_delay(20))
-        async def retry_connect_all():
-            await connect_all()
-
-        try:
-            loop.run_until_complete(retry_connect_all())
-        except RetryError as re:
-            logger.error(
-                f"❌ MCP client for agent '{agent_name}' failed to connect after retries."
-            )
-            logger.debug(re)
-        except Exception:
-            logger.exception(
-                f"❌ MCP client for agent '{agent_name}' raised an unexpected error."
-            )
-
-        return client
-
-    async def _retry_failed_agents_loop(self):
-        logger.debug("🔄 Agent retry loop started.")
-        while True:
-            await asyncio.sleep(10)
-            if not self.failed_agents:
-                logger.debug("🔄 Agent retry is all right.")
-                continue
-
-            try:
-                logger.info("🔁 Retrying failed agents...")
-                to_remove = []
-                for name, agent_cfg in list(self.failed_agents.items()):
-                    success = await self._register_static_agent(agent_cfg)
-                    if success:
-                        logger.info(f"✅ Recovered agent '{name}' on retry.")
-                        to_remove.append(name)
-                    else:
-                        logger.debug(f"🔁 Agent '{name}' still failing.")
-                for name in to_remove:
-                    del self.failed_agents[name]
-            except Exception:
-                logger.exception(
-                    "🔥 Unexpected error in retry loop — will continue anyway"
-                )
+        self.supervisor.stop_retry_loop()
+        self.agent_instances.clear()
+        self.agent_settings.clear()
+        self.agent_classes.clear()
+        logger.info("🗑️ AgentManager cleanup complete.")

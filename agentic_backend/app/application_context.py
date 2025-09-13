@@ -640,7 +640,7 @@ class ApplicationContext:
         logger.info("     • enabled: %s", m2m_sec.enabled)
         logger.info("     • client_id: %s", m2m_sec.client_id or "<unset>")
         logger.info("     • keycloak_url: %s", m2m_sec.realm_url or "<unset>")
-        
+
         secret = os.getenv("KEYCLOAK_AGENTIC_CLIENT_SECRET", "")
         if secret:
             logger.info(
