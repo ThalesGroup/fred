@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import logging
-from enum import Enum
 from typing import Dict, List
 
 from fastapi import (
@@ -75,9 +74,7 @@ def get_node_numerical_metrics(
     agg_mapping: Dict[str, List[str]] = {}
     for item in agg:
         if ":" not in item:
-            raise HTTPException(
-                400, detail=f"Invalid agg parameter format: {item}"
-            )
+            raise HTTPException(400, detail=f"Invalid agg parameter format: {item}")
         field, op = item.split(":")
         if op not in SUPPORTED_OPS:
             raise HTTPException(400, detail=f"Unsupported aggregation op: {op}")
