@@ -70,6 +70,10 @@ class RBACProvider(AuthorizationProvider):
                 Resource.MESSAGE_ATTACHMENTS: {Action.CREATE},
                 Resource.PROMPT_COMPLETIONS: {Action.CREATE},
             },
+            "service_agent": {
+                Resource.TAGS: READ_ONLY,
+                Resource.DOCUMENTS: READ_ONLY,
+            },
         }
 
     def is_authorized(
