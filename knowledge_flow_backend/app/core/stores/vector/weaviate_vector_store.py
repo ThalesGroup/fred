@@ -22,12 +22,12 @@ from langchain.schema.document import Document
 from langchain_community.vectorstores import Weaviate
 
 from app.common.utils import get_embedding_model_name
-from app.core.stores.vector.base_vector_store import BaseVectoreStore
+from app.core.stores.vector.base_vector_store import BaseVectorStore
 
 logger = logging.getLogger(__name__)
 
 
-class WeaviateVectorStore(BaseVectoreStore):
+class WeaviateVectorStore(BaseVectorStore):
     def __init__(
         self,
         embedding_model: Embeddings,

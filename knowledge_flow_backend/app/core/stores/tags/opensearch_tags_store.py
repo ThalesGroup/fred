@@ -80,6 +80,11 @@ TAGS_INDEX_MAPPING = {
 def _compose_full_path(path: Optional[str], name: str) -> str:
     return f"{path}/{name}" if path else name
 
+def _normalize_path_for_query(p: str) -> str:
+    # Mirror your service normalization + lowercasing to match lc_norm
+    parts = [seg.strip() for seg in p.split("/") if seg.strip()]
+    return "/".join(parts).lower()
+
 
 class OpenSearchTagStore(BaseTagStore):
     """
