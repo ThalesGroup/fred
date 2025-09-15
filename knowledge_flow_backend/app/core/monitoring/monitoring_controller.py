@@ -12,20 +12,35 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
+from app.core.monitoring.monitoring_service import AppMonitoringMetricsService
+
 from fastapi import (
     APIRouter,
+    Response,
 )
 
+# Create a module-level APIRouter
+router = APIRouter(tags=["Monitoring"])
 
-class MonitoringController:
-    def __init__(
-        self,
-        app: APIRouter,
-    ):
-        @app.get("/healthz")
-        async def healthz():
-            return {"status": "ok"}
+@router.get("/healthz")
+async def healthz():
+  return {"status": "ok"}
 
-        @app.get("/ready")
-        def ready():
-            return {"status": "ready"}
+@router.get("/ready")
+def ready():
+  return {"status": "ready"}
+
+@router.get(
+    "/metrics/system",
+    summary="Expose system metrics for Prometheus scraping",
+    include_in_schema=False,
+)
+def metrics():
+    """
+    Expose Prometheus system metrics
+    """
+    return Response(
+        content=generate_latest(),
+        media_type=CONTENT_TYPE_LATEST,
+    )

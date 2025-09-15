@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+              
 import logging
 from typing import Dict, List
 
@@ -20,7 +20,9 @@ from fastapi import (
     Depends,
     HTTPException,
     Query,
+    Response,
 )
+from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 from fred_core import KeycloakUser, get_current_user
 
 from app.core.chatbot.metric_structures import MetricsResponse
@@ -53,6 +55,16 @@ async def healthz():
 def ready():
     return {"status": "ready"}
 
+@router.get(
+    "/metrics/system",
+    summary="Expose system metrics for Prometheus scraping",
+    include_in_schema=False,
+)
+def metrics():
+    return Response(
+        content=generate_latest(),
+        media_type=CONTENT_TYPE_LATEST,
+    )
 
 @router.get(
     "/metrics/chatbot/numerical",
