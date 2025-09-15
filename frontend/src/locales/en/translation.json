@@ -139,7 +139,9 @@
     "conversations": "Conversations",
     "newConversation": "New conversation",
     "noConversation": "No conversation",
-    "delete": "Delete"
+    "delete": "Delete",
+    "newConversationHelp": "Start a new conversation (not saved yet)",
+    "draftNotSaved": "Draft • Not saved yet"
   },
   "monitoring": {
     "title": "Agent & AI Service Monitoring",
