@@ -215,6 +215,7 @@ class VectorSearchService:
         policy_key = policy_name or SearchPolicyName.hybrid
         if policy_key == SearchPolicyName.strict:
             pol = POLICIES[SearchPolicyName.strict]
+            logger.info("Using strict search policy: %s", pol)
             # If your StrictRetriever.search expects StrictPolicy, this is fine:
             return self._strict(
                 question=question,
@@ -224,20 +225,23 @@ class VectorSearchService:
                 policy=pol,  # ✅ pass the policy object
             )
 
-        if policy_key == SearchPolicyName.semantic:
-            return self._semantic(
+        if policy_key == SearchPolicyName.hybrid:
+            pol = POLICIES[SearchPolicyName.hybrid]
+            logger.info("Using hybrid search policy: %s", pol)
+            return self._hybrid(
                 question=question,
                 user=user,
                 k=top_k,
                 library_tags_ids=document_library_tags_ids,
+                policy=pol,
             )
-
-        # default: hybrid
-        pol = POLICIES[SearchPolicyName.hybrid]
-        return self._hybrid(
+        
+        logger.info("Using semantic search policy (legacy)")
+        return self._semantic(
             question=question,
             user=user,
             k=top_k,
             library_tags_ids=document_library_tags_ids,
-            policy=pol,
         )
+
+

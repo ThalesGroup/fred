@@ -40,6 +40,7 @@ class VectorSearchController:
                 user=user,
                 top_k=request.top_k,
                 document_library_tags_ids=request.document_library_tags_ids,
+                policy_name=request.search_policy,
             )
             # hits is expected to be List[VectorSearchHit]
             return hits
