@@ -28,17 +28,25 @@ class RuntimeContext(BaseModel):
     selected_document_libraries_ids: list[str] | None = None
     selected_prompt_ids: list[str] | None = None
     selected_template_ids: list[str] | None = None
+    search_policy: str | None = None
 
 
 # Type alias for context provider functions
 RuntimeContextProvider = Callable[[], Optional[RuntimeContext]]
 
 
-def get_document_libraries_ids(context: RuntimeContext | None) -> list[str] | None:
+def get_document_library_tags_ids(context: RuntimeContext | None) -> list[str] | None:
     """Helper to extract document library IDs from context."""
     if not context:
         return None
     return context.selected_document_libraries_ids
+
+
+def get_search_policy(context: RuntimeContext | None) -> str:
+    """Helper to extract search policy from context."""
+    if not context:
+        return "hybrid"
+    return context.search_policy if context.search_policy else "hybrid"
 
 
 def get_prompt_libraries_ids(context: RuntimeContext | None) -> list[str] | None:

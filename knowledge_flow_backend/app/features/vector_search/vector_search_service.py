@@ -20,7 +20,6 @@ from app.features.vector_search.vector_search_structures import (
     HybridPolicy,
     SearchPolicy,
     SearchPolicyName,
-    StrictPolicy,
 )
 
 logger = logging.getLogger(__name__)
@@ -84,7 +83,7 @@ class VectorSearchService:
                 logger.debug("Could not resolve tag id=%s: %s", tid, e)
         return names, full_paths
 
-    def _all_document_libraries_tags_ids(self, user: KeycloakUser) -> List[str]:
+    def _all_document_library_tags_ids(self, user: KeycloakUser) -> List[str]:
         """
         Return all library tags ids for the user.
         """
@@ -171,10 +170,7 @@ class VectorSearchService:
         """
         sf = SearchFilter(tag_ids=sorted(library_tags_ids)) if library_tags_ids else None
         ann_hits: List[AnnHit] = self.vector_store.ann_search(question, k=k, search_filter=sf)
-        return [
-            self._to_hit(h.document, h.score, rank, user)
-            for rank, h in enumerate(ann_hits, start=1)
-        ]
+        return [self._to_hit(h.document, h.score, rank, user) for rank, h in enumerate(ann_hits, start=1)]
 
     def _strict(self, *, question: str, user: KeycloakUser, k: Optional[int], library_tags_ids: List[str], policy: SearchPolicy) -> List[VectorSearchHit]:
         """
@@ -204,7 +200,7 @@ class VectorSearchService:
         question: str,
         user: KeycloakUser,
         top_k: int = 10,
-        library_tags_names: Optional[List[str]] = None,
+        document_library_tags_ids: Optional[List[str]] = None,
         policy_name: Optional[SearchPolicyName] = None,
     ) -> List[VectorSearchHit]:
         """
@@ -214,9 +210,9 @@ class VectorSearchService:
         - semantic          : pure ANN (legacy/debug).
         We hard-scope by library (tags -> document_uids) to avoid cross-library leakage.
         """
-        if not library_tags_names or library_tags_names == []:
-           library_tags_names = self._all_document_libraries_tags_ids(user)
-        policy_key = (policy_name or SearchPolicyName.hybrid)
+        if not document_library_tags_ids or document_library_tags_ids == []:
+            document_library_tags_ids = self._all_document_library_tags_ids(user)
+        policy_key = policy_name or SearchPolicyName.hybrid
         if policy_key == SearchPolicyName.strict:
             pol = POLICIES[SearchPolicyName.strict]
             # If your StrictRetriever.search expects StrictPolicy, this is fine:
@@ -224,7 +220,7 @@ class VectorSearchService:
                 question=question,
                 user=user,
                 k=top_k,
-                library_tags_ids=library_tags_names,
+                library_tags_ids=document_library_tags_ids,
                 policy=pol,  # ✅ pass the policy object
             )
 
@@ -233,7 +229,7 @@ class VectorSearchService:
                 question=question,
                 user=user,
                 k=top_k,
-                library_tags_ids=library_tags_names,
+                library_tags_ids=document_library_tags_ids,
             )
 
         # default: hybrid
@@ -242,8 +238,6 @@ class VectorSearchService:
             question=question,
             user=user,
             k=top_k,
-            library_tags_ids=library_tags_names,
+            library_tags_ids=document_library_tags_ids,
             policy=pol,
         )
-
-

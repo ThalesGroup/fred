@@ -126,7 +126,7 @@ class MetadataService:
             if not new_ids:
                 if self.vector_store is None:
                     self.vector_store = ApplicationContext.get_instance().get_vector_store()
-                self.vector_store.delete_vectors(metadata.document_uid)
+                self.vector_store.delete_vectors_for_document(document_uid=metadata.document_uid)
                 self.metadata_store.delete_metadata(metadata.document_uid)
                 logger.info(f"[METADATA] Deleted document '{metadata.document_name}' because no tags remain (last removed by '{modified_by}')")
 

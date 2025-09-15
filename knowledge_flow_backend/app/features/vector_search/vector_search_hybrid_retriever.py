@@ -55,9 +55,7 @@ class HybridRetriever:
         bm25_rank: Dict[str, int] = {}
         if isinstance(self.vs, LexicalSearchable):
             vs_lex = cast(LexicalSearchable, self.vs)
-            bm25_hits: List[LexicalHit] = vs_lex.lexical_search(
-                query, k=policy.fetch_k_bm25, search_filter=sf, operator_and=True
-            )
+            bm25_hits: List[LexicalHit] = vs_lex.lexical_search(query, k=policy.fetch_k_bm25, search_filter=sf, operator_and=True)
             # gate BM25
             bm25_hits = [h for h in bm25_hits if h.score >= policy.bm25_min_score]
             bm25_rank = {h.chunk_id: r for r, h in enumerate(bm25_hits, start=1)}
@@ -68,6 +66,7 @@ class HybridRetriever:
 
         # 3) RRF fusion (ANN always contributes; BM25 contributes when present)
         fused: Dict[str, float] = {}
+
         def add_rrf(rank_map: Dict[str, int]) -> None:
             for cid, r in rank_map.items():
                 fused[cid] = fused.get(cid, 0.0) + 1.0 / (policy.rrf_k + r)

@@ -230,29 +230,6 @@ class TagService:
         tag.updated_at = datetime.now()
         self._tag_store.update_tag_by_id(tag_id, tag)
 
-    @authorize(Action.READ, Resource.TAGS)
-    def resolve_tag_ids_for_user(
-        self,
-        *,
-        user: KeycloakUser,
-        names_or_paths: list[str],
-        tag_type: TagType,
-        path_prefix: Optional[str] = None,
-    ) -> list[str]:
-        """
-        Resolve human-readable tag refs (full paths like 'Sales/HR' or leaves like 'HR')
-        to tag IDs, preserving input order.
-
-        Fred rationale:
-        - UI/agents can work with human names; persistence & permissions use IDs.
-        - Keep resolution rules in the store (OpenSearch/DuckDB), not in the service.
-        """
-        return self._tag_store.resolve_tag_ids_for_user(
-            owner_id=user.uid,
-            names_or_paths=names_or_paths,
-            tag_type=tag_type,
-            path_prefix=path_prefix,
-        )
     # ---------- Internals / helpers ----------
 
     def _retrieve_documents_for_tag(self, user: KeycloakUser, tag_id: str) -> list[DocumentMetadata]:

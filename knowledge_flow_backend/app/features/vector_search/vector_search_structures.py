@@ -17,6 +17,7 @@ from enum import Enum
 from typing import Optional
 from pydantic import BaseModel, Field
 
+
 class DocumentSource(BaseModel):
     content: str
     file_path: str
@@ -47,6 +48,7 @@ class SearchResponseDocument(BaseModel):
     content: str
     metadata: dict
 
+
 @dataclass(frozen=True)
 class SearchPolicy:
     """
@@ -56,17 +58,20 @@ class SearchPolicy:
       - Two signals must agree: vector similarity AND lexical evidence.
       - Toggle phrase requirement to slash near-topic false positives.
     """
-    k_final: int = 5              # max docs to return
-    fetch_k: int = 60             # ANN/BM25 candidate pool
+
+    k_final: int = 5  # max docs to return
+    fetch_k: int = 60  # ANN/BM25 candidate pool
     vector_min_cosine: float = 0.52  # gate for ANN (cosine after normalization)
-    bm25_min_score: float = 3.0      # gate for BM25 (tune per index)
+    bm25_min_score: float = 3.0  # gate for BM25 (tune per index)
     require_phrase_hit: bool = True  # demand exact phrase in text/title/section
-    use_mmr: bool = True             # de-dup many chunks from same doc
+    use_mmr: bool = True  # de-dup many chunks from same doc
+
 
 class SearchPolicyName(str, Enum):
-    hybrid = "hybrid"   # default
+    hybrid = "hybrid"  # default
     strict = "strict"  # high precision
-    semantic = "semantic" # simple, not precise useful to debug
+    semantic = "semantic"  # simple, not precise useful to debug
+
 
 @dataclass(frozen=True)
 class HybridPolicy:
@@ -74,6 +79,7 @@ class HybridPolicy:
     Hybrid (default) — BM25 + ANN with RRF fusion.
     Why: robust general default; resists semantic drift while keeping recall.
     """
+
     k_final: int = 8
     fetch_k_ann: int = 60
     fetch_k_bm25: int = 60
@@ -82,12 +88,14 @@ class HybridPolicy:
     rrf_k: int = 60
     use_mmr: bool = True
 
+
 @dataclass(frozen=True)
 class StrictPolicy:
     """
     Strict — ANN ∩ BM25 ∩ (optional) exact phrase; returns [] if weak.
     Why: high-precision mode for dense/noisy libraries.
     """
+
     k_final: int = 5
     fetch_k: int = 60
     vector_min_cosine: float = 0.52
@@ -95,20 +103,23 @@ class StrictPolicy:
     require_phrase_hit: bool = True
     use_mmr: bool = True
 
+
 POLICIES = {
     SearchPolicyName.hybrid: HybridPolicy(),
     SearchPolicyName.strict: StrictPolicy(),
     SearchPolicyName.semantic: HybridPolicy(k_final=10, fetch_k_ann=50, fetch_k_bm25=0),  # not used by retriever
 }
 
+
 class SearchRequest(BaseModel):
     """
     Request schema for vector search.
     Generated OpenAPI will expose enum for policy, making UI dropdown trivial.
     """
-    query: str
+
+    question: str
     top_k: int = Field(default=10, ge=1, le=100, description="Number of results to return.")
-    library_tags_ids: Optional[list[str]] = Field(
+    document_library_tags_ids: Optional[list[str]] = Field(
         default=None,
         description="Optional list of tag names to filter documents. Only chunks in a document with at least one of these tags will be returned.",
     )

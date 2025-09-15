@@ -125,6 +125,7 @@ class OpenSearchVectorIndexConfig(BaseModel):
     index: str = Field(..., description="OpenSearch index name")
     bulk_size: int = Field(default=1000, description="Number of documents to send in each bulk insert request")
 
+
 class ChromaVectorStorageConfig(BaseModel):
     """
     Local, embedded Chroma. No server needed.
@@ -132,10 +133,12 @@ class ChromaVectorStorageConfig(BaseModel):
     - collection_name: logical collection for your chunks
     - distance: ANN space; 'cosine' matches our UI-friendly similarity
     """
+
     type: Literal["chroma"]
     local_path: str = Field(default=str(Path("~/.fred/knowledge-flow/chromadb-vector-store")), description="Local vector storage path")
     collection_name: str = Field("fred_chunks", description="Chroma collection name")
     distance: Literal["cosine", "l2", "ip"] = Field("cosine", description="Vector space (affects HNSW metric)")
+
 
 VectorStorageConfig = Annotated[Union[InMemoryVectorStorage, OpenSearchVectorIndexConfig, ChromaVectorStorageConfig, WeaviateVectorStorage], Field(discriminator="type")]
 

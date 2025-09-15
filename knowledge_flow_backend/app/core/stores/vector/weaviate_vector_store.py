@@ -14,7 +14,7 @@
 
 import logging
 from datetime import datetime, timezone
-from typing import Iterable, List, Tuple
+from typing import Iterable, List, Optional, Tuple
 
 import weaviate
 from langchain.embeddings.base import Embeddings
@@ -53,9 +53,10 @@ class WeaviateVectorStore(BaseVectorStore):
 
         logger.info(f"✅ Weaviate vector store initialized on {host} (index: {index_name})")
 
-    def add_documents(self, documents: List[Document]) -> None:
+    def add_documents(self, documents: List[Document], *, ids: Optional[List[str]] = None) -> List[str]:
         self.vectorstore.add_documents(documents)
         logger.info(f"✅ Added {len(documents)} documents to Weaviate.")
+        return ids or []
 
     def similarity_search_with_score(self, query: str, k: int = 5, documents_ids: Iterable[str] | None = None) -> List[Tuple[Document, float]]:
         if documents_ids:

@@ -18,6 +18,7 @@ from typing import List
 
 from langchain.schema.document import Document
 
+
 class BaseTextSplitter(ABC):
     """
     Interface for splitting documents into smaller chunks.
@@ -29,5 +30,3 @@ class BaseTextSplitter(ABC):
     def split(self, document: Document) -> List[Document]:
         """Split a document into smaller chunks."""
         pass
-
-

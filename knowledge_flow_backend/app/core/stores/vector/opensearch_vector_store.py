@@ -21,7 +21,7 @@ from langchain_community.vectorstores import OpenSearchVectorSearch
 
 from app.common.utils import get_embedding_model_name
 from app.core.stores.vector.base_embedding_model import BaseEmbeddingModel
-from app.core.stores.vector.base_vector_store import CHUNK_ID_FIELD, AnnHit, BaseVectorStore, LexicalHit, LexicalSearchable, SearchFilter 
+from app.core.stores.vector.base_vector_store import CHUNK_ID_FIELD, AnnHit, BaseVectorStore, LexicalHit, LexicalSearchable, SearchFilter
 
 logger = logging.getLogger(__name__)
 
@@ -59,10 +59,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
         self._vs: OpenSearchVectorSearch | None = None
         self._expected_dim: int | None = None
 
-        logger.info(
-            "🔗 OpenSearchVectorStoreAdapter initialized index=%r host=%r bulk=%s",
-            self._index, self._host, self._bulk_size
-        )
+        logger.info("🔗 OpenSearchVectorStoreAdapter initialized index=%r host=%r bulk=%s", self._index, self._host, self._bulk_size)
 
     # ---------- lazy LangChain wrapper + raw client ----------
 

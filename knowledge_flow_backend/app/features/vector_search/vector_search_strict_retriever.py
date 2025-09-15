@@ -26,10 +26,7 @@ class StrictRetriever:
     def __init__(self, vs: BaseVectorStore):
         # Strict requires lexical capability (BM25/phrase).
         if not isinstance(vs, LexicalSearchable):
-            raise TypeError(
-                "StrictRetriever requires a LexicalSearchable vector store "
-                "(e.g., OpenSearch adapter)."
-            )
+            raise TypeError("StrictRetriever requires a LexicalSearchable vector store (e.g., OpenSearch adapter).")
         # For the type checker, keep both views: BaseVectorStore (ANN) + LexicalSearchable (lexical/phrase)
         self._vs_ann: BaseVectorStore = vs
         self._vs_lex: LexicalSearchable = cast(LexicalSearchable, vs)
@@ -63,11 +60,7 @@ class StrictRetriever:
             return []
 
         # 2) Lexical evidence (BM25) — gated
-        bm25_map = {
-            h.chunk_id: h.score
-            for h in self._vs_lex.lexical_search(query, k=policy.fetch_k, search_filter=sf, operator_and=True)
-            if h.score >= policy.bm25_min_score
-        }
+        bm25_map = {h.chunk_id: h.score for h in self._vs_lex.lexical_search(query, k=policy.fetch_k, search_filter=sf, operator_and=True) if h.score >= policy.bm25_min_score}
 
         # 3) Optional exact phrase agreement
         phrase_ids: Set[str] = set()

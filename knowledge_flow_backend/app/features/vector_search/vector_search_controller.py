@@ -36,10 +36,10 @@ class VectorSearchController:
             user: KeycloakUser = Depends(get_current_user),
         ) -> List[VectorSearchHit]:
             hits = self.service.search(
-                question=request.query,
+                question=request.question,
                 user=user,
                 top_k=request.top_k,
-                library_tags_names=request.library_tags_ids,
+                document_library_tags_ids=request.document_library_tags_ids,
             )
             # hits is expected to be List[VectorSearchHit]
             return hits

@@ -33,4 +33,3 @@ class BaseEmbeddingModel(Embeddings, ABC):
         Returns a list of { 'embedding': List[float], 'document': Document }
         """
         pass
-

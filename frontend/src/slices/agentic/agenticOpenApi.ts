@@ -364,6 +364,7 @@ export type RuntimeContext = {
   selected_document_libraries_ids?: string[] | null;
   selected_prompt_ids?: string[] | null;
   selected_template_ids?: string[] | null;
+  search_policy?: string | null;
   [key: string]: any;
 };
 export type ChatAskInput = {

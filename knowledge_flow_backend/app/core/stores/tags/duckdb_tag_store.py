@@ -214,4 +214,3 @@ class DuckdbTagStore(BaseTagStore):
         # Mirror service normalization; DB comparisons are done case-insensitively via LOWER()
         parts = [seg.strip() for seg in p.split("/") if seg.strip()]
         return "/".join(parts)
-

@@ -5,7 +5,7 @@ from typing import List, Optional, Dict, Any
 import requests
 from app.core.agents.runtime_context import (
     RuntimeContext,
-    get_document_libraries_ids,
+    get_document_library_tags_ids,
     get_prompt_libraries_ids,
 )
 
@@ -58,7 +58,7 @@ def _fetch_body(kf_base: str, rid: str, timeout: float = 8.0) -> Optional[str]:
 
 def resolve_prepared(ctx: RuntimeContext, kf_base: str) -> Prepared:
     # 1) Document libraries for RAG scoping
-    doc_tags = list(get_document_libraries_ids(ctx) or [])
+    doc_tags = list(get_document_library_tags_ids(ctx) or [])
 
     # 2) Prompts: loop each id, append body when resolvable; ignore failures
     bodies: List[str] = []

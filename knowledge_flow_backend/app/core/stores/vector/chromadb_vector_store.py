@@ -131,7 +131,7 @@ class ChromaDBVectorStore(BaseVectorStore, FetchById):
         # you can fallback to delete(ids) + add(...), but that's less efficient.
         self._collection.add(
             ids=chunk_ids,
-            embeddings=vectors,   # type: ignore[arg-type]
+            embeddings=vectors,  # type: ignore[arg-type]
             documents=texts,
             metadatas=metadatas,  # type: ignore[arg-type]
         )

@@ -29,6 +29,7 @@ logger = logging.getLogger(__name__)
 
 # ----------------------- helpers -----------------------
 
+
 def _to_json_safe(v: Any) -> Any:
     """Recursively make values JSON/Pydantic friendly."""
     if v is None:
@@ -85,6 +86,7 @@ def _ensure_chunk_uid(md: Dict[str, Any]) -> str:
 
 
 # ----------------------- adapter -----------------------
+
 
 class InMemoryLangchainVectorStore(BaseVectorStore):
     """

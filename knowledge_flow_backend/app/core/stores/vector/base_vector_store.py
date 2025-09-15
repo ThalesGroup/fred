@@ -20,6 +20,7 @@ from langchain.schema.document import Document
 
 CHUNK_ID_FIELD = "chunk_uid"  # your canonical per-chunk id in metadata
 
+
 @dataclass(frozen=True)
 class SearchFilter:
     """
@@ -27,18 +28,23 @@ class SearchFilter:
     - document_ids: hard scope by doc_uid (library scoping resolved upstream)
     - metadata_terms: exact keyword filters on metadata fields
     """
+
     tag_ids: Optional[Sequence[str]] = None
     metadata_terms: Optional[Dict[str, Sequence[str]]] = None
+
 
 @dataclass(frozen=True)
 class AnnHit:
     """Semantic hit with hydrated Document (used directly for UI)."""
+
     document: Document
     score: float  # cosine in [0,1] if normalized
+
 
 @dataclass(frozen=True)
 class LexicalHit:
     """Lexical hit returns ids + score; hydrate on demand if needed."""
+
     chunk_id: str
     score: float
 
@@ -65,12 +71,14 @@ class BaseVectorStore(ABC):
         """Semantic (ANN) search; should honor SearchFilter where supported."""
         raise NotImplementedError
 
+
 @runtime_checkable
 class LexicalSearchable(Protocol):
     """
     Capability: BM25 + phrase search.
     A store that implements this can be used by 'hybrid' and 'strict'.
     """
+
     def lexical_search(self, query: str, *, k: int, search_filter: Optional[SearchFilter] = None, operator_and: bool = True) -> List[LexicalHit]: ...
     def phrase_search(self, phrase: str, *, fields: Sequence[str], k: int, search_filter: Optional[SearchFilter] = None) -> List[str]: ...
 
@@ -80,4 +88,5 @@ class FetchById(Protocol):
     Capability: hydrate Documents from chunk ids.
     Useful if your lexical returns only ids.
     """
+
     def fetch_documents(self, chunk_ids: Sequence[str]) -> List[Document]: ...
