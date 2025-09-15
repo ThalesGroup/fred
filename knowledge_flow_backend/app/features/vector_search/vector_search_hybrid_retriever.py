@@ -131,6 +131,7 @@ class HybridRetriever:
     ) -> List[Tuple[Document, float]]:
         t0 = time.perf_counter()
         if not scoped_document_ids:
+            logger.info("No scoped documents provided, returning empty list")
             return []
 
         sf = SearchFilter(tag_ids=scoped_document_ids)
@@ -198,6 +199,7 @@ class HybridRetriever:
             bm25_hits: List[LexicalHit] = vs_lex.lexical_search(query, k=fetch_k_bm25, search_filter=sf, operator_and=False)
             bm25_hits = [h for h in bm25_hits if h.score >= bm25_min]
             bm25_rank = {h.chunk_id: r for r, h in enumerate(bm25_hits, start=1)}
+            logger.info("BM25 hits after filtering by min score (%s): %s", policy.bm25_min_score, len(bm25_hits))
 
         if not ann_rank and not bm25_rank:
             logger.info("Hybrid: empty(ANN,BM25) → []")
@@ -253,6 +255,7 @@ class HybridRetriever:
             key=lambda kv: (kv[1], ann_map.get(kv[0], (None, -1.0))[1]),
             reverse=True,
         )
+        logger.info("Chunks ordered by fused score")
 
         # 6) Build output with doc-level diversity
         out: List[Tuple[Document, float]] = []
@@ -277,6 +280,7 @@ class HybridRetriever:
 
             out.append((doc, cos))
             if len(out) >= policy.k_final:
+                logger.info("Reached k_final (%s), stopping", policy.k_final)
                 break
 
         logger.info(
