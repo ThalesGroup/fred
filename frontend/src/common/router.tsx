@@ -39,6 +39,7 @@ import { FrugalIt } from "../pages/FrugalIt";
 import Inspect from "../frugalit/pages/Inspect";
 import { Monitoring } from "../pages/Monitoring";
 import { K8ApplicationContextProvider } from "../app/K8ApplicationContextProvider";
+import ChatPOC from "../pages/ChatPoc";
 
 const RootLayout = ({ children }: React.PropsWithChildren<{}>) => (
   <ProtectedRoute permission="viewer">
@@ -60,7 +61,7 @@ export const routes: RouteObject[] = [
             </FootprintContextProvider>
           </K8ApplicationContextProvider>
         ) : (
-          <Chat />
+          <ChatPOC />
         ),
       },
 
@@ -170,7 +171,7 @@ export const routes: RouteObject[] = [
       },
       {
         path: "chat",
-        element: <Chat />,
+        element: <ChatPOC />,
       },
       {
         path: "monitoring",
