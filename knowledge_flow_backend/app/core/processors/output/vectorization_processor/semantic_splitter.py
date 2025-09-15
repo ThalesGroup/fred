@@ -17,7 +17,7 @@ import re
 from typing import List, Tuple
 from langchain.text_splitter import RecursiveCharacterTextSplitter, MarkdownHeaderTextSplitter
 from langchain.schema import Document
-from app.core.stores.vector.base_vector_store import BaseTextSplitter
+from app.core.stores.vector.base_text_splitter import BaseTextSplitter
 
 logger = logging.getLogger(__name__)
 
