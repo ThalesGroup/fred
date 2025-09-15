@@ -798,11 +798,15 @@ export type VectorSearchHit = {
   retrieved_at?: string | null;
   retrieval_session_id?: string | null;
 };
+export type SearchPolicyName = "hybrid" | "strict" | "semantic";
 export type SearchRequest = {
-  query: string;
+  question: string;
+  /** Number of results to return. */
   top_k?: number;
-  /** Optional list of tags to filter documents. Only chunks in a document with at least one of these tags will be returned. */
-  tags?: string[] | null;
+  /** Optional list of tag names to filter documents. Only chunks in a document with at least one of these tags will be returned. */
+  document_library_tags_ids?: string[] | null;
+  /** Optional search policy preset. If omitted, defaults to 'hybrid'. */
+  search_policy?: SearchPolicyName | null;
 };
 export type KpiQueryResultRow = {
   group: {

@@ -21,11 +21,11 @@ app:
 
 security:
   m2m:
-    enabled: true
+    enabled: false
     client_id: "knowledge-flow"
     realm_url: "http://app-keycloak:8080/realms/app"
   user:
-    enabled: true
+    enabled: false
     client_id: "app"
     realm_url: "http://app-keycloak:8080/realms/app"
     authorized_origins:

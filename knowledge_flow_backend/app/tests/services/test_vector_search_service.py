@@ -25,8 +25,8 @@ import pytest
 from fred_core import KeycloakUser
 from langchain.schema.document import Document
 
-from app.features.vector_search import service
-from app.features.vector_search.service import VectorSearchService
+from app.features.vector_search import vector_search_service
+from app.features.vector_search.vector_search_service import VectorSearchService
 
 
 class DummyVectorStore:
@@ -74,9 +74,9 @@ def test_user():
 def test_similarity_search_success(monkeypatch, test_user):
     """Test: performs similarity search with a valid question and k=2.
     Asserts returned objects are Document-score tuples."""
-    monkeypatch.setattr(service.ApplicationContext, "get_instance", DummyContext)
+    monkeypatch.setattr(vector_search_service.ApplicationContext, "get_instance", DummyContext)
     vector_svc = VectorSearchService()
-    results = vector_svc.similarity_search_with_score("What is AI?", test_user, k=2)
+    results = vector_svc.search(question="What is AI?", user=test_user, top_k=2)
     assert isinstance(results, list)
     assert all(isinstance(doc, tuple) and isinstance(doc[0], Document) for doc in results)
     assert len(results) == 2
@@ -89,10 +89,10 @@ def test_similarity_search_success(monkeypatch, test_user):
 
 def test_similarity_search_empty_question(monkeypatch, test_user):
     """Test: raises ValueError if question is an empty string."""
-    monkeypatch.setattr(service.ApplicationContext, "get_instance", DummyContext)
+    monkeypatch.setattr(vector_search_service.ApplicationContext, "get_instance", DummyContext)
     vector_svc = VectorSearchService()
     with pytest.raises(ValueError):
-        vector_svc.similarity_search_with_score("", test_user, k=3)
+        vector_svc.search(question="", user=test_user, top_k=3)
 
 
 # ----------------------------
@@ -102,8 +102,8 @@ def test_similarity_search_empty_question(monkeypatch, test_user):
 
 def test_similarity_search_zero_k(monkeypatch, test_user):
     """Test: returns empty list when k=0, a valid edge case."""
-    monkeypatch.setattr(service.ApplicationContext, "get_instance", DummyContext)
+    monkeypatch.setattr(vector_search_service.ApplicationContext, "get_instance", DummyContext)
     vector_svc = VectorSearchService()
-    results = vector_svc.similarity_search_with_score("Explain edge case.", test_user, k=0)
+    results = vector_svc.search(question="Explain edge case.", user=test_user, top_k=0)
     assert isinstance(results, list)
     assert results == []

@@ -8,8 +8,8 @@ from typing import List
 from fastapi import APIRouter, Depends
 from fred_core import KeycloakUser, VectorSearchHit, get_current_user
 
-from app.features.vector_search.service import VectorSearchService
-from app.features.vector_search.structures import SearchRequest
+from app.features.vector_search.vector_search_service import VectorSearchService
+from app.features.vector_search.vector_search_structures import SearchRequest
 
 logger = logging.getLogger(__name__)
 
@@ -35,11 +35,12 @@ class VectorSearchController:
             request: SearchRequest,
             user: KeycloakUser = Depends(get_current_user),
         ) -> List[VectorSearchHit]:
-            hits = self.service.similarity_search_with_score(
-                request.query,
-                user,
-                k=request.top_k,
-                tags_ids=request.tags,
+            hits = self.service.search(
+                question=request.question,
+                user=user,
+                top_k=request.top_k,
+                document_library_tags_ids=request.document_library_tags_ids,
+                policy_name=request.search_policy,
             )
             # hits is expected to be List[VectorSearchHit]
             return hits

@@ -268,6 +268,7 @@ See `agentic_backend/config/configuration.yaml` (section `ai:`) for concrete exa
 ## Documentation
 
 * Main docs: <https://fredk8.dev/docs>  
+* [Features overview](./docs/FEATURES.md)  ← start here if you’re evaluating Fred
 * [Agentic backend README](./agentic_backend/README.md)  
 * [Agentic backend agentic design](./agentic_backend/docs/AGENTS.md)  
 * [MCP](./agentic_backend/docs/MCP.md)

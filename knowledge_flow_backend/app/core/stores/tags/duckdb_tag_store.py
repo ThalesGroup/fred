@@ -208,3 +208,9 @@ class DuckdbTagStore(BaseTagStore):
                 [owner_id, tag_type.value, full_path],
             ).fetchone()
         return self._deserialize(row) if row else None
+
+    @staticmethod
+    def _normalize_path_for_query(p: str) -> str:
+        # Mirror service normalization; DB comparisons are done case-insensitively via LOWER()
+        parts = [seg.strip() for seg in p.split("/") if seg.strip()]
+        return "/".join(parts)

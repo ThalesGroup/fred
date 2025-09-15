@@ -47,7 +47,7 @@ from app.features.resources.controller import ResourceController
 from app.features.scheduler.controller import SchedulerController
 from app.features.tabular.controller import TabularController
 from app.features.tag.controller import TagController
-from app.features.vector_search.controller import VectorSearchController
+from app.features.vector_search.vector_search_controller import VectorSearchController
 
 # -----------------------
 # LOGGING + ENVIRONMENT

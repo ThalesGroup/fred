@@ -12,148 +12,81 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""
-Vectorization Architecture
-
-High-Level Schema:
-
- [ FILE PATH + METADATA ]
-             │
-             ▼
-┌───────────────────────────────┐
-│    DocumentLoaderInterface    │  (ex: LocalFileLoader)
-└───────────────────────────────┘
-             │
-             ▼
-┌───────────────────────────────┐
-│     TextSplitterInterface     │  (ex: RecursiveSplitter)
-└───────────────────────────────┘
-             │
-             ▼
-┌───────────────────────────────┐
-│   EmbeddingModelInterface     │  (ex: AzureEmbedder)
-└───────────────────────────────┘
-             │
-             ▼
-┌─────────────────────────────────────┐
-│        VectorStoreInterface         │  (ex: TracedOpenSearchVectorStore)
-└─────────────────────────────────────┘
-             │
-             ▼
-┌─────────────────────────────────────┐
-│        BaseMetadataStore            │  (ex: OpenSearchMetadataStore)
-└─────────────────────────────────────┘
-
-Each step is handled by a modular, replaceable component.
-This design allows easy switching of backends (e.g., OpenSearch ➔ ChromaDB, Azure ➔ HuggingFace).
-
-"""
-
 from abc import ABC, abstractmethod
-from typing import Iterable, List, Tuple
+from typing import Dict, List, Optional, Protocol, Sequence, runtime_checkable
 
+from attr import dataclass
 from langchain.schema.document import Document
-from langchain.embeddings.base import Embeddings
 
-from app.common.document_structures import DocumentMetadata
+CHUNK_ID_FIELD = "chunk_uid"  # your canonical per-chunk id in metadata
 
 
-class BaseLangchainDocumentLoader(ABC):
+@dataclass(frozen=True)
+class SearchFilter:
     """
-    Interface for loading documents from a given source and returning them as LangChain Documents.
-    This interface is designed to be implemented by various concrete classes that handle
-    different document sources (e.g., local files, remote files, APIs).
-
-    Design Motivation:
-    -------------------
-    Although in the current system documents are always processed from local files,
-    we define this interface to maintain clear separation of concerns:
-
-    - The "loading" step (reading raw content + associating metadata) is isolated.
-    - Future flexibility: easily swap in other sources (e.g., S3, Minio, remote API, database).
-    - Testability: mock the loading phase during unit testing without involving actual file I/O.
-    - Uniformity: keeps the vectorization pipeline modular and easy to extend.
-
-    Every concrete implementation must return a LangChain `Document`
-    containing the loaded text and its associated metadata.
-
-    Typical implementations:
-    -------------------------
-    - LocalFileLoader (reads from local disk)
-    - RemoteFileLoader (future: reads from S3/Minio)
-    - APIDocumentLoader (future: fetches from an API)
-
+    Backend-agnostic filter.
+    - document_ids: hard scope by doc_uid (library scoping resolved upstream)
+    - metadata_terms: exact keyword filters on metadata fields
     """
 
-    @abstractmethod
-    def load_langchain_doc_from_metadata(self, file_path: str, metadata: DocumentMetadata) -> Document:
-        """Load a document from a file."""
-        pass
+    tag_ids: Optional[Sequence[str]] = None
+    metadata_terms: Optional[Dict[str, Sequence[str]]] = None
 
 
-# 2. Text Splitter Interface
-class BaseTextSplitter(ABC):
+@dataclass(frozen=True)
+class AnnHit:
+    """Semantic hit with hydrated Document (used directly for UI)."""
+
+    document: Document
+    score: float  # cosine in [0,1] if normalized
+
+
+@dataclass(frozen=True)
+class LexicalHit:
+    """Lexical hit returns ids + score; hydrate on demand if needed."""
+
+    chunk_id: str
+    score: float
+
+
+class BaseVectorStore(ABC):
     """
-    Interface for splitting documents into smaller chunks.
-    This interface is designed to be implemented by various concrete classes that handle
-    different splitting strategies (e.g., by character, by sentence, etc.).
+    Minimal, backend-agnostic interface every store implements.
+    - Ingestion (idempotent via stable ids)
+    - ANN search (semantic)
     """
 
     @abstractmethod
-    def split(self, document: Document) -> List[Document]:
-        """Split a document into smaller chunks."""
-        pass
-
-
-# 3. Embedding Model Interface
-class BaseEmbeddingModel(Embeddings, ABC):
-    """
-    Interface for embedding models.
-    This interface is designed to be implemented by various concrete classes that handle
-    different embedding strategies (e.g., OpenAI, Azure, HuggingFace, etc.).
-    """
+    def add_documents(self, documents: List[Document], *, ids: Optional[List[str]] = None) -> List[str]:
+        """Upsert chunks; return assigned ids (prefer stable chunk_uids)."""
+        raise NotImplementedError
 
     @abstractmethod
-    def embed_documents(self, texts: List[str]) -> List[List[float]]:
-        """
-        Embed a list of documents into vectors.
-        Returns a list of { 'embedding': List[float], 'document': Document }
-        """
-        pass
+    def delete_vectors_for_document(self, *, document_uid: str) -> None:
+        """Delete all chunks for a logical document."""
+        raise NotImplementedError
+
+    @abstractmethod
+    def ann_search(self, query: str, *, k: int, search_filter: Optional[SearchFilter] = None) -> List[AnnHit]:
+        """Semantic (ANN) search; should honor SearchFilter where supported."""
+        raise NotImplementedError
 
 
-# 4. Vector Store Interface
-class BaseVectoreStore(ABC):
+@runtime_checkable
+class LexicalSearchable(Protocol):
     """
-    Base Vector Store
-    -------------------
-    Interface for vector stores.
-
-    This interface is designed to be implemented by various concrete classes that handle
-    different vector storage strategies (e.g., OpenSearch, in memory, etc.).
+    Capability: BM25 + phrase search.
+    A store that implements this can be used by 'hybrid' and 'strict'.
     """
 
-    @abstractmethod
-    def add_documents(self, documents: List[Document]) -> None:
-        """Store the documents in a vector database."""
-        pass
+    def lexical_search(self, query: str, *, k: int, search_filter: Optional[SearchFilter] = None, operator_and: bool = True) -> List[LexicalHit]: ...
+    def phrase_search(self, phrase: str, *, fields: Sequence[str], k: int, search_filter: Optional[SearchFilter] = None) -> List[str]: ...
 
-    @abstractmethod
-    def delete_vectors(self, document_uid: str) -> None:
-        """Delete the vectors associated with a document."""
-        pass
 
-    @abstractmethod
-    def similarity_search_with_score(self, query: str, k: int = 5, documents_ids: Iterable[str] | None = None) -> List[Tuple[Document, float]]:
-        """
-        Perform a similarity search on the vector store.
+class FetchById(Protocol):
+    """
+    Capability: hydrate Documents from chunk ids.
+    Useful if your lexical returns only ids.
+    """
 
-        Args:
-            query (str): The query string.
-            k (int): Number of top documents to return.
-            tags (list[str] | None): Optional list of tags to filter documents. Only documents with at least one of these tags will be returned.
-
-        Returns:
-            List[Tuple[Document, float]]: A list of tuples containing the document and its similarity score.
-        """
-        pass
+    def fetch_documents(self, chunk_ids: Sequence[str]) -> List[Document]: ...

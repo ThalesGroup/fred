@@ -28,6 +28,7 @@ from fred_core.store.structures import StoreInfo
 
 from fred_core.common.structures import SQLStorageConfig
 from app.common.structures import (
+    ChromaVectorStorageConfig,
     Configuration,
     EmbeddingProvider,
     InMemoryVectorStorage,
@@ -68,8 +69,10 @@ from app.core.stores.resources.opensearch_resource_store import OpenSearchResour
 from app.core.stores.tags.base_tag_store import BaseTagStore
 from app.core.stores.tags.duckdb_tag_store import DuckdbTagStore
 from app.core.stores.tags.opensearch_tags_store import OpenSearchTagStore
+from app.core.stores.vector.base_embedding_model import BaseEmbeddingModel
+from app.core.stores.vector.base_text_splitter import BaseTextSplitter
 from app.core.stores.vector.in_memory_langchain_vector_store import InMemoryLangchainVectorStore
-from app.core.stores.vector.base_vector_store import BaseEmbeddingModel, BaseTextSplitter, BaseVectoreStore
+from app.core.stores.vector.base_vector_store import BaseVectorStore
 from app.core.stores.vector.opensearch_vector_store import OpenSearchVectorStoreAdapter
 from app.core.processors.output.vectorization_processor.semantic_splitter import SemanticSplitter
 
@@ -178,7 +181,7 @@ class ApplicationContext:
     configuration: Configuration
     _input_processor_instances: Dict[str, BaseInputProcessor] = {}
     _output_processor_instances: Dict[str, BaseOutputProcessor] = {}
-    _vector_store_instance: Optional[BaseVectoreStore] = None
+    _vector_store_instance: Optional[BaseVectorStore] = None
     _metadata_store_instance: Optional[BaseMetadataStore] = None
     _tag_store_instance: Optional[BaseTagStore] = None
     _kpi_store_instance: Optional[BaseKPIStore] = None
@@ -436,7 +439,7 @@ class ApplicationContext:
         else:
             raise ValueError(f"Unsupported embedding backend: {backend_type}")
 
-    def get_vector_store(self) -> BaseVectoreStore:
+    def get_vector_store(self) -> BaseVectorStore:
         """
         Vector Store Factory
         """
@@ -444,7 +447,7 @@ class ApplicationContext:
             return self._vector_store_instance
         raise ValueError("Vector store is not initialized. Use get_create_vector_store() instead.")
 
-    def get_create_vector_store(self, embedding_model: BaseEmbeddingModel) -> BaseVectoreStore:
+    def get_create_vector_store(self, embedding_model: BaseEmbeddingModel) -> BaseVectorStore:
         """
         Vector Store Factory
         """
@@ -474,6 +477,16 @@ class ApplicationContext:
         #     if self._vector_store_instance is None:
         #         self._vector_store_instance = WeaviateVectorStore(embedding_model, s.host, s.index_name)
         #     return self._vector_store_instance
+        elif isinstance(store, ChromaVectorStorageConfig):
+            from app.core.stores.vector.chromadb_vector_store import ChromaDBVectorStore
+
+            local_path = Path(store.local_path).expanduser()
+            local_path.mkdir(parents=True, exist_ok=True)
+            self._vector_store_instance = ChromaDBVectorStore(
+                persist_path=str(local_path),
+                collection_name=store.collection_name,
+                embeddings=embedding_model,
+            )
         elif isinstance(store, InMemoryVectorStorage):
             self._vector_store_instance = InMemoryLangchainVectorStore(embedding_model=embedding_model)
         else:
