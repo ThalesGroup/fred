@@ -21,11 +21,11 @@ app:
 
 security:
   m2m:
-    enabled: false
+    enabled: true
     client_id: "knowledge-flow"
     realm_url: "http://app-keycloak:8080/realms/app"
   user:
-    enabled: false
+    enabled: true
     client_id: "app"
     realm_url: "http://app-keycloak:8080/realms/app"
     authorized_origins:
@@ -93,7 +93,6 @@ embedding:
   use_gpu: true
   # Enable or disable image processing in documents
   process_images: true
-
 
 storage:
   postgres:
