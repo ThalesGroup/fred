@@ -48,7 +48,6 @@ def get_search_policy(context: RuntimeContext | None) -> str:
         return "hybrid"
     return context.search_policy if context.search_policy else "hybrid"
 
-
 def get_prompt_libraries_ids(context: RuntimeContext | None) -> list[str] | None:
     """Helper to extract prompt library IDs from context."""
     if not context:

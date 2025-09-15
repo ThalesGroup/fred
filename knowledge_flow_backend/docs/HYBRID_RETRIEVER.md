@@ -14,7 +14,7 @@ Hybrid Search blends two ways of finding relevant passages:
 
 It combines both rankings so items that are strong in **either** style float to the top. You’ll usually get:
 - Better **recall** on paraphrased questions (semantic),
-- Better **precision** on acronyms, codes, and exact terms (keyword),
+- Better **precision** on acronyms, codes, names, and exact terms (keyword),
 - A balanced list with **diverse sources** (we avoid flooding from a single document).
 
 > If keyword search isn’t available in the current backend, Hybrid quietly behaves like **Semantic** search—no errors, just a simpler result list.
@@ -24,8 +24,8 @@ It combines both rankings so items that are strong in **either** style float to 
 ## When to pick **Hybrid** (recommended default)
 
 Choose Hybrid if your query:
-- Mixes **short terms** (e.g., IDs, acronyms) and **natural language** (“SLA targets for GEO traffic in EMEA”).
-- Needs **exact tokens** to be noticed (error codes, config keys, API names).
+- Mixes **short terms** (e.g., IDs, acronyms, proper names) and **natural language** (“SLA targets for GEO traffic in EMEA”).
+- Needs **exact tokens** or **people names** to be noticed (error codes, config keys, Amartya Sen, Nussbaum, etc.).
 - May be phrased in a way that doesn’t match the document text exactly (paraphrasing).
 
 It’s also a great first pick when you’re **not sure** which mode is best.
@@ -57,15 +57,16 @@ Pick **Keyword** if:
 - A confidence indicator driven by semantic similarity (useful for quick triage).
 - Consistent behavior across libraries/tags you’ve selected.
 
-> Tip: If your first results look close but not quite right, try adding 1–2 **specific words** (e.g., an acronym or setting name). Hybrid will pick that up.
+> Tip: If your first results look close but not quite right, try adding 1–2 **specific words** (e.g., an acronym, a name, or a setting). Hybrid will pick that up.
 
 ---
 
 ## Why Hybrid is often best-in-class
 
 - **Robust to phrasing** (semantic).
-- **Precise on tokens** (keyword).
-- **Fair fusion** (it balances both rather than over-favoring one).
+- **Precise on tokens and names** (keyword).
+- **Fair fusion** (balances both rather than over-favoring one).
+- **Name-evidence gate**: prevents semantically-related but irrelevant docs from surfacing if your query clearly names people.
 - **Graceful fallback** (works even if keyword search isn’t available).
 
 ---
@@ -82,7 +83,7 @@ Pick **Keyword** if:
 | Your situation | Best first choice | Why |
 |---|---|---|
 | Unsure / general question | **Hybrid** | Balanced, robust results |
-| Needs exact codes/IDs | **Hybrid** or **Keyword** | Exact terms matter |
+| Needs exact codes/IDs or names | **Hybrid** or **Keyword** | Exact terms matter |
 | Conceptual, long questions | **Semantic** | Paraphrase-friendly |
 | Strict phrase search | **Keyword** | Literal matching |
 
@@ -94,7 +95,7 @@ Pick **Keyword** if:
 **A:** No—results are kept diverse, so you see the best from multiple documents.
 
 **Q: I typed a short query and got “smart” but not exact answers.**  
-**A:** Add one or two precise tokens (e.g., a setting or error code). Hybrid will boost exact matches.
+**A:** Add one or two precise tokens (e.g., a name, acronym, or error code). Hybrid will boost exact matches.
 
 **Q: Does Hybrid work everywhere?**  
 **A:** Yes. If keyword search isn’t available in your current backend, it seamlessly falls back to semantic results.
@@ -107,4 +108,4 @@ Pick **Keyword** if:
 - Switch to **Semantic** for speed and open-ended questions.
 - Switch to **Keyword** for strict, exact matches.
 
-Hybrid makes it easy to start broad and still catch the exact needles in your haystack.
+Hybrid makes it easy to start broad, stay precise on critical tokens or names, and avoid semantic drift into irrelevant but related documents.

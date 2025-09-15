@@ -30,10 +30,10 @@ Create **three** clients:
 > - `agentic` → **KEYCLOAK_AGENTIC_CLIENT_SECRET**
 > - `knowledge-flow` → **KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET** (only needed if KF calls others)
 
-### 1.3 Realm Roles (used by KF RBAC)
-Create **realm roles** (not client roles):
+### 1.3 Roles (used by KF RBAC)
+Create **client roles** for `app` client (not realm roles):
 
-| Realm Role       | Assigned To                 | Grants in KF (`RBACProvider`) |
+| Role       | Assigned To                 | Grants in KF (`RBACProvider`) |
 |---               |---                          |---|
 | `admin`          | Admin users                 | All actions on all resources |
 | `editor`         | Power users / curators      | CRUD on most KF resources + limited Agentic actions |
@@ -180,7 +180,7 @@ curl -v \
 
 ## 5) RBAC 
 
-The `RBACProvider` maps realm roles to resources:
+The `RBACProvider` maps roles to resources:
 
 ```python
 "admin":  { resource: ALL for resource in Resource },
@@ -218,7 +218,7 @@ Authorization denied: user=<uid> roles=<[]> action=read resource=documents
 
 ## 7) Troubleshooting
 
-- **`roles=[]` on service token** → you created a client role instead of realm role, or `roles` scope missing on `agentic`.
+- **`roles=[]` on service token** → you created a realm role instead of client role, or `roles` scope missing on `agentic`.
 - **User token has no roles** → user not in group/role, or `roles` scope missing on `app`.
 - **307 → 401** on MCP base → wrong trailing slash or ingress redirect; base **must end with `/`**.
 - **`aud` denied** (strict mode) → add Audience mapper for `knowledge-flow`.
