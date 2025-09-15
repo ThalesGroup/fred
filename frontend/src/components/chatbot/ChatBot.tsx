@@ -18,7 +18,6 @@ import { useTranslation } from "react-i18next";
 import { v4 as uuidv4 } from "uuid";
 import { getConfig } from "../../common/config.tsx";
 import DotsLoader from "../../common/DotsLoader.tsx";
-import { usePostTranscribeAudioMutation } from "../../frugalit/slices/api.tsx";
 import { KeyCloakService } from "../../security/KeycloakService.ts";
 import {
   AgenticFlow,
@@ -47,9 +46,9 @@ export interface ChatBotError {
   content: string;
 }
 
-interface TranscriptionResponse {
-  text?: string;
-}
+// interface TranscriptionResponse {
+//   text?: string;
+// }
 
 export interface ChatBotProps {
   currentChatBotSession: SessionSchema;
@@ -90,7 +89,7 @@ const ChatBot = ({
 
   const { showInfo, showError } = useToast();
   const webSocketRef = useRef<WebSocket | null>(null);
-  const [postTranscribeAudio] = usePostTranscribeAudioMutation();
+  // const [postTranscribeAudio] = usePostTranscribeAudioMutation();
   const [webSocket, setWebSocket] = useState<WebSocket | null>(null);
   const wsTokenRef = useRef<string | null>(null);
 
@@ -426,17 +425,17 @@ const ChatBot = ({
 
     if (content.text) {
       queryChatBot(content.text.trim(), undefined, runtimeContext);
-    } else if (content.audio) {
-      setWaitResponse(true);
-      const audioFile: File = new File([content.audio], "audio.mp3", { type: content.audio.type });
-      postTranscribeAudio({ file: audioFile }).then((response) => {
-        if (response.data) {
-          const message: TranscriptionResponse = response.data as TranscriptionResponse;
-          if (message.text) {
-            queryChatBot(message.text, undefined, runtimeContext);
-          }
-        }
-      });
+    // } else if (content.audio) {
+    //   setWaitResponse(true);
+    //   const audioFile: File = new File([content.audio], "audio.mp3", { type: content.audio.type });
+    //   postTranscribeAudio({ file: audioFile }).then((response) => {
+    //     if (response.data) {
+    //       const message: TranscriptionResponse = response.data as TranscriptionResponse;
+    //       if (message.text) {
+    //         queryChatBot(message.text, undefined, runtimeContext);
+    //       }
+    //     }
+    //   });
     } else {
       console.warn("No content to send.");
     }

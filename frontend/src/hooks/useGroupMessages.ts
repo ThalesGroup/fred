@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { ChatMessage, AgenticFlow } from "../slices/agentic/agenticOpenApi";
+import { ChatMessage } from "../slices/agentic/agenticOpenApi";
 import { getExtras } from "../components/chatbot/ChatBotUtils";
 
 // A structured representation of a single conversation turn (one user message + responses)

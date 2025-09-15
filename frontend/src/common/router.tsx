@@ -13,33 +13,14 @@
 // limitations under the License.
 
 import { createBrowserRouter, RouteObject } from "react-router-dom";
-import { Chat } from "../pages/Chat";
 import { Profile } from "../pages/Profile";
-import { ExplainWorkload } from "../frugalit/pages/ExplainWorkload";
 import { PageError } from "../pages/PageError";
-import { Scores } from "../pages/Scores";
-import { ExplainNamespace } from "../frugalit/pages/ExplainNamespace";
-import { ExplainCluster } from "../frugalit/pages/ExplainCluster";
-import { FactsWorkload } from "../frugalit/pages/FactsWorkload";
-import { FactsCluster } from "../frugalit/pages/FactsCluster";
-import { FactsNamespace } from "../frugalit/pages/FactsNamespace";
 import { KnowledgeHub } from "../pages/KnowledgeHub";
 import { AgentHub } from "../pages/AgentHub";
-import { Optimize } from "../frugalit/pages/Optimize";
-import { Geomap } from "../warfare/pages/TheaterOfOperations";
 import { ProtectedRoute } from "../components/ProtectedRoute";
-import { FootprintContextProvider } from "../app/FootprintContextProvider";
-import { ExplainContextProvider } from "../app/ExplainContextProvider";
-import { FeatureFlagKey, isFeatureEnabled } from "./config";
 import { LayoutWithSidebar } from "../app/LayoutWithSidebar";
-import { Explain } from "../frugalit/pages/Explain";
-import { Facts } from "../frugalit/pages/Facts";
-import { Audit } from "../pages/Audit";
-import { FrugalIt } from "../pages/FrugalIt";
-import Inspect from "../frugalit/pages/Inspect";
 import { Monitoring } from "../pages/Monitoring";
-import { K8ApplicationContextProvider } from "../app/K8ApplicationContextProvider";
-import ChatPOC from "../pages/ChatPoc";
+import Chat from "../pages/Chat";
 
 const RootLayout = ({ children }: React.PropsWithChildren<{}>) => (
   <ProtectedRoute permission="viewer">
@@ -54,124 +35,11 @@ export const routes: RouteObject[] = [
     children: [
       {
         index: true,
-        element: isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES) ? (
-          <K8ApplicationContextProvider>
-            <FootprintContextProvider>
-              <FrugalIt />
-            </FootprintContextProvider>
-          </K8ApplicationContextProvider>
-        ) : (
-          <ChatPOC />
-        ),
-      },
-
-      isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES) && {
-        path: "score/:cluster/:namespace/:application",
-        element: (
-          <K8ApplicationContextProvider>
-            <Scores />
-          </K8ApplicationContextProvider>
-        ),
-      },
-      isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES) && {
-        path: "audit",
-        element: (
-          <K8ApplicationContextProvider>
-            <Audit />
-          </K8ApplicationContextProvider>
-        ),
-      },
-      isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES) && {
-        path: "facts",
-        element: (
-          <K8ApplicationContextProvider>
-            <Facts />
-          </K8ApplicationContextProvider>
-        ),
-      },
-      isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES) && {
-        path: "facts-workload",
-        element: (
-          <K8ApplicationContextProvider>
-            <FactsWorkload />
-          </K8ApplicationContextProvider>
-        ),
-      },
-      isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES) && {
-        path: "facts-cluster",
-        element: (
-          <K8ApplicationContextProvider>
-            <FactsCluster />
-          </K8ApplicationContextProvider>
-        ),
-      },
-      isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES) && {
-        path: "facts-namespace",
-        element: (
-          <K8ApplicationContextProvider>
-            <FactsNamespace />
-          </K8ApplicationContextProvider>
-        ),
-      },
-      isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES) && {
-        path: "explain",
-        element: (
-          <K8ApplicationContextProvider>
-            <Explain />
-          </K8ApplicationContextProvider>
-        ),
-      },
-      isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES) && {
-        path: "explain-cluster",
-        element: (
-          <K8ApplicationContextProvider>
-            <ExplainCluster />
-          </K8ApplicationContextProvider>
-        ),
-      },
-      isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES) && {
-        path: "explain-namespace",
-        element: (
-          <K8ApplicationContextProvider>
-            <ExplainNamespace />
-          </K8ApplicationContextProvider>
-        ),
-      },
-      isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES) && {
-        path: "explain-workload",
-        element: (
-          <K8ApplicationContextProvider>
-            <ExplainContextProvider>
-              <ExplainWorkload />
-            </ExplainContextProvider>
-          </K8ApplicationContextProvider>
-        ),
-      },
-      isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES) && {
-        path: "optimize",
-        element: (
-          <K8ApplicationContextProvider>
-            <Optimize />
-          </K8ApplicationContextProvider>
-        ),
-      },
-      isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES) && {
-        path: "inspect",
-        element: (
-          <K8ApplicationContextProvider>
-            <FootprintContextProvider>
-              <Inspect />
-            </FootprintContextProvider>
-          </K8ApplicationContextProvider>
-        ),
-      },
-      isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES) && {
-        path: "geomap",
-        element: <Geomap />,
+        element: <Chat />
       },
       {
         path: "chat",
-        element: <ChatPOC />,
+        element: <Chat />,
       },
       {
         path: "monitoring",
@@ -200,23 +68,6 @@ export const routes: RouteObject[] = [
       </RootLayout>
     ),
   },
-  // {
-  //   path: "/documentLibrary/:libraryId",
-  //   element: (
-  //     <RootLayout>
-  //       <DocumentLibraryViewPage />
-  //     </RootLayout>
-  //   ),
-  // },
-  // {
-  //   path: "/promptLibrary/:libraryId",
-  //   element: (
-  //     <RootLayout>
-  //       <PromptLibraryViewPage />
-  //     </RootLayout>
-  //   ),
-  // },
-
   {
     path: "*",
     element: (

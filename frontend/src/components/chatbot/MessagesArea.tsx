@@ -108,7 +108,7 @@ function Area({ messages, agenticFlows, currentAgenticFlow }: Props) {
             side="right"
             enableCopy
             enableThumbs
-            enableAudio
+            // enableAudio
           />,
         );
       }
@@ -161,7 +161,7 @@ function Area({ messages, agenticFlows, currentAgenticFlow }: Props) {
               side={msg.role === "user" ? "right" : "left"}
               enableCopy
               enableThumbs
-              enableAudio
+              //  enableAudio
               // Hook up hover/click from inline [n] markers to highlight Sources
               onCitationHover={(uid) => setHighlightUid(uid)}
               onCitationClick={(uid) => setHighlightUid(uid)}
@@ -198,7 +198,7 @@ function Area({ messages, agenticFlows, currentAgenticFlow }: Props) {
             side="left"
             enableCopy
             enableThumbs
-            enableAudio
+            // enableAudio
             // Keep text; MessageCard → CustomMarkdownRenderer renders it robustly
             suppressText={false}
             onCitationHover={(uid) => setHighlightUid(uid)}
