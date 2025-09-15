@@ -1,12 +1,28 @@
+# Copyright Thales 2025
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from __future__ import annotations
 from typing import Dict, List, Sequence, Tuple, cast
 import re
+import logging
 
 from langchain.schema.document import Document
 
 from app.core.stores.vector.base_vector_store import AnnHit, BaseVectorStore, LexicalHit, LexicalSearchable, SearchFilter
 from app.features.vector_search.vector_search_structures import HybridPolicy
 
+logger = logging.getLogger(__name__)
 
 # ---------- lightweight helpers (general-purpose) ----------
 
@@ -58,16 +74,6 @@ def _has_all_names_in_doc(doc: Document, names: List[str]) -> bool:
 
 
 class HybridRetriever:
-    """
-    Fred — Hybrid Retriever (default).
-    Rationale:
-      - Fuse ANN (semantic) with BM25 (lexical) via RRF.
-      - Gate weak hits; de-duplicate per document to avoid many slices.
-      - If the vector store has no lexical capability, gracefully fall back to Semantic.
-      - NEW: If the query contains proper names, require name evidence in candidates
-        to prevent semantically-near but irrelevant noise (e.g., OECD policy PDFs).
-    """
-
     def __init__(self, vs: BaseVectorStore) -> None:
         self.vs: BaseVectorStore = vs
 
@@ -78,18 +84,22 @@ class HybridRetriever:
         scoped_document_ids: Sequence[str],
         policy: HybridPolicy,
     ) -> List[Tuple[Document, float]]:
+        logger.info("Starting search with query: '%s'", query)
         if not scoped_document_ids:
+            logger.info("No scoped documents provided, returning empty list")
             return []
 
         sf = SearchFilter(tag_ids=scoped_document_ids)
-
-        # --- Detect proper names once for the whole query (no specialization) ---
         names = _names_from_query(query)
+        logger.info("Detected proper names from query: %s", names)
 
-        # 1) ANN branch (with gate)
+        # 1) ANN branch
         ann_hits: List[AnnHit] = self.vs.ann_search(query, k=policy.fetch_k_ann, search_filter=sf)
+        logger.info("ANN hits returned: %s", len(ann_hits))
         ann_hits = [h for h in ann_hits if h.score >= policy.vector_min_cosine]
+        logger.info("ANN hits after filtering by min cosine (%s): %s", policy.vector_min_cosine, len(ann_hits))
         if not ann_hits:
+            logger.info("No ANN hits above threshold, returning empty list")
             return []
 
         ann_rank: Dict[str, int] = {}
@@ -98,27 +108,32 @@ class HybridRetriever:
             d, s = h.document, h.score
             chunk_id = d.metadata.get("chunk_uid") or d.metadata.get("_id")
             if not isinstance(chunk_id, str) or not chunk_id:
+                logger.info("Skipping ANN hit with invalid chunk_id: %s", chunk_id)
                 continue
             prev = ann_rank.get(chunk_id)
             ann_rank[chunk_id] = r if prev is None else min(prev, r)
             ann_map[chunk_id] = (d, s)
 
-        # 2) BM25 branch (with gate) — only if store supports lexical
+        logger.info("ANN ranking completed: %s items", len(ann_rank))
+
+        # 2) BM25 branch
         bm25_rank: Dict[str, int] = {}
         if isinstance(self.vs, LexicalSearchable):
             vs_lex = cast(LexicalSearchable, self.vs)
             bm25_hits: List[LexicalHit] = vs_lex.lexical_search(
                 query, k=policy.fetch_k_bm25, search_filter=sf, operator_and=True
             )
+            logger.info("BM25 hits returned: %s", len(bm25_hits))
             bm25_hits = [h for h in bm25_hits if h.score >= policy.bm25_min_score]
             bm25_rank = {h.chunk_id: r for r, h in enumerate(bm25_hits, start=1)}
+            logger.info("BM25 hits after filtering by min score (%s): %s", policy.bm25_min_score, len(bm25_hits))
 
         if not ann_rank and not bm25_rank:
+            logger.info("No ANN or BM25 hits, returning empty list")
             return []
 
-        # 3) RRF fusion (ANN always contributes; BM25 contributes when present)
+        # 3) RRF fusion
         fused: Dict[str, float] = {}
-
         def add_rrf(rank_map: Dict[str, int]) -> None:
             for cid, r in rank_map.items():
                 fused[cid] = fused.get(cid, 0.0) + 1.0 / (policy.rrf_k + r)
@@ -126,6 +141,7 @@ class HybridRetriever:
         add_rrf(ann_rank)
         if bm25_rank:
             add_rrf(bm25_rank)
+        logger.info("Fused scores computed for %s chunks", len(fused))
 
         # 4) Sort by fused desc; tie-break with ANN cosine desc when present
         ordered_ids = sorted(
@@ -133,38 +149,47 @@ class HybridRetriever:
             key=lambda kv: (kv[1], ann_map.get(kv[0], (None, -1.0))[1]),
             reverse=True,
         )
+        logger.info("Chunks ordered by fused score")
 
-        # 5) De-dup per document_uid; return top k_final as (Document, ann_cosine)
+        # 5) De-dup, apply name gate
         out: List[Tuple[Document, float]] = []
         seen_docs: set[str] = set()
-
-        def _doc_uid(md: dict) -> str | None:
-            uid = md.get("document_uid")
-            return uid if isinstance(uid, str) and uid else None
-
-        # --- Name-evidence gate parameters (policy-configurable with sane defaults) ---
-        semantic_override = getattr(policy, "name_gate_semantic_override", 0.82)  # 0..1 cosine
+        semantic_override = getattr(policy, "name_gate_semantic_override", 0.82)
         enable_name_gate = getattr(policy, "enable_name_gate", True)
+
+        skip_counts = {
+            "not_in_ann_map": 0,
+            "name_gate": 0,
+            "mmr_dup": 0,
+        }
 
         for cid, _ in ordered_ids:
             if cid not in ann_map:
+                skip_counts["not_in_ann_map"] += 1
                 continue
             d, ann_cos = ann_map[cid]
 
-            # NEW: Drop candidates that don't mention all proper names (if any detected),
-            #      unless semantic confidence is very high.
             if enable_name_gate and names:
                 if not _has_all_names_in_doc(d, names) and ann_cos < semantic_override:
-                    continue  # blocks OECD-like noise
+                    skip_counts["name_gate"] += 1
+                    continue
 
-            uid = _doc_uid(d.metadata)
+            uid = d.metadata.get("document_uid")
             if policy.use_mmr:
                 if uid is None or uid in seen_docs:
+                    skip_counts["mmr_dup"] += 1
                     continue
                 seen_docs.add(uid)
 
             out.append((d, ann_cos))
             if len(out) >= policy.k_final:
+                logger.info("Reached k_final (%s), stopping", policy.k_final)
                 break
 
+        # Summary of skipped chunks
+        for reason, count in skip_counts.items():
+            if count > 0:
+                logger.info("Skipped %s chunks due to %s", count, reason)
+
+        logger.info("Search completed, returning %s documents", len(out))
         return out

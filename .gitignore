@@ -207,3 +207,6 @@ secrets/openai-api-key.sh
 # OpenAPI specs
 agentic_backend/openapi.json
 knowledge_flow_backend/openapi.json
+
+# Developer tools query results
+developer_tools/results/
