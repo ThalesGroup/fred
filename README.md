@@ -288,6 +288,12 @@ See `agentic_backend/config/configuration.yaml` (section `ai:`) for concrete exa
 
 We welcome pull requests and issues. Start with the [Contributing guide](./CONTRIBUTING.md).
 
+## Community
+
+Join the discussion on our [Discord server](https://discord.gg/F6qh4Bnk)!
+
+[![Join our Discord](https://img.shields.io/badge/chat-on%20Discord-7289da?logo=discord&logoColor=white)](https://discord.gg/F6qh4Bnk)
+
 ---
 
 ## License
