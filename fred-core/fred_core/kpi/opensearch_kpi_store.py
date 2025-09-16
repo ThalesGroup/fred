@@ -17,15 +17,16 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List, Optional
 
-from opensearchpy import OpenSearch, RequestsHttpConnection, OpenSearchException
+from opensearchpy import OpenSearch, OpenSearchException, RequestsHttpConnection
 
 from fred_core.kpi.base_kpi_store import BaseKPIStore
-from fred_core.kpi.kpi_writer_structures import KPIEvent
 from fred_core.kpi.kpi_reader_structures import (
     KPIQuery,
     KPIQueryResult,
     KPIQueryResultRow,
 )
+from fred_core.kpi.kpi_writer_structures import KPIEvent
+from fred_core.store.opensearch_mapping_validator import validate_index_mapping
 
 logger = logging.getLogger(__name__)
 
@@ -154,6 +155,8 @@ class OpenSearchKPIStore(BaseKPIStore):
                 logger.info(f"[KPI] created index '{self.index}'.")
             else:
                 logger.info(f"[KPI] index '{self.index}' already exists.")
+                # Validate existing mapping matches expected mapping
+                validate_index_mapping(self.client, self.index, KPI_INDEX_MAPPING)
         except OpenSearchException as e:
             logger.error(f"[KPI] ensure_ready failed: {e}")
             raise
