@@ -223,9 +223,11 @@ class HybridRetriever:
 
         # 3) RRF fusion (weighted)
         fused: Dict[str, float] = {}
+
         def add_rrf(rank_map: Dict[str, int], weight: float) -> None:
             for cid, rnk in rank_map.items():
                 fused[cid] = fused.get(cid, 0.0) + weight * (1.0 / (rrf_k + rnk))
+
         if ann_rank:
             add_rrf(ann_rank, w_ann)
         if bm25_rank:
