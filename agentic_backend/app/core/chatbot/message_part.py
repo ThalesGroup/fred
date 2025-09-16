@@ -10,16 +10,15 @@ from typing import Any, List, Optional
 from pydantic import ValidationError
 
 from app.core.chatbot.chat_schema import (
-    MessagePart,
-    TextPart,
+    ChatTokenUsage,
     CodePart,
+    FinishReason,
+    GeoPart,
     ImageUrlPart,
     LinkPart,
-    GeoPart,
-    ChatTokenUsage,
-    FinishReason,
+    MessagePart,
+    TextPart,
 )
-
 
 # -------------------------------------------------------------------
 # Content -> MessageParts

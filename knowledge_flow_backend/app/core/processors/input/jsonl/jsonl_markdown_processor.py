@@ -5,12 +5,13 @@
 # ...
 
 from __future__ import annotations
-import logging
-from pathlib import Path
-from typing import Dict, Optional, Any, Iterable
-import json
+
 import datetime
+import json
+import logging
 import re
+from pathlib import Path
+from typing import Any, Dict, Iterable, Optional
 
 from app.core.processors.input.common.base_input_processor import BaseMarkdownProcessor
 

@@ -10,20 +10,20 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from fred_core.store.duckdb_store import DuckDBTableStore
 from pydantic import TypeAdapter, ValidationError
 
 from app.common.utils import truncate_datetime
-from app.core.chatbot.metric_structures import MetricsBucket, MetricsResponse
 from app.core.chatbot.chat_schema import (
+    Channel,
     ChatMessage,
     ChatMetadata,
     ChatTokenUsage,
-    Role,
-    Channel,
     MessagePart,
+    Role,
 )
+from app.core.chatbot.metric_structures import MetricsBucket, MetricsResponse
 from app.core.monitoring.base_history_store import BaseHistoryStore
-from fred_core.store.duckdb_store import DuckDBTableStore
 
 logger = logging.getLogger(__name__)
 

@@ -12,16 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import logging
 from typing import List
+
 from fred_core.kpi.base_kpi_store import BaseKPIStore
-from fred_core.kpi.kpi_writer_structures import (
-    KPIEvent,
-)
 from fred_core.kpi.kpi_reader_structures import (
     KPIQuery,
     KPIQueryResult,
 )
-import logging
+from fred_core.kpi.kpi_writer_structures import (
+    KPIEvent,
+)
 
 
 class KpiLogStore(BaseKPIStore):

@@ -12,11 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import base64
+import json
 import logging
 import time
-import json
-import base64
-from typing import Optional, Dict, Any
+from typing import Any, Dict, Optional
+
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 

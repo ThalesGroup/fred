@@ -16,9 +16,11 @@
 
 import base64
 import logging
+
 import requests
-from app.core.processors.input.common.base_image_describer import BaseImageDescriber
+
 from app.config.embedding_openai_settings import EmbeddingOpenAISettings
+from app.core.processors.input.common.base_image_describer import BaseImageDescriber
 
 logger = logging.getLogger(__name__)
 

@@ -12,10 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from fred_core import BaseModelWithId
-from pydantic import Field
 from datetime import datetime
 from typing import Optional
+
+from fred_core import BaseModelWithId
+from pydantic import Field
 
 
 class FeedbackRecord(BaseModelWithId):

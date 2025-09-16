@@ -15,8 +15,9 @@
 from datetime import datetime
 from enum import Enum
 from typing import Optional
-from pydantic import BaseModel, field_validator
+
 from fred_core import BaseModelWithId
+from pydantic import BaseModel, field_validator
 
 
 class TagType(str, Enum):

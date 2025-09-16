@@ -16,8 +16,8 @@ import logging
 from pathlib import Path
 from typing import List, Tuple
 
-import pandas as pd
 import duckdb
+import pandas as pd
 
 logger = logging.getLogger(__name__)
 

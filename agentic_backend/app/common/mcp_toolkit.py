@@ -54,6 +54,7 @@ model = model.bind_tools(tools)
 ```
 """
 
+import logging
 from typing import List, override
 
 from langchain_core.tools import BaseTool, BaseToolkit
@@ -62,8 +63,6 @@ from pydantic import Field
 
 from app.core.agents.context_aware_tool import ContextAwareTool
 from app.core.agents.runtime_context import RuntimeContextProvider
-
-import logging
 
 logger = logging.getLogger(__name__)
 

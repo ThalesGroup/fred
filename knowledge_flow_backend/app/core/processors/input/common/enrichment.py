@@ -1,5 +1,6 @@
 # app/core/processors/input/common/enrichment.py
 from __future__ import annotations
+
 from datetime import datetime
 from typing import Any, Dict, Optional
 

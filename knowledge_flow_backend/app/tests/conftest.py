@@ -1,35 +1,35 @@
 # app/tests/conftest.py
 
-from pydantic import AnyHttpUrl, AnyUrl
 import pytest
 from fastapi.testclient import TestClient
+from fred_core import (
+    DuckdbStoreConfig,
+    M2MSecurity,
+    OpenSearchStoreConfig,
+    PostgresStoreConfig,
+    SecurityConfiguration,
+    UserSecurity,
+)
 from langchain_community.embeddings import FakeEmbeddings
+from pydantic import AnyHttpUrl, AnyUrl
 
 from app.application_context import ApplicationContext
-from app.main import create_app
 from app.common.structures import (
     AppConfig,
     Configuration,
     EmbeddingConfig,
     EmbeddingProvider,
-    LocalContentStorageConfig,
-    StorageConfig,
-    PushSourceConfig,
-    ProcessorConfig,
-    SchedulerConfig,
-    TemporalSchedulerConfig,
     InMemoryVectorStorage,
+    LocalContentStorageConfig,
+    ProcessorConfig,
+    PushSourceConfig,
+    SchedulerConfig,
+    StorageConfig,
+    TemporalSchedulerConfig,
 )
 from app.core.processors.output.vectorization_processor.embedder import Embedder
-from app.tests.test_utils.test_processors import TestOutputProcessor, TestMarkdownProcessor, TestTabularProcessor
-from fred_core import (
-    DuckdbStoreConfig,
-    PostgresStoreConfig,
-    OpenSearchStoreConfig,
-    SecurityConfiguration,
-    M2MSecurity,
-    UserSecurity,
-)
+from app.main import create_app
+from app.tests.test_utils.test_processors import TestMarkdownProcessor, TestOutputProcessor, TestTabularProcessor
 
 
 @pytest.fixture(scope="function", autouse=True)

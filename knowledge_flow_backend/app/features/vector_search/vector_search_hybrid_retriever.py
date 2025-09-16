@@ -20,10 +20,12 @@
 # - Explainability: each scoring component is logged (dev-mode) and can be surfaced in UI.
 
 from __future__ import annotations
-from typing import Dict, List, Sequence, Tuple, cast
+
 import logging
 import re
 import time
+from typing import Dict, List, Sequence, Tuple, cast
+
 from langchain.schema.document import Document
 
 from app.core.stores.vector.base_vector_store import AnnHit, BaseVectorStore, LexicalHit, LexicalSearchable, SearchFilter
