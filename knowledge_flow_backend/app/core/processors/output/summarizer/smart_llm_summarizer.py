@@ -195,8 +195,8 @@ class SmartDocSummarizer(BaseDocSummarizer):
                         max_words=int(self.opts["mr_shard_words"]),
                     )
                 )
-            except Exception:
-                pass
+            except Exception as e:
+                raise e
 
         if not shard_summaries:
             return "", []
@@ -209,8 +209,8 @@ class SmartDocSummarizer(BaseDocSummarizer):
         final_abs = ""
         try:
             final_abs = self._summarizer.summarize_abstract(concat, max_words=int(self.opts["sum_abs_words"]))
-        except Exception:
-            pass
+        except Exception as e:
+            raise e
 
         # Keywords: use full text if smallish, else use reduced concat to stay bounded
         kw_source = text if len(text) <= int(self.opts["sum_input_cap"]) else concat
@@ -221,8 +221,8 @@ class SmartDocSummarizer(BaseDocSummarizer):
                 top_k=int(self.opts["sum_kw_top_k"]),
                 vocab_hint=None,
             )
-        except Exception:
-            pass
+        except Exception as e:
+            raise e
 
         return final_abs, kws
 
