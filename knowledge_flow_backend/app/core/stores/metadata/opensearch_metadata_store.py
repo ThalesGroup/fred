@@ -3,7 +3,7 @@
 import logging
 from typing import Any, Dict, List, Optional
 
-from fred_core.store.opensearch_mapping_validator import validate_index_mapping
+from fred_core import validate_index_mapping
 from opensearchpy import OpenSearch, OpenSearchException, RequestsHttpConnection
 from pydantic import ValidationError
 

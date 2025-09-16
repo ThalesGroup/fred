@@ -15,8 +15,7 @@
 import logging
 from typing import List, Optional
 
-from fred_core import KeycloakUser, ThreadSafeLRUCache
-from fred_core.store.opensearch_mapping_validator import validate_index_mapping
+from fred_core import KeycloakUser, ThreadSafeLRUCache, validate_index_mapping
 from opensearchpy import ConflictError, NotFoundError, OpenSearch, RequestsHttpConnection
 
 from app.core.stores.tags.base_tag_store import BaseTagStore, TagAlreadyExistsError, TagNotFoundError

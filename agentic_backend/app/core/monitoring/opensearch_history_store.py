@@ -8,8 +8,7 @@ from datetime import datetime, timezone
 from statistics import mean
 from typing import Any, Dict, List, Optional
 
-from fred_core import ThreadSafeLRUCache
-from fred_core.store.opensearch_mapping_validator import validate_index_mapping
+from fred_core import ThreadSafeLRUCache, validate_index_mapping
 from opensearchpy import OpenSearch, RequestsHttpConnection
 
 from app.common.utils import truncate_datetime

@@ -1,8 +1,7 @@
 import logging
 from typing import List
 
-from fred_core import ThreadSafeLRUCache
-from fred_core.store.opensearch_mapping_validator import validate_index_mapping
+from fred_core import ThreadSafeLRUCache, validate_index_mapping
 from opensearchpy import ConflictError, NotFoundError, OpenSearch, RequestsHttpConnection
 
 from app.core.stores.resources.base_resource_store import (

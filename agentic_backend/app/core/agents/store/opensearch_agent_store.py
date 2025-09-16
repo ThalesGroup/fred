@@ -16,7 +16,7 @@
 import logging
 from typing import List, Optional
 
-from fred_core.store.opensearch_mapping_validator import validate_index_mapping
+from fred_core import validate_index_mapping
 from opensearchpy import NotFoundError, OpenSearch, RequestsHttpConnection
 
 from app.common.structures import AgentSettings
