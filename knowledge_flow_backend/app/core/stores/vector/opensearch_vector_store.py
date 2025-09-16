@@ -139,13 +139,14 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
 
     # ---------- BaseVectorStore: ANN (semantic) ----------
 
+    # --- ann_search: keep passing the list directly to boolean_filter ---
     def ann_search(self, query: str, *, k: int, search_filter: Optional[SearchFilter] = None) -> List[AnnHit]:
         """
         ANN (semantic) search honoring library/document filters.
         Returns hydrated Documents with cosine similarity scores.
         """
-        boolean_filter = self._to_filter_clause(search_filter)
-        kwargs: Dict = {"boolean_filter": boolean_filter} if boolean_filter else {}
+        filters = self._to_filter_clause(search_filter)  # now List[Dict] | None
+        kwargs: Dict = {"boolean_filter": filters} if filters else {}
 
         pairs = self._lc.similarity_search_with_score(query, k=k, **kwargs)
 
@@ -157,7 +158,6 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
             cid = doc.metadata.get(CHUNK_ID_FIELD) or doc.metadata.get("_id")
             if cid and CHUNK_ID_FIELD not in doc.metadata:
                 doc.metadata[CHUNK_ID_FIELD] = cid
-            # enrich for UI/telemetry
             doc.metadata["score"] = score
             doc.metadata["rank"] = rank
             doc.metadata["retrieved_at"] = now_iso
@@ -181,13 +181,13 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
         """
         BM25 search with same filter semantics; returns (chunk_id, score) only.
         """
-        f = self._to_filter_clause(search_filter)
+        filters = self._to_filter_clause(search_filter)  # List[Dict] | None
         body = {
             "size": k,
             "query": {
                 "bool": {
                     "must": [{"match": {"text": {"query": query, "operator": "AND" if operator_and else "OR"}}}],
-                    "filter": f["bool"]["filter"] if f else [],
+                    "filter": filters or [],
                 }
             },
             "_source": False,
@@ -208,14 +208,14 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
         Returns matching chunk ids.
         """
         should = [{"match_phrase": {field: {"query": phrase}}} for field in fields]
-        f = self._to_filter_clause(search_filter)
+        filters = self._to_filter_clause(search_filter)  # List[Dict] | None
         body = {
             "size": k,
             "query": {
                 "bool": {
                     "should": should,
                     "minimum_should_match": 1,
-                    "filter": f["bool"]["filter"] if f else [],
+                    "filter": filters or [],
                 }
             },
             "_source": False,
@@ -247,7 +247,14 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
             )
         logger.info("✅ Vector dimension check passed: model %r outputs %s", model_name, expected_dim)
 
-    def _to_filter_clause(self, f: Optional[SearchFilter]) -> Optional[Dict]:
+    # --- helper: return a flat list of term filters (or None) ---
+    def _to_filter_clause(self, f: Optional[SearchFilter]) -> Optional[List[Dict]]:
+        """
+        Fred rationale:
+        - LangChain's OpenSearchVectorSearch expects `boolean_filter` to be a LIST of filters.
+        - Our raw OS queries also expect that list under `bool.filter`.
+        - Returning a dict with `bool.filter` here causes double nesting upstream.
+        """
         if not f:
             return None
         filters: List[Dict] = []
@@ -256,4 +263,4 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
         if f.metadata_terms:
             for field, values in f.metadata_terms.items():
                 filters.append({"terms": {f"metadata.{field}": list(values)}})
-        return {"bool": {"filter": filters}} if filters else None
+        return filters or None
