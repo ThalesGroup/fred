@@ -14,10 +14,13 @@
 
 import logging
 from typing import List
+
+from fred_core import ThreadSafeLRUCache
+from fred_core.store.opensearch_mapping_validator import validate_index_mapping
 from opensearchpy import NotFoundError, OpenSearch, RequestsHttpConnection
+
 from app.core.chatbot.chat_schema import SessionSchema
 from app.core.session.stores.base_session_store import BaseSessionStore
-from fred_core import ThreadSafeLRUCache
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +71,8 @@ class OpensearchSessionStore(BaseSessionStore):
             logger.info(f"OpenSearch index '{index}' created with mapping.")
         else:
             logger.info(f"OpenSearch index '{index}' already exists.")
+            # Validate existing mapping matches expected mapping
+            validate_index_mapping(self.client, index, MAPPING)
 
     def save(self, session: SessionSchema) -> None:
         try:

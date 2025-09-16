@@ -8,6 +8,8 @@ from datetime import datetime, timezone
 from statistics import mean
 from typing import Any, Dict, List, Optional
 
+from fred_core import ThreadSafeLRUCache
+from fred_core.store.opensearch_mapping_validator import validate_index_mapping
 from opensearchpy import OpenSearch, RequestsHttpConnection
 
 from app.common.utils import truncate_datetime
@@ -18,8 +20,6 @@ from app.core.chatbot.chat_schema import (
 )
 from app.core.chatbot.metric_structures import MetricsBucket, MetricsResponse
 from app.core.monitoring.base_history_store import BaseHistoryStore
-from fred_core import ThreadSafeLRUCache
-
 
 logger = logging.getLogger(__name__)
 
@@ -177,6 +177,9 @@ class OpensearchHistoryStore(BaseHistoryStore):
                     )
             except Exception as e:
                 logger.warning("Could not update mapping on index '%s': %s", index, e)
+
+            # Validate existing mapping matches expected mapping
+            validate_index_mapping(self.client, index, MAPPING)
 
     # ----------------------------------------------------------------------
     # Persistence

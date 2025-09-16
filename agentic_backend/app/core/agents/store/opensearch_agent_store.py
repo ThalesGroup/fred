@@ -16,7 +16,8 @@
 import logging
 from typing import List, Optional
 
-from opensearchpy import OpenSearch, NotFoundError, RequestsHttpConnection
+from fred_core.store.opensearch_mapping_validator import validate_index_mapping
+from opensearchpy import NotFoundError, OpenSearch, RequestsHttpConnection
 
 from app.common.structures import AgentSettings
 from app.core.agents.store.base_agent_store import BaseAgentStore
@@ -76,6 +77,8 @@ class OpenSearchAgentStore(BaseAgentStore):
             logger.info(
                 f"[AGENTS] OpenSearch index '{self.index_name}' already exists."
             )
+            # Validate existing mapping matches expected mapping
+            validate_index_mapping(self.client, self.index_name, AGENTS_INDEX_MAPPING)
 
     def save(self, settings: AgentSettings) -> None:
         try:
