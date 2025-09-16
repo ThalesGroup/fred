@@ -1,23 +1,24 @@
 # app/core/stores/metadata/opensearch_metadata_store.py
 
 import logging
-from typing import List, Optional, Dict, Any
+from typing import Any, Dict, List, Optional
 
-from opensearchpy import OpenSearch, RequestsHttpConnection, OpenSearchException
+from fred_core.store.opensearch_mapping_validator import validate_index_mapping
+from opensearchpy import OpenSearch, OpenSearchException, RequestsHttpConnection
 from pydantic import ValidationError
 
 from app.common.document_structures import (
-    DocumentMetadata,
-    Identity,
-    SourceInfo,
-    FileInfo,
-    Tagging,
     AccessInfo,
+    DocumentMetadata,
+    FileInfo,
+    FileType,
+    Identity,
     Processing,
     ProcessingStage,
     ProcessingStatus,
+    SourceInfo,
     SourceType,
-    FileType,
+    Tagging,
 )
 from app.core.stores.metadata.base_metadata_store import (
     BaseMetadataStore,
@@ -99,6 +100,8 @@ class OpenSearchMetadataStore(BaseMetadataStore):
             logger.info(f"OpenSearch index '{index}' created.")
         else:
             logger.info(f"OpenSearch index '{index}' already exists.")
+            # Validate existing mapping matches expected mapping
+            validate_index_mapping(self.client, self.metadata_index_name, METADATA_INDEX_MAPPING)
 
     # ---------- (de)serialization ----------
 
