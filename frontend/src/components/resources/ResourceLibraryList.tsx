@@ -277,7 +277,7 @@ export default function ResourceLibraryList({ kind }: Props) {
         {/* Search */}
         <TextField
           size="small"
-          placeholder={t("resourceLibrary.searchPlaceholder", {typeOne}) || "Search resources…"}
+          placeholder={t("resourceLibrary.searchPlaceholder", { typeOne }) || "Search resources…"}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           sx={{ minWidth: 260 }}
@@ -387,7 +387,7 @@ export default function ResourceLibraryList({ kind }: Props) {
           }}
         />
       )}
-       {kind === "prompt" && (
+      {kind === "prompt" && (
         <PromptEditorModal
           isOpen={openCreateResource}
           onClose={() => setOpenCreateResource(false)}
@@ -414,7 +414,6 @@ export default function ResourceLibraryList({ kind }: Props) {
 
       {/* Preview modal */}
       <ResourcePreviewModal open={!!previewing} resource={previewing} onClose={() => setPreviewing(null)} />
-
       {/* Edit modals (pass-through YAML if present) */}
       {editing &&
         (kind === "template" ? (
@@ -437,7 +436,7 @@ export default function ResourceLibraryList({ kind }: Props) {
               await Promise.all([refetchTags(), refetchResources()]);
             }}
           />
-        ) : (
+        ) : kind === "prompt" ? (
           <PromptEditorModal
             isOpen={!!editing}
             onClose={() => setEditing(null)}
@@ -459,7 +458,28 @@ export default function ResourceLibraryList({ kind }: Props) {
               await Promise.all([refetchTags(), refetchResources()]);
             }}
           />
-        ))}
+        ) : kind === "profile" ? (
+          <ProfileEditorModal
+            isOpen={!!editing}
+            onClose={() => setEditing(null)}
+            initial={{
+              name: editing.name ?? "",
+              description: editing.description ?? "",
+              yaml: editing.content, // on laisse passer le YAML existant si présent
+              labels: (editing as any)?.labels ?? [],
+            }}
+            onSave={async (payload) => {
+              await updateResource(editing.id, {
+                content: payload.content,
+                name: payload.name,
+                description: payload.description,
+                labels: payload.labels,
+              });
+              setEditing(null);
+              await Promise.all([refetchTags(), refetchResources()]);
+            }}
+          />
+        ) : null)}
 
       {/* Import drawer */}
       <ResourceImportDrawer

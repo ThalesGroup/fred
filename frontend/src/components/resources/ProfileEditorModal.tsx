@@ -57,7 +57,6 @@ export const ProfileEditorModal: React.FC<ProfileEditorModalProps> = ({
   getSuggestion,
 }) => {
   const incomingDoc = useMemo(() => (initial as any)?.yaml ?? (initial as any)?.body ?? "", [initial]);
-  const isDocMode = useMemo(() => looksLikeYamlDoc(incomingDoc), [incomingDoc]);
 
   // ----- Simple mode form (create) -----
   const {
@@ -71,27 +70,41 @@ export const ProfileEditorModal: React.FC<ProfileEditorModalProps> = ({
     defaultValues: { name: "", description: "", body: "" },
   });
 
-  // ----- Doc mode state (edit header+body) -----
+  // ----- Doc mode state (kept but UI is simple-only now) -----
   const [headerText, setHeaderText] = useState<string>("");
   const [bodyText, setBodyText] = useState<string>("");
   const [headerError, setHeaderError] = useState<string | null>(null);
   const [suggesting, setSuggesting] = useState(false);
 
+  // Force simple UI; we still parse YAML to prefill simple fields if present.
+  const isDocMode = false;
+
   useEffect(() => {
     if (!isOpen) return;
 
-    if (isDocMode) {
+    if (looksLikeYamlDoc(incomingDoc)) {
       const { header, body } = splitFrontMatter(incomingDoc);
+      // Prefill simple form from YAML
+      reset({
+        name: (header as any)?.name ?? initial?.name ?? "",
+        description: (header as any)?.description ?? initial?.description ?? "",
+        body: body ?? "",
+      });
+      // Keep internal doc states in sync (not rendered)
       setHeaderText(yaml.dump(header).trim());
-      setBodyText(body);
+      setBodyText(body ?? "");
+      setHeaderError(null);
     } else {
       reset({
         name: initial?.name ?? "",
         description: initial?.description ?? "",
         body: incomingDoc || "",
       });
+      setHeaderText("");
+      setBodyText("");
+      setHeaderError(null);
     }
-  }, [isOpen, isDocMode, incomingDoc, initial?.name, initial?.description, reset]);
+  }, [isOpen, incomingDoc, initial?.name, initial?.description, reset]);
 
   const handleAIHelp = async () => {
     if (!getSuggestion) return;
@@ -99,11 +112,7 @@ export const ProfileEditorModal: React.FC<ProfileEditorModalProps> = ({
       setSuggesting(true);
       const suggestion = await getSuggestion();
       if (!suggestion) return;
-      if (isDocMode) {
-        setBodyText(suggestion);
-      } else {
-        setValue("body", suggestion);
-      }
+      setValue("body", suggestion);
     } catch (err) {
       console.error("AI profile suggestion failed", err);
     } finally {
@@ -132,8 +141,8 @@ export const ProfileEditorModal: React.FC<ProfileEditorModalProps> = ({
     onClose();
   };
 
+  // Kept for compatibility; not used in UI anymore.
   const onSubmitDoc = () => {
-    // Parse header YAML back to object
     let headerObj: Record<string, any>;
     try {
       headerObj = (yaml.load(headerText || "") as Record<string, any>) ?? {};
@@ -142,7 +151,6 @@ export const ProfileEditorModal: React.FC<ProfileEditorModalProps> = ({
       setHeaderError(e?.message || "Invalid YAML");
       return;
     }
-    // Ensure kind (UI safety; backend can still validate)
     if (!headerObj.kind) headerObj.kind = "profile";
 
     const content = buildFrontMatter(headerObj, bodyText);
@@ -159,90 +167,49 @@ export const ProfileEditorModal: React.FC<ProfileEditorModalProps> = ({
     <Dialog open={isOpen} onClose={onClose} fullWidth maxWidth="md">
       <DialogTitle>{initial ? "Edit Profile" : "Create Profile"}</DialogTitle>
 
-      {/* Render either simple or doc form */}
-      {isDocMode ? (
-        <>
-          <DialogContent>
-            <Stack spacing={3} mt={1}>
-              <TextField
-                label="Header (YAML)"
-                fullWidth
-                multiline
-                minRows={10}
-                value={headerText}
-                onChange={(e) => setHeaderText(e.target.value)}
-                error={!!headerError}
-                helperText={headerError || "Edit profile metadata (version, name, labels, schema, etc.)"}
-              />
-              <TextField
-                label="Body"
-                fullWidth
-                multiline
-                minRows={14}
-                value={bodyText}
-                onChange={(e) => setBodyText(e.target.value)}
-                helperText="Tip: use {placeholders} to define inputs."
-              />
-            </Stack>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={onClose} variant="outlined">Cancel</Button>
-            <Button
-              onClick={handleAIHelp}
-              variant="text"
-              disabled={!getSuggestion || suggesting}
-              startIcon={suggesting ? <CircularProgress size={16} /> : undefined}
-            >
-              Get Help from AI
-            </Button>
-            <Button onClick={onSubmitDoc} variant="contained">Save</Button>
-          </DialogActions>
-        </>
-      ) : (
-        <form onSubmit={handleSubmit(onSubmitSimple)}>
-          <DialogContent>
-            <Stack spacing={3} mt={1}>
-              <TextField
-                label="Profile Name"
-                fullWidth
-                {...register("name")}
-                error={!!errors.name}
-                helperText={errors.name?.message}
-              />
-              <TextField
-                label="Description (optional)"
-                fullWidth
-                {...register("description")}
-                error={!!errors.description}
-                helperText={errors.description?.message}
-              />
-              <TextField
-                label="Profile Body"
-                fullWidth
-                multiline
-                minRows={14}
-                {...register("body")}
-                error={!!errors.body}
-                helperText={errors.body?.message || "Tip: use {placeholders} to define inputs."}
-              />
-            </Stack>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={onClose} variant="outlined">Cancel</Button>
-            <Button
-              onClick={handleAIHelp}
-              variant="text"
-              disabled={!getSuggestion || suggesting}
-              startIcon={suggesting ? <CircularProgress size={16} /> : undefined}
-            >
-              Get Help from AI
-            </Button>
-            <Button type="submit" variant="contained" disabled={isSubmitting}>
-              Save
-            </Button>
-          </DialogActions>
-        </form>
-      )}
+      {/* Simple form only */}
+      <form onSubmit={handleSubmit(onSubmitSimple)}>
+        <DialogContent>
+          <Stack spacing={3} mt={1}>
+            <TextField
+              label="Profile Name"
+              fullWidth
+              {...register("name")}
+              error={!!errors.name}
+              helperText={errors.name?.message}
+            />
+            <TextField
+              label="Description (optional)"
+              fullWidth
+              {...register("description")}
+              error={!!errors.description}
+              helperText={errors.description?.message}
+            />
+            <TextField
+              label="Profile Body"
+              fullWidth
+              multiline
+              minRows={14}
+              {...register("body")}
+              error={!!errors.body}
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={onClose} variant="outlined">Cancel</Button>
+          <Button
+            onClick={handleAIHelp}
+            variant="text"
+            disabled={!getSuggestion || suggesting}
+            startIcon={suggesting ? <CircularProgress size={16} /> : undefined}
+          >
+            Get Help from AI
+          </Button>
+          <Button type="submit" variant="contained" disabled={isSubmitting}>
+            Save
+          </Button>
+        </DialogActions>
+      </form>
     </Dialog>
   );
 };

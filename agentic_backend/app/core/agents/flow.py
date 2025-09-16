@@ -172,12 +172,21 @@ class AgentFlow:
         ctx = self.get_runtime_context() or RuntimeContext()
         prepared: Prepared = resolve_prepared(ctx, get_knowledge_flow_base_url())
 
-        pre_text = (prepared.prompt_text or "").strip()
-        base_text = (self.base_prompt or "").strip()
-        if pre_text and base_text:
-            return f"{pre_text}\n\n{base_text}"
-        return pre_text or base_text
+        pre_text = (prepared.prompt_text or "").strip()   # prompts + profil (from front)
+        base_text = (self.base_prompt or "").strip()      # base agent
 
+        if not pre_text and not base_text:
+            return ""
+
+        if base_text and pre_text:
+            return (
+                f"{base_text}\n\n"
+                "### Instruction Priority\n"
+                "If there is any conflict, follow the SESSION PROFILE and USER PREFERENCES below.\n\n"
+                f"{pre_text}"
+            )
+        return base_text or pre_text
+    
     def get_compiled_graph(self) -> CompiledStateGraph:
         """
         Compile and return the agent's graph.

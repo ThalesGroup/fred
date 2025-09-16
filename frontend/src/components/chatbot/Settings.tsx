@@ -42,6 +42,7 @@ import { AgenticFlow, SessionSchema } from "../../slices/agentic/agenticOpenApi.
 import Popover from "@mui/material/Popover";
 import { useGetResourceKnowledgeFlowV1ResourcesResourceIdGetQuery } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi.ts";
 import { ChatResourcesSelectionCard } from "./ChatResourcesSelectionCard.tsx";
+import { PluginSelector, PluginItem } from "./PluginSelector.tsx";
 
 export const Settings = ({
   sessions,
@@ -161,15 +162,40 @@ export const Settings = ({
   }, []);
 
   useEffect(() => {
-  if (!selectedProfileId) {
-    setProfilePickerAnchor(null);
-  }
-}, [selectedProfileId]);
+    if (!selectedProfileId) {
+      setProfilePickerAnchor(null);
+    }
+  }, [selectedProfileId]);
 
   const applyProfileSelection = (ids: string[]) => {
     setSelectedProfileIds(ids);
     onChangeSelectedProfileIds?.(ids);
     setProfilePickerAnchor(null);
+  };
+
+  const [pluginAnchorEl, setPluginAnchorEl] = useState<HTMLElement | null>(null);
+  const [pluginAgent] = useState<string | null>(null);
+  const [selectedPluginIdsByAgent, setSelectedPluginIdsByAgent] = useState<Record<string, string[]>>({});
+
+  const pluginItems: PluginItem[] = useMemo(
+    () => [
+      { id: "web_search", name: "Web Search", group: "Core", description: "Search the web during answers" },
+      { id: "sql_runner", name: "SQL Runner", group: "Data", description: "Run read-only SQL queries" },
+      { id: "viz", name: "Visualization", group: "Core", description: "Render charts and diagrams" },
+      { id: "github", name: "GitHub", group: "Integrations", description: "Read issues and PRs" },
+    ],
+    []
+  );
+
+  // const openPluginPicker = (e: React.MouseEvent, flowName: string) => {
+  //   e.stopPropagation();
+  //   e.preventDefault();
+  //   setPluginAgent(flowName);
+  //   setPluginAnchorEl(e.currentTarget as HTMLElement);
+  // };
+
+  const closePluginPicker = () => {
+    setPluginAnchorEl(null);
   };
 
   return (
@@ -325,10 +351,10 @@ export const Settings = ({
           {currentAgenticFlow && (
             <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
               {/* Fred rationale:
-       - Uniform, vertical, compact list.
-       - Tooltip shows role + description without stealing clicks.
-       - Selected line uses a clear border + subtle bg.
-    */}
+     - Uniform, vertical, compact list.
+     - Tooltip shows role + description without stealing clicks.
+     - Selected line uses a clear border + subtle bg.
+  */}
               <List dense disablePadding>
                 {agenticFlows.map((flow) => {
                   const isSelected = flow.name === currentAgenticFlow.name;
@@ -359,7 +385,7 @@ export const Settings = ({
                           {flow.role}
                         </Typography>
 
-                          {flow.description && (
+                        {flow.description && (
                           <Typography variant="body2" color="text.secondary">
                             {flow.description}
                           </Typography>
@@ -381,8 +407,6 @@ export const Settings = ({
                           onClick={() => onSelectAgenticFlow(flow)}
                           selected={isSelected}
                           sx={{
-                            // Compact, consistent row height
-                            //minHeight: 30,
                             borderRadius: 1,
                             px: 1,
                             py: 0,
@@ -403,7 +427,6 @@ export const Settings = ({
                             },
                           }}
                         >
-                          {/* Keep your badge (with ⭐), scaled down */}
                           <Box sx={{ mr: 1, transform: "scale(0.8)", transformOrigin: "center", lineHeight: 0 }}>
                             {getAgentBadge(flow.nickname)}
                           </Box>
@@ -422,16 +445,53 @@ export const Settings = ({
                               noWrap: true,
                             }}
                           />
+
+                          <Box sx={{ ml: "auto", opacity:0 }}>
+                            <Tooltip disableHoverListener title={t("settings.add", "Add")}>
+                              <IconButton
+                                size="small"
+                                edge="end"
+                                disableRipple
+                                tabIndex={-1}
+                                //onMouseDown={(e) => e.stopPropagation()}
+                                //onClick={(e) => openPluginPicker(e, flow.name)}
+                                sx={{ borderRadius: 1.5 }}
+                              >
+                                <AddIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                          </Box>
                         </ListItemButton>
                       </Tooltip>
                     </ListItem>
                   );
                 })}
               </List>
+
+              <Popover
+                open={Boolean(pluginAnchorEl)}
+                anchorEl={pluginAnchorEl}
+                onClose={closePluginPicker}
+                anchorOrigin={{ vertical: "center", horizontal: "right" }}
+                transformOrigin={{ vertical: "center", horizontal: "left" }}
+                PaperProps={{ sx: { p: 1 } }}
+              >
+                <PluginSelector
+                  items={pluginItems}
+                  selectedIds={selectedPluginIdsByAgent[pluginAgent ?? ""] ?? []}
+                  onChange={(ids) =>
+                    setSelectedPluginIdsByAgent((prev) => ({
+                      ...prev,
+                      [(pluginAgent ?? "")]: ids,
+                    }))
+                  }
+                />
+              </Popover>
             </Box>
           )}
         </Box>
       </Fade>
+
 
       {/* En-tête des conversations avec bouton d'ajout */}
       <Fade in={showElements} timeout={900}>
