@@ -75,6 +75,7 @@ from app.core.stores.vector.in_memory_langchain_vector_store import InMemoryLang
 from app.core.stores.vector.base_vector_store import BaseVectorStore
 from app.core.stores.vector.opensearch_vector_store import OpenSearchVectorStoreAdapter
 from app.core.processors.output.vectorization_processor.semantic_splitter import SemanticSplitter
+from app.model_factory import get_utility_model
 
 # Union of supported processor base classes
 BaseProcessorType = Union[BaseMarkdownProcessor, BaseTabularProcessor]
@@ -439,6 +440,9 @@ class ApplicationContext:
         else:
             raise ValueError(f"Unsupported embedding backend: {backend_type}")
 
+    def get_utility_model(self):
+        return get_utility_model(self.configuration.model)
+      
     def get_vector_store(self) -> BaseVectorStore:
         """
         Vector Store Factory

@@ -15,7 +15,7 @@
 
 import os
 from pathlib import Path
-from typing import Annotated, Dict, List, Literal, Union
+from typing import Annotated, Any, Dict, List, Literal, Union
 from pydantic import BaseModel, Field, model_validator
 from typing import Optional
 from enum import Enum
@@ -32,7 +32,16 @@ unit tests. It helps to decouple the different components of the application and
 to define clear workflows and data structures.
 """
 
-
+class ModelConfiguration(BaseModel):
+    provider: Optional[str] = Field(
+        None, description="Provider of the AI model, e.g., openai, ollama, azure."
+    )
+    name: Optional[str] = Field(None, description="Model name, e.g., gpt-4o, llama2.")
+    settings: Optional[Dict[str, Any]] = Field(
+        default_factory=dict,
+        description="Additional provider-specific settings, e.g., Azure deployment name.",
+    )
+    
 class EmbeddingProvider(str, Enum):
     OPENAI = "openai"
     AZUREOPENAI = "azureopenai"
@@ -310,6 +319,7 @@ class StorageConfig(BaseModel):
 
 class Configuration(BaseModel):
     app: AppConfig
+    model: ModelConfiguration
     security: SecurityConfiguration
     input_processors: List[ProcessorConfig]
     output_processors: Optional[List[ProcessorConfig]] = None

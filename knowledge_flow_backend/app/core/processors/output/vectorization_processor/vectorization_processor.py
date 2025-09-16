@@ -15,7 +15,7 @@
 import logging
 import os
 import time
-from typing import override
+from typing import List, Optional, override
 from langchain.schema.document import Document
 
 from app.application_context import ApplicationContext
@@ -24,6 +24,8 @@ from app.core.processors.output.base_output_processor import (
     BaseOutputProcessor,
     VectorProcessingError,
 )
+from app.core.processors.output.summarizer.llm_summarizer import LLMBasedDocSummarizer
+from app.core.processors.output.summarizer.smart_llm_summarizer import SmartDocSummarizer
 from app.core.processors.output.vectorization_processor.vectorization_utils import (
     flat_metadata_from,
     load_langchain_doc_from_metadata,
@@ -52,6 +54,21 @@ class VectorizationProcessor(BaseOutputProcessor):
 
         self.embedder = self.context.get_embedder()
         logger.info(f"🧠 Embedder initialized: {self.embedder.__class__.__name__}")
+
+        self.smart_summarizer = SmartDocSummarizer(
+            model_config=self.context.configuration.model,
+            splitter=self.splitter,
+            opts={  # hardcoded; move to config later
+                "sum_enabled": True,
+                "sum_input_cap": 120_000,
+                "sum_abs_words": 180,
+                "sum_kw_top_k": 24,
+                "mr_top_shards": 24,
+                "mr_shard_words": 80,
+                "small_threshold": 50_000,
+                "large_threshold": 1_200_000,
+            },
+        )
 
         self.vector_store = self.context.get_create_vector_store(self.embedder)
         logger.info(f"🗃️ Vector store initialized: {self.vector_store.__class__.__name__}")
@@ -85,6 +102,16 @@ class VectorizationProcessor(BaseOutputProcessor):
             logger.debug(f"Document loaded: {document}")
             if not document:
                 raise ValueError("Document is empty or not loaded correctly.")
+
+            # 1.b) Summarize ONCE per doc (size-aware; non-blocking)
+            abstract: Optional[str]
+            keywords: Optional[List[str]]
+            abstract, keywords = self.smart_summarizer.summarize_document(document)
+
+            if abstract or keywords:
+                logger.info("Summaries computed: abstract_len=%d, keywords=%d",
+                            len(abstract or ""), len(keywords or []))
+
 
             # 2) Split
             chunks = self.splitter.split(document)
