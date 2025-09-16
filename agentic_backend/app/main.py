@@ -20,7 +20,6 @@ Entrypoint for the Agentic Backend App.
 """
 
 import asyncio
-from contextlib import asynccontextmanager
 import logging
 import os
 from contextlib import asynccontextmanager
