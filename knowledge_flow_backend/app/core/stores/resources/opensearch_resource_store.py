@@ -2,7 +2,8 @@ import logging
 from typing import List
 
 from fred_core import ThreadSafeLRUCache
-from opensearchpy import OpenSearch, NotFoundError, ConflictError, RequestsHttpConnection
+from fred_core.store.opensearch_mapping_validator import validate_index_mapping
+from opensearchpy import ConflictError, NotFoundError, OpenSearch, RequestsHttpConnection
 
 from app.core.stores.resources.base_resource_store import (
     BaseResourceStore,
@@ -56,6 +57,8 @@ class OpenSearchResourceStore(BaseResourceStore):
             logger.info(f"[RESOURCES] OpenSearch index '{self.index_name}' created.")
         else:
             logger.info(f"[RESOURCES] OpenSearch index '{self.index_name}' already exists.")
+            # Validate existing mapping matches expected mapping
+            validate_index_mapping(self.client, self.index_name, RESOURCES_INDEX_MAPPING)
 
     def list_resources_for_user(self, user: str, kind: ResourceKind) -> List[Resource]:
         try:
