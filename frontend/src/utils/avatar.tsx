@@ -13,9 +13,8 @@
 // limitations under the License.
 
 // utils/getUserAvatar.tsx
-import { Avatar, Badge, Box, Typography, useTheme } from "@mui/material";
+import { Avatar, Badge, useTheme } from "@mui/material";
 import { red, blue, green, purple, orange, teal, yellow } from "@mui/material/colors";
-import { Fact } from "../frugalit/slices/factsStructures";
 import AppsIcon from "@mui/icons-material/Apps";
 import AssignmentIcon from "@mui/icons-material/Assignment";
 import AttachMoneyIcon from "@mui/icons-material/AttachMoney";
@@ -55,57 +54,6 @@ export const getUserAvatar = (userName: string, size: number = 40) => {
 
   // Return an Avatar component with the initial and dynamic color
   return <Avatar sx={{ bgcolor: avatarColor, width: size, height: size }}>{userName[0].toUpperCase()}</Avatar>;
-};
-
-export const getFactAvatar = (fact: Fact, size: number = 20) => {
-  const theme = useTheme(); // Access the theme object
-
-  // Define fact type colors based on theme.palette
-  const factTypeColors: Record<string, string> = {
-    domain: theme.palette.info.dark, // Replace with your theme colors
-    requirement: theme.palette.success.main, // Success color for requirements
-    cost: theme.palette.warning.main, // Warning color for cost
-    compliance: theme.palette.primary.main, // Primary color for compliance
-    security: theme.palette.error.main, // Error color for security
-  };
-  const factFallbackColor = theme.palette.grey[500]; // Fallback color
-
-  // Determine color based on the user's name
-  const avatarColor = factTypeColors[fact.type] || factFallbackColor;
-  // Return an Avatar component with the initial and dynamic color
-  return (
-    <Box
-      sx={{
-        border: `3px solid ${avatarColor}`, // Colored border
-
-        backgroundColor: theme.palette.common.white,
-        color: theme.palette.primary.contrastText, // Text color for contrast
-        width: size * 3, // Adjust width dynamically
-        height: size * 1.2, // Adjust height dynamically
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        borderRadius: "12px", // Rounded corners
-        paddingX: 2, // Horizontal padding for content
-        textAlign: "center",
-        overflow: "hidden", // Prevent text overflow
-        whiteSpace: "nowrap", // Prevent wrapping
-        textOverflow: "ellipsis", // Add ellipsis if title is too long
-        fontWeight: "bold",
-        fontSize: size * 0.6, // Font size relative to size
-      }}
-    >
-      <Typography
-        variant="body2"
-        noWrap
-        sx={{
-          color: theme.palette.common.black,
-        }}
-      >
-        {fact.title}
-      </Typography>
-    </Box>
-  );
 };
 
 const expertColors: Record<string, string> = {

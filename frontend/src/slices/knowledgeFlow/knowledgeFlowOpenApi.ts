@@ -243,6 +243,12 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/knowledge-flow/v1/resources/${queryArg.resourceId}`, method: "DELETE" }),
     }),
+    echoSchemaKnowledgeFlowV1SchemasEchoPost: build.mutation<
+      EchoSchemaKnowledgeFlowV1SchemasEchoPostApiResponse,
+      EchoSchemaKnowledgeFlowV1SchemasEchoPostApiArg
+    >({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/schemas/echo`, method: "POST", body: queryArg.echoEnvelope }),
+    }),
     searchDocumentsUsingVectorization: build.mutation<
       SearchDocumentsUsingVectorizationApiResponse,
       SearchDocumentsUsingVectorizationApiArg
@@ -498,6 +504,10 @@ export type DeleteResourceKnowledgeFlowV1ResourcesResourceIdDeleteApiResponse =
   /** status 200 Successful Response */ any;
 export type DeleteResourceKnowledgeFlowV1ResourcesResourceIdDeleteApiArg = {
   resourceId: string;
+};
+export type EchoSchemaKnowledgeFlowV1SchemasEchoPostApiResponse = /** status 200 Successful Response */ any;
+export type EchoSchemaKnowledgeFlowV1SchemasEchoPostApiArg = {
+  echoEnvelope: EchoEnvelope;
 };
 export type SearchDocumentsUsingVectorizationApiResponse = /** status 200 Successful Response */ VectorSearchHit[];
 export type SearchDocumentsUsingVectorizationApiArg = {
@@ -761,6 +771,20 @@ export type ResourceUpdate = {
   description?: string | null;
   labels?: string[] | null;
 };
+export type SearchPolicy = {
+  k_final?: number;
+  fetch_k?: number;
+  vector_min_cosine?: number;
+  bm25_min_score?: number;
+  require_phrase_hit?: boolean;
+  use_mmr?: boolean;
+};
+export type SearchPolicyName = "hybrid" | "strict" | "semantic";
+export type EchoEnvelope = {
+  kind: "SearchPolicy" | "SearchPolicyName";
+  /** Schema payload being echoed */
+  payload: SearchPolicy | SearchPolicyName;
+};
 export type VectorSearchHit = {
   content: string;
   page?: number | null;
@@ -798,7 +822,6 @@ export type VectorSearchHit = {
   retrieved_at?: string | null;
   retrieval_session_id?: string | null;
 };
-export type SearchPolicyName = "hybrid" | "strict" | "semantic";
 export type SearchRequest = {
   question: string;
   /** Number of results to return. */
@@ -939,6 +962,7 @@ export const {
   useGetResourceKnowledgeFlowV1ResourcesResourceIdGetQuery,
   useLazyGetResourceKnowledgeFlowV1ResourcesResourceIdGetQuery,
   useDeleteResourceKnowledgeFlowV1ResourcesResourceIdDeleteMutation,
+  useEchoSchemaKnowledgeFlowV1SchemasEchoPostMutation,
   useSearchDocumentsUsingVectorizationMutation,
   useQueryKnowledgeFlowV1KpiQueryPostMutation,
   useOsHealthQuery,

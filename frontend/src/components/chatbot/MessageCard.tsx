@@ -1,16 +1,25 @@
 // Copyright Thales 2025
-// Licensed under the Apache License, Version 2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 import { Box, Grid2, IconButton, Tooltip, Chip, Typography } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import { useState, useMemo } from "react";
 import RateReviewIcon from "@mui/icons-material/RateReview";
-import VolumeUpIcon from "@mui/icons-material/VolumeUp";
-import ClearIcon from "@mui/icons-material/Clear";
-import { usePostSpeechTextMutation } from "../../frugalit/slices/api.tsx";
+//import VolumeUpIcon from "@mui/icons-material/VolumeUp";
+//import ClearIcon from "@mui/icons-material/Clear";
 import { getAgentBadge } from "../../utils/avatar.tsx";
-import { FeedbackDialog } from "../../frugalit/component/FeedbackDialog.tsx";
 import { useToast } from "../ToastProvider.tsx";
 import { extractHttpErrorMessage } from "../../utils/extractHttpErrorMessage.tsx";
 import CustomMarkdownRenderer from "../markdown/CustomMarkdownRenderer.tsx";
@@ -19,8 +28,9 @@ import {
   ChatMessage,
   usePostFeedbackAgenticV1ChatbotFeedbackPostMutation,
 } from "../../slices/agentic/agenticOpenApi.ts";
-import { toCopyText, toMarkdown, toSpeechText } from "./messageParts.ts";
+import { toCopyText, toMarkdown } from "./messageParts.ts";
 import { getExtras, isToolCall, isToolResult } from "./ChatBotUtils.tsx";
+import { FeedbackDialog } from "../feedback/FeedbackDialog.tsx";
 
 export default function MessageCard({
   message,
@@ -28,20 +38,20 @@ export default function MessageCard({
   side,
   enableCopy = false,
   enableThumbs = false,
-  enableAudio = false,
+  // enableAudio = false,
   currentAgenticFlow,
   pending = false,
   showMetaChips = true,
-  suppressText = false,                 // hides text parts when true (we still render non-text via markdown)
-  onCitationHover,                      // optional: (uid|null) → let parent highlight Sources
-  onCitationClick,                      // optional: (uid|null) → parent can open dialog
+  suppressText = false, // hides text parts when true (we still render non-text via markdown)
+  onCitationHover, // optional: (uid|null) → let parent highlight Sources
+  onCitationClick, // optional: (uid|null) → parent can open dialog
 }: {
   message: ChatMessage;
   agenticFlow: AgenticFlow;
   side: "left" | "right";
   enableCopy?: boolean;
   enableThumbs?: boolean;
-  enableAudio?: boolean;
+  // enableAudio?: boolean;
   currentAgenticFlow: AgenticFlow;
   pending?: boolean;
   showMetaChips?: boolean;
@@ -52,10 +62,10 @@ export default function MessageCard({
   const theme = useTheme();
   const { showError, showInfo } = useToast();
 
-  const [postSpeechText] = usePostSpeechTextMutation();
+  // const [postSpeechText] = usePostSpeechTextMutation();
   const [postFeedback] = usePostFeedbackAgenticV1ChatbotFeedbackPostMutation();
 
-  const [audioToSpeech, setAudioToSpeech] = useState<HTMLAudioElement | null>(null);
+  // const [audioToSpeech, setAudioToSpeech] = useState<HTMLAudioElement | null>(null);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
 
   const handleFeedbackSubmit = (rating: number, comment?: string) => {
@@ -80,32 +90,32 @@ export default function MessageCard({
     setFeedbackOpen(false);
   };
 
-  const handleStartSpeaking = (msgText: string) => {
-    postSpeechText(msgText).then((response) => {
-      if (response.data) {
-        const audioBlob = response.data as Blob;
-        const audioUrl = URL.createObjectURL(audioBlob);
-        const a = new Audio(audioUrl);
-        setAudioToSpeech(a);
-        a.play()
-          .then(() => {
-            a.onended = () => setAudioToSpeech(null);
-          })
-          .catch((error) => {
-            console.error("Failed to play audio:", error);
-          });
-      } else {
-        console.error("No audio data in response");
-      }
-    });
-  };
+  // const handleStartSpeaking = (msgText: string) => {
+  //   postSpeechText(msgText).then((response) => {
+  //     if (response.data) {
+  //       const audioBlob = response.data as Blob;
+  //       const audioUrl = URL.createObjectURL(audioBlob);
+  //       const a = new Audio(audioUrl);
+  //       setAudioToSpeech(a);
+  //       a.play()
+  //         .then(() => {
+  //           a.onended = () => setAudioToSpeech(null);
+  //         })
+  //         .catch((error) => {
+  //           console.error("Failed to play audio:", error);
+  //         });
+  //     } else {
+  //       console.error("No audio data in response");
+  //     }
+  //   });
+  // };
 
-  const handleStopSpeaking = () => {
-    if (audioToSpeech) {
-      audioToSpeech.pause();
-      setAudioToSpeech(null);
-    }
-  };
+  // const handleStopSpeaking = () => {
+  //   if (audioToSpeech) {
+  //     audioToSpeech.pause();
+  //     setAudioToSpeech(null);
+  //   }
+  // };
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text).catch(() => {});
@@ -117,9 +127,7 @@ export default function MessageCard({
 
   // Build the markdown content once (optionally filtering out text parts)
   const mdContent = useMemo(() => {
-    const parts = suppressText
-      ? (message.parts || []).filter((p: any) => p?.type !== "text")
-      : message.parts || [];
+    const parts = suppressText ? (message.parts || []).filter((p: any) => p?.type !== "text") : message.parts || [];
     return toMarkdown(parts);
   }, [message.parts, suppressText]);
 
@@ -194,18 +202,17 @@ export default function MessageCard({
                     <CustomMarkdownRenderer
                       content={mdContent}
                       size="medium"
-                      
                       citations={{
-    getUidForNumber: (n) => {
-      // Build once per message if you like, but simplest:
-      const src = (message.metadata?.sources as any[]) || [];
-      const ordered = [...src].sort((a, b) => (a?.rank ?? 1e9) - (b?.rank ?? 1e9));
-      const hit = ordered[n - 1];
-      return hit?.uid ?? null;
-    },
-    onHover: onCitationHover,  // already coming from parent
-    onClick: onCitationClick,  // optional
-  }}
+                        getUidForNumber: (n) => {
+                          // Build once per message if you like, but simplest:
+                          const src = (message.metadata?.sources as any[]) || [];
+                          const ordered = [...src].sort((a, b) => (a?.rank ?? 1e9) - (b?.rank ?? 1e9));
+                          const hit = ordered[n - 1];
+                          return hit?.uid ?? null;
+                        },
+                        onHover: onCitationHover, // already coming from parent
+                        onClick: onCitationClick, // optional
+                      }}
                     />
                   </Box>
                 </Box>
@@ -226,7 +233,7 @@ export default function MessageCard({
                     </IconButton>
                   )}
 
-                  {enableAudio && (
+                  {/* {enableAudio && (
                     <IconButton
                       size="small"
                       onClick={() =>
@@ -239,7 +246,7 @@ export default function MessageCard({
                         <VolumeUpIcon fontSize="medium" color="inherit" />
                       )}
                     </IconButton>
-                  )}
+                  )} */}
 
                   {message.metadata?.token_usage && (
                     <Tooltip
