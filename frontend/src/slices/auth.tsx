@@ -12,7 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { apiSlice } from "../frugalit/slices/api";
+import { createApi } from "@reduxjs/toolkit/query/react";
+import { createDynamicBaseQuery } from "../common/dynamicBaseQuery";
 
 export interface LoginConfiguration {
   openId: string;
@@ -29,6 +30,16 @@ export interface Credentials {
   username: string;
   password: string;
 }
+
+// Base API slice definition
+export const apiSlice = createApi({
+  reducerPath: "api", // Optional: Defines where the slice is added to the state
+  baseQuery: createDynamicBaseQuery({ backend: "api" }),
+  endpoints: () => ({}),
+});
+
+// Export the API slice reducer and middleware
+export const { reducer: apiReducer, middleware: apiMiddleware } = apiSlice;
 
 const extendedApi = apiSlice.injectEndpoints({
   endpoints: (build) => ({

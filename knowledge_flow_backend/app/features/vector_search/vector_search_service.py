@@ -235,7 +235,7 @@ class VectorSearchService:
                 library_tags_ids=document_library_tags_ids,
                 policy=pol,
             )
-        
+
         logger.info("Using semantic search policy (legacy)")
         return self._semantic(
             question=question,
@@ -243,5 +243,3 @@ class VectorSearchService:
             k=top_k,
             library_tags_ids=document_library_tags_ids,
         )
-
-
