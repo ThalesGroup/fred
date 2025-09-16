@@ -16,16 +16,11 @@ logger = logging.getLogger(__name__)
 
 # ---------------- Echo types for UI OpenAPI ----------------
 
-EchoPayload = Union[
-    SearchPolicy,
-    SearchPolicyName
-]
+EchoPayload = Union[SearchPolicy, SearchPolicyName]
+
 
 class EchoEnvelope(BaseModel):
-    kind: Literal[
-        "SearchPolicy",
-        "SearchPolicyName"
-    ]
+    kind: Literal["SearchPolicy", "SearchPolicyName"]
     payload: EchoPayload = Field(..., description="Schema payload being echoed")
 
 
@@ -46,7 +41,6 @@ class VectorSearchController:
         )
         def echo_schema(envelope: EchoEnvelope) -> None:
             pass
-
 
         @router.post(
             "/vector/search",

@@ -10,14 +10,11 @@
 from __future__ import annotations
 from typing import Dict, List, Sequence, Tuple, cast
 import logging
-import math
 import re
 import time
 from langchain.schema.document import Document
 
-from app.core.stores.vector.base_vector_store import (
-    AnnHit, BaseVectorStore, LexicalHit, LexicalSearchable, SearchFilter
-)
+from app.core.stores.vector.base_vector_store import AnnHit, BaseVectorStore, LexicalHit, LexicalSearchable, SearchFilter
 from app.features.vector_search.vector_search_structures import HybridPolicy
 
 logger = logging.getLogger(__name__)
@@ -29,23 +26,57 @@ _QUOTED = re.compile(r'"([^"]{2,120})"|\'([^\']{2,120})\'')
 
 _STOP = {
     # articles/conjunctions/preps (EN/FR)
-    "the","a","an","and","or","of","for","in","to","on","with","by","at","from",
-    "le","la","les","un","une","des","du","de","d","et","ou","pour","dans","sur",
-    "au","aux","par","à","en",
+    "the",
+    "a",
+    "an",
+    "and",
+    "or",
+    "of",
+    "for",
+    "in",
+    "to",
+    "on",
+    "with",
+    "by",
+    "at",
+    "from",
+    "le",
+    "la",
+    "les",
+    "un",
+    "une",
+    "des",
+    "du",
+    "de",
+    "d",
+    "et",
+    "ou",
+    "pour",
+    "dans",
+    "sur",
+    "au",
+    "aux",
+    "par",
+    "à",
+    "en",
 }
+
 
 def _tokenize(q: str) -> List[str]:
     return re.findall(r"[A-Za-z][A-Za-z\-]{1,40}", q.lower())
 
+
 def _salient_terms(q: str) -> List[str]:
     """General-purpose signal: unquoted words ≥3 chars not in _STOP."""
     return [t for t in _tokenize(q) if len(t) >= 3 and t not in _STOP]
+
 
 def _capitalized_terms(q: str) -> List[str]:
     """Heuristic 'proper-like' tokens; used as SOFT bonus only."""
     caps = re.findall(r"\b[A-Z][a-zA-Z\-]{1,40}\b", q)
     # Drop first if it's sentence case of a function word (e.g., 'Define', 'Offshore')
     return [c.lower() for c in caps[1:] if c.lower() not in _STOP] if caps else []
+
 
 def _quoted_phrases(q: str) -> List[str]:
     """Quoted phrases are strong lexical signals; SOFT bonus."""
@@ -56,15 +87,18 @@ def _quoted_phrases(q: str) -> List[str]:
             out.append(g.strip().lower())
     return out
 
+
 def _chunk_id_of(d: Document) -> str | None:
     md = d.metadata or {}
     cid = md.get("chunk_uid") or md.get("_id")
     return cid if isinstance(cid, str) and cid else None
 
+
 def _doc_uid_of(d: Document) -> str | None:
     md = d.metadata or {}
     uid = md.get("document_uid")
     return uid if isinstance(uid, str) and uid else None
+
 
 def _doc_text_pool(d: Document) -> str:
     """Small text pool (title/section/body). Cheap containment tests, not full scoring."""
@@ -73,7 +107,9 @@ def _doc_text_pool(d: Document) -> str:
     section = md.get("section") or ""
     return (title + " \n " + section + " \n " + (d.page_content or "")).lower()
 
+
 # ---- Core retriever ----
+
 
 class HybridRetriever:
     """
@@ -100,23 +136,23 @@ class HybridRetriever:
         sf = SearchFilter(tag_ids=scoped_document_ids)
 
         # --- Policy knobs with safe defaults (kept in HybridPolicy; getattr to avoid breaking callers) ---
-        rrf_k            = getattr(policy, "rrf_k", 60)
-        fetch_k_ann      = getattr(policy, "fetch_k_ann", 60)
-        fetch_k_bm25     = getattr(policy, "fetch_k_bm25", 60)
-        vec_min          = getattr(policy, "vector_min_cosine", 0.45)
-        bm25_min         = getattr(policy, "bm25_min_score", 1.5)
-        use_mmr          = getattr(policy, "use_mmr", True)
+        rrf_k = getattr(policy, "rrf_k", 60)
+        fetch_k_ann = getattr(policy, "fetch_k_ann", 60)
+        fetch_k_bm25 = getattr(policy, "fetch_k_bm25", 60)
+        vec_min = getattr(policy, "vector_min_cosine", 0.45)
+        bm25_min = getattr(policy, "bm25_min_score", 1.5)
+        use_mmr = getattr(policy, "use_mmr", True)
 
         # Fusion weights (tune per corpus; default slightly favors ANN)
-        w_ann            = getattr(policy, "w_ann", 1.0)
-        w_bm25           = getattr(policy, "w_bm25", 0.9)
+        w_ann = getattr(policy, "w_ann", 1.0)
+        w_bm25 = getattr(policy, "w_bm25", 0.9)
 
         # Soft-signal bonuses (bounded; never decisive alone)
-        enable_signals   = getattr(policy, "enable_soft_signals", True)
-        who_boost        = getattr(policy, "who_query_boost", 0.02)   # tiny nudge for ANN tie-breaks
-        caps_bonus_w     = getattr(policy, "capitalized_terms_bonus", 0.08)  # per coverage ratio
-        quoted_bonus_w   = getattr(policy, "quoted_phrases_bonus",   0.12)   # stronger than caps
-        bonus_cap        = getattr(policy, "soft_bonus_cap",         0.25)   # never exceed this
+        enable_signals = getattr(policy, "enable_soft_signals", True)
+        who_boost = getattr(policy, "who_query_boost", 0.02)  # tiny nudge for ANN tie-breaks
+        caps_bonus_w = getattr(policy, "capitalized_terms_bonus", 0.08)  # per coverage ratio
+        quoted_bonus_w = getattr(policy, "quoted_phrases_bonus", 0.12)  # stronger than caps
+        bonus_cap = getattr(policy, "soft_bonus_cap", 0.25)  # never exceed this
 
         who_query = bool(_WH_PAT.search(query))
         caps = _capitalized_terms(query)
@@ -124,10 +160,21 @@ class HybridRetriever:
         quoted = _quoted_phrases(query)
 
         logger.info(
-            "Hybrid:start q='%s' scope=%d | RRF(k=%d) fetch(ann=%d bm25=%d) thr(vec=%.3f bm25=%.3f) "
-            "w(ann=%.2f bm25=%.2f) mmr=%s | signals=%s who=%s caps=%s quoted=%s terms=%s",
-            query, len(scoped_document_ids), rrf_k, fetch_k_ann, fetch_k_bm25, vec_min, bm25_min,
-            w_ann, w_bm25, use_mmr, enable_signals, who_query, caps or "[]", quoted or "[]",
+            "Hybrid:start q='%s' scope=%d | RRF(k=%d) fetch(ann=%d bm25=%d) thr(vec=%.3f bm25=%.3f) w(ann=%.2f bm25=%.2f) mmr=%s | signals=%s who=%s caps=%s quoted=%s terms=%s",
+            query,
+            len(scoped_document_ids),
+            rrf_k,
+            fetch_k_ann,
+            fetch_k_bm25,
+            vec_min,
+            bm25_min,
+            w_ann,
+            w_bm25,
+            use_mmr,
+            enable_signals,
+            who_query,
+            caps or "[]",
+            quoted or "[]",
             terms[:8] + (["…"] if len(terms) > 8 else []),
         )
 
@@ -148,9 +195,7 @@ class HybridRetriever:
         bm25_rank: Dict[str, int] = {}
         if isinstance(self.vs, LexicalSearchable):
             vs_lex = cast(LexicalSearchable, self.vs)
-            bm25_hits: List[LexicalHit] = vs_lex.lexical_search(
-                query, k=fetch_k_bm25, search_filter=sf, operator_and=False
-            )
+            bm25_hits: List[LexicalHit] = vs_lex.lexical_search(query, k=fetch_k_bm25, search_filter=sf, operator_and=False)
             bm25_hits = [h for h in bm25_hits if h.score >= bm25_min]
             bm25_rank = {h.chunk_id: r for r, h in enumerate(bm25_hits, start=1)}
 
@@ -160,9 +205,11 @@ class HybridRetriever:
 
         # 3) RRF fusion (weighted)
         fused: Dict[str, float] = {}
+
         def add_rrf(rank_map: Dict[str, int], weight: float) -> None:
             for cid, rnk in rank_map.items():
                 fused[cid] = fused.get(cid, 0.0) + weight * (1.0 / (rrf_k + rnk))
+
         if ann_rank:
             add_rrf(ann_rank, w_ann)
         if bm25_rank:
@@ -234,8 +281,11 @@ class HybridRetriever:
 
         logger.info(
             "Hybrid: final=%d of %d candidates | ann_only=%s bm25_used=%s dt=%.1fms",
-            len(out), len(ordered), bool(ann_rank and not bm25_rank),
-            bool(bm25_rank), (time.perf_counter() - t0) * 1000,
+            len(out),
+            len(ordered),
+            bool(ann_rank and not bm25_rank),
+            bool(bm25_rank),
+            (time.perf_counter() - t0) * 1000,
         )
 
         return out
