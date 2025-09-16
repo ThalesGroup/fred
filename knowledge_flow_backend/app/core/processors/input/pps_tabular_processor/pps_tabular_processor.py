@@ -14,6 +14,7 @@
 
 import logging
 from pathlib import Path
+
 import pandas as pd
 
 from app.core.processors.input.common.base_input_processor import BaseTabularProcessor

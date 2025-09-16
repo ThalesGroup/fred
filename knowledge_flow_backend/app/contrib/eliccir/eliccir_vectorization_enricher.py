@@ -1,5 +1,6 @@
 # Copyright Thales 2025 - Apache 2.0
 from __future__ import annotations
+
 import re
 from dataclasses import dataclass
 from datetime import datetime

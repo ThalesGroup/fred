@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from typing import List
+
 from langchain.schema.document import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 

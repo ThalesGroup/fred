@@ -23,13 +23,14 @@ import asyncio
 from contextlib import asynccontextmanager
 import logging
 import os
+from contextlib import asynccontextmanager
 
+from dotenv import load_dotenv
+from fastapi import APIRouter, FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fred_core import initialize_user_security, register_exception_handlers
+from rich.logging import RichHandler
 
-from app.core.agents import agent_controller
-from app.core.agents.agent_manager import AgentManager
-from app.core.chatbot import chatbot_controller
-from app.core.chatbot.session_orchestrator import SessionOrchestrator
-from app.core.feedback import feedback_controller
 from app.application_context import (
     ApplicationContext,
     get_agent_store,
@@ -37,13 +38,12 @@ from app.application_context import (
 )
 from app.common.structures import Configuration
 from app.common.utils import parse_server_configuration
+from app.core.agents import agent_controller
+from app.core.agents.agent_manager import AgentManager
+from app.core.chatbot import chatbot_controller
+from app.core.chatbot.session_orchestrator import SessionOrchestrator
+from app.core.feedback import feedback_controller
 from app.core.monitoring import monitoring_controller
-from dotenv import load_dotenv
-from fastapi import APIRouter, FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from fred_core import initialize_user_security, register_exception_handlers
-from rich.logging import RichHandler
-
 
 # -----------------------
 # LOGGING + ENVIRONMENT

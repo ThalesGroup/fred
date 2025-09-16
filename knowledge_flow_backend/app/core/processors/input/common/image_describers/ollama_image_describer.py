@@ -13,7 +13,9 @@
 # limitations under the License.
 
 import json
+
 import requests
+
 from app.config.ollama_settings import OllamaSettings
 from app.core.processors.input.common.base_image_describer import BaseImageDescriber
 

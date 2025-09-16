@@ -14,19 +14,20 @@
 
 
 import logging
+import re
 from pathlib import Path
+
 import pypdf
-from pypdf.errors import PdfReadError
-from docling.document_converter import DocumentConverter, PdfFormatOption
-from docling.datamodel.pipeline_options import PdfPipelineOptions
+import torch
 from docling.datamodel.base_models import InputFormat
+from docling.datamodel.pipeline_options import PdfPipelineOptions
+from docling.document_converter import DocumentConverter, PdfFormatOption
 from docling_core.types.doc.base import ImageRefMode
+from pypdf.errors import PdfReadError
 
 from app.application_context import get_configuration
 from app.core.processors.input.common.base_image_describer import BaseImageDescriber
 from app.core.processors.input.common.base_input_processor import BaseMarkdownProcessor
-import re
-import torch
 
 logger = logging.getLogger(__name__)
 

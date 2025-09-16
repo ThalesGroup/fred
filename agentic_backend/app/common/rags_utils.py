@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from typing import List, Optional
+
 from fred_core import VectorSearchHit
 
 from app.core.chatbot.chat_schema import LinkKind, LinkPart

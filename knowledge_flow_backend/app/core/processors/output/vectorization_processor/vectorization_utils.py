@@ -1,10 +1,11 @@
 # app/common/vectorization_utils.py
 
-from pathlib import Path
-from langchain.schema.document import Document
-from typing import Dict, Any, List, Tuple
-import logging
 import hashlib
+import logging
+from pathlib import Path
+from typing import Any, Dict, List, Tuple
+
+from langchain.schema.document import Document
 
 from app.common.document_structures import DocumentMetadata
 

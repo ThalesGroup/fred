@@ -12,16 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import hashlib
 import logging
 from pathlib import Path
 from typing import List
-from app.common.document_structures import DocumentMetadata
-from app.core.stores.content.base_content_loader import BaseContentLoader
+
 from minio import Minio
 from minio.error import S3Error
-import hashlib
+
+from app.common.document_structures import DocumentMetadata
 from app.common.structures import MinioPullSource
 from app.core.stores.catalog.base_catalog_store import PullFileEntry
+from app.core.stores.content.base_content_loader import BaseContentLoader
 
 logger = logging.getLogger(__name__)
 

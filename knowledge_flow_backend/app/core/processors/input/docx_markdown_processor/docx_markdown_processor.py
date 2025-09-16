@@ -12,14 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import zipfile
 import logging
+import subprocess
+import zipfile
 from datetime import datetime
 from pathlib import Path
+
 from docx import Document
 
 from app.core.processors.input.common.base_input_processor import BaseMarkdownProcessor
-import subprocess
 
 logger = logging.getLogger(__name__)
 

@@ -16,7 +16,7 @@
 import logging
 from typing import List, Optional
 
-from opensearchpy import OpenSearch, NotFoundError, RequestsHttpConnection
+from opensearchpy import NotFoundError, OpenSearch, RequestsHttpConnection
 
 from app.common.structures import AgentSettings
 from app.core.agents.store.base_agent_store import BaseAgentStore

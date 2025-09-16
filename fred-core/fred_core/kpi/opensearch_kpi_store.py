@@ -17,15 +17,15 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List, Optional
 
-from opensearchpy import OpenSearch, RequestsHttpConnection, OpenSearchException
+from opensearchpy import OpenSearch, OpenSearchException, RequestsHttpConnection
 
 from fred_core.kpi.base_kpi_store import BaseKPIStore
-from fred_core.kpi.kpi_writer_structures import KPIEvent
 from fred_core.kpi.kpi_reader_structures import (
     KPIQuery,
     KPIQueryResult,
     KPIQueryResultRow,
 )
+from fred_core.kpi.kpi_writer_structures import KPIEvent
 
 logger = logging.getLogger(__name__)
 

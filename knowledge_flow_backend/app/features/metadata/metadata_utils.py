@@ -3,11 +3,11 @@ from pathlib import Path
 
 from app.common.document_structures import (
     DocumentMetadata,
+    FileInfo,
+    FileType,
     Identity,
     SourceInfo,
-    FileInfo,
     SourceType,
-    FileType,
 )
 from app.core.stores.catalog.base_catalog_store import PullFileEntry
 

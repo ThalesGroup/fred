@@ -14,7 +14,7 @@
 
 import logging
 import uuid
-from datetime import datetime, date, timezone
+from datetime import date, datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from langchain.embeddings.base import Embeddings
