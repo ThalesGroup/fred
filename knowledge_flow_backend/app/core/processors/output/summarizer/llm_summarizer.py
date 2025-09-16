@@ -87,7 +87,8 @@ class LLMBasedDocSummarizer(BaseDocSummarizer):
         seen, out = set(), []
         for t in toks:
             if t not in seen:
-                seen.add(t); out.append(t)
+                seen.add(t)
+                out.append(t)
             if len(out) >= top_k:
                 break
         return out

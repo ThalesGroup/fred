@@ -256,7 +256,8 @@ class SmartDocSummarizer(BaseDocSummarizer):
         for L in lists:
             for t in L:
                 if t not in seen:
-                    seen.add(t); out.append(t)
+                    seen.add(t) 
+                    out.append(t)
                 if len(out) >= limit:
                     return out
         return out
