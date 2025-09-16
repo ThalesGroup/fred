@@ -16,13 +16,22 @@
 
 
 import pytest
-from pydantic import AnyHttpUrl, AnyUrl
+from fastapi import APIRouter, FastAPI
 from fastapi.testclient import TestClient
-from fastapi import FastAPI, APIRouter
+from fred_core import (
+    DuckdbStoreConfig,
+    M2MSecurity,
+    OpenSearchStoreConfig,
+    PostgresStoreConfig,
+    SecurityConfiguration,
+    UserSecurity,
+)
+from pydantic import AnyHttpUrl, AnyUrl
 
+from app.application_context import ApplicationContext
 from app.common.structures import (
-    AIConfig,
     AgentSettings,
+    AIConfig,
     AppConfig,
     Configuration,
     FrontendFlags,
@@ -32,15 +41,6 @@ from app.common.structures import (
     RecursionConfig,
     StorageConfig,
     TimeoutSettings,
-)
-from app.application_context import ApplicationContext
-from fred_core import (
-    DuckdbStoreConfig,
-    PostgresStoreConfig,
-    OpenSearchStoreConfig,
-    SecurityConfiguration,
-    M2MSecurity,
-    UserSecurity,
 )
 
 

@@ -3,13 +3,15 @@
 # Licensed under the Apache License, Version 2.0 (the "License"); ...
 
 from __future__ import annotations
+
+import logging
+import time
 from typing import List, Sequence, Set, cast
+
 from langchain.schema.document import Document
 
 from app.core.stores.vector.base_vector_store import BaseVectorStore, LexicalSearchable, SearchFilter
 from app.features.vector_search.vector_search_structures import SearchPolicy
-import logging
-import time
 
 logger = logging.getLogger(__name__)
 

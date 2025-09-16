@@ -12,20 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import logging
-import pandas as pd
-from pandas._libs.tslibs.nattype import NaTType
-from langchain.schema.document import Document
 import io
-import dateparser
+import logging
 import re
 
+import dateparser
+import pandas as pd
+from langchain.schema.document import Document
+from pandas._libs.tslibs.nattype import NaTType
 
 from app.application_context import ApplicationContext
 from app.common.document_structures import DocumentMetadata, ProcessingStage
-from app.core.processors.output.vectorization_processor.vectorization_utils import load_langchain_doc_from_metadata
-from app.core.processors.output.base_output_processor import BaseOutputProcessor, TabularProcessingError
 from app.common.utils import sanitize_sql_name
+from app.core.processors.output.base_output_processor import BaseOutputProcessor, TabularProcessingError
+from app.core.processors.output.vectorization_processor.vectorization_utils import load_langchain_doc_from_metadata
 
 logger = logging.getLogger(__name__)
 

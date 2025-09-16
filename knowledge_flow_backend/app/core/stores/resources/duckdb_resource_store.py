@@ -4,9 +4,9 @@
 from pathlib import Path
 from typing import List
 
+from fred_core.store.duckdb_store import DuckDBTableStore
 from pydantic import ValidationError
 
-from fred_core.store.duckdb_store import DuckDBTableStore
 from app.core.stores.resources.base_resource_store import (
     BaseResourceStore,
     ResourceAlreadyExistsError,

@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from statistics import mean
 from typing import Any, Dict, List, Optional
 
+from fred_core import ThreadSafeLRUCache
 from opensearchpy import OpenSearch, RequestsHttpConnection
 
 from app.common.utils import truncate_datetime
@@ -18,8 +19,6 @@ from app.core.chatbot.chat_schema import (
 )
 from app.core.chatbot.metric_structures import MetricsBucket, MetricsResponse
 from app.core.monitoring.base_history_store import BaseHistoryStore
-from fred_core import ThreadSafeLRUCache
-
 
 logger = logging.getLogger(__name__)
 

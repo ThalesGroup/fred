@@ -15,11 +15,12 @@
 # app/tests/test_utils/fake_processors.py
 
 from pathlib import Path
-from app.common.document_structures import DocumentMetadata
-from app.core.processors.output.base_output_processor import BaseOutputProcessor
+
 import pandas as pd
 
+from app.common.document_structures import DocumentMetadata
 from app.core.processors.input.common.base_input_processor import BaseMarkdownProcessor, BaseTabularProcessor
+from app.core.processors.output.base_output_processor import BaseOutputProcessor
 
 
 class TestMarkdownProcessor(BaseMarkdownProcessor):

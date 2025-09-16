@@ -27,10 +27,10 @@ All tests are isolated using pytest's tmp_path and monkeypatch fixtures.
 """
 
 from pathlib import Path
+
 import pytest
 
 from app.core.stores.content.filesystem_content_store import FileSystemContentStore
-
 
 # ----------------------------
 # ⚙️ Fixtures

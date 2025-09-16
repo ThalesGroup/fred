@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional, Sequence, Callable
+from typing import Any, Callable, Dict, List, Optional, Sequence
 
 import requests
+from fred_core import VectorSearchHit
+from pydantic import TypeAdapter
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
-from pydantic import TypeAdapter
 
-from fred_core import VectorSearchHit
 from app.application_context import get_app_context
 
 logger = logging.getLogger(__name__)

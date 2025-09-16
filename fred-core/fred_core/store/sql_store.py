@@ -12,15 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import pandas as pd
-from sqlalchemy import create_engine, text, inspect
-from sqlalchemy.exc import SQLAlchemyError, OperationalError
 import logging
-from typing import List
 from pathlib import Path
+from typing import List
+
+import pandas as pd
 import sqlparse
+from sqlalchemy import create_engine, inspect, text
+from sqlalchemy.exc import OperationalError, SQLAlchemyError
 from sqlparse.sql import Identifier, IdentifierList
-from sqlparse.tokens import Keyword, Whitespace, Punctuation
+from sqlparse.tokens import Keyword, Punctuation, Whitespace
 
 logger = logging.getLogger(__name__)
 

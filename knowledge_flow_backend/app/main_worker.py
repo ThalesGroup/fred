@@ -49,12 +49,14 @@ This separation supports independent scaling and better resource management in K
 import asyncio
 import logging
 import os
+
+from dotenv import load_dotenv
 from rich.logging import RichHandler
-from app.features.scheduler.worker import run_worker
+
 from app.application_context import ApplicationContext
 from app.common.structures import Configuration
 from app.common.utils import parse_server_configuration
-from dotenv import load_dotenv
+from app.features.scheduler.worker import run_worker
 
 # -----------------------
 # LOGGING + ENVIRONMENT

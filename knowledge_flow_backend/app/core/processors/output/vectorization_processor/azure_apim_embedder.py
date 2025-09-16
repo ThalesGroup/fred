@@ -12,10 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List
-from azure.identity import ClientSecretCredential
-import httpx
 import logging
+from typing import List
+
+import httpx
+from azure.identity import ClientSecretCredential
 from langchain.embeddings.base import Embeddings
 
 from app.config.embedding_azure_apim_settings import EmbeddingAzureApimSettings

@@ -15,22 +15,22 @@
 
 from __future__ import annotations
 
-import time
 import logging
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Dict, Iterable, Optional, Callable
+from typing import Any, Callable, Dict, Iterable, Optional
 
 from fred_core.kpi.base_kpi_store import BaseKPIStore
 from fred_core.kpi.kpi_writer_structures import (
-    KPIEvent,
-    KPIActor,
-    Metric,
     Cost,
+    Dims,
+    KPIActor,
+    KPIEvent,
+    Metric,
+    MetricType,
     Quantities,
     Trace,
-    MetricType,
-    Dims,
 )
 from fred_core.security.structure import KeycloakUser
 

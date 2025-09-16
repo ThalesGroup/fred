@@ -12,8 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import sys
 import logging
+import sys
+
 from pydantic import ValidationError
 
 logger = logging.getLogger(__name__)
