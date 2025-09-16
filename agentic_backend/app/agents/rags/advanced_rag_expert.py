@@ -16,26 +16,26 @@
 import logging
 from typing import Any, Dict, List, Optional, cast
 
+from fred_core import VectorSearchHit
 from langchain.prompts import ChatPromptTemplate
 from langchain_core.messages import AIMessage, ToolMessage
 from langgraph.graph import END, StateGraph
 
-from fred_core import VectorSearchHit
 from app.agents.rags.structures import (
     GradeAnswerOutput,
     GradeDocumentsOutput,
     RagGraphState,
     RephraseQueryOutput,
 )
-from app.common.vector_search_client import VectorSearchClient
 from app.common.rags_utils import attach_sources_to_llm_response
+from app.common.structures import AgentSettings
+from app.common.vector_search_client import VectorSearchClient
 from app.core.agents.flow import AgentFlow
 from app.core.agents.runtime_context import (
     get_document_library_tags_ids,
     get_search_policy,
 )
 from app.core.model.model_factory import get_model
-from app.common.structures import AgentSettings
 
 logger = logging.getLogger(__name__)
 

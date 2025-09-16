@@ -14,8 +14,10 @@
 
 from abc import ABC, abstractmethod
 from typing import List
-from app.features.tag.structure import Tag, TagType
+
 from fred_core import KeycloakUser
+
+from app.features.tag.structure import Tag, TagType
 
 
 class TagNotFoundError(Exception):

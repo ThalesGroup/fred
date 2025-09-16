@@ -2,22 +2,22 @@
 # Copyright Thales 2025
 # Licensed under the Apache License, Version 2.0
 
-from dataclasses import dataclass
-from collections import deque
-from difflib import get_close_matches
 import logging
+from collections import deque
+from dataclasses import dataclass
+from difflib import get_close_matches
 from typing import Literal, Sequence
 
-from langgraph.graph.state import StateGraph, CompiledStateGraph
-from langgraph.constants import START, END
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
+from langgraph.constants import END, START
+from langgraph.graph.state import CompiledStateGraph, StateGraph
 
-from app.common.structures import AgentSettings
-from app.core.model.model_factory import get_model, get_structured_chain
-from app.core.agents.flow import AgentFlow
-from app.agents.leader.structures.state import State
-from app.agents.leader.structures.plan import Plan
 from app.agents.leader.structures.decision import ExecuteDecision, PlanDecision
+from app.agents.leader.structures.plan import Plan
+from app.agents.leader.structures.state import State
+from app.common.structures import AgentSettings
+from app.core.agents.flow import AgentFlow
+from app.core.model.model_factory import get_model, get_structured_chain
 
 logger = logging.getLogger(__name__)
 

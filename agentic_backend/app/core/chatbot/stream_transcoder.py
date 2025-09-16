@@ -16,14 +16,14 @@ from langgraph.graph.state import CompiledStateGraph
 
 from app.application_context import get_configuration
 from app.core.chatbot.chat_schema import (
+    Channel,
     ChatMessage,
     ChatMetadata,
-    Channel,
+    MessagePart,
     Role,
+    TextPart,
     ToolCallPart,
     ToolResultPart,
-    TextPart,
-    MessagePart,
 )
 from app.core.chatbot.message_part import (
     clean_token_usage,

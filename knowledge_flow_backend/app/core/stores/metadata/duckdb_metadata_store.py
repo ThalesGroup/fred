@@ -6,14 +6,14 @@ import logging
 from pathlib import Path
 from typing import List, Optional
 
+from fred_core.store.duckdb_store import DuckDBTableStore
 from pydantic import ValidationError
 
-from fred_core.store.duckdb_store import DuckDBTableStore
+from app.common.document_structures import DocumentMetadata
 from app.core.stores.metadata.base_metadata_store import (
     BaseMetadataStore,
     MetadataDeserializationError,
 )
-from app.common.document_structures import DocumentMetadata
 
 logger = logging.getLogger(__name__)
 

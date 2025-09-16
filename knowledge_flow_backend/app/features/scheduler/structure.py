@@ -13,11 +13,12 @@
 # limitations under the License.
 
 
-from pydantic import BaseModel
-from typing import List, Optional
+import hashlib
 from datetime import datetime, timezone
 from pathlib import Path
-import hashlib
+from typing import List, Optional
+
+from pydantic import BaseModel
 
 from app.common.document_structures import AccessInfo, DocumentMetadata, FileInfo, Identity, Processing, SourceInfo, SourceType, Tagging
 from app.core.stores.catalog.base_catalog_store import PullFileEntry

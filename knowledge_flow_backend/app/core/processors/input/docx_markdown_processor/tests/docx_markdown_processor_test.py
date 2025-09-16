@@ -15,9 +15,9 @@
 import tempfile
 from pathlib import Path
 
-from app.common.document_structures import DocumentMetadata
 import pytest
 
+from app.common.document_structures import DocumentMetadata
 from app.core.processors.input.docx_markdown_processor.docx_markdown_processor import DocxMarkdownProcessor
 
 

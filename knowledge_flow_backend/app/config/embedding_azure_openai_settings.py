@@ -13,8 +13,8 @@
 # limitations under the License.
 
 import logging
-from pydantic import Field
 
+from pydantic import Field
 from pydantic_settings import BaseSettings
 
 logger = logging.getLogger(__name__)

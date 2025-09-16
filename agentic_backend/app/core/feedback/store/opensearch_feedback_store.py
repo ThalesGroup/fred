@@ -16,9 +16,9 @@ import logging
 from typing import List, Optional
 
 from opensearchpy import (
-    OpenSearch,
-    NotFoundError,
     ConflictError,
+    NotFoundError,
+    OpenSearch,
     RequestsHttpConnection,
 )
 

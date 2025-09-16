@@ -50,11 +50,11 @@ from langchain.schema.document import Document
 # Fred base contracts
 from app.core.stores.vector.base_embedding_model import BaseEmbeddingModel
 from app.core.stores.vector.base_vector_store import (
+    CHUNK_ID_FIELD,
+    AnnHit,
     BaseVectorStore,
     FetchById,
     SearchFilter,
-    AnnHit,
-    CHUNK_ID_FIELD,
 )
 
 DOC_UID_FIELD = "document_uid"

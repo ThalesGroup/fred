@@ -15,10 +15,11 @@
 
 from abc import ABC, abstractmethod
 from pathlib import Path
+from typing import BinaryIO, List
+
 from app.common.document_structures import DocumentMetadata
 from app.common.structures import DocumentSourceConfig
 from app.core.stores.catalog.base_catalog_store import PullFileEntry
-from typing import BinaryIO, List
 
 
 class BaseContentLoader(ABC):

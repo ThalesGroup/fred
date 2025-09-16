@@ -17,11 +17,10 @@ import logging
 from datetime import datetime
 from typing import List
 
+from fred_core import VectorSearchHit
 from langchain_core.messages import HumanMessage
 from langgraph.graph import END, START, MessagesState, StateGraph
 
-from fred_core import VectorSearchHit
-from app.common.vector_search_client import VectorSearchClient
 from app.common.rags_utils import (
     attach_sources_to_llm_response,
     ensure_ranks,
@@ -29,6 +28,7 @@ from app.common.rags_utils import (
     sort_hits,
 )
 from app.common.structures import AgentSettings
+from app.common.vector_search_client import VectorSearchClient
 from app.core.agents.flow import AgentFlow
 from app.core.agents.runtime_context import (
     get_document_library_tags_ids,
