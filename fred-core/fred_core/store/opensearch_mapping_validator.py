@@ -95,7 +95,7 @@ def validate_index_mapping(
             ) from e
 
 
-def _get_field_type(field_config: Dict[str, Any]) -> str:
+def _get_field_type(field_config: Dict[str, Any]) -> str | None:
     """
     Get the effective field type, handling OpenSearch's implicit object type.
 
