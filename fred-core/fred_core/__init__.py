@@ -72,6 +72,7 @@ from fred_core.security.structure import (
     SecurityConfiguration,
     UserSecurity,
 )
+from fred_core.store.opensearch_mapping_validator import validate_index_mapping
 from fred_core.store.vector_search import VectorSearchHit
 
 __all__ = [
@@ -123,4 +124,5 @@ __all__ = [
     "M2MBearerAuth",
     "make_m2m_asgi_client",
     "split_realm_url",
+    "validate_index_mapping",
 ]
