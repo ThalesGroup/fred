@@ -29,6 +29,7 @@ import logging
 import re
 from typing import List, Optional, Tuple, Protocol
 
+from app.common.structures import ModelConfiguration
 from langchain.schema.document import Document
 
 # Contracts + concrete summarizers
@@ -66,7 +67,7 @@ class SmartDocSummarizer(BaseDocSummarizer):
     def __init__(
         self,
         *,
-        model_config,                 # your Configuration.model (can be None)
+        model_config: ModelConfiguration,      # your Configuration.model (can be None)
         splitter: BaseTextSplitter,      # reuse the pipeline splitter to align shard boundaries
         opts: Optional[dict] = None,  # temporary hardcoded opts; move to config later
     ):
@@ -86,16 +87,20 @@ class SmartDocSummarizer(BaseDocSummarizer):
         }
 
         self.splitter = splitter
-
         # Always provide a working summarizer (LLM or cheap extractive fallback).
         try:
             self._summarizer: BaseDocSummarizer = LLMBasedDocSummarizer(model_config)
+            self.model_name = model_config.name if model_config else "default"
             logger.info("SmartDocSummarizer: using LLM-based summarizer (%s)", self._summarizer.__class__.__name__)
         except Exception as e:
             self._summarizer = CheapExtractiveSummarizer()
+            self.model_name = "extractive-fallback"
             logger.info("SmartDocSummarizer: using built-in extractive fallback due to %r", e)
 
     # ------------------------ Public API (orchestration) ------------------------
+    def get_model_name(self) -> str:
+        """Name of the underlying model, or 'extractive-fallback'."""
+        return self.model_name or "extractive-fallback"
 
     def summarize_document(self, document: Document) -> Tuple[Optional[str], Optional[List[str]]]:
         """

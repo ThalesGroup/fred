@@ -7,6 +7,7 @@ from opensearchpy import OpenSearch, RequestsHttpConnection, OpenSearchException
 from pydantic import ValidationError
 
 from app.common.document_structures import (
+    DocSummary,
     DocumentMetadata,
     Identity,
     SourceInfo,
@@ -40,12 +41,14 @@ METADATA_INDEX_MAPPING = {
             "created": {"type": "date"},
             "modified": {"type": "date"},
             "last_modified_by": {"type": "keyword"},
+
             # source
             "source_type": {"type": "keyword"},
             "source_tag": {"type": "keyword"},
             "pull_location": {"type": "keyword"},
             "retrievable": {"type": "boolean"},
             "date_added_to_kb": {"type": "date"},
+
             # file
             "file_type": {"type": "keyword"},
             "mime_type": {"type": "keyword"},
@@ -54,15 +57,32 @@ METADATA_INDEX_MAPPING = {
             "row_count": {"type": "integer"},
             "sha256": {"type": "keyword"},
             "language": {"type": "keyword"},
+
             # tags / folders
             "tag_ids": {"type": "keyword"},
+            "tag_names": {"type": "keyword"},  # chips in UI (optional)
+
             # access
             "license": {"type": "keyword"},
             "confidential": {"type": "boolean"},
             "acl": {"type": "keyword"},
+
             # processing (ops)
             "processing_stages": {"type": "object", "dynamic": True},
             "processing_errors": {"type": "object", "dynamic": True},
+
+            # summary (flat; human-facing lives here, not in vector index)
+            "summary_abstract":   {"type": "text"},
+            "summary_keywords":   {"type": "keyword"},
+            "summary_model_name": {"type": "keyword"},
+            "summary_method":     {"type": "keyword"},
+            "summary_version":    {"type": "keyword"},
+            "summary_created_at": {"type": "date"},
+
+            # UX links (optional)
+            "preview_url": {"type": "keyword"},
+            "viewer_url":  {"type": "keyword"},
+
             # processor specific fields
             "extensions": {"type": "object", "enabled": False},
         }
@@ -94,11 +114,62 @@ class OpenSearchMetadataStore(BaseMetadataStore):
         )
         self.metadata_index_name = index
 
-        if not self.client.indices.exists(index=self.metadata_index_name):
-            self.client.indices.create(index=self.metadata_index_name, body=METADATA_INDEX_MAPPING)
-            logger.info(f"OpenSearch index '{index}' created.")
-        else:
-            logger.info(f"OpenSearch index '{index}' already exists.")
+        # Ensure index exists and mapping has the required fields (add-only).
+        self.ensure_index()
+
+        logger.info(f"OpenSearch metadata index ready: '{index}'")
+
+    # ---- index bootstrap / evolve (add-only) ----
+
+    def ensure_index(self) -> None:
+        """
+        Fred rationale:
+        - Create the metadata index if absent.
+        - If present, *add only missing fields* via PUT _mapping (non-breaking).
+        - Never attempt to change existing field types here.
+        """
+        idx = self.metadata_index_name
+        required_props: dict = METADATA_INDEX_MAPPING.get("mappings", {}).get("properties", {}) or {}
+
+        if not self.client.indices.exists(index=idx):
+            self.client.indices.create(index=idx, body=METADATA_INDEX_MAPPING)
+            logger.info(f"[METADATA] Created index '{idx}' with base mapping.")
+            return
+
+        # Index exists: compute missing top-level properties and add them.
+        try:
+            current = self.client.indices.get_mapping(index=idx)
+            # payload shape: {index_name: {"mappings": {"properties": {...}}}}
+            cur_props = (
+                current.get(idx, {})
+                       .get("mappings", {})
+                       .get("properties", {}) or {}
+            )
+        except Exception as e:
+            logger.warning(f"[METADATA] Failed to read current mapping for '{idx}': {e}")
+            cur_props = {}
+
+        missing = self._diff_flat_properties(required_props, cur_props)
+        if missing:
+            try:
+                self.client.indices.put_mapping(index=idx, body={"properties": missing})
+                logger.info(f"[METADATA] Updated mapping for '{idx}': added fields {list(missing.keys())}")
+            except Exception as e:
+                logger.error(f"[METADATA] PUT _mapping failed for '{idx}': {e}")
+                # Do not raise: running with older mapping is still functional, just without new fields.
+
+    @staticmethod
+    def _diff_flat_properties(required: dict, current: dict) -> dict:
+        """
+        Return a dict of properties that are present in `required` but missing in `current`.
+        Only compares **top-level** fields of this flat metadata index.
+        (We deliberately avoid type diffs or deep merges to keep it non-breaking.)
+        """
+        missing: dict = {}
+        for field, spec in required.items():
+            if field not in current:
+                missing[field] = spec
+        return missing
 
     # ---------- (de)serialization ----------
 
@@ -120,8 +191,9 @@ class OpenSearchMetadataStore(BaseMetadataStore):
         """Flatten DocumentMetadata v2 into top-level dict that matches index mapping."""
         stages = {k.value: v.value for k, v in md.processing.stages.items()}
         errors = {k.value: v for k, v in md.processing.errors.items()}
-
-        return {
+        has_summary = bool(md.summary and (md.summary.abstract or (md.summary.keywords and len(md.summary.keywords) > 0)))
+        
+        body = {
             # identity
             "document_uid": md.identity.document_uid,
             "document_name": md.identity.document_name,
@@ -156,6 +228,20 @@ class OpenSearchMetadataStore(BaseMetadataStore):
             # extensions
             "extensions": md.extensions or {},
         }
+    
+        if has_summary and md.summary is not None:
+            s = md.summary
+            body.update({
+                "summary_abstract":   s.abstract,
+                "summary_keywords":   s.keywords,
+                "summary_model_name": s.model_name,
+                "summary_method":     s.method,
+                "summary_version":    getattr(s, "version", None),
+                "summary_created_at": s.created_at,
+            })
+
+        return body
+
 
     @staticmethod
     def _deserialize(src: Dict[str, Any]) -> DocumentMetadata:
@@ -219,10 +305,32 @@ class OpenSearchMetadataStore(BaseMetadataStore):
                 errors={ProcessingStage(k): v for k, v in errors_raw.items() if k in stages_raw and v is not None},
             )
 
+            has_any_summary = any(
+                k in src and src[k] is not None for k in (
+                    "summary_abstract",
+                    "summary_keywords",
+                    "summary_model_name",
+                    "summary_method",
+                    "summary_version",
+                    "summary_created_at",
+                )
+            )
+            summary: DocSummary | None = None
+            if has_any_summary:
+                summary = DocSummary(
+                    abstract=src.get("summary_abstract"),
+                    keywords=list(src.get("summary_keywords") or []),
+                    model_name=src.get("summary_model_name"),
+                    method=src.get("summary_method"),
+                    created_at=src.get("summary_created_at"),
+                    # version is optional in your model; set if present
+                    **({"version": src.get("summary_version")} if "summary_version" in src else {}),
+                )
             return DocumentMetadata(
                 identity=identity,
                 source=source,
                 file=file,
+                summary=summary,
                 tags=tags,
                 access=access,
                 processing=processing,

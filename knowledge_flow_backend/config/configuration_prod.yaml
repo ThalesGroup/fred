@@ -19,6 +19,9 @@ app:
   reload: false
   reload_dir: "."
 
+features:
+  generate_summary: true
+
 security:
   m2m:
     enabled: true
@@ -94,6 +97,8 @@ embedding:
   # Enable or disable image processing in documents
   process_images: true
 
+# Configuration for the LLM used for summary, keyword generation
+# and other text generation tasks.
 model:
   provider: openai        # openai | azure | ollama
   name: gpt-4o-mini       # azure: deployment name, ollama: 'qwen2.5:3b-instruct' etc.

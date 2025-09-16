@@ -19,12 +19,11 @@ from typing import List, Optional, override
 from langchain.schema.document import Document
 
 from app.application_context import ApplicationContext
-from app.common.document_structures import DocumentMetadata, ProcessingStage
+from app.common.document_structures import DocSummary, DocumentMetadata, ProcessingStage
 from app.core.processors.output.base_output_processor import (
     BaseOutputProcessor,
     VectorProcessingError,
 )
-from app.core.processors.output.summarizer.llm_summarizer import LLMBasedDocSummarizer
 from app.core.processors.output.summarizer.smart_llm_summarizer import SmartDocSummarizer
 from app.core.processors.output.vectorization_processor.vectorization_utils import (
     flat_metadata_from,
@@ -104,13 +103,28 @@ class VectorizationProcessor(BaseOutputProcessor):
                 raise ValueError("Document is empty or not loaded correctly.")
 
             # 1.b) Summarize ONCE per doc (size-aware; non-blocking)
-            abstract: Optional[str]
-            keywords: Optional[List[str]]
-            abstract, keywords = self.smart_summarizer.summarize_document(document)
+            if self.context.is_summary_generation_enabled():
+                abstract: Optional[str]
+                keywords: Optional[List[str]]
+                abstract, keywords = self.smart_summarizer.summarize_document(document)
 
-            if abstract or keywords:
-                logger.info("Summaries computed: abstract_len=%d, keywords=%d",
-                            len(abstract or ""), len(keywords or []))
+
+                if abstract or keywords:
+                    logger.info(
+                        "Summaries computed: abstract_len=%d, keywords=%d",
+                        len(abstract or ""), len(keywords or [])
+                    )
+
+                    # Fred rationale:
+                    # - Keep human-facing abstract at *document* level (no chunk bloat).
+                    # - Add provenance for audits and future refresh decisions.
+                    metadata.summary = DocSummary(
+                        abstract=abstract,
+                        keywords=keywords or [],
+                        model_name=self.smart_summarizer.get_model_name(),
+                        method="SmartDocSummarizer@v1",
+                        # created_at is set by the metadata store on save if you prefer; setting here is optional.
+                    )
 
 
             # 2) Split
@@ -127,6 +141,14 @@ class VectorizationProcessor(BaseOutputProcessor):
             base_flat = flat_metadata_from(metadata)
             base_flat = {k: v for k, v in base_flat.items() if v is not None}
 
+            # just before: for i, doc in enumerate(chunks):
+            kw_for_search = None
+            if keywords:
+                # Fred rationale:
+                # - Give BM25 a few strong tokens without duplicating the abstract.
+                # - Keep it short to avoid index bloat.
+                kw_for_search = " ".join((keywords or [])[:12])
+
             for i, doc in enumerate(chunks):
                 raw_meta = (doc.metadata or {}).copy()
 
@@ -136,6 +158,11 @@ class VectorizationProcessor(BaseOutputProcessor):
 
                 # Stable id
                 raw_meta["chunk_uid"] = make_chunk_uid(doc_uid, {**raw_meta, "chunk_index": i})
+
+                # - Per-chunk 'doc_kw' boosts lexical recall for hybrid search.
+                # - Name is short; ensure sanitize_chunk_metadata() whitelists 'doc_kw'.
+                if kw_for_search:
+                    raw_meta["doc_kw"] = kw_for_search
 
                 # Whitelist + coerce + derive viewer_fragment/section
                 clean, dropped = sanitize_chunk_metadata(raw_meta)

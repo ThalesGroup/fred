@@ -727,6 +727,14 @@ class ApplicationContext:
         else:
             raise NotImplementedError(f"No pull provider implemented for '{source_config.provider}'")
 
+    def is_summary_generation_enabled(self) -> bool:
+        """
+        Checks if the summary generation feature is enabled in the configuration.
+        Returns:
+            bool: True if enabled, False otherwise.
+        """
+        return self.configuration.features.generate_summary
+
     def _log_sensitive(self, name: str, value: Optional[str]):
         logger.info(f"     ↳ {name} set: {'✅' if value else '❌'}")
 

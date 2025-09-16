@@ -316,6 +316,15 @@ class StorageConfig(BaseModel):
     tabular_stores: Optional[Dict[str, StoreConfig]] = Field(default=None, description="Optional tabular store")
     vector_store: VectorStorageConfig
 
+class FeaturesConfig(BaseModel):
+    """
+    Configuration for optional features in the ingestion pipeline.
+    """
+    # Summary & Keyword features
+    generate_summary: bool = Field(
+        default=True,
+        description="Enable/disable human-centric abstract and keyword generation for documents."
+    )
 
 class Configuration(BaseModel):
     app: AppConfig
@@ -328,3 +337,7 @@ class Configuration(BaseModel):
     scheduler: SchedulerConfig
     document_sources: Dict[str, DocumentSourceConfig] = Field(default_factory=dict, description="Mapping of source_tag identifiers to push/pull source configurations")
     storage: StorageConfig
+    features: FeaturesConfig = Field(
+        default_factory=FeaturesConfig,
+        description="A collection of feature flags to enable or disable optional functionality."
+    )

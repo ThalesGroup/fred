@@ -468,6 +468,8 @@ applications:
         log_level: "info"
         reload: false
         reload_dir: "."
+      features:
+        generate_summary: true
       security:
         m2m:
           enabled: true
@@ -521,6 +523,13 @@ applications:
         type: "openai"
         use_gpu: True
         process_images: True
+      model:
+        provider: openai        # openai | azure | ollama
+        name: gpt-4o-mini       # azure: deployment name, ollama: 'qwen2.5:3b-instruct' etc.
+        settings:
+          # openai: nothing else required (keys in .env)
+          # azure: { endpoint: "...", api_version: "2024-08-01-preview" }
+          # ollama: { base_url: "http://localhost:11434"
       storage:
         postgres:
           host: localhost
