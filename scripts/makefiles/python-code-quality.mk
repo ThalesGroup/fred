@@ -23,10 +23,10 @@ import-order: ## Run the formatter (ruff) to check import order
 	@echo "************ Executing Ruff check for import order ************"
 	$(UV) run ruff check --select I
 
-.PHONY: fix-import-order
+.PHONY: import-order-fix
 import-order-fix: ## Run the formatter (ruff) to fix import order
 	@echo "************ Executing Ruff check to fix import order ************"
-	$(UV) run ruff check --select I
+	$(UV) run ruff check --select I --fix
 
 .PHONY: format
 format: ## Run the formatter (ruff)
