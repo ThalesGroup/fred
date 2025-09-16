@@ -94,6 +94,14 @@ embedding:
   # Enable or disable image processing in documents
   process_images: true
 
+model:
+  provider: openai        # openai | azure | ollama
+  name: gpt-4o-mini       # azure: deployment name, ollama: 'qwen2.5:3b-instruct' etc.
+  settings:
+    # openai: nothing else required (keys in .env)
+    # azure: { endpoint: "...", api_version: "2024-08-01-preview" }
+    # ollama: { base_url: "http://localhost:11434" }
+
 storage:
   postgres:
     host: localhost
