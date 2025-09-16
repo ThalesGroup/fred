@@ -5,19 +5,11 @@
 
 // User input component for the chatbot
 
-import AttachFileIcon from "@mui/icons-material/AttachFile";
-import MicIcon from "@mui/icons-material/Mic";
-import StopIcon from "@mui/icons-material/Stop";
 import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
 import AddIcon from "@mui/icons-material/Add";
-import LibraryBooksIcon from "@mui/icons-material/LibraryBooks";
-import AutoFixHighIcon from "@mui/icons-material/AutoFixHigh";
-import DescriptionIcon from "@mui/icons-material/Description";
-import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
-
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import AudioController from "./AudioController.tsx";
-import AudioRecorder from "./AudioRecorder.tsx";
+import AudioController from "../AudioController.tsx";
+import AudioRecorder from "../AudioRecorder.tsx";
 
 import {
   Grid2,
@@ -26,25 +18,21 @@ import {
   Tooltip,
   useTheme,
   Box,
-  Chip,
-  Popover,
-  Typography,
   Stack,
-  Divider,
-  MenuList,
-  MenuItem,
-  ListItemIcon,
-  ListItemText,
 } from "@mui/material";
-import { ChatResourcesSelectionCard } from "./ChatResourcesSelectionCard.tsx";
-import { ChatDocumentLibrariesSelectionCard } from "./ChatDocumentLibrariesSelectionCard.tsx";
+
 import {
   Resource,
+  SearchPolicyName,
   TagWithItemsId,
   useListAllTagsKnowledgeFlowV1TagsGetQuery,
   useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery,
-} from "../../slices/knowledgeFlow/knowledgeFlowOpenApi.ts";
+} from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi.ts";
 import { useTranslation } from "react-i18next";
+
+// Import the new sub-components
+import { UserInputAttachments } from "./UserInputAttachments.tsx";
+import { UserInputPopover } from "./UserInputPopover.tsx";
 
 export interface UserInputContent {
   text?: string;
@@ -53,12 +41,14 @@ export interface UserInputContent {
   documentLibraryIds?: string[];
   promptResourceIds?: string[];
   templateResourceIds?: string[];
+  searchPolicy?: SearchPolicyName;
 }
 
 type PersistedCtx = {
   documentLibraryIds?: string[];
   promptResourceIds?: string[];
   templateResourceIds?: string[];
+  searchPolicy?: SearchPolicyName;
 };
 
 function makeStorageKey(sessionId?: string) {
@@ -92,11 +82,11 @@ export default function UserInput({
   isWaiting = false,
   onSend = () => {},
   onContextChange,
-  sessionId, // current conversation id from backend
-  // initial* are defaults only — used once when a session starts and nothing is yet persisted/selected
+  sessionId,
   initialDocumentLibraryIds,
   initialPromptResourceIds,
   initialTemplateResourceIds,
+  initialSearchPolicy = "semantic",
 }: {
   enableFilesAttachment: boolean;
   enableAudioAttachment: boolean;
@@ -107,6 +97,7 @@ export default function UserInput({
   initialDocumentLibraryIds?: string[];
   initialPromptResourceIds?: string[];
   initialTemplateResourceIds?: string[];
+  initialSearchPolicy?: SearchPolicyName;
 }) {
   const theme = useTheme();
   const { t } = useTranslation();
@@ -129,6 +120,7 @@ export default function UserInput({
   const [selectedDocumentLibrariesIds, setSelectedDocumentLibrariesIds] = useState<string[]>([]);
   const [selectedPromptResourceIds, setSelectedPromptResourceIds] = useState<string[]>([]);
   const [selectedTemplateResourceIds, setSelectedTemplateResourceIds] = useState<string[]>([]);
+  const [selectedSearchPolicyName, setSelectedSearchPolicyName] = useState<SearchPolicyName>("semantic");
 
   // Selections made *before* we get a real sessionId (first question) — migrate them.
   const preSessionRef = useRef<PersistedCtx>({});
@@ -140,6 +132,7 @@ export default function UserInput({
         documentLibraryIds: selectedDocumentLibrariesIds,
         promptResourceIds: selectedPromptResourceIds,
         templateResourceIds: selectedTemplateResourceIds,
+        searchPolicy: selectedSearchPolicyName,
       };
     }
   }, [
@@ -147,6 +140,7 @@ export default function UserInput({
     selectedDocumentLibrariesIds,
     selectedPromptResourceIds,
     selectedTemplateResourceIds,
+    selectedSearchPolicyName,
   ]);
 
   // Hydration guard: run at most once per session id.
@@ -167,25 +161,27 @@ export default function UserInput({
     const persisted = loadSessionCtx(sessionId) ?? {};
     const pre = preSessionRef.current ?? {};
 
-    const libs =
-      persisted.documentLibraryIds?.length
-        ? persisted.documentLibraryIds
-        : pre.documentLibraryIds?.length
+    const libs = persisted.documentLibraryIds?.length
+      ? persisted.documentLibraryIds
+      : pre.documentLibraryIds?.length
         ? pre.documentLibraryIds
-        : initialDocumentLibraryIds ?? [];
-    const prompts =
-      persisted.promptResourceIds?.length
-        ? persisted.promptResourceIds
-        : pre.promptResourceIds?.length
+        : (initialDocumentLibraryIds ?? []);
+    const prompts = persisted.promptResourceIds?.length
+      ? persisted.promptResourceIds
+      : pre.promptResourceIds?.length
         ? pre.promptResourceIds
-        : initialPromptResourceIds ?? [];
-    const templates =
-      persisted.templateResourceIds?.length
-        ? persisted.templateResourceIds
-        : pre.templateResourceIds?.length
+        : (initialPromptResourceIds ?? []);
+    const templates = persisted.templateResourceIds?.length
+      ? persisted.templateResourceIds
+      : pre.templateResourceIds?.length
         ? pre.templateResourceIds
-        : initialTemplateResourceIds ?? [];
-
+        : (initialTemplateResourceIds ?? []);
+    const searchPolicy = persisted.searchPolicy
+      ? persisted.searchPolicy
+      : pre.searchPolicy
+        ? pre.searchPolicy
+        : initialSearchPolicy;
+    setSelectedSearchPolicyName(searchPolicy);
     setSelectedDocumentLibrariesIds(libs);
     setSelectedPromptResourceIds(prompts);
     setSelectedTemplateResourceIds(templates);
@@ -195,6 +191,7 @@ export default function UserInput({
       documentLibraryIds: libs,
       promptResourceIds: prompts,
       templateResourceIds: templates,
+      searchPolicy: searchPolicy,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
@@ -208,6 +205,7 @@ export default function UserInput({
           documentLibraryIds: value,
           promptResourceIds: selectedPromptResourceIds,
           templateResourceIds: selectedTemplateResourceIds,
+          searchPolicy: selectedSearchPolicyName,
         });
       return value;
     });
@@ -220,6 +218,7 @@ export default function UserInput({
           documentLibraryIds: selectedDocumentLibrariesIds,
           promptResourceIds: value,
           templateResourceIds: selectedTemplateResourceIds,
+          searchPolicy: selectedSearchPolicyName,
         });
       return value;
     });
@@ -232,39 +231,54 @@ export default function UserInput({
           documentLibraryIds: selectedDocumentLibrariesIds,
           promptResourceIds: selectedPromptResourceIds,
           templateResourceIds: value,
+          searchPolicy: selectedSearchPolicyName,
+        });
+      return value;
+    });
+  };
+  const setSearchPolicy = (next: React.SetStateAction<SearchPolicyName>) => {
+    setSelectedSearchPolicyName((prev) => {
+      const value = typeof next === "function" ? (next as any)(prev) : next;
+      if (sessionId)
+        saveSessionCtx(sessionId, {
+          documentLibraryIds: selectedDocumentLibrariesIds,
+          promptResourceIds: selectedPromptResourceIds,
+          templateResourceIds: selectedTemplateResourceIds,
+          searchPolicy: value,
         });
       return value;
     });
   };
 
+  const searchPolicyLabels: Record<SearchPolicyName, string> = {
+    hybrid: t("search.hybrid", "Hybrid"),
+    semantic: t("search.semantic", "Semantic"),
+    strict: t("search.strict", "Strict"),
+  };
+
   // “+” menu popover
   const [plusAnchor, setPlusAnchor] = useState<HTMLElement | null>(null);
-  const plusOpen = Boolean(plusAnchor);
-
   // Inline picker view inside the same popover (replaces the old Dialogs)
   // null -> root menu with sections; otherwise show the corresponding selector inline
-  const [pickerView, setPickerView] = useState<null | "libraries" | "prompts" | "templates">(null);
+  const [pickerView, setPickerView] = useState<null | "libraries" | "prompts" | "templates" | "search_policy">(null);
 
   // --- Fetch resource/tag names so chips can display labels instead of raw IDs
-  const { data: promptResources = [] } =
-    useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery({ kind: "prompt" });
-  const { data: templateResources = [] } =
-    useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery({ kind: "template" });
+  const { data: promptResources = [] } = useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery({ kind: "prompt" });
+  const { data: templateResources = [] } = useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery({ kind: "template" });
   // Libraries are "document" tags in your UI
-  const { data: documentTags = [] } =
-    useListAllTagsKnowledgeFlowV1TagsGetQuery({ type: "document" });
+  const { data: documentTags = [] } = useListAllTagsKnowledgeFlowV1TagsGetQuery({ type: "document" });
 
   const promptNameById = useMemo(
     () => Object.fromEntries((promptResources as Resource[]).map((r) => [r.id, r.name])),
-    [promptResources]
+    [promptResources],
   );
   const templateNameById = useMemo(
     () => Object.fromEntries((templateResources as Resource[]).map((r) => [r.id, r.name])),
-    [templateResources]
+    [templateResources],
   );
   const libNameById = useMemo(
     () => Object.fromEntries((documentTags as TagWithItemsId[]).map((t) => [t.id, t.name])),
-    [documentTags]
+    [documentTags],
   );
 
   // --- Fred rationale ---
@@ -278,6 +292,7 @@ export default function UserInput({
       documentLibraryIds: selectedDocumentLibrariesIds.length ? selectedDocumentLibrariesIds : undefined,
       promptResourceIds: selectedPromptResourceIds.length ? selectedPromptResourceIds : undefined,
       templateResourceIds: selectedTemplateResourceIds.length ? selectedTemplateResourceIds : undefined,
+      searchPolicy: selectedSearchPolicyName,
     });
   }, [
     filesBlob,
@@ -285,6 +300,7 @@ export default function UserInput({
     selectedDocumentLibrariesIds,
     selectedPromptResourceIds,
     selectedTemplateResourceIds,
+    selectedSearchPolicyName,
     onContextChange,
   ]);
 
@@ -309,6 +325,7 @@ export default function UserInput({
       documentLibraryIds: selectedDocumentLibrariesIds,
       promptResourceIds: selectedPromptResourceIds,
       templateResourceIds: selectedTemplateResourceIds,
+      searchPolicy: selectedSearchPolicyName,
     });
     setUserInput("");
     setAudioBlob(null);
@@ -352,89 +369,16 @@ export default function UserInput({
   const removePrompt = (id: string) => setPrompts((prev) => prev.filter((x) => x !== id));
   const removeTemplate = (id: string) => setTemplates((prev) => prev.filter((x) => x !== id));
 
-  // Small count chip
-  const countChip = (n: number) =>
-    n > 0 ? <Chip size="small" label={n} sx={{ height: 20, borderRadius: "999px", fontSize: "0.7rem" }} /> : null;
-
-  // Section header (root popover)
-  const sectionHeader = (
-    icon: React.ReactNode,
-    label: string,
-    count: number,
-    onAdd: () => void,
-    onClear?: () => void,
-  ) => (
-    <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 0.75 }}>
-      <Stack direction="row" alignItems="center" spacing={1}>
-        {icon}
-        <Typography variant="body2" sx={{ fontWeight: 600 }}>
-          {label}
-        </Typography>
-        {countChip(count)}
-      </Stack>
-      <Stack direction="row" alignItems="center" spacing={0.5}>
-        {onClear && count > 0 && (
-          <Tooltip title={t("documentLibrary.clearSelection")}>
-            <IconButton
-              size="small"
-              onClick={() => {
-                // clear via wrappers so storage updates
-                if (label === t("knowledge.viewSelector.libraries")) setLibs([]);
-                if (label === t("knowledge.viewSelector.prompts")) setPrompts([]);
-                if (label === t("knowledge.viewSelector.templates")) setTemplates([]);
-              }}
-            >
-              <DeleteOutlineIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
-        )}
-        <Tooltip title={t("common.add")}>
-          <IconButton size="small" onClick={onAdd}>
-            <AddIcon fontSize="small" />
-          </IconButton>
-        </Tooltip>
-      </Stack>
-    </Stack>
-  );
-
   return (
     <Grid2 container sx={{ height: "100%", justifyContent: "flex-end", overflow: "hidden" }} size={12} display="flex">
-      {/* Attachments strip */}
-      {((filesBlob && filesBlob.length > 0) || audioBlob) && (
-        <Grid2
-          container
-          size={12}
-          height="40px"
-          overflow="auto"
-          paddingBottom={1}
-          display="flex"
-          justifyContent="center"
-          gap={1}
-        >
-          {filesBlob &&
-            filesBlob.map((f, i) => (
-              <Grid2 size="auto" key={`${(f as File).name}-${i}`}>
-                <Chip
-                  label={(f as File).name.replace(/\.[^/.]+$/, "")}
-                  color="primary"
-                  variant="outlined"
-                  sx={{ height: 32, fontSize: "1.0rem" }}
-                  onDelete={() => handleRemoveFile(i)}
-                />
-              </Grid2>
-            ))}
-          {audioBlob && (
-            <Chip
-              label={t("chatbot.audioChip", "Audio recording")}
-              color="error"
-              variant="outlined"
-              sx={{ height: 32, fontSize: "1.0rem" }}
-              onClick={() => setDisplayAudioController(true)}
-              onDelete={() => setAudioBlob(null)}
-            />
-          )}
-        </Grid2>
-      )}
+      {/* Attachments strip - now a dedicated component */}
+      <UserInputAttachments
+        files={filesBlob}
+        audio={audioBlob}
+        onRemoveFile={handleRemoveFile}
+        onShowAudioController={() => setDisplayAudioController(true)}
+        onRemoveAudio={() => setAudioBlob(null)}
+      />
 
       {/* Only the inner rounded input remains visible */}
       <Grid2 container size={12} alignItems="center" sx={{ p: 0, gap: 0, backgroundColor: "transparent" }}>
@@ -513,7 +457,7 @@ export default function UserInput({
                   overflow: "auto",
                   "& .MuiInputBase-input, & .MuiInputBase-inputMultiline": {
                     paddingTop: "12px",
-                    paddingBottom: "56px", // gutter for the "+" button
+                    paddingBottom: "56px",
                     paddingRight: "16px",
                     paddingLeft: "12px",
                   },
@@ -523,170 +467,43 @@ export default function UserInput({
           </Box>
         </Box>
 
-        {/* Popover: root sections OR inline selector (no intermediate dialog, no Clear/Done footer) */}
-        <Popover
-          open={plusOpen}
-          anchorEl={plusAnchor}
-          onClose={() => {
+        {/* Popover - now a dedicated component */}
+        <UserInputPopover
+          plusAnchor={plusAnchor}
+          pickerView={pickerView}
+          isRecording={isRecording}
+          selectedDocumentLibrariesIds={selectedDocumentLibrariesIds}
+          selectedPromptResourceIds={selectedPromptResourceIds}
+          selectedTemplateResourceIds={selectedTemplateResourceIds}
+          selectedSearchPolicyName={selectedSearchPolicyName}
+          libNameById={libNameById}
+          promptNameById={promptNameById}
+          templateNameById={templateNameById}
+          searchPolicyLabels={searchPolicyLabels}
+          setPickerView={setPickerView}
+          setPlusAnchor={setPlusAnchor}
+          setLibs={setLibs}
+          setPrompts={setPrompts}
+          setTemplates={setTemplates}
+          setSearchPolicy={setSearchPolicy}
+          onRemoveLib={removeLib}
+          onRemovePrompt={removePrompt}
+          onRemoveTemplate={removeTemplate}
+          onAttachFileClick={() => {
+            fileInputRef.current?.click();
+            setPickerView(null);
+            setPlusAnchor(null);
+            requestAnimationFrame(() => inputRef.current?.focus());
+          }}
+          onRecordAudioClick={() => {
+            handleAudioRecorderDisplay();
             setPickerView(null);
             setPlusAnchor(null);
           }}
-          anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-          transformOrigin={{ vertical: "top", horizontal: "right" }}
-          slotProps={{
-            paper: {
-              sx: {
-                width: pickerView ? 520 : 420,
-                maxHeight: "70vh",
-                p: 1.25,
-                overflow: "hidden",
-              },
-            },
-          }}
-        >
-          {/* === Root view: sections with chips and quick actions === */}
-          {!pickerView && (
-            <Box sx={{ display: "flex", flexDirection: "column" }}>
-              {/* Libraries */}
-              {sectionHeader(
-                <LibraryBooksIcon fontSize="small" />,
-                t("knowledge.viewSelector.libraries"),
-                selectedDocumentLibrariesIds.length,
-                () => setPickerView("libraries"),
-                () => setLibs([]),
-              )}
-              <Box sx={{ mb: 1 }}>
-                {selectedDocumentLibrariesIds.length ? (
-                  <Stack direction="row" flexWrap="wrap" gap={0.75}>
-                    {selectedDocumentLibrariesIds.map((id) => (
-                      <Chip key={id} size="small" label={libNameById[id] ?? id} onDelete={() => removeLib(id)} />
-                    ))}
-                  </Stack>
-                ) : (
-                  <Typography variant="caption" color="text.secondary">
-                    {t("common.noneSelected")}
-                  </Typography>
-                )}
-              </Box>
-              <Divider sx={{ my: 1 }} />
-
-              {/* Prompts */}
-              {sectionHeader(
-                <AutoFixHighIcon fontSize="small" />,
-                t("knowledge.viewSelector.prompts"),
-                selectedPromptResourceIds.length,
-                () => setPickerView("prompts"),
-                () => setPrompts([]),
-              )}
-              <Box sx={{ mb: 1 }}>
-                {selectedPromptResourceIds.length ? (
-                  <Stack direction="row" flexWrap="wrap" gap={0.75}>
-                    {selectedPromptResourceIds.map((id) => (
-                      <Chip key={id} size="small" label={promptNameById[id] ?? id} onDelete={() => removePrompt(id)} />
-                    ))}
-                  </Stack>
-                ) : (
-                  <Typography variant="caption" color="text.secondary">
-                    {t("common.noneSelected")}
-                  </Typography>
-                )}
-              </Box>
-              <Divider sx={{ my: 1 }} />
-
-              {/* Templates */}
-              {sectionHeader(
-                <DescriptionIcon fontSize="small" />,
-                t("knowledge.viewSelector.templates"),
-                selectedTemplateResourceIds.length,
-                () => setPickerView("templates"),
-                () => setTemplates([]),
-              )}
-              <Box sx={{ mb: 1 }}>
-                {selectedTemplateResourceIds.length ? (
-                  <Stack direction="row" flexWrap="wrap" gap={0.75}>
-                    {selectedTemplateResourceIds.map((id) => (
-                      <Chip key={id} size="small" label={templateNameById[id] ?? id} onDelete={() => removeTemplate(id)} />
-                    ))}
-                  </Stack>
-                ) : (
-                  <Typography variant="caption" color="text.secondary">
-                    {t("common.noneSelected")}
-                  </Typography>
-                )}
-              </Box>
-              <Divider sx={{ my: 1 }} />
-
-              {/* Attach / Audio */}
-              <MenuList dense sx={{ py: 0.25 }}>
-                {enableFilesAttachment && (
-                  <MenuItem
-                    onClick={() => {
-                      fileInputRef.current?.click();
-                      setPickerView(null);
-                      setPlusAnchor(null);
-                      requestAnimationFrame(() => inputRef.current?.focus());
-                    }}
-                  >
-                    <ListItemIcon>
-                      <AttachFileIcon fontSize="small" />
-                    </ListItemIcon>
-                    <ListItemText
-                      primary={t("chatbot.attachFiles")}
-                      secondary={
-                        filesBlob?.length
-                          ? t("chatbot.attachments.count", {
-                              count: filesBlob.length,
-                            })
-                          : undefined
-                      }
-                    />
-                  </MenuItem>
-                )}
-                {enableAudioAttachment && (
-                  <MenuItem
-                    onClick={() => {
-                      handleAudioRecorderDisplay();
-                      setPickerView(null);
-                      setPlusAnchor(null);
-                    }}
-                  >
-                    <ListItemIcon>
-                      {isRecording ? <StopIcon fontSize="small" /> : <MicIcon fontSize="small" />}
-                    </ListItemIcon>
-                    <ListItemText primary={isRecording ? t("chatbot.stopRecording") : t("chatbot.recordAudio")} />
-                  </MenuItem>
-                )}
-              </MenuList>
-            </Box>
-          )}
-
-          {/* === Inline picker views (direct cards; no header/footer) === */}
-          {pickerView && (
-            <Box sx={{ height: "60vh", overflow: "auto", pr: 0.5 }}>
-              {pickerView === "libraries" && (
-                <ChatDocumentLibrariesSelectionCard
-                  selectedLibrariesIds={selectedDocumentLibrariesIds}
-                  setSelectedLibrariesIds={setLibs} // wrapped setter (persist)
-                  libraryType="document"
-                />
-              )}
-              {pickerView === "prompts" && (
-                <ChatResourcesSelectionCard
-                  libraryType="prompt"
-                  selectedResourceIds={selectedPromptResourceIds}
-                  setSelectedResourceIds={setPrompts} // wrapped setter (persist)
-                />
-              )}
-              {pickerView === "templates" && (
-                <ChatResourcesSelectionCard
-                  libraryType="template"
-                  selectedResourceIds={selectedTemplateResourceIds}
-                  setSelectedResourceIds={setTemplates} // wrapped setter (persist)
-                />
-              )}
-            </Box>
-          )}
-        </Popover>
+          enableFilesAttachment={enableFilesAttachment}
+          enableAudioAttachment={enableAudioAttachment}
+          filesBlob={filesBlob}
+        />
       </Grid2>
     </Grid2>
   );

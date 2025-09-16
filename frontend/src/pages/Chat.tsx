@@ -1,9 +1,20 @@
+// Copyright Thales 2025
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 import { useRef, useState } from "react";
-import {
-  Box, CircularProgress, Paper, Typography, Divider, IconButton, Tooltip, PaperProps,
-} from "@mui/material";
-import CloseIcon from "@mui/icons-material/Close";
-import AppsIcon from "@mui/icons-material/Apps";
+import { Box, CircularProgress, Paper, Typography, Divider, IconButton, PaperProps } from "@mui/material";
+import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import {
   AgenticFlow,
   SessionSchema,
@@ -12,16 +23,17 @@ import {
   useDeleteSessionAgenticV1ChatbotSessionSessionIdDeleteMutation,
 } from "../slices/agentic/agenticOpenApi";
 import AgentsList from "../components/chatbot/settings/AgentList";
-import { getAgentBadge } from "../utils/avatar";
 import { ConversationList } from "../components/chatbot/settings/ConversationList";
 import { useSessionOrchestrator } from "../hooks/useSessionOrchestrator";
 import ChatBot from "../components/chatbot/ChatBot";
+import { SidePanelToggle } from "../components/SidePanelToogle";
+import { useTranslation } from "react-i18next";
 
 const PANEL_W = { xs: 300, sm: 340, md: 360 };
 
 export default function Chat() {
   const containerRef = useRef<HTMLDivElement | null>(null);
-  
+  const { t } = useTranslation();
 
   const {
     data: flows = [],
@@ -49,7 +61,7 @@ export default function Chat() {
     selectAgenticFlowForCurrentSession,
     startNewConversation,
     updateOrAddSession,
-    bindDraftAgentToSessionId
+    bindDraftAgentToSessionId,
   } = useSessionOrchestrator({
     sessionsFromServer,
     flowsFromServer: flows,
@@ -73,7 +85,7 @@ export default function Chat() {
     selectSession(s);
   };
 
-const handleDeleteSession = async (s: SessionSchema) => {
+  const handleDeleteSession = async (s: SessionSchema) => {
     try {
       console.log("ChatPOC: Starting delete for session:", s.id);
       await deleteSessionMutation({ sessionId: s.id }).unwrap();
@@ -87,7 +99,8 @@ const handleDeleteSession = async (s: SessionSchema) => {
         refetchSessions();
       }, 1000);
     }
-  };  console.log("ChatPOC: Component rendering. Session count:", sessions?.length);
+  };
+  console.log("ChatPOC: Component rendering. Session count:", sessions?.length);
   if (flowsLoading || sessionsLoading) {
     return (
       <Box sx={{ p: 3, display: "grid", placeItems: "center", height: "100vh" }}>
@@ -98,7 +111,9 @@ const handleDeleteSession = async (s: SessionSchema) => {
   if (flowsError) {
     return (
       <Box sx={{ p: 3 }}>
-        <Typography variant="h6" color="error">Failed to load assistants</Typography>
+        <Typography variant="h6" color="error">
+          Failed to load assistants
+        </Typography>
         <Typography variant="body2" sx={{ mt: 1 }}>
           {(flowsErrObj as any)?.data?.detail || "Please try again later."}
         </Typography>
@@ -108,7 +123,9 @@ const handleDeleteSession = async (s: SessionSchema) => {
   if (sessionsError) {
     return (
       <Box sx={{ p: 3 }}>
-        <Typography variant="h6" color="error">Failed to load conversations</Typography>
+        <Typography variant="h6" color="error">
+          Failed to load conversations
+        </Typography>
         <Typography variant="body2" sx={{ mt: 1 }}>
           {(sessionsErrObj as any)?.data?.detail || "Please try again later."}
         </Typography>
@@ -143,30 +160,20 @@ const handleDeleteSession = async (s: SessionSchema) => {
     />
   );
 
+  // ... (rest of the component)
+
   return (
     <Box ref={containerRef} sx={{ height: "100%", position: "relative", overflow: "hidden" }}>
+      {/* This is the toggle button for when the panel is closed. 
+        It remains in its original position, which is good. 
+      */}
       {!agentsOpen && (
         <Box sx={{ position: "absolute", top: 12, left: 12, zIndex: 10 }}>
-          <Tooltip title="Assistants" arrow>
-            <IconButton
-              onClick={openAgents}
-              size="small"
-              aria-label="Choose assistant"
-              sx={{
-                border: (t) => `1px solid ${t.palette.divider}`,
-                bgcolor: "background.paper",
-                boxShadow: (t) => (t.palette.mode === "light" ? 1 : 3),
-              }}
-            >
-              {currentAgenticFlow ? (
-                <Box sx={{ lineHeight: 0, transform: "scale(0.8)" }}>
-                  {getAgentBadge(currentAgenticFlow.nickname || currentAgenticFlow.name)}
-                </Box>
-              ) : (
-                <AppsIcon fontSize="small" />
-              )}
-            </IconButton>
-          </Tooltip>
+          <SidePanelToggle
+            isOpen={agentsOpen}
+            label={currentAgenticFlow ? currentAgenticFlow.nickname || currentAgenticFlow.name : "Assistants"}
+            onToggle={openAgents}
+          />
         </Box>
       )}
 
@@ -187,15 +194,19 @@ const handleDeleteSession = async (s: SessionSchema) => {
         <PanelShell>
           <Box
             sx={{
-              display: "flex", alignItems: "center", justifyContent: "space-between",
-              px: 1, py: 1, borderBottom: (t) => `1px solid ${t.palette.divider}`,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              px: 1,
+              py: 1,
+              borderBottom: (t) => `1px solid ${t.palette.divider}`,
             }}
           >
-            <Typography variant="subtitle2" sx={{ fontWeight: 600, pl: 1 }}>
-              Assistants & Conversations
+            <Typography variant="h6" sx={{ flexGrow: 1, pl: 1 }}>
+              {t("panel.conversationSetup", "Conversation setup")}
             </Typography>
             <IconButton size="small" onClick={closeAgents}>
-              <CloseIcon fontSize="small" />
+              <ChevronLeftIcon fontSize="small" />
             </IconButton>
           </Box>
           <Box sx={{ flex: 1, overflow: "auto" }}>

@@ -35,7 +35,6 @@ import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
 import GroupIcon from "@mui/icons-material/Group";
 import LightModeIcon from "@mui/icons-material/LightMode";
-import MenuIcon from "@mui/icons-material/Menu";
 import MenuBookIcon from "@mui/icons-material/MenuBook";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import { useContext } from "react";
@@ -143,7 +142,7 @@ export default function SideBar({ darkMode, onThemeChange }) {
         sx={{
           display: "flex",
           alignItems: "center",
-          justifyContent: isSidebarSmall ? "center" : "space-between",
+          justifyContent:  "center",
           py: 2.5,
           px: isSidebarSmall ? 1 : 2,
           borderBottom: `1px solid ${theme.palette.divider}`,
@@ -154,6 +153,7 @@ export default function SideBar({ darkMode, onThemeChange }) {
             display: "flex",
             alignItems: "center",
             cursor: "pointer",
+            justifyContent: "center" 
           }}
           onClick={() => navigate("/")}
         >
@@ -166,55 +166,33 @@ export default function SideBar({ darkMode, onThemeChange }) {
           >
             <ImageComponent name={logoName} width="36px" height="36px" />
           </Avatar>
-          {!isSidebarSmall && (
-            <Typography
-              variant="subtitle1"
-              sx={{
-                ml: 1.5,
-                fontWeight: 500,
-                color: theme.palette.text.primary,
-              }}
-            >
-              {logoName}
-            </Typography>
-          )}
         </Box>
-        {!isSidebarSmall && (
-          <IconButton
-            onClick={toggleSidebar}
-            size="small"
-            sx={{
-              borderRadius: "8px",
-              "&:hover": {
-                backgroundColor: hoverColor,
-              },
-            }}
-          >
-            {theme.direction === "ltr" ? <ChevronLeftIcon /> : <ChevronRightIcon />}
-          </IconButton>
-        )}
       </Box>
 
-      {isSidebarSmall && (
-        <Box sx={{ display: "flex", justifyContent: "center", pt: 2 }}>
-          <IconButton
-            size="small"
-            onClick={toggleSidebar}
-            sx={{
-              borderRadius: "8px",
-              border: `1px solid ${theme.palette.divider}`,
-              width: 28,
-              height: 28,
-              "&:hover": {
-                backgroundColor: hoverColor,
-              },
-            }}
-          >
-            <MenuIcon fontSize="small" />
-          </IconButton>
-        </Box>
-      )}
-
+      {/* NEW, CONSOLIDATED BUTTON LOCATION */}
+      <Box sx={{ display: "flex", justifyContent: "center", pt: 2 }}>
+        <IconButton
+          size="small"
+          onClick={toggleSidebar}
+          sx={{
+            borderRadius: "8px",
+            border: `1px solid ${theme.palette.divider}`,
+            width: 28,
+            height: 28,
+            "&:hover": {
+              backgroundColor: hoverColor,
+            },
+          }}
+        >
+          {/* Change icon based on state */}
+          {isSidebarCollapsed ? (
+            <ChevronRightIcon fontSize="small" />
+          ) : (
+            <ChevronLeftIcon fontSize="small" />
+          )}
+        </IconButton>
+      </Box>
+      
       <List
         sx={{
           pt: 3,
@@ -344,30 +322,6 @@ export default function SideBar({ darkMode, onThemeChange }) {
         {/* Liens externes */}
         {!isSidebarSmall && (
           <>
-            <Box
-              sx={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                py: 1,
-                px: 2,
-                mt: 1,
-                width: "90%",
-                borderRadius: 1,
-              }}
-            >
-              <Typography variant="caption" color="text.secondary">
-                Innovation hub
-              </Typography>
-              <IconButton
-                color="inherit"
-                size="small"
-                onClick={() => window.open("https://paradox-innovation.dev", "_blank", "noopener,noreferrer")}
-                sx={{ p: 0.3 }}
-              >
-                <OpenInNewIcon sx={{ fontSize: "0.8rem", color: "text.secondary" }} />
-              </IconButton>
-            </Box>
 
             <Box
               sx={{

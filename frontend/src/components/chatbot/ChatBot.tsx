@@ -32,7 +32,7 @@ import {
 import { getAgentBadge } from "../../utils/avatar.tsx";
 import { useToast } from "../ToastProvider.tsx";
 import { MessagesArea } from "./MessagesArea.tsx";
-import UserInput, { UserInputContent } from "./UserInput.tsx";
+import UserInput, { UserInputContent } from "./user_input/UserInput.tsx";
 import { keyOf, mergeAuthoritative, sortMessages, toWsUrl, upsertOne } from "./ChatBotUtils.tsx";
 import {
   TagType,
@@ -389,6 +389,7 @@ const ChatBot = ({
     if (content.templateResourceIds?.length) {
       runtimeContext.selected_template_ids = content.templateResourceIds;
     }
+    runtimeContext.search_policy = content.searchPolicy || "semantic";
 
     // Files upload
     if (content.files?.length) {

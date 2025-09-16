@@ -3,15 +3,30 @@
 # ...
 
 import logging
-from typing import List
+from typing import List, Literal, Union
 
 from fastapi import APIRouter, Depends
 from fred_core import KeycloakUser, VectorSearchHit, get_current_user
+from pydantic import BaseModel, Field
 
 from app.features.vector_search.vector_search_service import VectorSearchService
-from app.features.vector_search.vector_search_structures import SearchRequest
+from app.features.vector_search.vector_search_structures import SearchPolicy, SearchPolicyName, SearchRequest
 
 logger = logging.getLogger(__name__)
+
+# ---------------- Echo types for UI OpenAPI ----------------
+
+EchoPayload = Union[
+    SearchPolicy,
+    SearchPolicyName
+]
+
+class EchoEnvelope(BaseModel):
+    kind: Literal[
+        "SearchPolicy",
+        "SearchPolicyName"
+    ]
+    payload: EchoPayload = Field(..., description="Schema payload being echoed")
 
 
 class VectorSearchController:
@@ -22,6 +37,16 @@ class VectorSearchController:
 
     def __init__(self, router: APIRouter):
         self.service = VectorSearchService()
+
+        @router.post(
+            "/schemas/echo",
+            tags=["Schemas"],
+            summary="Ignore. Not a real endpoint.",
+            description="Ignore. This endpoint is only used to include some types (mainly one used in websocket) in the OpenAPI spec, so they can be generated as typescript types for the UI. This endpoint is not really used, this is just a code generation hack.",
+        )
+        def echo_schema(envelope: EchoEnvelope) -> None:
+            pass
+
 
         @router.post(
             "/vector/search",

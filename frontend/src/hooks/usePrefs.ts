@@ -1,4 +1,17 @@
-// src/hooks/usePrefs.ts
+// Copyright Thales 2025
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 import { useCallback, useMemo, useState } from "react";
 import { load, save, updateMap, renameKeyInMap } from "../common/persist";
 import type { AgentPrefs, SessionPrefs, UserPrefs } from "../types/prefs";
@@ -26,7 +39,7 @@ export function useUserPrefs() {
 
 // -------- Per-agent preferences --------
 const DEFAULT_AGENT_PREFS: AgentPrefs = {
-  search_policy: "hybrid",
+  search_policy: "semantic",
   selected_document_libraries_ids: [],
   selected_prompt_ids: null,
   selected_template_ids: null,
