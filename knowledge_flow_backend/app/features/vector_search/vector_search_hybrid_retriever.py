@@ -1,6 +1,18 @@
-# app/features/vector_search/vector_search_hybrid_retriever.py
-# Copyright Thales 2025 — Fred
+# Copyright Thales 2025
 #
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
 # Fred rationale (keep short, high-signal):
 # - Goal: beat plain ANN on average without per-query hacks.
 # - Method: RRF(ANN,BM25) + soft bonuses (NEVER hard filters) + doc-level diversity.
@@ -131,11 +143,12 @@ class HybridRetriever:
     ) -> List[Tuple[Document, float]]:
         t0 = time.perf_counter()
         if not scoped_document_ids:
+            logger.info("[Hybrid] No scoped documents provided, returning empty list")
             return []
 
         sf = SearchFilter(tag_ids=scoped_document_ids)
 
-        # --- Policy knobs with safe defaults (kept in HybridPolicy; getattr to avoid breaking callers) ---
+        # --- Policy knobs with safe defaults ---
         rrf_k = getattr(policy, "rrf_k", 60)
         fetch_k_ann = getattr(policy, "fetch_k_ann", 60)
         fetch_k_bm25 = getattr(policy, "fetch_k_bm25", 60)
@@ -160,7 +173,7 @@ class HybridRetriever:
         quoted = _quoted_phrases(query)
 
         logger.info(
-            "Hybrid:start q='%s' scope=%d | RRF(k=%d) fetch(ann=%d bm25=%d) thr(vec=%.3f bm25=%.3f) w(ann=%.2f bm25=%.2f) mmr=%s | signals=%s who=%s caps=%s quoted=%s terms=%s",
+            "[Hybrid] Start q='%s' scope=%d | RRF(k=%d) fetch(ann=%d bm25=%d) thr(vec=%.3f bm25=%.3f) w(ann=%.2f bm25=%.2f) mmr=%s | signals=%s who=%s caps=%s quoted=%s terms=%s",
             query,
             len(scoped_document_ids),
             rrf_k,
@@ -183,13 +196,17 @@ class HybridRetriever:
         ann_hits = [h for h in ann_hits if h.score >= vec_min]
         ann_rank: Dict[str, int] = {}
         ann_map: Dict[str, Tuple[Document, float]] = {}
+        skipped_ann_no_chunk = 0
         for r, h in enumerate(ann_hits, start=1):
             cid = _chunk_id_of(h.document)
             if not cid:
+                skipped_ann_no_chunk += 1
                 continue
             # Keep best rank & map to cosine
             ann_rank[cid] = min(ann_rank.get(cid, r), r)
             ann_map[cid] = (h.document, h.score)
+        if skipped_ann_no_chunk:
+            logger.info("[Hybrid] ANN skipped %d hits with no chunk id", skipped_ann_no_chunk)
 
         # 2) BM25 (optional)
         bm25_rank: Dict[str, int] = {}
@@ -198,18 +215,17 @@ class HybridRetriever:
             bm25_hits: List[LexicalHit] = vs_lex.lexical_search(query, k=fetch_k_bm25, search_filter=sf, operator_and=False)
             bm25_hits = [h for h in bm25_hits if h.score >= bm25_min]
             bm25_rank = {h.chunk_id: r for r, h in enumerate(bm25_hits, start=1)}
+            logger.info("[Hybrid] BM25 hits after filtering by min score (%s): %s", policy.bm25_min_score, len(bm25_hits))
 
         if not ann_rank and not bm25_rank:
-            logger.info("Hybrid: empty(ANN,BM25) → []")
+            logger.info("[Hybrid] Hybrid: empty(ANN,BM25) → []")
             return []
 
         # 3) RRF fusion (weighted)
         fused: Dict[str, float] = {}
-
         def add_rrf(rank_map: Dict[str, int], weight: float) -> None:
             for cid, rnk in rank_map.items():
                 fused[cid] = fused.get(cid, 0.0) + weight * (1.0 / (rrf_k + rnk))
-
         if ann_rank:
             add_rrf(ann_rank, w_ann)
         if bm25_rank:
@@ -253,15 +269,19 @@ class HybridRetriever:
             key=lambda kv: (kv[1], ann_map.get(kv[0], (None, -1.0))[1]),
             reverse=True,
         )
+        logger.info("[Hybrid] Chunks ordered by fused score, total=%d", len(ordered))
 
         # 6) Build output with doc-level diversity
         out: List[Tuple[Document, float]] = []
         seen_docs: set[str] = set()
+        skipped_missing_doc = 0
+        skipped_duplicates = 0
 
         for cid, _score in ordered:
             # Prefer candidates that we have ANN cosine for; if BM25-only, still allowed.
             doc, cos = ann_map.get(cid, (None, -1.0))
             if doc is None:
+                skipped_missing_doc += 1
                 # Attempt to recover Document from lexical side if store provides it
                 if isinstance(self.vs, LexicalSearchable):
                     # NOTE: leaving this minimal; if you want, keep a map cid->LexicalHit.document
@@ -272,19 +292,22 @@ class HybridRetriever:
             uid = _doc_uid_of(doc)
             if use_mmr:
                 if not uid or uid in seen_docs:
+                    skipped_duplicates += 1
                     continue
                 seen_docs.add(uid)
-
             out.append((doc, cos))
             if len(out) >= policy.k_final:
+                logger.info("[Hybrid] Reached k_final (%s), stopping", policy.k_final)
                 break
 
         logger.info(
-            "Hybrid: final=%d of %d candidates | ann_only=%s bm25_used=%s dt=%.1fms",
+            "[Hybrid] Final=%d of %d candidates | ann_only=%s bm25_used=%s | skipped_missing_doc=%d skipped_duplicates=%d | dt=%.1fms",
             len(out),
             len(ordered),
             bool(ann_rank and not bm25_rank),
             bool(bm25_rank),
+            skipped_missing_doc,
+            skipped_duplicates,
             (time.perf_counter() - t0) * 1000,
         )
 
