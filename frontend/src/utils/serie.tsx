@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { ClusterConsumption } from "../frugalit/slices/api.tsx";
 
 export interface SeriePoint {
   date: string;
@@ -58,19 +57,3 @@ export const getSumValue = (serie: Serie): number => {
   return parseFloat(serie.seriePoints.reduce((sum, { value }) => sum + value, 0).toFixed(0));
 };
 
-// Returns a Serie Object from a ClusterConsumption Object
-export const transformClusterConsumptionToSerie = (
-  clusterConsumptionArray: ClusterConsumption,
-  name: string,
-  color: string,
-): Serie => {
-  return {
-    name: name,
-    color: color,
-    unit: clusterConsumptionArray.unit,
-    seriePoints: clusterConsumptionArray.values.map((value, index) => ({
-      date: clusterConsumptionArray.timestamps[index],
-      value: Math.round(value * 100) / 100,
-    })),
-  };
-};

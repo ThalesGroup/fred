@@ -16,7 +16,6 @@ A quick, skimmable overview of what Fred offers — with links to deeper docs.
 | **Knowledge flow** | Ingestion, chunking, embeddings, vector search | [Knowledge Flow README](../knowledge_flow_backend/README.md) |
 | **Auth & Security** | Keycloak/OIDC-ready, scoped search (by libraries/tags), safe defaults | [Keycloak](./docs/KEYCLOAK.md) · [Security](./docs/SECURITY.md) |
 | **Storage options** | Local FS by default; optional Chroma (embedded), OpenSearch, Weaviate | [Design](./docs/DESIGN.md) |
-| **Dev experience** | Run locally, or Dev-Container; VS Code workspace; `make` recipes | [DEV Container](../knowledge_flow_backend/docs/DEV_CONTAINER.md) · [Developer Guide](../knowledge_flow_backend/docs/DEVELOPER_GUIDE.md) |
 | **Licensing** | Apache 2.0; optional integrations configured externally | [License](./docs/LICENSE.md) |
 | **Roadmap** | What’s next & priorities | [ROADMAP](./docs/ROADMAP.md) |
 

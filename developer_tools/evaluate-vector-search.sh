@@ -65,15 +65,25 @@ fi
 
 # ---------- Question set (natural queries) ----------
 QUESTIONS=(
-  "Who are Sen and Nussbaum?"
-  "How do Sen and Nussbaum define the Capability Approach in human development?"
-  "Why is the Capability Approach considered different from Maslow’s hierarchy of needs?"
-  "In what ways has the Capability Approach been applied to social policy so far?"
-  "How can homelessness be interpreted through the lens of Nussbaum’s central capabilities?"
-  "Has the Capability Approach been integrated into agent-based modeling or computational methods?"
-  "What benchmark did the authors design to evaluate LLMs’ policymaking capabilities?"
-  "Which cities were used in the study’s policy decision scenarios?"
-  "What are the challenges of operationalizing the Capability Approach in practice?"
+  "What is RAGuard?"
+  "Define Offshore Wind maintenance."
+  "What is the SafetyClamp extension?"
+  "What is the PUWER regulation?"
+  "Who are the authors of the RAGuard paper?"
+  "How does RAGuard address the limitations of conventional LLMs?"
+  "Explain the core problem RAGuard aims to solve."
+  "What is the main difference between standard RAG and RAGuard?"
+  "Describe the dual-stream retrieval process."
+  "What are the challenges of using AI in safety-critical domains?"
+  "What did Connor Walker write about AI safety?"
+  "Explain the purpose of the SafetyClamp in RAGuard."
+  "Tell me about the methodology section of the paper by Aslansefat et al."
+  "How does RAGuard improve retrieval recall metrics, according to the paper?"
+  "What are the best retrieval parameters for RAGuard with SafetyClamp under the dense paradigm?"
+  "According to the paper, what is the combined recall score for the dense RAGuard variant?"
+  "What is the typical chunk overlap percentage mentioned in the document?"
+  "Name a pre-trained RAG model that excels in few-shot learning settings."
+  "Which regulations were used in the evaluation dataset?"
 )
 
 # ---------- Helpers ----------
@@ -86,7 +96,7 @@ timestamp() { date +%Y%m%d-%H%M%S; }
 
 # Output dir: results/<ts>-<policy>/
 TS="$(timestamp)"
-OUTDIR="results/${TS}-${POLICY}"
+OUTDIR="evaluation_results/${TS}-${POLICY}"
 mkdir -p "$OUTDIR"
 
 # ---------- Run ----------
