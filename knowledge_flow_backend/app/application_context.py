@@ -26,7 +26,7 @@ from app.core.stores.content.minio_content_loader import MinioContentLoader
 from fred_core.store.sql_store import SQLTableStore
 from fred_core.store.structures import StoreInfo
 
-from fred_core.common.structures import SQLStorageConfig
+from fred_core import SQLStorageConfig
 from app.common.structures import (
     ChromaVectorStorageConfig,
     Configuration,
@@ -810,9 +810,11 @@ class ApplicationContext:
 
             def _describe(label: str, store_cfg):
                 if isinstance(store_cfg, DuckdbStoreConfig):
-                    logger.info("     • %-14s DuckDB  path=%s", label, store_cfg.duckdb_path)
+                    logger.info(
+                        "     • %-14s DuckDB  path=%s", label, store_cfg.duckdb_path
+                    )
+ 
                 elif isinstance(store_cfg, OpenSearchIndexConfig):
-                    # These carry index name + opensearch global section
                     os_cfg = self.configuration.storage.opensearch
                     logger.info(
                         "     • %-14s OpenSearch host=%s index=%s secure=%s verify=%s",
@@ -822,16 +824,38 @@ class ApplicationContext:
                         os_cfg.secure,
                         os_cfg.verify_certs,
                     )
+                elif isinstance(store_cfg, SQLStorageConfig):
+                    logger.info(
+                        "     • %-14s SQLStorage  database=%s  host=%s",
+                        label,
+                        store_cfg.database or "unset",
+                        store_cfg.host or "unset"
+                    )
+                elif isinstance(store_cfg, ChromaVectorStorageConfig):
+                    logger.info(
+                        "     • %-14s ChromaDB  database=%s  host=%s  distance=%s",
+                        label,
+                        store_cfg.local_path or "unset",
+                        store_cfg.collection_name or "unset",
+                        store_cfg.distance or "unset"
+                    )
+                elif isinstance(store_cfg, LogStoreConfig):
+                    # No-op KPI / log-only store
+                    logger.info(
+                        "     • %-14s No-op / LogStore  level=%s  (logs only, no persistence)",
+                        label,
+                        getattr(store_cfg, "level", "INFO"),
+                    )
                 else:
-                    # Generic store types from your pydantic StoreConfig could land here
                     logger.info("     • %-14s %s", label, type(store_cfg).__name__)
 
-            _describe("agent_store", st.tag_store)
-            _describe("session_store", st.kpi_store)
-            _describe("feedback_store", st.catalog_store)
-            _describe("feedback_store", st.metadata_store)
-            _describe("feedback_store", st.vector_store)
-            _describe("feedback_store", st.resource_store)
+            _describe("tag_store", st.tag_store)
+            _describe("kpi_store", st.kpi_store)
+            _describe("catalog_store", st.catalog_store)
+            _describe("metadata_store", st.metadata_store)
+            _describe("vector_store", st.vector_store)
+            _describe("resource_store", st.resource_store)
+
         except Exception:
             logger.warning("  ⚠️ Failed to read storage section (some variables may be missing).")
 

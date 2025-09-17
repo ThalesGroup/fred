@@ -22,6 +22,7 @@ from fred_core.common.structures import (
     OpenSearchStoreConfig,
     PostgresStoreConfig,
     PostgresTableConfig,
+    SQLStorageConfig,
     StoreConfig,
 )
 from fred_core.common.utils import raise_internal_error
@@ -98,6 +99,7 @@ __all__ = [
     "DuckdbStoreConfig",
     "PostgresStoreConfig",
     "PostgresTableConfig",
+    "SQLStorageConfig",
     "StoreConfig",
     "ThreadSafeLRUCache",
     "VectorSearchHit",
