@@ -12,14 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List, Optional
-from pathlib import Path
 import logging
+from pathlib import Path
+from typing import List, Optional
 
-from app.core.agents.store.base_agent_store import BaseAgentStore
-from pydantic import ValidationError
-from app.common.structures import AgentSettings
 from fred_core.store.duckdb_store import DuckDBTableStore
+from pydantic import ValidationError
+
+from app.common.structures import AgentSettings
+from app.core.agents.store.base_agent_store import BaseAgentStore
 
 logger = logging.getLogger(__name__)
 

@@ -12,11 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from langgraph.graph import MessagesState
 from typing import List, Optional
-from pydantic.v1 import BaseModel
-from langchain_core.messages import AIMessage
+
 from fred_core import VectorSearchHit
+from langchain_core.messages import AIMessage
+from langgraph.graph import MessagesState
+from pydantic.v1 import BaseModel
 
 
 class RagGraphState(MessagesState):

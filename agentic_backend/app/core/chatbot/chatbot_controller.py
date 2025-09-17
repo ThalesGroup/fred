@@ -30,10 +30,10 @@ from fastapi import (
 )
 from fred_core import (
     KeycloakUser,
-    VectorSearchHit,
-    get_current_user,
-    decode_jwt,
     UserSecurity,
+    VectorSearchHit,
+    decode_jwt,
+    get_current_user,
 )
 from pydantic import BaseModel, Field
 from starlette.websockets import WebSocketState

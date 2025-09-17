@@ -2,7 +2,7 @@ import logging
 from typing import List
 
 from fred_core import ThreadSafeLRUCache
-from opensearchpy import OpenSearch, NotFoundError, ConflictError, RequestsHttpConnection
+from opensearchpy import ConflictError, NotFoundError, OpenSearch, RequestsHttpConnection
 
 from app.core.stores.resources.base_resource_store import (
     BaseResourceStore,

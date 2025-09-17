@@ -12,14 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Any, Dict, List, Optional, Literal
-from pydantic import BaseModel, Field
+from typing import Any, Dict, List, Literal, Optional
+
 from fred_core import (
-    SecurityConfiguration,
-    PostgresStoreConfig,
     OpenSearchStoreConfig,
+    PostgresStoreConfig,
+    SecurityConfiguration,
     StoreConfig,
 )
+from pydantic import BaseModel, Field
 
 
 class StorageConfig(BaseModel):

@@ -13,8 +13,9 @@
 # limitations under the License.
 
 import time
+from typing import Callable, Optional, Union
+
 import requests
-from typing import Optional, Callable, Union
 from requests.auth import AuthBase
 
 

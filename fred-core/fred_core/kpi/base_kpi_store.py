@@ -33,14 +33,16 @@ Key ideas:
 """
 
 from __future__ import annotations
-from typing import Protocol
+
 import logging
-from fred_core.kpi.kpi_writer_structures import (
-    KPIEvent,
-)
+from typing import Protocol
+
 from fred_core.kpi.kpi_reader_structures import (
     KPIQuery,
     KPIQueryResult,
+)
+from fred_core.kpi.kpi_writer_structures import (
+    KPIEvent,
 )
 
 logger = logging.getLogger(__name__)

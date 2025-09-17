@@ -61,16 +61,16 @@ from fred_core.security.backend_to_backend_auth import (
     make_m2m_asgi_client,
 )
 from fred_core.security.keycloak import (
+    decode_jwt,
     get_current_user,
     initialize_user_security,
     split_realm_url,
-    decode_jwt,
 )
 from fred_core.security.outbound import BearerAuth, ClientCredentialsProvider
 from fred_core.security.structure import (
     KeycloakUser,
-    SecurityConfiguration,
     M2MSecurity,
+    SecurityConfiguration,
     UserSecurity,
 )
 from fred_core.store.vector_search import VectorSearchHit

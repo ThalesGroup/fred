@@ -12,8 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from pydantic import BaseModel, AnyUrl, AnyHttpUrl
 from typing import List
+
+from pydantic import AnyHttpUrl, AnyUrl, BaseModel
 
 
 class KeycloakUser(BaseModel):

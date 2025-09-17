@@ -2,8 +2,8 @@
 
 import hashlib
 import logging
-from abc import ABC, abstractmethod
 import mimetypes
+from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any, Dict
 
@@ -11,12 +11,12 @@ import pandas  # kept because BaseTabularProcessor references it
 
 from app.common.document_structures import (
     DocumentMetadata,
+    FileInfo,
     FileType,
     Identity,
     SourceInfo,
-    FileInfo,
-    Tagging,
     SourceType,
+    Tagging,
 )
 from app.common.source_utils import resolve_source_type
 from app.core.processors.input.common.enrichment import normalize_enrichment

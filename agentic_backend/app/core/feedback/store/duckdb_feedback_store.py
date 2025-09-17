@@ -19,11 +19,12 @@
 # Licensed under the Apache License, Version 2.0 (the "License");
 # http://www.apache.org/licenses/LICENSE-2.0
 
-from typing import List, Optional
-from pathlib import Path
 import logging
+from pathlib import Path
+from typing import List, Optional
 
 from fred_core.store.duckdb_store import DuckDBTableStore
+
 from app.core.feedback.feedback_structures import FeedbackRecord
 from app.core.feedback.store.base_feedback_store import BaseFeedbackStore
 

@@ -1,6 +1,6 @@
 from collections import OrderedDict
 from threading import Lock
-from typing import TypeVar, Generic
+from typing import Generic, TypeVar
 
 K = TypeVar("K")
 V = TypeVar("V")

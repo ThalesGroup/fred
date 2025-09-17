@@ -12,10 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from pathlib import Path
-import pandas as pd
 import csv
 import logging
+from pathlib import Path
+
+import pandas as pd
+
 from app.core.processors.input.common.base_input_processor import BaseTabularProcessor
 
 logger = logging.getLogger(__name__)

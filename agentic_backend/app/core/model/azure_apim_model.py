@@ -1,7 +1,9 @@
-from app.core.model.azure_apim_settings import AzureApimSettings
+import logging
+
 from azure.identity import ClientSecretCredential
 from langchain_openai import AzureChatOpenAI
-import logging
+
+from app.core.model.azure_apim_settings import AzureApimSettings
 
 logger = logging.getLogger(__name__)
 

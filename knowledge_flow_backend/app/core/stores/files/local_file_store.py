@@ -18,8 +18,8 @@ import logging
 import mimetypes
 import os
 from pathlib import Path
-from app.core.stores.files.base_file_store import BaseFileStore, FileInfo
 
+from app.core.stores.files.base_file_store import BaseFileStore, FileInfo
 
 logger = logging.getLogger(__name__)
 

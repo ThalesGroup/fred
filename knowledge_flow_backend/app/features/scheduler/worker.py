@@ -21,8 +21,9 @@ activities and workflows, and listens on the configured task queue.
 It is launched in a background thread from main.py during application startup.
 """
 
-import logging
 import concurrent.futures
+import logging
+
 from temporalio.client import Client
 from temporalio.worker import Worker
 
@@ -32,7 +33,7 @@ from app.features.scheduler.activities import (
     input_process,
     output_process,
 )
-from app.features.scheduler.workflow import GetPushFileMetadata, Process, InputProcess, OutputProcess
+from app.features.scheduler.workflow import GetPushFileMetadata, InputProcess, OutputProcess, Process
 
 # Use basic logging instead of rich within the Temporal worker
 logging.basicConfig(

@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from typing import List
+
 from langchain.embeddings.base import Embeddings
 
 

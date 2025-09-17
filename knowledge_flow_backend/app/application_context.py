@@ -16,52 +16,52 @@ import importlib
 import logging
 import os
 from pathlib import Path
-from typing import Dict, Type, Union, Optional
-from fred_core import LogStoreConfig, OpenSearchIndexConfig, DuckdbStoreConfig, OpenSearchKPIStore, BaseKPIStore, KpiLogStore, split_realm_url
-from opensearchpy import OpenSearch, RequestsHttpConnection
-from app.core.stores.catalog.opensearch_catalog_store import OpenSearchCatalogStore
-from app.core.stores.content.base_content_loader import BaseContentLoader
-from app.core.stores.content.filesystem_content_loader import FileSystemContentLoader
-from app.core.stores.content.minio_content_loader import MinioContentLoader
+from typing import Dict, Optional, Type, Union
+
+from fred_core import BaseKPIStore, DuckdbStoreConfig, KpiLogStore, KPIWriter, LogStoreConfig, OpenSearchIndexConfig, OpenSearchKPIStore, SQLStorageConfig, split_realm_url
+from fred_core.common.structures import SQLStorageConfig
 from fred_core.store.sql_store import SQLTableStore
 from fred_core.store.structures import StoreInfo
+from langchain_ollama import OllamaEmbeddings
+from langchain_openai import AzureOpenAIEmbeddings, OpenAIEmbeddings
+from opensearchpy import OpenSearch, RequestsHttpConnection
 
-from fred_core import SQLStorageConfig
 from app.common.structures import (
     ChromaVectorStorageConfig,
     Configuration,
     EmbeddingProvider,
-    InMemoryVectorStorage,
     FileSystemPullSource,
+    InMemoryVectorStorage,
     LocalContentStorageConfig,
     MinioPullSource,
     MinioStorageConfig,
     OpenSearchVectorIndexConfig,
     WeaviateVectorStorage,
 )
-from fred_core import KPIWriter
 from app.common.utils import validate_settings_or_exit
 from app.config.embedding_azure_apim_settings import EmbeddingAzureApimSettings
 from app.config.embedding_azure_openai_settings import EmbeddingAzureOpenAISettings
-from app.config.ollama_settings import OllamaSettings
 from app.config.embedding_openai_settings import EmbeddingOpenAISettings
-from app.core.stores.content.base_content_store import BaseContentStore
-from app.core.stores.content.filesystem_content_store import FileSystemContentStore
-from app.core.stores.content.minio_content_store import MinioStorageBackend
-from app.core.stores.catalog.base_catalog_store import BaseCatalogStore
-from app.core.stores.catalog.duckdb_catalog_store import DuckdbCatalogStore
-from app.core.stores.files.base_file_store import BaseFileStore
-from app.core.stores.files.local_file_store import LocalFileStore
-from app.core.stores.files.minio_file_store import MinioFileStore
-from app.core.stores.metadata.duckdb_metadata_store import DuckdbMetadataStore
-from langchain_openai import OpenAIEmbeddings, AzureOpenAIEmbeddings
-from langchain_ollama import OllamaEmbeddings
-
+from app.config.ollama_settings import OllamaSettings
 from app.core.processors.input.common.base_input_processor import BaseInputProcessor, BaseMarkdownProcessor, BaseTabularProcessor
 from app.core.processors.output.base_output_processor import BaseOutputProcessor
 from app.core.processors.output.vectorization_processor.azure_apim_embedder import AzureApimEmbedder
 from app.core.processors.output.vectorization_processor.embedder import Embedder
+from app.core.processors.output.vectorization_processor.semantic_splitter import SemanticSplitter
+from app.core.stores.catalog.base_catalog_store import BaseCatalogStore
+from app.core.stores.catalog.duckdb_catalog_store import DuckdbCatalogStore
+from app.core.stores.catalog.opensearch_catalog_store import OpenSearchCatalogStore
+from app.core.stores.content.base_content_loader import BaseContentLoader
+from app.core.stores.content.base_content_store import BaseContentStore
+from app.core.stores.content.filesystem_content_loader import FileSystemContentLoader
+from app.core.stores.content.filesystem_content_store import FileSystemContentStore
+from app.core.stores.content.minio_content_loader import MinioContentLoader
+from app.core.stores.content.minio_content_store import MinioStorageBackend
+from app.core.stores.files.base_file_store import BaseFileStore
+from app.core.stores.files.local_file_store import LocalFileStore
+from app.core.stores.files.minio_file_store import MinioFileStore
 from app.core.stores.metadata.base_metadata_store import BaseMetadataStore
+from app.core.stores.metadata.duckdb_metadata_store import DuckdbMetadataStore
 from app.core.stores.metadata.opensearch_metadata_store import OpenSearchMetadataStore
 from app.core.stores.resources.base_resource_store import BaseResourceStore
 from app.core.stores.resources.duckdb_resource_store import DuckdbResourceStore
@@ -71,10 +71,9 @@ from app.core.stores.tags.duckdb_tag_store import DuckdbTagStore
 from app.core.stores.tags.opensearch_tags_store import OpenSearchTagStore
 from app.core.stores.vector.base_embedding_model import BaseEmbeddingModel
 from app.core.stores.vector.base_text_splitter import BaseTextSplitter
-from app.core.stores.vector.in_memory_langchain_vector_store import InMemoryLangchainVectorStore
 from app.core.stores.vector.base_vector_store import BaseVectorStore
+from app.core.stores.vector.in_memory_langchain_vector_store import InMemoryLangchainVectorStore
 from app.core.stores.vector.opensearch_vector_store import OpenSearchVectorStoreAdapter
-from app.core.processors.output.vectorization_processor.semantic_splitter import SemanticSplitter
 
 # Union of supported processor base classes
 BaseProcessorType = Union[BaseMarkdownProcessor, BaseTabularProcessor]

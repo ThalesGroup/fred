@@ -15,17 +15,17 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Mapping
 import logging
+from collections.abc import Mapping
 from inspect import iscoroutinefunction
 from typing import Awaitable, Callable, Iterable
+
+from app.agents.leader.leader import Leader
 
 # ❌ remove anyio.abc TaskGroup import; we won't accept a TG anymore
 # import anyio
 # from anyio.abc import TaskGroup
-
 from app.core.agents.flow import AgentFlow
-from app.agents.leader.leader import Leader
 
 logger = logging.getLogger(__name__)
 

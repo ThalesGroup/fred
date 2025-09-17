@@ -13,12 +13,13 @@
 # limitations under the License.
 
 from __future__ import annotations
+
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional, Union, Annotated, Literal
+from typing import Annotated, Any, Dict, List, Literal, Optional, Union
 
-from pydantic import BaseModel, Field, ConfigDict
 from fred_core import VectorSearchHit
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.agents.runtime_context import RuntimeContext  # Unchanged, as requested
 

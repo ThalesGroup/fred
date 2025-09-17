@@ -13,8 +13,8 @@
 # limitations under the License.
 
 import logging
-from pathlib import Path
 from abc import ABC, abstractmethod
+from pathlib import Path
 from typing import BinaryIO
 
 logger = logging.getLogger(__name__)

@@ -1,6 +1,6 @@
 # app/config/llm_azure_apim_settings.py
-from pydantic_settings import BaseSettings
 from pydantic import Field
+from pydantic_settings import BaseSettings
 
 
 class AzureApimSettings(BaseSettings):

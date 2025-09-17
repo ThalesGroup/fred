@@ -23,41 +23,40 @@ Includes:
 - Context service management
 """
 
-from dataclasses import dataclass
+import logging
 import os
+import re
+from dataclasses import dataclass
+from pathlib import Path
 from threading import Lock
 from typing import Any, Callable, Dict, List, Optional
 
-from app.core.agents.store.base_agent_store import BaseAgentStore
-from app.core.feedback.store.base_feedback_store import BaseFeedbackStore
+from fred_core import (
+    BaseKPIStore,
+    BearerAuth,
+    ClientCredentialsProvider,
+    DuckdbStoreConfig,
+    KpiLogStore,
+    KPIWriter,
+    LogStoreConfig,
+    OpenSearchIndexConfig,
+    OpenSearchKPIStore,
+    SQLStorageConfig,
+    split_realm_url,
+)
+from langchain_core.language_models.base import BaseLanguageModel
+from requests.auth import AuthBase
 
 from app.common.structures import (
     AgentSettings,
     Configuration,
     ModelConfiguration,
 )
+from app.core.agents.store.base_agent_store import BaseAgentStore
+from app.core.feedback.store.base_feedback_store import BaseFeedbackStore
 from app.core.model.model_factory import get_model
-from langchain_core.language_models.base import BaseLanguageModel
 from app.core.monitoring.base_history_store import BaseHistoryStore
 from app.core.session.stores.base_session_store import BaseSessionStore
-from pathlib import Path
-from fred_core import (
-    LogStoreConfig,
-    OpenSearchIndexConfig,
-    DuckdbStoreConfig,
-    ClientCredentialsProvider,
-    BearerAuth,
-    OpenSearchKPIStore,
-    BaseKPIStore,
-    KpiLogStore,
-    KPIWriter,
-    SQLStorageConfig,
-    split_realm_url
-)
-from requests.auth import AuthBase
-import logging
-import re
-
 
 logger = logging.getLogger(__name__)
 
