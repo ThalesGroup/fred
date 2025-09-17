@@ -42,7 +42,7 @@ from app.core.agents.agent_manager import AgentManager
 from app.core.chatbot import chatbot_controller
 from app.core.chatbot.session_orchestrator import SessionOrchestrator
 from app.core.feedback import feedback_controller
-from app.core.monitoring import monitoring_controller
+from app.core.monitoring.monitoring_controller import MonitoringController
 
 # -----------------------
 # LOGGING + ENVIRONMENT
@@ -150,6 +150,8 @@ def create_app() -> FastAPI:
     )
 
     initialize_user_security(configuration.security.user)
+
+    monitoring_controller = MonitoringController() 
 
     router = APIRouter(prefix=base_url)
     router.include_router(agent_controller.router)
