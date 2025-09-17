@@ -17,6 +17,7 @@ import logging
 from datetime import datetime
 from pathlib import Path
 from docx import Document
+import pypandoc
 
 from app.core.processors.input.common.base_input_processor import BaseMarkdownProcessor
 import subprocess
@@ -68,21 +69,21 @@ class DocxMarkdownProcessor(BaseMarkdownProcessor):
         images_dir = output_dir
         extra_args = [f"--extract-media={images_dir}", "--preserve-tabs", "--wrap=none", "--reference-links"]
 
-        subprocess.run(
-            [
-                "pandoc",
-                "--to",
-                "markdown",
-                "--to",
-                "markdown_strict",
-                str(file_path),
-                "-o",
-                str(md_path),
-                *extra_args,
-            ],
-        )
+        # subprocess.run(
+        #     [
+        #         "pandoc",
+        #         "--to",
+        #         "markdown",
+        #         "--to",
+        #         "markdown_strict",
+        #         str(file_path),
+        #         "-o",
+        #         str(md_path),
+        #         *extra_args,
+        #     ],
+        # )
 
-        # pypandoc.convert_file(str(file_path), to="markdown_strict+pipe_tables", outputfile=str(md_path), extra_args=extra_args)
+        pypandoc.convert_file(str(file_path), to="markdown_strict+pipe_tables", outputfile=str(md_path), extra_args=extra_args)
 
         # Convert EMF to SVG
         for img_path in (images_dir / "media").glob("*.emf"):
