@@ -201,7 +201,7 @@
     }
   },
   "profile": {
-    "title": "Profile",
+    "title": "User profile",
     "description": "Manage your profile settings",
     "menu": {
       "account": "Account",
