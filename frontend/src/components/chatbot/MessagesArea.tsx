@@ -1,3 +1,17 @@
+// Copyright Thales 2025
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 import React, { memo, useMemo, useRef, useEffect } from "react";
 import MessageCard from "./MessageCard";
 import Sources from "./Sources";
@@ -108,7 +122,7 @@ function Area({ messages, agenticFlows, currentAgenticFlow }: Props) {
             side="right"
             enableCopy
             enableThumbs
-            enableAudio
+            // enableAudio
           />,
         );
       }
@@ -161,7 +175,7 @@ function Area({ messages, agenticFlows, currentAgenticFlow }: Props) {
               side={msg.role === "user" ? "right" : "left"}
               enableCopy
               enableThumbs
-              enableAudio
+              //  enableAudio
               // Hook up hover/click from inline [n] markers to highlight Sources
               onCitationHover={(uid) => setHighlightUid(uid)}
               onCitationClick={(uid) => setHighlightUid(uid)}
@@ -198,7 +212,7 @@ function Area({ messages, agenticFlows, currentAgenticFlow }: Props) {
             side="left"
             enableCopy
             enableThumbs
-            enableAudio
+            // enableAudio
             // Keep text; MessageCard → CustomMarkdownRenderer renders it robustly
             suppressText={false}
             onCitationHover={(uid) => setHighlightUid(uid)}

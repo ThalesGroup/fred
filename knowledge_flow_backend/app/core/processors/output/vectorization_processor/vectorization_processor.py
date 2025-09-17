@@ -16,6 +16,8 @@ import logging
 import os
 import time
 from typing import override
+
+from fred_core import KPIActor, KPIWriter
 from langchain.schema.document import Document
 
 from app.application_context import ApplicationContext
@@ -30,8 +32,6 @@ from app.core.processors.output.vectorization_processor.vectorization_utils impo
     make_chunk_uid,
     sanitize_chunk_metadata,
 )
-
-from fred_core import KPIWriter, KPIActor
 
 logger = logging.getLogger(__name__)
 

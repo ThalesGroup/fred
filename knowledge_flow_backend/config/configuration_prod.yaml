@@ -94,7 +94,6 @@ embedding:
   # Enable or disable image processing in documents
   process_images: true
 
-
 storage:
   postgres:
     host: localhost

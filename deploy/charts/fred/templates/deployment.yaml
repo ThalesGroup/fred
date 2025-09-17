@@ -87,7 +87,7 @@ spec:
 
           {{- if .app.probes.livenessProbe.enabled }}
           livenessProbe:
-{{ toYaml .app.probes.probes.livenessProbe.data | nindent 12 }}
+{{ toYaml .app.probes.livenessProbe.data | nindent 12 }}
           {{- end }}
 
           {{- if .app.probes.readinessProbe.enabled }}

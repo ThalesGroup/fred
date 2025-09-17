@@ -18,7 +18,6 @@ import { useTranslation } from "react-i18next";
 import { v4 as uuidv4 } from "uuid";
 import { getConfig } from "../../common/config.tsx";
 import DotsLoader from "../../common/DotsLoader.tsx";
-import { usePostTranscribeAudioMutation } from "../../frugalit/slices/api.tsx";
 import { KeyCloakService } from "../../security/KeycloakService.ts";
 import {
   AgenticFlow,
@@ -33,7 +32,7 @@ import {
 import { getAgentBadge } from "../../utils/avatar.tsx";
 import { useToast } from "../ToastProvider.tsx";
 import { MessagesArea } from "./MessagesArea.tsx";
-import UserInput, { UserInputContent } from "./UserInput.tsx";
+import UserInput, { UserInputContent } from "./user_input/UserInput.tsx";
 import { keyOf, mergeAuthoritative, sortMessages, toWsUrl, upsertOne } from "./ChatBotUtils.tsx";
 import {
   TagType,
@@ -47,9 +46,9 @@ export interface ChatBotError {
   content: string;
 }
 
-interface TranscriptionResponse {
-  text?: string;
-}
+// interface TranscriptionResponse {
+//   text?: string;
+// }
 
 export interface ChatBotProps {
   currentChatBotSession: SessionSchema;
@@ -58,6 +57,7 @@ export interface ChatBotProps {
   onUpdateOrAddSession: (session: SessionSchema) => void;
   isCreatingNewConversation: boolean;
   runtimeContext?: RuntimeContext;
+  onBindDraftAgentToSessionId?: (sessionId: string) => void;
 }
 
 const ChatBot = ({
@@ -67,6 +67,7 @@ const ChatBot = ({
   onUpdateOrAddSession,
   isCreatingNewConversation,
   runtimeContext: baseRuntimeContext,
+  onBindDraftAgentToSessionId,
 }: ChatBotProps) => {
   const theme = useTheme();
   const { t } = useTranslation();
@@ -88,7 +89,7 @@ const ChatBot = ({
 
   const { showInfo, showError } = useToast();
   const webSocketRef = useRef<WebSocket | null>(null);
-  const [postTranscribeAudio] = usePostTranscribeAudioMutation();
+  // const [postTranscribeAudio] = usePostTranscribeAudioMutation();
   const [webSocket, setWebSocket] = useState<WebSocket | null>(null);
   const wsTokenRef = useRef<string | null>(null);
 
@@ -199,6 +200,11 @@ const ChatBot = ({
               messagesRef.current = mergeAuthoritative(messagesRef.current, finalEvent.messages);
               setMessages(messagesRef.current);
 
+              const sid = finalEvent.session.id;
+              if (sid) {
+                console.log("[🔗 ChatBot] Binding draft agent to session id from final event:", sid);
+                onBindDraftAgentToSessionId?.(sid);
+              }
               // Accept session update if backend created/switched it
               if (finalEvent.session.id !== currentChatBotSession?.id) {
                 onUpdateOrAddSession(finalEvent.session);
@@ -289,6 +295,9 @@ const ChatBot = ({
         console.groupEnd();
 
         setAllMessages(sortMessages(serverMessages)); // layout effect will scroll
+        // NEW — If this is the first time we "see" this id, bind draft now.
+        console.log("[🔗 ChatBot] Binding draft agent to session id from history load:", id);
+        onBindDraftAgentToSessionId?.(id);
       })
       .catch((e) => {
         console.error("[❌ ChatBot] Failed to load messages:", e);
@@ -383,6 +392,7 @@ const ChatBot = ({
     if (content.profileResourceIds?.length) {
       runtimeContext.selected_profile_ids = content.profileResourceIds;
     }
+    runtimeContext.search_policy = content.searchPolicy || "semantic";
 
     // Files upload
     if (content.files?.length) {
@@ -419,17 +429,17 @@ const ChatBot = ({
 
     if (content.text) {
       queryChatBot(content.text.trim(), undefined, runtimeContext);
-    } else if (content.audio) {
-      setWaitResponse(true);
-      const audioFile: File = new File([content.audio], "audio.mp3", { type: content.audio.type });
-      postTranscribeAudio({ file: audioFile }).then((response) => {
-        if (response.data) {
-          const message: TranscriptionResponse = response.data as TranscriptionResponse;
-          if (message.text) {
-            queryChatBot(message.text, undefined, runtimeContext);
-          }
-        }
-      });
+    // } else if (content.audio) {
+    //   setWaitResponse(true);
+    //   const audioFile: File = new File([content.audio], "audio.mp3", { type: content.audio.type });
+    //   postTranscribeAudio({ file: audioFile }).then((response) => {
+    //     if (response.data) {
+    //       const message: TranscriptionResponse = response.data as TranscriptionResponse;
+    //       if (message.text) {
+    //         queryChatBot(message.text, undefined, runtimeContext);
+    //       }
+    //     }
+    //   });
     } else {
       console.warn("No content to send.");
     }

@@ -23,40 +23,39 @@ Includes:
 - Context service management
 """
 
-from dataclasses import dataclass
+import logging
 import os
+import re
+from dataclasses import dataclass
+from pathlib import Path
 from threading import Lock
 from typing import Any, Callable, Dict, List, Optional
 
-from app.core.agents.store.base_agent_store import BaseAgentStore
-from app.core.feedback.store.base_feedback_store import BaseFeedbackStore
+from fred_core import (
+    BaseKPIStore,
+    BearerAuth,
+    ClientCredentialsProvider,
+    DuckdbStoreConfig,
+    KpiLogStore,
+    KPIWriter,
+    LogStoreConfig,
+    OpenSearchIndexConfig,
+    OpenSearchKPIStore,
+    split_realm_url,
+)
+from langchain_core.language_models.base import BaseLanguageModel
+from requests.auth import AuthBase
 
 from app.common.structures import (
     AgentSettings,
     Configuration,
     ModelConfiguration,
 )
+from app.core.agents.store.base_agent_store import BaseAgentStore
+from app.core.feedback.store.base_feedback_store import BaseFeedbackStore
 from app.core.model.model_factory import get_model
-from langchain_core.language_models.base import BaseLanguageModel
 from app.core.monitoring.base_history_store import BaseHistoryStore
 from app.core.session.stores.base_session_store import BaseSessionStore
-from pathlib import Path
-from fred_core import (
-    LogStoreConfig,
-    OpenSearchIndexConfig,
-    DuckdbStoreConfig,
-    ClientCredentialsProvider,
-    BearerAuth,
-    OpenSearchKPIStore,
-    BaseKPIStore,
-    KpiLogStore,
-    KPIWriter,
-    split_realm_url,
-)
-from requests.auth import AuthBase
-import logging
-import re
-
 
 logger = logging.getLogger(__name__)
 
@@ -533,7 +532,6 @@ class ApplicationContext:
         Does NOT print secrets; only presence/masked hints.
         """
         cfg = self.configuration
-        sec = cfg.security.user
 
         logger.info("🔧 Agentic configuration summary")
         logger.info("────────────────────────────────────────────────────────────────")
@@ -614,13 +612,14 @@ class ApplicationContext:
             )
 
         # Inbound security (UI -> Agentic)
-        logger.info("  🔒 Outbound security (Agentic → Knwoledge/Third Party):")
-        logger.info("     • enabled: %s", sec.enabled)
-        logger.info("     • client_id: %s", sec.client_id or "<unset>")
-        logger.info("     • keycloak_url: %s", sec.realm_url or "<unset>")
+        user_sec = cfg.security.user
+        logger.info("  🔒 Inbound security (UI → Agentic):")
+        logger.info("     • enabled: %s", user_sec.enabled)
+        logger.info("     • client_id: %s", user_sec.client_id or "<unset>")
+        logger.info("     • keycloak_url: %s", user_sec.realm_url or "<unset>")
         # realm parsing
         try:
-            base, realm = split_realm_url(str(sec.realm_url))
+            base, realm = split_realm_url(str(user_sec.realm_url))
             logger.info("     • realm: %s  (base=%s)", realm, base)
         except Exception as e:
             logger.error(
@@ -628,14 +627,19 @@ class ApplicationContext:
             )
 
         # Heuristic warnings on client_id naming
-        if sec.client_id == "app":
+        if user_sec.client_id == "agentic":
             logger.warning(
-                "     ⚠️ client_id is 'app'. Reserve 'app' for the UI client; "
-                "Agentic should usually use a dedicated client like 'agentic'."
+                "     ⚠️ user client_id is 'agentic'. Reserve 'agentic' for M2M client; "
+                "UI should usually use a client like 'app'."
             )
 
         # Outbound S2S (Agentic → Knowledge Flow)
+        m2m_sec = cfg.security.m2m
         logger.info("  🔑 Outbound S2S (Agentic → Knowledge Flow):")
+        logger.info("     • enabled: %s", m2m_sec.enabled)
+        logger.info("     • client_id: %s", m2m_sec.client_id or "<unset>")
+        logger.info("     • keycloak_url: %s", m2m_sec.realm_url or "<unset>")
+
         secret = os.getenv("KEYCLOAK_AGENTIC_CLIENT_SECRET", "")
         if secret:
             logger.info(
@@ -648,18 +652,18 @@ class ApplicationContext:
             )
 
         # Relationship between inbound 'enabled' and outbound needs
-        if not sec.enabled and secret:
+        if not m2m_sec.enabled and secret:
             logger.info(
-                "     • Note: inbound security is disabled, but S2S secret is present. "
+                "     • Note: M2M security is disabled, but S2S secret is present. "
                 "Outbound calls will still include a bearer if your code enables it."
             )
 
         # Final tips / quick misconfig guards
-        if secret and sec.client_id and sec.client_id != "agentic":
+        if secret and m2m_sec.client_id and m2m_sec.client_id != "agentic":
             logger.warning(
-                "     ⚠️ Secret is present but client_id is '%s' (expected 'agentic' for S2S). "
+                "     ⚠️ Secret is present but M2M client_id is '%s' (expected 'agentic' for S2S). "
                 "Ensure client_id matches the secret you provisioned.",
-                sec.client_id,
+                m2m_sec.client_id,
             )
 
         logger.info("────────────────────────────────────────────────────────────────")

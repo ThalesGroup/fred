@@ -16,13 +16,13 @@ import logging
 from typing import List, Optional
 
 from opensearchpy import (
-    OpenSearch,
-    NotFoundError,
     ConflictError,
+    NotFoundError,
+    OpenSearch,
     RequestsHttpConnection,
 )
 
-from app.core.feedback.structures import FeedbackRecord
+from app.core.feedback.feedback_structures import FeedbackRecord
 from app.core.feedback.store.base_feedback_store import BaseFeedbackStore
 
 logger = logging.getLogger(__name__)

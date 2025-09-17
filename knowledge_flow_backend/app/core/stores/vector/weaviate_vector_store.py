@@ -14,7 +14,7 @@
 
 import logging
 from datetime import datetime, timezone
-from typing import Iterable, List, Tuple
+from typing import Iterable, List, Optional, Tuple
 
 import weaviate
 from langchain.embeddings.base import Embeddings
@@ -22,12 +22,12 @@ from langchain.schema.document import Document
 from langchain_community.vectorstores import Weaviate
 
 from app.common.utils import get_embedding_model_name
-from app.core.stores.vector.base_vector_store import BaseVectoreStore
+from app.core.stores.vector.base_vector_store import BaseVectorStore
 
 logger = logging.getLogger(__name__)
 
 
-class WeaviateVectorStore(BaseVectoreStore):
+class WeaviateVectorStore(BaseVectorStore):
     def __init__(
         self,
         embedding_model: Embeddings,
@@ -53,9 +53,10 @@ class WeaviateVectorStore(BaseVectoreStore):
 
         logger.info(f"✅ Weaviate vector store initialized on {host} (index: {index_name})")
 
-    def add_documents(self, documents: List[Document]) -> None:
+    def add_documents(self, documents: List[Document], *, ids: Optional[List[str]] = None) -> List[str]:
         self.vectorstore.add_documents(documents)
         logger.info(f"✅ Added {len(documents)} documents to Weaviate.")
+        return ids or []
 
     def similarity_search_with_score(self, query: str, k: int = 5, documents_ids: Iterable[str] | None = None) -> List[Tuple[Document, float]]:
         if documents_ids:

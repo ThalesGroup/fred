@@ -13,10 +13,11 @@
 # limitations under the License.
 
 from typing import List
+
 from langchain.schema.document import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 
-from app.core.stores.vector.base_vector_store import BaseTextSplitter
+from app.core.stores.vector.base_text_splitter import BaseTextSplitter
 
 
 class RecursiveSplitter(BaseTextSplitter):

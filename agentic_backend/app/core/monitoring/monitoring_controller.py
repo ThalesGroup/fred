@@ -12,9 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 import logging
-from enum import Enum
 from typing import Dict, List
 
 from fastapi import (
@@ -30,6 +28,9 @@ from app.core.monitoring.monitoring_service import AppMonitoringMetricsService
 
 logger = logging.getLogger(__name__)
 
+# Create a module-level APIRouter
+router = APIRouter(tags=["Monitoring"])
+
 
 def _split_csv(values: list[str]) -> list[str]:
     out: list[str] = []
@@ -38,55 +39,52 @@ def _split_csv(values: list[str]) -> list[str]:
     return out
 
 
-class MonitoringController:
-    def __init__(
-        self,
-        app: APIRouter,
-    ):
-        fastapi_tags: list[str | Enum] = ["Monitoring"]
-        self.service = AppMonitoringMetricsService()
+# Dependency function to get the service instance
+def get_monitoring_service() -> AppMonitoringMetricsService:
+    return AppMonitoringMetricsService()
 
-        @app.get("/healthz")
-        async def healthz():
-            return {"status": "ok"}
 
-        @app.get("/ready")
-        def ready():
-            return {"status": "ready"}
+@router.get("/healthz", summary="Liveness check for Kubernetes")
+async def healthz():
+    return {"status": "ok"}
 
-        @app.get(
-            "/metrics/chatbot/numerical",
-            summary="Get aggregated numerical chatbot metrics",
-            tags=fastapi_tags,
-            response_model=MetricsResponse,
-        )
-        def get_node_numerical_metrics(
-            start: str,
-            end: str,
-            precision: str = "hour",
-            agg: List[str] = Query(default=[]),
-            groupby: List[str] = Query(default=[]),
-            user: KeycloakUser = Depends(get_current_user),
-        ) -> MetricsResponse:
-            agg = _split_csv(agg)  # supports ?agg=a:b&agg=c:d OR ?agg=a:b,c:d
-            groupby = _split_csv(groupby)
-            SUPPORTED_OPS = {"mean", "sum", "min", "max", "values"}
-            agg_mapping: Dict[str, List[str]] = {}
-            for item in agg:
-                if ":" not in item:
-                    raise HTTPException(
-                        400, detail=f"Invalid agg parameter format: {item}"
-                    )
-                field, op = item.split(":")
-                if op not in SUPPORTED_OPS:
-                    raise HTTPException(400, detail=f"Unsupported aggregation op: {op}")
-                agg_mapping.setdefault(field, []).append(op)
-            return self.service.get_node_numerical_metrics(
-                user,
-                start=start,
-                end=end,
-                precision=precision,
-                groupby=groupby,
-                agg_mapping=agg_mapping,
-                user_id=user.uid,
-            )
+
+@router.get("/ready", summary="Readiness check for Kubernetes")
+def ready():
+    return {"status": "ready"}
+
+
+@router.get(
+    "/metrics/chatbot/numerical",
+    summary="Get aggregated numerical chatbot metrics",
+    response_model=MetricsResponse,
+)
+def get_node_numerical_metrics(
+    start: str,
+    end: str,
+    precision: str = "hour",
+    agg: List[str] = Query(default=[]),
+    groupby: List[str] = Query(default=[]),
+    user: KeycloakUser = Depends(get_current_user),
+    service: AppMonitoringMetricsService = Depends(get_monitoring_service),
+) -> MetricsResponse:
+    agg = _split_csv(agg)  # supports ?agg=a:b&agg=c:d OR ?agg=a:b,c:d
+    groupby = _split_csv(groupby)
+    SUPPORTED_OPS = {"mean", "sum", "min", "max", "values"}
+    agg_mapping: Dict[str, List[str]] = {}
+    for item in agg:
+        if ":" not in item:
+            raise HTTPException(400, detail=f"Invalid agg parameter format: {item}")
+        field, op = item.split(":")
+        if op not in SUPPORTED_OPS:
+            raise HTTPException(400, detail=f"Unsupported aggregation op: {op}")
+        agg_mapping.setdefault(field, []).append(op)
+    return service.get_node_numerical_metrics(
+        user,
+        start=start,
+        end=end,
+        precision=precision,
+        groupby=groupby,
+        agg_mapping=agg_mapping,
+        user_id=user.uid,
+    )

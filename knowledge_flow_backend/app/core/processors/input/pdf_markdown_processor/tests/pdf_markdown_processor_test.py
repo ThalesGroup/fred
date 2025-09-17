@@ -15,12 +15,13 @@
 # tests/test_pdf_processor.py
 
 import os
-from dotenv import load_dotenv
-import pytest
 from pathlib import Path
+
+import pytest
+from dotenv import load_dotenv
+
 from app.core.processors.input.common.base_image_describer import BaseImageDescriber
 from app.core.processors.input.pdf_markdown_processor.pdf_markdown_processor import PdfMarkdownProcessor
-
 
 dotenv_path = os.getenv("ENV_FILE", "./config/.env")
 load_dotenv(dotenv_path)

@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional, Sequence, Iterable, Callable
+from typing import Any, Callable, Dict, List, Optional, Sequence
 
 import requests
+from fred_core import VectorSearchHit
+from pydantic import TypeAdapter
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
-from pydantic import TypeAdapter
 
-from fred_core import VectorSearchHit
 from app.application_context import get_app_context
 
 logger = logging.getLogger(__name__)
@@ -82,26 +82,32 @@ class VectorSearchClient:
     def search(
         self,
         *,
-        query: str,
-        top_k: int,
-        tags: Optional[Sequence[str]] = None,
-        payload_overrides: Optional[Dict[str, Any]] = None,
+        question: str,
+        top_k: int = 10,
+        document_library_tags_ids: Optional[Sequence[str]] = None,
+        search_policy: Optional[str] = None,
     ) -> List[VectorSearchHit]:
-        payload: Dict[str, Any] = {"query": query, "top_k": top_k}
-        if tags:
-            payload["tags"] = list(tags)
-        if payload_overrides:
-            payload.update(payload_overrides)
+        """
+        Wire format (matches controller):
+          POST /vector/search
+          {
+            "question": str,
+            "top_k": int,
+            "library_tags_ids": [str]?,
+            "search_policy": str?
+          }
+        """
+        payload: Dict[str, Any] = {"question": question, "top_k": top_k}
+        if document_library_tags_ids:
+            payload["document_library_tags_ids"] = list(document_library_tags_ids)
+        if search_policy:
+            payload["search_policy"] = search_policy
 
         r = self._post_with_auth_retry("/vector/search", payload)
         r.raise_for_status()
 
-        try:
-            raw = r.json()
-        except ValueError as e:
-            logger.error("Vector search returned non-JSON response: %s", e)
-            raise
-
-        if not isinstance(raw, Iterable):
+        raw = r.json()
+        if not isinstance(raw, list):
+            logger.warning("Unexpected vector search payload type: %s", type(raw))
             return []
         return _HITS.validate_python(raw)

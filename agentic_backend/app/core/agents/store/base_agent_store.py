@@ -14,6 +14,7 @@
 
 from abc import ABC, abstractmethod
 from typing import List, Optional
+
 from app.common.structures import AgentSettings
 
 

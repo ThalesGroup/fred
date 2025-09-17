@@ -348,103 +348,101 @@ export const Settings = ({
             {t("settings.assistants")}
           </Typography>
 
-          {currentAgenticFlow && (
-            <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
-              {/* Fred rationale:
-     - Uniform, vertical, compact list.
-     - Tooltip shows role + description without stealing clicks.
-     - Selected line uses a clear border + subtle bg.
-  */}
-              <List dense disablePadding>
-                {agenticFlows.map((flow) => {
-                  const isSelected = flow.name === currentAgenticFlow.name;
+          <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
+            {/* Fred rationale:
+     - Always render the list so users can pick an assistant even with no session.
+     - Selection is computed safely with optional chaining. */}
+            <List dense disablePadding>
+              {agenticFlows.map((flow) => {
+                const isSelected = currentAgenticFlow?.name === flow.name;
 
-                  // Tooltip content: nickname (title), then role + description
-                  const tooltipContent = (
-                    <Box sx={{ maxWidth: 460 }}>
-                      {/* Nickname */}
-                      <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 0.75 }}>
-                        {flow.nickname}
+                const tooltipContent = (
+                  <Box sx={{ maxWidth: 460 }}>
+                    {/* Nickname */}
+                    <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 0.75 }}>
+                      {flow.nickname}
+                    </Typography>
+
+                    {/* Subtle separator */}
+                    <Divider sx={{ opacity: 0.5, mb: 0.75 }} />
+
+                    {/* Role + description grouped with a thin left accent */}
+                    <Box
+                      sx={(theme) => ({
+                        pl: 1.25,
+                        borderLeft: `2px solid ${theme.palette.divider}`,
+                      })}
+                    >
+                      <Typography
+                        variant="body2"
+                        color="text.secondary"
+                        sx={{ fontStyle: "italic", mb: flow.description ? 0.25 : 0 }}
+                      >
+                        {flow.role}
                       </Typography>
 
-                      {/* Subtle separator */}
-                      <Divider sx={{ opacity: 0.5, mb: 0.75 }} />
-
-                      {/* Role + description grouped with a thin left accent */}
-                      <Box
-                        sx={(theme) => ({
-                          pl: 1.25,
-                          borderLeft: `2px solid ${theme.palette.divider}`,
-                        })}
-                      >
-                        <Typography
-                          variant="body2"
-                          color="text.secondary"
-                          sx={{ fontStyle: "italic", mb: flow.description ? 0.25 : 0 }}
-                        >
-                          {flow.role}
+                      {flow.description && (
+                        <Typography variant="body2" color="text.secondary">
+                          {flow.description}
                         </Typography>
-
-                        {flow.description && (
-                          <Typography variant="body2" color="text.secondary">
-                            {flow.description}
-                          </Typography>
-                        )}
-                      </Box>
+                      )}
                     </Box>
-                  );
+                  </Box>
+                );
 
-                  return (
-                    <ListItem key={flow.name} disableGutters sx={{ mb: 0 }}>
-                      <Tooltip
-                        title={tooltipContent}
-                        placement="right"
-                        arrow
-                        slotProps={{ tooltip: { sx: { maxWidth: 460 } } }}
-                      >
-                        <ListItemButton
-                          dense
-                          onClick={() => onSelectAgenticFlow(flow)}
-                          selected={isSelected}
-                          sx={{
-                            borderRadius: 1,
-                            px: 1,
-                            py: 0,
-                            border: `1px solid ${isSelected ? theme.palette.primary.main : theme.palette.divider}`,
+                return (
+                  <ListItem key={flow.name} disableGutters sx={{ mb: 0 }}>
+                    <Tooltip
+                      title={tooltipContent}
+                      placement="right"
+                      arrow
+                      slotProps={{ tooltip: { sx: { maxWidth: 460 } } }}
+                    >
+                      <ListItemButton
+                        dense
+                        onClick={() => onSelectAgenticFlow(flow)}
+                        selected={isSelected}
+                        sx={{
+                          borderRadius: 1,
+                          px: 1,
+                          py: 0,
+                          border: `1px solid ${isSelected ? theme.palette.primary.main : theme.palette.divider}`,
+                          backgroundColor: isSelected
+                            ? theme.palette.mode === "dark"
+                              ? "rgba(25,118,210,0.12)"
+                              : "rgba(25,118,210,0.06)"
+                            : "transparent",
+                          "&:hover": {
                             backgroundColor: isSelected
                               ? theme.palette.mode === "dark"
-                                ? "rgba(25,118,210,0.12)"
-                                : "rgba(25,118,210,0.06)"
-                              : "transparent",
-                            "&:hover": {
-                              backgroundColor: isSelected
-                                ? theme.palette.mode === "dark"
-                                  ? "rgba(25,118,210,0.16)"
-                                  : "rgba(25,118,210,0.1)"
-                                : theme.palette.mode === "dark"
-                                  ? "rgba(255,255,255,0.04)"
-                                  : "rgba(0,0,0,0.03)",
-                            },
-                          }}
-                        >
-                          <Box sx={{ mr: 1, transform: "scale(0.8)", transformOrigin: "center", lineHeight: 0 }}>
-                            {getAgentBadge(flow.nickname)}
-                          </Box>
+                                ? "rgba(25,118,210,0.16)"
+                                : "rgba(25,118,210,0.1)"
+                              : theme.palette.mode === "dark"
+                                ? "rgba(255,255,255,0.04)"
+                                : "rgba(0,0,0,0.03)",
+                          },
+                        }}
+                      >
+                        {/* Badge */}
+                        <Box sx={{ mr: 1, transform: "scale(0.8)", transformOrigin: "center", lineHeight: 0 }}>
+                          {getAgentBadge(flow.nickname)}
+                        </Box>
 
-                          <ListItemText
-                            primary={flow.nickname}
-                            secondary={flow.role}
-                            primaryTypographyProps={{
-                              variant: "body2",
-                              fontWeight: isSelected ? 600 : 500,
-                              noWrap: true,
-                            }}
-                            secondaryTypographyProps={{
-                              variant: "caption",
-                              color: "text.secondary",
-                              noWrap: true,
-                            }}
-                          />
+                        {/* Texts */}
+                        <ListItemText
+                          primary={flow.nickname}
+                          secondary={flow.role}
+                          primaryTypographyProps={{
+                            variant: "body2",
+                            fontWeight: isSelected ? 600 : 500,
+                            noWrap: true,
+                          }}
+                          secondaryTypographyProps={{
+                            variant: "caption",
+                            color: "text.secondary",
+                            noWrap: true,
+                          }}
+                        />
 
                           <Box sx={{ ml: "auto", opacity:0 }}>
                             <Tooltip disableHoverListener title={t("settings.add", "Add")}>
@@ -461,12 +459,19 @@ export const Settings = ({
                               </IconButton>
                             </Tooltip>
                           </Box>
-                        </ListItemButton>
-                      </Tooltip>
-                    </ListItem>
-                  );
-                })}
-              </List>
+                      </ListItemButton>
+                    </Tooltip>
+                  </ListItem>
+                );
+              })}
+            </List>
+
+            {/* Optional hint when nothing is selected */}
+            {!currentAgenticFlow && (
+              <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, px: 1 }}>
+                {t("settings.pickAssistantToStart")}
+              </Typography>
+            )}
 
               <Popover
                 open={Boolean(pluginAnchorEl)}
@@ -487,8 +492,7 @@ export const Settings = ({
                   }
                 />
               </Popover>
-            </Box>
-          )}
+          </Box>
         </Box>
       </Fade>
 

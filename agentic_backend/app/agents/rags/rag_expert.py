@@ -17,11 +17,10 @@ import logging
 from datetime import datetime
 from typing import List
 
+from fred_core import VectorSearchHit
 from langchain_core.messages import HumanMessage
 from langgraph.graph import END, START, MessagesState, StateGraph
 
-from fred_core import VectorSearchHit
-from app.common.vector_search_client import VectorSearchClient
 from app.common.rags_utils import (
     attach_sources_to_llm_response,
     ensure_ranks,
@@ -29,8 +28,12 @@ from app.common.rags_utils import (
     sort_hits,
 )
 from app.common.structures import AgentSettings
+from app.common.vector_search_client import VectorSearchClient
 from app.core.agents.flow import AgentFlow
-from app.core.agents.runtime_context import get_document_libraries_ids
+from app.core.agents.runtime_context import (
+    get_document_library_tags_ids,
+    get_search_policy,
+)
 from app.core.model.model_factory import get_model
 
 logger = logging.getLogger(__name__)
@@ -67,6 +70,9 @@ class RagExpert(AgentFlow):
 
     def __init__(self, agent_settings: AgentSettings):
         super().__init__(agent_settings=agent_settings)
+        self.top_k = agent_settings.settings.get(
+            "top_k", 3
+        )  # default, can be overridden per call
 
     async def async_init(self):
         self.model = get_model(self.agent_settings.model)
@@ -97,12 +103,16 @@ class RagExpert(AgentFlow):
 
         try:
             # Build search args
-            top_k = 3
-            tags = get_document_libraries_ids(self.get_runtime_context())
-
+            document_library_tags_ids = get_document_library_tags_ids(
+                self.get_runtime_context()
+            )
+            search_policy = get_search_policy(self.get_runtime_context())
             # 1) Vector search via client
             hits: List[VectorSearchHit] = self.search_client.search(
-                query=question, top_k=top_k, tags=tags
+                question=question,
+                top_k=self.top_k,
+                document_library_tags_ids=document_library_tags_ids,
+                search_policy=search_policy,
             )
             if not hits:
                 warn = f"I couldn't find any relevant documents for “{question}”. Try rephrasing?"

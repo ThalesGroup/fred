@@ -15,14 +15,16 @@
 # fred_core/security/service_auth.py
 
 from __future__ import annotations
+
+import asyncio
 import os
 import time
 import typing as t
-import asyncio
+
 import httpx
-from pydantic import BaseModel
-from httpx import Request, Response
 from fastapi import FastAPI
+from httpx import Request, Response
+from pydantic import BaseModel
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Fred rationale:

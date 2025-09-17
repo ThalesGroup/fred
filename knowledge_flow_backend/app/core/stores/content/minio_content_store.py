@@ -12,15 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from io import BytesIO
 import io
 import logging
+from io import BytesIO
 from pathlib import Path
 from typing import BinaryIO
 from urllib.parse import urlparse
+
+import pandas as pd
 from minio import Minio
 from minio.error import S3Error
-import pandas as pd
+
 from app.core.stores.content.base_content_store import BaseContentStore
 
 logger = logging.getLogger(__name__)

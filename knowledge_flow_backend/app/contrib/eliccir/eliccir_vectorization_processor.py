@@ -14,6 +14,7 @@
 
 import logging
 from typing import override
+
 from langchain.schema.document import Document
 
 from app.application_context import ApplicationContext

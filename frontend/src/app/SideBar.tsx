@@ -29,25 +29,19 @@ import {
 import { useLocation, useNavigate } from "react-router-dom";
 
 import AccountCircleIcon from "@mui/icons-material/AccountCircle";
-import AssessmentIcon from "@mui/icons-material/Assessment";
-import AssistantIcon from "@mui/icons-material/Assistant";
 import ChatIcon from "@mui/icons-material/Chat";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
 import GroupIcon from "@mui/icons-material/Group";
 import LightModeIcon from "@mui/icons-material/LightMode";
-import MenuIcon from "@mui/icons-material/Menu";
 import MenuBookIcon from "@mui/icons-material/MenuBook";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
-import TuneIcon from "@mui/icons-material/Tune";
 import { useContext } from "react";
 import { useTranslation } from "react-i18next";
-import { FeatureFlagKey, getProperty, isFeatureEnabled } from "../common/config.tsx";
-import { SideBarClusterSelector } from "../frugalit/component/SideBarClusterSelector.tsx";
+import { getProperty } from "../common/config.tsx";
 import { ImageComponent } from "../utils/image.tsx";
 import { ApplicationContext } from "./ApplicationContextProvider.tsx";
-import { K8ApplicationContext } from "./K8ApplicationContextProvider.tsx";
 
 export default function SideBar({ darkMode, onThemeChange }) {
   const { t } = useTranslation();
@@ -55,7 +49,6 @@ export default function SideBar({ darkMode, onThemeChange }) {
   const navigate = useNavigate();
   const location = useLocation();
   const applicationContext = useContext(ApplicationContext);
-  const k8ApplicationContext = useContext(K8ApplicationContext);
   const smallScreen = useMediaQuery(theme.breakpoints.down("md"));
 
   // Couleurs sobres à la manière du second fichier
@@ -67,63 +60,15 @@ export default function SideBar({ darkMode, onThemeChange }) {
 
   const hoverColor = theme.palette.sidebar.hoverColor;
 
-  const currentClusterFullname = k8ApplicationContext?.currentClusterOverview?.fullname;
-
-  // Éléments de menu du premier fichier
   const menuItems = [
-    ...(isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES)
-      ? [
-          {
-            key: "explain",
-            label: t("sidebar.cluster"),
-            icon: <AssistantIcon />,
-            url: `/explain?cluster=${currentClusterFullname}`,
-            canBeDisabled: true,
-            tooltip: t("sidebar.tooltip.cluster"),
-          },
-          {
-            key: "facts",
-            label: t("sidebar.facts"),
-            icon: <AssistantIcon />,
-            url: `/facts?cluster=${currentClusterFullname}`,
-            canBeDisabled: true,
-            tooltip: t("sidebar.tooltip.facts"),
-          },
-          {
-            key: "audit",
-            label: t("sidebar.audit"),
-            icon: <AssessmentIcon />,
-            url: `/audit?cluster=${currentClusterFullname}`,
-            canBeDisabled: true,
-            tooltip: t("sidebar.tooltip.audit"),
-          },
-          {
-            key: "optimize",
-            label: t("sidebar.optimize"),
-            icon: <TuneIcon />,
-            url: `/optimize?cluster=${currentClusterFullname}`,
-            canBeDisabled: true,
-            tooltip: t("sidebar.tooltip.optimize"),
-          },
-          {
-            key: "chat",
-            label: t("sidebar.chat"),
-            icon: <ChatIcon />,
-            url: `/chat?cluster=${currentClusterFullname}`,
-            canBeDisabled: false,
-            tooltip: t("sidebar.tooltip.chat"),
-          },
-        ]
-      : [
-          {
-            key: "chat",
-            label: t("sidebar.chat"),
-            icon: <ChatIcon />,
-            url: `/chat`,
-            canBeDisabled: false,
-            tooltip: t("sidebar.tooltip.chat"),
-          },
-        ]),
+    {
+      key: "chat",
+      label: t("sidebar.chat"),
+      icon: <ChatIcon />,
+      url: `/chat`,
+      canBeDisabled: false,
+      tooltip: t("sidebar.tooltip.chat"),
+    },
     {
       key: "monitoring",
       label: t("sidebar.monitoring"),
@@ -152,7 +97,7 @@ export default function SideBar({ darkMode, onThemeChange }) {
       key: "account",
       label: t("sidebar.account"),
       icon: <AccountCircleIcon />,
-      url: `/account?cluster=${currentClusterFullname}`,
+      url: `/account`,
       canBeDisabled: false,
       tooltip: t("sidebar.tooltip.account"),
     },
@@ -161,6 +106,7 @@ export default function SideBar({ darkMode, onThemeChange }) {
   const { isSidebarCollapsed, toggleSidebar } = applicationContext;
   const isSidebarSmall = smallScreen || isSidebarCollapsed;
   const sidebarWidth = isSidebarCollapsed ? theme.layout.sidebarCollapsedWidth : theme.layout.sidebarWidth;
+
   // Helper function to check if the current path matches the menu item path
   const isActive = (path: string) => {
     const menuPathBase = path.split("?")[0];
@@ -196,7 +142,7 @@ export default function SideBar({ darkMode, onThemeChange }) {
         sx={{
           display: "flex",
           alignItems: "center",
-          justifyContent: isSidebarSmall ? "center" : "space-between",
+          justifyContent:  "center",
           py: 2.5,
           px: isSidebarSmall ? 1 : 2,
           borderBottom: `1px solid ${theme.palette.divider}`,
@@ -207,6 +153,7 @@ export default function SideBar({ darkMode, onThemeChange }) {
             display: "flex",
             alignItems: "center",
             cursor: "pointer",
+            justifyContent: "center" 
           }}
           onClick={() => navigate("/")}
         >
@@ -219,65 +166,33 @@ export default function SideBar({ darkMode, onThemeChange }) {
           >
             <ImageComponent name={logoName} width="36px" height="36px" />
           </Avatar>
-          {!isSidebarSmall && (
-            <Typography
-              variant="subtitle1"
-              sx={{
-                ml: 1.5,
-                fontWeight: 500,
-                color: theme.palette.text.primary,
-              }}
-            >
-              {logoName}
-            </Typography>
-          )}
         </Box>
-        {!isSidebarSmall && (
-          <IconButton
-            onClick={toggleSidebar}
-            size="small"
-            sx={{
-              borderRadius: "8px",
-              "&:hover": {
-                backgroundColor: hoverColor,
-              },
-            }}
-          >
-            {theme.direction === "ltr" ? <ChevronLeftIcon /> : <ChevronRightIcon />}
-          </IconButton>
-        )}
       </Box>
 
-      {isSidebarSmall && (
-        <Box sx={{ display: "flex", justifyContent: "center", pt: 2 }}>
-          <IconButton
-            size="small"
-            onClick={toggleSidebar}
-            sx={{
-              borderRadius: "8px",
-              border: `1px solid ${theme.palette.divider}`,
-              width: 28,
-              height: 28,
-              "&:hover": {
-                backgroundColor: hoverColor,
-              },
-            }}
-          >
-            <MenuIcon fontSize="small" />
-          </IconButton>
-        </Box>
-      )}
-
-      {!isSidebarSmall && isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES) && (
-        <Box sx={{ pt: 3, px: 2 }}>
-          <SideBarClusterSelector
-            currentClusterOverview={k8ApplicationContext.currentClusterOverview}
-            allClusters={k8ApplicationContext.allClusters}
-            setCurrentClusterOverview={k8ApplicationContext.fetchClusterAndNamespaceData}
-          />
-        </Box>
-      )}
-
+      {/* NEW, CONSOLIDATED BUTTON LOCATION */}
+      <Box sx={{ display: "flex", justifyContent: "center", pt: 2 }}>
+        <IconButton
+          size="small"
+          onClick={toggleSidebar}
+          sx={{
+            borderRadius: "8px",
+            border: `1px solid ${theme.palette.divider}`,
+            width: 28,
+            height: 28,
+            "&:hover": {
+              backgroundColor: hoverColor,
+            },
+          }}
+        >
+          {/* Change icon based on state */}
+          {isSidebarCollapsed ? (
+            <ChevronRightIcon fontSize="small" />
+          ) : (
+            <ChevronLeftIcon fontSize="small" />
+          )}
+        </IconButton>
+      </Box>
+      
       <List
         sx={{
           pt: 3,
@@ -293,11 +208,7 @@ export default function SideBar({ darkMode, onThemeChange }) {
             <Tooltip
               key={item.key}
               title={
-                isSidebarSmall
-                  ? currentClusterFullname || !item.canBeDisabled
-                    ? item.tooltip
-                    : t("sidebar.tooltip.selectCluster")
-                  : ""
+               item.tooltip
               }
               placement="right"
               arrow
@@ -313,9 +224,7 @@ export default function SideBar({ darkMode, onThemeChange }) {
                   color: active ? activeItemTextColor : "text.secondary",
                   "&:hover": {
                     backgroundColor:
-                      item.canBeDisabled && !currentClusterFullname
-                        ? "transparent"
-                        : active
+                      active
                           ? activeItemBgColor
                           : hoverColor,
                     color: active ? activeItemTextColor : "text.primary",
@@ -323,11 +232,11 @@ export default function SideBar({ darkMode, onThemeChange }) {
                   transition: "all 0.2s",
                   px: isSidebarSmall ? 1 : 2,
                   position: "relative",
-                  cursor: item.canBeDisabled && !currentClusterFullname ? "not-allowed" : "pointer",
-                  opacity: item.canBeDisabled && !currentClusterFullname ? 0.5 : 1,
-                  pointerEvents: item.canBeDisabled && !currentClusterFullname ? "none" : "auto",
+                  cursor: "pointer",
+                  opacity:  1,
+                  pointerEvents: "auto",
                 }}
-                onClick={item.canBeDisabled && !currentClusterFullname ? undefined : () => navigate(item.url)}
+                onClick={ () => navigate(item.url)}
               >
                 <ListItemIcon
                   sx={{
@@ -413,30 +322,6 @@ export default function SideBar({ darkMode, onThemeChange }) {
         {/* Liens externes */}
         {!isSidebarSmall && (
           <>
-            <Box
-              sx={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                py: 1,
-                px: 2,
-                mt: 1,
-                width: "90%",
-                borderRadius: 1,
-              }}
-            >
-              <Typography variant="caption" color="text.secondary">
-                Innovation hub
-              </Typography>
-              <IconButton
-                color="inherit"
-                size="small"
-                onClick={() => window.open("https://paradox-innovation.dev", "_blank", "noopener,noreferrer")}
-                sx={{ p: 0.3 }}
-              >
-                <OpenInNewIcon sx={{ fontSize: "0.8rem", color: "text.secondary" }} />
-              </IconButton>
-            </Box>
 
             <Box
               sx={{

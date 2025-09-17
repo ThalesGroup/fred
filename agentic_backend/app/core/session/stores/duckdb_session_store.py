@@ -1,13 +1,14 @@
 # app/core/session/stores/duckdb_session_storage.py
 
 import logging
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional
-from datetime import datetime, timezone
+
+from fred_core.store.duckdb_store import DuckDBTableStore
 
 from app.core.chatbot.chat_schema import SessionSchema
 from app.core.session.stores.base_session_store import BaseSessionStore
-from fred_core.store.duckdb_store import DuckDBTableStore
 
 logger = logging.getLogger(__name__)
 

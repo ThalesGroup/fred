@@ -1,34 +1,6 @@
 import { agenticApi as api } from "./agenticApi";
 const injectedRtkApi = api.injectEndpoints({
   endpoints: (build) => ({
-    getFeedbackAgenticV1ChatbotFeedbackGet: build.query<
-      GetFeedbackAgenticV1ChatbotFeedbackGetApiResponse,
-      GetFeedbackAgenticV1ChatbotFeedbackGetApiArg
-    >({
-      query: () => ({ url: `/agentic/v1/chatbot/feedback` }),
-    }),
-    postFeedbackAgenticV1ChatbotFeedbackPost: build.mutation<
-      PostFeedbackAgenticV1ChatbotFeedbackPostApiResponse,
-      PostFeedbackAgenticV1ChatbotFeedbackPostApiArg
-    >({
-      query: (queryArg) => ({ url: `/agentic/v1/chatbot/feedback`, method: "POST", body: queryArg.feedbackPayload }),
-    }),
-    deleteFeedbackAgenticV1ChatbotFeedbackFeedbackIdDelete: build.mutation<
-      DeleteFeedbackAgenticV1ChatbotFeedbackFeedbackIdDeleteApiResponse,
-      DeleteFeedbackAgenticV1ChatbotFeedbackFeedbackIdDeleteApiArg
-    >({
-      query: (queryArg) => ({ url: `/agentic/v1/chatbot/feedback/${queryArg.feedbackId}`, method: "DELETE" }),
-    }),
-    completePromptAgenticV1PromptsCompletePost: build.mutation<
-      CompletePromptAgenticV1PromptsCompletePostApiResponse,
-      CompletePromptAgenticV1PromptsCompletePostApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/agentic/v1/prompts/complete`,
-        method: "POST",
-        body: queryArg.promptCompleteRequest,
-      }),
-    }),
     createAgentAgenticV1AgentsCreatePost: build.mutation<
       CreateAgentAgenticV1AgentsCreatePostApiResponse,
       CreateAgentAgenticV1AgentsCreatePostApiArg
@@ -114,25 +86,28 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    getFeedbackAgenticV1ChatbotFeedbackGet: build.query<
+      GetFeedbackAgenticV1ChatbotFeedbackGetApiResponse,
+      GetFeedbackAgenticV1ChatbotFeedbackGetApiArg
+    >({
+      query: () => ({ url: `/agentic/v1/chatbot/feedback` }),
+    }),
+    postFeedbackAgenticV1ChatbotFeedbackPost: build.mutation<
+      PostFeedbackAgenticV1ChatbotFeedbackPostApiResponse,
+      PostFeedbackAgenticV1ChatbotFeedbackPostApiArg
+    >({
+      query: (queryArg) => ({ url: `/agentic/v1/chatbot/feedback`, method: "POST", body: queryArg.feedbackPayload }),
+    }),
+    deleteFeedbackAgenticV1ChatbotFeedbackFeedbackIdDelete: build.mutation<
+      DeleteFeedbackAgenticV1ChatbotFeedbackFeedbackIdDeleteApiResponse,
+      DeleteFeedbackAgenticV1ChatbotFeedbackFeedbackIdDeleteApiArg
+    >({
+      query: (queryArg) => ({ url: `/agentic/v1/chatbot/feedback/${queryArg.feedbackId}`, method: "DELETE" }),
+    }),
   }),
   overrideExisting: false,
 });
 export { injectedRtkApi as agenticApi };
-export type GetFeedbackAgenticV1ChatbotFeedbackGetApiResponse = /** status 200 Successful Response */ FeedbackRecord[];
-export type GetFeedbackAgenticV1ChatbotFeedbackGetApiArg = void;
-export type PostFeedbackAgenticV1ChatbotFeedbackPostApiResponse = unknown;
-export type PostFeedbackAgenticV1ChatbotFeedbackPostApiArg = {
-  feedbackPayload: FeedbackPayload;
-};
-export type DeleteFeedbackAgenticV1ChatbotFeedbackFeedbackIdDeleteApiResponse = unknown;
-export type DeleteFeedbackAgenticV1ChatbotFeedbackFeedbackIdDeleteApiArg = {
-  feedbackId: string;
-};
-export type CompletePromptAgenticV1PromptsCompletePostApiResponse =
-  /** status 200 Successful Response */ PromptCompleteResponse;
-export type CompletePromptAgenticV1PromptsCompletePostApiArg = {
-  promptCompleteRequest: PromptCompleteRequest;
-};
 export type CreateAgentAgenticV1AgentsCreatePostApiResponse = /** status 200 Successful Response */ any;
 export type CreateAgentAgenticV1AgentsCreatePostApiArg = {
   req: {
@@ -192,22 +167,15 @@ export type GetNodeNumericalMetricsAgenticV1MetricsChatbotNumericalGetApiArg = {
   agg?: string[];
   groupby?: string[];
 };
-export type FeedbackRecord = {
-  id: string;
-  /** Session ID associated with the feedback */
-  session_id: string;
-  /** Message ID the feedback refers to */
-  message_id: string;
-  /** Name of the agent that generated the message */
-  agent_name: string;
-  /** User rating, typically 1–5 stars */
-  rating: number;
-  /** Optional user comment or clarification */
-  comment?: string | null;
-  /** Timestamp when the feedback was submitted */
-  created_at: string;
-  /** Optional user ID if identity is tracked */
-  user_id: string;
+export type GetFeedbackAgenticV1ChatbotFeedbackGetApiResponse = /** status 200 Successful Response */ FeedbackRecord[];
+export type GetFeedbackAgenticV1ChatbotFeedbackGetApiArg = void;
+export type PostFeedbackAgenticV1ChatbotFeedbackPostApiResponse = unknown;
+export type PostFeedbackAgenticV1ChatbotFeedbackPostApiArg = {
+  feedbackPayload: FeedbackPayload;
+};
+export type DeleteFeedbackAgenticV1ChatbotFeedbackFeedbackIdDeleteApiResponse = unknown;
+export type DeleteFeedbackAgenticV1ChatbotFeedbackFeedbackIdDeleteApiArg = {
+  feedbackId: string;
 };
 export type ValidationError = {
   loc: (string | number)[];
@@ -216,23 +184,6 @@ export type ValidationError = {
 };
 export type HttpValidationError = {
   detail?: ValidationError[];
-};
-export type FeedbackPayload = {
-  rating: number;
-  comment?: string | null;
-  messageId: string;
-  sessionId: string;
-  agentName: string;
-};
-export type PromptCompleteResponse = {
-  prompt: string;
-  completion: string;
-};
-export type PromptCompleteRequest = {
-  prompt: string;
-  temperature?: number | null;
-  max_tokens?: number | null;
-  model?: string | null;
 };
 export type McpServerConfiguration = {
   name: string;
@@ -413,6 +364,7 @@ export type RuntimeContext = {
   selected_document_libraries_ids?: string[] | null;
   selected_prompt_ids?: string[] | null;
   selected_template_ids?: string[] | null;
+  search_policy?: string | null;
   [key: string]: any;
 };
 export type ChatAskInput = {
@@ -562,12 +514,31 @@ export type BodyUploadFileAgenticV1ChatbotUploadPost = {
   agent_name: string;
   file: Blob;
 };
+export type FeedbackRecord = {
+  id: string;
+  /** Session ID associated with the feedback */
+  session_id: string;
+  /** Message ID the feedback refers to */
+  message_id: string;
+  /** Name of the agent that generated the message */
+  agent_name: string;
+  /** User rating, typically 1–5 stars */
+  rating: number;
+  /** Optional user comment or clarification */
+  comment?: string | null;
+  /** Timestamp when the feedback was submitted */
+  created_at: string;
+  /** Optional user ID if identity is tracked */
+  user_id: string;
+};
+export type FeedbackPayload = {
+  rating: number;
+  comment?: string | null;
+  messageId: string;
+  sessionId: string;
+  agentName: string;
+};
 export const {
-  useGetFeedbackAgenticV1ChatbotFeedbackGetQuery,
-  useLazyGetFeedbackAgenticV1ChatbotFeedbackGetQuery,
-  usePostFeedbackAgenticV1ChatbotFeedbackPostMutation,
-  useDeleteFeedbackAgenticV1ChatbotFeedbackFeedbackIdDeleteMutation,
-  useCompletePromptAgenticV1PromptsCompletePostMutation,
   useCreateAgentAgenticV1AgentsCreatePostMutation,
   useUpdateAgentAgenticV1AgentsNamePutMutation,
   useDeleteAgentAgenticV1AgentsNameDeleteMutation,
@@ -588,4 +559,8 @@ export const {
   useLazyReadyAgenticV1ReadyGetQuery,
   useGetNodeNumericalMetricsAgenticV1MetricsChatbotNumericalGetQuery,
   useLazyGetNodeNumericalMetricsAgenticV1MetricsChatbotNumericalGetQuery,
+  useGetFeedbackAgenticV1ChatbotFeedbackGetQuery,
+  useLazyGetFeedbackAgenticV1ChatbotFeedbackGetQuery,
+  usePostFeedbackAgenticV1ChatbotFeedbackPostMutation,
+  useDeleteFeedbackAgenticV1ChatbotFeedbackFeedbackIdDeleteMutation,
 } = injectedRtkApi;

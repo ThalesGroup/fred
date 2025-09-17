@@ -16,13 +16,22 @@
 
 
 import pytest
-from pydantic import AnyHttpUrl, AnyUrl
+from fastapi import APIRouter, FastAPI
 from fastapi.testclient import TestClient
-from fastapi import FastAPI, APIRouter
+from fred_core import (
+    DuckdbStoreConfig,
+    M2MSecurity,
+    OpenSearchStoreConfig,
+    PostgresStoreConfig,
+    SecurityConfiguration,
+    UserSecurity,
+)
+from pydantic import AnyHttpUrl, AnyUrl
 
+from app.application_context import ApplicationContext
 from app.common.structures import (
-    AIConfig,
     AgentSettings,
+    AIConfig,
     AppConfig,
     Configuration,
     FrontendFlags,
@@ -32,15 +41,6 @@ from app.common.structures import (
     RecursionConfig,
     StorageConfig,
     TimeoutSettings,
-)
-from app.application_context import ApplicationContext
-from fred_core import (
-    DuckdbStoreConfig,
-    PostgresStoreConfig,
-    OpenSearchStoreConfig,
-    SecurityConfiguration,
-    M2MSecurity,
-    UserSecurity,
 )
 
 
@@ -52,16 +52,16 @@ def minimal_generalist_config() -> Configuration:
             enabled=False,
             realm_url=AnyUrl("http://localhost:8080/realms/fake-m2m-realm"),
             client_id="fake-m2m-client",
-            audience="fake-audience"
+            audience="fake-audience",
         ),
         user=UserSecurity(
             enabled=False,
             realm_url=AnyUrl("http://localhost:8080/realms/fake-user-realm"),
             client_id="fake-user-client",
-            authorized_origins=[AnyHttpUrl("http://localhost:5173")]
-        )
+            authorized_origins=[AnyHttpUrl("http://localhost:5173")],
+        ),
     )
- 
+
     return Configuration(
         app=AppConfig(
             base_url="/agentic/v1",

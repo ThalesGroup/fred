@@ -14,16 +14,16 @@
 
 
 import logging
-from app.core.model.azure_apim_model import AzureApimModel
-from langchain_openai import AzureChatOpenAI, ChatOpenAI
-from langchain_ollama import ChatOllama
-from pydantic import BaseModel
 from typing import Type
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_core.output_parsers import PydanticOutputParser
 
+from langchain_core.output_parsers import PydanticOutputParser
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_ollama import ChatOllama
+from langchain_openai import AzureChatOpenAI, ChatOpenAI
+from pydantic import BaseModel
 
 from app.common.structures import ModelConfiguration
+from app.core.model.azure_apim_model import AzureApimModel
 
 logger = logging.getLogger(__name__)
 

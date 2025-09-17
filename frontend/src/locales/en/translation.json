@@ -3,7 +3,6 @@
     "add": "Add",
     "noneSelected": "None selected"
   },
-
   "resource": {
     "kind": {
       "prompt":   { "one": "prompt",   "other": "prompts" },
@@ -141,7 +140,10 @@
     "newConversation": "New conversation",
     "noConversation": "No conversation",
     "delete": "Delete",
-    "profile": "Profile"
+    "profile": "Profile",
+    "conversationSetup": "Conversation setup",
+    "newConversationHelp": "Start a new conversation (not yet saved)",
+    "draftNotSaved": "Draft • not yet saved"
   },
   "monitoring": {
     "title": "Agent & AI Service Monitoring",
@@ -276,8 +278,8 @@
     "confirmDeleteFolderTitle": "Delete folder?",
     "confirmDeleteFolderMessage": "Delete empty folder « {{name}} »?",
     "folderDeleted": "Folder deleted",
-    "deleteFolder": "Delete folder"
-
+    "deleteFolder": "Delete folder",
+    "download": "Download"
   },
   "resourceLibrary": {
     "title": "{{typePlural}}",
@@ -369,5 +371,14 @@
     "save": "Save",
     "updateFailed": "Update Failed",
     "updateFailedDetail": "An error occurred while updating the library. Please try again."
+  },
+  "search" : {
+    "policy": "Search Policy",
+    "strict": "Strict",
+    "hybrid": "Hybrid",
+    "semantic": "Semantic",
+    "strictDescription": "Only use documents that are explicitly relevant to the query.",
+    "hybridDescription": "Combine relevant documents with semantic search results.",
+    "semanticDescription": "Use semantic search to find related documents."
   }
 }

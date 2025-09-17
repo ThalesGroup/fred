@@ -1,23 +1,23 @@
 # app/core/stores/metadata/opensearch_metadata_store.py
 
 import logging
-from typing import List, Optional, Dict, Any
+from typing import Any, Dict, List, Optional
 
-from opensearchpy import OpenSearch, RequestsHttpConnection, OpenSearchException
+from opensearchpy import OpenSearch, OpenSearchException, RequestsHttpConnection
 from pydantic import ValidationError
 
 from app.common.document_structures import (
-    DocumentMetadata,
-    Identity,
-    SourceInfo,
-    FileInfo,
-    Tagging,
     AccessInfo,
+    DocumentMetadata,
+    FileInfo,
+    FileType,
+    Identity,
     Processing,
     ProcessingStage,
     ProcessingStatus,
+    SourceInfo,
     SourceType,
-    FileType,
+    Tagging,
 )
 from app.core.stores.metadata.base_metadata_store import (
     BaseMetadataStore,

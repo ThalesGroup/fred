@@ -12,7 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List, Dict, Union, Any
+from typing import Any, Dict, List, Union
+
 from pydantic import BaseModel
 
 

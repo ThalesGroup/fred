@@ -20,30 +20,29 @@ Entrypoint for the Agentic Backend App.
 """
 
 import asyncio
-from contextlib import asynccontextmanager
 import logging
 import os
+from contextlib import asynccontextmanager
 
-from app.core.agents.agent_manager import AgentManager
-from app.core.chatbot.session_orchestrator import SessionOrchestrator
-from app.core.feedback.controller import FeedbackController
-from app.core.agents.agent_controller import AgentController
-from app.application_context import (
-    ApplicationContext,
-    get_agent_store,
-    get_session_store,
-)
-from app.core.chatbot.chatbot_controller import ChatbotController
-from app.common.structures import Configuration
-from app.common.utils import parse_server_configuration
-from app.core.monitoring.monitoring_controller import MonitoringController
-from app.core.prompts.controller import PromptController
 from dotenv import load_dotenv
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fred_core import initialize_user_security, register_exception_handlers
 from rich.logging import RichHandler
 
+from app.application_context import (
+    ApplicationContext,
+    get_agent_store,
+    get_session_store,
+)
+from app.common.structures import Configuration
+from app.common.utils import parse_server_configuration
+from app.core.agents import agent_controller
+from app.core.agents.agent_manager import AgentManager
+from app.core.chatbot import chatbot_controller
+from app.core.chatbot.session_orchestrator import SessionOrchestrator
+from app.core.feedback import feedback_controller
+from app.core.monitoring import monitoring_controller
 
 # -----------------------
 # LOGGING + ENVIRONMENT
@@ -91,24 +90,44 @@ def create_app() -> FastAPI:
 
     ApplicationContext(configuration)
 
-    agent_manager = AgentManager(configuration, get_agent_store())
-    session_orchestrator = SessionOrchestrator(get_session_store(), agent_manager)
-
+    # The correct and final code to use
     @asynccontextmanager
     async def lifespan(app: FastAPI):
+        """
+        Fred lifespan: manages the lifecycle of the application's core services.
+        - Startup instantiates and launches background tasks.
+        - `yield` hands control to the server.
+        - `finally` gracefully shuts down all tasks and services.
+        """
+        logger.info("🚀 Lifespan enter.")
+
+        # Instantiate dependencies *within* the lifespan context
+        app.state.configuration = configuration
+        agent_manager = AgentManager(configuration, get_agent_store())
+        session_orchestrator = SessionOrchestrator(get_session_store(), agent_manager)
+
+        # Store state on app.state for access via dependency injection
+        app.state.agent_manager = agent_manager
+        app.state.session_orchestrator = session_orchestrator
+
+        # Use asyncio to launch a background task that runs for the duration of the app's life.
+        # We remove the separate TaskGroup to prevent the race condition.
+        startup_task = asyncio.create_task(agent_manager.initialize_and_start_retries())
+
         try:
-            await agent_manager.load_agents()
-            agent_manager.start_retry_loop()
-            logger.info("🚀 AgentManager fully loaded.")
-            yield
-        except asyncio.CancelledError as e:
-            logger.warning(
-                "🧯 Lifespan CancelledError caught (expected on shutdown): %r", e
-            )
-            # IMPORTANT: do NOT re-raise; cancellation is a control signal.
-            # Swallowing it here prevents the noisy traceback you observed.
+            yield  # Hand control to the FastAPI server, but keep the startup task running
         finally:
-            logger.info("🧹 Lifespan exit.")
+            logger.info("🧹 Lifespan exit: orderly shutdown.")
+            # Cancel the background task and wait for it to finish
+            startup_task.cancel()
+            try:
+                await startup_task
+            except asyncio.CancelledError:
+                pass  # Expected when a task is canceled
+
+            # Perform final cleanup
+            await agent_manager.aclose()
+            logger.info("✅ Shutdown complete.")
 
     app = FastAPI(
         docs_url=f"{base_url}/docs",
@@ -133,15 +152,10 @@ def create_app() -> FastAPI:
     initialize_user_security(configuration.security.user)
 
     router = APIRouter(prefix=base_url)
-    # Register controllers
-    FeedbackController(router)
-    PromptController(router)
-    AgentController(router, agent_manager=agent_manager)
-
-    ChatbotController(
-        router, session_orchestrator=session_orchestrator, agent_manager=agent_manager
-    )
-    MonitoringController(router)
+    router.include_router(agent_controller.router)
+    router.include_router(chatbot_controller.router)
+    router.include_router(monitoring_controller.router)
+    router.include_router(feedback_controller.router)
     app.include_router(router)
     logger.info("🧩 All controllers registered.")
     return app

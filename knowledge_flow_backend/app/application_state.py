@@ -20,14 +20,15 @@ Application-scoped runtime state (FastAPI-bound).
 """
 
 from __future__ import annotations
-from typing import Optional, Mapping, Any
+
+from typing import Any, Mapping, Optional
+
 import httpx
 from fastapi import FastAPI
-
 from fred_core import (
     M2MAuthConfig,
-    M2MTokenProvider,
     M2MBearerAuth,
+    M2MTokenProvider,
     make_m2m_asgi_client,
 )
 

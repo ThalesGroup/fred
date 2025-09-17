@@ -104,17 +104,17 @@ transient errors) and your agents remain stable and chatty, instead of brittle.
 
 from __future__ import annotations
 
-from contextlib import AsyncExitStack
 import inspect
 import logging
+from contextlib import AsyncExitStack
 from typing import Optional
 
 import anyio
 from langchain_core.tools import BaseTool
 from langchain_mcp_adapters.client import MultiServerMCPClient
 
-from app.common.mcp_utils import get_mcp_client_for_agent
 from app.common.mcp_toolkit import McpToolkit
+from app.common.mcp_utils import get_mcp_client_for_agent
 from app.common.structures import AgentSettings
 from app.core.agents.runtime_context import RuntimeContextProvider
 

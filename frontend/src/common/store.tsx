@@ -13,9 +13,7 @@
 // limitations under the License.
 
 import { combineReducers, configureStore, createReducer, isFulfilled, isPending, isRejected } from "@reduxjs/toolkit";
-import { apiSlice } from "../frugalit/slices/api.tsx";
 import { agenticApi } from "../slices/agentic/agenticApi.ts";
-import { documentApiSlice } from "../slices/documentApi.tsx";
 import { knowledgeFlowApi } from "../slices/knowledgeFlow/knowledgeFlowApi.ts";
 import { monitoringApiMiddleware, monitoringApiReducer } from "../slices/monitoringApi.tsx";
 
@@ -45,8 +43,6 @@ const combinedReducer = combineReducers({
   ),
   [knowledgeFlowApi.reducerPath]: knowledgeFlowApi.reducer,
   [agenticApi.reducerPath]: agenticApi.reducer,
-  api: apiSlice.reducer,
-  documentApi: documentApiSlice.reducer,
   monitoringApi: monitoringApiReducer,
 });
 
@@ -57,8 +53,6 @@ export const store = configureStore({
     getDefaultMiddleware().concat(
       knowledgeFlowApi.middleware,
       agenticApi.middleware,
-      apiSlice.middleware,
-      documentApiSlice.middleware,
       monitoringApiMiddleware,
       loggingMiddleware,
     ),

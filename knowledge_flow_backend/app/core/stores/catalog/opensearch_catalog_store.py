@@ -13,7 +13,7 @@
 import logging
 from typing import List
 
-from opensearchpy import OpenSearch, NotFoundError, RequestsHttpConnection
+from opensearchpy import NotFoundError, OpenSearch, RequestsHttpConnection
 
 from app.core.stores.catalog.base_catalog_store import PullFileEntry
 

@@ -140,6 +140,7 @@
     "newConversation": "Nouvelle conversation",
     "noConversation": "Aucune conversation",
     "delete": "Supprimer",
+    "conversationSetup": "Configuration de la conversation",
     "newConversationHelp": "Commencer une nouvelle conversation (non encore enregistrée)",
     "draftNotSaved": "Brouillon • non encore enregistré",
     "profile": "Profil"
@@ -278,10 +279,13 @@
     "confirmDeleteFolderTitle": "Supprimer le dossier ?",
     "confirmDeleteFolderMessage": "Supprimer le dossier vide « {{name}} » ?",
     "folderDeleted": "Dossier supprimé",
-    "deleteFolder": "Supprimer le dossier"
+    "deleteFolder": "Supprimer le dossier",
+    "download": "Télécharger"
   },
   "resourceLibrary": {
     "title": "{{typePlural}}",
+    "edit": "Modifier",
+    "preview": "Aperçu",
     "createLibrary": "Créer une bibliothèque",
     "createResource": "Créer un {{typeOne}}",
     "importResource": "Importer un {{typeOne}} depuis un fichier",
@@ -301,7 +305,6 @@
     "dropFiles":"Deposez vos {{typePlural}} ici",
     "noFiles": "Aucun(e) {{typeOne}} trouvé(e)",
     "import": "Importer"
-
   },
   "documentTable": {
     "selectedCount": "{{count}} sélectionné(s)",
@@ -369,5 +372,14 @@
     "save": "Enregistrer",
     "updateFailed": "Échec de la mise à jour",
     "updateFailedDetail": "Une erreur s'est produite lors de la mise à jour de la bibliothèque. Veuillez réessayer."
+  },
+  "search" : {
+    "policy": "Politique de recherche",
+    "strict": "Strict",
+    "hybrid": "Hybride",
+    "semantic": "Sémantique",
+    "strictDescription": "N'utiliser que des documents explicitement pertinents pour la requête.",
+    "hybridDescription": "Combiner des documents pertinents avec des résultats de recherche sémantique.",
+    "semanticDescription": "Utiliser la recherche sémantique pour trouver des documents connexes."
   }
 }

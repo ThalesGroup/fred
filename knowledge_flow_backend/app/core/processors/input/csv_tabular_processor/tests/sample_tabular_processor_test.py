@@ -14,8 +14,9 @@
 
 # test_example_tabular_processor.py
 import tempfile
-import pandas as pd
 from pathlib import Path
+
+import pandas as pd
 
 from app.core.processors.input.csv_tabular_processor.csv_tabular_processor import CsvTabularProcessor
 
