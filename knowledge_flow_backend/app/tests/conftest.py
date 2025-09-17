@@ -29,7 +29,7 @@ from app.common.structures import (
 )
 from app.core.processors.output.vectorization_processor.embedder import Embedder
 from app.main import create_app
-from app.tests.test_utils.test_processors import TestMarkdownProcessor, TestOutputProcessor, TestTabularProcessor
+from app.tests.test_utils.test_processors import TestMarkdownProcessor, TestOutputProcessor
 
 
 @pytest.fixture(scope="function", autouse=True)

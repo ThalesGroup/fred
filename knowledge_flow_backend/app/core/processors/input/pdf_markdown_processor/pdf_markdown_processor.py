@@ -36,7 +36,7 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
     def __init__(self, image_describer: BaseImageDescriber | None = None):
         super().__init__()
         self.image_describer = image_describer
-        self.process_images = get_configuration().embedding.process_images
+        self.process_images = get_configuration().processing.process_images
 
     def check_file_validity(self, file_path: Path) -> bool:
         """Checks if the PDF is readable and contains at least one page."""

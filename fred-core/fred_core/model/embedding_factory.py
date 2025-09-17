@@ -20,7 +20,7 @@ import os
 from typing import Dict
 
 from pydantic import SecretStr
-from langchain_core.embeddings import Embeddings as LCEmbeddings
+from langchain_core.embeddings import Embeddings
 from langchain_openai import OpenAIEmbeddings, AzureOpenAIEmbeddings
 from langchain_ollama import OllamaEmbeddings
 
@@ -29,7 +29,7 @@ from fred_core.common.structures import ModelConfiguration
 logger = logging.getLogger(__name__)
 
 
-def get_embeddings(model_config: ModelConfiguration) -> LCEmbeddings:
+def get_embeddings(model_config: ModelConfiguration) -> Embeddings:
     """
     Fred rationale:
     - Single source of truth for embedding providers (symmetry with get_model()).

@@ -17,10 +17,11 @@ from datetime import datetime, timezone
 from typing import Dict, List, Optional, Sequence
 
 from langchain.schema.document import Document
+from langchain_core.embeddings import Embeddings
+
 from langchain_community.vectorstores import OpenSearchVectorSearch
 
 from app.common.utils import get_embedding_model_name
-from app.core.stores.vector.base_embedding_model import BaseEmbeddingModel
 from app.core.stores.vector.base_vector_store import CHUNK_ID_FIELD, AnnHit, BaseVectorStore, LexicalHit, LexicalSearchable, SearchFilter
 
 logger = logging.getLogger(__name__)
@@ -38,7 +39,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
 
     def __init__(
         self,
-        embedding_model: BaseEmbeddingModel,
+        embedding_model: Embeddings,
         host: str,
         index: str,
         username: str,

@@ -35,7 +35,7 @@ from fred_core import (
     ModelConfiguration,
 )
 from opensearchpy import OpenSearch, RequestsHttpConnection
-from langchain_core.embeddings import Embeddings as LCEmbeddings
+from langchain_core.embeddings import Embeddings
 
 from app.common.structures import (
     ChromaVectorStorageConfig,
@@ -72,7 +72,6 @@ from app.core.stores.resources.opensearch_resource_store import OpenSearchResour
 from app.core.stores.tags.base_tag_store import BaseTagStore
 from app.core.stores.tags.duckdb_tag_store import DuckdbTagStore
 from app.core.stores.tags.opensearch_tags_store import OpenSearchTagStore
-from app.core.stores.vector.base_embedding_model import BaseEmbeddingModel
 from app.core.stores.vector.base_text_splitter import BaseTextSplitter
 from app.core.stores.vector.base_vector_store import BaseVectorStore
 from app.core.stores.vector.in_memory_langchain_vector_store import InMemoryLangchainVectorStore
@@ -400,12 +399,12 @@ class ApplicationContext:
             raise ValueError(f"Unsupported file backend: {backend_type}")
         return self._file_store_instance
 
-    def get_embedder(self) -> LCEmbeddings:
+    def get_embedder(self) -> Embeddings:
         """
         Fred rationale:
         - Knowledge Flow uses the shared fred_core factory to avoid provider drift.
         - Only secrets live in env; all other wiring lives in YAML.
-        - Typed return (LCEmbeddings) keeps the contract clear at call sites.
+        - Typed return (Embeddings) keeps the contract clear at call sites.
         """
         cfg: ModelConfiguration = self.configuration.embedding
         return get_embeddings(cfg)
@@ -421,7 +420,7 @@ class ApplicationContext:
             return self._vector_store_instance
         raise ValueError("Vector store is not initialized. Use get_create_vector_store() instead.")
 
-    def get_create_vector_store(self, embedding_model: BaseEmbeddingModel) -> BaseVectorStore:
+    def get_create_vector_store(self, embedding_model: Embeddings) -> BaseVectorStore:
         """
         Vector Store Factory
         """
