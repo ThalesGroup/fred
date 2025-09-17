@@ -19,8 +19,10 @@ app:
   reload: false
   reload_dir: "."
 
-features:
+processing:
   generate_summary: true
+  use_gpu: true
+  process_images: true
 
 security:
   m2m:
@@ -79,7 +81,9 @@ document_sources:
     description: "Personal local documents available for pull-mode ingestion"
 
 embedding:
-  type: "openai"
+  provider: openai
+  name: text-embedding-3-large
+  settings: {}
 
 # Configuration for the LLM used for summary, keyword generation
 # and other text generation tasks.
