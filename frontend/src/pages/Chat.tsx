@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { useRef, useState } from "react";
-import { Box, CircularProgress, Paper, Typography, Divider, IconButton, PaperProps } from "@mui/material";
+import { Box, CircularProgress, Paper, Typography, Divider, IconButton, PaperProps, Grid2 } from "@mui/material";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import {
   AgenticFlow,
@@ -28,6 +28,7 @@ import { useSessionOrchestrator } from "../hooks/useSessionOrchestrator";
 import ChatBot from "../components/chatbot/ChatBot";
 import { SidePanelToggle } from "../components/SidePanelToogle";
 import { useTranslation } from "react-i18next";
+import { ProfilePickerPanel } from "../components/chatbot/settings/ProfilePickerPanel";
 
 const PANEL_W = { xs: 300, sm: 340, md: 360 };
 
@@ -61,14 +62,14 @@ export default function Chat() {
     selectAgenticFlowForCurrentSession,
     startNewConversation,
     updateOrAddSession,
-    bindDraftAgentToSessionId,
   } = useSessionOrchestrator({
     sessionsFromServer,
     flowsFromServer: flows,
     loading: sessionsLoading || flowsLoading,
   });
 
-  const [baseRuntimeContext, setBaseRuntimeContext] = useState<Record<string, any>>({});
+  const [baseRuntimeContext] = useState<Record<string, any>>({});
+  const [selectedProfileIds, setSelectedProfileIds] = useState<string[]>([]);
 
   const [agentsOpen, setAgentsOpen] = useState(false);
   const openAgents = () => setAgentsOpen(true);
@@ -102,7 +103,9 @@ export default function Chat() {
       }, 1000);
     }
   };
+
   console.log("ChatPOC: Component rendering. Session count:", sessions?.length);
+
   if (flowsLoading || sessionsLoading) {
     return (
       <Box sx={{ p: 3, display: "grid", placeItems: "center", height: "100vh" }}>
@@ -162,13 +165,8 @@ export default function Chat() {
     />
   );
 
-  // ... (rest of the component)
-
   return (
     <Box ref={containerRef} sx={{ height: "100%", position: "relative", overflow: "hidden" }}>
-      {/* This is the toggle button for when the panel is closed. 
-        It remains in its original position, which is good. 
-      */}
       {!agentsOpen && (
         <Box sx={{ position: "absolute", top: 12, left: 12, zIndex: 10 }}>
           <SidePanelToggle
@@ -212,6 +210,11 @@ export default function Chat() {
             </IconButton>
           </Box>
           <Box sx={{ flex: 1, overflow: "auto" }}>
+            <ProfilePickerPanel
+              selectedProfileIds={selectedProfileIds}
+              onChangeSelectedProfileIds={setSelectedProfileIds}
+            />
+            <Divider />
             <AgentsList agenticFlows={flows} selected={currentAgenticFlow} onSelect={handleSelectAgent} />
             <Divider />
             <ConversationList
@@ -225,37 +228,21 @@ export default function Chat() {
           </Box>
         </PanelShell>
 
-        {/* This is the new ChatBot component! */}
-        <ChatBot
-          currentChatBotSession={currentSession}
-          currentAgenticFlow={currentAgenticFlow!}
-          agenticFlows={flows}
-          onUpdateOrAddSession={updateOrAddSession}
-          isCreatingNewConversation={isCreatingNewConversation}
-          runtimeContext={{ cluster, ...baseRuntimeContext }}
-        />
-      </Grid2>
-
-      <Grid2 size="auto">
-        <Settings
-          sessions={sessions}
-          currentSession={currentSession}
-          onSelectSession={selectSession}
-          onCreateNewConversation={startNewConversation}
-          agenticFlows={agenticFlows}
-          currentAgenticFlow={currentAgenticFlow}
-          onSelectAgenticFlow={selectAgenticFlowForCurrentSession}
-          onDeleteSession={deleteSession}
-          isCreatingNewConversation={isCreatingNewConversation}
-          onChangeSelectedProfileIds={(ids) =>
-            setBaseRuntimeContext((ctx) => ({
-              ...ctx,
-              selected_profile_ids: ids.length ? ids : undefined,
-            }))
-          }
-          onBindDraftAgentToSessionId={bindDraftAgentToSessionId}
-        />
+        <Grid2>
+          {/* This is the new ChatBot component! */}
+          <ChatBot
+            currentChatBotSession={currentSession}
+            currentAgenticFlow={currentAgenticFlow!}
+            agenticFlows={flows}
+            onUpdateOrAddSession={updateOrAddSession}
+            isCreatingNewConversation={isCreatingNewConversation}
+            runtimeContext={{
+              ...baseRuntimeContext,
+              selected_profile_ids: selectedProfileIds.length ? selectedProfileIds : undefined,
+            }}
+          />
+        </Grid2>
+      </Box>
     </Box>
-    </Box >
   );
 }
