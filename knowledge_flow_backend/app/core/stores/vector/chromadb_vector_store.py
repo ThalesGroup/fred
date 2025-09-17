@@ -42,7 +42,9 @@ Scoring notes:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Sequence
+from typing import Dict, List, Optional, Sequence, Mapping, Any
+from datetime import datetime
+import json
 
 import chromadb
 from langchain.schema.document import Document
@@ -82,6 +84,55 @@ def _cosine_similarity_from_distance(distance: float) -> float:
     # Chroma returns cosine distance; convert to [0,1] similarity for UI
     sim = 1.0 - float(distance)
     return max(0.0, min(1.0, sim))
+
+def sanitize_metadata(meta: Mapping[str, Any]) -> dict[str, Any]:
+    clean: dict[str, Any] = {}
+    for k, v in meta.items():
+        if isinstance(v, datetime):
+            clean[k] = v.isoformat()
+        elif isinstance(v, list):
+            # Empty list, returns None
+            if not v:
+                clean[k] = ""
+            # List containing only one element, returns the element    
+            elif len(v) == 1:
+                clean[k] = v[0]
+            # List containing more than one elements, returns a JSON string
+            else:
+                import json
+                clean[k] = json.dumps(v)
+        elif isinstance(v, Mapping):
+            clean[k] = sanitize_metadata(v)
+        else:
+            clean[k] = v
+    return clean
+
+
+def restore_metadata(meta: Mapping[str, Any]) -> dict[str, Any]:
+    restored: dict[str, Any] = {}
+    for k, v in meta.items():
+        if isinstance(v, str):
+            # Try to restore datetime
+            try:
+                restored[k] = datetime.fromisoformat(v)
+                continue
+            except ValueError:
+                pass
+            # Try to restore JSON-encoded lists
+            try:
+                loaded = json.loads(v)
+                if isinstance(loaded, list):
+                    restored[k] = loaded
+                    continue
+            except (json.JSONDecodeError, TypeError):
+                pass
+            restored[k] = v
+        elif v == "":
+            # originally empty list
+            restored[k] = []
+        else:
+            restored[k] = v
+    return restored
 
 
 @dataclass
@@ -123,7 +174,7 @@ class ChromaDBVectorStore(BaseVectorStore, FetchById):
             raise ValueError("len(ids) must match len(documents)")
 
         texts = [d.page_content for d in documents]
-        metadatas = [d.metadata for d in documents]
+        metadatas = [sanitize_metadata(d.metadata) for d in documents]
         vectors = self.embeddings.embed_documents(texts)
 
         # Upsert for idempotency (add would error on duplicates)
@@ -176,7 +227,10 @@ class ChromaDBVectorStore(BaseVectorStore, FetchById):
         documents = got.get("documents", []) or []
         metadatas = got.get("metadatas", []) or []
         for text, meta in zip(documents, metadatas):
-            docs.append(Document(page_content=text or "", metadata=meta or {}))
+            docs.append(Document(
+                page_content=text or "",
+                metadata=restore_metadata(meta or {})
+            ))
         return docs
 
 
