@@ -25,7 +25,8 @@ from app.core.processors.output.summarizer.base_summarizer import BaseDocSummari
 logger = logging.getLogger(__name__)
 
 _ABSTRACT_SYS = "You are a precise technical summarizer for software docs."
-_TOKENS_SYS   = "You extract discriminative keywords and short phrases."
+_TOKENS_SYS = "You extract discriminative keywords and short phrases."
+
 
 class LLMBasedDocSummarizer(BaseDocSummarizer):
     """
@@ -44,9 +45,7 @@ class LLMBasedDocSummarizer(BaseDocSummarizer):
 
         # Reusable 2-message prompt (system + user). We keep a MessagesPlaceholder
         # so we can reuse the chain for both abstract and keywords with different system prompts.
-        self.prompt = ChatPromptTemplate.from_messages([
-            MessagesPlaceholder("messages")
-        ])
+        self.prompt = ChatPromptTemplate.from_messages([MessagesPlaceholder("messages")])
 
         # Build a tiny chain once: (prompt | chat_model) returns an AIMessage
         self.chain: Runnable = self.prompt | self.model
@@ -68,11 +67,7 @@ class LLMBasedDocSummarizer(BaseDocSummarizer):
         return getattr(result, "content", result).strip()
 
     def summarize_abstract(self, text: str, *, max_words: int = 180) -> str:
-        user = (
-            f"Write a concise abstract (≤{max_words} words) for engineers. "
-            "State problem, approach, and key takeaways. Avoid marketing tone.\n\n---\n"
-            f"{text}"
-        )
+        user = f"Write a concise abstract (≤{max_words} words) for engineers. State problem, approach, and key takeaways. Avoid marketing tone.\n\n---\n{text}"
         return self._complete(_ABSTRACT_SYS, user, max_tokens=700)
 
     def summarize_tokens(self, text: str, *, top_k: int = 24, vocab_hint: Optional[str] = None) -> List[str]:
@@ -92,6 +87,3 @@ class LLMBasedDocSummarizer(BaseDocSummarizer):
             if len(out) >= top_k:
                 break
         return out
-
-
-

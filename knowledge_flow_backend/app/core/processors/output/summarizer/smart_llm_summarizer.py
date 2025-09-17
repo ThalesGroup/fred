@@ -49,6 +49,7 @@ HINTS = re.compile(
 
 class SupportsSplit(Protocol):
     """Tiny protocol so we can type the splitter without importing its concrete class."""
+
     def split(self, doc: Document) -> List[Document]: ...
 
 
@@ -67,22 +68,22 @@ class SmartDocSummarizer(BaseDocSummarizer):
     def __init__(
         self,
         *,
-        model_config: ModelConfiguration,      # your Configuration.model (can be None)
-        splitter: BaseTextSplitter,      # reuse the pipeline splitter to align shard boundaries
+        model_config: ModelConfiguration,  # your Configuration.model (can be None)
+        splitter: BaseTextSplitter,  # reuse the pipeline splitter to align shard boundaries
         opts: Optional[dict] = None,  # temporary hardcoded opts; move to config later
     ):
         # Default knobs — safe, predictable, cheap
         self.opts = {
             "sum_enabled": True,
-            "sum_input_cap": 120_000,     # hard cap on chars considered
+            "sum_input_cap": 120_000,  # hard cap on chars considered
             "sum_abs_words": 180,
             "sum_kw_top_k": 24,
             # map-reduce specifics
-            "mr_top_shards": 24,          # summarize at most N shards
-            "mr_shard_words": 80,         # per-shard mini-abstract budget
+            "mr_top_shards": 24,  # summarize at most N shards
+            "mr_shard_words": 80,  # per-shard mini-abstract budget
             # thresholds
-            "small_threshold": 50_000,    # chars → single pass
-            "large_threshold": 1_200_000, # chars → head/tail policy
+            "small_threshold": 50_000,  # chars → single pass
+            "large_threshold": 1_200_000,  # chars → head/tail policy
             **(opts or {}),
         }
 
@@ -156,9 +157,7 @@ class SmartDocSummarizer(BaseDocSummarizer):
         """
         return self._summarizer.summarize_abstract(text, max_words=max_words)
 
-    def summarize_tokens(
-        self, text: str, *, top_k: int = 24, vocab_hint: Optional[str] = None
-    ) -> List[str]:
+    def summarize_tokens(self, text: str, *, top_k: int = 24, vocab_hint: Optional[str] = None) -> List[str]:
         """
         Delegate: keep the BaseDocSummarizer contract (including optional vocab_hint).
         """
@@ -196,6 +195,7 @@ class SmartDocSummarizer(BaseDocSummarizer):
                     )
                 )
             except Exception:
+                logger.warning("Shard summarization failed (continuing).")
                 pass
 
         if not shard_summaries:
@@ -210,6 +210,7 @@ class SmartDocSummarizer(BaseDocSummarizer):
         try:
             final_abs = self._summarizer.summarize_abstract(concat, max_words=int(self.opts["sum_abs_words"]))
         except Exception:
+            logger.warning("Final abstract summarization failed (continuing).")
             pass
 
         # Keywords: use full text if smallish, else use reduced concat to stay bounded
@@ -222,6 +223,7 @@ class SmartDocSummarizer(BaseDocSummarizer):
                 vocab_hint=None,
             )
         except Exception:
+            logger.warning("Keyword summarization failed (continuing).")
             pass
 
         return final_abs, kws
@@ -237,7 +239,7 @@ class SmartDocSummarizer(BaseDocSummarizer):
         """
         scores = []
         for i, d in enumerate(shards):
-            t = (d.page_content or "")
+            t = d.page_content or ""
             # density ~ informative token ratio
             alpha = re.findall(r"[a-zA-Z]{3,}", t)
             density = len(alpha) / max(1, len(t))
@@ -249,14 +251,14 @@ class SmartDocSummarizer(BaseDocSummarizer):
                 boost -= 0.5
             scores.append((density * boost, i))
         scores.sort(reverse=True)
-        return [i for _, i in scores[:max(1, min(top_k, len(shards)))]]
+        return [i for _, i in scores[: max(1, min(top_k, len(shards)))]]
 
     def _merge_keywords(self, *lists: List[str], limit: int) -> List[str]:
         seen, out = set(), []
         for L in lists:
             for t in L:
                 if t not in seen:
-                    seen.add(t) 
+                    seen.add(t)
                     out.append(t)
                 if len(out) >= limit:
                     return out

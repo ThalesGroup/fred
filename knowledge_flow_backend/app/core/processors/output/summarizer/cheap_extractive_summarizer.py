@@ -40,7 +40,7 @@ class CheapExtractiveSummarizer(BaseDocSummarizer):
     - Tokens: crude n-gram frequency (2–4 grams) plus strong unigrams, de-duplicated, lowercased.
     """
 
-    _SPLIT = re.compile(r'(?<=[.!?])\s+')
+    _SPLIT = re.compile(r"(?<=[.!?])\s+")
     _WORD_RE = re.compile(r"[a-z0-9_\-]+")
     _ALPHA3_RE = re.compile(r"[a-zA-Z]{3,}")
 
@@ -72,9 +72,7 @@ class CheapExtractiveSummarizer(BaseDocSummarizer):
         out.sort(key=lambda x: sents.index(x))
         return " ".join(out)
 
-    def summarize_tokens(
-        self, text: str, *, top_k: int = 24, vocab_hint: Optional[str] = None
-    ) -> List[str]:
+    def summarize_tokens(self, text: str, *, top_k: int = 24, vocab_hint: Optional[str] = None) -> List[str]:
         """
         Extractive keywording.
         - `vocab_hint` is accepted to satisfy the interface; ignored here (no LLM).

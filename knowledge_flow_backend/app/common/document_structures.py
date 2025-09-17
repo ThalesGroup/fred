@@ -189,13 +189,13 @@ class DocSummary(BaseModel):
     - Keep provenance to make results auditable and cache-bustable.
     - UI reads this to show 'Abstract' and 'Key terms' on demand.
     """
+
     abstract: Optional[str] = Field(default=None, description="Concise doc abstract for humans (UI).")
     keywords: Optional[List[str]] = Field(default=None, description="Top key terms for navigation and filters.")
     model_name: Optional[str] = Field(default=None, description="LLM/flow used to produce this summary.")
     method: Optional[str] = Field(default=None, description="Algorithm/flow id (e.g., 'SmartDocSummarizer@v1').")
     created_at: Optional[datetime] = Field(default=None, description="UTC when this summary was computed.")
 
-    
 
 class DocumentMetadata(BaseModel):
     # === Core ===

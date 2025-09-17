@@ -19,13 +19,13 @@ from pathlib import Path
 from typing import Dict, Optional, Type, Union
 
 from fred_core import (
-    BaseKPIStore, 
-    DuckdbStoreConfig, 
-    KpiLogStore, 
-    KPIWriter, 
-    LogStoreConfig, 
-    OpenSearchIndexConfig, 
-    OpenSearchKPIStore, 
+    BaseKPIStore,
+    DuckdbStoreConfig,
+    KpiLogStore,
+    KPIWriter,
+    LogStoreConfig,
+    OpenSearchIndexConfig,
+    OpenSearchKPIStore,
     split_realm_url,
     SQLStorageConfig,
     SQLTableStore,
@@ -77,7 +77,6 @@ from app.core.stores.vector.base_text_splitter import BaseTextSplitter
 from app.core.stores.vector.base_vector_store import BaseVectorStore
 from app.core.stores.vector.in_memory_langchain_vector_store import InMemoryLangchainVectorStore
 from app.core.stores.vector.opensearch_vector_store import OpenSearchVectorStoreAdapter
-from app.core.processors.output.vectorization_processor.semantic_splitter import SemanticSplitter
 
 # Union of supported processor base classes
 BaseProcessorType = Union[BaseMarkdownProcessor, BaseTabularProcessor]
@@ -178,6 +177,7 @@ def validate_output_processor_config(config: Configuration):
         except (ImportError, AttributeError, TypeError) as e:
             raise ImportError(f"Output Processor '{entry.class_path}' could not be loaded: {e}")
 
+
 def _require_env(var: str) -> None:
     """Log presence of a required env var or raise loudly if missing."""
     val = os.getenv(var, "")
@@ -186,6 +186,7 @@ def _require_env(var: str) -> None:
         return
     logger.error("     ❌ %s is not set", var)
     raise ValueError(f"Missing required environment variable: {var}")
+
 
 class ApplicationContext:
     _instance: Optional["ApplicationContext"] = None
@@ -408,10 +409,10 @@ class ApplicationContext:
         """
         cfg: ModelConfiguration = self.configuration.embedding
         return get_embeddings(cfg)
-    
+
     def get_utility_model(self):
         return get_model(self.configuration.model)
-      
+
     def get_vector_store(self) -> BaseVectorStore:
         """
         Vector Store Factory
@@ -706,7 +707,6 @@ class ApplicationContext:
 
     def _log_sensitive(self, name: str, value: Optional[str]):
         logger.info(f"     ↳ {name} set: {'✅' if value else '❌'}")
-
 
     def _log_config_summary(self):
         sec = self.configuration.security.user

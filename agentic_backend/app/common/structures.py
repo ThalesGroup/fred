@@ -23,6 +23,7 @@ from fred_core import (
 )
 from pydantic import BaseModel, Field
 
+
 class StorageConfig(BaseModel):
     postgres: PostgresStoreConfig
     opensearch: OpenSearchStoreConfig

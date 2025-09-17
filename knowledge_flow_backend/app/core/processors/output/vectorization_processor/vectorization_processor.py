@@ -109,12 +109,8 @@ class VectorizationProcessor(BaseOutputProcessor):
                 keywords: Optional[List[str]]
                 abstract, keywords = self.smart_summarizer.summarize_document(document)
 
-
                 if abstract or keywords:
-                    logger.info(
-                        "Summaries computed: abstract_len=%d, keywords=%d",
-                        len(abstract or ""), len(keywords or [])
-                    )
+                    logger.info("Summaries computed: abstract_len=%d, keywords=%d", len(abstract or ""), len(keywords or []))
 
                     # Fred rationale:
                     # - Keep human-facing abstract at *document* level (no chunk bloat).
@@ -126,7 +122,6 @@ class VectorizationProcessor(BaseOutputProcessor):
                         method="SmartDocSummarizer@v1",
                         # created_at is set by the metadata store on save if you prefer; setting here is optional.
                     )
-
 
             # 2) Split
             chunks = self.splitter.split(document)

@@ -15,6 +15,7 @@
 from abc import ABC, abstractmethod
 from typing import List, Optional
 
+
 class BaseDocSummarizer(ABC):
     """
     Fred rationale:
@@ -32,9 +33,7 @@ class BaseDocSummarizer(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def summarize_tokens(
-        self, text: str, *, top_k: int = 24, vocab_hint: Optional[str] = None
-    ) -> List[str]:
+    def summarize_tokens(self, text: str, *, top_k: int = 24, vocab_hint: Optional[str] = None) -> List[str]:
         """
         Token summary tuned for retrieval enrichment (keywords/phrases).
         - Prefer multi-word phrases when salient (e.g., 'vector clock', 'LangGraph recursion').

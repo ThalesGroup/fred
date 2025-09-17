@@ -15,25 +15,20 @@
 
 import os
 from pathlib import Path
-from typing import Annotated, Any, Dict, List, Literal, Union
+from typing import Annotated, Dict, List, Literal, Union
 from pydantic import BaseModel, Field, model_validator
 from typing import Optional
 from enum import Enum
 
-from fred_core import (
-    OpenSearchStoreConfig,
-    PostgresStoreConfig,
-    SecurityConfiguration,
-    StoreConfig,
-    ModelConfiguration
-)
+from fred_core import OpenSearchStoreConfig, PostgresStoreConfig, SecurityConfiguration, StoreConfig, ModelConfiguration
 
 """
 This module defines the top level data structures used by controllers, processors
 unit tests. It helps to decouple the different components of the application and allows
 to define clear workflows and data structures.
 """
-    
+
+
 class Status(str, Enum):
     SUCCESS = "success"
     IGNORED = "ignored"
@@ -138,22 +133,13 @@ VectorStorageConfig = Annotated[Union[InMemoryVectorStorage, OpenSearchVectorInd
 
 
 class ProcessingConfig(BaseModel):
-    use_gpu: bool = Field(
-        default=True,
-        description="Enable/disable GPU usage for processing (if supported by the processor)"
-    )
-    process_images: bool = Field(
-        default=True,
-        description="Enable/disable image content extraction"
-    )
-    generate_summary: bool = Field(
-        default=True,
-        description="Enable/disable human-centric abstract and keyword generation for documents."
-    )
+    use_gpu: bool = Field(default=True, description="Enable/disable GPU usage for processing (if supported by the processor)")
+    process_images: bool = Field(default=True, description="Enable/disable image content extraction")
+    generate_summary: bool = Field(default=True, description="Enable/disable human-centric abstract and keyword generation for documents.")
 
 
 class TemporalSchedulerConfig(BaseModel):
-    host: str = "localhost:7233"    
+    host: str = "localhost:7233"
     namespace: str = "default"
     task_queue: str = "ingestion"
     workflow_prefix: str = "pipeline"
@@ -310,6 +296,7 @@ class StorageConfig(BaseModel):
     tabular_stores: Optional[Dict[str, StoreConfig]] = Field(default=None, description="Optional tabular store")
     vector_store: VectorStorageConfig
 
+
 class Configuration(BaseModel):
     app: AppConfig
     model: ModelConfiguration
@@ -319,9 +306,6 @@ class Configuration(BaseModel):
     content_storage: ContentStorageConfig = Field(..., description="Content Storage configuration")
     embedding: ModelConfiguration
     scheduler: SchedulerConfig
-    processing: ProcessingConfig = Field(
-        default_factory=ProcessingConfig,
-        description="A collection of feature flags to enable or disable optional functionality."
-    )
+    processing: ProcessingConfig = Field(default_factory=ProcessingConfig, description="A collection of feature flags to enable or disable optional functionality.")
     document_sources: Dict[str, DocumentSourceConfig] = Field(default_factory=dict, description="Mapping of source_tag identifiers to push/pull source configurations")
     storage: StorageConfig

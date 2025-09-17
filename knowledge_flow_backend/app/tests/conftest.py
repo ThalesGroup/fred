@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 from fred_core import (
     DuckdbStoreConfig,
     M2MSecurity,
+    ModelConfiguration,
     OpenSearchStoreConfig,
     PostgresStoreConfig,
     SecurityConfiguration,
@@ -17,10 +18,9 @@ from app.application_context import ApplicationContext
 from app.common.structures import (
     AppConfig,
     Configuration,
-    EmbeddingConfig,
-    EmbeddingProvider,
     InMemoryVectorStorage,
     LocalContentStorageConfig,
+    ProcessingConfig,
     ProcessorConfig,
     PushSourceConfig,
     SchedulerConfig,
@@ -98,28 +98,26 @@ def app_context(monkeypatch, fake_embedder):
             type="local",
             root_path="/tmp/knowledge-flow-test-content",
         ),
-        embedding=EmbeddingConfig(type=EmbeddingProvider.OPENAI),
+        model=ModelConfiguration(
+            provider="openai",
+            name="gpt-4o",
+            settings={"temperature": 0, "max_retries": 1},
+        ),
+        embedding=ModelConfiguration(
+            provider="openai",
+            name="text-embedding-3-large",
+            settings={},
+        ),
+        processing=ProcessingConfig(
+            generate_summary=True,
+            use_gpu=True,
+            process_images=True,
+        ),
         input_processors=[
-            ProcessorConfig(
-                prefix=".docx",
-                class_path=f"{TestMarkdownProcessor.__module__}.{TestMarkdownProcessor.__qualname__}",
-            ),
-            ProcessorConfig(
-                prefix=".pdf",
-                class_path=f"{TestMarkdownProcessor.__module__}.{TestMarkdownProcessor.__qualname__}",
-            ),
-            ProcessorConfig(
-                prefix=".xlsx",
-                class_path=f"{TestTabularProcessor.__module__}.{TestTabularProcessor.__qualname__}",
-            ),
-            ProcessorConfig(
-                prefix=".csv",
-                class_path=f"{TestTabularProcessor.__module__}.{TestTabularProcessor.__qualname__}",
-            ),
             ProcessorConfig(
                 prefix=".md",
                 class_path=f"{TestMarkdownProcessor.__module__}.{TestMarkdownProcessor.__qualname__}",
-            ),
+            )
         ],
         output_processors=[
             ProcessorConfig(

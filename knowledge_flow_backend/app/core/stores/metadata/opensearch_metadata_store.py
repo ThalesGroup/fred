@@ -41,14 +41,12 @@ METADATA_INDEX_MAPPING = {
             "created": {"type": "date"},
             "modified": {"type": "date"},
             "last_modified_by": {"type": "keyword"},
-
             # source
             "source_type": {"type": "keyword"},
             "source_tag": {"type": "keyword"},
             "pull_location": {"type": "keyword"},
             "retrievable": {"type": "boolean"},
             "date_added_to_kb": {"type": "date"},
-
             # file
             "file_type": {"type": "keyword"},
             "mime_type": {"type": "keyword"},
@@ -57,32 +55,26 @@ METADATA_INDEX_MAPPING = {
             "row_count": {"type": "integer"},
             "sha256": {"type": "keyword"},
             "language": {"type": "keyword"},
-
             # tags / folders
             "tag_ids": {"type": "keyword"},
             "tag_names": {"type": "keyword"},  # chips in UI (optional)
-
             # access
             "license": {"type": "keyword"},
             "confidential": {"type": "boolean"},
             "acl": {"type": "keyword"},
-
             # processing (ops)
             "processing_stages": {"type": "object", "dynamic": True},
             "processing_errors": {"type": "object", "dynamic": True},
-
             # summary (flat; human-facing lives here, not in vector index)
-            "summary_abstract":   {"type": "text"},
-            "summary_keywords":   {"type": "keyword"},
+            "summary_abstract": {"type": "text"},
+            "summary_keywords": {"type": "keyword"},
             "summary_model_name": {"type": "keyword"},
-            "summary_method":     {"type": "keyword"},
-            "summary_version":    {"type": "keyword"},
+            "summary_method": {"type": "keyword"},
+            "summary_version": {"type": "keyword"},
             "summary_created_at": {"type": "date"},
-
             # UX links (optional)
             "preview_url": {"type": "keyword"},
-            "viewer_url":  {"type": "keyword"},
-
+            "viewer_url": {"type": "keyword"},
             # processor specific fields
             "extensions": {"type": "object", "enabled": False},
         }
@@ -140,11 +132,7 @@ class OpenSearchMetadataStore(BaseMetadataStore):
         try:
             current = self.client.indices.get_mapping(index=idx)
             # payload shape: {index_name: {"mappings": {"properties": {...}}}}
-            cur_props = (
-                current.get(idx, {})
-                       .get("mappings", {})
-                       .get("properties", {}) or {}
-            )
+            cur_props = current.get(idx, {}).get("mappings", {}).get("properties", {}) or {}
         except Exception as e:
             logger.warning(f"[METADATA] Failed to read current mapping for '{idx}': {e}")
             cur_props = {}
@@ -192,7 +180,7 @@ class OpenSearchMetadataStore(BaseMetadataStore):
         stages = {k.value: v.value for k, v in md.processing.stages.items()}
         errors = {k.value: v for k, v in md.processing.errors.items()}
         has_summary = bool(md.summary and (md.summary.abstract or (md.summary.keywords and len(md.summary.keywords) > 0)))
-        
+
         body = {
             # identity
             "document_uid": md.identity.document_uid,
@@ -228,20 +216,21 @@ class OpenSearchMetadataStore(BaseMetadataStore):
             # extensions
             "extensions": md.extensions or {},
         }
-    
+
         if has_summary and md.summary is not None:
             s = md.summary
-            body.update({
-                "summary_abstract":   s.abstract,
-                "summary_keywords":   s.keywords,
-                "summary_model_name": s.model_name,
-                "summary_method":     s.method,
-                "summary_version":    getattr(s, "version", None),
-                "summary_created_at": s.created_at,
-            })
+            body.update(
+                {
+                    "summary_abstract": s.abstract,
+                    "summary_keywords": s.keywords,
+                    "summary_model_name": s.model_name,
+                    "summary_method": s.method,
+                    "summary_version": getattr(s, "version", None),
+                    "summary_created_at": s.created_at,
+                }
+            )
 
         return body
-
 
     @staticmethod
     def _deserialize(src: Dict[str, Any]) -> DocumentMetadata:
@@ -306,7 +295,8 @@ class OpenSearchMetadataStore(BaseMetadataStore):
             )
 
             has_any_summary = any(
-                k in src and src[k] is not None for k in (
+                k in src and src[k] is not None
+                for k in (
                     "summary_abstract",
                     "summary_keywords",
                     "summary_model_name",
