@@ -47,16 +47,6 @@ def parse_server_configuration(configuration_path: str) -> Configuration:
     return Configuration(**config)
 
 
-def get_embedding_model_name(embedding_model: object) -> str:
-    """
-    Returns a clean string name for the embedding model, even if wrapped inside a custom class.
-    """
-    if hasattr(embedding_model, "model"):
-        inner = getattr(embedding_model, "model")
-        return getattr(inner, "model", type(inner).__name__)
-    return getattr(embedding_model, "model", type(embedding_model).__name__)
-
-
 B = TypeVar("B", bound=BaseSettings)
 
 

@@ -21,7 +21,7 @@ from langchain_core.embeddings import Embeddings
 
 from langchain_community.vectorstores import OpenSearchVectorSearch
 
-from app.common.utils import get_embedding_model_name
+from app.application_context import get_configuration
 from app.core.stores.vector.base_vector_store import CHUNK_ID_FIELD, AnnHit, BaseVectorStore, LexicalHit, LexicalSearchable, SearchFilter
 
 logger = logging.getLogger(__name__)
@@ -109,7 +109,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
                     ids.append(cid)
 
             assigned_ids = list(self._lc.add_documents(documents, ids=ids))
-            model_name = get_embedding_model_name(self._embedding_model)
+            model_name = get_configuration().embedding.name or "unknown"
             now_iso = datetime.now(timezone.utc).isoformat()
 
             # Normalize metadata (handy for UI/telemetry)
@@ -152,7 +152,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
         pairs = self._lc.similarity_search_with_score(query, k=k, **kwargs)
 
         hits: List[AnnHit] = []
-        model_name = get_embedding_model_name(self._embedding_model)
+        model_name = get_configuration().embedding.name or "unknown"
         now_iso = datetime.now(timezone.utc).isoformat()
 
         for rank, (doc, score) in enumerate(pairs, start=1):
@@ -238,7 +238,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
             logger.warning("⚠️ Failed to check vector dimension: %s", e)
             return
 
-        model_name = get_embedding_model_name(self._embedding_model)
+        model_name = get_configuration().embedding.name or "unknown"
         if actual_dim != expected_dim:
             raise ValueError(
                 "❌ Vector dimension mismatch:\n"

@@ -21,7 +21,7 @@ from langchain.embeddings.base import Embeddings
 from langchain.schema.document import Document
 from langchain_core.vectorstores import InMemoryVectorStore
 
-from app.common.utils import get_embedding_model_name
+from app.application_context import get_configuration
 from app.core.stores.vector.base_vector_store import CHUNK_ID_FIELD, AnnHit, BaseVectorStore, SearchFilter
 
 logger = logging.getLogger(__name__)
@@ -108,7 +108,7 @@ class InMemoryLangchainVectorStore(BaseVectorStore):
         we ensure/return metadata[chunk_uid] as the assigned id.
         """
         assigned: List[str] = []
-        model_name = get_embedding_model_name(self.embedding_model)
+        model_name = get_configuration().embedding.name or "unknown"
 
         # Normalize & ensure chunk_uid
         for d, forced_id in zip(documents, ids or [None] * len(documents)):
@@ -175,7 +175,7 @@ class InMemoryLangchainVectorStore(BaseVectorStore):
         pairs = self.vectorstore.similarity_search_with_score(query, k=k, filter=lc_filter)
 
         hits: List[AnnHit] = []
-        model_name = get_embedding_model_name(self.embedding_model)
+        model_name = get_configuration().embedding.name or "unknown"
         now_iso = datetime.now(timezone.utc).isoformat()
 
         for rank0, (doc, score) in enumerate(pairs, start=1):

@@ -20,8 +20,7 @@ import weaviate
 from langchain.embeddings.base import Embeddings
 from langchain.schema.document import Document
 from langchain_community.vectorstores import Weaviate
-
-from app.common.utils import get_embedding_model_name
+from app.application_context import get_configuration
 from app.core.stores.vector.base_vector_store import BaseVectorStore
 
 logger = logging.getLogger(__name__)
@@ -72,7 +71,7 @@ class WeaviateVectorStore(BaseVectorStore):
             doc.metadata["score"] = score
             doc.metadata["rank"] = rank
             doc.metadata["retrieved_at"] = datetime.now(timezone.utc).isoformat()
-            doc.metadata["embedding_model"] = get_embedding_model_name(self.embedding_model)
+            doc.metadata["embedding_model"] = get_configuration().embedding.name or "unknown"
             doc.metadata["vector_index"] = self.index_name
             doc.metadata["token_count"] = len(doc.page_content.split())
             enriched.append((doc, score))

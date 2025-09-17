@@ -55,7 +55,11 @@ def _info_provider(cfg: ModelConfiguration) -> None:
 # =================================================
 
 
-def get_model(cfg: ModelConfiguration) -> BaseChatModel:
+def get_model(cfg: Optional[ModelConfiguration]) -> BaseChatModel:
+    if cfg is None:
+        # this does not happen but in the configuration yaml file model can be undefined
+        # it is set to the default in that case. So basically we should never reach this point.
+        raise ValueError("Model configuration is None")
     """
     Fred rationale:
     - One place to instantiate chat models for all providers.
