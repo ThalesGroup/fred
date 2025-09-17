@@ -32,7 +32,7 @@ security:
       - "http://localhost:5173"
 
 scheduler:
-  enabled: true
+  enabled: false
   backend: "temporal"
   temporal:
     host: "localhost:7233"
@@ -76,6 +76,12 @@ document_sources:
 
 embedding:
   type: "openai"
+  # Set to false to disable GPU usage even if available, the pdf processor
+  # will then only use CPU. This can help if you have a GPU without enough
+  # memory to process large documents.
+  use_gpu: false
+  # Enable or disable image processing in documents
+  process_images: false
 
 storage:
   postgres:
