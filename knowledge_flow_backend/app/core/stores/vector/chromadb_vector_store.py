@@ -106,7 +106,7 @@ class ChromaDBVectorStore(BaseVectorStore, FetchById):
         self.collection_name = collection_name
         self.embeddings = embeddings
         client = chromadb.PersistentClient(path=self.persist_path)
-        self._collection = client.create_collection(
+        self._collection = client.get_or_create_collection(
             name=self.collection_name,
             metadata={"hnsw:space": "cosine"},  # ensure cosine distance
         )
