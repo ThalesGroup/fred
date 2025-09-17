@@ -17,7 +17,7 @@ from app.agents.leader.structures.plan import Plan
 from app.agents.leader.structures.state import State
 from app.common.structures import AgentSettings
 from app.core.agents.flow import AgentFlow
-from app.core.model.model_factory import get_model, get_structured_chain
+from fred_core import get_model, get_structured_chain
 
 logger = logging.getLogger(__name__)
 

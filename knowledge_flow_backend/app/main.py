@@ -91,7 +91,7 @@ def create_app() -> FastAPI:
     base_url = configuration.app.base_url
     logger.info(f"🛠️ create_app() called with base_url={base_url}")
 
-    if not configuration.embedding.use_gpu:
+    if not configuration.processing.use_gpu:
         os.environ["CUDA_VISIBLE_DEVICES"] = ""
         os.environ["MPS_VISIBLE_DEVICES"] = ""
         import torch

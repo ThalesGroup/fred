@@ -23,7 +23,11 @@ from fred_core.common.structures import (
     PostgresStoreConfig,
     PostgresTableConfig,
     StoreConfig,
+    ModelConfiguration,
+    SQLStorageConfig,
 )
+from fred_core.store.sql_store import SQLTableStore
+from fred_core.store.structures import StoreInfo
 from fred_core.common.utils import raise_internal_error
 from fred_core.kpi.base_kpi_store import BaseKPIStore
 from fred_core.kpi.kpi_reader_structures import (
@@ -73,6 +77,8 @@ from fred_core.security.structure import (
     UserSecurity,
 )
 from fred_core.store.vector_search import VectorSearchHit
+from fred_core.model.model_factory import get_model, get_structured_chain
+from fred_core.model.embedding_factory import get_embeddings
 
 __all__ = [
     "raise_internal_error",
@@ -123,4 +129,11 @@ __all__ = [
     "M2MBearerAuth",
     "make_m2m_asgi_client",
     "split_realm_url",
+    "get_model",
+    "get_structured_chain",
+    "get_embeddings",
+    "ModelConfiguration",
+    "SQLStorageConfig",
+    "SQLTableStore",
+    "StoreInfo",
 ]

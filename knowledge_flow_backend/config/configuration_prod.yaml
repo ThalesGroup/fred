@@ -19,6 +19,11 @@ app:
   reload: false
   reload_dir: "."
 
+processing:
+  generate_summary: true
+  use_gpu: true
+  process_images: true
+
 security:
   m2m:
     enabled: true
@@ -86,13 +91,19 @@ document_sources:
     secure: false
 
 embedding:
-  type: "openai"
-  # Set to false to disable GPU usage even if available, the pdf processor
-  # will then only use CPU. This can help if you have a GPU without enough
-  # memory to process large documents.
-  use_gpu: true
-  # Enable or disable image processing in documents
-  process_images: true
+  provider: openai
+  name: text-embedding-3-large
+  settings: {}
+
+# Configuration for the LLM used for summary, keyword generation
+# and other text generation tasks.
+model:
+  provider: openai        # openai | azure | ollama
+  name: gpt-4o-mini       # azure: deployment name, ollama: 'qwen2.5:3b-instruct' etc.
+  settings:
+    # openai: nothing else required (keys in .env)
+    # azure: { endpoint: "...", api_version: "2024-08-01-preview" }
+    # ollama: { base_url: "http://localhost:11434" }
 
 storage:
   postgres:

@@ -18,18 +18,28 @@ import os
 from pathlib import Path
 from typing import Dict, Optional, Type, Union
 
-from fred_core import BaseKPIStore, DuckdbStoreConfig, KpiLogStore, KPIWriter, LogStoreConfig, OpenSearchIndexConfig, OpenSearchKPIStore, split_realm_url
-from fred_core.common.structures import SQLStorageConfig
-from fred_core.store.sql_store import SQLTableStore
-from fred_core.store.structures import StoreInfo
-from langchain_ollama import OllamaEmbeddings
-from langchain_openai import AzureOpenAIEmbeddings, OpenAIEmbeddings
+from fred_core import (
+    BaseKPIStore, 
+    DuckdbStoreConfig, 
+    KpiLogStore, 
+    KPIWriter, 
+    LogStoreConfig, 
+    OpenSearchIndexConfig, 
+    OpenSearchKPIStore, 
+    split_realm_url,
+    SQLStorageConfig,
+    SQLTableStore,
+    StoreInfo,
+    get_model,
+    get_embeddings,
+    ModelConfiguration,
+)
 from opensearchpy import OpenSearch, RequestsHttpConnection
+from langchain_core.embeddings import Embeddings as LCEmbeddings
 
 from app.common.structures import (
     ChromaVectorStorageConfig,
     Configuration,
-    EmbeddingProvider,
     FileSystemPullSource,
     InMemoryVectorStorage,
     LocalContentStorageConfig,
@@ -38,15 +48,8 @@ from app.common.structures import (
     OpenSearchVectorIndexConfig,
     WeaviateVectorStorage,
 )
-from app.common.utils import validate_settings_or_exit
-from app.config.embedding_azure_apim_settings import EmbeddingAzureApimSettings
-from app.config.embedding_azure_openai_settings import EmbeddingAzureOpenAISettings
-from app.config.embedding_openai_settings import EmbeddingOpenAISettings
-from app.config.ollama_settings import OllamaSettings
 from app.core.processors.input.common.base_input_processor import BaseInputProcessor, BaseMarkdownProcessor, BaseTabularProcessor
 from app.core.processors.output.base_output_processor import BaseOutputProcessor
-from app.core.processors.output.vectorization_processor.azure_apim_embedder import AzureApimEmbedder
-from app.core.processors.output.vectorization_processor.embedder import Embedder
 from app.core.processors.output.vectorization_processor.semantic_splitter import SemanticSplitter
 from app.core.stores.catalog.base_catalog_store import BaseCatalogStore
 from app.core.stores.catalog.duckdb_catalog_store import DuckdbCatalogStore
@@ -74,6 +77,7 @@ from app.core.stores.vector.base_text_splitter import BaseTextSplitter
 from app.core.stores.vector.base_vector_store import BaseVectorStore
 from app.core.stores.vector.in_memory_langchain_vector_store import InMemoryLangchainVectorStore
 from app.core.stores.vector.opensearch_vector_store import OpenSearchVectorStoreAdapter
+from app.core.processors.output.vectorization_processor.semantic_splitter import SemanticSplitter
 
 # Union of supported processor base classes
 BaseProcessorType = Union[BaseMarkdownProcessor, BaseTabularProcessor]
@@ -174,6 +178,14 @@ def validate_output_processor_config(config: Configuration):
         except (ImportError, AttributeError, TypeError) as e:
             raise ImportError(f"Output Processor '{entry.class_path}' could not be loaded: {e}")
 
+def _require_env(var: str) -> None:
+    """Log presence of a required env var or raise loudly if missing."""
+    val = os.getenv(var, "")
+    if val:
+        logger.info("     • %s: present (%s)", var, _mask(val))
+        return
+    logger.error("     ❌ %s is not set", var)
+    raise ValueError(f"Missing required environment variable: {var}")
 
 class ApplicationContext:
     _instance: Optional["ApplicationContext"] = None
@@ -387,57 +399,19 @@ class ApplicationContext:
             raise ValueError(f"Unsupported file backend: {backend_type}")
         return self._file_store_instance
 
-    def get_embedder(self) -> BaseEmbeddingModel:
+    def get_embedder(self) -> LCEmbeddings:
         """
-        Factory method to create an embedding model instance based on the configuration.
-        Supports Azure OpenAI and OpenAI.
+        Fred rationale:
+        - Knowledge Flow uses the shared fred_core factory to avoid provider drift.
+        - Only secrets live in env; all other wiring lives in YAML.
+        - Typed return (LCEmbeddings) keeps the contract clear at call sites.
         """
-        backend_type = self.configuration.embedding.type
-
-        if backend_type == EmbeddingProvider.OPENAI:
-            settings = EmbeddingOpenAISettings()  # type: ignore[call-arg]
-            embedding_params = {
-                "model": settings.openai_model_name,
-                "openai_api_key": settings.openai_api_key,
-                "openai_api_base": settings.openai_api_base,
-                "openai_api_type": "openai",  # always "openai" for pure OpenAI
-            }
-
-            # Only add api_version if it exists
-            if settings.openai_api_version:
-                embedding_params["openai_api_version"] = settings.openai_api_version
-
-            return Embedder(OpenAIEmbeddings(**embedding_params))  # type: ignore[call-arg]
-
-        elif backend_type == EmbeddingProvider.AZUREOPENAI:
-            openai_settings = EmbeddingAzureOpenAISettings()  # type: ignore[call-arg]
-            return Embedder(
-                AzureOpenAIEmbeddings(
-                    deployment=openai_settings.azure_deployment_embedding,
-                    openai_api_type="azure",
-                    azure_endpoint=openai_settings.azure_openai_endpoint,
-                    openai_api_version=openai_settings.azure_api_version,
-                    openai_api_key=openai_settings.azure_openai_api_key,
-                )
-            )  # type: ignore[call-arg]
-
-        elif backend_type == EmbeddingProvider.AZUREAPIM:
-            settings = validate_settings_or_exit(EmbeddingAzureApimSettings, "Azure APIM Embedding Settings")
-            return AzureApimEmbedder(settings)
-
-        elif backend_type == EmbeddingProvider.OLLAMA:
-            ollama_settings = OllamaSettings()
-            embedding_params = {
-                "model": ollama_settings.embedding_model_name,
-            }
-            if ollama_settings.api_url:
-                embedding_params["base_url"] = ollama_settings.api_url
-
-            return Embedder(OllamaEmbeddings(**embedding_params))
-
-        else:
-            raise ValueError(f"Unsupported embedding backend: {backend_type}")
-
+        cfg: ModelConfiguration = self.configuration.embedding
+        return get_embeddings(cfg)
+    
+    def get_utility_model(self):
+        return get_model(self.configuration.model)
+      
     def get_vector_store(self) -> BaseVectorStore:
         """
         Vector Store Factory
@@ -722,8 +696,17 @@ class ApplicationContext:
         else:
             raise NotImplementedError(f"No pull provider implemented for '{source_config.provider}'")
 
+    def is_summary_generation_enabled(self) -> bool:
+        """
+        Checks if the summary generation feature is enabled in the configuration.
+        Returns:
+            bool: True if enabled, False otherwise.
+        """
+        return self.configuration.processing.generate_summary
+
     def _log_sensitive(self, name: str, value: Optional[str]):
         logger.info(f"     ↳ {name} set: {'✅' if value else '❌'}")
+
 
     def _log_config_summary(self):
         sec = self.configuration.security.user
@@ -741,47 +724,39 @@ class ApplicationContext:
             except Exception as e:
                 logger.error("     ❌ keycloak_url invalid (expected …/realms/<realm>): %s", e)
                 raise ValueError("Invalid Keycloak URL") from e
+            _require_env("KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET")
 
-            secret = os.getenv("KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET", "")
-            if secret:
-                logger.info("     • KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET: present  (%s)", _mask(secret))
+        embedding = self.configuration.embedding
+        # Non-secret settings from YAML
+        for k, v in (embedding.settings or {}).items():
+            # Heuristic mask for anything that *looks* sensitive even if put in YAML by mistake
+            if any(t in k.lower() for t in ("secret", "token", "key")):
+                logger.info("     ↳ %s: (masked)", k)
             else:
-                logger.error(
-                    "     ⚠️  KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET is not set — external or recursive MCP or REST calls will not be protected (NoAuth). Knowledge Flow will likely suffer from 401."
-                )
-                raise ValueError("Missing KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET environment variable")
+                logger.info("     ↳ %s: %s", k, v)
 
-        backend = self.configuration.embedding.type
-        logger.info("🔧 Application configuration summary:")
-        logger.info("--------------------------------------------------")
-        logger.info(f"  📦 Embedding backend: {backend.value}")
-
-        if backend == EmbeddingProvider.OPENAI:
-            s = validate_settings_or_exit(EmbeddingOpenAISettings, "OpenAI Embedding Settings")
-            self._log_sensitive("OPENAI_API_KEY", s.openai_api_key)
-            logger.info(f"     ↳ Model: {s.openai_model_name}")
-        elif backend == EmbeddingProvider.AZUREOPENAI:
-            s = validate_settings_or_exit(EmbeddingAzureOpenAISettings, "Azure OpenAI Embedding Settings")
-            self._log_sensitive("AZURE_OPENAI_API_KEY", s.azure_openai_api_key)
-            logger.info(f"     ↳ Deployment: {s.azure_deployment_embedding}")
-            logger.info(f"     ↳ API Version: {s.azure_api_version}")
-        elif backend == EmbeddingProvider.AZUREAPIM:
-            try:
-                s = validate_settings_or_exit(EmbeddingAzureApimSettings, "Azure APIM Embedding Settings")
-                self._log_sensitive("AZURE_CLIENT_ID", s.azure_client_id)
-                self._log_sensitive("AZURE_CLIENT_SECRET", s.azure_client_secret)
-                self._log_sensitive("AZURE_APIM_KEY", s.azure_apim_key)
-                logger.info(f"     ↳ APIM Base URL: {s.azure_apim_base_url}")
-                logger.info(f"     ↳ Deployment: {s.azure_deployment_embedding}")
-            except Exception:
-                logger.warning("⚠️ Failed to load Azure APIM settings — some variables may be missing.")
-        elif backend == EmbeddingProvider.OLLAMA:
-            s = validate_settings_or_exit(OllamaSettings, "Ollama Embedding Settings")
-            logger.info(f"     ↳ Model: {s.embedding_model_name}")
-            logger.info(f"     ↳ API URL: {s.api_url if s.api_url else 'default'}")
+        # Required env vars by provider
+        provider = (embedding.provider or "").lower()
+        if provider == "openai":
+            _require_env("OPENAI_API_KEY")
+        elif provider == "azure":
+            _require_env("AZURE_OPENAI_API_KEY")
+        elif provider == "azureapim":
+            _require_env("AZURE_CLIENT_SECRET")
+            _require_env("AZURE_APIM_KEY")
+        elif provider == "ollama":
+            # Usually no secrets; base_url is in settings
+            pass
         else:
-            logger.warning("⚠️ Unknown embedding backend configured.")
+            logger.error("     ❌ Unsupported embedding provider: %s", provider)
+            raise ValueError(f"Unsupported embedding provider: {provider}")
 
+        processing = self.configuration.processing or {}
+        # Processing flags (your new simple shape)
+        logger.info("  ⚙️ Processing policy:")
+        logger.info("     ↳ use_gpu: %s", processing.use_gpu)
+        logger.info("     ↳ process_images: %s", processing.process_images)
+        logger.info("     ↳ generate_summary: %s", processing.generate_summary)
         vector_type = self.configuration.storage.vector_store
         logger.info(f"  📚 Vector store backend: {vector_type}")
         try:

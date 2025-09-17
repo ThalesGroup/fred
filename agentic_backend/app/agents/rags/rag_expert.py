@@ -34,7 +34,7 @@ from app.core.agents.runtime_context import (
     get_document_library_tags_ids,
     get_search_policy,
 )
-from app.core.model.model_factory import get_model
+from fred_core import get_model
 
 logger = logging.getLogger(__name__)
 

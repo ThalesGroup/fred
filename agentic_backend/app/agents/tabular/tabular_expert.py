@@ -23,7 +23,7 @@ from app.common.mcp_runtime import MCPRuntime
 from app.common.resilient_tool_node import make_resilient_tools_node
 from app.common.structures import AgentSettings
 from app.core.agents.flow import AgentFlow
-from app.core.model.model_factory import get_model
+from fred_core import get_model
 
 logger = logging.getLogger(__name__)
 
