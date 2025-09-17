@@ -13,34 +13,39 @@
 # limitations under the License.
 
 from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
-from app.core.monitoring.monitoring_service import AppMonitoringMetricsService
 
 from fastapi import (
     APIRouter,
     Response,
 )
 
-# Create a module-level APIRouter
-router = APIRouter(tags=["Monitoring"])
+class MonitoringController:
+    def __init__(self, router: APIRouter, base_path: str = ""):
+        """
+        Attach monitoring routes to the given APIRouter.
+        :param router: The APIRouter instance to register endpoints on.
+        :param base_path: Optional prefix for monitoring endpoints.
+        """
+        self.router = router
+        self.base_path = base_path
+        self._register_routes()
 
-@router.get("/healthz")
-async def healthz():
-  return {"status": "ok"}
+    def _register_routes(self):
+        @self.router.get(f"{self.base_path}/healthz", tags=["Monitoring"])
+        async def healthz():
+            return {"status": "ok"}
 
-@router.get("/ready")
-def ready():
-  return {"status": "ready"}
+        @self.router.get(f"{self.base_path}/ready", tags=["Monitoring"])
+        async def ready():
+            return {"status": "ready"}
 
-@router.get(
-    "/metrics/system",
-    summary="Expose system metrics for Prometheus scraping",
-    include_in_schema=False,
-)
-def metrics():
-    """
-    Expose Prometheus system metrics
-    """
-    return Response(
-        content=generate_latest(),
-        media_type=CONTENT_TYPE_LATEST,
-    )
+        @self.router.get(
+            f"{self.base_path}/metrics/system",
+            summary="Expose system metrics for Prometheus scraping",
+            include_in_schema=False,
+        )
+        async def metrics():
+            return Response(
+                content=generate_latest(),
+                media_type=CONTENT_TYPE_LATEST,
+            )
