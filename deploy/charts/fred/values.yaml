@@ -492,8 +492,10 @@ applications:
         log_level: "info"
         reload: false
         reload_dir: "."
-      features:
+      processing:
         generate_summary: true
+        use_gpu: true
+        process_images: true
       security:
         m2m:
           enabled: true
@@ -547,10 +549,6 @@ applications:
         provider: openai
         name: text-embedding-3-large
         settings: {}
-      processing:
-        use_gpu: true
-        process_images: true
-        generate_summary: true
       model:
         provider: openai        # openai | azure | ollama
         name: gpt-4o-mini       # azure: deployment name, ollama: 'qwen2.5:3b-instruct' etc.

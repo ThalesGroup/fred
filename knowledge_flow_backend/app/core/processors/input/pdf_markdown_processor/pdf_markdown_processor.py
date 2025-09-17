@@ -26,17 +26,21 @@ from docling_core.types.doc.base import ImageRefMode
 from pypdf.errors import PdfReadError
 
 from app.application_context import get_configuration
-from app.core.processors.input.common.base_image_describer import BaseImageDescriber
 from app.core.processors.input.common.base_input_processor import BaseMarkdownProcessor
+from app.core.processors.input.common.image_describer import build_image_describer
 
 logger = logging.getLogger(__name__)
 
 
 class PdfMarkdownProcessor(BaseMarkdownProcessor):
-    def __init__(self, image_describer: BaseImageDescriber | None = None):
+    def __init__(self):
         super().__init__()
-        self.image_describer = image_describer
+        self.image_describer = None
         self.process_images = get_configuration().processing.process_images
+        if self.process_images:
+            if not get_configuration().vision:
+                raise ValueError("Vision model configuration is missing but process_images is enabled.")
+            self.image_describer = build_image_describer(get_configuration().vision)
 
     def check_file_validity(self, file_path: Path) -> bool:
         """Checks if the PDF is readable and contains at least one page."""

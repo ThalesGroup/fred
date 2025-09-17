@@ -24,18 +24,18 @@ from fred_core import (
     KpiLogStore,
     KPIWriter,
     LogStoreConfig,
+    ModelConfiguration,
     OpenSearchIndexConfig,
     OpenSearchKPIStore,
-    split_realm_url,
     SQLStorageConfig,
     SQLTableStore,
     StoreInfo,
-    get_model,
     get_embeddings,
-    ModelConfiguration,
+    get_model,
+    split_realm_url,
 )
-from opensearchpy import OpenSearch, RequestsHttpConnection
 from langchain_core.embeddings import Embeddings
+from opensearchpy import OpenSearch, RequestsHttpConnection
 
 from app.common.structures import (
     ChromaVectorStorageConfig,
@@ -410,7 +410,14 @@ class ApplicationContext:
         return get_embeddings(cfg)
 
     def get_utility_model(self):
+        if not self.configuration.model:
+            raise ValueError("Utility model configuration is missing.")
         return get_model(self.configuration.model)
+
+    def get_vision_model(self):
+        if not self.configuration.vision:
+            raise ValueError("Vision model configuration is missing.")
+        return get_model(self.configuration.vision)
 
     def get_vector_store(self) -> BaseVectorStore:
         """

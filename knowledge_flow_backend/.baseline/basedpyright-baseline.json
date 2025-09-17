@@ -18,26 +18,6 @@
                 }
             }
         ],
-        "./app/core/processors/input/common/image_describers/ollama_image_describer.py": [
-            {
-                "code": "reportCallIssue",
-                "range": {
-                    "startColumn": 36,
-                    "endColumn": 52,
-                    "lineCount": 1
-                }
-            }
-        ],
-        "./app/core/processors/input/common/image_describers/openai_image_describer.py": [
-            {
-                "code": "reportCallIssue",
-                "range": {
-                    "startColumn": 24,
-                    "endColumn": 49,
-                    "lineCount": 1
-                }
-            }
-        ],
         "./app/core/processors/input/pps_tabular_processor/pps_tabular_processor.py": [
             {
                 "code": "reportArgumentType",

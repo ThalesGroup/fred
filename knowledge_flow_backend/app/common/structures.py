@@ -14,13 +14,12 @@
 
 
 import os
-from pathlib import Path
-from typing import Annotated, Dict, List, Literal, Union
-from pydantic import BaseModel, Field, model_validator
-from typing import Optional
 from enum import Enum
+from pathlib import Path
+from typing import Annotated, Dict, List, Literal, Optional, Union
 
-from fred_core import OpenSearchStoreConfig, PostgresStoreConfig, SecurityConfiguration, StoreConfig, ModelConfiguration
+from fred_core import ModelConfiguration, OpenSearchStoreConfig, PostgresStoreConfig, SecurityConfiguration, StoreConfig
+from pydantic import BaseModel, Field, model_validator
 
 """
 This module defines the top level data structures used by controllers, processors
@@ -305,6 +304,7 @@ class Configuration(BaseModel):
     output_processors: Optional[List[ProcessorConfig]] = None
     content_storage: ContentStorageConfig = Field(..., description="Content Storage configuration")
     embedding: ModelConfiguration
+    vision: Optional[ModelConfiguration] = None
     scheduler: SchedulerConfig
     processing: ProcessingConfig = Field(default_factory=ProcessingConfig, description="A collection of feature flags to enable or disable optional functionality.")
     document_sources: Dict[str, DocumentSourceConfig] = Field(default_factory=dict, description="Mapping of source_tag identifiers to push/pull source configurations")
