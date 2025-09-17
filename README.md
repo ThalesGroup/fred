@@ -135,6 +135,10 @@ cd fred
 #### 3 · Add your OpenAI key
 
 ```bash
+# Copy the 2 environment files templates
+cp agentic_backend/config/.env.template agentic_backend/config/.env
+cp knowledge_flow_backend/config/.env.template knowledge_flow_backend/config/.env
+
 echo "OPENAI_API_KEY=sk-..." > {agentic_backend,knowledge_flow_backend}/config/.env
 ```
 
