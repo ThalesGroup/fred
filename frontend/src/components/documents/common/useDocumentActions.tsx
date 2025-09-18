@@ -15,11 +15,11 @@
 import { useTranslation } from "react-i18next";
 import {
   DocumentMetadata,
-  ProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPostApiArg,
-  ListPullDocumentsKnowledgeFlowV1PullDocumentsGetApiArg,
-  BrowseDocumentsRequest,
-  useProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPostMutation,
-  useBrowseDocumentsKnowledgeFlowV1DocumentsBrowsePostMutation,
+  ProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostApiArg,
+  ScheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPostApiArg,
+  ProcessDocumentsRequest,
+  useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation,
+  useScheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPostMutation,
 } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { useToast } from "../../ToastProvider";
 import {
@@ -31,23 +31,24 @@ import {
 
 export const useDocumentActions = (onRefreshData?: () => void) => {
   const { t } = useTranslation();
-  const { showInfo, showError } = useToast();
-  console.log("useDocumentActions with to review", onRefreshData);
+  const { showInfo, showError } = useToast();  console.log("useDocumentActions with to review", onRefreshData);
 
   // API hooks
 
-  const [processDocuments] = useProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPostMutation();
-  const [scheduleDocuments] = useBrowseDocumentsKnowledgeFlowV1DocumentsBrowsePostMutation();
+  const [processDocuments] =
+    useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation();
+  const [scheduleDocuments] =
+    useScheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPostMutation();
 
   const handleSchedule = async (files: DocumentMetadata[]) => {
     try {
-      const payload: BrowseDocumentsRequest = {
+      const payload: ProcessDocumentsRequest = {
         files: files.map((f) => {
           const isPull = f.source.source_type === "pull";
           return {
             source_tag: f.source.source_tag,
             document_uid: isPull ? undefined : f.identity.document_uid,
-            external_path: isPull ? (f.source.pull_location ?? undefined) : undefined,
+            external_path: isPull ? f.source.pull_location ?? undefined : undefined,
             tags: f.tags.tag_ids || [],
             display_name: f.identity.document_name,
           };
@@ -55,8 +56,8 @@ export const useDocumentActions = (onRefreshData?: () => void) => {
         pipeline_name: "manual_ui_async",
       };
 
-      const args: ListPullDocumentsKnowledgeFlowV1PullDocumentsGetApiArg = {
-        BrowseDocumentsRequest: payload,
+      const args: ScheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPostApiArg = {
+        processDocumentsRequest: payload,
       };
 
       const result = await scheduleDocuments(args).unwrap();
@@ -75,13 +76,13 @@ export const useDocumentActions = (onRefreshData?: () => void) => {
 
   const handleProcess = async (files: DocumentMetadata[]) => {
     try {
-      const payload: BrowseDocumentsRequest = {
+      const payload: ProcessDocumentsRequest = {
         files: files.map((f) => {
           const isPull = f.source.source_type === "pull";
           return {
             source_tag: f.source.source_tag,
             document_uid: isPull ? undefined : f.identity.document_uid,
-            external_path: isPull ? (f.source.pull_location ?? undefined) : undefined,
+            external_path: isPull ? f.source.pull_location ?? undefined : undefined,
             tags: f.tags.tag_ids || [],
             display_name: f.identity.document_name,
           };
@@ -89,8 +90,8 @@ export const useDocumentActions = (onRefreshData?: () => void) => {
         pipeline_name: "manual_ui_async",
       };
 
-      const args: ProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPostApiArg = {
-        BrowseDocumentsRequest: payload,
+      const args: ProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostApiArg = {
+        processDocumentsRequest: payload,
       };
 
       const result = await processDocuments(args).unwrap();

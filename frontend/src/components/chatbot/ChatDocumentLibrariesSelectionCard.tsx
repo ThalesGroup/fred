@@ -7,11 +7,7 @@ import { TreeItem } from "@mui/x-tree-view/TreeItem";
 import KeyboardArrowRightIcon from "@mui/icons-material/KeyboardArrowRight";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import { useTranslation } from "react-i18next";
-import {
-  TagType,
-  TagWithItemsId,
-  useListAllTagsKnowledgeFlowV1TagsGetQuery,
-} from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { TagType, TagWithItemsId, useListAllTagsKnowledgeFlowV1TagsGetQuery } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 
 export interface ChatDocumentLibrariesSelectionCardProps {
   selectedLibrariesIds: string[];
@@ -22,10 +18,10 @@ export interface ChatDocumentLibrariesSelectionCardProps {
 type Lib = Pick<TagWithItemsId, "id" | "name" | "path" | "description">;
 
 type TagNode = {
-  name: string; // segment label
-  full: string; // e.g. "thales/six"
+  name: string;                 // segment label
+  full: string;                 // e.g. "thales/six"
   children: Map<string, TagNode>;
-  tagsHere: Lib[]; // real tags exactly at this node (usually 0 or 1)
+  tagsHere: Lib[];              // real tags exactly at this node (usually 0 or 1)
 };
 
 function buildTree(libs: Lib[]): TagNode {
@@ -99,12 +95,13 @@ export function ChatDocumentLibrariesSelectionCard({
   setSelectedLibrariesIds,
   libraryType,
 }: ChatDocumentLibrariesSelectionCardProps) {
+   
   const theme = useTheme();
   const { t } = useTranslation();
   const { data: libraries = [] } = useListAllTagsKnowledgeFlowV1TagsGetQuery({ type: libraryType });
   const [search, setSearch] = useState("");
   const [expanded, setExpanded] = useState<string[]>([]);
-
+ 
   const libs = useMemo<Lib[]>(
     () =>
       (libraries as any[]).map((x) => ({
@@ -119,7 +116,8 @@ export function ChatDocumentLibrariesSelectionCard({
   const filtered = useMemo(() => filterTree(tree, search), [tree, search]);
   const selected = useMemo(() => new Set(selectedLibrariesIds), [selectedLibrariesIds]);
 
-  const label = libraryType === "document" ? t("chatbot.searchDocumentLibraries") : t("chatbot.searchPromptLibraries");
+  const label =
+    libraryType === "document" ? t("chatbot.searchDocumentLibraries") : t("chatbot.searchPromptLibraries");
 
   const toggleIds = useCallback(
     (ids: Set<string>, force?: boolean) => {
@@ -164,7 +162,7 @@ export function ChatDocumentLibrariesSelectionCard({
             toggleIds(ids, !checked);
           }}
         />
-
+        
         <Box sx={{ minWidth: 0 }}>
           <Typography variant="body2" noWrap title={leaf?.name ?? node.name}>
             {leaf?.name ?? node.name}

@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+
 import { useEffect, useMemo, useState } from "react";
 import { Box, Grid2 } from "@mui/material";
 import dayjs, { Dayjs } from "dayjs";
@@ -111,35 +112,34 @@ export default function MonitoringOverview() {
 
   const latencyRows = (latencyState.data as KpiQueryResult | undefined)?.rows ?? [];
   /* ---------------------------------------------------------------------- */
-  /* ---------------------------------------------------------------------- */
-  /* KPI: chat.exchange_total by dims.status (range totals)                 */
-  /* Fetch at top-level; pass rows to the mini (presentational only).       */
-  /* ---------------------------------------------------------------------- */
-  const [fetchStatus, statusState] = useQueryKnowledgeFlowV1KpiQueryPostMutation();
+/* ---------------------------------------------------------------------- */
+/* KPI: chat.exchange_total by dims.status (range totals)                 */
+/* Fetch at top-level; pass rows to the mini (presentational only).       */
+/* ---------------------------------------------------------------------- */
+const [fetchStatus, statusState] = useQueryKnowledgeFlowV1KpiQueryPostMutation();
 
-  const statusBody: KpiQuery = useMemo(
-    () => ({
-      since: alignedStartIso,
-      until: alignedEndIso,
-      select: [{ field: "metric.value", op: "sum", alias: "exchanges" } as any],
-      group_by: ["dims.status"],
-      // No time_bucket: we want totals over the selected window
-      filters: [{ field: "metric.name", value: "chat.exchange_total" } as FilterTerm],
-      limit: 10,
-      // If you want to sort bars by the metric instead of doc_count:
-      // order_by: { by: "metric", metric_alias: "exchanges", direction: "desc" } as any,
-    }),
-    [alignedStartIso, alignedEndIso],
-  );
+const statusBody: KpiQuery = useMemo(
+  () => ({
+    since: alignedStartIso,
+    until: alignedEndIso,
+    select: [{ field: "metric.value", op: "sum", alias: "exchanges" } as any],
+    group_by: ["dims.status"],
+    // No time_bucket: we want totals over the selected window
+    filters: [{ field: "metric.name", value: "chat.exchange_total" } as FilterTerm],
+    limit: 10,
+    // If you want to sort bars by the metric instead of doc_count:
+    // order_by: { by: "metric", metric_alias: "exchanges", direction: "desc" } as any,
+  }),
+  [alignedStartIso, alignedEndIso]
+);
 
-  useEffect(() => {
-    fetchStatus({ kpiQuery: statusBody })
-      .unwrap()
-      .catch(() => {});
-  }, [fetchStatus, statusBody]);
+useEffect(() => {
+  fetchStatus({ kpiQuery: statusBody }).unwrap().catch(() => {});
+}, [fetchStatus, statusBody]);
 
-  const statusRows = (statusState.data as KpiQueryResult | undefined)?.rows ?? [];
+const statusRows = (statusState.data as KpiQueryResult | undefined)?.rows ?? [];
 
+  
   return (
     <Box display="flex" flexDirection="column" gap={2} p={2}>
       {/* Single Paper host: global filters only */}
@@ -194,9 +194,9 @@ export default function MonitoringOverview() {
             subtitle="Range totals in the selected window"
             help="Sums of chat.exchange_total per dims.status (ok, error, timeout, filtered)."
           >
-            <KpiStatusMini rows={statusRows} height={150} showLegend={false} />
+              <KpiStatusMini rows={statusRows} height={150} showLegend={false} />
           </FramelessTile>
-        </Grid2>
+        </Grid2>  
       </Grid2>
     </Box>
   );

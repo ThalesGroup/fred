@@ -128,6 +128,6 @@ class PipelineDefinition(BaseModel):
     files: List[FileToProcess]
 
 
-class BrowseDocumentsRequest(BaseModel):
+class ProcessDocumentsRequest(BaseModel):
     files: List[FileToProcess]
     pipeline_name: str

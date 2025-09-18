@@ -13,9 +13,11 @@ interface DynamicBaseQueryOptions {
   backend: "api" | "knowledge";
 }
 
-export const createDynamicBaseQuery = (
-  options: DynamicBaseQueryOptions,
-): BaseQueryFn<string | FetchArgs, unknown, FetchBaseQueryError> => {
+export const createDynamicBaseQuery = (options: DynamicBaseQueryOptions): BaseQueryFn<
+  string | FetchArgs,
+  unknown,
+  FetchBaseQueryError
+> => {
   // We resolve the baseUrl lazily (at call time), just like your original code.
   const pickBaseUrl = () => {
     if (options.backend === "knowledge") {

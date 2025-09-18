@@ -46,10 +46,12 @@ export function KeywordsPreview({
 
   // Deduplicate, trim, preserve order
   const list = useMemo(() => {
-    const src = (keywords ?? []).map((k) => (k ?? "").trim()).filter((k) => k.length > 0);
+    const src = (keywords ?? [])
+      .map((k) => (k ?? "").trim())
+      .filter((k) => k.length > 0);
     const seen = new Set<string>();
     const out: string[] = [];
-    for (const k of src) if (!seen.has(k)) seen.add(k), out.push(k);
+    for (const k of src) if (!seen.has(k)) (seen.add(k), out.push(k));
     return out;
   }, [keywords]);
 
@@ -60,11 +62,7 @@ export function KeywordsPreview({
 
   // Group by first letter; non A–Z -> '#'
   const groups = useMemo(() => {
-    const normalize = (s: string) =>
-      s
-        .normalize("NFD")
-        .replace(/\p{Diacritic}/gu, "")
-        .toUpperCase();
+    const normalize = (s: string) => s.normalize("NFD").replace(/\p{Diacritic}/gu, "").toUpperCase();
     const out: Record<string, string[]> = {};
     for (const kw of list) {
       const letter = /^[A-Z]/.test(normalize(kw)) ? normalize(kw)[0] : "#";

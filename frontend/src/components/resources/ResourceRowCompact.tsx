@@ -67,9 +67,7 @@ export function ResourceRowCompact({
       <Tooltip title={prompt.updated_at || ""}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, flexShrink: 0 }}>
           <EventAvailableIcon fontSize="inherit" />
-          <Typography variant="caption" noWrap>
-            {fmt(prompt.updated_at)}
-          </Typography>
+          <Typography variant="caption" noWrap>{fmt(prompt.updated_at)}</Typography>
         </Box>
       </Tooltip>
 

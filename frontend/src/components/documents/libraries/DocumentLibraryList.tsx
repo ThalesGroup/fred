@@ -290,7 +290,7 @@ export default function DocumentLibraryList() {
               getChildren={getChildren}
               documents={filteredDocs}
               onPreview={preview}
-              onDownload={download}
+              onDownload={download} 
               onToggleRetrievable={toggleRetrievable}
               onRemoveFromLibrary={removeOneWithConfirm}
               selectedDocs={selectedDocs}

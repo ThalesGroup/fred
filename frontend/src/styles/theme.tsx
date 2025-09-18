@@ -123,10 +123,10 @@ declare module "@mui/material/Typography" {
 
 // ---------- Shared Gradient Stops (single source of truth) ----------
 const lightHeroFrom = "#ffffffd9";
-const lightHeroTo = "#ffffffe6";
+const lightHeroTo   = "#ffffffe6";
 
-const darkHeroFrom = "#191923cc";
-const darkHeroTo = "#191923e6";
+const darkHeroFrom  = "#191923cc";
+const darkHeroTo    = "#191923e6";
 
 // ---------- Light Palette ----------
 const lightPalette = {
@@ -177,7 +177,7 @@ const lightPalette = {
   heroBackgroundGrad: { gradientFrom: lightHeroFrom, gradientTo: lightHeroTo },
   // Surfaces derived from hero gradient to keep consistency with the welcome box
   surfaces: {
-    soft: `linear-gradient(180deg, ${lightHeroFrom}, ${lightHeroTo})`,
+    soft:   `linear-gradient(180deg, ${lightHeroFrom}, ${lightHeroTo})`,
     raised: `linear-gradient(180deg, #ffffffcc, #f7f7f7f2)`,
   },
 };
@@ -230,7 +230,7 @@ const darkPalette = {
   heroBackgroundGrad: { gradientFrom: darkHeroFrom, gradientTo: darkHeroTo },
   // Surfaces derived from hero gradient (the subtle blue you liked)
   surfaces: {
-    soft: `linear-gradient(180deg, ${darkHeroFrom}, ${darkHeroTo})`,
+    soft:   `linear-gradient(180deg, ${darkHeroFrom}, ${darkHeroTo})`,
     raised: `linear-gradient(180deg, #1f2230cc, #1b1f2ae6)`,
   },
 };
@@ -254,7 +254,7 @@ const baseTypography = {
     h2: { lineHeight: 1.5, fontWeight: 500, fontSize: "1.15rem", marginBottom: "0.6rem" },
     h3: { lineHeight: 1.5, fontWeight: 400, fontSize: "1.10rem", marginBottom: "0.6rem" },
     h4: { lineHeight: 1.5, fontWeight: 400, fontSize: "1.05rem", marginBottom: "0.6rem" },
-    p: { lineHeight: 1.8, fontWeight: 400, fontSize: "1.0rem", marginBottom: "0.8rem" },
+    p:  { lineHeight: 1.8, fontWeight: 400, fontSize: "1.0rem", marginBottom: "0.8rem" },
     code: { lineHeight: 1.5, fontSize: "0.9rem", borderRadius: "4px" },
     a: { textDecoration: "underline", lineHeight: 1.6, fontWeight: 400, fontSize: "0.9rem" },
     ul: { marginLeft: "0.2rem", lineHeight: 1.4, fontWeight: 400, fontSize: "0.9rem" },

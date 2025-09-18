@@ -35,7 +35,9 @@ export function useTagCommands({ refetchTags, refetchResources, refetchDocs }: R
         await refresh();
         showSuccess?.({
           summary: t("resourceLibrary.folderDeleteSuccess") || "Folder deleted",
-          detail: t("resourceLibrary.folderDeleteDetail", { name: tag.name }) || "The folder was removed.",
+          detail:
+            t("resourceLibrary.folderDeleteDetail", { name: tag.name }) ||
+            "The folder was removed.",
         });
       } catch (e: any) {
         showError?.({

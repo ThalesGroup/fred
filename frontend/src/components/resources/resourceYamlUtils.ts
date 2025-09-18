@@ -94,7 +94,7 @@ export const buildPromptSchemaFromBody = (body: string) => {
 export const normalizePromptHeader = (
   rawHeader: Record<string, any>,
   body: string,
-  opts?: { keepVersion?: boolean; recomputeSchema?: boolean },
+  opts?: { keepVersion?: boolean; recomputeSchema?: boolean }
 ): Record<string, any> => {
   const keepVersion = opts?.keepVersion ?? true;
   const recomputeSchema = opts?.recomputeSchema ?? true;
@@ -127,7 +127,7 @@ export const normalizeTemplateHeader = (
   rawHeader: Record<string, any>,
   body: string,
   format: TemplateFormat,
-  opts?: { keepVersion?: boolean; recomputeSchema?: boolean },
+  opts?: { keepVersion?: boolean; recomputeSchema?: boolean }
 ) => {
   const h = normalizePromptHeader(rawHeader, body, opts);
   h.kind = "template";

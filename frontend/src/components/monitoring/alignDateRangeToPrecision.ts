@@ -34,7 +34,7 @@ const precisionToUnit: Record<"sec" | "min" | "hour" | "day", OpUnitType> = {
 export function alignDateRangeToPrecision(
   start: Dayjs,
   end: Dayjs,
-  precision: "sec" | "min" | "hour" | "day",
+  precision: "sec" | "min" | "hour" | "day"
 ): [string, string] {
   const unit = precisionToUnit[precision];
   const alignedStart = dayjs.utc(start).startOf(unit);

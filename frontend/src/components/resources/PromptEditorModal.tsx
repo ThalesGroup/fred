@@ -28,7 +28,12 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import yaml from "js-yaml";
-import { buildPromptYaml, looksLikeYamlDoc, splitFrontMatter, buildFrontMatter } from "./resourceYamlUtils";
+import {
+  buildPromptYaml,
+  looksLikeYamlDoc,
+  splitFrontMatter,
+  buildFrontMatter,
+} from "./resourceYamlUtils";
 
 const promptSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -194,9 +199,7 @@ export const PromptEditorModal: React.FC<PromptEditorModalProps> = ({
             </Stack>
           </DialogContent>
           <DialogActions>
-            <Button onClick={onClose} variant="outlined">
-              Cancel
-            </Button>
+            <Button onClick={onClose} variant="outlined">Cancel</Button>
             <Button
               onClick={handleAIHelp}
               variant="text"
@@ -205,9 +208,7 @@ export const PromptEditorModal: React.FC<PromptEditorModalProps> = ({
             >
               Get Help from AI
             </Button>
-            <Button onClick={onSubmitDoc} variant="contained">
-              Save
-            </Button>
+            <Button onClick={onSubmitDoc} variant="contained">Save</Button>
           </DialogActions>
         </>
       ) : (
@@ -240,9 +241,7 @@ export const PromptEditorModal: React.FC<PromptEditorModalProps> = ({
             </Stack>
           </DialogContent>
           <DialogActions>
-            <Button onClick={onClose} variant="outlined">
-              Cancel
-            </Button>
+            <Button onClick={onClose} variant="outlined">Cancel</Button>
             <Button
               onClick={handleAIHelp}
               variant="text"

@@ -37,7 +37,7 @@ export function renderTextWithCitations(
   text: string,
   map: Map<number, string>,
   onHover?: (uid: string | null) => void,
-  onClick?: (n: number, uid: string | null) => void,
+  onClick?: (n: number, uid: string | null) => void
 ): React.ReactNode {
   if (!text) return null;
   const chunks = text.split(/(\[\d+\])/g); // keep markers

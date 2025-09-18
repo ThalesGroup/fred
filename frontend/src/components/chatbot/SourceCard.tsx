@@ -31,45 +31,50 @@ export const SourceCard = ({ documentId, hits }: SourceCardProps) => {
   if (!hits || hits.length === 0) return null;
 
   // sort hits: rank asc (if present) => score desc; then dedupe by page|section|fragment|content
-  const sorted = hits.slice().sort((a, b) => {
-    const ra = a.rank ?? Number.MAX_SAFE_INTEGER;
-    const rb = b.rank ?? Number.MAX_SAFE_INTEGER;
-    if (ra !== rb) return ra - rb;
-    return (b.score ?? 0) - (a.score ?? 0);
-  });
+  const sorted = hits
+    .slice()
+    .sort((a, b) => {
+      const ra = a.rank ?? Number.MAX_SAFE_INTEGER;
+      const rb = b.rank ?? Number.MAX_SAFE_INTEGER;
+      if (ra !== rb) return ra - rb;
+      return (b.score ?? 0) - (a.score ?? 0);
+    });
 
   const deduped = sorted.filter((h, i, arr) => {
     const key = `${h.page ?? ""}|${h.section ?? ""}|${h.viewer_fragment ?? ""}|${(h.content || "").slice(0, 80)}`;
     const first = arr.findIndex(
-      (x) => `${x.page ?? ""}|${x.section ?? ""}|${x.viewer_fragment ?? ""}|${(x.content || "").slice(0, 80)}` === key,
+      x =>
+        `${x.page ?? ""}|${x.section ?? ""}|${x.viewer_fragment ?? ""}|${(x.content || "").slice(0, 80)}` === key
     );
     return first === i;
   });
 
   // doc-level summary (best available across hits)
-  const bestScore = Math.max(...deduped.map((h) => h.score ?? 0));
+  const bestScore = Math.max(...deduped.map(h => h.score ?? 0));
   const title =
-    (deduped.find((h) => h.title)?.title || deduped[0]?.title)?.trim() || deduped[0]?.file_name?.trim() || documentId;
+    (deduped.find(h => h.title)?.title || deduped[0]?.title)?.trim() ||
+    deduped[0]?.file_name?.trim() ||
+    documentId;
 
-  const language = deduped.find((h) => h.language)?.language || undefined;
-  const mime = deduped.find((h) => h.mime_type)?.mime_type || undefined;
-  const license = deduped.find((h) => h.license)?.license || undefined;
+  const language = deduped.find(h => h.language)?.language || undefined;
+  const mime = deduped.find(h => h.mime_type)?.mime_type || undefined;
+  const license = deduped.find(h => h.license)?.license || undefined;
   const confidential =
-    deduped.find((h) => h.confidential !== null && h.confidential !== undefined)?.confidential ?? false;
+    deduped.find(h => h.confidential !== null && h.confidential !== undefined)?.confidential ?? false;
 
-  const tagNames = Array.from(new Set(deduped.flatMap((h) => h.tag_names || [])));
+  const tagNames = Array.from(new Set(deduped.flatMap(h => h.tag_names || [])));
   const partsCount = deduped.length;
 
   // build snippets for the viewer (prefer viewer_fragment; fallback to content)
   const snippetStrings = deduped
-    .map((h) => h.viewer_fragment || h.content)
+    .map(h => h.viewer_fragment || h.content)
     .filter((s): s is string => Boolean(s && s.trim().length > 0));
 
   const handleOpenDocument = () => {
     // dev logs to confirm payload
     console.groupCollapsed(`[SourceCard] open ${documentId} (${partsCount} parts)`);
     console.table(
-      deduped.map((h) => ({
+      deduped.map(h => ({
         uid: h.uid,
         page: h.page ?? "",
         section: h.section ?? "",
@@ -78,11 +83,14 @@ export const SourceCard = ({ documentId, hits }: SourceCardProps) => {
         lang: h.language ?? "",
         mime: h.mime_type ?? "",
         tag_names: (h.tag_names || []).join(", "),
-      })),
+      }))
     );
     console.groupEnd();
 
-    openDocument({ document_uid: documentId }, { chunksToHighlight: snippetStrings });
+    openDocument(
+      { document_uid: documentId },
+      { chunksToHighlight: snippetStrings }
+    );
   };
 
   return (
@@ -105,7 +113,11 @@ export const SourceCard = ({ documentId, hits }: SourceCardProps) => {
         <ArticleOutlinedIcon sx={{ fontSize: "1.2rem", color: "text.secondary" }} />
 
         <Box sx={{ minWidth: 0, flex: 1, display: "flex", flexDirection: "column" }}>
-          <Typography sx={{ fontSize: "0.9rem", fontWeight: 600 }} noWrap title={title}>
+          <Typography
+            sx={{ fontSize: "0.9rem", fontWeight: 600 }}
+            noWrap
+            title={title}
+          >
             {title}
           </Typography>
 

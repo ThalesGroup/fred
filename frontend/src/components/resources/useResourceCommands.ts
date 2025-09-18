@@ -46,7 +46,10 @@ type UpdateInput = {
   labels?: string[];
 };
 
-export function useResourceCommands(kind: ResourceKind, { refetchTags, refetchResources }: ResourceRefresher = {}) {
+export function useResourceCommands(
+  kind: ResourceKind,
+  { refetchTags, refetchResources }: ResourceRefresher = {},
+) {
   const { t } = useTranslation();
   const { showSuccess, showError } = useToast();
 
@@ -77,7 +80,9 @@ export function useResourceCommands(kind: ResourceKind, { refetchTags, refetchRe
         await refresh();
         showSuccess?.({
           summary: t("resourceLibrary.createSuccess") || "Created",
-          detail: t("resourceLibrary.createDetail", { typeOne: kind }) || "Resource added to the library.",
+          detail:
+            t("resourceLibrary.createDetail", { typeOne: kind }) ||
+            "Resource added to the library.",
         });
       } catch (e: any) {
         showError?.({
@@ -106,7 +111,9 @@ export function useResourceCommands(kind: ResourceKind, { refetchTags, refetchRe
         await refresh();
         showSuccess?.({
           summary: t("resourceLibrary.updateSuccess") || "Updated",
-          detail: t("resourceLibrary.updateDetail", { typeOne: kind }) || "Resource updated.",
+          detail:
+            t("resourceLibrary.updateDetail", { typeOne: kind }) ||
+            "Resource updated.",
         });
       } catch (e: any) {
         showError?.({
@@ -122,21 +129,18 @@ export function useResourceCommands(kind: ResourceKind, { refetchTags, refetchRe
    * Optional fetch to support preview (or to re-fetch before editing).
    * If you’re already passing the full resource down, you don’t need this.
    */
-  const getResource = useCallback(
-    async (resourceId: string) => {
-      try {
-        const res = await triggerGetResource({ resourceId }).unwrap();
-        return res;
-      } catch (e: any) {
-        showError?.({
-          summary: t("validation.error") || "Error",
-          detail: e?.data?.detail || e?.message || "Failed to fetch resource.",
-        });
-        throw e;
-      }
-    },
-    [triggerGetResource, showError, t],
-  );
+  const getResource = useCallback(async (resourceId: string) => {
+    try {
+      const res = await triggerGetResource({ resourceId }).unwrap();
+      return res;
+    } catch (e: any) {
+      showError?.({
+        summary: t("validation.error") || "Error",
+        detail: e?.data?.detail || e?.message || "Failed to fetch resource.",
+      });
+      throw e;
+    }
+  }, [triggerGetResource, showError, t]);
 
   /**
    * Remove a resource from ONE library (current tag system).
@@ -159,7 +163,9 @@ export function useResourceCommands(kind: ResourceKind, { refetchTags, refetchRe
         await refresh();
         showSuccess?.({
           summary: t("resourceLibrary.removeSuccess") || "Removed",
-          detail: t("resourceLibrary.removeDetail", { typeOne: kind }) || "Resource removed from the library.",
+          detail:
+            t("resourceLibrary.removeDetail", { typeOne: kind }) ||
+            "Resource removed from the library.",
         });
       } catch (e: any) {
         showError?.({

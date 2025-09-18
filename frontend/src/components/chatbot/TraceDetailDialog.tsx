@@ -12,26 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Dialog, DialogTitle, DialogContent, DialogActions, Button, Typography, Stack } from "@mui/material";
+import {
+  Dialog, DialogTitle, DialogContent, DialogActions,
+  Button, Typography, Stack
+} from "@mui/material";
 import { AgenticFlow, ChatMessage } from "../../slices/agentic/agenticOpenApi";
 import MessageCard from "./MessageCard";
 
 function safeStringify(v: unknown, space = 2) {
-  try {
-    return JSON.stringify(v, null, space);
-  } catch {
-    return String(v);
-  }
+  try { return JSON.stringify(v, null, space); } catch { return String(v); }
 }
 
 function ToolCall({ m }: { m: ChatMessage }) {
-  const part = (m.parts?.find((p) => p.type === "tool_call") as any) || {};
+  const part = (m.parts?.find(p => p.type === "tool_call") as any) || {};
   return (
     <Stack spacing={0.75}>
       <Typography variant="subtitle2">Tool call</Typography>
-      <Typography variant="body2">
-        <strong>name:</strong> {part?.name ?? "tool"}
-      </Typography>
+      <Typography variant="body2"><strong>name:</strong> {part?.name ?? "tool"}</Typography>
       <Typography variant="body2" component="pre" sx={{ whiteSpace: "pre-wrap", m: 0 }}>
         {safeStringify(part?.args ?? {}, 2)}
       </Typography>
@@ -40,7 +37,7 @@ function ToolCall({ m }: { m: ChatMessage }) {
 }
 
 function ToolResult({ m }: { m: ChatMessage }) {
-  const part = (m.parts?.find((p) => p.type === "tool_result") as any) || {};
+  const part = (m.parts?.find(p => p.type === "tool_result") as any) || {};
   const ok = part?.ok;
   return (
     <Stack spacing={0.75}>
@@ -63,7 +60,7 @@ export default function TraceDetailsDialog({
   open,
   step,
   onClose,
-  resolveAgent,
+  resolveAgent
 }: {
   open: boolean;
   step?: ChatMessage;
@@ -82,13 +79,17 @@ export default function TraceDetailsDialog({
         {step.channel === "tool_call" && <ToolCall m={step} />}
         {step.channel === "tool_result" && <ToolResult m={step} />}
         {step.channel !== "tool_call" && step.channel !== "tool_result" && (
-          <MessageCard message={step} agenticFlow={agent!} currentAgenticFlow={agent!} side="left" enableCopy />
+          <MessageCard
+            message={step}
+            agenticFlow={agent!}
+            currentAgenticFlow={agent!}
+            side="left"
+            enableCopy
+          />
         )}
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose} variant="contained">
-          Close
-        </Button>
+        <Button onClick={onClose} variant="contained">Close</Button>
       </DialogActions>
     </Dialog>
   );

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useMemo } from "react";
+import  { useMemo } from "react";
 import { Box } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import { ResponsiveContainer, CartesianGrid, XAxis, YAxis, Tooltip, Legend, LineChart, Line } from "recharts";
@@ -33,7 +33,7 @@ export function KpiLatencyMini({
   end: Date;
   precision: TimePrecision;
   xDomain?: [number, number];
-  rows: KpiQueryResultRow[]; // 👈 new prop
+  rows: KpiQueryResultRow[];          // 👈 new prop
   height?: number;
   showLegend?: boolean;
 }) {
@@ -53,14 +53,16 @@ export function KpiLatencyMini({
     });
   }, [rows, start, end, precision]);
 
-  const isEmpty = series.every((p) => p.p50 == null && p.p95 == null);
+  const isEmpty = series.every(p => p.p50 == null && p.p95 == null);
   const domain = buildPaddedDomain(precision, xDomain, start, end);
 
   return (
     <Box sx={{ width: "100%", height }}>
       <ResponsiveContainer>
         {isEmpty ? (
-          <Box sx={{ p: 1, fontSize: 12, color: theme.palette.text.secondary }}>No data in the selected range.</Box>
+          <Box sx={{ p: 1, fontSize: 12, color: theme.palette.text.secondary }}>
+            No data in the selected range.
+          </Box>
         ) : (
           <LineChart data={series} margin={{ top: 6, right: 6, left: 0, bottom: 0 }}>
             <CartesianGrid strokeDasharray="2 2" stroke={gridStroke(theme)} />

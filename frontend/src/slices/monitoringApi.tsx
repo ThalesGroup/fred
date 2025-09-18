@@ -40,16 +40,14 @@ export const monitoringApi = createApi({
   reducerPath: "monitoringApi",
   baseQuery: createDynamicBaseQuery({ backend: "api" }),
   endpoints: (builder) => ({
-    fetchNumericalMetrics: builder.mutation<
-      NumericalMetric[],
-      {
-        start: string;
-        end: string;
-        precision?: Precision;
-        agg: string[]; // Ex: ["latency:avg", "total_tokens:sum"]
-        groupby?: string[]; // Ex: "agent_name"
-      }
-    >({
+
+    fetchNumericalMetrics: builder.mutation<NumericalMetric[], {
+      start: string;
+      end: string;
+      precision?: Precision;
+      agg: string[];          // Ex: ["latency:avg", "total_tokens:sum"]
+      groupby?: string[];       // Ex: "agent_name"
+    }>({
       query: ({ start, end, precision = "min", agg, groupby }) => ({
         url: `/agentic/v1/metrics/nodes/numerical`,
         method: "GET",
@@ -58,18 +56,15 @@ export const monitoringApi = createApi({
           end,
           precision,
           ...(groupby ? { groupby } : {}),
-          agg, // Will serialize to multiple &agg=... in query
+          agg,  // Will serialize to multiple &agg=... in query
         },
       }),
     }),
 
-    fetchCategoricalMetrics: builder.mutation<
-      CategoricalMetric[],
-      {
-        start: string;
-        end: string;
-      }
-    >({
+    fetchCategoricalMetrics: builder.mutation<CategoricalMetric[], {
+      start: string;
+      end: string;
+    }>({
       query: ({ start, end }) => ({
         url: `/agentic/v1/metrics/nodes/categorical`,
         method: "GET",
@@ -79,6 +74,12 @@ export const monitoringApi = createApi({
   }),
 });
 
-export const { useFetchNumericalMetricsMutation, useFetchCategoricalMetricsMutation } = monitoringApi;
+export const {
+  useFetchNumericalMetricsMutation,
+  useFetchCategoricalMetricsMutation,
+} = monitoringApi;
 
-export const { reducer: monitoringApiReducer, middleware: monitoringApiMiddleware } = monitoringApi;
+export const {
+  reducer: monitoringApiReducer,
+  middleware: monitoringApiMiddleware,
+} = monitoringApi;

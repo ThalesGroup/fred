@@ -20,7 +20,7 @@ import FredUi from "./app/App.tsx";
 import { store } from "./common/store.tsx";
 import { KeyCloakService } from "./security/KeycloakService.ts";
 import { loadConfig } from "./common/config.tsx";
-import "./i18n";
+import './i18n';
 import "@fontsource/inter/100.css";
 import "@fontsource/inter/200.css";
 import "@fontsource/inter/300.css";

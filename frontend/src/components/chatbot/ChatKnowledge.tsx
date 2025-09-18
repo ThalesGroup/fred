@@ -43,10 +43,19 @@ const ChatKnowledge: React.FC<ChatKnowledgeProps> = ({
 
   if (!open || !hasContext) return null;
 
-  const renderChips = (ids: string[] = [], onDelete?: (id: string) => void, labelMap?: Record<string, string>) => (
+  const renderChips = (
+    ids: string[] = [],
+    onDelete?: (id: string) => void,
+    labelMap?: Record<string, string>
+  ) => (
     <Stack direction="row" flexWrap="wrap" gap={0.5}>
       {ids.map((id) => (
-        <Chip key={id} label={labelMap?.[id] ?? id} size="small" onDelete={onDelete ? () => onDelete(id) : undefined} />
+        <Chip
+          key={id}
+          label={labelMap?.[id] ?? id}
+          size="small"
+          onDelete={onDelete ? () => onDelete(id) : undefined}
+        />
       ))}
     </Stack>
   );
@@ -115,7 +124,9 @@ const ChatKnowledge: React.FC<ChatKnowledgeProps> = ({
               justifyContent="space-between"
               sx={{ border: 1, borderColor: "divider", borderRadius: 2, px: 1, py: 0.5 }}
             >
-              <Typography variant="body2">{t("chatbot.knowledgePanel.audioCount", { count: 1 })}</Typography>
+              <Typography variant="body2">
+                {t("chatbot.knowledgePanel.audioCount", { count: 1 })}
+              </Typography>
               <IconButton size="small" onClick={() => userInputContext.actions?.removeAudio()}>
                 <CloseIcon fontSize="inherit" />
               </IconButton>
@@ -130,7 +141,11 @@ const ChatKnowledge: React.FC<ChatKnowledgeProps> = ({
                 count: userInputContext.documentLibraryIds.length,
               })}
             </Typography>
-            {renderChips(userInputContext.documentLibraryIds, userInputContext.actions?.removeDocLib, libraryNameMap)}
+            {renderChips(
+              userInputContext.documentLibraryIds,
+              userInputContext.actions?.removeDocLib,
+              libraryNameMap
+            )}
           </Box>
         ) : null}
 
@@ -141,7 +156,11 @@ const ChatKnowledge: React.FC<ChatKnowledgeProps> = ({
                 count: userInputContext.promptResourceIds.length,
               })}
             </Typography>
-            {renderChips(userInputContext.promptResourceIds, userInputContext.actions?.removePrompt, promptNameMap)}
+            {renderChips(
+              userInputContext.promptResourceIds,
+              userInputContext.actions?.removePrompt,
+              promptNameMap
+            )}
           </Box>
         ) : null}
 
@@ -155,7 +174,7 @@ const ChatKnowledge: React.FC<ChatKnowledgeProps> = ({
             {renderChips(
               userInputContext.templateResourceIds,
               userInputContext.actions?.removeTemplate,
-              templateNameMap,
+              templateNameMap
             )}
           </Box>
         ) : null}

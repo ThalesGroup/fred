@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+
 import { Theme, alpha } from "@mui/material/styles";
 import { formatTick, TimePrecision } from "./timeAxis";
 
@@ -28,18 +29,9 @@ export function tsTickFormatter(precision: PrecisionStr) {
 export function chartSeriesPalette(theme: Theme, count?: number): string[] {
   const c = (theme.palette as any).chart || {};
   const bases: string[] = [
-    c.primary,
-    c.secondary,
-    c.blue,
-    c.green,
-    c.orange,
-    c.purple,
-    c.red,
-    c.yellow,
-    c.highBlue,
-    c.mediumBlue,
-    c.highGreen,
-    c.mediumGreen,
+    c.primary, c.secondary,
+    c.blue, c.green, c.orange, c.purple, c.red, c.yellow,
+    c.highBlue, c.mediumBlue, c.highGreen, c.mediumGreen,
   ].filter(Boolean);
 
   if (bases.length === 0) {
@@ -49,7 +41,7 @@ export function chartSeriesPalette(theme: Theme, count?: number): string[] {
       theme.palette.success.main,
       theme.palette.info.main,
       theme.palette.warning.main,
-      theme.palette.error.main,
+      theme.palette.error.main
     );
   }
 

@@ -15,6 +15,7 @@
 import { useDrawer } from "../components/DrawerProvider";
 import NewDocumentViewer from "./NewDocumentViewer";
 
+
 export interface NewDocumentViewerDocument {
   document_uid: string;
   file_name?: string;
@@ -42,8 +43,7 @@ export const newUseDocumentViewer = () => {
       ),
       anchor: "right",
     });
-  };
-  screenX;
+  };screenX
 
   const closeDocument = () => {
     closeDrawer();

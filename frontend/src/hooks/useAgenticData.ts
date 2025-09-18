@@ -35,7 +35,8 @@ type SessionMap = Record<string, SessionSchema>;
 
 export function useAgenticData() {
   // --- Remote sources (RTK-Query) ---
-  const { data: flowsData, isLoading: flowsLoading } = useGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery();
+  const { data: flowsData, isLoading: flowsLoading } =
+    useGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery();
 
   const {
     data: sessionsData,
@@ -43,7 +44,8 @@ export function useAgenticData() {
     refetch: refetchSessions,
   } = useGetSessionsAgenticV1ChatbotSessionsGetQuery();
 
-  const [deleteSessionMutation] = useDeleteSessionAgenticV1ChatbotSessionSessionIdDeleteMutation();
+  const [deleteSessionMutation] =
+    useDeleteSessionAgenticV1ChatbotSessionSessionIdDeleteMutation();
 
   // --- Local overlay for sessions (authoritative updates pushed via WS) ---
   // Why: RTK caches server state; WS "final" events or POST responses can arrive out-of-band.
@@ -57,7 +59,9 @@ export function useAgenticData() {
     const map = new Map<string, SessionSchema>(base.map((s) => [s.id, s]));
     for (const s of Object.values(overlay)) map.set(s.id, s);
     // Optional: keep a stable, useful order (last updated first)
-    return Array.from(map.values()).sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
+    return Array.from(map.values()).sort(
+      (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime(),
+    );
   }, [sessionsData, overlay]);
 
   // --- Mutations exposed to UI ---

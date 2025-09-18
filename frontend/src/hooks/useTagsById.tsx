@@ -13,11 +13,7 @@
 // limitations under the License.
 
 import * as React from "react";
-import {
-  TagType,
-  TagWithItemsId,
-  useLazyGetTagKnowledgeFlowV1TagsTagIdGetQuery,
-} from "../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { TagType, TagWithItemsId, useLazyGetTagKnowledgeFlowV1TagsTagIdGetQuery } from "../slices/knowledgeFlow/knowledgeFlowOpenApi";
 
 export function useTagsById(tagIds: string[] | undefined) {
   const [getTag] = useLazyGetTagKnowledgeFlowV1TagsTagIdGetQuery();

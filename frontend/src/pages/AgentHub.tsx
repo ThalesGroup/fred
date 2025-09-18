@@ -95,7 +95,8 @@ const ActionButton = ({
         color: "text.primary",
         "&:hover": {
           borderColor: theme.palette.primary.main,
-          backgroundColor: theme.palette.mode === "dark" ? "rgba(25,118,210,0.10)" : "rgba(25,118,210,0.06)",
+          backgroundColor:
+            theme.palette.mode === "dark" ? "rgba(25,118,210,0.10)" : "rgba(25,118,210,0.06)",
         },
         ...props.sx,
       }}
@@ -239,9 +240,10 @@ export const AgentHub = () => {
                 {categories.map((category, index) => {
                   const isFav = category.name === "favorites";
                   const isTag = !!category.isTag;
-                  const count = isFav
-                    ? favoriteAgents.length
-                    : isTag
+                  const count =
+                    isFav
+                      ? favoriteAgents.length
+                      : isTag
                       ? agenticFlows.filter((a) => a.tag === category.name).length
                       : agenticFlows.length;
 

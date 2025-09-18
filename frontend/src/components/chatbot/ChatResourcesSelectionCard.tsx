@@ -59,9 +59,10 @@ export function ChatResourcesSelectionCard({
   const resourceKind: ResourceKind | undefined =
     libraryType === "prompt" ? "prompt" : libraryType === "template" ? "template" : undefined;
 
-  const { data: fetchedResources = [] } = resourceKind
-    ? useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery({ kind: resourceKind })
-    : ({ data: [] } as { data: Resource[] });
+  const { data: fetchedResources = [] } =
+    resourceKind
+      ? useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery({ kind: resourceKind })
+      : ({ data: [] } as { data: Resource[] });
 
   const [q, setQ] = useState("");
   const [openMap, setOpenMap] = useState<Record<string, boolean>>({});
@@ -76,7 +77,7 @@ export function ChatResourcesSelectionCard({
           description: x.description ?? null,
         }))
         .sort((a, b) => a.name.localeCompare(b.name)),
-    [tags],
+    [tags]
   );
 
   // tagId -> resources[]
@@ -98,7 +99,7 @@ export function ChatResourcesSelectionCard({
       (l) =>
         l.name.toLowerCase().includes(needle) ||
         (l.path ?? "").toLowerCase().includes(needle) ||
-        (l.description ?? "").toLowerCase().includes(needle),
+        (l.description ?? "").toLowerCase().includes(needle)
     );
   }, [libs, q]);
 
@@ -170,7 +171,9 @@ export function ChatResourcesSelectionCard({
                     }
                   >
                     <ListItemButton onClick={() => toggleOpen(lib.id)}>
-                      <ListItemText primary={lib.name} />
+                      <ListItemText
+                        primary={lib.name}
+                        />
                     </ListItemButton>
                   </ListItem>
 
@@ -180,7 +183,7 @@ export function ChatResourcesSelectionCard({
                       {contents.map((r) => {
                         const resChecked = selectedResourceIds.includes(r.id);
                         return (
-                          <ListItem key={r.id} dense>
+                          <ListItem key={r.id} dense >
                             <ListItemButton onClick={() => toggleSelectResource(r.id)} selected={resChecked}>
                               <ListItemIcon sx={{ minWidth: 36 }}>
                                 <Checkbox
@@ -191,7 +194,9 @@ export function ChatResourcesSelectionCard({
                                   onChange={() => toggleSelectResource(r.id)}
                                 />
                               </ListItemIcon>
-                              <ListItemText primary={r.name} />
+                              <ListItemText
+                                primary={r.name}
+                              />
                             </ListItemButton>
                           </ListItem>
                         );

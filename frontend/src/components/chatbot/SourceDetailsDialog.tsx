@@ -54,23 +54,27 @@ export function SourceDetailsDialog({
   const deduped = dedupe(sorted);
 
   const title =
-    (deduped.find((h) => h.title)?.title || deduped[0]?.title)?.trim() || deduped[0]?.file_name?.trim() || documentId;
+    (deduped.find(h => h.title)?.title || deduped[0]?.title)?.trim() ||
+    deduped[0]?.file_name?.trim() ||
+    documentId;
 
-  const bestScore = Math.max(...deduped.map((h) => h.score ?? 0));
-  const author = deduped.find((h) => h.author)?.author || undefined;
-  const created = firstDate(deduped.map((h) => h.created).filter(Boolean) as string[]);
-  const modified = firstDate(deduped.map((h) => h.modified).filter(Boolean) as string[]);
-  const language = deduped.find((h) => h.language)?.language || undefined;
-  const license = deduped.find((h) => h.license)?.license || undefined;
-  const fileName = deduped.find((h) => h.file_name)?.file_name || undefined;
-  const filePath = deduped.find((h) => h.file_path)?.file_path || undefined;
-  const repo = deduped.find((h) => h.repository)?.repository || undefined;
-  const pull = deduped.find((h) => h.pull_location)?.pull_location || undefined;
-  const tags = Array.from(new Set(deduped.flatMap((h) => h.tag_names || [])));
-  const confidential = !!deduped.find((h) => h.confidential)?.confidential;
+  const bestScore = Math.max(...deduped.map(h => h.score ?? 0));
+  const author = deduped.find(h => h.author)?.author || undefined;
+  const created = firstDate(deduped.map(h => h.created).filter(Boolean) as string[]);
+  const modified = firstDate(deduped.map(h => h.modified).filter(Boolean) as string[]);
+  const language = deduped.find(h => h.language)?.language || undefined;
+  const license = deduped.find(h => h.license)?.license || undefined;
+  const fileName = deduped.find(h => h.file_name)?.file_name || undefined;
+  const filePath = deduped.find(h => h.file_path)?.file_path || undefined;
+  const repo = deduped.find(h => h.repository)?.repository || undefined;
+  const pull = deduped.find(h => h.pull_location)?.pull_location || undefined;
+  const tags = Array.from(new Set(deduped.flatMap(h => h.tag_names || [])));
+  const confidential = !!deduped.find(h => h.confidential)?.confidential;
 
   const highlightAll = () => {
-    const chunks = deduped.map((h) => h.viewer_fragment || h.content).filter((s): s is string => !!(s && s.trim()));
+    const chunks = deduped
+      .map(h => h.viewer_fragment || h.content)
+      .filter((s): s is string => !!(s && s.trim()));
     openDocument({ document_uid: documentId }, { chunksToHighlight: chunks });
     onClose();
   };
@@ -93,9 +97,7 @@ export function SourceDetailsDialog({
           {language && <Chip size="small" label={language} variant="outlined" />}
           {license && <Chip size="small" label={`license: ${license}`} variant="outlined" />}
           {confidential && <Chip size="small" color="warning" label="Confidential" />}
-          {tags.slice(0, 6).map((t) => (
-            <Chip key={t} size="small" label={t} />
-          ))}
+          {tags.slice(0, 6).map(t => <Chip key={t} size="small" label={t} />)}
           {tags.length > 6 && <Chip size="small" label={`+${tags.length - 6}`} />}
         </Box>
       </DialogTitle>
@@ -137,7 +139,7 @@ export function SourceDetailsDialog({
             <Box
               key={`${documentId}-${i}`}
               sx={{
-                border: (theme) => `1px solid ${theme.palette.divider}`,
+                border: theme => `1px solid ${theme.palette.divider}`,
                 borderRadius: 1,
                 p: 1,
               }}
@@ -194,9 +196,7 @@ function Meta({ label, value }: { label: string; value: string }) {
         {label}
       </Typography>
       <Tooltip title={value}>
-        <Typography variant="body2" noWrap>
-          {value}
-        </Typography>
+        <Typography variant="body2" noWrap>{value}</Typography>
       </Tooltip>
     </Box>
   );
@@ -218,12 +218,7 @@ function pickFirstUrl(parts: Array<string | undefined>) {
 function dedupe(arr: VectorSearchHit[]) {
   return arr.filter((h, i, a) => {
     const key = `${h.page ?? ""}|${h.section ?? ""}|${h.viewer_fragment ?? ""}|${(h.content || "").slice(0, 80)}`;
-    return (
-      a.findIndex(
-        (x) =>
-          `${x.page ?? ""}|${x.section ?? ""}|${x.viewer_fragment ?? ""}|${(x.content || "").slice(0, 80)}` === key,
-      ) === i
-    );
+    return a.findIndex(x => `${x.page ?? ""}|${x.section ?? ""}|${x.viewer_fragment ?? ""}|${(x.content || "").slice(0, 80)}` === key) === i;
   });
 }
 

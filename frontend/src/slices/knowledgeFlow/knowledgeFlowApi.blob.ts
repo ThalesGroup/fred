@@ -13,7 +13,10 @@ export const blobApi = api.injectEndpoints({
     }),
 
     // Markdown media file as Blob
-    downloadMarkdownMediaBlob: build.query<Blob, { documentUid: string; mediaId: string }>({
+    downloadMarkdownMediaBlob: build.query<
+      Blob,
+      { documentUid: string; mediaId: string }
+    >({
       query: ({ documentUid, mediaId }) => ({
         url: `/knowledge-flow/v1/markdown/${documentUid}/media/${mediaId}`,
         responseHandler: (response) => response.blob(),
