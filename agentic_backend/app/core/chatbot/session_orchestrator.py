@@ -10,10 +10,13 @@ import secrets
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Awaitable, Callable, List, Optional, Tuple
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 from uuid import uuid4
 
 from fastapi import UploadFile
+# (Optionnel) trace léger si tu veux l'utiliser plus tard
+# from app.core.chatbot.orchestration_trace import OrchestrationTrace
+
 from fred_core import Action, KeycloakUser, KPIActor, KPIWriter, Resource, authorize
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 
@@ -53,15 +56,13 @@ def _utcnow_dt() -> datetime:
 
 class SessionOrchestrator:
     """
-    Why this class exists (architecture note):
-      Keep the controller thin. This orchestrator is the ONLY entry point used by
-      the WebSocket/API layer to run a chat exchange. It owns:
-        - session lifecycle (get/create, title)
-        - emitting the user message
-        - KPI timing and counters
-        - persistence of session + history
-      It delegates ALL streaming/transcoding of LangGraph events to StreamTranscoder.
-      Result: Single Responsibility, easy to unit test, and the WS layer remains simple.
+    Keep the controller thin. This orchestrator is the ONLY entry point used by
+    the WebSocket/API layer to run a chat exchange. It owns:
+      - session lifecycle
+      - emitting the user message
+      - KPI timing and counters
+      - persistence of session + history
+    It delegates ALL streaming/transcoding of LangGraph events to StreamTranscoder.
     """
 
     def __init__(self, session_store: BaseSessionStore, agent_manager: AgentManager):
@@ -96,12 +97,6 @@ class SessionOrchestrator:
     ) -> Tuple[SessionSchema, List[ChatMessage]]:
         """
         Entry point called by the WebSocket controller for a user question.
-        Responsibility:
-          - ensure session exists and rebuild minimal LC history
-          - emit the user message
-          - time + run the agent via StreamTranscoder
-          - persist session + history
-          - record KPIs (success/error)
         """
         logger.info(
             "chat_ask_websocket user_id=%s session_id=%s agent=%s",
@@ -154,8 +149,11 @@ class SessionOrchestrator:
 
         # 3) Stream agent responses via the transcoder
         saw_final_assistant = False
+
+        # --- NEW: compose a callback that enriches assistant messages with used-only plugins
+        enriched_callback = self._wrap_with_plugins_used(callback, runtime_context)
+
         try:
-            # Timer covers the entire exchange; status defaults to "error" if exception bubbles.
             with self.kpi.timer(
                 "chat.exchange_latency_ms",
                 dims={
@@ -174,19 +172,16 @@ class SessionOrchestrator:
                     agent_name=agent_name,
                     base_rank=base_rank,
                     start_seq=1,  # user message already consumed rank=base_rank
-                    callback=callback,
+                    callback=enriched_callback,  # <- inject enrichment centrally
                 )
                 all_msgs.extend(agent_msgs)
-                # Success signal: exactly one assistant/final per exchange (enforced by transcoder)
                 saw_final_assistant = any(
                     (m.role == Role.assistant and m.channel == Channel.final)
                     for m in agent_msgs
                 )
         except Exception:
             logger.exception("Agent execution failed")
-            # KPI timer already recorded status="error" on exception
         finally:
-            # Count the exchange outcome
             self.kpi.count(
                 "chat.exchange_total",
                 1,
@@ -208,18 +203,10 @@ class SessionOrchestrator:
 
         return session, all_msgs
 
-    # ---------------- Session/History helpers (intentionally here) ----------------
+    # ---------------- Session/History helpers ----------------
 
     @authorize(action=Action.READ, resource=Resource.SESSIONS)
-    def get_sessions(
-        self,
-        user: KeycloakUser,
-    ) -> List[SessionWithFiles]:
-        """
-        Why here:
-          Listing sessions is part of the conversational lifecycle exposed to the UI.
-          Keeping it on the orchestrator avoids leaking session_store details upward.
-        """
+    def get_sessions(self, user: KeycloakUser) -> List[SessionWithFiles]:
         sessions = self.session_store.get_for_user(user.uid)
         enriched: List[SessionWithFiles] = []
         for session in sessions:
@@ -235,9 +222,7 @@ class SessionOrchestrator:
         return enriched
 
     @authorize(action=Action.READ, resource=Resource.SESSIONS)
-    def get_session_history(
-        self, session_id: str, user: KeycloakUser
-    ) -> List[ChatMessage]:
+    def get_session_history(self, session_id: str, user: KeycloakUser) -> List[ChatMessage]:
         # TODO: check session belongs to user
         return self.history_store.get(session_id) or []
 
@@ -246,18 +231,15 @@ class SessionOrchestrator:
         # TODO: check session belongs to user
         self.session_store.delete(session_id)
 
-    # ---------------- File uploads (kept for backward compatibility) ----------------
+    # ---------------- File uploads ----------------
 
     @authorize(action=Action.CREATE, resource=Resource.MESSAGE_ATTACHMENTS)
     async def upload_file(
         self, user: KeycloakUser, session_id: str, agent_name: str, file: UploadFile
     ) -> dict:
         """
-        Purpose:
-          Keep simple "drop a file into this session's temp area" behavior unchanged,
-          so the UI doesn't need to move right now. Can be split later to a dedicated service.
+        Simple temp storage for uploaded files tied to a session.
         """
-        # TODO: check session belongs to user
         try:
             session_folder = self._get_session_temp_folder(session_id)
             if file.filename is None:
@@ -267,7 +249,7 @@ class SessionOrchestrator:
             with open(file_path, "wb") as f:
                 f.write(content)
 
-            # Kick attachment processing (same behavior as before)
+            # Keep existing attachment pipeline
             self.attachement_processing.process_attachment(file_path)
 
             logger.info(
@@ -316,9 +298,7 @@ class SessionOrchestrator:
 
     async def _emit(self, callback: CallbackType, message: ChatMessage) -> None:
         """
-        Purpose:
-          Uniformly support sync OR async callbacks from the WS layer without
-          duplicating code at call sites.
+        Supports sync OR async callbacks uniformly.
         """
         result = callback(message.model_dump())
         if asyncio.iscoroutine(result):
@@ -333,18 +313,11 @@ class SessionOrchestrator:
         agent_name: str,
         runtime_context: RuntimeContext | None = None,
     ) -> tuple[SessionSchema, list[BaseMessage], AgentFlow, bool]:
-        """
-        Why here:
-          Session creation, title generation and *minimal* LC history reconstruction
-          are orchestration concerns. We keep the LangChain history intentionally
-          lean (user/assistant/system only) to avoid leaking UI-specific messages
-          (tools, thought traces) into the prompt.
-        """
         session, is_new_session = self._get_or_create_session(
             user_id=user.uid, query=message, session_id=session_id
         )
 
-        # Rebuild minimal LangChain history (user/assistant/system only)
+        # Minimal LC history (user/assistant/system only)
         lc_history: list[BaseMessage] = []
         for m in self.get_session_history(session.id, user):
             if m.role == Role.user:
@@ -391,9 +364,157 @@ class SessionOrchestrator:
         logger.info("Created new session %s for user %s", new_session_id, user_id)
         return session, True
 
+    # ---------- enrichment helpers (used-only plugins) ----------
+
+    def _wrap_with_plugins_used(
+        self,
+        inner_cb: CallbackType,
+        runtime_context: Optional[RuntimeContext],
+    ) -> CallbackType:
+        """
+        Agrège l'usage 'used-only' sur l'ENTIER flux puis l'injecte dans metadata.extras.plugins.
+        - Ne jette jamais d'exception.
+        - N'écrase pas extras.plugins existant : on merge.
+        - Déduit tools depuis les tool_calls de TOUT message streamé.
+        - Déduit libraries depuis metadata.sources (tous messages), avec fallback RC si sources>0.
+        - Compte docs_used cumulés.
+        - Remonte search_policy depuis runtime_context si connue.
+        """
+
+        # --- état d'agrégation pour CETTE requête
+        seen_tools: set[str] = set()
+        seen_libs: set[str] = set()
+        docs_used_total: int = 0
+        search_policy_val: Optional[str] = self._extract_search_policy(runtime_context)
+
+        async def _cb(msg_dict: Dict[str, Any]) -> None:
+            nonlocal docs_used_total
+
+            try:
+                role = msg_dict.get("role")
+
+                # 1) agrégation globale depuis CHAQUE message du stream
+                # tools via parts[].type == "tool_call"
+                for p in (msg_dict.get("parts") or []):
+                    if isinstance(p, dict) and p.get("type") == "tool_call":
+                        name = p.get("name")
+                        if name:
+                            seen_tools.add(str(name))
+
+                # sources (pour libs + docs_used)
+                md = msg_dict.get("metadata") or {}
+                sources = md.get("sources")
+                if isinstance(sources, list) and sources:
+                    docs_used_total += len(sources)
+                    # extraire les ids de biblio depuis chaque hit
+                    for s in sources:
+                        lib = self._extract_library_from_source(s)
+                        if lib:
+                            seen_libs.add(lib)
+
+                # 2) au moment d'un message assistant, on publie l'état agrégé
+                if role == "assistant":
+                    md = msg_dict.setdefault("metadata", {})
+                    extras = md.setdefault("extras", {})
+                    existing = extras.get("plugins") if isinstance(extras.get("plugins"), dict) else {}
+
+                    # si on a des sources mais aucune lib détectée, fallback RC
+                    if docs_used_total > 0 and not seen_libs and runtime_context is not None:
+                        selected = (
+                            getattr(runtime_context, "selected_document_libraries_ids", None)
+                            if not isinstance(runtime_context, dict)
+                            else runtime_context.get("selected_document_libraries_ids")
+                        )
+                        if selected:
+                            for lib in selected:
+                                if lib:
+                                    seen_libs.add(str(lib))
+
+                    # construire le bloc 'used-only'
+                    used_plugins: Dict[str, Any] = {}
+                    if seen_tools:
+                        used_plugins["tools"] = sorted(seen_tools)
+                    if seen_libs:
+                        used_plugins["libraries"] = sorted(seen_libs)
+                    if docs_used_total:
+                        used_plugins["docs_used"] = docs_used_total
+                    if search_policy_val:
+                        used_plugins["search_policy"] = search_policy_val
+
+                    # merge non destructif avec ce qui existe déjà
+                    if existing:
+                        merged = {**used_plugins, **existing}  # existing prioritaire si conflit
+                        extras["plugins"] = merged
+                    elif used_plugins:
+                        extras["plugins"] = used_plugins
+
+                    md["extras"] = extras
+                    msg_dict["metadata"] = md
+
+            except Exception:
+                # ne jamais bloquer le stream
+                pass
+
+            res = inner_cb(msg_dict)
+            if asyncio.iscoroutine(res):
+                await res
+
+        return _cb  # type: ignore
+
+    # -------- helpers extraction tolérants --------
+
+    def _extract_library_from_source(self, src: Any) -> Optional[str]:
+        """
+        Tente de récupérer un identifiant de 'bibliothèque' depuis un VectorSearchHit
+        ou un dict approchant. On essaie plusieurs clés courantes.
+        """
+        if src is None:
+            return None
+
+        # dict
+        if isinstance(src, dict):
+            for key in (
+                "library_id",
+                "document_library_id",
+                "collection",
+                "index",
+                "index_name",
+                "source_library",
+                "corpus",
+                "dataset",
+            ):
+                val = src.get(key)
+                if val:
+                    return str(val)
+            return None
+
+        # pydantic / objet
+        for key in (
+            "library_id",
+            "document_library_id",
+            "collection",
+            "index",
+            "index_name",
+            "source_library",
+            "corpus",
+            "dataset",
+        ):
+            val = getattr(src, key, None)
+            if val:
+                return str(val)
+        return None
+
+    def _extract_search_policy(self, rc: Optional[RuntimeContext]) -> Optional[str]:
+        if not rc:
+            return None
+        if isinstance(rc, dict):
+            policy = rc.get("search_policy")
+            return str(policy) if isinstance(policy, str) and policy else None
+        policy = getattr(rc, "search_policy", None)
+        return str(policy) if isinstance(policy, str) and policy else None
+
 
 # ---------- pure helpers (kept local for discoverability) ----------
-
 
 def _concat_text_parts(parts) -> str:
     texts: list[str] = []
