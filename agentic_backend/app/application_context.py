@@ -41,6 +41,7 @@ from fred_core import (
     LogStoreConfig,
     OpenSearchIndexConfig,
     OpenSearchKPIStore,
+    get_model,
     split_realm_url,
 )
 from langchain_core.language_models.base import BaseLanguageModel
@@ -53,7 +54,6 @@ from app.common.structures import (
 )
 from app.core.agents.store.base_agent_store import BaseAgentStore
 from app.core.feedback.store.base_feedback_store import BaseFeedbackStore
-from app.core.model.model_factory import get_model
 from app.core.monitoring.base_history_store import BaseHistoryStore
 from app.core.session.stores.base_session_store import BaseSessionStore
 

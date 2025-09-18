@@ -19,6 +19,11 @@ app:
   reload: false
   reload_dir: "."
 
+processing:
+  generate_summary: true
+  use_gpu: true
+  process_images: true
+
 security:
   m2m:
     enabled: true
@@ -43,7 +48,7 @@ scheduler:
 
 input_processors:
   - prefix: ".pdf"
-    class_path: app.core.processors.input.pdf_markdown_processor.openai_pdf_markdown_processor.OpenaiPdfMarkdownProcessor
+    class_path: app.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor
   - prefix: ".docx"
     class_path: app.core.processors.input.docx_markdown_processor.docx_markdown_processor.DocxMarkdownProcessor
   - prefix: ".pptx"
@@ -85,14 +90,80 @@ document_sources:
     prefix: ""
     secure: false
 
+model:
+  provider: openai
+  name: gpt-4o-mini # any chat-capable model (gpt-4o, gpt-4o-mini, gpt-4.1, etc.)
+  settings:
+    temperature: 0 # optional, forwarded to LangChain wrapper
+    max_retries: 2 # optional
 embedding:
-  type: "openai"
-  # Set to false to disable GPU usage even if available, the pdf processor
-  # will then only use CPU. This can help if you have a GPU without enough
-  # memory to process large documents.
-  use_gpu: true
-  # Enable or disable image processing in documents
-  process_images: true
+  provider: openai
+  name: text-embedding-ada-002 # or text-embedding-3-small
+  settings: {}
+vision:
+  provider: openai
+  name: gpt-4o-mini # or gpt-4o if you want higher fidelity
+  settings:
+    temperature: 0 # optional
+    max_retries: 2 # optional
+
+# model:
+#   provider: ollama
+#   name: qwen2.5:3b-instruct         # any chat-capable Ollama model you pulled
+#   settings:
+#     base_url: http://localhost:11434
+#     temperature: 0.7                # optional, forwarded to LangChain Ollama wrapper
+
+# embedding:
+#   provider: ollama
+#   name: nomic-embed-text            # embedding model served by Ollama
+#   settings:
+#     base_url: http://localhost:11434
+
+# model:
+#   provider: azure
+#   # azure use deployment name instead of a plain model name as openai. The principle
+#   # is the same.
+#   name: fred-gpt-4o              # Azure deployment name for your chat model
+#   settings:
+#     azure_endpoint: https://<your-azure-openai>.openai.azure.com
+#     azure_api_version: 2024-05-01-preview
+# embedding:
+#   provider: azure
+#   # azure use deployment name instead of a plain model name as openai. The principle
+#   # is the same.
+#   name: fred-embed-3             # Azure deployment name for your embedding model
+#   settings:
+#     azure_endpoint: https://<your-azure-openai>.openai.azure.com
+#     azure_api_version: 2024-05-01-preview
+
+# embedding:
+#   provider: azureapim
+#   # azure use deployment name instead of a plain model name as openai. The principle
+#   # is the same.
+#   name: fred-text-embedding-3-large
+#   settings: {
+#     azure_apim_base_url: "https://trustnest.azure-api.net"
+#     azure_resource_path: "/genai-aoai-inference/v1"
+#     azure_api_version: "2024-06-01"
+#     azure_tenant_id: "your-tenant-id"
+#     azure_client_id: "your-client-id"
+#     azure_client_scope: "api://your-client-id/.default"
+#   }
+
+# model:
+#   provider: azureapim        # openai | azure | ollama
+#   # azure use deployment name instead of a plain model name as openai. The principle
+#   # is the same.
+#   name: gpt-4o
+#   settings: {
+#     azure_apim_base_url: "https://trustnest.azure-api.net"
+#     azure_resource_path: "/genai-aoai-inference/v2"
+#     azure_api_version: "2024-06-01"
+#     azure_tenant_id: "your-tenant-id"
+#     azure_client_id: "your-client-id"
+#     azure_client_scope: "api://your-client-id/.default"
+#   }
 
 storage:
   postgres:
