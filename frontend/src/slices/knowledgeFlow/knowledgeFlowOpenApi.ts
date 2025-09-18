@@ -315,6 +315,26 @@ const injectedRtkApi = api.injectEndpoints({
     osDiagnostics: build.query<OsDiagnosticsApiResponse, OsDiagnosticsApiArg>({
       query: () => ({ url: `/knowledge-flow/v1/os/diagnostics` }),
     }),
+    processDocumentsKnowledgeFlowV1ProcessDocumentsPost: build.mutation<
+      ProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostApiResponse,
+      ProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/process-documents`,
+        method: "POST",
+        body: queryArg.processDocumentsRequest,
+      }),
+    }),
+    scheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPost: build.mutation<
+      ScheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPostApiResponse,
+      ScheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/schedule-documents`,
+        method: "POST",
+        body: queryArg.processDocumentsRequest,
+      }),
+    }),
   }),
   overrideExisting: false,
 });
@@ -539,6 +559,15 @@ export type OsShardsApiArg = {
 };
 export type OsDiagnosticsApiResponse = /** status 200 Successful Response */ any;
 export type OsDiagnosticsApiArg = void;
+export type ProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostApiResponse = /** status 200 Successful Response */ any;
+export type ProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostApiArg = {
+  processDocumentsRequest: ProcessDocumentsRequest;
+};
+export type ScheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPostApiResponse =
+  /** status 200 Successful Response */ any;
+export type ScheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPostApiArg = {
+  processDocumentsRequest: ProcessDocumentsRequest;
+};
 export type Identity = {
   /** Original file name incl. extension */
   document_name: string;
@@ -883,6 +912,20 @@ export type KpiQuery = {
   limit?: number;
   order_by?: OrderBy | null;
 };
+export type FileToProcess = {
+  source_tag: string;
+  tags?: string[];
+  display_name?: string | null;
+  document_uid?: string | null;
+  external_path?: string | null;
+  size?: number | null;
+  modified_time?: number | null;
+  hash?: string | null;
+};
+export type ProcessDocumentsRequest = {
+  files: FileToProcess[];
+  pipeline_name: string;
+};
 export const {
   useHealthzKnowledgeFlowV1HealthzGetQuery,
   useLazyHealthzKnowledgeFlowV1HealthzGetQuery,
@@ -955,4 +998,6 @@ export const {
   useLazyOsShardsQuery,
   useOsDiagnosticsQuery,
   useLazyOsDiagnosticsQuery,
+  useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation,
+  useScheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPostMutation,
 } = injectedRtkApi;
