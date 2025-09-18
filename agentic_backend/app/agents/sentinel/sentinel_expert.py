@@ -18,6 +18,7 @@ import json
 import logging
 from typing import Any, Dict, List
 
+from fred_core import get_model
 from langchain_core.messages import HumanMessage, ToolMessage
 from langgraph.constants import START
 from langgraph.graph import MessagesState, StateGraph
@@ -28,7 +29,6 @@ from app.common.mcp_runtime import MCPRuntime
 from app.common.resilient_tool_node import make_resilient_tools_node
 from app.common.structures import AgentSettings
 from app.core.agents.flow import AgentFlow
-from app.core.model.model_factory import get_model
 
 logger = logging.getLogger(__name__)
 

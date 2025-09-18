@@ -182,11 +182,29 @@ class Processing(BaseModel):
         return all(v == ProcessingStatus.DONE for v in self.stages.values())
 
 
+class DocSummary(BaseModel):
+    """
+    Fred rationale:
+    - Store *document-level* summarization once (avoid chunk bloat).
+    - Keep provenance to make results auditable and cache-bustable.
+    - UI reads this to show 'Abstract' and 'Key terms' on demand.
+    """
+
+    abstract: Optional[str] = Field(default=None, description="Concise doc abstract for humans (UI).")
+    keywords: Optional[List[str]] = Field(default=None, description="Top key terms for navigation and filters.")
+    model_name: Optional[str] = Field(default=None, description="LLM/flow used to produce this summary.")
+    method: Optional[str] = Field(default=None, description="Algorithm/flow id (e.g., 'SmartDocSummarizer@v1').")
+    created_at: Optional[datetime] = Field(default=None, description="UTC when this summary was computed.")
+
+
 class DocumentMetadata(BaseModel):
     # === Core ===
     identity: Identity
     source: SourceInfo
     file: FileInfo = Field(default_factory=FileInfo)
+
+    # Optional summary produced by a summarization processor
+    summary: Optional[DocSummary] = None
 
     # === Business & Access ===
     tags: Tagging = Field(default_factory=Tagging)
@@ -201,7 +219,17 @@ class DocumentMetadata(BaseModel):
 
     extensions: Optional[Dict[str, Any]] = Field(default=None, description="Processor-specific additional attributes (namespaced keys).")
 
-    # ---- Convenience passthroughs (compat with v1) ----
+    # - Optional summary lets us ingest at scale and compute value later.
+    # - Helpers keep call-sites explicit and avoid None gymnastics.
+    def has_summary(self) -> bool:
+        """True when a human-usable abstract/keywords exist."""
+        s = self.summary
+        return bool(s and (s.abstract or (s.keywords and len(s.keywords) > 0)))
+
+    def clear_summary(self) -> None:
+        """Drop stale/low-quality summary without touching other fields."""
+        self.summary = None
+
     @property
     def document_name(self) -> str:
         return self.identity.document_name

@@ -21,7 +21,6 @@ from langchain.embeddings.base import Embeddings
 from langchain.schema.document import Document
 from langchain_community.vectorstores import Weaviate
 
-from app.common.utils import get_embedding_model_name
 from app.core.stores.vector.base_vector_store import BaseVectorStore
 
 logger = logging.getLogger(__name__)
@@ -31,11 +30,13 @@ class WeaviateVectorStore(BaseVectorStore):
     def __init__(
         self,
         embedding_model: Embeddings,
+        embedding_model_name: str,
         host: str,
         index_name: str = "CodeDocuments",
         text_key: str = "content",
     ):
         self.embedding_model = embedding_model
+        self.embedding_model_name = embedding_model_name
         self.index_name = index_name
         self.text_key = text_key
         self.client = weaviate.Client(host)  # v3 syntax
@@ -72,7 +73,7 @@ class WeaviateVectorStore(BaseVectorStore):
             doc.metadata["score"] = score
             doc.metadata["rank"] = rank
             doc.metadata["retrieved_at"] = datetime.now(timezone.utc).isoformat()
-            doc.metadata["embedding_model"] = get_embedding_model_name(self.embedding_model)
+            doc.metadata["embedding_model"] = self.embedding_model_name or "unknown"
             doc.metadata["vector_index"] = self.index_name
             doc.metadata["token_count"] = len(doc.page_content.split())
             enriched.append((doc, score))
