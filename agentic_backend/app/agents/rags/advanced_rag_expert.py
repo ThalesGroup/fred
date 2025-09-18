@@ -16,7 +16,7 @@
 import logging
 from typing import Any, Dict, List, Optional, cast
 
-from fred_core import VectorSearchHit
+from fred_core import VectorSearchHit, get_model
 from langchain.prompts import ChatPromptTemplate
 from langchain_core.messages import AIMessage, ToolMessage
 from langgraph.graph import END, StateGraph
@@ -35,7 +35,6 @@ from app.core.agents.runtime_context import (
     get_document_library_tags_ids,
     get_search_policy,
 )
-from fred_core import get_model
 
 logger = logging.getLogger(__name__)
 

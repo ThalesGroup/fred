@@ -16,11 +16,11 @@ import logging
 from datetime import datetime
 from typing import List
 
+from fred_core import get_model
 from langgraph.graph import END, START, MessagesState, StateGraph
 
 from app.common.structures import AgentSettings
 from app.core.agents.flow import AgentFlow
-from fred_core import get_model
 
 logger = logging.getLogger(__name__)
 

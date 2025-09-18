@@ -16,10 +16,10 @@
 # Copyright Thales 2025
 # Apache-2.0
 
-from typing import List, Optional
-import re
 import logging
+import re
 from collections import Counter
+from typing import List, Optional
 
 from app.core.processors.output.summarizer.base_summarizer import BaseDocSummarizer
 

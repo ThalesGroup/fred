@@ -15,11 +15,11 @@
 from typing import Any, Dict, List, Literal, Optional
 
 from fred_core import (
+    ModelConfiguration,
     OpenSearchStoreConfig,
     PostgresStoreConfig,
     SecurityConfiguration,
     StoreConfig,
-    ModelConfiguration,
 )
 from pydantic import BaseModel, Field
 

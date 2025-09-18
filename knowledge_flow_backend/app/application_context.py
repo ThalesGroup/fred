@@ -433,7 +433,7 @@ class ApplicationContext:
         """
         if self._vector_store_instance is not None:
             return self._vector_store_instance
-
+        embedding_model_name = self.configuration.embedding.name or "unknown"
         store = self.configuration.storage.vector_store
 
         if isinstance(store, OpenSearchVectorIndexConfig):
@@ -444,6 +444,7 @@ class ApplicationContext:
 
             self._vector_store_instance = OpenSearchVectorStoreAdapter(
                 embedding_model=embedding_model,
+                embedding_model_name=embedding_model_name,
                 host=opensearch_config.host,
                 index=store.index,
                 username=opensearch_config.username,
@@ -466,9 +467,10 @@ class ApplicationContext:
                 persist_path=str(local_path),
                 collection_name=store.collection_name,
                 embeddings=embedding_model,
+                embedding_model_name=embedding_model_name,
             )
         elif isinstance(store, InMemoryVectorStorage):
-            self._vector_store_instance = InMemoryLangchainVectorStore(embedding_model=embedding_model)
+            self._vector_store_instance = InMemoryLangchainVectorStore(embedding_model=embedding_model, embedding_model_name=embedding_model_name)
         else:
             raise ValueError("Unsupported vector store backend")
         return self._vector_store_instance

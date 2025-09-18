@@ -14,6 +14,7 @@
 
 from datetime import datetime
 
+from fred_core import get_model
 from langgraph.constants import START
 from langgraph.graph import MessagesState, StateGraph
 from langgraph.prebuilt import tools_condition
@@ -22,7 +23,6 @@ from app.common.mcp_runtime import MCPRuntime
 from app.common.resilient_tool_node import make_resilient_tools_node
 from app.common.structures import AgentSettings
 from app.core.agents.flow import AgentFlow
-from fred_core import get_model
 
 
 class JiraExpert(AgentFlow):

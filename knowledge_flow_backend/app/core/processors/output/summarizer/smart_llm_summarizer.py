@@ -27,10 +27,11 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import List, Optional, Tuple, Protocol
+from typing import List, Optional, Protocol, Tuple
+
+from langchain.schema.document import Document
 
 from app.common.structures import ModelConfiguration
-from langchain.schema.document import Document
 
 # Contracts + concrete summarizers
 from app.core.processors.output.summarizer.base_summarizer import BaseDocSummarizer

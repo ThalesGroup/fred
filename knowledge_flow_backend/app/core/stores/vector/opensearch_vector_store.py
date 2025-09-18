@@ -17,11 +17,9 @@ from datetime import datetime, timezone
 from typing import Dict, List, Optional, Sequence
 
 from langchain.schema.document import Document
+from langchain_community.vectorstores import OpenSearchVectorSearch
 from langchain_core.embeddings import Embeddings
 
-from langchain_community.vectorstores import OpenSearchVectorSearch
-
-from app.application_context import get_configuration
 from app.core.stores.vector.base_vector_store import CHUNK_ID_FIELD, AnnHit, BaseVectorStore, LexicalHit, LexicalSearchable, SearchFilter
 
 logger = logging.getLogger(__name__)
@@ -40,6 +38,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
     def __init__(
         self,
         embedding_model: Embeddings,
+        embedding_model_name: str,
         host: str,
         index: str,
         username: str,
@@ -56,7 +55,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
         self._secure = secure
         self._verify_certs = verify_certs
         self._bulk_size = bulk_size
-
+        self._embedding_model_name = embedding_model_name
         self._vs: OpenSearchVectorSearch | None = None
         self._expected_dim: int | None = None
 
@@ -109,7 +108,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
                     ids.append(cid)
 
             assigned_ids = list(self._lc.add_documents(documents, ids=ids))
-            model_name = get_configuration().embedding.name or "unknown"
+            model_name = self._embedding_model_name or "unknown"
             now_iso = datetime.now(timezone.utc).isoformat()
 
             # Normalize metadata (handy for UI/telemetry)
@@ -152,7 +151,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
         pairs = self._lc.similarity_search_with_score(query, k=k, **kwargs)
 
         hits: List[AnnHit] = []
-        model_name = get_configuration().embedding.name or "unknown"
+        model_name = self._embedding_model_name or "unknown"
         now_iso = datetime.now(timezone.utc).isoformat()
 
         for rank, (doc, score) in enumerate(pairs, start=1):
@@ -238,7 +237,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
             logger.warning("⚠️ Failed to check vector dimension: %s", e)
             return
 
-        model_name = get_configuration().embedding.name or "unknown"
+        model_name = self._embedding_model_name or "unknown"
         if actual_dim != expected_dim:
             raise ValueError(
                 "❌ Vector dimension mismatch:\n"

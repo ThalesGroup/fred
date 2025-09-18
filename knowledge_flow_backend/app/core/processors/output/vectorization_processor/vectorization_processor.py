@@ -15,10 +15,9 @@
 import logging
 import os
 import time
-from typing import override
+from typing import List, Optional, override
 
 from fred_core import KPIActor, KPIWriter
-from typing import List, Optional
 from langchain.schema.document import Document
 
 from app.application_context import ApplicationContext

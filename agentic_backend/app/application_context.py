@@ -41,8 +41,8 @@ from fred_core import (
     LogStoreConfig,
     OpenSearchIndexConfig,
     OpenSearchKPIStore,
-    split_realm_url,
     get_model,
+    split_realm_url,
 )
 from langchain_core.language_models.base import BaseLanguageModel
 from requests.auth import AuthBase

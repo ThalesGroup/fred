@@ -42,6 +42,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, Optional, Sequence
 
+from fred_core import get_model
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import Runnable
@@ -50,7 +51,6 @@ from pydantic import BaseModel, Field
 
 from app.common.structures import AgentSettings
 from app.core.agents.flow import AgentFlow
-from fred_core import get_model
 
 logger = logging.getLogger(__name__)
 

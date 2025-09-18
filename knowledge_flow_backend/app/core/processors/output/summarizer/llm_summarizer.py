@@ -13,12 +13,13 @@
 # limitations under the License.
 
 # app/core/summarization/llm_summarizer.py
-from typing import List, Optional
-from app.application_context import ApplicationContext
 import logging
+from typing import List, Optional
 
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables import Runnable
+
+from app.application_context import ApplicationContext
 from app.common.structures import ModelConfiguration
 from app.core.processors.output.summarizer.base_summarizer import BaseDocSummarizer
 

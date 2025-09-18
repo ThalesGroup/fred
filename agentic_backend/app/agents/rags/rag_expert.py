@@ -17,7 +17,7 @@ import logging
 from datetime import datetime
 from typing import List
 
-from fred_core import VectorSearchHit
+from fred_core import VectorSearchHit, get_model
 from langchain_core.messages import HumanMessage
 from langgraph.graph import END, START, MessagesState, StateGraph
 
@@ -34,7 +34,6 @@ from app.core.agents.runtime_context import (
     get_document_library_tags_ids,
     get_search_policy,
 )
-from fred_core import get_model
 
 logger = logging.getLogger(__name__)
 

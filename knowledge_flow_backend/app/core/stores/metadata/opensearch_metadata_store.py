@@ -7,18 +7,18 @@ from opensearchpy import OpenSearch, OpenSearchException, RequestsHttpConnection
 from pydantic import ValidationError
 
 from app.common.document_structures import (
+    AccessInfo,
     DocSummary,
     DocumentMetadata,
-    Identity,
-    SourceInfo,
     FileInfo,
-    Tagging,
-    AccessInfo,
     FileType,
+    Identity,
     Processing,
     ProcessingStage,
     ProcessingStatus,
+    SourceInfo,
     SourceType,
+    Tagging,
 )
 from app.core.stores.metadata.base_metadata_store import (
     BaseMetadataStore,
