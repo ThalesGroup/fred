@@ -17,6 +17,7 @@ import uuid
 
 from fastapi import HTTPException
 
+
 def raise_internal_error(logger: logging.Logger, msg: str, exc: Exception):
     """
     Raise a FastAPI HTTPException (500) while logging the full exception with a unique error ID.

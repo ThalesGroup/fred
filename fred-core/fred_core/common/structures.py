@@ -14,13 +14,14 @@
 
 import os
 from pathlib import Path
-from typing import Annotated, Literal, Optional, Union, Dict, Any
+from typing import Annotated, Any, Dict, Literal, Optional, Union
 
 from pydantic import BaseModel, Field, model_validator
 
 
 class BaseModelWithId(BaseModel):
     id: str
+
 
 class ModelConfiguration(BaseModel):
     provider: Optional[str] = Field(
@@ -31,6 +32,7 @@ class ModelConfiguration(BaseModel):
         default_factory=dict,
         description="Additional provider-specific settings, e.g., Azure deployment name.",
     )
+
 
 class OpenSearchStoreConfig(BaseModel):
     host: str = Field(..., description="OpenSearch host URL")
