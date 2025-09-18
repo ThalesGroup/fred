@@ -18,6 +18,7 @@ from fred_core.common.structures import (
     BaseModelWithId,
     DuckdbStoreConfig,
     LogStoreConfig,
+    ModelConfiguration,
     OpenSearchIndexConfig,
     OpenSearchStoreConfig,
     PostgresStoreConfig,
@@ -44,6 +45,7 @@ from fred_core.kpi.kpi_writer_structures import (
 )
 from fred_core.kpi.log_kpi_store import KpiLogStore
 from fred_core.kpi.opensearch_kpi_store import OpenSearchKPIStore
+from fred_core.model.factory import get_embeddings, get_model, get_structured_chain
 from fred_core.security.authorization import (
     NO_AUTHZ_CHECK_USER,
     TODO_PASS_REAL_USER,
@@ -73,6 +75,8 @@ from fred_core.security.structure import (
     SecurityConfiguration,
     UserSecurity,
 )
+from fred_core.store.sql_store import SQLTableStore
+from fred_core.store.structures import StoreInfo
 from fred_core.store.vector_search import VectorSearchHit
 
 __all__ = [
@@ -125,4 +129,11 @@ __all__ = [
     "M2MBearerAuth",
     "make_m2m_asgi_client",
     "split_realm_url",
+    "get_model",
+    "get_structured_chain",
+    "get_embeddings",
+    "ModelConfiguration",
+    "SQLStorageConfig",
+    "SQLTableStore",
+    "StoreInfo",
 ]

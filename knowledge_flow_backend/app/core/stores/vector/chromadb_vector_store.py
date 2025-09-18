@@ -48,9 +48,9 @@ import json
 
 import chromadb
 from langchain.schema.document import Document
+from langchain_core.embeddings import Embeddings
 
 # Fred base contracts
-from app.core.stores.vector.base_embedding_model import BaseEmbeddingModel
 from app.core.stores.vector.base_vector_store import (
     CHUNK_ID_FIELD,
     AnnHit,
@@ -150,12 +150,13 @@ class ChromaDBVectorStore(BaseVectorStore, FetchById):
 
     persist_path: str
     collection_name: str
-    embeddings: BaseEmbeddingModel
+    embeddings: Embeddings
 
-    def __init__(self, persist_path: str, collection_name: str, embeddings: BaseEmbeddingModel) -> None:
+    def __init__(self, persist_path: str, collection_name: str, embeddings: Embeddings, embedding_model_name: str) -> None:
         self.persist_path = persist_path
         self.collection_name = collection_name
         self.embeddings = embeddings
+        self.embedding_model_name = embedding_model_name
         client = chromadb.PersistentClient(path=self.persist_path)
         self._collection = client.get_or_create_collection(
             name=self.collection_name,

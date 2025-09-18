@@ -18,7 +18,6 @@ import traceback
 from datetime import datetime, timezone
 from typing import Dict, Optional, TypeVar
 
-import tiktoken
 import yaml
 from pydantic import ValidationError
 from pydantic_settings import BaseSettings
@@ -45,16 +44,6 @@ def parse_server_configuration(configuration_path: str) -> Configuration:
             print(f"Error while parsing configuration file {configuration_path}: {e}")
             exit(1)
     return Configuration(**config)
-
-
-def get_embedding_model_name(embedding_model: object) -> str:
-    """
-    Returns a clean string name for the embedding model, even if wrapped inside a custom class.
-    """
-    if hasattr(embedding_model, "model"):
-        inner = getattr(embedding_model, "model")
-        return getattr(inner, "model", type(inner).__name__)
-    return getattr(embedding_model, "model", type(embedding_model).__name__)
 
 
 B = TypeVar("B", bound=BaseSettings)
@@ -135,67 +124,6 @@ def utc_now_iso() -> str:
         str: The current UTC time in ISO 8601 format with timezone info.
     """
     return datetime.now(timezone.utc).isoformat()
-
-
-def count_tokens(text: str) -> int:
-    """
-    Count the number of tokens in a given text using the best available method.
-
-    ⚠️ BACKGROUND & CONTEXT:
-    ------------------------
-    This function is used to measure the "size" of a document in terms of tokens,
-    which is the billing and processing unit for Large Language Models (LLMs).
-
-    However, tokenization is *not* standardized across models or providers:
-    - OpenAI (via `tiktoken`) uses a specific BPE tokenizer (e.g., cl100k_base)
-    - Mistral and other open models may use different tokenizers (e.g., HuggingFace BPE, SentencePiece)
-    - Some providers (e.g., Anthropic) use *undocumented* or custom schemes
-
-    ❗Why does it matter?
-    - If we overestimate tokens: we may reject files that are actually OK
-    - If we underestimate tokens: we risk crashing or exceeding model limits
-    - If we hardcode token logic: we tie ourselves to OpenAI assumptions
-
-    🧩 STRATEGY:
-    -----------
-    1. If the configured embedder exposes a `count_tokens(text)` method, use it.
-       ✅ This gives accurate results for the currently selected embedding model.
-
-    2. Otherwise, fallback to `tiktoken` using the embedder's model name
-       ⚠️ WARNING: Only works for OpenAI-compatible models
-       ⚠️ May be inaccurate for others (e.g., Mistral, Cohere)
-
-    🔒 This logic should eventually be moved to a TokenCounterService abstraction
-       if/when the embedding logic becomes more diverse.
-
-    A final not: this method assumes the application context is initialized.
-
-    Args:
-        text (str): The plain text to tokenize.
-
-    Returns:
-        int: Estimated token count.
-    """
-    from app.application_context import ApplicationContext
-
-    embedder = ApplicationContext.get_instance().get_embedder()
-
-    # Preferred path: embedder provides its own token counting logic
-    if hasattr(embedder, "count_tokens"):
-        try:
-            return embedder.count_tokens(text)
-        except Exception as e:
-            logger.warning(f"Embedder-specific token count failed: {e}")
-
-    # Fallback path: use tiktoken based on the embedder's model name
-    try:
-        model_name = getattr(embedder.embedding, "model_name", "cl100k_base")
-        encoding = tiktoken.encoding_for_model(model_name)
-        return len(encoding.encode(text))
-    except Exception as e:
-        logger.warning(f"Fallback to cl100k_base tokenizer due to error: {e}")
-        encoding = tiktoken.get_encoding("cl100k_base")
-        return len(encoding.encode(text))
 
 
 def sanitize_sql_name(name: str) -> str:
