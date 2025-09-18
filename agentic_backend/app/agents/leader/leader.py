@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from difflib import get_close_matches
 from typing import Literal, Sequence
 
+from fred_core import get_model, get_structured_chain
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from langgraph.constants import END, START
 from langgraph.graph.state import CompiledStateGraph, StateGraph
@@ -17,7 +18,6 @@ from app.agents.leader.structures.plan import Plan
 from app.agents.leader.structures.state import State
 from app.common.structures import AgentSettings
 from app.core.agents.flow import AgentFlow
-from app.core.model.model_factory import get_model, get_structured_chain
 
 logger = logging.getLogger(__name__)
 

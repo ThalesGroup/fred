@@ -1,6 +1,7 @@
 import logging
 from typing import List
 
+from fred_core import get_model
 from langchain_core.messages import HumanMessage
 from langgraph.constants import START
 from langgraph.graph import MessagesState, StateGraph
@@ -10,7 +11,6 @@ from app.common.mcp_utils import get_mcp_client_for_agent
 from app.common.structures import AgentSettings
 from app.core.agents.flow import AgentFlow
 from app.core.agents.mcp_agent_toolkit import McpAgentToolkit
-from app.core.model.model_factory import get_model
 
 logger = logging.getLogger(__name__)
 

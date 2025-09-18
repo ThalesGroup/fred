@@ -18,12 +18,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Annotated, Dict, List, Literal, Optional, Union
 
-from fred_core import (
-    OpenSearchStoreConfig,
-    PostgresStoreConfig,
-    SecurityConfiguration,
-    StoreConfig,
-)
+from fred_core import ModelConfiguration, OpenSearchStoreConfig, PostgresStoreConfig, SecurityConfiguration, StoreConfig
 from pydantic import BaseModel, Field, model_validator
 
 """
@@ -31,13 +26,6 @@ This module defines the top level data structures used by controllers, processor
 unit tests. It helps to decouple the different components of the application and allows
 to define clear workflows and data structures.
 """
-
-
-class EmbeddingProvider(str, Enum):
-    OPENAI = "openai"
-    AZUREOPENAI = "azureopenai"
-    AZUREAPIM = "azureapim"
-    OLLAMA = "ollama"
 
 
 class Status(str, Enum):
@@ -143,10 +131,10 @@ class ChromaVectorStorageConfig(BaseModel):
 VectorStorageConfig = Annotated[Union[InMemoryVectorStorage, OpenSearchVectorIndexConfig, ChromaVectorStorageConfig, WeaviateVectorStorage], Field(discriminator="type")]
 
 
-class EmbeddingConfig(BaseModel):
-    type: EmbeddingProvider = Field(..., description="The embedding backend to use (e.g., 'openai', 'azureopenai')")
-    use_gpu: bool = Field(default=True, description="Set to True to use GPU acceleration if available")
-    process_images: bool = Field(default=True, description="Set to True to process images")
+class ProcessingConfig(BaseModel):
+    use_gpu: bool = Field(default=True, description="Enable/disable GPU usage for processing (if supported by the processor)")
+    process_images: bool = Field(default=True, description="Enable/disable image content extraction")
+    generate_summary: bool = Field(default=True, description="Enable/disable human-centric abstract and keyword generation for documents.")
 
 
 class TemporalSchedulerConfig(BaseModel):
@@ -310,11 +298,14 @@ class StorageConfig(BaseModel):
 
 class Configuration(BaseModel):
     app: AppConfig
+    model: ModelConfiguration
     security: SecurityConfiguration
     input_processors: List[ProcessorConfig]
     output_processors: Optional[List[ProcessorConfig]] = None
     content_storage: ContentStorageConfig = Field(..., description="Content Storage configuration")
-    embedding: EmbeddingConfig = Field(..., description="Embedding configuration")
+    embedding: ModelConfiguration
+    vision: Optional[ModelConfiguration] = None
     scheduler: SchedulerConfig
+    processing: ProcessingConfig = Field(default_factory=ProcessingConfig, description="A collection of feature flags to enable or disable optional functionality.")
     document_sources: Dict[str, DocumentSourceConfig] = Field(default_factory=dict, description="Mapping of source_tag identifiers to push/pull source configurations")
     storage: StorageConfig

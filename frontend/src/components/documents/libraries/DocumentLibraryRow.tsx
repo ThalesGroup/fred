@@ -1,11 +1,9 @@
 // Copyright Thales 2025
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
+// You may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
-//
 //     http://www.apache.org/licenses/LICENSE-2.0
-//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -28,6 +26,9 @@ import { type DocumentMetadata } from "../../../slices/knowledgeFlow/knowledgeFl
 import { usePermissions } from "../../../security/usePermissions";
 import { DOCUMENT_PROCESSING_STAGES } from "../../../utils/const";
 
+import SummaryPreview from "./SummaryPreview";
+import KeywordsPreview from "./KeywordsPreview";
+
 export type DocumentRowCompactProps = {
   doc: DocumentMetadata;
   onPreview?: (doc: DocumentMetadata) => void;
@@ -47,99 +48,103 @@ export function DocumentRowCompact({
   const { can } = usePermissions();
   const canToggle = can("document:toggleRetrievable");
 
-  const formatDate = (date?: string) => {
-    return date ? dayjs(date).format("DD/MM/YYYY") : "-";
-  };
+  const formatDate = (date?: string) => (date ? dayjs(date).format("DD/MM/YYYY") : "-");
 
   return (
     <Box
       sx={{
-        display: "flex",
+        display: "grid",
+        // Columns: Name | Summary | Keywords | Preview | Status | Date | Toggle | Actions
+        gridTemplateColumns: "minmax(0, 2fr) auto auto auto auto auto auto auto",
         alignItems: "center",
+        columnGap: 2,
         width: "100%",
         px: 1,
-        py: 0.5,
+        py: 0.75,
         "&:hover": { bgcolor: "action.hover" },
       }}
     >
-      {/* Left section: icon + name + optional tags */}
-      <Box
-        sx={{
-          display: "flex",
-          alignItems: "center",
-          gap: 1,
-          flex: 1, // Fill remaining space
-          minWidth: 0, // Required for truncation
-          overflow: "hidden",
-        }}
-      >
+      {/* 1) Name (icon + filename) — flexible column that absorbs overflow */}
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0, overflow: "hidden" }}>
         {getDocumentIcon(doc.identity.document_name) || <InsertDriveFileOutlinedIcon fontSize="small" />}
-
         <Typography
           variant="body2"
           noWrap
-          sx={{
-            flexShrink: 1,
-            minWidth: 0,
-            maxWidth: "50%",
-            cursor: onPreview ? "pointer" : "default",
-          }}
+          sx={{ minWidth: 0, maxWidth: "100%", cursor: onPreview ? "pointer" : "default" }}
           onClick={() => onPreview?.(doc)}
+          title={doc.identity.document_name}
         >
           {doc.identity.document_name || doc.identity.document_uid}
         </Typography>
       </Box>
 
-      {/* Middle section: status & date */}
-      <Box
-        sx={{
-          display: "flex",
-          alignItems: "center",
-          gap: 2,
-          flexShrink: 0,
-        }}
-      >
-        {/* Status */}
-        <Box sx={{ display: "flex", gap: 0.5 }}>
-          {DOCUMENT_PROCESSING_STAGES.map((stage) => {
-            const status = doc.processing.stages?.[stage] ?? "not_started";
-            const statusStyleMap: Record<string, { bgColor: string; color: string }> = {
-              done: { bgColor: "#c8e6c9", color: "#2e7d32" },
-              in_progress: { bgColor: "#fff9c4", color: "#f9a825" },
-              failed: { bgColor: "#ffcdd2", color: "#c62828" },
-              not_started: { bgColor: "#e0e0e0", color: "#757575" },
-            };
-            const stageLabelMap: Record<string, string> = {
-              raw: "R",
-              preview: "P",
-              vector: "V",
-              sql: "S",
-              mcp: "M",
-            };
-            const { bgColor, color } = statusStyleMap[status];
-            return (
-              <Tooltip key={stage} title={`${stage}: ${status}`} arrow>
-                <Box
-                  sx={{
-                    bgcolor: bgColor,
-                    color,
-                    width: 18,
-                    height: 18,
-                    borderRadius: "50%",
-                    fontSize: "0.6rem",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                >
-                  {stageLabelMap[stage]}
-                </Box>
-              </Tooltip>
-            );
-          })}
-        </Box>
+      {/* 2) Summary (peek + dialog). Rationale: keep doc “why” close to the name. */}
+      <Box sx={{ justifySelf: "start" }}>
+        <SummaryPreview summary={doc.summary} docTitle={doc.identity.title ?? doc.identity.document_name} />
+      </Box>
 
-        {/* Date */}
+      {/* 3) Keywords (compact trigger + grouped dialog) */}
+      <Box sx={{ justifySelf: "start" }}>
+        {doc.summary?.keywords && doc.summary.keywords.length > 0 ? (
+          <KeywordsPreview
+            keywords={doc.summary.keywords}
+            docTitle={doc.identity.title ?? doc.identity.document_name}
+            // onChipClick={(kw) => console.log("filter by", kw)}
+          />
+        ) : (
+          <Typography variant="caption" sx={{ opacity: 0.4 }}>
+            —
+          </Typography>
+        )}
+      </Box>
+
+      {/* 4) Preview button (explicit) */}
+      <Box sx={{ justifySelf: "start" }}>
+        {onPreview && (
+          <Tooltip title={t("documentLibrary.preview")}>
+            <IconButton size="small" onClick={() => onPreview(doc)} aria-label={t("documentLibrary.preview")}>
+              <VisibilityOutlinedIcon fontSize="inherit" />
+            </IconButton>
+          </Tooltip>
+        )}
+      </Box>
+
+      {/* 5) Status pills */}
+      <Box sx={{ display: "flex", gap: 0.5, justifySelf: "start" }}>
+        {DOCUMENT_PROCESSING_STAGES.map((stage) => {
+          const status = doc.processing.stages?.[stage] ?? "not_started";
+          const style: Record<string, { bg: string; fg: string }> = {
+            done: { bg: "#c8e6c9", fg: "#2e7d32" },
+            in_progress: { bg: "#fff9c4", fg: "#f9a825" },
+            failed: { bg: "#ffcdd2", fg: "#c62828" },
+            not_started: { bg: "#e0e0e0", fg: "#757575" },
+          };
+          const label: Record<string, string> = { raw: "R", preview: "P", vector: "V", sql: "S", mcp: "M" };
+          const { bg, fg } = style[status];
+          return (
+            <Tooltip key={stage} title={`${stage}: ${status}`} arrow>
+              <Box
+                sx={{
+                  bgcolor: bg,
+                  color: fg,
+                  width: 18,
+                  height: 18,
+                  borderRadius: "50%",
+                  fontSize: "0.6rem",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                {label[stage]}
+              </Box>
+            </Tooltip>
+          );
+        })}
+      </Box>
+
+      {/* 6) Date added */}
+      <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, justifySelf: "start" }}>
         <Tooltip title={doc.source.date_added_to_kb}>
           <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
             <EventAvailableIcon fontSize="inherit" />
@@ -148,24 +153,33 @@ export function DocumentRowCompact({
             </Typography>
           </Box>
         </Tooltip>
-        {/* Searchable */}
-        <Tooltip title={doc.source.retrievable ? "Make excluded" : "Make searchable"}>
+      </Box>
+
+      {/* 7) Searchable toggle */}
+      <Box sx={{ justifySelf: "start" }}>
+        <Tooltip
+          title={
+            doc.source.retrievable
+              ? t("documentLibrary.makeExcluded", "Make excluded")
+              : t("documentLibrary.makeSearchable", "Make searchable")
+          }
+        >
           <span>
-            {" "}
-            {/* needed so Tooltip works when the button is disabled */}
             <IconButton
               size="small"
               disabled={!canToggle}
               onClick={() => {
-                if (!canToggle) return; // extra safety
+                if (!canToggle) return;
                 onToggleRetrievable?.(doc);
               }}
               sx={{
                 width: 28,
                 height: 28,
-                color: doc.source.retrievable ? "success.main" : "error.main",
-                ...(!canToggle && { color: "action.disabled" }), // optional: match disabled look
+                color: canToggle ? (doc.source.retrievable ? "success.main" : "error.main") : "action.disabled",
               }}
+              aria-label={
+                doc.source.retrievable ? t("documentLibrary.searchOn", "Search on") : t("documentLibrary.searchOff", "Search off")
+              }
             >
               {doc.source.retrievable ? <SearchIcon fontSize="small" /> : <SearchOffIcon fontSize="small" />}
             </IconButton>
@@ -173,16 +187,8 @@ export function DocumentRowCompact({
         </Tooltip>
       </Box>
 
-      {/* Right section: actions */}
-      <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, flexShrink: 0, ml: 2 }}>
-        {onPreview && (
-          <Tooltip title={t("documentLibrary.preview")}>
-            <IconButton size="small" onClick={() => onPreview(doc)}>
-              <VisibilityOutlinedIcon fontSize="inherit" />
-            </IconButton>
-          </Tooltip>
-        )}
-         
+      {/* 8) Actions (download/remove) */}
+      <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, justifySelf: "end" }}>
         {onDownload && (
           <Tooltip title={t("documentLibrary.download")}>
             <IconButton size="small" onClick={() => onDownload(doc)}>
