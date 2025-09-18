@@ -34,7 +34,7 @@ class MockImageDescriber(BaseImageDescriber):
 
 @pytest.fixture
 def processor():
-    return PdfMarkdownProcessor(image_describer=MockImageDescriber())
+    return PdfMarkdownProcessor()
 
 
 @pytest.fixture

@@ -37,3 +37,4 @@ export const docHasAnyTag = (d: DocumentMetadata, tagIds: readonly string[]): bo
   // small input: O(n*m) is fine and keeps code minimal
   return docIds.some((id) => tagIds.includes(id));
 };
+
