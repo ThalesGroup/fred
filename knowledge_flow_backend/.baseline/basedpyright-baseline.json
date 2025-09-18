@@ -1,23 +1,5 @@
 {
     "files": {
-        "./app/common/utils.py": [
-            {
-                "code": "reportAttributeAccessIssue",
-                "range": {
-                    "startColumn": 28,
-                    "endColumn": 40,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportAttributeAccessIssue",
-                "range": {
-                    "startColumn": 38,
-                    "endColumn": 47,
-                    "lineCount": 1
-                }
-            }
-        ],
         "./app/core/processors/input/pps_tabular_processor/pps_tabular_processor.py": [
             {
                 "code": "reportArgumentType",

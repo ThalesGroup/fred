@@ -101,10 +101,11 @@ class ChromaDBVectorStore(BaseVectorStore, FetchById):
     collection_name: str
     embeddings: Embeddings
 
-    def __init__(self, persist_path: str, collection_name: str, embeddings: Embeddings) -> None:
+    def __init__(self, persist_path: str, collection_name: str, embeddings: Embeddings, embedding_model_name: str) -> None:
         self.persist_path = persist_path
         self.collection_name = collection_name
         self.embeddings = embeddings
+        self.embedding_model_name = embedding_model_name
         client = chromadb.PersistentClient(path=self.persist_path)
         self._collection = client.create_collection(
             name=self.collection_name,
