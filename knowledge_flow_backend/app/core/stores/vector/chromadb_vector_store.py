@@ -70,15 +70,30 @@ def _assert_has_metadata_keys(doc: Document) -> None:
 
 
 def _build_where(search_filter: Optional[SearchFilter]) -> Optional[Dict]:
+    """
+    Build the 'where' filter for Chroma.
+    Use primitive types (strings, numbers), not JSON-encoded lists.
+    """
     if not search_filter:
         return None
-    where: Dict[str, Dict] = {}
-    if search_filter.tag_ids:
-        where[DOC_UID_FIELD] = {"$in": list(search_filter.tag_ids)}
-    for k, values in (search_filter.metadata_terms or {}).items():
-        where[k] = {"$in": list(values)}
-    return where or None
 
+    where: Dict[str, Dict] = {}
+
+    # Only primitive values: flatten tag_ids
+    if search_filter.tag_ids:
+        where["tag_ids"] = {"$in": list(search_filter.tag_ids)}
+
+    # Flatten metadata_terms
+    for k, values in (search_filter.metadata_terms or {}).items():
+        flat_values: List[Any] = []
+        for v in values:
+            if isinstance(v, list):
+                flat_values.extend(v)  # add each element as primitive
+            else:
+                flat_values.append(v)
+        where[k] = {"$in": flat_values}
+
+    return where or None
 
 def _cosine_similarity_from_distance(distance: float) -> float:
     # Chroma returns cosine distance; convert to [0,1] similarity for UI
@@ -91,22 +106,14 @@ def sanitize_metadata(meta: Mapping[str, Any]) -> dict[str, Any]:
         if isinstance(v, datetime):
             clean[k] = v.isoformat()
         elif isinstance(v, list):
-            # Empty list, returns None
-            if not v:
-                clean[k] = ""
-            # List containing only one element, returns the element    
-            elif len(v) == 1:
-                clean[k] = v[0]
-            # List containing more than one elements, returns a JSON string
-            else:
-                import json
-                clean[k] = json.dumps(v)
+            # always JSON encode, even single element or empty
+            import json
+            clean[k] = json.dumps(v)
         elif isinstance(v, Mapping):
             clean[k] = sanitize_metadata(v)
         else:
             clean[k] = v
     return clean
-
 
 def restore_metadata(meta: Mapping[str, Any]) -> dict[str, Any]:
     restored: dict[str, Any] = {}
@@ -200,6 +207,10 @@ class ChromaDBVectorStore(BaseVectorStore, FetchById):
         k: int,
         search_filter: Optional[SearchFilter] = None,
     ) -> List[AnnHit]:
+        """
+        Perform semantic (ANN) search with optional filtering.
+        Restores metadata lists (tag_ids, etc.) for compatibility with Pydantic.
+        """
         where = _build_where(search_filter)
         qvec = self.embeddings.embed_query(query)
         res = self._collection.query(
@@ -208,15 +219,26 @@ class ChromaDBVectorStore(BaseVectorStore, FetchById):
             where=where,
             include=["distances", "documents", "metadatas"],
         )
-        # Chroma returns lists per query; we have one query
+
+        # Chroma returns lists per query; we only have one query
         docs = (res.get("documents") or [[]])[0]
         metas = (res.get("metadatas") or [[]])[0]
         dists = (res.get("distances") or [[]])[0]
 
         hits: List[AnnHit] = []
         for text, meta, dist in zip(docs, metas, dists):
-            doc = Document(page_content=text, metadata=meta or {})
+            meta = meta or {}
+
+            # Restore any sanitized lists (including tag_ids)
+            restored_meta = restore_metadata(meta)
+
+            # Ensure tag_ids is always a list
+            if "tag_ids" in restored_meta and not isinstance(restored_meta["tag_ids"], list):
+                restored_meta["tag_ids"] = [restored_meta["tag_ids"]]
+
+            doc = Document(page_content=text, metadata=restored_meta)
             hits.append(AnnHit(document=doc, score=_cosine_similarity_from_distance(dist)))
+
         return hits
 
     # -------- Hydration --------
