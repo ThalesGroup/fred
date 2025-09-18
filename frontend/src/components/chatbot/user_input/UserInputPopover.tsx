@@ -232,11 +232,8 @@ export const UserInputPopover: React.FC<UserInputPopoverProps> = ({
           </Box>
           <Divider sx={{ my: 1 }} />
 
-          {sectionHeader(
-            <TravelExploreIcon fontSize="small" />,
-            t("search.policy", "Search policy"),
-            1,
-            () => setPickerView("search_policy"),
+          {sectionHeader(<TravelExploreIcon fontSize="small" />, t("search.policy", "Search policy"), 1, () =>
+            setPickerView("search_policy"),
           )}
           <Box sx={{ mb: 1 }}>
             <Stack direction="row" flexWrap="wrap" gap={0.75}>
@@ -265,7 +262,9 @@ export const UserInputPopover: React.FC<UserInputPopoverProps> = ({
             )}
             {enableAudioAttachment && (
               <MenuItem onClick={onRecordAudioClick}>
-                <ListItemIcon>{isRecording ? <StopIcon fontSize="small" /> : <MicIcon fontSize="small" />}</ListItemIcon>
+                <ListItemIcon>
+                  {isRecording ? <StopIcon fontSize="small" /> : <MicIcon fontSize="small" />}
+                </ListItemIcon>
                 <ListItemText primary={isRecording ? t("chatbot.stopRecording") : t("chatbot.recordAudio")} />
               </MenuItem>
             )}

@@ -12,15 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import {
-  Box,
-  Card,
-  CardContent,
-  Grid2,
-  Stack,
-  Typography,
-  useTheme,
-} from "@mui/material";
+import { Box, Card, CardContent, Grid2, Stack, Typography, useTheme } from "@mui/material";
 import CodeIcon from "@mui/icons-material/Code";
 import { useTranslation } from "react-i18next";
 
@@ -34,20 +26,15 @@ export function ProfileToken({ tokenParsed }: ProfileTokenProps) {
 
   return (
     // Right-anchored container to match ProfileCard
-    <Grid2
-      size={{ xs: 12 }}
-      display="flex"
-      justifyContent={{ xs: "stretch", md: "flex-end" }}
-      px={{ xs: 1.5, md: 3 }}
-    >
+    <Grid2 size={{ xs: 12 }} display="flex" justifyContent={{ xs: "stretch", md: "flex-end" }} px={{ xs: 1.5, md: 3 }}>
       <Card
         variant="outlined"
         sx={{
-          ml: { md: "auto" },        // stick to the right on md+
+          ml: { md: "auto" }, // stick to the right on md+
           width: "100%",
-          maxWidth: 980,             // align width with ProfileCard
+          maxWidth: 980, // align width with ProfileCard
           borderRadius: 3,
-          bgcolor: "transparent",    // no paper fill
+          bgcolor: "transparent", // no paper fill
           boxShadow: "none",
           borderColor: "divider",
         }}
@@ -56,11 +43,7 @@ export function ProfileToken({ tokenParsed }: ProfileTokenProps) {
           {/* Compact section header */}
           <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5 }}>
             <CodeIcon fontSize="small" />
-            <Typography
-              variant="overline"
-              color="text.secondary"
-              sx={{ letterSpacing: 0.6, fontWeight: 600 }}
-            >
+            <Typography variant="overline" color="text.secondary" sx={{ letterSpacing: 0.6, fontWeight: 600 }}>
               {t("profile.token.title")}
             </Typography>
           </Stack>
@@ -74,10 +57,7 @@ export function ProfileToken({ tokenParsed }: ProfileTokenProps) {
               maxHeight: 380,
               overflowY: "auto",
               overflowX: "auto",
-              bgcolor:
-                theme.palette.mode === "dark"
-                  ? "rgba(255,255,255,0.03)"
-                  : "rgba(0,0,0,0.03)", // very subtle surface
+              bgcolor: theme.palette.mode === "dark" ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.03)", // very subtle surface
               "&::-webkit-scrollbar": { width: 8, height: 8 },
               "&::-webkit-scrollbar-thumb": { borderRadius: 4 },
             }}

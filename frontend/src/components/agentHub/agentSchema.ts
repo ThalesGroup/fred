@@ -12,7 +12,10 @@ export const createAgentSchema = (t: TFunction) => {
     name: z.string().min(1, { message: get("validation.required", "Required") }),
     url: z.url({ message: get("validation.invalid_url", "Invalid URL") }),
     transport: z.enum(MCP_TRANSPORTS), // or .refine(() => true, { message: ... })
-    sse_read_timeout: z.number().min(0, { message: get("validation.timeout_min", "Must be ≥ 0") }).optional(),
+    sse_read_timeout: z
+      .number()
+      .min(0, { message: get("validation.timeout_min", "Must be ≥ 0") })
+      .optional(),
   });
 
   return z.object({

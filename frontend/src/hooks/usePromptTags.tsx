@@ -15,7 +15,7 @@
 import {
   TagType,
   // fetch all the tags possibly filtered by tag type as done here
-  useListAllTagsKnowledgeFlowV1TagsGetQuery
+  useListAllTagsKnowledgeFlowV1TagsGetQuery,
 } from "../slices/knowledgeFlow/knowledgeFlowOpenApi";
 
 /**
@@ -31,8 +31,7 @@ import {
  *  - `refetch`: A method to manually refetch the tags
  */
 export function usePromptTags() {
-  const { data, error, isLoading, refetch } =
-    useListAllTagsKnowledgeFlowV1TagsGetQuery({ type: "prompt" as TagType});
+  const { data, error, isLoading, refetch } = useListAllTagsKnowledgeFlowV1TagsGetQuery({ type: "prompt" as TagType });
 
   return {
     tags: data ?? [],

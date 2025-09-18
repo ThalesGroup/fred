@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 import { Box, ButtonGroup } from "@mui/material";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
@@ -36,36 +35,45 @@ function isRangeSelected(type: QuickRangeType, startDate: Dayjs, endDate: Dayjs)
   const today = dayjs();
   const graceMs = 5 * 60 * 1000;
   switch (type) {
-    case "today":     return startDate.isSame(today.startOf("day")) && endDate.isSame(today.endOf("day"));
-    case "yesterday": return startDate.isSame(today.subtract(1, "day").startOf("day")) && endDate.isSame(today.subtract(1, "day").endOf("day"));
-    case "thisWeek":  return startDate.isSame(today.startOf("week")) && endDate.isSame(today.endOf("week"));
-    case "thisMonth": return startDate.isSame(today.startOf("month")) && endDate.isSame(today.endOf("month"));
-    case "thisYear":  return startDate.isSame(today.startOf("year")) && endDate.isSame(today.endOf("year"));
+    case "today":
+      return startDate.isSame(today.startOf("day")) && endDate.isSame(today.endOf("day"));
+    case "yesterday":
+      return (
+        startDate.isSame(today.subtract(1, "day").startOf("day")) &&
+        endDate.isSame(today.subtract(1, "day").endOf("day"))
+      );
+    case "thisWeek":
+      return startDate.isSame(today.startOf("week")) && endDate.isSame(today.endOf("week"));
+    case "thisMonth":
+      return startDate.isSame(today.startOf("month")) && endDate.isSame(today.endOf("month"));
+    case "thisYear":
+      return startDate.isSame(today.startOf("year")) && endDate.isSame(today.endOf("year"));
     case "last12h": {
-      const s = today.subtract(12, "hour"); const e = today;
+      const s = today.subtract(12, "hour");
+      const e = today;
       return Math.abs(startDate.diff(s)) < graceMs && Math.abs(endDate.diff(e)) < graceMs;
     }
     case "last24h": {
-      const s = today.subtract(24, "hour"); const e = today;
+      const s = today.subtract(24, "hour");
+      const e = today;
       return Math.abs(startDate.diff(s)) < graceMs && Math.abs(endDate.diff(e)) < graceMs;
     }
     case "last7d": {
-      const s = today.subtract(7, "day"); const e = today;
+      const s = today.subtract(7, "day");
+      const e = today;
       return Math.abs(startDate.diff(s)) < graceMs && Math.abs(endDate.diff(e)) < graceMs;
     }
     case "last30d": {
-      const s = today.subtract(30, "day"); const e = today;
+      const s = today.subtract(30, "day");
+      const e = today;
       return Math.abs(startDate.diff(s)) < graceMs && Math.abs(endDate.diff(e)) < graceMs;
     }
-    default: return false;
+    default:
+      return false;
   }
 }
 
-function setSelectedRange(
-  type: QuickRangeType,
-  setStartDate: (d: Dayjs) => void,
-  setEndDate: (d: Dayjs) => void
-) {
+function setSelectedRange(type: QuickRangeType, setStartDate: (d: Dayjs) => void, setEndDate: (d: Dayjs) => void) {
   const now = dayjs();
   const ranges: Record<QuickRangeType, [Dayjs, Dayjs]> = {
     today: [now.startOf("day"), now.endOf("day")],
@@ -109,8 +117,19 @@ export default function DateRangeControls({ startDate, endDate, setStartDate, se
           "& .MuiButtonBase-root": { height: CONTROL_H, fontSize: BTN_FONT_SIZE, paddingInline: 1 },
         }}
       >
-        {(["last12h","last24h","last7d","last30d","today","yesterday","thisWeek","thisMonth","thisYear"] as QuickRangeType[])
-          .map((type) => (
+        {(
+          [
+            "last12h",
+            "last24h",
+            "last7d",
+            "last30d",
+            "today",
+            "yesterday",
+            "thisWeek",
+            "thisMonth",
+            "thisYear",
+          ] as QuickRangeType[]
+        ).map((type) => (
           <QuickRangeButton
             key={type}
             isSel={isRangeSelected(type, startDate, endDate)}
