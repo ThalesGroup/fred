@@ -68,30 +68,32 @@ def _assert_has_metadata_keys(doc: Document) -> None:
     if DOC_UID_FIELD not in (doc.metadata or {}):
         raise ValueError(f"Document is missing required metadata '{DOC_UID_FIELD}'")
 
-
 def _build_where(search_filter: Optional[SearchFilter]) -> Optional[Dict]:
     """
     Build the 'where' filter for Chroma.
-    Use primitive types (strings, numbers), not JSON-encoded lists.
+    Chroma only accepts primitive types (string, number), so we encode lists as JSON strings
+    exactly as stored via `sanitize_metadata`.
     """
     if not search_filter:
         return None
 
     where: Dict[str, Dict] = {}
 
-    # Only primitive values: flatten tag_ids
+    # Encode tag_ids to match stored JSON strings
     if search_filter.tag_ids:
-        where["tag_ids"] = {"$in": list(search_filter.tag_ids)}
+        tag_values = [json.dumps([t]) for t in search_filter.tag_ids]
+        where["tag_ids"] = {"$in": tag_values}
 
-    # Flatten metadata_terms
+    # Encode metadata_terms
     for k, values in (search_filter.metadata_terms or {}).items():
-        flat_values: List[Any] = []
+        encoded_values: List[Any] = []
         for v in values:
             if isinstance(v, list):
-                flat_values.extend(v)  # add each element as primitive
+                # encode all lists as JSON strings
+                encoded_values.append(json.dumps(v))
             else:
-                flat_values.append(v)
-        where[k] = {"$in": flat_values}
+                encoded_values.append(v)
+        where[k] = {"$in": encoded_values}
 
     return where or None
 
