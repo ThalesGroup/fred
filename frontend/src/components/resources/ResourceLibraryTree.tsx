@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 import * as React from "react";
 import { Box, Checkbox, IconButton, Tooltip } from "@mui/material";
 import { SimpleTreeView } from "@mui/x-tree-view/SimpleTreeView";
@@ -43,11 +42,7 @@ function resourceBelongsToNode(r: Resource, node: TagNode): boolean {
 }
 
 /** All resources in a node’s subtree (node + descendants). */
-function resourcesInSubtree(
-  root: TagNode,
-  all: Resource[],
-  getChildren: (n: TagNode) => TagNode[],
-): Resource[] {
+function resourcesInSubtree(root: TagNode, all: Resource[], getChildren: (n: TagNode) => TagNode[]): Resource[] {
   const stack: TagNode[] = [root];
   const out: Resource[] = [];
   while (stack.length) {
@@ -110,7 +105,9 @@ export function ResourceLibraryTree({
       if (!tag) return;
 
       const subtree = resourcesInSubtree(node, resources, getChildren);
-      const eligible = subtree.filter((r) => resourceBelongsToNode(r, node) && (r as any).library_tags?.includes(tag.id));
+      const eligible = subtree.filter(
+        (r) => resourceBelongsToNode(r, node) && (r as any).library_tags?.includes(tag.id),
+      );
       if (eligible.length === 0) return;
 
       setSelectedItems((prev) => {
@@ -249,7 +246,9 @@ export function ResourceLibraryTree({
                       resource={r}
                       onPreview={onPreview}
                       onEdit={onEdit}
-                      onRemoveFromLibrary={tag && onRemoveFromLibrary ? (rr) => onRemoveFromLibrary(rr, tag) : undefined}
+                      onRemoveFromLibrary={
+                        tag && onRemoveFromLibrary ? (rr) => onRemoveFromLibrary(rr, tag) : undefined
+                      }
                     />
                   </Box>
                 }

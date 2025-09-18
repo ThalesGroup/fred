@@ -178,7 +178,9 @@ export function DocumentRowCompact({
                 color: canToggle ? (doc.source.retrievable ? "success.main" : "error.main") : "action.disabled",
               }}
               aria-label={
-                doc.source.retrievable ? t("documentLibrary.searchOn", "Search on") : t("documentLibrary.searchOff", "Search off")
+                doc.source.retrievable
+                  ? t("documentLibrary.searchOn", "Search on")
+                  : t("documentLibrary.searchOff", "Search off")
               }
             >
               {doc.source.retrievable ? <SearchIcon fontSize="small" /> : <SearchOffIcon fontSize="small" />}

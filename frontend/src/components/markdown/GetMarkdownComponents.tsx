@@ -13,17 +13,7 @@
 // limitations under the License.
 
 import Mermaid from "./Mermaid.tsx";
-import {
-  alpha,
-  Paper,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Theme,
-} from "@mui/material";
+import { alpha, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Theme } from "@mui/material";
 
 interface GetMarkdownComponentsOptions {
   theme: Theme;
@@ -31,27 +21,14 @@ interface GetMarkdownComponentsOptions {
   enableEmojiFix?: boolean;
 }
 
-export function getMarkdownComponents({
-  theme,
-  size,
-  enableEmojiFix = true,
-}: GetMarkdownComponentsOptions) {
-  const baseStyle = (style: any) =>
-    size === "small" ? { ...style, fontSize: "0.85rem" } : style;
+export function getMarkdownComponents({ theme, size, enableEmojiFix = true }: GetMarkdownComponentsOptions) {
+  const baseStyle = (style: any) => (size === "small" ? { ...style, fontSize: "0.85rem" } : style);
 
   return {
-    h1: ({ node, ...props }) => (
-      <h1 style={baseStyle(theme.typography.markdown.h1)} {...props} />
-    ),
-    h2: ({ node, ...props }) => (
-      <h2 style={baseStyle(theme.typography.markdown.h2)} {...props} />
-    ),
-    h3: ({ node, ...props }) => (
-      <h3 style={baseStyle(theme.typography.markdown.h3)} {...props} />
-    ),
-    h4: ({ node, ...props }) => (
-      <h4 style={baseStyle(theme.typography.markdown.h4)} {...props} />
-    ),
+    h1: ({ node, ...props }) => <h1 style={baseStyle(theme.typography.markdown.h1)} {...props} />,
+    h2: ({ node, ...props }) => <h2 style={baseStyle(theme.typography.markdown.h2)} {...props} />,
+    h3: ({ node, ...props }) => <h3 style={baseStyle(theme.typography.markdown.h3)} {...props} />,
+    h4: ({ node, ...props }) => <h4 style={baseStyle(theme.typography.markdown.h4)} {...props} />,
     p: ({ node, ...props }) => (
       <p
         style={{
@@ -69,15 +46,9 @@ export function getMarkdownComponents({
         {...props}
       />
     ),
-    a: ({ node, ...props }) => (
-      <a style={baseStyle(theme.typography.markdown.a)} {...props} />
-    ),
-    ul: ({ node, ...props }) => (
-      <ul style={baseStyle(theme.typography.markdown.ul)} {...props} />
-    ),
-    li: ({ node, ...props }) => (
-      <li style={baseStyle(theme.typography.markdown.li)} {...props} />
-    ),
+    a: ({ node, ...props }) => <a style={baseStyle(theme.typography.markdown.a)} {...props} />,
+    ul: ({ node, ...props }) => <ul style={baseStyle(theme.typography.markdown.ul)} {...props} />,
+    li: ({ node, ...props }) => <li style={baseStyle(theme.typography.markdown.li)} {...props} />,
     code: ({ node, inline, className, children, ...props }) => {
       const isMermaid = /language-mermaid/.test(className || "");
       if (isMermaid && children) {

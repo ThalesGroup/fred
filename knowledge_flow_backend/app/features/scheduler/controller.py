@@ -21,7 +21,7 @@ from temporalio.client import Client
 
 from app.application_context import ApplicationContext
 from app.features.scheduler.activities import create_pull_file_metadata, get_push_file_metadata, input_process, load_pull_file, load_push_file, output_process
-from app.features.scheduler.structure import PipelineDefinition, ProcessDocumentsRequest
+from app.features.scheduler.structure import PipelineDefinition, BrowseDocumentsRequest
 from app.features.scheduler.workflow import Process
 
 logger = logging.getLogger(__name__)
@@ -56,7 +56,7 @@ class SchedulerController:
             summary="Submit processing for push/pull files via Temporal",
             description="Accepts a list of files (document_uid or external_path) and launches the appropriate ingestion workflow",
         )
-        async def process_documents(req: ProcessDocumentsRequest, user: KeycloakUser = Depends(get_current_user)):
+        async def process_documents(req: BrowseDocumentsRequest, user: KeycloakUser = Depends(get_current_user)):
             authorize_or_raise(user, Action.PROCESS, Resource.DOCUMENTS)
 
             logger.info(f"Processing {len(req.files)} file(s) via Temporal pipeline")
@@ -78,7 +78,7 @@ class SchedulerController:
             summary="Submit processing for push/pull files via Temporal",
             description="Accepts a list of files (document_uid or external_path) and launches the appropriate ingestion workflow",
         )
-        async def schedule_documents(req: ProcessDocumentsRequest, user: KeycloakUser = Depends(get_current_user)):
+        async def schedule_documents(req: BrowseDocumentsRequest, user: KeycloakUser = Depends(get_current_user)):
             authorize_or_raise(user, Action.PROCESS, Resource.DOCUMENTS)
 
             logger.info(f"Processing {len(req.files)} file(s) via Temporal pipeline")

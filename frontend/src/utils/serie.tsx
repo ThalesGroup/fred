@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 export interface SeriePoint {
   date: string;
   value: number;
@@ -56,4 +55,3 @@ export const getSumValue = (serie: Serie): number => {
   if (!serie.seriePoints) return 0;
   return parseFloat(serie.seriePoints.reduce((sum, { value }) => sum + value, 0).toFixed(0));
 };
-

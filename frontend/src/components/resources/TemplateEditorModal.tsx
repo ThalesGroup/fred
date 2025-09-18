@@ -28,12 +28,7 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import yaml from "js-yaml";
-import {
-  buildTemplateYaml,
-  splitFrontMatter,
-  buildFrontMatter,
-  looksLikeYamlDoc,
-} from "./resourceYamlUtils";
+import { buildTemplateYaml, splitFrontMatter, buildFrontMatter, looksLikeYamlDoc } from "./resourceYamlUtils";
 
 /** ---- Minimal form schema ---- */
 const templateSchema = z.object({
@@ -60,13 +55,7 @@ interface TemplateEditorModalProps {
   getSuggestion?: () => Promise<string>;
 }
 
-export const TemplateEditorModal = ({
-  isOpen,
-  onClose,
-  onSave,
-  initial,
-  getSuggestion,
-}: TemplateEditorModalProps) => {
+export const TemplateEditorModal = ({ isOpen, onClose, onSave, initial, getSuggestion }: TemplateEditorModalProps) => {
   // decide incoming doc
   const incomingDoc = useMemo(() => (initial as any)?.yaml ?? (initial as any)?.body ?? "", [initial]);
   const isDocMode = useMemo(() => looksLikeYamlDoc(incomingDoc), [incomingDoc]);
@@ -190,7 +179,9 @@ export const TemplateEditorModal = ({
             </Stack>
           </DialogContent>
           <DialogActions>
-            <Button onClick={onClose} variant="outlined">Cancel</Button>
+            <Button onClick={onClose} variant="outlined">
+              Cancel
+            </Button>
             <Button
               onClick={handleAIHelp}
               variant="text"
@@ -199,7 +190,9 @@ export const TemplateEditorModal = ({
             >
               Get Help from AI
             </Button>
-            <Button onClick={onSubmitDoc} variant="contained">Save</Button>
+            <Button onClick={onSubmitDoc} variant="contained">
+              Save
+            </Button>
           </DialogActions>
         </>
       ) : (
@@ -246,7 +239,9 @@ export const TemplateEditorModal = ({
             </Stack>
           </DialogContent>
           <DialogActions>
-            <Button onClick={onClose} variant="outlined">Cancel</Button>
+            <Button onClick={onClose} variant="outlined">
+              Cancel
+            </Button>
             <Button
               onClick={handleAIHelp}
               variant="text"

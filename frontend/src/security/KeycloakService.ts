@@ -278,12 +278,11 @@ const GetToken = (): string | null => {
 
 const GetTokenParsed = (): any => {
   if (!isSecurityEnabled) {
-    const tok = GetToken();                // returns our dev token in insecure mode
-    return parseJwtPayload(tok);           // <- decode and return payload JSON
+    const tok = GetToken(); // returns our dev token in insecure mode
+    return parseJwtPayload(tok); // <- decode and return payload JSON
   }
   return keycloakInstance?.tokenParsed ?? null;
 };
-
 
 export const KeyCloakService = {
   CallLogin: Login,

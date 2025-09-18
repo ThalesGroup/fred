@@ -33,7 +33,8 @@ export async function streamUploadOrProcessDocument(
     throw new Error("Knowledge backend URL is not defined");
   }
 
-  const endpoint = mode === "upload" ? "/knowledge-flow/v1/upload-documents" : "/knowledge-flow/v1/upload-process-documents";
+  const endpoint =
+    mode === "upload" ? "/knowledge-flow/v1/upload-documents" : "/knowledge-flow/v1/upload-process-documents";
 
   const response = await fetch(`${backend_url_knowledge}${endpoint}`, {
     method: "POST",

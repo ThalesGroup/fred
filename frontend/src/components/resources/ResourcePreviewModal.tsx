@@ -44,7 +44,9 @@ export const ResourcePreviewModal: React.FC<Props> = ({ open, resource, onClose 
         </Stack>
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose} variant="contained">Close</Button>
+        <Button onClick={onClose} variant="contained">
+          Close
+        </Button>
       </DialogActions>
     </Dialog>
   );

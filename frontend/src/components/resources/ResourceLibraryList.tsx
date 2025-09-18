@@ -12,25 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 import * as React from "react";
 import AddIcon from "@mui/icons-material/Add";
 import FolderOutlinedIcon from "@mui/icons-material/FolderOutlined";
 import UploadIcon from "@mui/icons-material/Upload";
 import UnfoldMoreIcon from "@mui/icons-material/UnfoldMore";
 import UnfoldLessIcon from "@mui/icons-material/UnfoldLess";
-import {
-  Box,
-  Breadcrumbs,
-  Button,
-  Card,
-  Chip,
-  Link,
-  Typography,
-  IconButton,
-  Tooltip,
-  TextField,
-} from "@mui/material";
+import { Box, Breadcrumbs, Button, Card, Chip, Link, Typography, IconButton, Tooltip, TextField } from "@mui/material";
 import {
   useListAllTagsKnowledgeFlowV1TagsGetQuery,
   ResourceKind,
@@ -288,7 +276,7 @@ export default function ResourceLibraryList({ kind }: Props) {
         {/* Search */}
         <TextField
           size="small"
-          placeholder={t("resourceLibrary.searchPlaceholder", {typeOne}) || "Search resources…"}
+          placeholder={t("resourceLibrary.searchPlaceholder", { typeOne }) || "Search resources…"}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           sx={{ minWidth: 260 }}

@@ -17,21 +17,16 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { createKeycloakInstance } from "../security/KeycloakService";
-import type {
-  FrontendConfigDto,
-  UserSecurity,
-  FrontendFlags,
-  Properties,
-} from "../slices/agentic/agenticOpenApi";
+import type { FrontendConfigDto, UserSecurity, FrontendFlags, Properties } from "../slices/agentic/agenticOpenApi";
 
 /** Final merged app config used by the UI. */
 export interface AppConfig {
-  backend_url_api: string;        // Base URL of the Agentic backend
-  backend_url_knowledge: string;  // Base URL of the Knowledge Flow backend
-  websocket_url: string;          // WebSocket server URL
+  backend_url_api: string; // Base URL of the Agentic backend
+  backend_url_knowledge: string; // Base URL of the Knowledge Flow backend
+  websocket_url: string; // WebSocket server URL
   feature_flags: Record<string, boolean>;
   properties: Record<string, string>;
-  user_auth: UserSecurity;        // from OpenAPI types
+  user_auth: UserSecurity; // from OpenAPI types
 }
 
 export const FeatureFlagKey = {
@@ -103,9 +98,7 @@ export const getConfig = (): AppConfig => {
 };
 
 /** Feature flags helper */
-export const isFeatureEnabled = (flag: FeatureFlagKeyType): boolean =>
-  !!getConfig().feature_flags?.[flag];
+export const isFeatureEnabled = (flag: FeatureFlagKeyType): boolean => !!getConfig().feature_flags?.[flag];
 
 /** Properties helper */
-export const getProperty = (key: string): string =>
-  getConfig().properties?.[key];
+export const getProperty = (key: string): string => getConfig().properties?.[key];

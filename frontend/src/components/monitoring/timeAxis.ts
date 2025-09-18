@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 import dayjs, { Dayjs, ManipulateType, OpUnitType } from "dayjs";
 import utc from "dayjs/plugin/utc";
 
@@ -72,7 +71,7 @@ export const buildPaddedDomain = (
   p: TimePrecision,
   sharedDomain?: [number, number],
   start?: Date,
-  end?: Date
+  end?: Date,
 ): [number, number] | ["dataMin", "dataMax"] => {
   const step = stepMsFor(p);
   if (sharedDomain) return [sharedDomain[0] - step / 2, sharedDomain[1] + step / 2];
@@ -104,11 +103,7 @@ export const iterateBuckets = (start: Date, end: Date, p: TimePrecision): number
  * Aligns a start and end date to the given precision (UTC).
  * Returns ISO strings so it can be fed directly to APIs.
  */
-export function alignDateRangeToPrecision(
-  start: Dayjs,
-  end: Dayjs,
-  precision: TimePrecision
-): [string, string] {
+export function alignDateRangeToPrecision(start: Dayjs, end: Dayjs, precision: TimePrecision): [string, string] {
   const unit: OpUnitType = precisionToUnit[precision] as OpUnitType;
   const alignedStart = dayjs.utc(start).startOf(unit);
   const alignedEnd = dayjs.utc(end).endOf(unit);
