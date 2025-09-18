@@ -41,10 +41,10 @@ Scoring notes:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Dict, List, Optional, Sequence, Mapping, Any
-from datetime import datetime
 import json
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Any, Dict, List, Mapping, Optional, Sequence
 
 import chromadb
 from langchain.schema.document import Document

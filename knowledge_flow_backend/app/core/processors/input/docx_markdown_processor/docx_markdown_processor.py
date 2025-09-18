@@ -18,8 +18,8 @@ import zipfile
 from datetime import datetime
 from pathlib import Path
 
-from docx import Document
 import pypandoc
+from docx import Document
 
 from app.core.processors.input.common.base_input_processor import BaseMarkdownProcessor
 
