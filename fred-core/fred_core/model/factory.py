@@ -80,11 +80,11 @@ def get_model(cfg: Optional[ModelConfiguration]) -> BaseChatModel:
 
     if provider == "azure":
         _require_env("AZURE_OPENAI_API_KEY")
-        _require_settings(settings, ["azure_endpoint", "api_version"], "Azure chat")
+        _require_settings(settings, ["azure_endpoint", "azure_api_version"], "Azure chat")
         _info_provider(cfg)
         if not cfg.name:
             raise ValueError("Azure chat requires 'name' (deployment).")
-        api_version = settings.pop("api_version")
+        api_version = settings.pop("azure_api_version")
         return AzureChatOpenAI(
             azure_deployment=cfg.name, api_version=api_version, **settings
         )
@@ -105,6 +105,8 @@ def get_model(cfg: Optional[ModelConfiguration]) -> BaseChatModel:
 
         base = settings["azure_apim_base_url"].rstrip("/")
         path = settings["azure_resource_path"].rstrip("/")
+        api_version = settings["azure_api_version"]
+        
         if not cfg.name:
             raise ValueError("Azure APIM chat requires 'name' (deployment).")
         full_url = f"{base}{path}/deployments/{cfg.name}/chat/completions?api-version={settings['azure_api_version']}"
@@ -126,6 +128,7 @@ def get_model(cfg: Optional[ModelConfiguration]) -> BaseChatModel:
         return AzureChatOpenAI(
             azure_endpoint=full_url,
             api_key=SecretStr(token),
+            api_version=api_version,
             default_headers={
                 "TrustNest-Apim-Subscription-Key": os.environ["AZURE_APIM_KEY"]
             },
@@ -170,11 +173,11 @@ def get_embeddings(cfg: ModelConfiguration) -> LCEmbeddings:
     if provider == "azure":
         _require_env("AZURE_OPENAI_API_KEY")
         _require_settings(
-            settings, ["azure_endpoint", "api_version"], "Azure embeddings"
+            settings, ["azure_endpoint", "azure_api_version"], "Azure embeddings"
         )
         if not name:
             raise ValueError("Azure embeddings require 'name' (deployment).")
-        api_version = settings.pop("api_version")
+        api_version = settings.pop("azure_api_version")
         _info_provider(cfg)
         return AzureOpenAIEmbeddings(
             azure_deployment=name, api_version=api_version, **settings
@@ -195,6 +198,7 @@ def get_embeddings(cfg: ModelConfiguration) -> LCEmbeddings:
 
         base = settings["azure_apim_base_url"].rstrip("/")
         path = settings["azure_resource_path"].rstrip("/")
+        api_version = settings["azure_api_version"]
         if not name:
             raise ValueError("Azure APIM embeddings require 'name' (deployment).")
         full_url = f"{base}{path}/deployments/{name}/embeddings?api-version={settings['azure_api_version']}"
@@ -216,6 +220,7 @@ def get_embeddings(cfg: ModelConfiguration) -> LCEmbeddings:
         return AzureOpenAIEmbeddings(
             azure_endpoint=full_url,
             api_key=SecretStr(token),
+            api_version=api_version,
             default_headers={
                 "TrustNest-Apim-Subscription-Key": os.environ["AZURE_APIM_KEY"]
             },
