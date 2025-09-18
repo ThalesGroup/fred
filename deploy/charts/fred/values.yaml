@@ -518,7 +518,7 @@ applications:
           connect_timeout_seconds: 5
       input_processors:
         - prefix: ".pdf"
-          class_path: app.core.processors.input.pdf_markdown_processor.openai_pdf_markdown_processor.OpenaiPdfMarkdownProcessor
+          class_path: app.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor
         - prefix: ".docx"
           class_path: app.core.processors.input.docx_markdown_processor.docx_markdown_processor.DocxMarkdownProcessor
         - prefix: ".pptx"
