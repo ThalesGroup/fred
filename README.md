@@ -136,9 +136,14 @@ cd fred
 # Copy the 2 environment files templates
 cp agentic_backend/config/.env.template agentic_backend/config/.env
 cp knowledge_flow_backend/config/.env.template knowledge_flow_backend/config/.env
-
-echo "OPENAI_API_KEY=sk-..." >> {agentic_backend,knowledge_flow_backend}/config/.env
 ```
+
+And then copy-paster your `OPENAI_API_KEY` value in the 2 files:
+
+- agentic_backend/config/.env
+- knowledge_flow_backend/config/.env
+
+⚠️ An `OPENAI_API_KEY` from a free openAI account unfortunately does not work.
 
 #### 4 · Run the services
 
