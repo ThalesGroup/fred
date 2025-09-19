@@ -83,7 +83,7 @@ class DocxMarkdownProcessor(BaseMarkdownProcessor):
             ],
         )
 
-        #pypandoc.convert_file(str(file_path), to="markdown_strict+pipe_tables", outputfile=str(md_path), extra_args=extra_args)
+        # pypandoc.convert_file(str(file_path), to="markdown_strict+pipe_tables", outputfile=str(md_path), extra_args=extra_args)
 
         # Convert EMF to SVG
         for img_path in (images_dir / "media").glob("*.emf"):

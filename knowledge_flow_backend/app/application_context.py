@@ -792,10 +792,8 @@ class ApplicationContext:
 
             def _describe(label: str, store_cfg):
                 if isinstance(store_cfg, DuckdbStoreConfig):
-                    logger.info(
-                        "     • %-14s DuckDB  path=%s", label, store_cfg.duckdb_path
-                    )
- 
+                    logger.info("     • %-14s DuckDB  path=%s", label, store_cfg.duckdb_path)
+
                 elif isinstance(store_cfg, OpenSearchIndexConfig):
                     os_cfg = self.configuration.storage.opensearch
                     logger.info(
@@ -807,20 +805,9 @@ class ApplicationContext:
                         os_cfg.verify_certs,
                     )
                 elif isinstance(store_cfg, SQLStorageConfig):
-                    logger.info(
-                        "     • %-14s SQLStorage  database=%s  host=%s",
-                        label,
-                        store_cfg.database or "unset",
-                        store_cfg.host or "unset"
-                    )
+                    logger.info("     • %-14s SQLStorage  database=%s  host=%s", label, store_cfg.database or "unset", store_cfg.host or "unset")
                 elif isinstance(store_cfg, ChromaVectorStorageConfig):
-                    logger.info(
-                        "     • %-14s ChromaDB  database=%s  host=%s  distance=%s",
-                        label,
-                        store_cfg.local_path or "unset",
-                        store_cfg.collection_name or "unset",
-                        store_cfg.distance or "unset"
-                    )
+                    logger.info("     • %-14s ChromaDB  database=%s  host=%s  distance=%s", label, store_cfg.local_path or "unset", store_cfg.collection_name or "unset", store_cfg.distance or "unset")
                 elif isinstance(store_cfg, LogStoreConfig):
                     # No-op KPI / log-only store
                     logger.info(
