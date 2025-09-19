@@ -199,7 +199,7 @@ class IngestionController:
                         events.append(ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n")
 
                         current_step = "input processing"
-                        metadata = input_process(input_file=input_temp_file, metadata=metadata)
+                        metadata = input_process(user=user, input_file=input_temp_file, metadata=metadata)
                         events.append(ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n")
 
                         current_step = "output processing"

@@ -21,7 +21,7 @@ from temporalio.client import Client
 
 from app.application_context import ApplicationContext
 from app.features.scheduler.activities import create_pull_file_metadata, get_push_file_metadata, input_process, load_pull_file, load_push_file, output_process
-from app.features.scheduler.structure import PipelineDefinition, ProcessDocumentsRequest
+from app.features.scheduler.structure import FileToProcess, PipelineDefinition, ProcessDocumentsRequest
 from app.features.scheduler.workflow import Process
 
 logger = logging.getLogger(__name__)
@@ -32,12 +32,12 @@ async def run_ingestion_pipeline(definition: PipelineDefinition) -> str:
         if file.is_pull():
             metadata = create_pull_file_metadata(file)
             local_file_path = load_pull_file(file, metadata)
-            metadata = input_process(input_file=local_file_path, metadata=metadata)
+            metadata = input_process(user=file.processed_by, input_file=local_file_path, metadata=metadata)
             metadata = output_process(file=file, metadata=metadata, accept_memory_storage=True)
         else:
             metadata = get_push_file_metadata(file)
             local_file_path = load_push_file(file, metadata)
-            metadata = input_process(input_file=local_file_path, metadata=metadata)
+            metadata = input_process(user=file.processed_by, input_file=local_file_path, metadata=metadata)
             metadata = output_process(file=file, metadata=metadata, accept_memory_storage=True)
     return "success"
 
@@ -65,7 +65,8 @@ class SchedulerController:
                 # You may batch files per-source_tag if needed
                 definition = PipelineDefinition(
                     name=req.pipeline_name,
-                    files=req.files,
+                    # Assign file to the authenticated user
+                    files=[FileToProcess.from_file_to_process_without_user(f, user) for f in req.files],
                 )
                 result = await run_ingestion_pipeline(definition)
                 return {"status": result}

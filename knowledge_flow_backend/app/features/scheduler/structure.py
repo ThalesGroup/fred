@@ -25,12 +25,11 @@ from app.common.document_structures import AccessInfo, DocumentMetadata, FileInf
 from app.core.stores.catalog.base_catalog_store import PullFileEntry
 
 
-class FileToProcess(BaseModel):
+class FileToProcessWithoutUser(BaseModel):
     # Common fields
     source_tag: str
     tags: List[str] = []
     display_name: Optional[str] = None
-    processed_by: KeycloakUser
 
     # Push-specific
     document_uid: Optional[str] = None  # Present for push files
@@ -46,6 +45,17 @@ class FileToProcess(BaseModel):
 
     def is_push(self) -> bool:
         return not self.is_pull()
+
+
+class FileToProcess(FileToProcessWithoutUser):
+    processed_by: KeycloakUser
+
+    @classmethod
+    def from_file_to_process_without_user(cls, file: FileToProcessWithoutUser, user: KeycloakUser) -> "FileToProcess":
+        return cls(
+            **file.model_dump(),
+            processed_by=user,
+        )
 
     @classmethod
     def from_pull_entry(cls, entry: PullFileEntry, source_tag: str, user: KeycloakUser) -> "FileToProcess":
@@ -132,5 +142,5 @@ class PipelineDefinition(BaseModel):
 
 
 class ProcessDocumentsRequest(BaseModel):
-    files: List[FileToProcess]
+    files: List[FileToProcessWithoutUser]
     pipeline_name: str

@@ -16,7 +16,7 @@ import logging
 import pathlib
 import tempfile
 
-from fred_core import TODO_PASS_REAL_USER
+from fred_core import KeycloakUser
 from temporalio import activity, exceptions
 
 from app.common.document_structures import DocumentMetadata, ProcessingStage
@@ -132,7 +132,7 @@ def load_pull_file(file: FileToProcess, metadata: DocumentMetadata) -> pathlib.P
 
 
 @activity.defn
-def input_process(input_file: pathlib.Path, metadata: DocumentMetadata) -> DocumentMetadata:
+def input_process(user: KeycloakUser, input_file: pathlib.Path, metadata: DocumentMetadata) -> DocumentMetadata:
     """
     Processes the provided local input file and saves the metadata.
     This method generates the output files (preview, markdown, CSV) and
@@ -151,11 +151,11 @@ def input_process(input_file: pathlib.Path, metadata: DocumentMetadata) -> Docum
     output_dir.mkdir(exist_ok=True)
 
     # Process the file
-    ingestion_service.process_input(TODO_PASS_REAL_USER, input_file, output_dir, metadata)
-    ingestion_service.save_output(TODO_PASS_REAL_USER, metadata=metadata, output_dir=output_dir)
+    ingestion_service.process_input(user, input_file, output_dir, metadata)
+    ingestion_service.save_output(user, metadata=metadata, output_dir=output_dir)
 
     metadata.mark_stage_done(ProcessingStage.PREVIEW_READY)
-    ingestion_service.save_metadata(TODO_PASS_REAL_USER, metadata=metadata)
+    ingestion_service.save_metadata(user, metadata=metadata)
 
     logger.info(f"[input_process] Done for UID: {metadata.document_uid}")
     return metadata

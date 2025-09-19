@@ -60,9 +60,9 @@ class LoadPushFile:
 @workflow.defn
 class InputProcess:
     @workflow.run
-    async def run(self, file, metadata):
+    async def run(self, user, file, metadata):
         workflow.logger.info(f"📂 InputProcess: {file}")
-        return await workflow.execute_activity(input_process, args=[file, metadata], schedule_to_close_timeout=timedelta(seconds=60))
+        return await workflow.execute_activity(input_process, args=[user, file, metadata], schedule_to_close_timeout=timedelta(seconds=60))
 
 
 @workflow.defn
