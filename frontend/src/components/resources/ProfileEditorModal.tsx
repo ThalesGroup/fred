@@ -10,16 +10,13 @@ import {
   TextField,
 } from "@mui/material";
 import * as React from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import yaml from "js-yaml";
 import {
   buildProfileYaml,
   looksLikeYamlDoc,
-  splitFrontMatter,
-  buildFrontMatter,
 } from "./resourceYamlUtils";
 
 const profileSchema = z.object({
@@ -56,14 +53,12 @@ export const ProfileEditorModal: React.FC<ProfileEditorModalProps> = ({
   initial,
   getSuggestion,
 }) => {
-  const incomingDoc = useMemo(() => (initial as any)?.yaml ?? (initial as any)?.body ?? "", [initial]);
 
   // ----- Simple mode form (create) -----
   const {
     register,
     handleSubmit,
     setValue,
-    reset,
     formState: { errors, isSubmitting },
   } = useForm<ProfileFormData>({
     resolver: zodResolver(profileSchema),
@@ -71,40 +66,7 @@ export const ProfileEditorModal: React.FC<ProfileEditorModalProps> = ({
   });
 
   // ----- Doc mode state (kept but UI is simple-only now) -----
-  const [headerText, setHeaderText] = useState<string>("");
-  const [bodyText, setBodyText] = useState<string>("");
-  const [headerError, setHeaderError] = useState<string | null>(null);
   const [suggesting, setSuggesting] = useState(false);
-
-  // Force simple UI; we still parse YAML to prefill simple fields if present.
-  const isDocMode = false;
-
-  useEffect(() => {
-    if (!isOpen) return;
-
-    if (looksLikeYamlDoc(incomingDoc)) {
-      const { header, body } = splitFrontMatter(incomingDoc);
-      // Prefill simple form from YAML
-      reset({
-        name: (header as any)?.name ?? initial?.name ?? "",
-        description: (header as any)?.description ?? initial?.description ?? "",
-        body: body ?? "",
-      });
-      // Keep internal doc states in sync (not rendered)
-      setHeaderText(yaml.dump(header).trim());
-      setBodyText(body ?? "");
-      setHeaderError(null);
-    } else {
-      reset({
-        name: initial?.name ?? "",
-        description: initial?.description ?? "",
-        body: incomingDoc || "",
-      });
-      setHeaderText("");
-      setBodyText("");
-      setHeaderError(null);
-    }
-  }, [isOpen, incomingDoc, initial?.name, initial?.description, reset]);
 
   const handleAIHelp = async () => {
     if (!getSuggestion) return;
@@ -126,11 +88,11 @@ export const ProfileEditorModal: React.FC<ProfileEditorModalProps> = ({
     const content = looksLikeYamlDoc(body)
       ? body
       : buildProfileYaml({
-          name: data.name,
-          description: data.description || undefined,
-          labels: undefined,
-          body,
-        });
+        name: data.name,
+        description: data.description || undefined,
+        labels: undefined,
+        body,
+      });
 
     const payload: ResourceCreateLike = {
       name: data.name,
@@ -138,28 +100,6 @@ export const ProfileEditorModal: React.FC<ProfileEditorModalProps> = ({
       content,
     };
     onSave(payload);
-    onClose();
-  };
-
-  // Kept for compatibility; not used in UI anymore.
-  const onSubmitDoc = () => {
-    let headerObj: Record<string, any>;
-    try {
-      headerObj = (yaml.load(headerText || "") as Record<string, any>) ?? {};
-      setHeaderError(null);
-    } catch (e: any) {
-      setHeaderError(e?.message || "Invalid YAML");
-      return;
-    }
-    if (!headerObj.kind) headerObj.kind = "profile";
-
-    const content = buildFrontMatter(headerObj, bodyText);
-    onSave({
-      content,
-      name: headerObj.name,
-      description: headerObj.description,
-      labels: headerObj.labels,
-    });
     onClose();
   };
 

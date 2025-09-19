@@ -43,7 +43,7 @@ export function PluginSelector({
       map.get(g)!.push(it);
     }
     // sort groups and items by name
-    for (const [k, arr] of map) arr.sort((a, b) => a.name.localeCompare(b.name));
+    for (const [,arr] of map) arr.sort((a, b) => a.name.localeCompare(b.name));
     return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]));
   }, [items]);
 
