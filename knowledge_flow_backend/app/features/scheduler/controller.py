@@ -87,7 +87,7 @@ class SchedulerController:
             # You may batch files per-source_tag if needed
             definition = PipelineDefinition(
                 name=req.pipeline_name,
-                files=req.files,
+                files=[FileToProcess.from_file_to_process_without_user(f, user) for f in req.files],
             )
 
             client = await Client.connect(
