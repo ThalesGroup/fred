@@ -1,8 +1,19 @@
-# app/core/stores/metadata/duckdb_metadata_store.py
+# Copyright Thales 2025
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from __future__ import annotations
 
-import json
-import logging
 from pathlib import Path
 from typing import List, Optional
 
@@ -15,19 +26,12 @@ from app.core.stores.metadata.base_metadata_store import (
     MetadataDeserializationError,
 )
 
-logger = logging.getLogger(__name__)
-
 
 class DuckdbMetadataStore(BaseMetadataStore):
     """
-    Minimal, robust DuckDB store:
-      - One JSON blob column 'doc' with the full DocumentMetadata (authoritative)
-      - A few 'hot' columns for fast filters: document_uid (PK), source_tag, tag_ids (JSON array), date_added_to_kb
-    Query strategy:
-      - get_metadata_by_uid: direct hit on PK
-      - list_by_source_tag: simple WHERE on source_tag
-      - get_metadata_in_tag: json_each(tag_ids)
-      - get_all_metadata: dev-friendly load-all + in-memory filter (as before)
+    DuckDB metadata store with native arrays:
+      - 'doc' keeps the full DocumentMetadata JSON blob
+      - 'tag_ids' is a VARCHAR[] for fast filtering
     """
 
     def __init__(self, db_path: Path):
@@ -38,41 +42,34 @@ class DuckdbMetadataStore(BaseMetadataStore):
     def _table(self) -> str:
         return self.store._prefixed(self.table_name)
 
-    # ---------- schema ----------
+    # --- schema ---
 
     def _ensure_schema(self) -> None:
         """
-        Schema: compact + future-proof.
+        Ensure table exists and add columns if the schema drifted.
         """
         full_table = self._table()
-        sql = f"""
-            CREATE TABLE IF NOT EXISTS {full_table} (
-                document_uid TEXT PRIMARY KEY,
-                source_tag   TEXT,
-                date_added_to_kb TIMESTAMP,
-                tag_ids      JSON,      -- JSON ARRAY of strings
-                doc          JSON       -- full DocumentMetadata JSON blob
-            );
-        """
         with self.store._connect() as conn:
-            conn.execute(sql)
-            # Normalize legacy bad tag_ids (string -> array) if present
-            conn.execute(
-                f"""
-                UPDATE {full_table}
-                SET tag_ids = json_array(tag_ids)
-                WHERE tag_ids IS NOT NULL
-                  AND json_valid(tag_ids)
-                  AND json_type(tag_ids) = 'STRING'
-                """
-            )
+            conn.execute(f"""
+                CREATE TABLE IF NOT EXISTS {full_table} (
+                    document_uid TEXT PRIMARY KEY,
+                    source_tag   TEXT,
+                    date_added_to_kb TIMESTAMP,
+                    tag_ids      VARCHAR[],   -- native array
+                    doc          JSON         -- full DocumentMetadata JSON blob
+                )
+            """)
+            # Add missing column if upgrading from an older layout
+            cols = {r[1] for r in conn.execute(f"PRAGMA table_info('{full_table}')").fetchall()}
+            if "tag_ids" not in cols:
+                conn.execute(f"ALTER TABLE {full_table} ADD COLUMN tag_ids VARCHAR[]")
 
-    # ---------- helpers ----------
+    # --- serialization helpers ---
 
     @staticmethod
     def _to_json(md: DocumentMetadata) -> str:
-        # Store in “json” mode for portability (enums as values etc.)
-        return json.dumps(md.model_dump(mode="json"), ensure_ascii=False)
+        # Store in JSON mode for portability (enums as values etc.)
+        return md.model_dump_json()
 
     @staticmethod
     def _from_json(s: str) -> DocumentMetadata:
@@ -81,7 +78,7 @@ class DuckdbMetadataStore(BaseMetadataStore):
         except ValidationError as e:
             raise MetadataDeserializationError(f"Invalid metadata JSON: {e}") from e
 
-    # ---------- reads ----------
+    # --- reads ---
 
     def get_metadata_by_uid(self, document_uid: str) -> Optional[DocumentMetadata]:
         with self.store._connect() as conn:
@@ -101,27 +98,18 @@ class DuckdbMetadataStore(BaseMetadataStore):
 
     def get_metadata_in_tag(self, tag_id: str) -> List[DocumentMetadata]:
         """
-        Robust to legacy rows: if tag_ids was a string, we normalized it to an array in _ensure_schema.
+        Filter by a specific tag using DuckDB's native list_contains function.
         """
         with self.store._connect() as conn:
             rows = conn.execute(
-                f"""
-                SELECT m.doc
-                FROM {self._table()} AS m,
-                     json_each(CASE
-                         WHEN json_valid(m.tag_ids) AND json_type(m.tag_ids)='ARRAY' THEN m.tag_ids
-                         ELSE json('[]')
-                     END) AS je
-                WHERE je.value::VARCHAR = ?
-                """,
+                f"SELECT doc FROM {self._table()} WHERE list_contains(tag_ids, ?)",
                 [tag_id],
             ).fetchall()
         return [self._from_json(r[0]) for r in rows]
 
     def get_all_metadata(self, filters: dict) -> List[DocumentMetadata]:
         """
-        Keep it simple: load all + filter in memory using the JSON dict.
-        (Same behavior you had; easy to evolve later.)
+        Load all documents then filter in Python for nested keys.
         """
         with self.store._connect() as conn:
             rows = conn.execute(f"SELECT doc FROM {self._table()}").fetchall()
@@ -135,10 +123,9 @@ class DuckdbMetadataStore(BaseMetadataStore):
         if not uid:
             raise ValueError("Metadata must contain a 'document_uid'")
 
-        # pull “hot” columns from the object
         source_tag = metadata.source.source_tag
         date_added = metadata.source.date_added_to_kb
-        tag_ids = json.dumps(list(metadata.tags.tag_ids or []), ensure_ascii=False)
+        tag_ids = list(metadata.tags.tag_ids or [])
         doc_json = self._to_json(metadata)
 
         with self.store._connect() as conn:
@@ -164,7 +151,7 @@ class DuckdbMetadataStore(BaseMetadataStore):
         with self.store._connect() as conn:
             conn.execute(f"DELETE FROM {self._table()}")
 
-    # ---------- helper: nested filter ----------
+    # --- helper: nested filter ---
 
     def _match_nested(self, item: dict, filter_dict: dict) -> bool:
         """

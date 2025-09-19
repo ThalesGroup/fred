@@ -109,20 +109,15 @@ export function ProfileCard({
 
   return (
     // Right-anchored container
-    <Grid2
-      size={{ xs: 12 }}
-      display="flex"
-      justifyContent={{ xs: "stretch", md: "flex-end" }}
-      px={{ xs: 1.5, md: 3 }}
-    >
+    <Grid2 size={{ xs: 12 }} display="flex" justifyContent={{ xs: "stretch", md: "flex-end" }} px={{ xs: 1.5, md: 3 }}>
       <Card
         variant="outlined"
         sx={{
-          ml: { md: "auto" },           // stick to the right on md+
+          ml: { md: "auto" }, // stick to the right on md+
           width: "100%",
-          maxWidth: 980,                // comfortable reading width
+          maxWidth: 980, // comfortable reading width
           borderRadius: 3,
-          bgcolor: "transparent",       // no paper slab
+          bgcolor: "transparent", // no paper slab
           boxShadow: "none",
           borderColor: "divider",
         }}

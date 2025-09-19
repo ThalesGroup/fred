@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 /**
  * Downloads a file by creating a temporary link and clicking it
  */
@@ -26,4 +25,3 @@ export const downloadFile = (blob: Blob, filename: string) => {
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
 };
-

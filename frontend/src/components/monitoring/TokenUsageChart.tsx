@@ -12,16 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-  CartesianGrid,
-} from "recharts";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import dayjs, { ManipulateType } from "dayjs";
 import utc from "dayjs/plugin/utc";
 import { alpha, useTheme } from "@mui/material/styles";
@@ -42,14 +33,7 @@ export interface TokenUsageChartProps {
   xDomain?: [number, number];
 }
 
-export function TokenUsageChart({
-  start,
-  end,
-  precision,
-  metrics,
-  height = 220,
-  xDomain,
-}: TokenUsageChartProps) {
+export function TokenUsageChart({ start, end, precision, metrics, height = 220, xDomain }: TokenUsageChartProps) {
   const theme = useTheme();
 
   // Choose a bar base color from your theme (prefer chart.* then primary)
@@ -103,8 +87,9 @@ export function TokenUsageChart({
     return 60_000;
   };
   const stepMs = stepMsFor(precision);
-  const paddedDomain: [number, number] | ["dataMin", "dataMax"] =
-    xDomain ? [xDomain[0] - stepMs / 2, xDomain[1] + stepMs / 2] : ["dataMin", "dataMax"];
+  const paddedDomain: [number, number] | ["dataMin", "dataMax"] = xDomain
+    ? [xDomain[0] - stepMs / 2, xDomain[1] + stepMs / 2]
+    : ["dataMin", "dataMax"];
 
   // --- render ----------------------------------------------------------------
   return (
