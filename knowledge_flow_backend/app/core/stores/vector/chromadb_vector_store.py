@@ -68,6 +68,7 @@ def _assert_has_metadata_keys(doc: Document) -> None:
     if DOC_UID_FIELD not in (doc.metadata or {}):
         raise ValueError(f"Document is missing required metadata '{DOC_UID_FIELD}'")
 
+
 def _build_where(search_filter: Optional[SearchFilter]) -> Optional[Dict]:
     """
     Build the 'where' filter for Chroma.
@@ -97,10 +98,12 @@ def _build_where(search_filter: Optional[SearchFilter]) -> Optional[Dict]:
 
     return where or None
 
+
 def _cosine_similarity_from_distance(distance: float) -> float:
     # Chroma returns cosine distance; convert to [0,1] similarity for UI
     sim = 1.0 - float(distance)
     return max(0.0, min(1.0, sim))
+
 
 def sanitize_metadata(meta: Mapping[str, Any]) -> dict[str, Any]:
     clean: dict[str, Any] = {}
@@ -110,6 +113,7 @@ def sanitize_metadata(meta: Mapping[str, Any]) -> dict[str, Any]:
         elif isinstance(v, list):
             # always JSON encode, even single element or empty
             import json
+
             clean[k] = json.dumps(v)
         elif isinstance(v, Mapping):
             clean[k] = sanitize_metadata(v)
@@ -117,16 +121,17 @@ def sanitize_metadata(meta: Mapping[str, Any]) -> dict[str, Any]:
             clean[k] = v
     return clean
 
+
 def restore_metadata(meta: Mapping[str, Any]) -> dict[str, Any]:
     restored: dict[str, Any] = {}
     for k, v in meta.items():
         if isinstance(v, str):
             # Try to restore datetime
-            try:
-                restored[k] = datetime.fromisoformat(v)
-                continue
-            except ValueError:
-                pass
+            # try:
+            #     restored[k] = datetime.fromisoformat(v)
+            #     continue
+            # except ValueError:
+            #     pass
             # Try to restore JSON-encoded lists
             try:
                 loaded = json.loads(v)
@@ -252,10 +257,7 @@ class ChromaDBVectorStore(BaseVectorStore, FetchById):
         documents = got.get("documents", []) or []
         metadatas = got.get("metadatas", []) or []
         for text, meta in zip(documents, metadatas):
-            docs.append(Document(
-                page_content=text or "",
-                metadata=restore_metadata(meta or {})
-            ))
+            docs.append(Document(page_content=text or "", metadata=restore_metadata(meta or {})))
         return docs
 
 
