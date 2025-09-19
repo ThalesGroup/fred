@@ -9,12 +9,11 @@ import requests
 from app.core.agents.runtime_context import (
     RuntimeContext,
     get_document_library_tags_ids,
+    get_profile_libraries_ids,
     get_prompt_libraries_ids,
-    get_profile_libraries_ids
 )
 
 logger = logging.getLogger(__name__)
-
 
 @dataclass
 class Prepared:
