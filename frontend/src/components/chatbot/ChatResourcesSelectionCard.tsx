@@ -1,27 +1,19 @@
 // Copyright Thales 2025
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// You may not use this file except in compliance with the License.
+// http://www.apache.org/licenses/LICENSE-2.0
 
 import { useMemo, useState } from "react";
 import {
   Box,
-  Checkbox,
   IconButton,
   List,
   ListItem,
   ListItemButton,
   ListItemIcon,
   ListItemText,
+  Radio,
   TextField,
   Typography,
 } from "@mui/material";
@@ -38,7 +30,7 @@ import {
 } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 
 export interface ResourceLibrariesSelectionCardProps {
-  // ⬅️ ajoute "profile" au type accepté par le composant (sans casser TagType global)
+  // add "profile" without changing backend enum usage
   libraryType: TagType | "profile"; // "prompt" | "template" | "profile"
   selectedResourceIds: string[];
   setSelectedResourceIds: (ids: string[]) => void;
@@ -55,7 +47,6 @@ export function ChatResourcesSelectionCard({
 
   // Libraries (as groups to browse)
   const { data: tags = [], isLoading, isError } = useListAllTagsKnowledgeFlowV1TagsGetQuery({
-    // si le backend n'a pas encore "profile" dans TagType, le cast évite une erreur TS
     type: libraryType as TagType,
   });
 
@@ -67,6 +58,7 @@ export function ChatResourcesSelectionCard({
     return undefined;
   })();
 
+  // NOTE: this assumes resourceKind is set for supported types
   const { data: fetchedResources = [] } =
     resourceKind
       ? useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery({ kind: resourceKind })
@@ -111,10 +103,20 @@ export function ChatResourcesSelectionCard({
     );
   }, [libs, q]);
 
+  // --- single-select helpers ---
+  const selectResource = (id: string) => {
+    // force single selection
+    setSelectedResourceIds([id]);
+  };
+
   const toggleSelectResource = (id: string) => {
-    const sel = new Set(selectedResourceIds);
-    sel.has(id) ? sel.delete(id) : sel.add(id);
-    setSelectedResourceIds(Array.from(sel));
+    // if already selected → unselect, else select
+    const current = selectedResourceIds[0];
+    if (current === id) {
+      setSelectedResourceIds([]);
+    } else {
+      setSelectedResourceIds([id]);
+    }
   };
 
   const toggleOpen = (id: string) => setOpenMap((m) => ({ ...m, [id]: !m[id] }));
@@ -154,7 +156,7 @@ export function ChatResourcesSelectionCard({
             {t("common.noResults", "No results")}
           </Typography>
         ) : (
-          <List dense disablePadding>
+          <List dense disablePadding role="radiogroup" aria-label="library resources">
             {filtered.map((lib) => {
               const contents = resourcesByTag.get(lib.id) ?? [];
               const isOpen = !!openMap[lib.id];
@@ -185,21 +187,29 @@ export function ChatResourcesSelectionCard({
                     </ListItemButton>
                   </ListItem>
 
-                  {/* Resources inside the library (selectable) */}
+                  {/* Resources inside the library (single-select) */}
                   {resourceKind && isOpen && contents.length > 0 && (
                     <List disablePadding>
                       {contents.map((r) => {
-                        const resChecked = selectedResourceIds.includes(r.id);
+                        const resChecked = selectedResourceIds[0] === r.id;
                         return (
-                          <ListItem key={r.id} dense>
-                            <ListItemButton onClick={() => toggleSelectResource(r.id)} selected={resChecked}>
+                          <ListItem key={r.id} dense role="radio" aria-checked={resChecked}>
+                            <ListItemButton
+                              onClick={() => toggleSelectResource(r.id)}
+                              selected={resChecked}
+                              sx={{ borderRadius: 1 }}
+                            >
                               <ListItemIcon sx={{ minWidth: 36 }}>
-                                <Checkbox
+                                <Radio
                                   edge="start"
                                   tabIndex={-1}
                                   disableRipple
+                                  size="small"
                                   checked={resChecked}
-                                  onChange={() => toggleSelectResource(r.id)}
+                                  onChange={(e) => {
+                                    e.stopPropagation();
+                                    selectResource(r.id);
+                                  }}
                                 />
                               </ListItemIcon>
                               <ListItemText primary={r.name} />
