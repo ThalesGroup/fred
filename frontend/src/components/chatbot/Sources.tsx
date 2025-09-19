@@ -39,19 +39,18 @@ function SourceRow({
   uid: string;
   hits: VectorSearchHit[];
   onOpen: () => void;
-  highlighted: boolean; 
+  highlighted: boolean;
 }) {
-  const bestScore = Math.max(...hits.map(h => h.score ?? 0));
+  const bestScore = Math.max(...hits.map((h) => h.score ?? 0));
   const bestPct = Math.round(Math.max(0, Math.min(1, bestScore)) * 100);
   const first = hits[0] ?? ({} as VectorSearchHit);
-  const title =
-    (hits.find(h => h.title)?.title || first.title || first.file_name || uid)?.trim() || uid;
+  const title = (hits.find((h) => h.title)?.title || first.title || first.file_name || uid)?.trim() || uid;
   const fileName = first.file_name || "";
   const mime = first.mime_type || "";
   const lang = first.language || "";
-  const pageCount = [...new Set(hits.map(h => h.page).filter(Boolean))].length;
+  const pageCount = [...new Set(hits.map((h) => h.page).filter(Boolean))].length;
 
-  const tags = Array.from(new Set(hits.flatMap(h => h.tag_names ?? [])));
+  const tags = Array.from(new Set(hits.flatMap((h) => h.tag_names ?? [])));
   const shownTags = tags.slice(0, 3);
   const extra = Math.max(0, tags.length - shownTags.length);
 
@@ -59,16 +58,16 @@ function SourceRow({
     <Paper
       variant="outlined"
       sx={{
-    px: 1.5,
-    py: 1,
-    mb: 1,
-    borderRadius: 2,
-    borderColor: highlighted ? "primary.main" : undefined,
-    boxShadow: highlighted ? 3 : undefined,
-    "&:hover": { bgcolor: "action.hover" },
-    cursor: "pointer",
-    transition: "box-shadow 120ms ease, border-color 120ms ease",
-  }}
+        px: 1.5,
+        py: 1,
+        mb: 1,
+        borderRadius: 2,
+        borderColor: highlighted ? "primary.main" : undefined,
+        boxShadow: highlighted ? 3 : undefined,
+        "&:hover": { bgcolor: "action.hover" },
+        cursor: "pointer",
+        transition: "box-shadow 120ms ease, border-color 120ms ease",
+      }}
       role="button"
       tabIndex={0}
       onClick={onOpen}
@@ -101,14 +100,9 @@ function SourceRow({
           </Box>
         </Grid2>
 
-        <Grid2 size={{ xs: 8}}>
+        <Grid2 size={{ xs: 8 }}>
           <Box sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0 }}>
-            <Typography
-              variant="subtitle2"
-              noWrap
-              title={title}
-              sx={{ fontWeight: 600, maxWidth: "60%" }}
-            >
+            <Typography variant="subtitle2" noWrap title={title} sx={{ fontWeight: 600, maxWidth: "60%" }}>
               {title}
             </Typography>
             {fileName && (
@@ -150,8 +144,7 @@ export default function Sources({
   useEffect(() => {
     if (!sources?.length) return;
     const pct = (x?: number | null) => Math.round(Math.max(0, Math.min(1, x ?? 0)) * 100);
-    const short = (s?: string | null, n = 80) =>
-      (s ?? "").length > n ? (s ?? "").slice(0, n - 1) + "…" : (s ?? "");
+    const short = (s?: string | null, n = 80) => ((s ?? "").length > n ? (s ?? "").slice(0, n - 1) + "…" : (s ?? ""));
     const uniq = <T,>(arr: T[]) => Array.from(new Set(arr));
     const asDate = (s?: string | null) => (s ? new Date(s) : undefined);
     const fmtDate = (s?: string | null) => {
@@ -190,7 +183,7 @@ export default function Sources({
         frag_len: (s.viewer_fragment || "").length,
         content_len: (s.content || "").length,
         confidential: s.confidential ?? null,
-      }))
+      })),
     );
 
     const byUid = sources.reduce<Record<string, typeof sources>>((acc, h) => {
@@ -198,24 +191,17 @@ export default function Sources({
       return acc;
     }, {});
     const docSummaries = Object.entries(byUid).map(([uid, hits]) => {
-      const best = Math.max(...hits.map(h => h.score ?? 0));
+      const best = Math.max(...hits.map((h) => h.score ?? 0));
       const avg = hits.reduce((sum, h) => sum + (h.score ?? 0), 0) / (hits.length || 1);
-      const langs = uniq(hits.map(h => h.language).filter(Boolean) as string[]);
-      const mimes = uniq(hits.map(h => h.mime_type).filter(Boolean) as string[]);
-      const tags = uniq(hits.flatMap(h => h.tag_names ?? []));
-      const created = hits.map(h => h.created).filter(Boolean) as string[];
-      const modified = hits.map(h => h.modified).filter(Boolean) as string[];
-      const title =
-        (hits.find(h => h.title)?.title || hits[0]?.title)?.trim() ||
-        hits[0]?.file_name?.trim() ||
-        uid;
+      const langs = uniq(hits.map((h) => h.language).filter(Boolean) as string[]);
+      const mimes = uniq(hits.map((h) => h.mime_type).filter(Boolean) as string[]);
+      const tags = uniq(hits.flatMap((h) => h.tag_names ?? []));
+      const created = hits.map((h) => h.created).filter(Boolean) as string[];
+      const modified = hits.map((h) => h.modified).filter(Boolean) as string[];
+      const title = (hits.find((h) => h.title)?.title || hits[0]?.title)?.trim() || hits[0]?.file_name?.trim() || uid;
 
-      const minMod = modified.length
-        ? modified.reduce((a, b) => (new Date(a) < new Date(b) ? a : b))
-        : undefined;
-      const maxMod = modified.length
-        ? modified.reduce((a, b) => (new Date(a) > new Date(b) ? a : b))
-        : undefined;
+      const minMod = modified.length ? modified.reduce((a, b) => (new Date(a) < new Date(b) ? a : b)) : undefined;
+      const maxMod = modified.length ? modified.reduce((a, b) => (new Date(a) > new Date(b) ? a : b)) : undefined;
 
       return {
         uid,
@@ -238,18 +224,17 @@ export default function Sources({
         acc[k] = (acc[k] || 0) + 1;
         return acc;
       }, {});
-    const sortPairs = (obj: Record<string, number>) =>
-      Object.entries(obj).sort((a, b) => b[1] - a[1]);
+    const sortPairs = (obj: Record<string, number>) => Object.entries(obj).sort((a, b) => b[1] - a[1]);
 
-    const mimeDist = sortPairs(count(sources.map(s => s.mime_type)));
-    const langDist = sortPairs(count(sources.map(s => s.language)));
-    const tagDist = sortPairs(count(sources.flatMap(s => s.tag_names || [])));
+    const mimeDist = sortPairs(count(sources.map((s) => s.mime_type)));
+    const langDist = sortPairs(count(sources.map((s) => s.language)));
+    const tagDist = sortPairs(count(sources.flatMap((s) => s.tag_names || [])));
 
     console.log("[Sources] MIME distribution", Object.fromEntries(mimeDist));
     console.log("[Sources] Language distribution", Object.fromEntries(langDist));
     console.log("[Sources] Top tags", Object.fromEntries(tagDist.slice(0, 20)));
 
-    const sample = sources.slice(0, 10).map(s => ({
+    const sample = sources.slice(0, 10).map((s) => ({
       uid: s.uid,
       page: s.page ?? "",
       section: short(s.section, 40),
@@ -261,11 +246,11 @@ export default function Sources({
 
     const xmlLike = mimeDist.filter(([m]) => /xml/.test(m));
     if (xmlLike.length) console.warn("[Sources][Audit] XML-like MIME present:", Object.fromEntries(xmlLike));
-    const missingTitles = sources.filter(s => !s.title && !s.file_name).length;
+    const missingTitles = sources.filter((s) => !s.title && !s.file_name).length;
     if (missingTitles) console.warn(`[Sources][Audit] ${missingTitles} hit(s) with no title/file_name`);
-    const noMime = sources.filter(s => !s.mime_type).length;
+    const noMime = sources.filter((s) => !s.mime_type).length;
     if (noMime) console.warn(`[Sources][Audit] ${noMime} hit(s) with no mime_type`);
-    const zeroScores = sources.filter(s => !s.score).length;
+    const zeroScores = sources.filter((s) => !s.score).length;
     if (zeroScores) console.warn(`[Sources][Audit] ${zeroScores} hit(s) with score=0 or undefined`);
 
     console.groupEnd();
@@ -276,14 +261,17 @@ export default function Sources({
 
   const groupedOrdered = useMemo(() => {
     if (!sources?.length) return [];
-    const grouped: Record<string, VectorSearchHit[]> = sources.reduce((acc, h) => {
-      if (!h?.uid) return acc;
-      (acc[h.uid] ||= []).push(h);
-      return acc;
-    }, {} as Record<string, VectorSearchHit[]>);
+    const grouped: Record<string, VectorSearchHit[]> = sources.reduce(
+      (acc, h) => {
+        if (!h?.uid) return acc;
+        (acc[h.uid] ||= []).push(h);
+        return acc;
+      },
+      {} as Record<string, VectorSearchHit[]>,
+    );
 
     const entries = Object.entries(grouped).map(([uid, hits]) => {
-      const bestScore = Math.max(...hits.map(h => h.score ?? 0));
+      const bestScore = Math.max(...hits.map((h) => h.score ?? 0));
       return { uid, hits, bestScore };
     });
 
@@ -305,9 +293,13 @@ export default function Sources({
     >
       <Box sx={{ mt: 0.5 }}>
         {items.map(({ uid, hits }) => (
-          <SourceRow key={uid} uid={uid} hits={hits} 
-          highlighted={uid === highlightUid}
-          onOpen={() => setSelected({ uid, hits })} />
+          <SourceRow
+            key={uid}
+            uid={uid}
+            hits={hits}
+            highlighted={uid === highlightUid}
+            onOpen={() => setSelected({ uid, hits })}
+          />
         ))}
       </Box>
 

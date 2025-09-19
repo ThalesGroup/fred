@@ -56,9 +56,12 @@ export function useChatSocket(params: {
   }, []);
 
   const reset = useCallback(() => setAll([]), [setAll]);
-  const replaceAllMessages = useCallback((serverMessages: ChatMessage[]) => {
-    setAll(serverMessages);
-  }, [setAll]);
+  const replaceAllMessages = useCallback(
+    (serverMessages: ChatMessage[]) => {
+      setAll(serverMessages);
+    },
+    [setAll],
+  );
 
   // --- Connect / Close ---
 
@@ -162,7 +165,11 @@ export function useChatSocket(params: {
   // --- Send ---
 
   const send = useCallback(
-    async (message: string, runtimeContext?: RuntimeContext, overrides?: { agent?: AgenticFlow; session?: SessionSchema }) => {
+    async (
+      message: string,
+      runtimeContext?: RuntimeContext,
+      overrides?: { agent?: AgenticFlow; session?: SessionSchema },
+    ) => {
       const socket = await connect();
       if (!socket || socket.readyState !== WebSocket.OPEN) throw new Error("WebSocket not open");
 

@@ -12,13 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 import { useMemo } from "react";
 import { Box } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
-import {
-  ResponsiveContainer, CartesianGrid, XAxis, YAxis, Tooltip, Legend, BarChart, Bar,
-} from "recharts";
+import { ResponsiveContainer, CartesianGrid, XAxis, YAxis, Tooltip, Legend, BarChart, Bar } from "recharts";
 import type { KpiQueryResultRow } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { axisTickProps, gridStroke, tooltipStyle, legendStyle, primarySeriesColor } from "./metricChartUtils";
 
@@ -47,7 +44,7 @@ export function KpiStatusMini({
         k: (r.group as any)?.["dims.status"] ?? "unknown",
         v: Number(r.metrics?.exchanges ?? 0),
       })),
-    [rows]
+    [rows],
   );
 
   const isEmpty = data.length === 0;
@@ -56,9 +53,7 @@ export function KpiStatusMini({
     <Box sx={{ width: "100%", height }}>
       <ResponsiveContainer>
         {isEmpty ? (
-          <Box sx={{ p: 1, fontSize: 12, color: theme.palette.text.secondary }}>
-            No data in the selected range.
-          </Box>
+          <Box sx={{ p: 1, fontSize: 12, color: theme.palette.text.secondary }}>No data in the selected range.</Box>
         ) : (
           <BarChart data={data} margin={{ top: 6, right: 6, left: 0, bottom: 0 }}>
             <CartesianGrid strokeDasharray="2 2" stroke={gridStroke(theme)} />

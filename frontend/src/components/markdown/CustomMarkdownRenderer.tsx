@@ -49,11 +49,7 @@ function replaceStageDirectionsWithEmoji(text: string): string {
 }
 
 /** Walk all text nodes under `root`, excluding the given selector */
-function forEachTextNode(
-  root: HTMLElement,
-  excludeSelector: string,
-  fn: (textNode: Text) => void,
-) {
+function forEachTextNode(root: HTMLElement, excludeSelector: string, fn: (textNode: Text) => void) {
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
     acceptNode(node) {
       const parent = node.parentElement;

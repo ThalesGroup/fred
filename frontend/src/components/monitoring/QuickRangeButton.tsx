@@ -16,8 +16,15 @@ import { Button } from "@mui/material";
 import { ReactNode } from "react";
 
 export type QuickRangeType =
-  | "today" | "yesterday" | "thisWeek" | "thisMonth" | "thisYear"
-  | "last12h" | "last24h" | "last7d" | "last30d";
+  | "today"
+  | "yesterday"
+  | "thisWeek"
+  | "thisMonth"
+  | "thisYear"
+  | "last12h"
+  | "last24h"
+  | "last7d"
+  | "last30d";
 
 type Props = {
   isSel: boolean;

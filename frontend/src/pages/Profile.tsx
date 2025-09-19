@@ -136,9 +136,7 @@ export function Profile() {
                           py: 0.75,
                           mb: 0.5,
                           border: (t) =>
-                            `1px solid ${
-                              activeTab === index ? t.palette.primary.main : t.palette.divider
-                            }`,
+                            `1px solid ${activeTab === index ? t.palette.primary.main : t.palette.divider}`,
                           backgroundColor:
                             activeTab === index
                               ? theme.palette.mode === "dark"

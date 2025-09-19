@@ -18,7 +18,6 @@ import { DocumentMetadata } from "../../../slices/knowledgeFlow/knowledgeFlowOpe
 import { CustomRowAction } from "./DocumentOperationsTableRowActionsMenu";
 import { CustomBulkAction } from "./DocumentOperationsTableSelectionToolbar";
 
-
 export const createProcessAction = (
   onProcess: (file: DocumentMetadata) => Promise<void>,
   t: TFunction,
@@ -52,4 +51,3 @@ export const createBulkScheduleAction = (
   name: t("documentTable.scheduleSelected"),
   handler: onBulkSchedule,
 });
-

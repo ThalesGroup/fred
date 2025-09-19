@@ -5,7 +5,7 @@
   },
   "resource": {
     "kind": {
-      "prompt":   { "one": "prompt",   "other": "prompts" },
+      "prompt": { "one": "prompt", "other": "prompts" },
       "template": { "one": "modèle", "other": "modèles" }
     }
   },
@@ -17,7 +17,7 @@
     "invalid_type": "Type invalide",
     "updated": "Mis à jour",
     "error": "Erreur",
-     "deleted": "Supprimé"
+    "deleted": "Supprimé"
   },
   "sidebar": {
     "cluster": "Cluster",
@@ -225,7 +225,7 @@
     "description": "Gérez vos bibliothèques de documents et de prompts",
     "viewSelector": {
       "libraries": "Bibliothèques",
-       "templates": "Modèles",
+      "templates": "Modèles",
       "prompts": "Prompts",
       "documents": "Documents",
       "operations": "Opérations"
@@ -296,9 +296,9 @@
     "expandAll": "Tout développer",
     "folderDeleteSuccess": "Dossier supprimé",
     "folderDeleteDetail": "Le dossier « {{name}} » a été supprimé.",
-    "searchPlaceholder":"Rechercher un(e) {{typeOne}}",
+    "searchPlaceholder": "Rechercher un(e) {{typeOne}}",
     "importDrawerTitle": "Importer un(e) {{typeOne}}",
-    "dropFiles":"Deposez vos {{typePlural}} ici",
+    "dropFiles": "Deposez vos {{typePlural}} ici",
     "noFiles": "Aucun(e) {{typeOne}} trouvé(e)",
     "import": "Importer"
   },
@@ -369,7 +369,7 @@
     "updateFailed": "Échec de la mise à jour",
     "updateFailedDetail": "Une erreur s'est produite lors de la mise à jour de la bibliothèque. Veuillez réessayer."
   },
-  "search" : {
+  "search": {
     "policy": "Politique de recherche",
     "strict": "Strict",
     "hybrid": "Hybride",

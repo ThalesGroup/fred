@@ -37,8 +37,7 @@ export const toWsUrl = (base: string | undefined, path: string) => {
   return url.toString();
 };
 
-export const keyOf = (m: ChatMessage) =>
-  `${m.session_id}|${m.exchange_id}|${m.rank}|${m.role}|${m.channel}`;
+export const keyOf = (m: ChatMessage) => `${m.session_id}|${m.exchange_id}|${m.rank}|${m.role}|${m.channel}`;
 
 export const isToolCall = (m: ChatMessage) =>
   m.role === "assistant" && m.channel === "tool_call" && m.parts?.[0]?.type === "tool_call";
@@ -51,8 +50,7 @@ export const hasNonEmptyText = (m: ChatMessage) =>
 
 export const getExtras = (m: ChatMessage) => m.metadata?.extras ?? {};
 
-export const toolId = (m: ChatMessage) =>
-  (m.parts?.[0] as any)?.call_id ?? (m.parts?.[0] as any)?.id ?? "";
+export const toolId = (m: ChatMessage) => (m.parts?.[0] as any)?.call_id ?? (m.parts?.[0] as any)?.id ?? "";
 
 // ---- Parts typing ----
 type Part =
@@ -64,27 +62,16 @@ type Part =
 
 const isTextPart = (p: Part): p is Extract<Part, { type: "text" }> => p.type === "text";
 const isToolCallPart = (p: Part): p is Extract<Part, { type: "tool_call" }> => p.type === "tool_call";
-const isToolResultPart = (p: Part): p is Extract<Part, { type: "tool_result" }> =>
-  p.type === "tool_result";
+const isToolResultPart = (p: Part): p is Extract<Part, { type: "tool_result" }> => p.type === "tool_result";
 
 /** Safe truncate helper */
 const ellipsize = (s: string, max: number) => (s.length > max ? `${s.slice(0, max)}…` : s);
 
 // ---- Minimal status dot + text ----
-function StatusBadge({
-  ok,
-  text,
-  title,
-}: {
-  ok: boolean | undefined | null;
-  text: string;
-  title?: string;
-}) {
-  const dotClass =
-    ok === true ? "bg-green-500" : ok === false ? "bg-red-500" : "bg-gray-400";
+function StatusBadge({ ok, text, title }: { ok: boolean | undefined | null; text: string; title?: string }) {
+  const dotClass = ok === true ? "bg-green-500" : ok === false ? "bg-red-500" : "bg-gray-400";
 
-  const aria =
-    ok === true ? "Succeeded" : ok === false ? "Failed" : "Unknown status";
+  const aria = ok === true ? "Succeeded" : ok === false ? "Failed" : "Unknown status";
 
   return (
     <span

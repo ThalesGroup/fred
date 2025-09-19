@@ -68,7 +68,6 @@ content_storage:
   type: "local"
   root_path: ~/.fred/knowledge-flow/content-storage
 
-
 document_sources:
   fred:
     type: push
@@ -138,7 +137,6 @@ storage:
     verify_certs: false
     username: admin
 
-
   catalog_store:
     type: "duckdb"
     duckdb_path: "~/.fred/knowledge-flow/catalog.duckdb"
@@ -164,10 +162,10 @@ storage:
     duckdb_path: "~/.fred/knowledge-flow/metadata.duckdb"
 
   vector_store:
-    type: in_memory
+    type: chroma
 
   tabular_stores:
-    base_database:                            # Minimal configuration to enable CSV document ingestion
+    base_database: # Minimal configuration to enable CSV document ingestion
       type: "sql"
       driver: "duckdb"
       database: "base_database"
