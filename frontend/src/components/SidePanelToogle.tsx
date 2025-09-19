@@ -18,7 +18,7 @@ import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 
 type SidePanelToggleProps = {
   isOpen: boolean;
-  label: string;              // "Assistants" or current agent's display name
+  label: string; // "Assistants" or current agent's display name
   onToggle: () => void;
 };
 
@@ -43,9 +43,10 @@ export function SidePanelToggle({ isOpen, label, onToggle }: SidePanelToggleProp
           sx={{
             fontSize: 18,
             transform: isOpen ? "rotate(180deg)" : "rotate(0deg)",
-            transition: (t) => t.transitions.create("transform", {
-              duration: t.transitions.duration.shorter
-            }),
+            transition: (t) =>
+              t.transitions.create("transform", {
+                duration: t.transitions.duration.shorter,
+              }),
           }}
         />
       }
@@ -62,7 +63,9 @@ export function SidePanelToggle({ isOpen, label, onToggle }: SidePanelToggleProp
         "&:hover": { bgcolor: t.palette.action.hover },
       })}
     >
-      <Typography variant="body2" noWrap>{label}</Typography>
+      <Typography variant="body2" noWrap>
+        {label}
+      </Typography>
     </Button>
   );
 }

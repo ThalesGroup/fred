@@ -142,7 +142,7 @@ export default function SideBar({ darkMode, onThemeChange }) {
         sx={{
           display: "flex",
           alignItems: "center",
-          justifyContent:  "center",
+          justifyContent: "center",
           py: 2.5,
           px: isSidebarSmall ? 1 : 2,
           borderBottom: `1px solid ${theme.palette.divider}`,
@@ -153,7 +153,7 @@ export default function SideBar({ darkMode, onThemeChange }) {
             display: "flex",
             alignItems: "center",
             cursor: "pointer",
-            justifyContent: "center" 
+            justifyContent: "center",
           }}
           onClick={() => navigate("/")}
         >
@@ -185,14 +185,10 @@ export default function SideBar({ darkMode, onThemeChange }) {
           }}
         >
           {/* Change icon based on state */}
-          {isSidebarCollapsed ? (
-            <ChevronRightIcon fontSize="small" />
-          ) : (
-            <ChevronLeftIcon fontSize="small" />
-          )}
+          {isSidebarCollapsed ? <ChevronRightIcon fontSize="small" /> : <ChevronLeftIcon fontSize="small" />}
         </IconButton>
       </Box>
-      
+
       <List
         sx={{
           pt: 3,
@@ -205,14 +201,7 @@ export default function SideBar({ darkMode, onThemeChange }) {
         {menuItems.map((item) => {
           const active = isActive(item.url);
           return (
-            <Tooltip
-              key={item.key}
-              title={
-               item.tooltip
-              }
-              placement="right"
-              arrow
-            >
+            <Tooltip key={item.key} title={item.tooltip} placement="right" arrow>
               <ListItem
                 component="div"
                 sx={{
@@ -223,20 +212,17 @@ export default function SideBar({ darkMode, onThemeChange }) {
                   backgroundColor: active ? activeItemBgColor : "transparent",
                   color: active ? activeItemTextColor : "text.secondary",
                   "&:hover": {
-                    backgroundColor:
-                      active
-                          ? activeItemBgColor
-                          : hoverColor,
+                    backgroundColor: active ? activeItemBgColor : hoverColor,
                     color: active ? activeItemTextColor : "text.primary",
                   },
                   transition: "all 0.2s",
                   px: isSidebarSmall ? 1 : 2,
                   position: "relative",
                   cursor: "pointer",
-                  opacity:  1,
+                  opacity: 1,
                   pointerEvents: "auto",
                 }}
-                onClick={ () => navigate(item.url)}
+                onClick={() => navigate(item.url)}
               >
                 <ListItemIcon
                   sx={{
@@ -322,7 +308,6 @@ export default function SideBar({ darkMode, onThemeChange }) {
         {/* Liens externes */}
         {!isSidebarSmall && (
           <>
-
             <Box
               sx={{
                 display: "flex",

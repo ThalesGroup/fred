@@ -18,18 +18,28 @@ import os
 from pathlib import Path
 from typing import Dict, Optional, Type, Union
 
-from fred_core import BaseKPIStore, DuckdbStoreConfig, KpiLogStore, KPIWriter, LogStoreConfig, OpenSearchIndexConfig, OpenSearchKPIStore, split_realm_url
-from fred_core.common.structures import SQLStorageConfig
-from fred_core.store.sql_store import SQLTableStore
-from fred_core.store.structures import StoreInfo
-from langchain_ollama import OllamaEmbeddings
-from langchain_openai import AzureOpenAIEmbeddings, OpenAIEmbeddings
+from fred_core import (
+    BaseKPIStore,
+    DuckdbStoreConfig,
+    KpiLogStore,
+    KPIWriter,
+    LogStoreConfig,
+    ModelConfiguration,
+    OpenSearchIndexConfig,
+    OpenSearchKPIStore,
+    SQLStorageConfig,
+    SQLTableStore,
+    StoreInfo,
+    get_embeddings,
+    get_model,
+    split_realm_url,
+)
+from langchain_core.embeddings import Embeddings
 from opensearchpy import OpenSearch, RequestsHttpConnection
 
 from app.common.structures import (
     ChromaVectorStorageConfig,
     Configuration,
-    EmbeddingProvider,
     FileSystemPullSource,
     InMemoryVectorStorage,
     LocalContentStorageConfig,
@@ -38,15 +48,8 @@ from app.common.structures import (
     OpenSearchVectorIndexConfig,
     WeaviateVectorStorage,
 )
-from app.common.utils import validate_settings_or_exit
-from app.config.embedding_azure_apim_settings import EmbeddingAzureApimSettings
-from app.config.embedding_azure_openai_settings import EmbeddingAzureOpenAISettings
-from app.config.embedding_openai_settings import EmbeddingOpenAISettings
-from app.config.ollama_settings import OllamaSettings
 from app.core.processors.input.common.base_input_processor import BaseInputProcessor, BaseMarkdownProcessor, BaseTabularProcessor
 from app.core.processors.output.base_output_processor import BaseOutputProcessor
-from app.core.processors.output.vectorization_processor.azure_apim_embedder import AzureApimEmbedder
-from app.core.processors.output.vectorization_processor.embedder import Embedder
 from app.core.processors.output.vectorization_processor.semantic_splitter import SemanticSplitter
 from app.core.stores.catalog.base_catalog_store import BaseCatalogStore
 from app.core.stores.catalog.duckdb_catalog_store import DuckdbCatalogStore
@@ -69,7 +72,6 @@ from app.core.stores.resources.opensearch_resource_store import OpenSearchResour
 from app.core.stores.tags.base_tag_store import BaseTagStore
 from app.core.stores.tags.duckdb_tag_store import DuckdbTagStore
 from app.core.stores.tags.opensearch_tags_store import OpenSearchTagStore
-from app.core.stores.vector.base_embedding_model import BaseEmbeddingModel
 from app.core.stores.vector.base_text_splitter import BaseTextSplitter
 from app.core.stores.vector.base_vector_store import BaseVectorStore
 from app.core.stores.vector.in_memory_langchain_vector_store import InMemoryLangchainVectorStore
@@ -173,6 +175,16 @@ def validate_output_processor_config(config: Configuration):
             logger.debug(f"Validated output processor: {entry.class_path} for prefix: {entry.prefix}")
         except (ImportError, AttributeError, TypeError) as e:
             raise ImportError(f"Output Processor '{entry.class_path}' could not be loaded: {e}")
+
+
+def _require_env(var: str) -> None:
+    """Log presence of a required env var or raise loudly if missing."""
+    val = os.getenv(var, "")
+    if val:
+        logger.info("     • %s: present (%s)", var, _mask(val))
+        return
+    logger.error("     ❌ %s is not set", var)
+    raise ValueError(f"Missing required environment variable: {var}")
 
 
 class ApplicationContext:
@@ -387,56 +399,25 @@ class ApplicationContext:
             raise ValueError(f"Unsupported file backend: {backend_type}")
         return self._file_store_instance
 
-    def get_embedder(self) -> BaseEmbeddingModel:
+    def get_embedder(self) -> Embeddings:
         """
-        Factory method to create an embedding model instance based on the configuration.
-        Supports Azure OpenAI and OpenAI.
+        Fred rationale:
+        - Knowledge Flow uses the shared fred_core factory to avoid provider drift.
+        - Only secrets live in env; all other wiring lives in YAML.
+        - Typed return (Embeddings) keeps the contract clear at call sites.
         """
-        backend_type = self.configuration.embedding.type
+        cfg: ModelConfiguration = self.configuration.embedding
+        return get_embeddings(cfg)
 
-        if backend_type == EmbeddingProvider.OPENAI:
-            settings = EmbeddingOpenAISettings()  # type: ignore[call-arg]
-            embedding_params = {
-                "model": settings.openai_model_name,
-                "openai_api_key": settings.openai_api_key,
-                "openai_api_base": settings.openai_api_base,
-                "openai_api_type": "openai",  # always "openai" for pure OpenAI
-            }
+    def get_utility_model(self):
+        if not self.configuration.model:
+            raise ValueError("Utility model configuration is missing.")
+        return get_model(self.configuration.model)
 
-            # Only add api_version if it exists
-            if settings.openai_api_version:
-                embedding_params["openai_api_version"] = settings.openai_api_version
-
-            return Embedder(OpenAIEmbeddings(**embedding_params))  # type: ignore[call-arg]
-
-        elif backend_type == EmbeddingProvider.AZUREOPENAI:
-            openai_settings = EmbeddingAzureOpenAISettings()  # type: ignore[call-arg]
-            return Embedder(
-                AzureOpenAIEmbeddings(
-                    deployment=openai_settings.azure_deployment_embedding,
-                    openai_api_type="azure",
-                    azure_endpoint=openai_settings.azure_openai_endpoint,
-                    openai_api_version=openai_settings.azure_api_version,
-                    openai_api_key=openai_settings.azure_openai_api_key,
-                )
-            )  # type: ignore[call-arg]
-
-        elif backend_type == EmbeddingProvider.AZUREAPIM:
-            settings = validate_settings_or_exit(EmbeddingAzureApimSettings, "Azure APIM Embedding Settings")
-            return AzureApimEmbedder(settings)
-
-        elif backend_type == EmbeddingProvider.OLLAMA:
-            ollama_settings = OllamaSettings()
-            embedding_params = {
-                "model": ollama_settings.embedding_model_name,
-            }
-            if ollama_settings.api_url:
-                embedding_params["base_url"] = ollama_settings.api_url
-
-            return Embedder(OllamaEmbeddings(**embedding_params))
-
-        else:
-            raise ValueError(f"Unsupported embedding backend: {backend_type}")
+    def get_vision_model(self):
+        if not self.configuration.vision:
+            raise ValueError("Vision model configuration is missing.")
+        return get_model(self.configuration.vision)
 
     def get_vector_store(self) -> BaseVectorStore:
         """
@@ -446,13 +427,13 @@ class ApplicationContext:
             return self._vector_store_instance
         raise ValueError("Vector store is not initialized. Use get_create_vector_store() instead.")
 
-    def get_create_vector_store(self, embedding_model: BaseEmbeddingModel) -> BaseVectorStore:
+    def get_create_vector_store(self, embedding_model: Embeddings) -> BaseVectorStore:
         """
         Vector Store Factory
         """
         if self._vector_store_instance is not None:
             return self._vector_store_instance
-
+        embedding_model_name = self.configuration.embedding.name or "unknown"
         store = self.configuration.storage.vector_store
 
         if isinstance(store, OpenSearchVectorIndexConfig):
@@ -463,6 +444,7 @@ class ApplicationContext:
 
             self._vector_store_instance = OpenSearchVectorStoreAdapter(
                 embedding_model=embedding_model,
+                embedding_model_name=embedding_model_name,
                 host=opensearch_config.host,
                 index=store.index,
                 username=opensearch_config.username,
@@ -485,9 +467,10 @@ class ApplicationContext:
                 persist_path=str(local_path),
                 collection_name=store.collection_name,
                 embeddings=embedding_model,
+                embedding_model_name=embedding_model_name,
             )
         elif isinstance(store, InMemoryVectorStorage):
-            self._vector_store_instance = InMemoryLangchainVectorStore(embedding_model=embedding_model)
+            self._vector_store_instance = InMemoryLangchainVectorStore(embedding_model=embedding_model, embedding_model_name=embedding_model_name)
         else:
             raise ValueError("Unsupported vector store backend")
         return self._vector_store_instance
@@ -722,6 +705,14 @@ class ApplicationContext:
         else:
             raise NotImplementedError(f"No pull provider implemented for '{source_config.provider}'")
 
+    def is_summary_generation_enabled(self) -> bool:
+        """
+        Checks if the summary generation feature is enabled in the configuration.
+        Returns:
+            bool: True if enabled, False otherwise.
+        """
+        return self.configuration.processing.generate_summary
+
     def _log_sensitive(self, name: str, value: Optional[str]):
         logger.info(f"     ↳ {name} set: {'✅' if value else '❌'}")
 
@@ -741,47 +732,39 @@ class ApplicationContext:
             except Exception as e:
                 logger.error("     ❌ keycloak_url invalid (expected …/realms/<realm>): %s", e)
                 raise ValueError("Invalid Keycloak URL") from e
+            _require_env("KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET")
 
-            secret = os.getenv("KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET", "")
-            if secret:
-                logger.info("     • KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET: present  (%s)", _mask(secret))
+        embedding = self.configuration.embedding
+        # Non-secret settings from YAML
+        for k, v in (embedding.settings or {}).items():
+            # Heuristic mask for anything that *looks* sensitive even if put in YAML by mistake
+            if any(t in k.lower() for t in ("secret", "token", "key")):
+                logger.info("     ↳ %s: (masked)", k)
             else:
-                logger.error(
-                    "     ⚠️  KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET is not set — external or recursive MCP or REST calls will not be protected (NoAuth). Knowledge Flow will likely suffer from 401."
-                )
-                raise ValueError("Missing KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET environment variable")
+                logger.info("     ↳ %s: %s", k, v)
 
-        backend = self.configuration.embedding.type
-        logger.info("🔧 Application configuration summary:")
-        logger.info("--------------------------------------------------")
-        logger.info(f"  📦 Embedding backend: {backend.value}")
-
-        if backend == EmbeddingProvider.OPENAI:
-            s = validate_settings_or_exit(EmbeddingOpenAISettings, "OpenAI Embedding Settings")
-            self._log_sensitive("OPENAI_API_KEY", s.openai_api_key)
-            logger.info(f"     ↳ Model: {s.openai_model_name}")
-        elif backend == EmbeddingProvider.AZUREOPENAI:
-            s = validate_settings_or_exit(EmbeddingAzureOpenAISettings, "Azure OpenAI Embedding Settings")
-            self._log_sensitive("AZURE_OPENAI_API_KEY", s.azure_openai_api_key)
-            logger.info(f"     ↳ Deployment: {s.azure_deployment_embedding}")
-            logger.info(f"     ↳ API Version: {s.azure_api_version}")
-        elif backend == EmbeddingProvider.AZUREAPIM:
-            try:
-                s = validate_settings_or_exit(EmbeddingAzureApimSettings, "Azure APIM Embedding Settings")
-                self._log_sensitive("AZURE_CLIENT_ID", s.azure_client_id)
-                self._log_sensitive("AZURE_CLIENT_SECRET", s.azure_client_secret)
-                self._log_sensitive("AZURE_APIM_KEY", s.azure_apim_key)
-                logger.info(f"     ↳ APIM Base URL: {s.azure_apim_base_url}")
-                logger.info(f"     ↳ Deployment: {s.azure_deployment_embedding}")
-            except Exception:
-                logger.warning("⚠️ Failed to load Azure APIM settings — some variables may be missing.")
-        elif backend == EmbeddingProvider.OLLAMA:
-            s = validate_settings_or_exit(OllamaSettings, "Ollama Embedding Settings")
-            logger.info(f"     ↳ Model: {s.embedding_model_name}")
-            logger.info(f"     ↳ API URL: {s.api_url if s.api_url else 'default'}")
+        # Required env vars by provider
+        provider = (embedding.provider or "").lower()
+        if provider == "openai":
+            _require_env("OPENAI_API_KEY")
+        elif provider == "azure":
+            _require_env("AZURE_OPENAI_API_KEY")
+        elif provider == "azureapim":
+            _require_env("AZURE_CLIENT_SECRET")
+            _require_env("AZURE_APIM_KEY")
+        elif provider == "ollama":
+            # Usually no secrets; base_url is in settings
+            pass
         else:
-            logger.warning("⚠️ Unknown embedding backend configured.")
+            logger.error("     ❌ Unsupported embedding provider: %s", provider)
+            raise ValueError(f"Unsupported embedding provider: {provider}")
 
+        processing = self.configuration.processing or {}
+        # Processing flags (your new simple shape)
+        logger.info("  ⚙️ Processing policy:")
+        logger.info("     ↳ use_gpu: %s", processing.use_gpu)
+        logger.info("     ↳ process_images: %s", processing.process_images)
+        logger.info("     ↳ generate_summary: %s", processing.generate_summary)
         vector_type = self.configuration.storage.vector_store
         logger.info(f"  📚 Vector store backend: {vector_type}")
         try:
@@ -810,8 +793,8 @@ class ApplicationContext:
             def _describe(label: str, store_cfg):
                 if isinstance(store_cfg, DuckdbStoreConfig):
                     logger.info("     • %-14s DuckDB  path=%s", label, store_cfg.duckdb_path)
+
                 elif isinstance(store_cfg, OpenSearchIndexConfig):
-                    # These carry index name + opensearch global section
                     os_cfg = self.configuration.storage.opensearch
                     logger.info(
                         "     • %-14s OpenSearch host=%s index=%s secure=%s verify=%s",
@@ -821,16 +804,27 @@ class ApplicationContext:
                         os_cfg.secure,
                         os_cfg.verify_certs,
                     )
+                elif isinstance(store_cfg, SQLStorageConfig):
+                    logger.info("     • %-14s SQLStorage  database=%s  host=%s", label, store_cfg.database or "unset", store_cfg.host or "unset")
+                elif isinstance(store_cfg, ChromaVectorStorageConfig):
+                    logger.info("     • %-14s ChromaDB  database=%s  host=%s  distance=%s", label, store_cfg.local_path or "unset", store_cfg.collection_name or "unset", store_cfg.distance or "unset")
+                elif isinstance(store_cfg, LogStoreConfig):
+                    # No-op KPI / log-only store
+                    logger.info(
+                        "     • %-14s No-op / LogStore  level=%s  (logs only, no persistence)",
+                        label,
+                        getattr(store_cfg, "level", "INFO"),
+                    )
                 else:
-                    # Generic store types from your pydantic StoreConfig could land here
                     logger.info("     • %-14s %s", label, type(store_cfg).__name__)
 
-            _describe("agent_store", st.tag_store)
-            _describe("session_store", st.kpi_store)
-            _describe("feedback_store", st.catalog_store)
-            _describe("feedback_store", st.metadata_store)
-            _describe("feedback_store", st.vector_store)
-            _describe("feedback_store", st.resource_store)
+            _describe("tag_store", st.tag_store)
+            _describe("kpi_store", st.kpi_store)
+            _describe("catalog_store", st.catalog_store)
+            _describe("metadata_store", st.metadata_store)
+            _describe("vector_store", st.vector_store)
+            _describe("resource_store", st.resource_store)
+
         except Exception:
             logger.warning("  ⚠️ Failed to read storage section (some variables may be missing).")
 

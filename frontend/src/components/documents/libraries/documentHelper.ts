@@ -21,7 +21,7 @@ const _getDocTagIds = (d: DocumentMetadata): string[] => d.tags?.tag_ids ?? [];
 
 /** Best display name for search/labeling. */
 const _getDocDisplayName = (d: DocumentMetadata): string =>
-  (d.identity.title?.trim() || d.identity.document_name || d.identity.document_uid);
+  d.identity.title?.trim() || d.identity.document_name || d.identity.document_uid;
 
 /** Simple name-based matcher (case-insensitive). */
 export const matchesDocByName = (d: DocumentMetadata, q: string): boolean => {

@@ -83,9 +83,17 @@ applications:
       lifecycle:
         enabled: false
       livenessProbe:
-        enabled: false
+        enabled: true
+        data:
+          httpGet:
+            path: /agentic/v1/healthz
+            port: 8000
       readinessProbe:
-        enabled: false
+        enabled: true
+        data:
+          httpGet:
+            path: /agentic/v1/ready
+            port: 8000
       startupProbe:
         enabled: false
     serviceAccount:
@@ -345,9 +353,17 @@ applications:
       lifecycle:
         enabled: false
       livenessProbe:
-        enabled: false
+        enabled: true
+        data:
+          httpGet:
+            path: /healthz.html
+            port: 80
       readinessProbe:
-        enabled: false
+        enabled: true
+        data:
+          httpGet:
+            path: /ready.html
+            port: 80
       startupProbe:
         enabled: false
     serviceAccount:
@@ -442,9 +458,17 @@ applications:
       lifecycle:
         enabled: false
       livenessProbe:
-        enabled: false
+        enabled: true
+        data:
+          httpGet:
+            path: /knowledge-flow/v1/healthz
+            port: 8111
       readinessProbe:
-        enabled: false
+        enabled: true
+        data:
+          httpGet:
+            path: /knowledge-flow/v1/ready
+            port: 8111
       startupProbe:
         enabled: false
     serviceAccount:
@@ -468,6 +492,10 @@ applications:
         log_level: "info"
         reload: false
         reload_dir: "."
+      processing:
+        generate_summary: true
+        use_gpu: true
+        process_images: true
       security:
         m2m:
           enabled: true
@@ -490,7 +518,7 @@ applications:
           connect_timeout_seconds: 5
       input_processors:
         - prefix: ".pdf"
-          class_path: app.core.processors.input.pdf_markdown_processor.openai_pdf_markdown_processor.OpenaiPdfMarkdownProcessor
+          class_path: app.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor
         - prefix: ".docx"
           class_path: app.core.processors.input.docx_markdown_processor.docx_markdown_processor.DocxMarkdownProcessor
         - prefix: ".pptx"
@@ -518,9 +546,16 @@ applications:
           base_path: ~/Documents/Fred
           description: "Personal local documents available for pull-mode ingestion"
       embedding:
-        type: "openai"
-        use_gpu: True
-        process_images: True
+        provider: openai
+        name: text-embedding-3-large
+        settings: {}
+      model:
+        provider: openai        # openai | azure | ollama
+        name: gpt-4o-mini       # azure: deployment name, ollama: 'qwen2.5:3b-instruct' etc.
+        settings:
+          # openai: nothing else required (keys in .env)
+          # azure: { endpoint: "...", api_version: "2024-08-01-preview" }
+          # ollama: { base_url: "http://localhost:11434"
       storage:
         postgres:
           host: localhost

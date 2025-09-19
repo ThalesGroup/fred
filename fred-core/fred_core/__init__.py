@@ -18,10 +18,12 @@ from fred_core.common.structures import (
     BaseModelWithId,
     DuckdbStoreConfig,
     LogStoreConfig,
+    ModelConfiguration,
     OpenSearchIndexConfig,
     OpenSearchStoreConfig,
     PostgresStoreConfig,
     PostgresTableConfig,
+    SQLStorageConfig,
     StoreConfig,
 )
 from fred_core.common.utils import raise_internal_error
@@ -43,6 +45,7 @@ from fred_core.kpi.kpi_writer_structures import (
 )
 from fred_core.kpi.log_kpi_store import KpiLogStore
 from fred_core.kpi.opensearch_kpi_store import OpenSearchKPIStore
+from fred_core.model.factory import get_embeddings, get_model, get_structured_chain
 from fred_core.security.authorization import (
     NO_AUTHZ_CHECK_USER,
     TODO_PASS_REAL_USER,
@@ -73,6 +76,8 @@ from fred_core.security.structure import (
     UserSecurity,
 )
 from fred_core.store.opensearch_mapping_validator import validate_index_mapping
+from fred_core.store.sql_store import SQLTableStore
+from fred_core.store.structures import StoreInfo
 from fred_core.store.vector_search import VectorSearchHit
 
 __all__ = [
@@ -99,6 +104,7 @@ __all__ = [
     "DuckdbStoreConfig",
     "PostgresStoreConfig",
     "PostgresTableConfig",
+    "SQLStorageConfig",
     "StoreConfig",
     "ThreadSafeLRUCache",
     "VectorSearchHit",
@@ -125,4 +131,11 @@ __all__ = [
     "make_m2m_asgi_client",
     "split_realm_url",
     "validate_index_mapping",
+    "get_model",
+    "get_structured_chain",
+    "get_embeddings",
+    "ModelConfiguration",
+    "SQLStorageConfig",
+    "SQLTableStore",
+    "StoreInfo",
 ]

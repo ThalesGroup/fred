@@ -72,68 +72,73 @@ export function useSessionController() {
   const [draftAgenticFlow, setDraftAgenticFlow] = useState<AgenticFlow | null>(null);
 
   const currentAgenticFlow = useMemo(() => {
-  if (agenticFlows.length === 0) {
-    L.warn("resolveFlow: no flows available");
-    return null;
-  }
+    if (agenticFlows.length === 0) {
+      L.warn("resolveFlow: no flows available");
+      return null;
+    }
 
-  if (!currentSession) {
-    const chosen = draftAgenticFlow ?? agenticFlows[0];
-    L.info("resolveFlow: NO session → using", {
-      source: draftAgenticFlow ? "draft" : "default[0]",
-      name: chosen?.name,
-      nickname: chosen?.nickname,
+    if (!currentSession) {
+      const chosen = draftAgenticFlow ?? agenticFlows[0];
+      L.info("resolveFlow: NO session → using", {
+        source: draftAgenticFlow ? "draft" : "default[0]",
+        name: chosen?.name,
+        nickname: chosen?.nickname,
+      });
+      return chosen;
+    }
+
+    const mappedName = agentBySession[currentSession.id];
+    const resolved = mappedName ? agenticFlows.find((f) => f.name === mappedName) : null;
+
+    const finalFlow = resolved ?? agenticFlows[0] ?? null;
+
+    L.info("resolveFlow: WITH session", {
+      sessionId: currentSession.id,
+      mappedName,
+      resolved: resolved ? { name: resolved.name, nickname: resolved.nickname } : null,
+      fallback:
+        !resolved && agenticFlows[0] ? { name: agenticFlows[0].name, nickname: agenticFlows[0].nickname } : null,
+      final: finalFlow ? { name: finalFlow.name, nickname: finalFlow.nickname } : null,
     });
-    return chosen;
-  }
 
-  const mappedName = agentBySession[currentSession.id];
-  const resolved = mappedName
-    ? agenticFlows.find((f) => f.name === mappedName)
-    : null;
-
-  const finalFlow = resolved ?? agenticFlows[0] ?? null;
-
-  L.info("resolveFlow: WITH session", {
-    sessionId: currentSession.id,
-    mappedName,
-    resolved: resolved ? { name: resolved.name, nickname: resolved.nickname } : null,
-    fallback: !resolved && agenticFlows[0] ? { name: agenticFlows[0].name, nickname: agenticFlows[0].nickname } : null,
-    final: finalFlow ? { name: finalFlow.name, nickname: finalFlow.nickname } : null,
-  });
-
-  return finalFlow;
-}, [currentSession, agenticFlows, agentBySession, draftAgenticFlow]);
+    return finalFlow;
+  }, [currentSession, agenticFlows, agentBySession, draftAgenticFlow]);
 
   // ---- Hydration from queries ----
- useEffect(() => {
-  if (!flowsLoading && flowsData) {
-    setAgenticFlows(flowsData);
-    L.group("HYDRATE flows", flowsData.map(f => ({ name: f.name, nickname: f.nickname, role: f.role })));
-  }
-}, [flowsLoading, flowsData]);
-
-useEffect(() => {
-  if (!sessionsLoading && sessionsData) {
-    setSessions(sessionsData);
-    L.group("HYDRATE sessions", sessionsData.map(s => ({ id: s.id, title: s.title, updated_at: s.updated_at })));
-
-    const saved = sessionStorage.getItem("currentChatBotSession");
-    if (saved) {
-      try {
-        const parsed: SessionSchema = JSON.parse(saved);
-        const exists = sessionsData.find((s) => s.id === parsed.id);
-        setCurrentSession(exists || null);
-        L.info("restore currentSession from sessionStorage", { restored: exists?.id, title: exists?.title });
-      } catch (e) {
-        L.warn("restore currentSession failed", e);
-        setCurrentSession(null);
-      }
-    } else {
-      L.info("no currentSession in sessionStorage");
+  useEffect(() => {
+    if (!flowsLoading && flowsData) {
+      setAgenticFlows(flowsData);
+      L.group(
+        "HYDRATE flows",
+        flowsData.map((f) => ({ name: f.name, nickname: f.nickname, role: f.role })),
+      );
     }
-  }
-}, [sessionsLoading, sessionsData]);
+  }, [flowsLoading, flowsData]);
+
+  useEffect(() => {
+    if (!sessionsLoading && sessionsData) {
+      setSessions(sessionsData);
+      L.group(
+        "HYDRATE sessions",
+        sessionsData.map((s) => ({ id: s.id, title: s.title, updated_at: s.updated_at })),
+      );
+
+      const saved = sessionStorage.getItem("currentChatBotSession");
+      if (saved) {
+        try {
+          const parsed: SessionSchema = JSON.parse(saved);
+          const exists = sessionsData.find((s) => s.id === parsed.id);
+          setCurrentSession(exists || null);
+          L.info("restore currentSession from sessionStorage", { restored: exists?.id, title: exists?.title });
+        } catch (e) {
+          L.warn("restore currentSession failed", e);
+          setCurrentSession(null);
+        }
+      } else {
+        L.info("no currentSession in sessionStorage");
+      }
+    }
+  }, [sessionsLoading, sessionsData]);
 
   // ---- Environmental refetch (keep sidebar fresh) ----
   useEffect(() => {
@@ -159,24 +164,23 @@ useEffect(() => {
     sessionStorage.setItem("currentChatBotSession", JSON.stringify(s));
   };
 
-const selectAgenticFlowForCurrentSession = (flow: AgenticFlow) => {
-  if (!currentSession) {
-    L.info("selectAgent: NO session → stage draft", { name: flow.name, nickname: flow.nickname });
-    setDraftAgenticFlow(flow);
-    return;
-  }
-  L.info("selectAgent: WITH session → bind to session", { sessionId: currentSession.id, name: flow.name });
-  setAgentBySession((prev) => {
-    const defaultName = agenticFlows[0]?.name;
-    const existing = prev[currentSession.id];
-    // allow overriding default with explicit user click
-    const nextName = existing && defaultName && existing === defaultName ? flow.name : flow.name;
-    const next = { ...prev, [currentSession.id]: nextName };
-    saveMap(next);
-    return next;
-  });
-};
-
+  const selectAgenticFlowForCurrentSession = (flow: AgenticFlow) => {
+    if (!currentSession) {
+      L.info("selectAgent: NO session → stage draft", { name: flow.name, nickname: flow.nickname });
+      setDraftAgenticFlow(flow);
+      return;
+    }
+    L.info("selectAgent: WITH session → bind to session", { sessionId: currentSession.id, name: flow.name });
+    setAgentBySession((prev) => {
+      const defaultName = agenticFlows[0]?.name;
+      const existing = prev[currentSession.id];
+      // allow overriding default with explicit user click
+      const nextName = existing && defaultName && existing === defaultName ? flow.name : flow.name;
+      const next = { ...prev, [currentSession.id]: nextName };
+      saveMap(next);
+      return next;
+    });
+  };
 
   // Fred rationale:
   // “New conversation” is a transient UI state. The real session comes from the backend
@@ -188,27 +192,26 @@ const selectAgenticFlowForCurrentSession = (flow: AgenticFlow) => {
     sessionStorage.removeItem("currentChatBotSession");
   };
 
-const updateOrAddSession = (s: SessionSchema) => {
-  L.info("updateOrAddSession: incoming", { id: s.id, title: s.title });
+  const updateOrAddSession = (s: SessionSchema) => {
+    L.info("updateOrAddSession: incoming", { id: s.id, title: s.title });
 
-  // Upsert the session (no agent mapping writes here!)
-  setSessions((prev) => {
-    const exists = prev.some((x) => x.id === s.id);
-    L.info("updateOrAddSession: upsert", { wasNew: !exists });
-    return exists ? prev.map((x) => (x.id === s.id ? s : x)) : [s, ...prev];
-  });
+    // Upsert the session (no agent mapping writes here!)
+    setSessions((prev) => {
+      const exists = prev.some((x) => x.id === s.id);
+      L.info("updateOrAddSession: upsert", { wasNew: !exists });
+      return exists ? prev.map((x) => (x.id === s.id ? s : x)) : [s, ...prev];
+    });
 
-  // Focus that session in UI
-  if (!currentSession || currentSession.id !== s.id) {
-    L.info("selectSession (focus new/updated)", { id: s.id, title: s.title });
-    selectSession(s);
-  }
+    // Focus that session in UI
+    if (!currentSession || currentSession.id !== s.id) {
+      L.info("selectSession (focus new/updated)", { id: s.id, title: s.title });
+      selectSession(s);
+    }
 
-  // ⛔ IMPORTANT: do NOT bind agent here and do NOT consume the draft here.
-  // Binding is done exclusively by bindDraftAgentToSessionId(), called from ChatBot
-  // when the first session_id is known (final event or history load).
-};
-
+    // ⛔ IMPORTANT: do NOT bind agent here and do NOT consume the draft here.
+    // Binding is done exclusively by bindDraftAgentToSessionId(), called from ChatBot
+    // when the first session_id is known (final event or history load).
+  };
 
   // Fred rationale:
   // Deleting a session must also drop its agent binding (avoid stale keys).
@@ -227,51 +230,48 @@ const updateOrAddSession = (s: SessionSchema) => {
     refetchSessions();
   };
 
-const bindDraftAgentToSessionId = (sessionId: string) => {
-  console.log("🧭 bindDraftAgentToSessionId", { sessionId, draft: draftAgenticFlow?.name });
+  const bindDraftAgentToSessionId = (sessionId: string) => {
+    console.log("🧭 bindDraftAgentToSessionId", { sessionId, draft: draftAgenticFlow?.name });
 
-  setAgentBySession((prev) => {
-    const already = prev[sessionId];
-    const defaultName = agenticFlows[0]?.name;
-    const draftName = draftAgenticFlow?.name;
+    setAgentBySession((prev) => {
+      const already = prev[sessionId];
+      const defaultName = agenticFlows[0]?.name;
+      const draftName = draftAgenticFlow?.name;
 
-    // If someone pre-bound the default (e.g., Fred), allow overriding it with user's draft
-    if (already) {
-      if (draftName && defaultName && already === defaultName && draftName !== already) {
-        const next = { ...prev, [sessionId]: draftName };
-        saveMap(next);
-        console.log("🧭 bindDraftAgentToSessionId: override default → draft", {
-          sessionId,
-          from: already,
-          to: draftName,
-        });
-        return next;
+      // If someone pre-bound the default (e.g., Fred), allow overriding it with user's draft
+      if (already) {
+        if (draftName && defaultName && already === defaultName && draftName !== already) {
+          const next = { ...prev, [sessionId]: draftName };
+          saveMap(next);
+          console.log("🧭 bindDraftAgentToSessionId: override default → draft", {
+            sessionId,
+            from: already,
+            to: draftName,
+          });
+          return next;
+        }
+        console.log("🧭 bindDraftAgentToSessionId: already bound → keep", { sessionId, bound: already });
+        return prev;
       }
-      console.log("🧭 bindDraftAgentToSessionId: already bound → keep", { sessionId, bound: already });
-      return prev;
+
+      // No mapping yet → bind draft or default
+      const chosen = draftName ?? defaultName;
+      if (!chosen) {
+        console.warn("🧭 bindDraftAgentToSessionId: no draft and no default");
+        return prev;
+      }
+      const next = { ...prev, [sessionId]: chosen };
+      saveMap(next);
+      console.log("🧭 bindDraftAgentToSessionId: bound", { sessionId, chosen });
+      return next;
+    });
+
+    // Consume draft only here (not in updateOrAddSession)
+    if (draftAgenticFlow) {
+      console.log("🧭 bindDraftAgentToSessionId: consume draft", { draft: draftAgenticFlow.name });
+      setDraftAgenticFlow(null);
     }
-
-    // No mapping yet → bind draft or default
-    const chosen = draftName ?? defaultName;
-    if (!chosen) {
-      console.warn("🧭 bindDraftAgentToSessionId: no draft and no default");
-      return prev;
-    }
-    const next = { ...prev, [sessionId]: chosen };
-    saveMap(next);
-    console.log("🧭 bindDraftAgentToSessionId: bound", { sessionId, chosen });
-    return next;
-  });
-
-  // Consume draft only here (not in updateOrAddSession)
-  if (draftAgenticFlow) {
-    console.log("🧭 bindDraftAgentToSessionId: consume draft", { draft: draftAgenticFlow.name });
-    setDraftAgenticFlow(null);
-  }
-};
-
-
-
+  };
 
   const loading = flowsLoading || sessionsLoading;
 

@@ -41,14 +41,16 @@ Scoring notes:
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Sequence
+from datetime import datetime
+from typing import Any, Dict, List, Mapping, Optional, Sequence
 
 import chromadb
 from langchain.schema.document import Document
+from langchain_core.embeddings import Embeddings
 
 # Fred base contracts
-from app.core.stores.vector.base_embedding_model import BaseEmbeddingModel
 from app.core.stores.vector.base_vector_store import (
     CHUNK_ID_FIELD,
     AnnHit,
@@ -68,13 +70,32 @@ def _assert_has_metadata_keys(doc: Document) -> None:
 
 
 def _build_where(search_filter: Optional[SearchFilter]) -> Optional[Dict]:
+    """
+    Build the 'where' filter for Chroma.
+    Chroma only accepts primitive types (string, number), so we encode lists as JSON strings
+    exactly as stored via `sanitize_metadata`.
+    """
     if not search_filter:
         return None
+
     where: Dict[str, Dict] = {}
+
+    # Encode tag_ids to match stored JSON strings
     if search_filter.tag_ids:
-        where[DOC_UID_FIELD] = {"$in": list(search_filter.tag_ids)}
+        tag_values = [json.dumps([t]) for t in search_filter.tag_ids]
+        where["tag_ids"] = {"$in": tag_values}
+
+    # Encode metadata_terms
     for k, values in (search_filter.metadata_terms or {}).items():
-        where[k] = {"$in": list(values)}
+        encoded_values: List[Any] = []
+        for v in values:
+            if isinstance(v, list):
+                # encode all lists as JSON strings
+                encoded_values.append(json.dumps(v))
+            else:
+                encoded_values.append(v)
+        where[k] = {"$in": encoded_values}
+
     return where or None
 
 
@@ -82,6 +103,50 @@ def _cosine_similarity_from_distance(distance: float) -> float:
     # Chroma returns cosine distance; convert to [0,1] similarity for UI
     sim = 1.0 - float(distance)
     return max(0.0, min(1.0, sim))
+
+
+def sanitize_metadata(meta: Mapping[str, Any]) -> dict[str, Any]:
+    clean: dict[str, Any] = {}
+    for k, v in meta.items():
+        if isinstance(v, datetime):
+            clean[k] = v.isoformat()
+        elif isinstance(v, list):
+            # always JSON encode, even single element or empty
+            import json
+
+            clean[k] = json.dumps(v)
+        elif isinstance(v, Mapping):
+            clean[k] = sanitize_metadata(v)
+        else:
+            clean[k] = v
+    return clean
+
+
+def restore_metadata(meta: Mapping[str, Any]) -> dict[str, Any]:
+    restored: dict[str, Any] = {}
+    for k, v in meta.items():
+        if isinstance(v, str):
+            # Try to restore datetime
+            # try:
+            #     restored[k] = datetime.fromisoformat(v)
+            #     continue
+            # except ValueError:
+            #     pass
+            # Try to restore JSON-encoded lists
+            try:
+                loaded = json.loads(v)
+                if isinstance(loaded, list):
+                    restored[k] = loaded
+                    continue
+            except (json.JSONDecodeError, TypeError):
+                pass
+            restored[k] = v
+        elif v == "":
+            # originally empty list
+            restored[k] = []
+        else:
+            restored[k] = v
+    return restored
 
 
 @dataclass
@@ -99,14 +164,15 @@ class ChromaDBVectorStore(BaseVectorStore, FetchById):
 
     persist_path: str
     collection_name: str
-    embeddings: BaseEmbeddingModel
+    embeddings: Embeddings
 
-    def __init__(self, persist_path: str, collection_name: str, embeddings: BaseEmbeddingModel) -> None:
+    def __init__(self, persist_path: str, collection_name: str, embeddings: Embeddings, embedding_model_name: str) -> None:
         self.persist_path = persist_path
         self.collection_name = collection_name
         self.embeddings = embeddings
+        self.embedding_model_name = embedding_model_name
         client = chromadb.PersistentClient(path=self.persist_path)
-        self._collection = client.create_collection(
+        self._collection = client.get_or_create_collection(
             name=self.collection_name,
             metadata={"hnsw:space": "cosine"},  # ensure cosine distance
         )
@@ -123,7 +189,7 @@ class ChromaDBVectorStore(BaseVectorStore, FetchById):
             raise ValueError("len(ids) must match len(documents)")
 
         texts = [d.page_content for d in documents]
-        metadatas = [d.metadata for d in documents]
+        metadatas = [sanitize_metadata(d.metadata) for d in documents]
         vectors = self.embeddings.embed_documents(texts)
 
         # Upsert for idempotency (add would error on duplicates)
@@ -148,6 +214,10 @@ class ChromaDBVectorStore(BaseVectorStore, FetchById):
         k: int,
         search_filter: Optional[SearchFilter] = None,
     ) -> List[AnnHit]:
+        """
+        Perform semantic (ANN) search with optional filtering.
+        Restores metadata lists (tag_ids, etc.) for compatibility with Pydantic.
+        """
         where = _build_where(search_filter)
         qvec = self.embeddings.embed_query(query)
         res = self._collection.query(
@@ -156,15 +226,26 @@ class ChromaDBVectorStore(BaseVectorStore, FetchById):
             where=where,
             include=["distances", "documents", "metadatas"],
         )
-        # Chroma returns lists per query; we have one query
+
+        # Chroma returns lists per query; we only have one query
         docs = (res.get("documents") or [[]])[0]
         metas = (res.get("metadatas") or [[]])[0]
         dists = (res.get("distances") or [[]])[0]
 
         hits: List[AnnHit] = []
         for text, meta, dist in zip(docs, metas, dists):
-            doc = Document(page_content=text, metadata=meta or {})
+            meta = meta or {}
+
+            # Restore any sanitized lists (including tag_ids)
+            restored_meta = restore_metadata(meta)
+
+            # Ensure tag_ids is always a list
+            if "tag_ids" in restored_meta and not isinstance(restored_meta["tag_ids"], list):
+                restored_meta["tag_ids"] = [restored_meta["tag_ids"]]
+
+            doc = Document(page_content=text, metadata=restored_meta)
             hits.append(AnnHit(document=doc, score=_cosine_similarity_from_distance(dist)))
+
         return hits
 
     # -------- Hydration --------
@@ -176,7 +257,7 @@ class ChromaDBVectorStore(BaseVectorStore, FetchById):
         documents = got.get("documents", []) or []
         metadatas = got.get("metadatas", []) or []
         for text, meta in zip(documents, metadatas):
-            docs.append(Document(page_content=text or "", metadata=meta or {}))
+            docs.append(Document(page_content=text or "", metadata=restore_metadata(meta or {})))
         return docs
 
 

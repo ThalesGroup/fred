@@ -609,6 +609,18 @@ export type FileInfo = {
   md5?: string | null;
   language?: string | null;
 };
+export type DocSummary = {
+  /** Concise doc abstract for humans (UI). */
+  abstract?: string | null;
+  /** Top key terms for navigation and filters. */
+  keywords?: string[] | null;
+  /** LLM/flow used to produce this summary. */
+  model_name?: string | null;
+  /** Algorithm/flow id (e.g., 'SmartDocSummarizer@v1'). */
+  method?: string | null;
+  /** UTC when this summary was computed. */
+  created_at?: string | null;
+};
 export type Tagging = {
   /** Stable tag IDs (UUIDs) */
   tag_ids?: string[];
@@ -633,6 +645,7 @@ export type DocumentMetadata = {
   identity: Identity;
   source: SourceInfo;
   file?: FileInfo;
+  summary?: DocSummary | null;
   tags?: Tagging;
   access?: AccessInfo;
   processing?: Processing;
