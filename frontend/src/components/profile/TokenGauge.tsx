@@ -39,12 +39,12 @@ export const TokenGauge = ({ tokens, maxTokens }: TokenGaugeProps) => {
             color: [
               [0.5, "#91cc75"],
               [0.85, "#fac858"],
-              [1, "#ee6666"]
-            ]
-          }
+              [1, "#ee6666"],
+            ],
+          },
         },
         pointer: {
-          show: false
+          show: false,
         },
         axisTick: { show: false },
         splitLine: { show: false },
@@ -52,18 +52,12 @@ export const TokenGauge = ({ tokens, maxTokens }: TokenGaugeProps) => {
         detail: {
           formatter: `{value}%`,
           fontSize: 12,
-          offsetCenter: [0, "-20%"]
+          offsetCenter: [0, "-20%"],
         },
-        data: [{ value: usage }]
-      }
-    ]
+        data: [{ value: usage }],
+      },
+    ],
   };
 
-  return (
-    <ReactECharts
-      option={option}
-      style={{ height: 100, width: "100%" }}
-      opts={{ renderer: "svg" }}
-    />
-  );
+  return <ReactECharts option={option} style={{ height: 100, width: "100%" }} opts={{ renderer: "svg" }} />;
 };

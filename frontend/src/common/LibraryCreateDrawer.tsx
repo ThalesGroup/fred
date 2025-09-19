@@ -3,10 +3,7 @@ import SaveIcon from "@mui/icons-material/Save";
 import { Alert, Box, Button, Drawer, TextField, Typography } from "@mui/material";
 import React, { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  useCreateTagKnowledgeFlowV1TagsPostMutation,
-  TagType,
-} from "../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { useCreateTagKnowledgeFlowV1TagsPostMutation, TagType } from "../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { useToast } from "../components/ToastProvider";
 
 interface LibraryCreateDrawerProps {
@@ -67,8 +64,7 @@ export const LibraryCreateDrawer: React.FC<LibraryCreateDrawerProps> = ({
       showError({
         summary: t("libraryCreateDrawer.validationError"),
         detail:
-          t("libraryCreateDrawer.nameNoSlash") ||
-          "Name cannot contain '/'. Use the folder picker to set the location.",
+          t("libraryCreateDrawer.nameNoSlash") || "Name cannot contain '/'. Use the folder picker to set the location.",
       });
       return;
     }
@@ -78,7 +74,7 @@ export const LibraryCreateDrawer: React.FC<LibraryCreateDrawerProps> = ({
         name: trimmed,
         path: parentPath, // ✅ always normalized (null at root)
         description: description.trim() || null,
-        type: mode ,
+        type: mode,
         item_ids: [] as string[],
       };
 
@@ -118,8 +114,7 @@ export const LibraryCreateDrawer: React.FC<LibraryCreateDrawerProps> = ({
 
       {/* Always show target location so users understand hierarchy */}
       <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-        {t("libraryCreateDrawer.createUnder") || "Will be created under:"}{" "}
-        <strong>{parentPath || "/"}</strong>
+        {t("libraryCreateDrawer.createUnder") || "Will be created under:"} <strong>{parentPath || "/"}</strong>
       </Typography>
 
       <Box component="form" onSubmit={handleCreate} sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
@@ -143,9 +138,7 @@ export const LibraryCreateDrawer: React.FC<LibraryCreateDrawerProps> = ({
         />
 
         {error && (
-          <Alert severity="error">
-            {(error as any)?.data?.detail || t("libraryCreateDrawer.creationFailed")}
-          </Alert>
+          <Alert severity="error">{(error as any)?.data?.detail || t("libraryCreateDrawer.creationFailed")}</Alert>
         )}
 
         <Box sx={{ display: "flex", justifyContent: "space-between" }}>

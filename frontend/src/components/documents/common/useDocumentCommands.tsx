@@ -109,31 +109,26 @@ export function useDocumentCommands({ refetchTags, refetchDocs }: DocumentRefres
     },
     [openDocument],
   );
-  const download = useCallback(async (doc: DocumentMetadata) => {
-  try {
-    console.log("Downloading document:", doc.identity.document_name);
-    // IMPORTANT: unwrap to get the Blob
-    const blob = await triggerDownloadBlob({
-      documentUid: doc.identity.document_uid,
-    }).unwrap();
+  const download = useCallback(
+    async (doc: DocumentMetadata) => {
+      try {
+        console.log("Downloading document:", doc.identity.document_name);
+        // IMPORTANT: unwrap to get the Blob
+        const blob = await triggerDownloadBlob({
+          documentUid: doc.identity.document_uid,
+        }).unwrap();
 
-    console.log(
-      "Blob received?",
-      blob instanceof Blob,
-      blob.type,
-      blob.size
-    );
+        console.log("Blob received?", blob instanceof Blob, blob.type, blob.size);
 
-    downloadFile(
-      blob,
-      doc.identity.document_name || doc.identity.document_uid
-    );
-  } catch (err: any) {
-    showError({
-      summary: "Download failed",
-      detail: `Could not download document: ${err?.data?.detail || err.message}`,
-    });
-  }
-}, [triggerDownloadBlob, showError]);
+        downloadFile(blob, doc.identity.document_name || doc.identity.document_uid);
+      } catch (err: any) {
+        showError({
+          summary: "Download failed",
+          detail: `Could not download document: ${err?.data?.detail || err.message}`,
+        });
+      }
+    },
+    [triggerDownloadBlob, showError],
+  );
   return { toggleRetrievable, removeFromLibrary, preview, refresh, download };
 }

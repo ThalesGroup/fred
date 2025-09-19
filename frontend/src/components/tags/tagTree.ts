@@ -16,8 +16,8 @@ import { TagWithItemsId } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi"
 
 // ---------- Types ----------
 export type TagNode = {
-  name: string;      // path segment (e.g., "SIX")
-  full: string;      // full path (e.g., "SIX/DEV")
+  name: string; // path segment (e.g., "SIX")
+  full: string; // full path (e.g., "SIX/DEV")
   children: Map<string, TagNode>;
   tagsHere: TagWithItemsId[]; // tags that end exactly at this node
 };

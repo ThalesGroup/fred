@@ -11,15 +11,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import AudioController from "../AudioController.tsx";
 import AudioRecorder from "../AudioRecorder.tsx";
 
-import {
-  Grid2,
-  IconButton,
-  InputBase,
-  Tooltip,
-  useTheme,
-  Box,
-  Stack,
-} from "@mui/material";
+import { Grid2, IconButton, InputBase, Tooltip, useTheme, Box, Stack } from "@mui/material";
 
 import {
   Resource,

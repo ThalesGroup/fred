@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 import React, { useRef, useState } from "react";
 import { Box, Button, Drawer, Paper, Stack, Typography, useTheme } from "@mui/material";
 import UploadIcon from "@mui/icons-material/Upload";
@@ -37,13 +36,7 @@ const deriveName = (text: string, filename: string) => {
   return filename.replace(/\.(yaml|yml|md|txt)$/i, "");
 };
 
-export const ResourceImportDrawer: React.FC<Props> = ({
-  isOpen,
-  onClose,
-  onImportComplete,
-  libraryTagId,
-  kind,
-}) => {
+export const ResourceImportDrawer: React.FC<Props> = ({ isOpen, onClose, onImportComplete, libraryTagId, kind }) => {
   const { t } = useTranslation();
   const theme = useTheme();
   const { showSuccess, showError, showInfo } = useToast();
@@ -183,7 +176,7 @@ export const ResourceImportDrawer: React.FC<Props> = ({
         <Box display="flex" flexDirection="column" alignItems="center" justifyContent="center" height="100%" gap={1}>
           <UploadIcon sx={{ fontSize: 40, color: "text.secondary" }} />
           <Typography variant="body1" color="text.secondary">
-            {t("resourceLibrary.dropFiles", {typePlural: kind}) || "Drop files here or click to choose"}
+            {t("resourceLibrary.dropFiles", { typePlural: kind }) || "Drop files here or click to choose"}
           </Typography>
           <Typography variant="caption" color="text.secondary">
             .yaml, .yml, .md, .txt
@@ -201,7 +194,7 @@ export const ResourceImportDrawer: React.FC<Props> = ({
           ))
         ) : (
           <Typography variant="body2" color="text.secondary">
-            {t("resourceLibrary.noFiles", {typeOne: kind}) || "No files selected"}
+            {t("resourceLibrary.noFiles", { typeOne: kind }) || "No files selected"}
           </Typography>
         )}
       </Stack>

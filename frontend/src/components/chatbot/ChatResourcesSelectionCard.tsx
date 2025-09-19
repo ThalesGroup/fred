@@ -59,10 +59,9 @@ export function ChatResourcesSelectionCard({
   })();
 
   // NOTE: this assumes resourceKind is set for supported types
-  const { data: fetchedResources = [] } =
-    resourceKind
-      ? useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery({ kind: resourceKind })
-      : ({ data: [] } as { data: Resource[] });
+  const { data: fetchedResources = [] } = resourceKind
+    ? useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery({ kind: resourceKind })
+    : ({ data: [] } as { data: Resource[] });
 
   const [q, setQ] = useState("");
   const [openMap, setOpenMap] = useState<Record<string, boolean>>({});
@@ -77,7 +76,7 @@ export function ChatResourcesSelectionCard({
           description: x.description ?? null,
         }))
         .sort((a, b) => a.name.localeCompare(b.name)),
-    [tags]
+    [tags],
   );
 
   // tagId -> resources[]
@@ -99,7 +98,7 @@ export function ChatResourcesSelectionCard({
       (l) =>
         l.name.toLowerCase().includes(needle) ||
         (l.path ?? "").toLowerCase().includes(needle) ||
-        (l.description ?? "").toLowerCase().includes(needle)
+        (l.description ?? "").toLowerCase().includes(needle),
     );
   }, [libs, q]);
 

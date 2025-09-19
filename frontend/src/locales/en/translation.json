@@ -299,9 +299,9 @@
     "expandAll": "Expand all",
     "folderDeleteSuccess": "Folder deleted",
     "folderDeleteDetail": "The folder « {{name}} » has been deleted.",
-    "searchPlaceholder":"Search a {{typeOne}}",
+    "searchPlaceholder": "Search a {{typeOne}}",
     "importDrawerTitle": "Import {{typeOne}}",
-    "dropFiles":"Drop your {{typePlural}} here",
+    "dropFiles": "Drop your {{typePlural}} here",
     "noFiles": "No {{typeOne}} found",
     "import": "Import"
   },
@@ -372,7 +372,7 @@
     "updateFailed": "Update Failed",
     "updateFailedDetail": "An error occurred while updating the library. Please try again."
   },
-  "search" : {
+  "search": {
     "policy": "Search Policy",
     "strict": "Strict",
     "hybrid": "Hybrid",

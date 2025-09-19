@@ -103,6 +103,7 @@ __all__ = [
     "DuckdbStoreConfig",
     "PostgresStoreConfig",
     "PostgresTableConfig",
+    "SQLStorageConfig",
     "StoreConfig",
     "ThreadSafeLRUCache",
     "VectorSearchHit",

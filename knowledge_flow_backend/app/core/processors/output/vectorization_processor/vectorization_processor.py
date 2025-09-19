@@ -102,10 +102,13 @@ class VectorizationProcessor(BaseOutputProcessor):
             if not document:
                 raise ValueError("Document is empty or not loaded correctly.")
 
+            # Ensure keywords is always defined
+            keywords: List[str] | None = None
+
             # 1.b) Summarize ONCE per doc (size-aware; non-blocking)
             if self.context.is_summary_generation_enabled():
                 abstract: Optional[str]
-                keywords: Optional[List[str]]
+                keywords = None
                 abstract, keywords = self.smart_summarizer.summarize_document(document)
 
                 if abstract or keywords:
