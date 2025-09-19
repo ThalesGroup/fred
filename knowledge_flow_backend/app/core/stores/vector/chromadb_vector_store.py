@@ -127,11 +127,11 @@ def restore_metadata(meta: Mapping[str, Any]) -> dict[str, Any]:
     for k, v in meta.items():
         if isinstance(v, str):
             # Try to restore datetime
-            try:
-                restored[k] = datetime.fromisoformat(v)
-                continue
-            except ValueError:
-                pass
+            # try:
+            #     restored[k] = datetime.fromisoformat(v)
+            #     continue
+            # except ValueError:
+            #     pass
             # Try to restore JSON-encoded lists
             try:
                 loaded = json.loads(v)
