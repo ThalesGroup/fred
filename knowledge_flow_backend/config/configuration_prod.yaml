@@ -15,6 +15,7 @@ app:
   base_url: "/knowledge-flow/v1"
   address: "127.0.0.1"
   port: 8111
+  metrics_port: 9111
   log_level: "info"
   reload: false
   reload_dir: "."

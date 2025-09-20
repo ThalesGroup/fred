@@ -161,6 +161,7 @@ class AppConfig(BaseModel):
     base_url: str = "/knowledge-flow/v1"
     address: str = "127.0.0.1"
     port: int = 8000
+    metrics_port: int = 8001
     log_level: str = "info"
     reload: bool = False
     reload_dir: str = "."

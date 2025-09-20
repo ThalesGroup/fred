@@ -75,8 +75,8 @@ ENV PYTHONPATH=/app
 # Switch to non-root user
 USER ${USER_NAME}
 
-# Expose Fast API port
-EXPOSE 8111
+# Expose Fast API port and the metrics port
+EXPOSE 8111 9111
 
 # Entrypoint without make
 ENTRYPOINT ["uvicorn", "app.main:create_app", "--factory"]
