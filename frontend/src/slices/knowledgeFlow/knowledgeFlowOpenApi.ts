@@ -912,7 +912,7 @@ export type KpiQuery = {
   limit?: number;
   order_by?: OrderBy | null;
 };
-export type FileToProcess = {
+export type FileToProcessWithoutUser = {
   source_tag: string;
   tags?: string[];
   display_name?: string | null;
@@ -923,7 +923,7 @@ export type FileToProcess = {
   hash?: string | null;
 };
 export type ProcessDocumentsRequest = {
-  files: FileToProcess[];
+  files: FileToProcessWithoutUser[];
   pipeline_name: string;
 };
 export const {
