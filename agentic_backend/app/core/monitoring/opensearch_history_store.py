@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from statistics import mean
 from typing import Any, Dict, List, Optional
 
-from fred_core import ThreadSafeLRUCache
+from fred_core import ThreadSafeLRUCache, validate_index_mapping
 from opensearchpy import OpenSearch, RequestsHttpConnection
 
 from app.common.utils import truncate_datetime
@@ -176,6 +176,9 @@ class OpensearchHistoryStore(BaseHistoryStore):
                     )
             except Exception as e:
                 logger.warning("Could not update mapping on index '%s': %s", index, e)
+
+            # Validate existing mapping matches expected mapping
+            validate_index_mapping(self.client, index, MAPPING)
 
     # ----------------------------------------------------------------------
     # Persistence

@@ -33,6 +33,7 @@ export interface UserInputContent {
   documentLibraryIds?: string[];
   promptResourceIds?: string[];
   templateResourceIds?: string[];
+  profileResourceIds?: string[];
   searchPolicy?: SearchPolicyName;
 }
 
@@ -40,6 +41,7 @@ type PersistedCtx = {
   documentLibraryIds?: string[];
   promptResourceIds?: string[];
   templateResourceIds?: string[];
+  profileResourceIds?: string[];
   searchPolicy?: SearchPolicyName;
 };
 

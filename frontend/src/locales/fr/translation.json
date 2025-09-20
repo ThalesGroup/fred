@@ -5,8 +5,9 @@
   },
   "resource": {
     "kind": {
-      "prompt": { "one": "prompt", "other": "prompts" },
-      "template": { "one": "modèle", "other": "modèles" }
+      "prompt":   { "one": "prompt",   "other": "prompts" },
+      "template": { "one": "modèle", "other": "modèles" },
+      "profile": { "one" : "profil", "other": "profils"}
     }
   },
   "validation": {
@@ -26,7 +27,7 @@
     "optimize": "Optimiser",
     "chat": "Discussion",
     "monitoring": "Supervision",
-    "knowledge": "Savoir",
+    "knowledge": "Ressources",
     "agent": "Hub Agent",
     "workspaces": "Espaces de travail",
     "account": "Profil",
@@ -141,7 +142,8 @@
     "delete": "Supprimer",
     "conversationSetup": "Configuration de la conversation",
     "newConversationHelp": "Commencer une nouvelle conversation (non encore enregistrée)",
-    "draftNotSaved": "Brouillon • non encore enregistré"
+    "draftNotSaved": "Brouillon • non encore enregistré",
+    "profile": "Profil"
   },
   "monitoring": {
     "title": "Surveillance des agents et services IA",
@@ -221,14 +223,16 @@
     "language": "Langue de l'interface"
   },
   "knowledge": {
-    "title": "Centre de connaissances",
-    "description": "Gérez vos bibliothèques de documents et de prompts",
+    "title": "Ressources",
+    "description": "Gérez vos documents, prompts, profils et modèles",
     "viewSelector": {
       "libraries": "Bibliothèques",
       "templates": "Modèles",
       "prompts": "Prompts",
       "documents": "Documents",
-      "operations": "Opérations"
+      "operations": "Opérations",
+      "profiles": "Profils"
+
     }
   },
   "documentLibrary": {
@@ -289,9 +293,9 @@
     "loadingLibraries": "Chargement des bibliothèques…",
     "failedToLoad": "Échec du chargement des bibliothèques.",
     "createSuccess": "Créé",
-    "createDetail": "{{typeOne | capitalize}} ajouté à la bibliothèque.",
+    "createDetail": "{{typeOne, capitalize}} ajouté à la bibliothèque.",
     "removeSuccess": "Supprimé",
-    "removeDetail": "{{typeOne | capitalize}} supprimé de la bibliothèque.",
+    "removeDetail": "{{typeOne, capitalize}} supprimé de la bibliothèque.",
     "collapseAll": "Tout réduire",
     "expandAll": "Tout développer",
     "folderDeleteSuccess": "Dossier supprimé",
@@ -300,7 +304,17 @@
     "importDrawerTitle": "Importer un(e) {{typeOne}}",
     "dropFiles": "Deposez vos {{typePlural}} ici",
     "noFiles": "Aucun(e) {{typeOne}} trouvé(e)",
-    "import": "Importer"
+    "import": "Importer",
+    "selected": "Sélectionné",
+    "clearSelection": "Effacer la sélection",
+    "bulkRemove": "Supprimer les {{typePlural}} sélectionné(e)s",
+    "confirmBulkRemoveMessage": "Supprimer {{count}} {{typePlural}} de leurs bibliothèques ?",
+    "confirmBulkRemoveTitle": "Supprimer la sélection ?",
+    "bulkRemoveFromLibrary": "Supprimer de la bibliothèque",
+    "removedOneResource": "{{typeOne, capitalize}} supprimé(e) de la bibliothèque.",
+    "confirmRemoveTitle": "Supprimer de la bibliothèque ?",
+    "confirmRemoveMessage": "Supprimer « {{res}} » de « {{folder}} » ?"
+    
   },
   "documentTable": {
     "selectedCount": "{{count}} sélectionné(s)",

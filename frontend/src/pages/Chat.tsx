@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { useRef, useState } from "react";
-import { Box, CircularProgress, Paper, Typography, Divider, IconButton, PaperProps } from "@mui/material";
+import { Box, CircularProgress, Paper, Typography, Divider, IconButton, PaperProps, Grid2 } from "@mui/material";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import {
   AgenticFlow,
@@ -28,6 +28,7 @@ import { useSessionOrchestrator } from "../hooks/useSessionOrchestrator";
 import ChatBot from "../components/chatbot/ChatBot";
 import { SidePanelToggle } from "../components/SidePanelToogle";
 import { useTranslation } from "react-i18next";
+import { ProfilePickerPanel } from "../components/chatbot/settings/ProfilePickerPanel";
 
 const PANEL_W = { xs: 300, sm: 340, md: 360 };
 
@@ -43,13 +44,16 @@ export default function Chat() {
   } = useGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery();
 
   const {
-    data: sessionsFromServer = [],
-    isLoading: sessionsLoading,
-    isError: sessionsError,
-    error: sessionsErrObj,
-    refetch: refetchSessions,
-  } = useGetSessionsAgenticV1ChatbotSessionsGetQuery();
-
+  data: sessionsFromServer = [],
+  isLoading: sessionsLoading,
+  isError: sessionsError,
+  error: sessionsErrObj,
+  refetch: refetchSessions,
+} = useGetSessionsAgenticV1ChatbotSessionsGetQuery(undefined, {
+  refetchOnMountOrArgChange: true,  // always refetch on component mount
+  refetchOnFocus: true,             // when tab regains focus
+  refetchOnReconnect: true,         // when network reconnects
+});
   const [deleteSessionMutation] = useDeleteSessionAgenticV1ChatbotSessionSessionIdDeleteMutation();
 
   const {
@@ -61,12 +65,15 @@ export default function Chat() {
     selectAgenticFlowForCurrentSession,
     startNewConversation,
     updateOrAddSession,
-    bindDraftAgentToSessionId,
+    bindDraftAgentToSessionId
   } = useSessionOrchestrator({
     sessionsFromServer,
     flowsFromServer: flows,
     loading: sessionsLoading || flowsLoading,
   });
+
+  const [baseRuntimeContext] = useState<Record<string, any>>({});
+  const [selectedProfileIds, setSelectedProfileIds] = useState<string[]>([]);
 
   const [agentsOpen, setAgentsOpen] = useState(false);
   const openAgents = () => setAgentsOpen(true);
@@ -100,7 +107,9 @@ export default function Chat() {
       }, 1000);
     }
   };
+
   console.log("ChatPOC: Component rendering. Session count:", sessions?.length);
+
   if (flowsLoading || sessionsLoading) {
     return (
       <Box sx={{ p: 3, display: "grid", placeItems: "center", height: "100vh" }}>
@@ -160,13 +169,8 @@ export default function Chat() {
     />
   );
 
-  // ... (rest of the component)
-
   return (
     <Box ref={containerRef} sx={{ height: "100%", position: "relative", overflow: "hidden" }}>
-      {/* This is the toggle button for when the panel is closed. 
-        It remains in its original position, which is good. 
-      */}
       {!agentsOpen && (
         <Box sx={{ position: "absolute", top: 12, left: 12, zIndex: 10 }}>
           <SidePanelToggle
@@ -210,6 +214,11 @@ export default function Chat() {
             </IconButton>
           </Box>
           <Box sx={{ flex: 1, overflow: "auto" }}>
+            <ProfilePickerPanel
+              selectedProfileIds={selectedProfileIds}
+              onChangeSelectedProfileIds={setSelectedProfileIds}
+            />
+            <Divider />
             <AgentsList agenticFlows={flows} selected={currentAgenticFlow} onSelect={handleSelectAgent} />
             <Divider />
             <ConversationList
@@ -223,15 +232,20 @@ export default function Chat() {
           </Box>
         </PanelShell>
 
-        {/* This is the new ChatBot component! */}
-        <ChatBot
-          currentChatBotSession={currentSession}
-          currentAgenticFlow={currentAgenticFlow!}
-          agenticFlows={flows}
-          onUpdateOrAddSession={updateOrAddSession}
-          isCreatingNewConversation={isCreatingNewConversation}
-          onBindDraftAgentToSessionId={bindDraftAgentToSessionId}
-        />
+        <Grid2>
+          <ChatBot
+            currentChatBotSession={currentSession}
+            currentAgenticFlow={currentAgenticFlow!}
+            agenticFlows={flows}
+            onUpdateOrAddSession={updateOrAddSession}
+            isCreatingNewConversation={isCreatingNewConversation}
+            runtimeContext={{
+              ...baseRuntimeContext,
+              selected_profile_ids: selectedProfileIds.length ? selectedProfileIds : undefined,
+            }}
+            onBindDraftAgentToSessionId={bindDraftAgentToSessionId}
+          />
+        </Grid2>
       </Box>
     </Box>
   );
