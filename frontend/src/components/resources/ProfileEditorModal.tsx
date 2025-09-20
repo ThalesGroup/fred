@@ -1,7 +1,6 @@
 // ProfileEditorModal.tsx
 import {
   Button,
-  CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
@@ -10,7 +9,6 @@ import {
   TextField,
 } from "@mui/material";
 import * as React from "react";
-import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -51,36 +49,18 @@ export const ProfileEditorModal: React.FC<ProfileEditorModalProps> = ({
   onClose,
   onSave,
   initial,
-  getSuggestion,
 }) => {
 
   // ----- Simple mode form (create) -----
   const {
     register,
     handleSubmit,
-    setValue,
     formState: { errors, isSubmitting },
   } = useForm<ProfileFormData>({
     resolver: zodResolver(profileSchema),
     defaultValues: { name: "", description: "", body: "" },
   });
 
-  // ----- Doc mode state (kept but UI is simple-only now) -----
-  const [suggesting, setSuggesting] = useState(false);
-
-  const handleAIHelp = async () => {
-    if (!getSuggestion) return;
-    try {
-      setSuggesting(true);
-      const suggestion = await getSuggestion();
-      if (!suggestion) return;
-      setValue("body", suggestion);
-    } catch (err) {
-      console.error("AI profile suggestion failed", err);
-    } finally {
-      setSuggesting(false);
-    }
-  };
 
   // ----- Submit handlers -----
   const onSubmitSimple = (data: ProfileFormData) => {
@@ -137,14 +117,6 @@ export const ProfileEditorModal: React.FC<ProfileEditorModalProps> = ({
         </DialogContent>
         <DialogActions>
           <Button onClick={onClose} variant="outlined">Cancel</Button>
-          <Button
-            onClick={handleAIHelp}
-            variant="text"
-            disabled={!getSuggestion || suggesting}
-            startIcon={suggesting ? <CircularProgress size={16} /> : undefined}
-          >
-            Get Help from AI
-          </Button>
           <Button type="submit" variant="contained" disabled={isSubmitting}>
             Save
           </Button>
