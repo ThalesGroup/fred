@@ -5,8 +5,9 @@
   },
   "resource": {
     "kind": {
-      "prompt": { "one": "prompt", "other": "prompts" },
-      "template": { "one": "template", "other": "templates" }
+      "prompt":   { "one": "prompt",   "other": "prompts" },
+      "template": { "one": "template", "other": "templates" },
+      "profile": { "one" : "profile", "other": "profiles"}
     }
   },
   "validation": {
@@ -26,7 +27,7 @@
     "optimize": "Optimize",
     "chat": "Chat",
     "monitoring": "Monitoring",
-    "knowledge": "Knowledge",
+    "knowledge": "Resources",
     "agent": "Agents",
     "workspaces": "Workspaces",
     "account": "Profile",
@@ -139,6 +140,7 @@
     "newConversation": "New conversation",
     "noConversation": "No conversation",
     "delete": "Delete",
+    "profile": "Profile",
     "conversationSetup": "Conversation setup",
     "newConversationHelp": "Start a new conversation (not yet saved)",
     "draftNotSaved": "Draft • not yet saved"
@@ -199,7 +201,7 @@
     }
   },
   "profile": {
-    "title": "Profile",
+    "title": "User profile",
     "description": "Manage your profile settings",
     "menu": {
       "account": "Account",
@@ -221,14 +223,15 @@
     "language": "Interface language"
   },
   "knowledge": {
-    "title": "Knowledge Hub",
-    "description": "Manage your document and prompt libraries",
+    "title": "Resources",
+    "description": "Manage your document, prompt, profile and template libraries",
     "viewSelector": {
       "libraries": "Libraries",
       "templates": "Templates",
       "prompts": "Prompts",
       "documents": "Documents",
-      "operations": "Operations"
+      "operations": "Operations",
+      "profiles": "Profiles"
     }
   },
   "documentLibrary": {
@@ -300,7 +303,16 @@
     "importDrawerTitle": "Import {{typeOne}}",
     "dropFiles": "Drop your {{typePlural}} here",
     "noFiles": "No {{typeOne}} found",
-    "import": "Import"
+    "import": "Import",
+    "selected": "Selected",
+    "clearSelection": "Clear selection",
+    "bulkRemove": "Remove selected resources",
+    "confirmBulkRemoveMessage": "Remove {{count}} resources from their libraries?",
+    "confirmBulkRemoveTitle": "Remove selection?",
+    "bulkRemoveFromLibrary": "Remove from library",
+    "removedOneResource": "{{typeOne, capitalize}} removed from library.",
+    "confirmRemoveTitle": "Remove from library?",
+    "confirmRemoveMessage": "Remove « {{doc}} » from « {{folder}} »?"
   },
   "documentTable": {
     "selectedCount": "{{count}} selected",

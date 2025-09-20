@@ -23,6 +23,7 @@ from pydantic import BaseModel, Field
 class ResourceKind(str, Enum):
     PROMPT = "prompt"
     TEMPLATE = "template"
+    PROFILE = "profile"
 
 
 class ResourceUpdate(BaseModel):

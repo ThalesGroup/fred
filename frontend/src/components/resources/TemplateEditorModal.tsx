@@ -14,7 +14,6 @@
 
 import {
   Button,
-  CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
@@ -55,7 +54,7 @@ interface TemplateEditorModalProps {
   getSuggestion?: () => Promise<string>;
 }
 
-export const TemplateEditorModal = ({ isOpen, onClose, onSave, initial, getSuggestion }: TemplateEditorModalProps) => {
+export const TemplateEditorModal = ({ isOpen, onClose, onSave, initial }: TemplateEditorModalProps) => {
   // decide incoming doc
   const incomingDoc = useMemo(() => (initial as any)?.yaml ?? (initial as any)?.body ?? "", [initial]);
   const isDocMode = useMemo(() => looksLikeYamlDoc(incomingDoc), [incomingDoc]);
@@ -64,7 +63,6 @@ export const TemplateEditorModal = ({ isOpen, onClose, onSave, initial, getSugge
   const {
     register,
     handleSubmit,
-    setValue,
     reset,
     formState: { errors, isSubmitting },
   } = useForm<TemplateFormData>({
@@ -76,7 +74,6 @@ export const TemplateEditorModal = ({ isOpen, onClose, onSave, initial, getSugge
   const [headerText, setHeaderText] = useState<string>("");
   const [bodyText, setBodyText] = useState<string>("");
   const [headerError, setHeaderError] = useState<string | null>(null);
-  const [suggesting, setSuggesting] = useState(false);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -95,21 +92,6 @@ export const TemplateEditorModal = ({ isOpen, onClose, onSave, initial, getSugge
       });
     }
   }, [isOpen, isDocMode, incomingDoc, initial?.name, initial?.description, initial?.format, reset]);
-
-  const handleAIHelp = async () => {
-    if (!getSuggestion) return;
-    try {
-      setSuggesting(true);
-      const suggestion = await getSuggestion();
-      if (!suggestion) return;
-      if (isDocMode) setBodyText(suggestion);
-      else setValue("body", suggestion);
-    } catch (err) {
-      console.error("AI template suggestion failed", err);
-    } finally {
-      setSuggesting(false);
-    }
-  };
 
   // ---- submit handlers ----
   const onSubmitSimple = (data: TemplateFormData) => {
@@ -182,14 +164,6 @@ export const TemplateEditorModal = ({ isOpen, onClose, onSave, initial, getSugge
             <Button onClick={onClose} variant="outlined">
               Cancel
             </Button>
-            <Button
-              onClick={handleAIHelp}
-              variant="text"
-              disabled={!getSuggestion || suggesting}
-              startIcon={suggesting ? <CircularProgress size={16} /> : undefined}
-            >
-              Get Help from AI
-            </Button>
             <Button onClick={onSubmitDoc} variant="contained">
               Save
             </Button>
@@ -241,14 +215,6 @@ export const TemplateEditorModal = ({ isOpen, onClose, onSave, initial, getSugge
           <DialogActions>
             <Button onClick={onClose} variant="outlined">
               Cancel
-            </Button>
-            <Button
-              onClick={handleAIHelp}
-              variant="text"
-              disabled={!getSuggestion || suggesting}
-              startIcon={suggesting ? <CircularProgress size={16} /> : undefined}
-            >
-              Get Help from AI
             </Button>
             <Button type="submit" variant="contained" disabled={isSubmitting}>
               Save

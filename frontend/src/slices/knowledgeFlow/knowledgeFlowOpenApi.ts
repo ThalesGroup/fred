@@ -729,7 +729,7 @@ export type TabularQueryResponse = {
 export type RawSqlRequest = {
   query: string;
 };
-export type TagType = "document" | "prompt" | "template";
+export type TagType = "document" | "prompt" | "template" | "profile";
 export type TagWithItemsId = {
   id: string;
   created_at: string;
@@ -755,7 +755,7 @@ export type TagUpdate = {
   type: TagType;
   item_ids?: string[];
 };
-export type ResourceKind = "prompt" | "template";
+export type ResourceKind = "prompt" | "template" | "profile";
 export type Resource = {
   id: string;
   kind: ResourceKind;
