@@ -18,7 +18,7 @@ import { Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, B
 // Define the structure for the confirmation dialog
 interface ConfirmationDialogOptions {
   title: string;
-  message: string;
+  message?: string;
   onConfirm: () => void;
   onCancel?: () => void;
 }
@@ -48,9 +48,11 @@ export const ConfirmationDialogProvider: React.FC<{
       {dialogOptions && (
         <Dialog open={true} onClose={closeConfirmationDialog}>
           <DialogTitle>{dialogOptions.title}</DialogTitle>
-          <DialogContent>
-            <DialogContentText>{dialogOptions.message}</DialogContentText>
-          </DialogContent>
+          {dialogOptions.message && (
+            <DialogContent>
+              <DialogContentText>{dialogOptions.message}</DialogContentText>
+            </DialogContent>
+          )}
           <DialogActions>
             <Button onClick={closeConfirmationDialog} color="secondary">
               Cancel

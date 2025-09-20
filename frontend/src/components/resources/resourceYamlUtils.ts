@@ -135,6 +135,72 @@ export const normalizeTemplateHeader = (
   return h;
 };
 
+/* ===============================
+ * PROFILE 
+ * =============================== */
+
+/** NEW: Rebuild a profile schema from the body placeholders (même logique que prompt). */
+export const buildProfileSchemaFromBody = (body: string) => {
+  const vars = extractPlaceholders(body || "");
+  return {
+    type: "object",
+    required: vars,
+    properties: Object.fromEntries(vars.map((v) => [v, { type: "string", title: v }])),
+  };
+};
+
+/** NEW: Make a cleaned/upgraded header for PROFILE (mêmes règles que prompt). */
+export const normalizeProfileHeader = (
+  rawHeader: Record<string, any>,
+  body: string,
+  opts?: { keepVersion?: boolean; recomputeSchema?: boolean }
+): Record<string, any> => {
+  const keepVersion = opts?.keepVersion ?? true;
+  const recomputeSchema = opts?.recomputeSchema ?? true;
+
+  const header = { ...(rawHeader || {}) };
+
+  // Enforce kind
+  header.kind = "profile";
+
+  // Version policy (par défaut v1)
+  if (!keepVersion || !header.version) {
+    header.version = header.version || "v1";
+  }
+
+  // Champs connus (ne supprime pas les clefs inconnues)
+  if (!("name" in header)) header.name = undefined;
+  if (!("description" in header)) header.description = undefined;
+  if (!("labels" in header)) header.labels = undefined;
+
+  // Schéma depuis les placeholders si demandé
+  if (recomputeSchema) {
+    header.schema = buildProfileSchemaFromBody(body);
+  }
+
+  return header;
+};
+
+/** NEW: Builder YAML pour PROFILE (copie de prompt avec kind=profile). */
+export const buildProfileYaml = (opts: {
+  name?: string | null;
+  description?: string | null;
+  labels?: string[] | null;
+  body: string;
+  version?: string; // default v1
+}) => {
+  const version = opts.version || "v1";
+  const schema = buildProfileSchemaFromBody(opts.body);
+  const header: Record<string, any> = {
+    version,
+    kind: "profile",
+    name: opts.name || undefined,
+    description: opts.description || undefined,
+    schema,
+  };
+  return buildFrontMatter(header, opts.body);
+};
+
 // Existing builders (unchanged)
 export const buildPromptYaml = (opts: {
   name?: string | null;
