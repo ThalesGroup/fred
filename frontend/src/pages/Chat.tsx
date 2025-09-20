@@ -43,13 +43,16 @@ export default function Chat() {
   } = useGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery();
 
   const {
-    data: sessionsFromServer = [],
-    isLoading: sessionsLoading,
-    isError: sessionsError,
-    error: sessionsErrObj,
-    refetch: refetchSessions,
-  } = useGetSessionsAgenticV1ChatbotSessionsGetQuery();
-
+  data: sessionsFromServer = [],
+  isLoading: sessionsLoading,
+  isError: sessionsError,
+  error: sessionsErrObj,
+  refetch: refetchSessions,
+} = useGetSessionsAgenticV1ChatbotSessionsGetQuery(undefined, {
+  refetchOnMountOrArgChange: true,  // always refetch on component mount
+  refetchOnFocus: true,             // when tab regains focus
+  refetchOnReconnect: true,         // when network reconnects
+});
   const [deleteSessionMutation] = useDeleteSessionAgenticV1ChatbotSessionSessionIdDeleteMutation();
 
   const {
