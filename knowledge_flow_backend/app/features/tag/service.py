@@ -178,7 +178,7 @@ class TagService:
             for doc in removed_documents:
                 self.document_metadata_service.remove_tag_id_from_document(user, doc, tag.id, modified_by=user.uid)
 
-        elif tag.type in (TagType.PROMPT, TagType.TEMPLATE):
+        elif tag.type in (TagType.PROMPT, TagType.TEMPLATE, TagType.PROFILE):
             rk = _tagtype_to_rk(tag.type)
             old_item_ids = self.resource_service.get_resource_ids_for_tag(rk, tag_id)
             added, removed = self._compute_ids_diff(old_item_ids, tag_data.item_ids)

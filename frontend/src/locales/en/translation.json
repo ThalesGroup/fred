@@ -303,7 +303,16 @@
     "importDrawerTitle": "Import {{typeOne}}",
     "dropFiles": "Drop your {{typePlural}} here",
     "noFiles": "No {{typeOne}} found",
-    "import": "Import"
+    "import": "Import",
+    "selected": "Selected",
+    "clearSelection": "Clear selection",
+    "bulkRemove": "Remove selected resources",
+    "confirmBulkRemoveMessage": "Remove {{count}} resources from their libraries?",
+    "confirmBulkRemoveTitle": "Remove selection?",
+    "bulkRemoveFromLibrary": "Remove from library",
+    "removedOneResource": "{{typeOne, capitalize}} removed from library.",
+    "confirmRemoveTitle": "Remove from library?",
+    "confirmRemoveMessage": "Remove « {{doc}} » from « {{folder}} »?"
   },
   "documentTable": {
     "selectedCount": "{{count}} selected",
