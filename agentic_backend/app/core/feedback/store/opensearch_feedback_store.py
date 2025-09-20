@@ -15,6 +15,7 @@
 import logging
 from typing import List, Optional
 
+from fred_core import validate_index_mapping
 from opensearchpy import (
     ConflictError,
     NotFoundError,
@@ -80,6 +81,8 @@ class OpenSearchFeedbackStore(BaseFeedbackStore):
             logger.info(
                 f"[FEEDBACK] OpenSearch index '{self.index_name}' already exists."
             )
+            # Validate existing mapping matches expected mapping
+            validate_index_mapping(self.client, self.index_name, FEEDBACK_INDEX_MAPPING)
 
     def list(self) -> List[FeedbackRecord]:
         try:
