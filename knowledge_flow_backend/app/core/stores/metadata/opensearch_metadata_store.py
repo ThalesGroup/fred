@@ -3,6 +3,7 @@
 import logging
 from typing import Any, Dict, List, Optional
 
+from fred_core import validate_index_mapping
 from opensearchpy import OpenSearch, OpenSearchException, RequestsHttpConnection
 from pydantic import ValidationError
 
@@ -145,6 +146,9 @@ class OpenSearchMetadataStore(BaseMetadataStore):
             except Exception as e:
                 logger.error(f"[METADATA] PUT _mapping failed for '{idx}': {e}")
                 # Do not raise: running with older mapping is still functional, just without new fields.
+
+        # Validate existing mapping matches expected mapping
+        validate_index_mapping(self.client, self.metadata_index_name, METADATA_INDEX_MAPPING)
 
     @staticmethod
     def _diff_flat_properties(required: dict, current: dict) -> dict:
