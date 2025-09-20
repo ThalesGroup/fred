@@ -67,8 +67,8 @@ export function ProfilePickerPanel({
   return (
     <Box
       sx={{
-        px: 2,
-        py: 2.5,
+        px: 1,
+        py: 1,
         borderBottom: `1px solid ${theme.palette.divider}`,
         backgroundColor: theme.palette.sidebar.background,
       }}

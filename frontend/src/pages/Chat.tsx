@@ -65,6 +65,7 @@ export default function Chat() {
     selectAgenticFlowForCurrentSession,
     startNewConversation,
     updateOrAddSession,
+    bindDraftAgentToSessionId
   } = useSessionOrchestrator({
     sessionsFromServer,
     flowsFromServer: flows,
@@ -232,7 +233,6 @@ export default function Chat() {
         </PanelShell>
 
         <Grid2>
-          {/* This is the new ChatBot component! */}
           <ChatBot
             currentChatBotSession={currentSession}
             currentAgenticFlow={currentAgenticFlow!}
@@ -243,6 +243,7 @@ export default function Chat() {
               ...baseRuntimeContext,
               selected_profile_ids: selectedProfileIds.length ? selectedProfileIds : undefined,
             }}
+            onBindDraftAgentToSessionId={bindDraftAgentToSessionId}
           />
         </Grid2>
       </Box>
