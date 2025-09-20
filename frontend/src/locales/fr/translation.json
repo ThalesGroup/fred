@@ -223,8 +223,8 @@
     "language": "Langue de l'interface"
   },
   "knowledge": {
-    "title": "Centre de connaissances",
-    "description": "Gérez vos bibliothèques de documents et de prompts",
+    "title": "Ressources",
+    "description": "Gérez vos documents, prompts, profils et modèles",
     "viewSelector": {
       "libraries": "Bibliothèques",
       "templates": "Modèles",

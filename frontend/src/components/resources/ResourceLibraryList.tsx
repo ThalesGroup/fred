@@ -209,9 +209,6 @@ export default function ResourceLibraryList({ kind }: Props) {
 
     showConfirmationDialog({
       title: t("resourceLibrary.confirmBulkRemoveTitle") || "Remove selected?",
-      message:
-        t("resourceLibrary.confirmBulkRemoveMessage", { count: entries.length }) ||
-        `Remove ${entries.length} selected item(s) from their libraries? This does not delete originals.`,
       onConfirm: async () => {
         const byId = new Map<string | number, Resource>(allResources.map((r) => [r.id, r]));
         for (const [resId, tag] of entries) {

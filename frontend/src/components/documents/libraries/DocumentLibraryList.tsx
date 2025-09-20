@@ -152,9 +152,6 @@ export default function DocumentLibraryList() {
 
     showConfirmationDialog({
       title: t("documentLibrary.confirmBulkRemoveTitle") || "Remove selected?",
-      message:
-        t("documentLibrary.confirmBulkRemoveMessage", { count: entries.length }) ||
-        `Remove ${entries.length} selected document(s) from their libraries? This does not delete the original files.`,
       onConfirm: async () => {
         const docsById = new Map<string, DocumentMetadata>(
           (allDocuments ?? []).map((d) => [d.identity.document_uid, d]),

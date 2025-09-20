@@ -223,8 +223,8 @@
     "language": "Interface language"
   },
   "knowledge": {
-    "title": "Knowledge Hub",
-    "description": "Manage your document and prompt libraries",
+    "title": "Resources",
+    "description": "Manage your document, prompt, profile and template libraries",
     "viewSelector": {
       "libraries": "Libraries",
       "templates": "Templates",
