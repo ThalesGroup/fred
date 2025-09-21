@@ -112,7 +112,7 @@ def create_app() -> FastAPI:
         app.state.session_orchestrator = session_orchestrator
 
         # We start the prometheus exporter
-        start_prometheus_exporter(port=8082)
+        start_prometheus_exporter(port=configuration.app.metrics_port)
 
         # Use asyncio to launch a background task that runs for the duration of the app's life.
         # We remove the separate TaskGroup to prevent the race condition.
