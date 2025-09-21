@@ -5,6 +5,13 @@ global:
   create_index:
     enabled: true
     image: "alpine:3.22"
+  persistence:
+    enabled: true                 # if true = Enable the creation of PVC when duckdb is used
+    dynamic: true                # if true = let the PVC create the PV if possible and do not create if manually
+    accessModes: "ReadWriteMany"
+    reclaimPolicy: "Retain"
+    storageClass: ""              # if empty = default storage class
+    hostPath: "/mnt/data"         # only used if dynamic=false
 
 applications:
 
