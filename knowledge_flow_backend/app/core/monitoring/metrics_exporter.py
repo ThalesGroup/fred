@@ -1,6 +1,7 @@
 import logging
 import threading
-from prometheus_client import start_http_server, Gauge, Counter, Histogram
+
+from prometheus_client import start_http_server
 
 logger = logging.getLogger(__name__)
 

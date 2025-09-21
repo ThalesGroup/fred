@@ -16,16 +16,9 @@ import logging
 import threading
 from typing import Dict, List
 
-from fastapi import (
-    APIRouter,
-    Depends,
-    HTTPException,
-    Query,
-)
-
-from prometheus_client import start_http_server, Gauge, Counter, Histogram
-
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fred_core import KeycloakUser, get_current_user
+from prometheus_client import start_http_server
 
 from app.core.chatbot.metric_structures import MetricsResponse
 from app.core.monitoring.monitoring_service import AppMonitoringMetricsService
