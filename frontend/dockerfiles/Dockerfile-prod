@@ -35,7 +35,7 @@ RUN make build
 # -----------------------------------------------------------------------------
 FROM nginxinc/nginx-unprivileged:1.27.3-alpine AS runtime
 
-# Install exporter (binaire officiel)
+# Install exporter
 RUN apk add --no-cache curl && \
     curl -L https://github.com/nginxinc/nginx-prometheus-exporter/releases/download/v1.3.0/nginx-prometheus-exporter_1.3.0_linux_amd64.tar.gz \
     | tar -xz -C /usr/local/bin
