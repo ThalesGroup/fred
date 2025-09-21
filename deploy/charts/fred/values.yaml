@@ -6,12 +6,12 @@ global:
     enabled: true
     image: "alpine:3.22"
   persistence:
-    enabled: true                 # if true = Enable the creation of PVC when duckdb is used
-    dynamic: true                # if true = let the PVC create the PV if possible and do not create if manually
-    accessModes: "ReadWriteMany"
+    enabled: false                   # if true = Enable the creation of PVC when duckdb is used - Recommended TRUE
+    dynamic: false                   # if true = let the PVCs create PVs if possible and do not create them manually 
+    accessModes: "ReadWriteOnce"
     reclaimPolicy: "Retain"
-    storageClass: ""              # if empty = default storage class
-    hostPath: "/mnt/data"         # only used if dynamic=false
+    storageClass: "local-path"       # if empty = default storage class
+    hostPath: "/mnt/fred-data"       # only used if dynamic=false & storageClass=local-path, remind to create this directory on your host
 
 applications:
 
