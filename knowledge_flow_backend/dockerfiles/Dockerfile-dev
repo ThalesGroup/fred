@@ -46,8 +46,8 @@ USER ${USER_NAME}
 # Install dependencies with uv
 RUN make dev
 
-# Expose Fast API port
-EXPOSE 8111
+# Expose Fast API port and the metrics port
+EXPOSE 8111 9111
 
 # Run the application
 ENV PYTHONPATH=/app
