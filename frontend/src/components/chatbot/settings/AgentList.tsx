@@ -23,28 +23,28 @@ import {
   Theme,
 } from "@mui/material";
 import { useTranslation } from "react-i18next";
-import { AgenticFlow } from "../../../slices/agentic/agenticOpenApi";
 import { getAgentBadge } from "../../../utils/avatar";
+import { AnyAgent } from "../../../common/agent";
 
 // Public contract kept minimal on purpose:
-// - agenticFlows: source of truth from backend
+// - agents: source of truth from backend
 // - selected?: current agent (can be undefined when nothing picked yet)
-// - onSelect: emits the full AgenticFlow (not just name) to keep parent logic simple
+// - onSelect: emits the full agent (not just name) to keep parent logic simple
 export type AgentsListProps = {
-  agenticFlows: AgenticFlow[];
-  selected?: AgenticFlow | null;
-  onSelect: (flow: AgenticFlow) => void;
+  agents: AnyAgent[];
+  selected?: AnyAgent | null;
+  onSelect: (flow: AnyAgent) => void;
   // Optional: override item density if needed in other places (defaults to "dense")
   dense?: boolean;
 };
 
-const AgentsList = memo(function AgentsList({ agenticFlows, selected, onSelect, dense = true }: AgentsListProps) {
+const AgentsList = memo(function AgentsList({ agents, selected, onSelect, dense = true }: AgentsListProps) {
   const theme = useTheme<Theme>();
   const { t } = useTranslation();
   const selectedName = selected?.name;
 
-  const items = useMemo(() => agenticFlows, [agenticFlows]);
-  const handleClick = useCallback((flow: AgenticFlow) => () => onSelect(flow), [onSelect]);
+  const items = useMemo(() => agents, [agents]);
+  const handleClick = useCallback((flow: AnyAgent) => () => onSelect(flow), [onSelect]);
 
   return (
     <Box
@@ -64,13 +64,13 @@ const AgentsList = memo(function AgentsList({ agenticFlows, selected, onSelect, 
       </Typography>
 
       <List dense={dense} disablePadding>
-        {items.map((flow) => {
-          const isSelected = selectedName === flow.name;
+        {items.map((agent) => {
+          const isSelected = selectedName === agent.name;
 
           const tooltipContent = (
             <Box sx={{ maxWidth: 460 }}>
               <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 0.75 }}>
-                {flow.nickname}
+                {agent.name}
               </Typography>
               <Divider sx={{ opacity: 0.5, mb: 0.75 }} />
               <Box
@@ -82,13 +82,13 @@ const AgentsList = memo(function AgentsList({ agenticFlows, selected, onSelect, 
                 <Typography
                   variant="body2"
                   color="text.secondary"
-                  sx={{ fontStyle: "italic", mb: flow.description ? 0.25 : 0 }}
+                  sx={{ fontStyle: "italic", mb: agent.description ? 0.25 : 0 }}
                 >
-                  {flow.role}
+                  {agent.role}
                 </Typography>
-                {flow.description && (
+                {agent.description && (
                   <Typography variant="body2" color="text.secondary">
-                    {flow.description}
+                    {agent.description}
                   </Typography>
                 )}
               </Box>
@@ -96,10 +96,10 @@ const AgentsList = memo(function AgentsList({ agenticFlows, selected, onSelect, 
           );
 
           return (
-            <ListItem key={flow.name} disableGutters sx={{ mb: 0 }}>
+            <ListItem key={agent.name} disableGutters sx={{ mb: 0 }}>
               <Tooltip title={tooltipContent} placement="right" arrow>
                 <ListItemButton
-                  onClick={handleClick(flow)}
+                  onClick={handleClick(agent)}
                   selected={isSelected}
                   sx={{
                     borderRadius: 1,
@@ -114,11 +114,11 @@ const AgentsList = memo(function AgentsList({ agenticFlows, selected, onSelect, 
                   }}
                 >
                   {/* Single source of avatar truth */}
-                  <Box sx={{ mr: 1, lineHeight: 0 }}>{getAgentBadge(flow.nickname)}</Box>
+                  <Box sx={{ mr: 1, lineHeight: 0 }}>{getAgentBadge(agent.name)}</Box>
 
                   <ListItemText
-                    primary={flow.nickname}
-                    secondary={flow.role}
+                    primary={agent.name}
+                    secondary={agent.role}
                     slotProps={{
                       primary: {
                         variant: "body2",

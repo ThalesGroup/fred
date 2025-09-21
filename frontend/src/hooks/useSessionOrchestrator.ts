@@ -13,8 +13,9 @@
 // limitations under the License.
 
 import { useEffect, useMemo, useState, useCallback } from "react";
-import type { AgenticFlow, SessionSchema } from "../slices/agentic/agenticOpenApi";
+import type { SessionSchema } from "../slices/agentic/agenticOpenApi";
 import { useSessionAgent } from "./usePrefs";
+import { AnyAgent } from "../common/agent";
 
 /**
  * Thin, predictable orchestrator over:
@@ -25,10 +26,10 @@ import { useSessionAgent } from "./usePrefs";
  */
 export function useSessionOrchestrator(params: {
   sessionsFromServer: SessionSchema[];
-  flowsFromServer: AgenticFlow[];
+  agentsFromServer: AnyAgent[];
   loading: boolean;
 }) {
-  const { sessionsFromServer, flowsFromServer, loading } = params;
+  const { sessionsFromServer, agentsFromServer, loading } = params;
 
   // Local mirror so we can upsert/delete without fighting server pagination/timing.
   const [sessions, setSessions] = useState<SessionSchema[]>([]);
@@ -67,14 +68,14 @@ export function useSessionOrchestrator(params: {
     [sessions, currentSessionId],
   );
 
-  const currentAgenticFlow = useMemo(() => {
-    if (!flowsFromServer?.length) return null;
+  const currentAgent = useMemo(() => {
+    if (!agentsFromServer?.length) return null;
     // If we have a stored agent for this session, prefer that flow
-    const byStored = agentId ? (flowsFromServer.find((f) => f.name === agentId) ?? null) : null;
+    const byStored = agentId ? (agentsFromServer.find((f) => f.name === agentId) ?? null) : null;
     if (byStored) return byStored;
     // Otherwise pick the first flow as a safe default
-    return flowsFromServer[0] ?? null;
-  }, [flowsFromServer, agentId]);
+    return agentsFromServer[0] ?? null;
+  }, [agentsFromServer, agentId]);
 
   const isCreatingNewConversation = !currentSession || currentSessionId === "draft";
 
@@ -84,9 +85,9 @@ export function useSessionOrchestrator(params: {
     setCurrentSessionId(session.id);
   }, []);
 
-  const selectAgenticFlowForCurrentSession = useCallback(
-    (flow: AgenticFlow) => {
-      setAgentForSession(flow.name);
+  const selectAgentForCurrentSession = useCallback(
+    (agent: AnyAgent) => {
+      setAgentForSession(agent.name);
     },
     [setAgentForSession],
   );
@@ -137,15 +138,15 @@ export function useSessionOrchestrator(params: {
   return {
     // data
     loading,
-    agenticFlows: flowsFromServer,
+    agenticFlows: agentsFromServer,
     sessions,
     currentSession,
-    currentAgenticFlow,
+    currentAgent,
     isCreatingNewConversation,
 
     // actions
     selectSession,
-    selectAgenticFlowForCurrentSession,
+    selectAgentForCurrentSession,
     startNewConversation,
     updateOrAddSession,
     deleteSession,

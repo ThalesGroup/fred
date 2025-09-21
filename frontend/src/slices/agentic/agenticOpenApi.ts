@@ -5,13 +5,13 @@ const injectedRtkApi = api.injectEndpoints({
       CreateAgentAgenticV1AgentsCreatePostApiResponse,
       CreateAgentAgenticV1AgentsCreatePostApiArg
     >({
-      query: (queryArg) => ({ url: `/agentic/v1/agents/create`, method: "POST", body: queryArg.req }),
+      query: (queryArg) => ({ url: `/agentic/v1/agents/create`, method: "POST", body: queryArg.agentSettings }),
     }),
-    updateAgentAgenticV1AgentsNamePut: build.mutation<
-      UpdateAgentAgenticV1AgentsNamePutApiResponse,
-      UpdateAgentAgenticV1AgentsNamePutApiArg
+    updateAgentAgenticV1AgentsUpdatePut: build.mutation<
+      UpdateAgentAgenticV1AgentsUpdatePutApiResponse,
+      UpdateAgentAgenticV1AgentsUpdatePutApiArg
     >({
-      query: (queryArg) => ({ url: `/agentic/v1/agents/${queryArg.name}`, method: "PUT", body: queryArg.req }),
+      query: (queryArg) => ({ url: `/agentic/v1/agents/update`, method: "PUT", body: queryArg.agentSettings }),
     }),
     deleteAgentAgenticV1AgentsNameDelete: build.mutation<
       DeleteAgentAgenticV1AgentsNameDeleteApiResponse,
@@ -110,16 +110,23 @@ const injectedRtkApi = api.injectEndpoints({
 export { injectedRtkApi as agenticApi };
 export type CreateAgentAgenticV1AgentsCreatePostApiResponse = /** status 200 Successful Response */ any;
 export type CreateAgentAgenticV1AgentsCreatePostApiArg = {
-  req: {
-    agent_type: "mcp";
-  } & McpAgentRequest;
+  agentSettings:
+    | ({
+        type: "agent";
+      } & Agent)
+    | ({
+        type: "leader";
+      } & Leader);
 };
-export type UpdateAgentAgenticV1AgentsNamePutApiResponse = /** status 200 Successful Response */ any;
-export type UpdateAgentAgenticV1AgentsNamePutApiArg = {
-  name: string;
-  req: {
-    agent_type: "mcp";
-  } & McpAgentRequest;
+export type UpdateAgentAgenticV1AgentsUpdatePutApiResponse = /** status 200 Successful Response */ any;
+export type UpdateAgentAgenticV1AgentsUpdatePutApiArg = {
+  agentSettings:
+    | ({
+        type: "agent";
+      } & Agent)
+    | ({
+        type: "leader";
+      } & Leader);
 };
 export type DeleteAgentAgenticV1AgentsNameDeleteApiResponse = /** status 200 Successful Response */ any;
 export type DeleteAgentAgenticV1AgentsNameDeleteApiArg = {
@@ -132,8 +139,14 @@ export type EchoSchemaAgenticV1SchemasEchoPostApiArg = {
 export type GetFrontendConfigAgenticV1ConfigFrontendSettingsGetApiResponse =
   /** status 200 Successful Response */ FrontendConfigDto;
 export type GetFrontendConfigAgenticV1ConfigFrontendSettingsGetApiArg = void;
-export type GetAgenticFlowsAgenticV1ChatbotAgenticflowsGetApiResponse =
-  /** status 200 Successful Response */ AgenticFlow[];
+export type GetAgenticFlowsAgenticV1ChatbotAgenticflowsGetApiResponse = /** status 200 Successful Response */ (
+  | ({
+      type: "agent";
+    } & Agent2)
+  | ({
+      type: "leader";
+    } & Leader2)
+)[];
 export type GetAgenticFlowsAgenticV1ChatbotAgenticflowsGetApiArg = void;
 export type GetSessionsAgenticV1ChatbotSessionsGetApiResponse =
   /** status 200 Successful Response */ SessionWithFiles[];
@@ -185,34 +198,95 @@ export type ValidationError = {
 export type HttpValidationError = {
   detail?: ValidationError[];
 };
-export type McpServerConfiguration = {
-  name: string;
-  /** MCP server transport. Can be sse, stdio, websocket or streamable_http */
-  transport?: string | null;
-  /** URL and endpoint of the MCP server */
-  url?: string | null;
-  /** How long (in seconds) the client will wait for a new event before disconnecting */
-  sse_read_timeout?: number | null;
-  /** Command to run for stdio transport. Can be uv, uvx, npx and so on. */
-  command?: string | null;
-  /** Args to give the command as a list. ex:  ['--directory', '/directory/to/mcp', 'run', 'server.py'] */
-  args?: string[] | null;
-  /** Environment variables to give the MCP server */
-  env?: {
-    [key: string]: string;
+export type ModelConfiguration = {
+  /** Provider of the AI model, e.g., openai, ollama, azure. */
+  provider?: string | null;
+  /** Model name, e.g., gpt-4o, llama2. */
+  name?: string | null;
+  /** Additional provider-specific settings, e.g., Azure deployment name. */
+  settings?: {
+    [key: string]: any;
   } | null;
 };
-export type McpAgentRequest = {
-  agent_type: "mcp";
+export type UiHints = {
+  multiline?: boolean;
+  max_lines?: number;
+  placeholder?: string | null;
+  markdown?: boolean;
+  textarea?: boolean;
+  group?: string | null;
+};
+export type FieldSpec = {
+  key: string;
+  type:
+    | "string"
+    | "text"
+    | "number"
+    | "integer"
+    | "boolean"
+    | "select"
+    | "array"
+    | "object"
+    | "prompt"
+    | "secret"
+    | "url";
+  title: string;
+  description?: string | null;
+  required?: boolean;
+  default?: any | null;
+  enum?: string[] | null;
+  min?: number | null;
+  max?: number | null;
+  pattern?: string | null;
+  item_type?:
+    | (
+        | "string"
+        | "text"
+        | "number"
+        | "integer"
+        | "boolean"
+        | "select"
+        | "array"
+        | "object"
+        | "prompt"
+        | "secret"
+        | "url"
+      )
+    | null;
+  ui?: UiHints;
+};
+export type McpServerSpec = {
+  allow_user_add?: boolean;
+  allowed_transports?: string[];
+  required_fields?: string[];
+};
+export type AgentTuning = {
+  fields?: FieldSpec[];
+  mcp_servers?: McpServerSpec | null;
+};
+export type Agent = {
   name: string;
-  base_prompt: string;
-  mcp_servers: McpServerConfiguration[];
+  enabled?: boolean;
+  class_path?: string | null;
+  model?: ModelConfiguration | null;
+  tags?: string[];
   role: string;
-  nickname?: string | null;
   description: string;
-  icon?: string | null;
-  categories?: string[] | null;
-  tag?: string | null;
+  tuning?: AgentTuning | null;
+  type?: "agent";
+};
+export type Leader = {
+  name: string;
+  enabled?: boolean;
+  class_path?: string | null;
+  model?: ModelConfiguration | null;
+  tags?: string[];
+  role: string;
+  description: string;
+  tuning?: AgentTuning | null;
+  type?: "leader";
+  /** Names of agents in this leader's crew (if any). */
+  crew?: string[];
 };
 export type Role = "user" | "assistant" | "tool" | "system";
 export type Channel =
@@ -462,21 +536,33 @@ export type FrontendConfigDto = {
   frontend_settings: FrontendSettings;
   user_auth: UserSecurity;
 };
-export type AgenticFlow = {
-  /** Name of the agentic flow */
-  name?: string | null;
-  /** Human-readable role of the agentic flow */
+export type AgentTuning2 = {
+  fields?: FieldSpec[];
+  mcp_servers?: McpServerSpec | null;
+};
+export type Agent2 = {
+  name: string;
+  enabled?: boolean;
+  class_path?: string | null;
+  model?: ModelConfiguration | null;
+  tags?: string[];
   role: string;
-  /** Human-readable nickname of the agentic flow */
-  nickname?: string | null;
-  /** Human-readable description of the agentic flow */
   description: string;
-  /** Icon of the agentic flow */
-  icon: string | null;
-  /** List of experts in the agentic flow */
-  experts: string[] | null;
-  /** Human-readable tag of the agentic flow */
-  tag: string | null;
+  tuning?: AgentTuning2 | null;
+  type?: "agent";
+};
+export type Leader2 = {
+  name: string;
+  enabled?: boolean;
+  class_path?: string | null;
+  model?: ModelConfiguration | null;
+  tags?: string[];
+  role: string;
+  description: string;
+  tuning?: AgentTuning2 | null;
+  type?: "leader";
+  /** Names of agents in this leader's crew (if any). */
+  crew?: string[];
 };
 export type ChatMessage2 = {
   session_id: string;
@@ -541,7 +627,7 @@ export type FeedbackPayload = {
 };
 export const {
   useCreateAgentAgenticV1AgentsCreatePostMutation,
-  useUpdateAgentAgenticV1AgentsNamePutMutation,
+  useUpdateAgentAgenticV1AgentsUpdatePutMutation,
   useDeleteAgentAgenticV1AgentsNameDeleteMutation,
   useEchoSchemaAgenticV1SchemasEchoPostMutation,
   useGetFrontendConfigAgenticV1ConfigFrontendSettingsGetQuery,

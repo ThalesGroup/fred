@@ -14,12 +14,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
-  AgenticFlow,
   SessionSchema,
   useDeleteSessionAgenticV1ChatbotSessionSessionIdDeleteMutation,
   useGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery,
   useGetSessionsAgenticV1ChatbotSessionsGetQuery,
 } from "../slices/agentic/agenticOpenApi";
+import { AnyAgent } from "../common/agent";
 
 type AgentBySessionMap = Record<string, string>;
 
@@ -62,55 +62,54 @@ export function useSessionController() {
   const [deleteSessionMutation] = useDeleteSessionAgenticV1ChatbotSessionSessionIdDeleteMutation();
 
   // ---- Local state (single source of truth) ----
-  const [agenticFlows, setAgenticFlows] = useState<AgenticFlow[]>([]);
+  const [agents, setAgents] = useState<AnyAgent[]>([]);
   const [sessions, setSessions] = useState<SessionSchema[]>([]);
 
   const [agentBySession, setAgentBySession] = useState<AgentBySessionMap>(() => loadMap());
 
   const [currentSession, setCurrentSession] = useState<SessionSchema | null>(null);
   const [isCreatingNewConversation, setIsCreatingNewConversation] = useState(false);
-  const [draftAgenticFlow, setDraftAgenticFlow] = useState<AgenticFlow | null>(null);
+  const [draftAgenticFlow, setDraftAgenticFlow] = useState<AnyAgent | null>(null);
 
-  const currentAgenticFlow = useMemo(() => {
-    if (agenticFlows.length === 0) {
+  const currentAgent = useMemo(() => {
+    if (agents.length === 0) {
       L.warn("resolveFlow: no flows available");
       return null;
     }
 
     if (!currentSession) {
-      const chosen = draftAgenticFlow ?? agenticFlows[0];
+      const chosen = draftAgenticFlow ?? agents[0];
       L.info("resolveFlow: NO session → using", {
         source: draftAgenticFlow ? "draft" : "default[0]",
         name: chosen?.name,
-        nickname: chosen?.nickname,
       });
       return chosen;
     }
 
     const mappedName = agentBySession[currentSession.id];
-    const resolved = mappedName ? agenticFlows.find((f) => f.name === mappedName) : null;
+    const resolved = mappedName ? agents.find((f) => f.name === mappedName) : null;
 
-    const finalFlow = resolved ?? agenticFlows[0] ?? null;
+    const finalFlow = resolved ?? agents[0] ?? null;
 
     L.info("resolveFlow: WITH session", {
       sessionId: currentSession.id,
       mappedName,
-      resolved: resolved ? { name: resolved.name, nickname: resolved.nickname } : null,
+      resolved: resolved ? { name: resolved.name, nickname: resolved.name } : null,
       fallback:
-        !resolved && agenticFlows[0] ? { name: agenticFlows[0].name, nickname: agenticFlows[0].nickname } : null,
-      final: finalFlow ? { name: finalFlow.name, nickname: finalFlow.nickname } : null,
+        !resolved && agents[0] ? { name: agents[0].name, nickname: agents[0].name } : null,
+      final: finalFlow ? { name: finalFlow.name, nickname: finalFlow.name } : null,
     });
 
     return finalFlow;
-  }, [currentSession, agenticFlows, agentBySession, draftAgenticFlow]);
+  }, [currentSession, agents, agentBySession, draftAgenticFlow]);
 
   // ---- Hydration from queries ----
   useEffect(() => {
     if (!flowsLoading && flowsData) {
-      setAgenticFlows(flowsData);
+      setAgents(flowsData);
       L.group(
         "HYDRATE flows",
-        flowsData.map((f) => ({ name: f.name, nickname: f.nickname, role: f.role })),
+        flowsData.map((f) => ({ name: f.name, role: f.role })),
       );
     }
   }, [flowsLoading, flowsData]);
@@ -164,15 +163,15 @@ export function useSessionController() {
     sessionStorage.setItem("currentChatBotSession", JSON.stringify(s));
   };
 
-  const selectAgenticFlowForCurrentSession = (flow: AgenticFlow) => {
+  const selectAgenticFlowForCurrentSession = (flow: AnyAgent) => {
     if (!currentSession) {
-      L.info("selectAgent: NO session → stage draft", { name: flow.name, nickname: flow.nickname });
+      L.info("selectAgent: NO session → stage draft", { name: flow.name });
       setDraftAgenticFlow(flow);
       return;
     }
     L.info("selectAgent: WITH session → bind to session", { sessionId: currentSession.id, name: flow.name });
     setAgentBySession((prev) => {
-      const defaultName = agenticFlows[0]?.name;
+      const defaultName = agents[0]?.name;
       const existing = prev[currentSession.id];
       // allow overriding default with explicit user click
       const nextName = existing && defaultName && existing === defaultName ? flow.name : flow.name;
@@ -235,7 +234,7 @@ export function useSessionController() {
 
     setAgentBySession((prev) => {
       const already = prev[sessionId];
-      const defaultName = agenticFlows[0]?.name;
+      const defaultName = agents[0]?.name;
       const draftName = draftAgenticFlow?.name;
 
       // If someone pre-bound the default (e.g., Fred), allow overriding it with user's draft
@@ -278,10 +277,10 @@ export function useSessionController() {
   return {
     // state
     loading,
-    agenticFlows,
+    agents,
     sessions,
     currentSession,
-    currentAgenticFlow,
+    currentAgent,
     isCreatingNewConversation,
 
     // handlers

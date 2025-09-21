@@ -20,7 +20,6 @@ import { getConfig } from "../../common/config.tsx";
 import DotsLoader from "../../common/DotsLoader.tsx";
 import { KeyCloakService } from "../../security/KeycloakService.ts";
 import {
-  AgenticFlow,
   ChatAskInput,
   ChatMessage,
   FinalEvent,
@@ -40,6 +39,7 @@ import {
   useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery,
 } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import ChatKnowledge from "./ChatKnowledge.tsx";
+import { AnyAgent } from "../../common/agent.ts";
 
 export interface ChatBotError {
   session_id: string | null;
@@ -52,8 +52,8 @@ export interface ChatBotError {
 
 export interface ChatBotProps {
   currentChatBotSession: SessionSchema;
-  currentAgenticFlow: AgenticFlow;
-  agenticFlows: AgenticFlow[];
+  currentAgent: AnyAgent;
+  agents: AnyAgent[];
   onUpdateOrAddSession: (session: SessionSchema) => void;
   isCreatingNewConversation: boolean;
   runtimeContext?: RuntimeContext;
@@ -62,8 +62,8 @@ export interface ChatBotProps {
 
 const ChatBot = ({
   currentChatBotSession,
-  currentAgenticFlow,
-  agenticFlows,
+  currentAgent,
+  agents,
   onUpdateOrAddSession,
   isCreatingNewConversation,
   runtimeContext: baseRuntimeContext,
@@ -307,9 +307,9 @@ const ChatBot = ({
   // Chat knowledge persistance
   const storageKey = useMemo(() => {
     const uid = KeyCloakService.GetUserId?.() || "anon";
-    const agent = currentAgenticFlow?.name || "default";
+    const agent = currentAgent?.name || "default";
     return `chatctx:${uid}:${agent}`;
-  }, [currentAgenticFlow?.name]);
+  }, [currentAgent?.name]);
 
   // Init values (réhydratation)
   const [initialCtx, setInitialCtx] = useState<{
@@ -374,7 +374,7 @@ const ChatBot = ({
   const handleSend = async (content: UserInputContent) => {
     const userId = KeyCloakService.GetUserId();
     const sessionId = currentChatBotSession?.id;
-    const agentName = currentAgenticFlow.name;
+    const agentName = currentAgent.name;
 
     // Init runtime context
     const runtimeContext: RuntimeContext = { ...baseRuntimeContext };
@@ -450,12 +450,12 @@ const ChatBot = ({
    * Backend is authoritative: we DO NOT add an optimistic user bubble.
    * The server streams the authoritative user message first.
    */
-  const queryChatBot = async (input: string, agent?: AgenticFlow, runtimeContext?: RuntimeContext) => {
+  const queryChatBot = async (input: string, agent?: AnyAgent, runtimeContext?: RuntimeContext) => {
     console.log(`[📤 ChatBot] Sending message: ${input}`);
 
     const eventBase: ChatAskInput = {
       message: input,
-      agent_name: agent ? agent.name : currentAgenticFlow.name,
+      agent_name: agent ? agent.name : currentAgent.name,
       session_id: currentChatBotSession?.id,
       runtime_context: runtimeContext,
     };
@@ -566,9 +566,9 @@ const ChatBot = ({
                   flexWrap: "nowrap",
                 }}
               >
-                {getAgentBadge(currentAgenticFlow.nickname)}
+                {getAgentBadge(currentAgent.name)}
                 <Typography variant="h5" sx={{ fontWeight: 600, letterSpacing: 0.2 }}>
-                  {t("chatbot.startNew", { name: currentAgenticFlow.nickname })}
+                  {t("chatbot.startNew", { name: currentAgent.name })}
                 </Typography>
               </Box>
 
@@ -585,7 +585,7 @@ const ChatBot = ({
                 }}
               >
                 <Typography variant="body2" sx={{ fontStyle: "italic" }}>
-                  {currentAgenticFlow.role}
+                  {currentAgent.role}
                 </Typography>
 
                 <Box
@@ -639,8 +639,8 @@ const ChatBot = ({
               <MessagesArea
                 key={currentChatBotSession?.id}
                 messages={messages}
-                agenticFlows={agenticFlows}
-                currentAgenticFlow={currentAgenticFlow}
+                agents={agents}
+                currentAgent={currentAgent}
               />
               {waitResponse && (
                 <Box mt={1} sx={{ alignSelf: "flex-start" }}>

@@ -31,14 +31,15 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import Editor from "@monaco-editor/react";
 
-import { AgenticFlow, Channel, ChatMessage } from "../../slices/agentic/agenticOpenApi";
+import { Channel, ChatMessage } from "../../slices/agentic/agenticOpenApi";
 import { getExtras, textPreview } from "./ChatBotUtils";
 import ReasoningStepBadge from "./ReasoningStepBadge";
+import { AnyAgent } from "../../common/agent";
 
 type Props = {
   steps: ChatMessage[];
   isOpenByDefault?: boolean;
-  resolveAgent: (m: ChatMessage) => AgenticFlow | undefined;
+  resolveAgent: (m: ChatMessage) => AnyAgent | undefined;
 };
 
 // pretty-print channel names without duplicating enums
