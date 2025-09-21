@@ -28,8 +28,7 @@ from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi_mcp import AuthConfig, FastApiMCP
-from fred_core import (get_current_user, initialize_user_security,
-                       register_exception_handlers)
+from fred_core import get_current_user, initialize_user_security, register_exception_handlers
 from rich.logging import RichHandler
 
 # Local / first-party
@@ -52,8 +51,7 @@ from app.features.resources.controller import ResourceController
 from app.features.scheduler.controller import SchedulerController
 from app.features.tabular.controller import TabularController
 from app.features.tag.controller import TagController
-from app.features.vector_search.vector_search_controller import \
-    VectorSearchController
+from app.features.vector_search.vector_search_controller import VectorSearchController
 
 # -----------------------
 # LOGGING + ENVIRONMENT
