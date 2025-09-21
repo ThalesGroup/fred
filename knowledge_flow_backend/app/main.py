@@ -35,6 +35,7 @@ from app.common.http_logging import RequestResponseLogger
 from app.common.structures import Configuration
 from app.common.utils import parse_server_configuration
 from app.core.monitoring.monitoring_controller import MonitoringController
+from app.core.monitoring.metrics_exporter import start_prometheus_exporter
 from app.features.catalog.controller import CatalogController
 from app.features.content.controller import ContentController
 from app.features.ingestion.controller import IngestionController
@@ -126,6 +127,9 @@ def create_app() -> FastAPI:
     router = APIRouter(prefix=configuration.app.base_url)
 
     MonitoringController(router)
+
+    # TODO : Mix MonitoringController and start_prometheus_exporter to have all under /metrics
+    start_prometheus_exporter(port=8081)
 
     pull_document_service = PullDocumentService()
     # Register controllers

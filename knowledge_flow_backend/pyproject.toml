@@ -44,6 +44,7 @@ dependencies = [
   "duckdb-engine>=0.17.0",
   "psycopg2-binary>=2.9.10",
   "sqlparse>=0.5.3",
+  "prometheus-client>=0.23.1",
   "uv",
   "chromadb>=0.5",
 ]
