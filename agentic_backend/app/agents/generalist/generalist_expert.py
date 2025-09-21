@@ -14,37 +14,48 @@
 
 import logging
 from datetime import datetime
-from typing import List
 
 from fred_core import get_model
+from app.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
 from langgraph.graph import END, START, MessagesState, StateGraph
 
-from app.common.structures import AgentSettings
 from app.core.agents.flow import AgentFlow
 
 logger = logging.getLogger(__name__)
 
+TUNING = AgentTuning(
+    fields=[
+        FieldSpec(
+            key="prompts.system",          
+            type="prompt",
+            title="System Prompt",
+            description=(
+                "Sets Georges’ base persona and boundaries. "
+                "Adjust to shift tone/voice or emphasize constraints."
+            ),
+            required=True,
+            default=(
+                "You are a friendly generalist expert, skilled at providing guidance on a wide range "
+                "of topics without deep specialization.\n"
+                "Your role is to respond with clarity, providing accurate and reliable information.\n"
+                "When appropriate, highlight elements that could be particularly relevant.\n"
+                "In case of graphical representation, render mermaid diagrams code."
+            ),
+            ui=UIHints(group="Prompts", multiline=True, markdown=True),
+        ),
+    ],
+)
 
 class GeneralistExpert(AgentFlow):
+
+    tuning = TUNING
+
     """
     Generalist Expert provides guidance on a wide range of topics
     without deep specialization.
     """
-
-    # Class-level metadata
-    name: str | None = "GeneralistExpert"
-    nickname: str | None = "Georges"
-    role: str | None = "Fallback Generalist Expert"
-    description: (
-        str | None
-    ) = """Provides broad, high-level guidance when no specific expert is better suited. 
-        Acts as a default agent to assist with general questions across all domains."""
-    icon: str = "generalist_agent"
-    categories: List[str] = ["General"]
-    tag: str = "generalist"
-
-    def __init__(self, agent_settings: AgentSettings):
-        super().__init__(agent_settings=agent_settings)
+    # def __init__(self, agent_settings: AgentSettings):
+    #     super().__init__(agent_settings=agent_settings)
 
     async def async_init(self):
         self.model = get_model(self.agent_settings.model)
@@ -53,6 +64,7 @@ class GeneralistExpert(AgentFlow):
 
     def _generate_prompt(self) -> str:
         today = datetime.now().strftime("%Y-%m-%d")
+
         return "\n".join(
             [
                 "You are a friendly generalist expert, skilled at providing guidance on a wide range of topics without deep specialization.",

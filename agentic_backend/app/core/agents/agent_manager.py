@@ -21,7 +21,6 @@ from typing import Dict, List, Type
 from app.common.structures import AgentSettings, Configuration
 from app.core.agents.agent_loader import AgentLoader
 from app.core.agents.agent_supervisor import AgentSupervisor
-from app.core.agents.agentic_flow import AgenticFlow
 from app.core.agents.flow import AgentFlow
 from app.core.agents.runtime_context import RuntimeContext
 from app.core.agents.store.base_agent_store import BaseAgentStore
@@ -63,12 +62,12 @@ class AgentManager:
         # Phase 1: Initial load
         static_instances, failed_static = await self.loader.load_static()
         for inst in static_instances:
-            self._register_loaded_agent(inst.name, inst, inst.agent_settings)
+            self._register_loaded_agent(inst.get_name(), inst, inst.agent_settings)
         self.failed_agents.update(failed_static)
 
         persisted_instances = await self.loader.load_persisted()
         for inst in persisted_instances:
-            self._register_loaded_agent(inst.name, inst, inst.agent_settings)
+            self._register_loaded_agent(inst.get_name(), inst, inst.agent_settings)
 
         self.supervisor.inject_experts_into_leaders(
             agents_by_name=self.agent_instances,
@@ -119,6 +118,11 @@ class AgentManager:
         Tries to initialize and register a single agent.
         If it fails, it adds it back to the `failed_agents` dict.
         """
+        if not agent_cfg.class_path:
+            logger.error(
+                "❌ Cannot retry agent '%s' without a class_path.", agent_cfg.name
+            )
+            return
         try:
             # Re-run the core initialization logic (import, instantiate, async_init)
             cls = self.loader._import_agent_class(agent_cfg.class_path)
@@ -126,14 +130,19 @@ class AgentManager:
             if iscoroutinefunction(getattr(instance, "async_init", None)):
                 await instance.async_init()
 
-            self._register_loaded_agent(instance.name, instance, agent_cfg)
-            logger.info(f"✅ Recovered agent '{instance.name}' on retry.")
+            self._register_loaded_agent(instance.get_name(), instance, agent_cfg)
+            logger.info(f"✅ Recovered agent '{instance.get_name()}' on retry.")
 
         except Exception as e:
             logger.exception(f"❌ Failed to recover agent '{agent_cfg.name}': {e}")
             self.failed_agents[agent_cfg.name] = agent_cfg
 
     async def _register_static_agent(self, agent_cfg: AgentSettings) -> bool:
+        if not agent_cfg.class_path:
+            logger.error(
+                f"❌ Cannot register static agent '{agent_cfg.name}' without a class_path."
+            )
+            return False
         try:
             module_name, class_name = agent_cfg.class_path.rsplit(".", 1)
             module = importlib.import_module(module_name)
@@ -167,6 +176,11 @@ class AgentManager:
             return False
 
     def _try_seed_agent(self, agent_cfg: AgentSettings):
+        if not agent_cfg.class_path:
+            logger.error(
+                f"❌ Cannot seed agent '{agent_cfg.name}' without a class_path."
+            )
+            return
         """
         Attempts to load the class for the given agent and instantiate it.
         If successful, saves it to persistent store.
@@ -225,6 +239,9 @@ class AgentManager:
             f"✅ Registered dynamic agent '{name}' ({type(instance).__name__}) in memory."
         )
 
+    def update_agent(self, agent_settings: AgentSettings):
+        logger.info(f"updating agent '{agent_settings.name}'")
+
     async def unregister_agent(self, name: str):
         """
         Removes an agent from memory. Does NOT affect persisted storage.
@@ -242,20 +259,10 @@ class AgentManager:
         self.agent_settings.pop(name, None)
         logger.info(f"🗑️ Unregistered agent '{name}' from memory.")
 
-    def get_agentic_flows(self) -> List[AgenticFlow]:
+    def get_agentic_flows(self) -> List[AgentSettings]:
         flows = []
-        for name, instance in self.agent_instances.items():
-            flows.append(
-                AgenticFlow(
-                    name=instance.name,
-                    role=instance.role,
-                    nickname=instance.nickname,
-                    description=instance.description,
-                    icon=instance.icon,
-                    tag=instance.tag,
-                    experts=[],
-                )
-            )
+        for _name, instance in self.agent_instances.items():
+            flows.append(instance.get_settings())
         return flows
 
     def get_agent_instance(

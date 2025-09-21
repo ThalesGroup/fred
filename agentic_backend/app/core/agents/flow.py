@@ -15,7 +15,7 @@
 import logging
 from abc import abstractmethod
 from datetime import datetime
-from typing import List, Optional, Sequence
+from typing import ClassVar, List, Optional, Sequence
 
 from IPython.display import Image
 from langchain_core.messages import BaseMessage, SystemMessage
@@ -24,46 +24,11 @@ from langgraph.graph.state import CompiledStateGraph
 
 from app.application_context import get_knowledge_flow_base_url
 from app.common.structures import AgentSettings
+from app.core.agents.agent_spec import AgentTuning
 from app.core.agents.agent_state import Prepared, resolve_prepared
 from app.core.agents.runtime_context import RuntimeContext
 
 logger = logging.getLogger(__name__)
-
-
-# class Flow:
-#     def __init__(self, name: str, description: str, graph: StateGraph):
-#         # Name of agentic flow.
-#         self.name: str = name
-#         # Description of agentic flow.
-#         self.description: str = description
-#         # The graph of the agentic flow.
-#         self.graph: StateGraph | None = graph
-#         self.streaming_memory: MemorySaver = MemorySaver()
-#         self.compiled_graph: CompiledStateGraph | None = None
-#         self.runtime_context: Optional[RuntimeContext] = None
-
-#     def get_compiled_graph(self) -> CompiledStateGraph:
-#         if not self.graph:
-#             raise ValueError("Graph is not defined.")
-#         return self.graph.compile(checkpointer=self.streaming_memory)
-
-#     def save_graph_image(self, path: str):
-#         if not self.graph:
-#             raise ValueError("Graph is not defined.")
-#         compiled_graph: CompiledStateGraph = self.graph.compile()
-#         graph = Image(compiled_graph.get_graph().draw_mermaid_png())
-#         with open(f"{path}/{self.name}.png", "wb") as f:
-#             f.write(graph.data)
-
-#     def set_runtime_context(self, context: RuntimeContext) -> None:
-#         self.runtime_context = context
-
-#     def get_runtime_context(self) -> Optional[RuntimeContext]:
-#         return self.runtime_context
-
-#     def __str__(self) -> str:
-#         return f"{self.name}: {self.description}"
-
 
 class AgentFlow:
     """
@@ -81,14 +46,8 @@ class AgentFlow:
     Subclasses are responsible for defining any reasoning nodes (e.g. `reasoner`)
     and for calling `get_compiled_graph()` when they are ready to execute the agent.
     """
-
-    # Class attributes for documentation/metadata
-    name: str
-    role: str
-    nickname: str
-    description: str
-    icon: str
-    tag: str
+    # Subclasses MUST override this with a concrete AgentTuning
+    tuning: ClassVar[Optional[AgentTuning]] = None
 
     def __init__(self, agent_settings: AgentSettings):
         """
@@ -104,31 +63,13 @@ class AgentFlow:
                 - description: A detailed summary of agent functionality.
                 - icon: The icon used for representation in the UI.
                 - categories: (Optional) Categories that the agent is part of.
-                - tag: (Optional) Short tag identifier for the agent.
+                - tag:s (Optional) Short tag identifier for the agent.
         """
 
         self.agent_settings = agent_settings
-        self.name = agent_settings.name
-        self.nickname = agent_settings.nickname or agent_settings.name
-        self.role = (
-            agent_settings.role
-            if agent_settings.role is not None
-            else self.__class__.role
-        )
-        self.description = (
-            agent_settings.description
-            if agent_settings.description is not None
-            else self.__class__.description
-        )
+        self._tuning = agent_settings.tuning or self.__class__.tuning
+        self.agent_settings.tuning = self._tuning  # ensure it's set
         self.current_date = datetime.now().strftime("%Y-%m-%d")
-        self.categories = (
-            agent_settings.categories
-            if agent_settings.categories is not None
-            else self.__class__.categories
-        )
-        self.tag = (
-            agent_settings.tag if agent_settings.tag is not None else self.__class__.tag
-        )
         self.model = None  # Will be set in async_init
         self.base_prompt = ""  # Will be set in async_init
         self._graph = None  # Will be built in async_init
@@ -136,6 +77,25 @@ class AgentFlow:
         self.compiled_graph: Optional[CompiledStateGraph] = None
         self.runtime_context: Optional[RuntimeContext] = None
 
+    def get_name(self) -> str:
+        return self.agent_settings.name
+    
+    def get_description(self) -> str:
+        return self.agent_settings.description
+
+    def get_role(self) -> str:
+        return self.agent_settings.role
+    
+    def get_tags(self) -> List[str]:
+        return self.agent_settings.tags or []
+    
+    def get_tuning_spec(self) -> Optional[AgentTuning]:
+        """Return the tuning spec (from YAML or class)."""
+        return self.tuning
+    
+    def get_settings(self) -> AgentSettings:
+        return self.agent_settings
+     
     def use_fred_prompts(self, messages: Sequence[BaseMessage]) -> List[BaseMessage]:
         """
         Apply the prompts/templates the user picked in the Fred UI to this turn as ONE system message.
@@ -223,7 +183,7 @@ class AgentFlow:
 
     def __str__(self) -> str:
         """String representation of the agent."""
-        return f"{self.name} ({self.nickname}): {self.description}"
+        return f"{self.name} : {self.description}"
 
     @abstractmethod
     async def async_init(self):

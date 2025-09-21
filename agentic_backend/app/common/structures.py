@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Any, Dict, List, Literal, Optional
+from typing import Annotated, Any, Dict, List, Literal, Optional, Union
 
 from fred_core import (
     ModelConfiguration,
@@ -22,6 +22,8 @@ from fred_core import (
     StoreConfig,
 )
 from pydantic import BaseModel, Field
+
+from app.core.agents.agent_spec import AgentTuning
 
 
 class StorageConfig(BaseModel):
@@ -71,23 +73,52 @@ class RecursionConfig(BaseModel):
     recursion_limit: int
 
 
-class AgentSettings(BaseModel):
-    name: str  # a unique name
-    class_path: str
-    type: Literal["mcp", "custom", "leader"] = "custom"
-    enabled: bool = True
-    categories: List[str] = Field(default_factory=list)
-    settings: Dict[str, Any] = Field(default_factory=dict)
-    model: Optional[ModelConfiguration] = None
-    tag: Optional[str] = None
-    mcp_servers: Optional[List[MCPServerConfiguration]] = Field(default_factory=list)
-    max_steps: Optional[int] = 10
-    description: Optional[str] = None
-    base_prompt: Optional[str] = None
-    nickname: Optional[str] = None  # only used for UIs defaulting to name
-    role: Optional[str] = None
-    icon: Optional[str] = None
+# ---------------- Base: shared identity + UX + tuning ----------------
+class BaseAgent(BaseModel):
+    """
+    Fred rationale:
+    - This base carries only identity, UX hints, and optional tuning hooks.
+    - Behavior knobs live in `tuning_values` and are governed by `tuning_spec`.
+    - Agents created from UI can omit `class_path`.
+    """
 
+    name: str
+    enabled: bool = True
+    class_path: Optional[str] = None      # None → dynamic/UI agent
+    model: Optional[ModelConfiguration] = None
+    # User-facing discovery (what leaders & UI filter on)
+    tags: List[str] = Field(default_factory=list)
+    role: str
+    description: str
+
+    # Optional: spec declares allowed tunables; values store overrides
+    tuning: Optional[AgentTuning] = None
+
+
+# ---------------- Agent: a regular single agent ----------------
+class Agent(BaseAgent):
+    """
+    Why this subclass:
+    - Regular agents don’t own crew. They can be *selected* into a leader’s crew.
+    """
+    type: Literal["agent"] = "agent"
+
+
+# ---------------- Leader: declares its crew (and only here) ----------------
+class Leader(BaseAgent):
+    """
+    Why this subclass:
+    - Crew membership is defined *once*, at the leader level, to avoid drift.
+    - You can include by names and/or by tags; optional excludes too.
+    """
+    type: Literal["leader"] = "leader"
+    crew: List[str] = Field(
+        default_factory=list, description="Names of agents in this leader's crew (if any)."
+    )
+
+
+# ---------------- Discriminated union for IO (YAML ⇄ DB ⇄ API) ----------------
+AgentSettings = Annotated[Union[Agent, Leader], Field(discriminator="type")]
 
 class AIConfig(BaseModel):
     knowledge_flow_url: str = Field(
@@ -104,10 +135,6 @@ class AIConfig(BaseModel):
     agents: List[AgentSettings] = Field(
         default_factory=list, description="List of AI agents."
     )
-    recursion: RecursionConfig = Field(
-        ..., description="Number of max recursion while using the model"
-    )
-
 
 class FrontendFlags(BaseModel):
     enableK8Features: bool = False

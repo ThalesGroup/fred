@@ -20,18 +20,14 @@ from app.common.structures import MCPServerConfiguration
 
 
 class BaseAgentRequest(BaseModel):
-    agent_type: str = Field(
-        ..., description="The type of agent to create (e.g., 'mcp', 'rag')."
-    )
-
+    agent_type:  Literal["mcp"]  # , "rag", "custom"]  # extendable in future
 
 class MCPAgentRequest(BaseAgentRequest):
-    agent_type: Literal["mcp"]
+    type: Literal["mcp"]
     name: str
     base_prompt: str
     mcp_servers: List[MCPServerConfiguration]
     role: str
-    nickname: Optional[str] = None
     description: str
     icon: Optional[str] = None
     categories: Optional[List[str]] = None

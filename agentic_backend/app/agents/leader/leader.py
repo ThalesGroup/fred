@@ -88,7 +88,7 @@ class Leader(AgentFlow):
 
     def __init__(self, agent_settings: AgentSettings):
         super().__init__(agent_settings=agent_settings)
-        self.max_steps = agent_settings.max_steps
+        self.max_steps = 5
 
         # Expert registry + routing index
         self.experts: dict[str, AgentFlow] = {}
@@ -146,11 +146,11 @@ class Leader(AgentFlow):
         # Why: Prefer explicit agent hints; fallback to description-derived keywords.
         keywords = tuple(
             (getattr(instance, "routing_keywords", []) or [])
-            or instance.description.lower().split()[:8]
+            or instance.get_description().lower().split()[:8]
         )
         profile = ExpertProfile(
             name=name,
-            categories=tuple(instance.categories or ()),
+            categories=tuple(instance.get_tags() or ()),
             keywords=keywords,
             live_ok=bool(getattr(instance, "live_ok", True)),
             cost_hint=int(getattr(instance, "cost_hint", 2)),
@@ -498,7 +498,7 @@ class Leader(AgentFlow):
 
         response = await compiled.ainvoke({"messages": messages})
 
-        expert_description = expert_instance.description
+        expert_description = expert_instance.get_description() or ""
         additional_messages: list[BaseMessage] = [picking, decided]
         for message in response.get("messages", []):
             new_message: BaseMessage = message

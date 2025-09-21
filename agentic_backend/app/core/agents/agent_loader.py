@@ -79,7 +79,13 @@ class AgentLoader:
         for agent_cfg in self.config.ai.agents:
             if not agent_cfg.enabled:
                 continue
-
+            if not agent_cfg.class_path:
+                logger.warning(
+                    "No class_path for static agent '%s' — skipping.",
+                    agent_cfg.name,
+                )
+                failed[agent_cfg.name] = agent_cfg
+                continue
             try:
                 cls = self._import_agent_class(agent_cfg.class_path)
                 if not issubclass(cls, AgentFlow):

@@ -16,11 +16,10 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fred_core import KeycloakUser, get_current_user
 
 from app.common.error import MCPClientConnectionException
+from app.common.structures import AgentSettings
 from app.common.utils import log_exception
 from app.core.agents.agent_manager import AgentManager
 from app.core.agents.agent_service import AgentAlreadyExistsException, AgentService
-from app.core.agents.structures import CreateAgentRequest
-
 
 def get_agent_manager(request: Request) -> AgentManager:
     """Dependency function to retrieve AgentManager from app.state."""
@@ -46,31 +45,30 @@ router = APIRouter(tags=["Agents"])
     summary="Create a Dynamic Agent that can access MCP tools",
 )
 async def create_agent(
-    req: CreateAgentRequest,
+    agent_settings: AgentSettings,
     user: KeycloakUser = Depends(get_current_user),
     agent_manager: AgentManager = Depends(get_agent_manager),
 ):
     try:
         service = AgentService(agent_manager=agent_manager)
-        return await service.build_and_register_mcp_agent(user, req)
+        return await service.create_agent(user, agent_settings)
     except Exception as e:
         log_exception(e)
         raise handle_exception(e)
 
 
 @router.put(
-    "/agents/{name}",
-    summary="Update a dynamic agent's configuration",
+    "/agents/update",
+    summary="Update an agent. Only the tuning part is upfatable",
 )
 async def update_agent(
-    name: str,
-    req: CreateAgentRequest,
+    agent_settings: AgentSettings,
     user: KeycloakUser = Depends(get_current_user),
     agent_manager: AgentManager = Depends(get_agent_manager),
 ):
     try:
         service = AgentService(agent_manager=agent_manager)
-        return await service.update_agent(user, name, req)
+        return await service.update_agent(user, agent_settings)
     except Exception as e:
         log_exception(e)
         raise handle_exception(e)
@@ -87,7 +85,7 @@ async def delete_agent(
 ):
     try:
         service = AgentService(agent_manager=agent_manager)
-        return await service.delete_agent(user, name)
+        return await service.delete_agent(user=user, agent_name=name)
     except Exception as e:
         log_exception(e)
         raise handle_exception(e)
