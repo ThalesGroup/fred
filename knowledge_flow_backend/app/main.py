@@ -134,7 +134,7 @@ def create_app() -> FastAPI:
     MonitoringController(router)
 
     # TODO : Mix MonitoringController and start_prometheus_exporter to have all under /metrics
-    start_prometheus_exporter(port=8081)
+    start_prometheus_exporter(port=configuration.app.metrics_port)
 
     pull_document_service = PullDocumentService()
     # Register controllers
