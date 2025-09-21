@@ -43,6 +43,7 @@ from app.core.chatbot import chatbot_controller
 from app.core.chatbot.session_orchestrator import SessionOrchestrator
 from app.core.feedback import feedback_controller
 from app.core.monitoring import monitoring_controller
+from app.core.monitoring.monitoring_controller import start_prometheus_exporter
 
 # -----------------------
 # LOGGING + ENVIRONMENT
@@ -109,6 +110,9 @@ def create_app() -> FastAPI:
         # Store state on app.state for access via dependency injection
         app.state.agent_manager = agent_manager
         app.state.session_orchestrator = session_orchestrator
+
+        # We start the prometheus exporter
+        start_prometheus_exporter(port=8082)
 
         # Use asyncio to launch a background task that runs for the duration of the app's life.
         # We remove the separate TaskGroup to prevent the race condition.

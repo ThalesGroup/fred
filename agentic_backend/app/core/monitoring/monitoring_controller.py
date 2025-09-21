@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import logging
+import threading
 from typing import Dict, List
 
 from fastapi import (
@@ -21,6 +22,9 @@ from fastapi import (
     HTTPException,
     Query,
 )
+
+from prometheus_client import start_http_server, Gauge, Counter, Histogram
+
 from fred_core import KeycloakUser, get_current_user
 
 from app.core.chatbot.metric_structures import MetricsResponse
@@ -88,3 +92,17 @@ def get_node_numerical_metrics(
         agg_mapping=agg_mapping,
         user_id=user.uid,
     )
+
+def start_prometheus_exporter(port: int = 8082):
+    logger.info(f"Starting Prometheus exporter on port {port}")
+    start_http_server(port)
+
+    def collect_metrics():
+        while True:
+            # ici tu pourrais ajouter psutil.cpu_percent(), mem, etc.
+            import time
+            time.sleep(5)
+
+    # Launch collect on a specific thread
+    t = threading.Thread(target=collect_metrics, daemon=True)
+    t.start()
