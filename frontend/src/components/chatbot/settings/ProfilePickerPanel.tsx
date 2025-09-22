@@ -5,23 +5,11 @@
 // http://www.apache.org/licenses/LICENSE-2.0
 
 import { useMemo, useState } from "react";
-import {
-  Box,
-  IconButton,
-  List,
-  ListItem,
-  ListItemButton,
-  Tooltip,
-  Typography,
-  useTheme,
-  Theme,
-} from "@mui/material";
+import { Box, IconButton, List, ListItem, ListItemButton, Tooltip, Typography, useTheme, Theme } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import Popover from "@mui/material/Popover";
 import { useTranslation } from "react-i18next";
-import {
-  useGetResourceKnowledgeFlowV1ResourcesResourceIdGetQuery,
-} from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { useGetResourceKnowledgeFlowV1ResourcesResourceIdGetQuery } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { ChatResourcesSelectionCard } from "../ChatResourcesSelectionCard";
 
 export type ProfilePickerPanelProps = {
@@ -29,21 +17,17 @@ export type ProfilePickerPanelProps = {
   onChangeSelectedProfileIds: (ids: string[]) => void;
 };
 
-export function ProfilePickerPanel({
-  selectedProfileIds,
-  onChangeSelectedProfileIds,
-}: ProfilePickerPanelProps) {
+export function ProfilePickerPanel({ selectedProfileIds, onChangeSelectedProfileIds }: ProfilePickerPanelProps) {
   const theme = useTheme<Theme>();
   const { t } = useTranslation();
 
   const [profilePickerAnchor, setProfilePickerAnchor] = useState<HTMLElement | null>(null);
   const selectedProfileId = selectedProfileIds[0] ?? null;
 
-  const { data: selectedProfileResource } =
-    useGetResourceKnowledgeFlowV1ResourcesResourceIdGetQuery(
-      { resourceId: selectedProfileId as string },
-      { skip: !selectedProfileId }
-    );
+  const { data: selectedProfileResource } = useGetResourceKnowledgeFlowV1ResourcesResourceIdGetQuery(
+    { resourceId: selectedProfileId as string },
+    { skip: !selectedProfileId },
+  );
 
   const hasSelectedProfile = !!selectedProfileId;
 
@@ -122,15 +106,9 @@ export function ProfilePickerPanel({
                 py: 0.75,
                 alignItems: "flex-start",
                 border: `1px solid ${theme.palette.primary.main}`,
-                backgroundColor:
-                  theme.palette.mode === "dark"
-                    ? "rgba(25,118,210,0.06)"
-                    : "rgba(25,118,210,0.04)",
+                backgroundColor: theme.palette.mode === "dark" ? "rgba(25,118,210,0.06)" : "rgba(25,118,210,0.04)",
                 "&:hover": {
-                  backgroundColor:
-                    theme.palette.mode === "dark"
-                      ? "rgba(25,118,210,0.1)"
-                      : "rgba(25,118,210,0.08)",
+                  backgroundColor: theme.palette.mode === "dark" ? "rgba(25,118,210,0.1)" : "rgba(25,118,210,0.08)",
                 },
               }}
             >
@@ -139,26 +117,27 @@ export function ProfilePickerPanel({
                   {selectedProfileResource?.name}
                 </Typography>
 
-                {Array.isArray(selectedProfileResource?.labels) &&
-                  selectedProfileResource!.labels.length > 0 && (
-                    <Typography variant="caption" color="text.secondary" sx={{ display: "block" }} noWrap>
-                      {selectedProfileResource!.labels.join(" · ")}
-                    </Typography>
-                  )}
+                {Array.isArray(selectedProfileResource?.labels) && selectedProfileResource!.labels.length > 0 && (
+                  <Typography variant="caption" color="text.secondary" sx={{ display: "block" }} noWrap>
+                    {selectedProfileResource!.labels.join(" · ")}
+                  </Typography>
+                )}
 
                 {profileBodyPreview && (
                   <Typography
                     variant="caption"
                     color="text.secondary"
-                    sx={{
-                      mt: 0.5,
-                      display: "-webkit-box",
-                      WebkitLineClamp: "2",
-                      WebkitBoxOrient: "vertical",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "normal",
-                    } as any}
+                    sx={
+                      {
+                        mt: 0.5,
+                        display: "-webkit-box",
+                        WebkitLineClamp: "2",
+                        WebkitBoxOrient: "vertical",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "normal",
+                      } as any
+                    }
                   >
                     {profileBodyPreview}
                   </Typography>

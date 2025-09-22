@@ -17,7 +17,7 @@ import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 export type PluginItem = {
   id: string;
   name: string;
-  group?: string;         // pour regrouper (ex: catégorie)
+  group?: string; // pour regrouper (ex: catégorie)
   description?: string;
 };
 
@@ -43,7 +43,7 @@ export function PluginSelector({
       map.get(g)!.push(it);
     }
     // sort groups and items by name
-    for (const [,arr] of map) arr.sort((a, b) => a.name.localeCompare(b.name));
+    for (const [, arr] of map) arr.sort((a, b) => a.name.localeCompare(b.name));
     return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]));
   }, [items]);
 
@@ -57,9 +57,7 @@ export function PluginSelector({
       .map(([g, arr]) => [
         g,
         arr.filter(
-          (it) =>
-            it.name.toLowerCase().includes(needle) ||
-            (it.description ?? "").toLowerCase().includes(needle)
+          (it) => it.name.toLowerCase().includes(needle) || (it.description ?? "").toLowerCase().includes(needle),
         ),
       ])
       .filter(([_, arr]) => (arr as PluginItem[]).length > 0) as [string, PluginItem[]][];
@@ -71,8 +69,7 @@ export function PluginSelector({
     onChange(Array.from(set));
   };
 
-  const toggleOpen = (g: string) =>
-    setOpenMap((m) => ({ ...m, [g]: !m[g] }));
+  const toggleOpen = (g: string) => setOpenMap((m) => ({ ...m, [g]: !m[g] }));
 
   return (
     <Box sx={{ width: 420, height: 460, display: "flex", flexDirection: "column" }}>

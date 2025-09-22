@@ -46,7 +46,11 @@ export function ChatResourcesSelectionCard({
   const { t } = useTranslation();
 
   // Libraries (as groups to browse)
-  const { data: tags = [], isLoading, isError } = useListAllTagsKnowledgeFlowV1TagsGetQuery({
+  const {
+    data: tags = [],
+    isLoading,
+    isError,
+  } = useListAllTagsKnowledgeFlowV1TagsGetQuery({
     type: libraryType as TagType,
   });
 

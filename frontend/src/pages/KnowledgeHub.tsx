@@ -82,7 +82,7 @@ export const KnowledgeHub = () => {
       <Box sx={{ mb: 3 }}>
         {selectedView === "profiles" && (
           <Container maxWidth="xl">
-            <ResourceLibraryList kind="profile"  />
+            <ResourceLibraryList kind="profile" />
           </Container>
         )}
         {selectedView === "documents" && (

@@ -1,21 +1,10 @@
 // ProfileEditorModal.tsx
-import {
-  Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  Stack,
-  TextField,
-} from "@mui/material";
+import { Button, Dialog, DialogActions, DialogContent, DialogTitle, Stack, TextField } from "@mui/material";
 import * as React from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import {
-  buildProfileYaml,
-  looksLikeYamlDoc,
-} from "./resourceYamlUtils";
+import { buildProfileYaml, looksLikeYamlDoc } from "./resourceYamlUtils";
 
 const profileSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -44,13 +33,7 @@ interface ProfileEditorModalProps {
  *  - simple mode (name/description/body)
  *  - doc mode (header YAML + body) when initial content is a full YAML doc
  */
-export const ProfileEditorModal: React.FC<ProfileEditorModalProps> = ({
-  isOpen,
-  onClose,
-  onSave,
-  initial,
-}) => {
-
+export const ProfileEditorModal: React.FC<ProfileEditorModalProps> = ({ isOpen, onClose, onSave, initial }) => {
   // ----- Simple mode form (create) -----
   const {
     register,
@@ -61,18 +44,17 @@ export const ProfileEditorModal: React.FC<ProfileEditorModalProps> = ({
     defaultValues: { name: "", description: "", body: "" },
   });
 
-
   // ----- Submit handlers -----
   const onSubmitSimple = (data: ProfileFormData) => {
     const body = (data.body || "").trim();
     const content = looksLikeYamlDoc(body)
       ? body
       : buildProfileYaml({
-        name: data.name,
-        description: data.description || undefined,
-        labels: undefined,
-        body,
-      });
+          name: data.name,
+          description: data.description || undefined,
+          labels: undefined,
+          body,
+        });
 
     const payload: ResourceCreateLike = {
       name: data.name,
@@ -116,7 +98,9 @@ export const ProfileEditorModal: React.FC<ProfileEditorModalProps> = ({
           </Stack>
         </DialogContent>
         <DialogActions>
-          <Button onClick={onClose} variant="outlined">Cancel</Button>
+          <Button onClick={onClose} variant="outlined">
+            Cancel
+          </Button>
           <Button type="submit" variant="contained" disabled={isSubmitting}>
             Save
           </Button>

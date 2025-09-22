@@ -5,9 +5,9 @@
   },
   "resource": {
     "kind": {
-      "prompt":   { "one": "prompt",   "other": "prompts" },
+      "prompt": { "one": "prompt", "other": "prompts" },
       "template": { "one": "template", "other": "templates" },
-      "profile": { "one" : "profile", "other": "profiles"}
+      "profile": { "one": "profile", "other": "profiles" }
     }
   },
   "validation": {
