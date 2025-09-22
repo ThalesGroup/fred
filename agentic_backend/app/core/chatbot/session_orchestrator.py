@@ -14,7 +14,15 @@ from typing import Awaitable, Callable, List, Optional, Tuple
 from uuid import uuid4
 
 from fastapi import UploadFile
-from fred_core import Action, KeycloakUser, KPIActor, KPIWriter, Resource, authorize
+from fred_core import (
+    Action,
+    AuthorizationError,
+    KeycloakUser,
+    KPIActor,
+    KPIWriter,
+    Resource,
+    authorize,
+)
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 
 from app.application_context import (
@@ -215,11 +223,6 @@ class SessionOrchestrator:
         self,
         user: KeycloakUser,
     ) -> List[SessionWithFiles]:
-        """
-        Why here:
-          Listing sessions is part of the conversational lifecycle exposed to the UI.
-          Keeping it on the orchestrator avoids leaking session_store details upward.
-        """
         sessions = self.session_store.get_for_user(user.uid)
         enriched: List[SessionWithFiles] = []
         for session in sessions:
@@ -238,12 +241,12 @@ class SessionOrchestrator:
     def get_session_history(
         self, session_id: str, user: KeycloakUser
     ) -> List[ChatMessage]:
-        # TODO: check session belongs to user
+        self._authorize_user_action_on_session(session_id, user, Action.READ)
         return self.history_store.get(session_id) or []
 
     @authorize(action=Action.DELETE, resource=Resource.SESSIONS)
     def delete_session(self, session_id: str, user: KeycloakUser) -> None:
-        # TODO: check session belongs to user
+        self._authorize_user_action_on_session(session_id, user, Action.DELETE)
         self.session_store.delete(session_id)
 
     # ---------------- File uploads (kept for backward compatibility) ----------------
@@ -257,7 +260,7 @@ class SessionOrchestrator:
           Keep simple "drop a file into this session's temp area" behavior unchanged,
           so the UI doesn't need to move right now. Can be split later to a dedicated service.
         """
-        # TODO: check session belongs to user
+        self._authorize_user_action_on_session(session_id, user, Action.UPDATE)
         try:
             session_folder = self._get_session_temp_folder(session_id)
             if file.filename is None:
@@ -307,6 +310,30 @@ class SessionOrchestrator:
         )
 
     # ---------------- internals ----------------
+
+    def _authorize_user_action_on_session(
+        self, session_id: str, user: KeycloakUser, action: Action
+    ):
+        """Raise an AuthorizationError if a user can't perform an action on a session"""
+        if not self._is_user_action_authorized_on_session(session_id, user, action):
+            raise AuthorizationError(
+                user.uid,
+                action,
+                Resource.SESSIONS,
+                f"Not authorized to {action} session {session_id}",
+            )
+
+    def _is_user_action_authorized_on_session(
+        self, session_id: str, user: KeycloakUser, action: Action
+    ) -> bool:
+        """Check if a user can perform an action on a session"""
+        session = self.session_store.get(session_id)
+        if session is None:
+            return False
+
+        # For now, ignore action, only owners can access their sessions
+        # action is passed for future flexibility (ex: session sharing with attached permissions)
+        return session.user_id == user.uid
 
     def _get_session_temp_folder(self, session_id: str) -> Path:
         base_temp_dir = Path(tempfile.gettempdir()) / "chatbot_uploads"
