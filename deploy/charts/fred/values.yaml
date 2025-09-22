@@ -360,7 +360,7 @@ applications:
           name: frontend-front
     probes:
       lifecycle:
-        enabled: false
+        enabled: true
       livenessProbe:
         enabled: true
         data:
@@ -375,6 +375,14 @@ applications:
             port: 80
       startupProbe:
         enabled: false
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+        - "ALL"
+      runAsNonRoot: true
+      seccompProfile:
+        type: RuntimeDefault
     serviceAccount:
       annotations: {}
       labels: {}
