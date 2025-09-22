@@ -55,32 +55,67 @@ class AgentManager:
         self.failed_agents: Dict[str, AgentSettings] = {}
         self.agent_classes: Dict[str, Type[AgentFlow]] = {}
 
+    def list_running_agents(self) -> List[AgentSettings]:
+        """
+        Routing/runtime view.
+        Returns only agents that are instantiated and can answer right now.
+        """
+        return [inst.get_settings() for inst in self.agent_instances.values()]
+
+    def list_agents(self) -> List[AgentSettings]:
+        """
+        Fred rationale:
+        - `agent_instances` == runtime (what can answer right now).
+        - `agent_settings`  == source of truth for discovery (what exists, even if disabled).
+        """
+        return list(self.agent_settings.values())
+
     async def initialize_and_start_retries(self):
         """
-        The main async entry point for application startup.
+        Boot order:
+        1) Catalog from YAML (all agents, enabled or not)
+        2) Catalog from store (override YAML if present/edited)
+        3) Runtime from YAML+store (enabled only)
+        4) Wire leaders using the full catalog
+        5) Start retry loop
         """
-        # Phase 1: Initial load
-        static_instances, failed_static = await self.loader.load_static()
+
+        # (1) Catalog ← YAML
+        for cfg in self.config.ai.agents:
+            self.agent_settings[cfg.name] = cfg  # disabled are included on purpose
+
+        # (2) Catalog ← Store (authoritative if exists)
+        try:
+            for cfg in self.store.load_all():
+                self.agent_settings[cfg.name] = cfg  # overrides YAML snapshot
+        except Exception:
+            logger.exception("Failed to hydrate catalog from store.")
+
+        # (3) Runtime (enabled only)
+        (
+            static_instances,
+            failed_static,
+        ) = await self.loader.load_static()  # respects enabled
         for inst in static_instances:
             self._register_loaded_agent(inst.get_name(), inst, inst.agent_settings)
-        self.failed_agents.update(failed_static)
 
-        persisted_instances = await self.loader.load_persisted()
+        persisted_instances = await self.loader.load_persisted()  # respects enabled
         for inst in persisted_instances:
             self._register_loaded_agent(inst.get_name(), inst, inst.agent_settings)
 
+        self.failed_agents.update(failed_static)
+
+        # (4) Crew wiring (uses full catalog)
         self.supervisor.inject_experts_into_leaders(
             agents_by_name=self.agent_instances,
             settings_by_name=self.agent_settings,
             classes_by_name=self.agent_classes,
         )
 
-        # Phase 2: Start the background retry loop managed by the supervisor
-        # The retry loop is a long-lived coroutine, which we spawn as a task.
+        # (5) Retry loop
         asyncio.create_task(
             self.supervisor.run_retry_loop(self._retry_failed_agents_logic)
         )
-
         logger.info("✅ AgentManager startup tasks launched.")
 
     async def _retry_failed_agents_logic(self):
@@ -225,42 +260,43 @@ class AgentManager:
         self.agent_settings[name] = settings
         self.agent_instances[name] = instance
 
-    def register_dynamic_agent(self, instance: AgentFlow, settings: AgentSettings):
-        """
-        Public method to register a dynamically created agent (e.g., via POST /agents/create).
-        This makes the agent immediately available in the running app (UI, routing, etc).
-
-        Should be called after the agent has been fully initialized (including async_init).
-        """
-        name = settings.name
-        self.agent_classes[name] = type(instance)
-        self.agent_settings[name] = settings
-        logger.info(
-            f"✅ Registered dynamic agent '{name}' ({type(instance).__name__}) in memory."
-        )
-
     async def unregister_agent(self, name: str):
         """
-        Removes an agent from memory. Does NOT affect persisted storage.
-        Ensures long-lived tasks are stopped before dropping references.
+        Remove runtime presence only. Keep AgentSettings in the catalog
+        so the Agent Hub still shows the agent (now disabled/offline).
         """
         try:
             agent = self.get_agent_instance(name)
             close = getattr(agent, "aclose", None)
             if close and iscoroutinefunction(close):
-                # best-effort; do not fail unregister on cleanup issues
                 await close()
         except Exception:
             logger.debug("Unregister: aclose for %s failed/ignored.", name)
+
         self.agent_classes.pop(name, None)
-        self.agent_settings.pop(name, None)
-        logger.info(f"🗑️ Unregistered agent '{name}' from memory.")
+        # ⬇️ intentionally do **not** remove self.agent_settings[name]
+        logger.info(
+            "🗑️ Unregistered agent '%s' from runtime (settings preserved).", name
+        )
+
+    def register_dynamic_agent(self, instance: AgentFlow, settings: AgentSettings):
+        """
+        Register a dynamically created agent immediately into runtime + catalog.
+        """
+        name = settings.name
+        self.agent_classes[name] = type(instance)
+        self.agent_settings[name] = settings
+        self.agent_instances[name] = instance  # ⬅️ add to runtime (bug fix)
+        logger.info(
+            "✅ Registered dynamic agent '%s' (%s).", name, type(instance).__name__
+        )
 
     def get_agentic_flows(self) -> List[AgentSettings]:
-        flows = []
-        for _name, instance in self.agent_instances.items():
-            flows.append(instance.get_settings())
-        return flows
+        # flows = []
+        return self.list_agents()
+        # for _name, instance in self.agent_instances.items():
+        #     flows.append(instance.get_settings())
+        # return flows
 
     def get_agent_instance(
         self, name: str, runtime_context: RuntimeContext | None = None
@@ -283,34 +319,32 @@ class AgentManager:
 
     async def aclose_single(self, name: str) -> bool:
         """
-        Gracefully shuts down and unregisters a single agent.
-        Returns True if the agent was found and closed, False otherwise.
+        Gracefully shut down a single runtime instance.
+        Catalog entry (AgentSettings) is **retained**.
         """
         instance = self.agent_instances.pop(name, None)
-        self.agent_settings.pop(name, None)
         self.agent_classes.pop(name, None)
 
         if not instance:
-            logger.warning(f"Attempted to close non-existent agent '{name}'.")
+            logger.warning("Attempted to close non-existent agent '%s'.", name)
             return False
 
         await self.supervisor.close_agents([instance])
-        logger.info(f"🗑️ Unregistered agent '{name}' from memory.")
+        logger.info("🗑️ Unregistered agent '%s' from runtime.", name)
         return True
 
     async def aclose(self):
         """
-        Shuts down all agents.
+        Shut down all runtime instances. Catalog stays intact.
         """
-        # Iterate over a copy of keys to avoid RuntimeError
         for name in list(self.agent_instances.keys()):
             await self.aclose_single(name)
 
         self.supervisor.stop_retry_loop()
+        # NOTE: do not clear self.agent_settings — the catalog is persistent
         self.agent_instances.clear()
-        self.agent_settings.clear()
         self.agent_classes.clear()
-        logger.info("🗑️ AgentManager cleanup complete.")
+        logger.info("🗑️ AgentManager runtime cleanup complete (catalog preserved).")
 
     # --- small helpers ------------------------------------------------------
     def _is_leader_kind(self, settings: AgentSettings | None) -> bool:

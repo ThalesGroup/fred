@@ -141,7 +141,15 @@ export default function Chat() {
       </Box>
     );
   }
-  if (agentsFromServer.length === 0) {
+
+  // After the two queries
+  const allAgents = agentsFromServer ?? [];
+
+  // Treat agents with `enabled === true` as selectable for chat.
+  // (If some payloads don’t include `enabled`, use `a.enabled !== false` instead.)
+  const enabledAgents = allAgents.filter(a => a.enabled === true);
+
+  if (enabledAgents.length === 0) {
     return (
       <Box sx={{ p: 3 }}>
         <Typography variant="h6">No assistants available</Typography>
@@ -219,7 +227,7 @@ export default function Chat() {
               onChangeSelectedProfileIds={setSelectedProfileIds}
             />
             <Divider />
-            <AgentsList agents={agentsFromServer} selected={currentAgent} onSelect={handleSelectAgent} />
+            <AgentsList agents={enabledAgents} selected={currentAgent} onSelect={handleSelectAgent} />
             <Divider />
             <ConversationList
               sessions={sessions}
@@ -236,7 +244,7 @@ export default function Chat() {
           <ChatBot
             currentChatBotSession={currentSession}
             currentAgent={currentAgent!}
-            agents={agentsFromServer}
+            agents={enabledAgents}
             onUpdateOrAddSession={updateOrAddSession}
             isCreatingNewConversation={isCreatingNewConversation}
             runtimeContext={{

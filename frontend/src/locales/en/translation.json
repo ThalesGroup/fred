@@ -172,7 +172,10 @@
     "taggedWith": "Tagged with {{tag}}",
     "expertIntegrations": "Expert integrations",
     "enabled": "Enable agent",
-    "disable": "Disable agent"
+    "disable": "Disable agent",
+    "favorite": "Add the agent to your favorites",
+    "unfavorite": "Remove the agent from your favorites"
+
   },
   "dialogs": {
     "create": {

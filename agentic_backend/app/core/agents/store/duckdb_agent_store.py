@@ -52,7 +52,8 @@ class DuckdbAgentStore(BaseAgentStore):
         - Dump via adapter guarantees the discriminator and nested models are serialized consistently.
         """
         try:
-            json_str = AgentSettingsAdapter.dump_json(settings, exclude_none=True)
+            json_bytes = AgentSettingsAdapter.dump_json(settings, exclude_none=True)
+            json_str = json_bytes.decode("utf-8")
         except Exception as e:
             raise ValueError(
                 f"Failed to serialize AgentSettings for {getattr(settings, 'name', '?')}: {e}"

@@ -139,6 +139,12 @@ class AgentLoader:
                 )
                 continue
 
+            if not agent_settings.enabled:
+                logger.info(
+                    "↪️ Skipping disabled persisted agent: %s", agent_settings.name
+                )
+                continue
+
             try:
                 cls = self._import_agent_class(agent_settings.class_path)
                 if not issubclass(cls, AgentFlow):
