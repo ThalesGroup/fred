@@ -213,12 +213,12 @@ class AgentManager:
 
     def register_dynamic_agent(self, instance: AgentFlow, settings: AgentSettings):
         """
-        Public method to register a dynamically created agent (e.g., via POST /agents/create).
-        This makes the agent immediately available in the running app (UI, routing, etc).
-
-        Should be called after the agent has been fully initialized (including async_init).
+        Public method to register a dynamically created agent in memory.
+        Makes the agent immediately available in the running app, including UI and routing.
+        Should be called after async_init.
         """
         name = settings.name
+        self.agent_instances[name] = instance
         self.agent_classes[name] = type(instance)
         self.agent_settings[name] = settings
         logger.info(
@@ -227,20 +227,12 @@ class AgentManager:
 
     async def unregister_agent(self, name: str):
         """
-        Removes an agent from memory. Does NOT affect persisted storage.
-        Ensures long-lived tasks are stopped before dropping references.
+        Removes an agent from memory and stops any running tasks.
+        Delegates to `aclose_single` to centralize cleanup logic.
         """
-        try:
-            agent = self.get_agent_instance(name)
-            close = getattr(agent, "aclose", None)
-            if close and iscoroutinefunction(close):
-                # best-effort; do not fail unregister on cleanup issues
-                await close()
-        except Exception:
-            logger.debug("Unregister: aclose for %s failed/ignored.", name)
-        self.agent_classes.pop(name, None)
-        self.agent_settings.pop(name, None)
-        logger.info(f"🗑️ Unregistered agent '{name}' from memory.")
+        success = await self.aclose_single(name)
+        if not success:
+            logger.warning(f"Attempted to unregister non-existent agent '{name}'.")
 
     def get_agentic_flows(self) -> List[AgenticFlow]:
         flows = []
