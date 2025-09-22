@@ -76,7 +76,7 @@ export const CreateAgentModal = ({ open, onClose, onCreated }: CreateAgentModalP
       icon: "Robot",
       agent_type: "mcp",
       categories: [],
-      mcp_servers: [{ name: "", url: "", transport: "sse", sse_read_timeout: 600 }],
+      mcp_servers: [{ name: "", url: "", transport: "streamable_http", sse_read_timeout: 3600 }],
     },
   });
 
@@ -432,7 +432,7 @@ export const CreateAgentModal = ({ open, onClose, onCreated }: CreateAgentModalP
                   <Button
                     size="small"
                     variant="outlined"
-                    onClick={() => append({ name: "", url: "", transport: "sse" })}
+                    onClick={() => append({ name: "", url: "", transport: "streamable_http" })}
                   >
                     {t("agentHub.actions.add_mcp_server", "+ Add MCP Server")}
                   </Button>

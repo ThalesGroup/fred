@@ -3,7 +3,7 @@ import { z } from "zod";
 import { TFunction } from "i18next";
 
 export const AGENT_TYPES = ["mcp"] as const;
-export const MCP_TRANSPORTS = ["sse", "http"] as const;
+export const MCP_TRANSPORTS = ["streamable_http"] as const;
 
 export const createAgentSchema = (t: TFunction) => {
   const get = (key: string, defaultValue?: string) => t(key, { defaultValue });
