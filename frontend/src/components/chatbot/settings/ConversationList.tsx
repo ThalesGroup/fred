@@ -121,7 +121,7 @@ export const ConversationList: React.FC<ConversationListProps> = (props) => {
             mt: 1,
           }}
         >
-          <Typography variant="body2" sx={{ color: "text.secondary", fontWeight: 500 }}>
+          <Typography variant="body2" sx={{ color: "text.secondary" }}>
             {t("settings.conversations")}
           </Typography>
           <Tooltip title={t("settings.newConversation")}>
@@ -276,7 +276,7 @@ export const ConversationList: React.FC<ConversationListProps> = (props) => {
                       >
                         <Typography
                           variant="body2"
-                          sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                          sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" , maxWidth: "85%" }}
                         >
                           {session.title}
                         </Typography>

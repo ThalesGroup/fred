@@ -41,7 +41,7 @@ from app.common.structures import (
     AgentSettings,
     Configuration,
 )
-from app.core.agents.flow import AgentFlow
+from app.core.agents.agent_flow import AgentFlow
 from app.core.agents.store.base_agent_store import BaseAgentStore
 
 logger = logging.getLogger(__name__)

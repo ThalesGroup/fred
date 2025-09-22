@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Annotated, Any, Dict, List, Literal, Optional, Union
+from typing import Annotated, Dict, List, Literal, Optional, Union
 
 from fred_core import (
     ModelConfiguration,
@@ -84,7 +84,7 @@ class BaseAgent(BaseModel):
 
     name: str
     enabled: bool = True
-    class_path: Optional[str] = None      # None → dynamic/UI agent
+    class_path: Optional[str] = None  # None → dynamic/UI agent
     model: Optional[ModelConfiguration] = None
     # User-facing discovery (what leaders & UI filter on)
     tags: List[str] = Field(default_factory=list)
@@ -93,6 +93,10 @@ class BaseAgent(BaseModel):
 
     # Optional: spec declares allowed tunables; values store overrides
     tuning: Optional[AgentTuning] = None
+    mcp_servers: List[MCPServerConfiguration] = Field(
+        default_factory=list,
+        description="List of active MCP server configurations for this agent.",
+    )
 
 
 # ---------------- Agent: a regular single agent ----------------
@@ -101,6 +105,7 @@ class Agent(BaseAgent):
     Why this subclass:
     - Regular agents don’t own crew. They can be *selected* into a leader’s crew.
     """
+
     type: Literal["agent"] = "agent"
 
 
@@ -111,14 +116,17 @@ class Leader(BaseAgent):
     - Crew membership is defined *once*, at the leader level, to avoid drift.
     - You can include by names and/or by tags; optional excludes too.
     """
+
     type: Literal["leader"] = "leader"
     crew: List[str] = Field(
-        default_factory=list, description="Names of agents in this leader's crew (if any)."
+        default_factory=list,
+        description="Names of agents in this leader's crew (if any).",
     )
 
 
 # ---------------- Discriminated union for IO (YAML ⇄ DB ⇄ API) ----------------
 AgentSettings = Annotated[Union[Agent, Leader], Field(discriminator="type")]
+
 
 class AIConfig(BaseModel):
     knowledge_flow_url: str = Field(
@@ -135,6 +143,7 @@ class AIConfig(BaseModel):
     agents: List[AgentSettings] = Field(
         default_factory=list, description="List of AI agents."
     )
+
 
 class FrontendFlags(BaseModel):
     enableK8Features: bool = False

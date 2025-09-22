@@ -23,7 +23,7 @@ from app.application_context import (
     get_kpi_writer,
 )
 from app.core.agents.agent_manager import AgentManager
-from app.core.agents.flow import AgentFlow
+from app.core.agents.agent_flow import AgentFlow
 from app.core.agents.runtime_context import RuntimeContext
 from app.core.chatbot.chat_schema import (
     Channel,

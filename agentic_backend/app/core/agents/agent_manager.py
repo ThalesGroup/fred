@@ -21,7 +21,7 @@ from typing import Dict, List, Type
 from app.common.structures import AgentSettings, Configuration
 from app.core.agents.agent_loader import AgentLoader
 from app.core.agents.agent_supervisor import AgentSupervisor
-from app.core.agents.flow import AgentFlow
+from app.core.agents.agent_flow import AgentFlow
 from app.core.agents.runtime_context import RuntimeContext
 from app.core.agents.store.base_agent_store import BaseAgentStore
 
@@ -239,9 +239,6 @@ class AgentManager:
             f"✅ Registered dynamic agent '{name}' ({type(instance).__name__}) in memory."
         )
 
-    def update_agent(self, agent_settings: AgentSettings):
-        logger.info(f"updating agent '{agent_settings.name}'")
-
     async def unregister_agent(self, name: str):
         """
         Removes an agent from memory. Does NOT affect persisted storage.
@@ -314,3 +311,78 @@ class AgentManager:
         self.agent_settings.clear()
         self.agent_classes.clear()
         logger.info("🗑️ AgentManager cleanup complete.")
+
+    # --- small helpers ------------------------------------------------------
+    def _is_leader_kind(self, settings: AgentSettings | None) -> bool:
+        """
+        Fred rationale:
+        - 'leader' is a *routing role*, not a different base type.
+        - We accept either 'kind' or 'type' (depending on which layer constructed the payload).
+        """
+        if not settings:
+            return False
+        # tolerate either naming to keep backend decoupled from UI
+        kind = getattr(settings, "kind", None) or getattr(settings, "type", None)
+        return str(kind or "").lower() == "leader"
+
+    async def _ensure_running_instance(self, cfg: AgentSettings) -> AgentFlow:
+        inst = self.agent_instances.get(cfg.name)
+        if inst:
+            return inst
+        if not cfg.class_path:
+            raise ValueError(f"Cannot (re)hydrate '{cfg.name}' without class_path.")
+        cls: Type[AgentFlow] = self.loader._import_agent_class(cfg.class_path)
+        instance = cls(agent_settings=cfg)
+        if iscoroutinefunction(getattr(instance, "async_init", None)):
+            await instance.async_init()
+        self._register_loaded_agent(cfg.name, instance, cfg)
+        return instance
+
+    # --- the update you asked for ------------------------------------------
+    async def update_agent(self, new_settings: AgentSettings) -> bool:
+        """
+        Contract:
+        - Update tuning/settings in memory + persist.
+        - If `enabled=False`: close & unregister.
+        - Leaders: crew changes are honored by a deterministic rewire pass.
+        """
+        name = new_settings.name
+
+        # 1) Persist source of truth (DB)
+        try:
+            self.store.save(new_settings)
+        except Exception:
+            logger.exception(
+                "Failed to persist agent '%s'; continuing with runtime update.", name
+            )
+
+        # 2) Disabled → unregister instance; keep latest settings for UI/discovery
+        if new_settings.enabled is False:
+            await self.aclose_single(name)  # unregister + shutdown
+            self.agent_settings[name] = new_settings  # keep the disabled snapshot
+            # Safe & simple: leaders might reference this agent → rewire
+            self.supervisor.inject_experts_into_leaders(
+                agents_by_name=self.agent_instances,
+                settings_by_name=self.agent_settings,
+                classes_by_name=self.agent_classes,
+            )
+            logger.info("🛑 '%s' disabled & unregistered.", name)
+            return True
+
+        # 3) Enabled → ensure instance, then apply new settings atomically
+        instance = await self._ensure_running_instance(new_settings)
+        instance.apply_settings(new_settings)  # sets agent_settings + resolves _tuning
+        self.agent_settings[name] = new_settings  # registry snapshot
+
+        # 4) Crew wiring: cheap to rebuild; avoids corner-cases
+        #    If you want to optimize later, gate this on:
+        #    - new_settings.kind == "leader"
+        #    - or (prev_settings and prev_settings.crew != new_settings.crew)
+        self.supervisor.inject_experts_into_leaders(
+            agents_by_name=self.agent_instances,
+            settings_by_name=self.agent_settings,
+            classes_by_name=self.agent_classes,
+        )
+
+        logger.info("✅ '%s' updated.", name)
+        return True

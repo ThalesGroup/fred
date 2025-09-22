@@ -1,84 +1,110 @@
 // src/components/agentHub/TuningForm.tsx
-import { Stack, TextField, FormControlLabel, Checkbox, FormControl, InputLabel, Select, MenuItem, FormHelperText } from "@mui/material";
+import { Box, TextField, MenuItem, Stack, Typography } from "@mui/material";
 import { FieldSpec } from "../../slices/agentic/agenticOpenApi";
+import { PromptEditor } from "./PromptEditor";
 
 type Props = {
   fields: FieldSpec[];
-  onChange: (index: number, nextDefault: any) => void;  // edits FieldSpec.default
+  onChange: (index: number, next: any) => void;
 };
 
 export function TuningForm({ fields, onChange }: Props) {
-  const render = (f: FieldSpec, i: number) => {
-    const helper = f.description || "";
-    const value = fields[i]?.default ?? "";
+  // optional grouping by ui.group
+  const groups = groupBy(fields, (f) => f.ui?.group || "General");
 
-    switch (f.type) {
-      case "prompt":
-      case "text":
-      case "string":
-        return (
-          <TextField
-            key={f.key}
-            label={f.title}
-            value={value ?? ""}
-            onChange={e => onChange(i, e.target.value)}
-            helperText={helper}
-            fullWidth
-            multiline={!!f.ui?.multiline || f.type === "prompt" || f.type === "text"}
-            minRows={f.ui?.max_lines || (f.type === "prompt" ? 6 : 1)}
-          />
-        );
-      case "number":
-      case "integer":
-        return (
-          <TextField
-            key={f.key}
-            type="number"
-            label={f.title}
-            value={value ?? ""}
-            onChange={e => onChange(i, e.target.value === "" ? null : Number(e.target.value))}
-            helperText={helper}
-            fullWidth
-          />
-        );
-      case "boolean":
-        return (
-          <FormControl key={f.key}>
-            <FormControlLabel
-              control={<Checkbox checked={!!value} onChange={e => onChange(i, e.target.checked)} />}
-              label={f.title}
-            />
-            {helper && <FormHelperText>{helper}</FormHelperText>}
-          </FormControl>
-        );
-      case "select":
-        return (
-          <FormControl key={f.key} fullWidth>
-            <InputLabel>{f.title}</InputLabel>
-            <Select
-              label={f.title}
-              value={value ?? ""}
-              onChange={e => onChange(i, e.target.value)}
-            >
-              {(f.enum || []).map(opt => <MenuItem key={opt} value={opt}>{opt}</MenuItem>)}
-            </Select>
-            {helper && <FormHelperText>{helper}</FormHelperText>}
-          </FormControl>
-        );
-      default:
-        return (
-          <TextField
-            key={f.key}
-            label={`${f.title} (not yet editable)`}
-            value={JSON.stringify(value ?? f.default ?? "", null, 2)}
-            helperText={helper}
-            fullWidth
-            multiline
-            InputProps={{ readOnly: true }}
-          />
-        );
-    }
-  };
+  return (
+    <Stack spacing={2}>
+      {Object.entries(groups).map(([groupName, groupFields]) => (
+        <Box key={groupName} sx={{ mt: 0.5 }}>
+          <Typography variant="subtitle2" sx={{ mb: 1 }}>{groupName}</Typography>
+          <Stack spacing={1.5}>
+            {groupFields.map((f, i) => {
+              const idx = fields.indexOf(f);
+              const label = f.title || f.key;
+              const val = f.default as any;
 
-  return <Stack spacing={1.25}>{fields.map((f, i) => render(f, i))}</Stack>;
+              if (f.type === "prompt") {
+                // Suggest default routing tokens if key matches
+                const tokens =
+                  f.key.includes("routing.prompts.choose_expert")
+                    ? ["{objective}", "{step_number}", "{step}", "{options}"]
+                    : [];
+
+                return (
+                  <PromptEditor
+                    key={f.key}
+                    label={label}
+                    value={val ?? ""}
+                    defaultValue={f.default as string}
+                    onChange={(next) => onChange(idx, next)}
+                    tokens={tokens}
+                  />
+                );
+              }
+
+              if (f.type === "boolean") {
+                return (
+                  <TextField
+                    key={f.key}
+                    label={label}
+                    value={val ? "true" : "false"}
+                    onChange={(e) => onChange(idx, e.target.value === "true")}
+                    select
+                    fullWidth
+                    size="small"
+                  >
+                    <MenuItem value="true">True</MenuItem>
+                    <MenuItem value="false">False</MenuItem>
+                  </TextField>
+                );
+              }
+
+              if (f.type === "select" && Array.isArray(f.enum)) {
+                return (
+                  <TextField
+                    key={f.key}
+                    select
+                    fullWidth
+                    size="small"
+                    label={label}
+                    value={val ?? ""}
+                    onChange={(e) => onChange(idx, e.target.value)}
+                  >
+                    {f.enum!.map((opt) => (
+                      <MenuItem key={opt} value={opt}>
+                        {opt}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                );
+              }
+
+              // default text/number/etc
+              return (
+                <TextField
+                  key={f.key}
+                  fullWidth
+                  size="small"
+                  label={label}
+                  value={val ?? ""}
+                  onChange={(e) => onChange(idx, e.target.value)}
+                  multiline={!!f.ui?.multiline}
+                  minRows={f.ui?.multiline ? Math.min(f.ui?.max_lines ?? 6, 10) : undefined}
+                  placeholder={f.ui?.placeholder || ""}
+                />
+              );
+            })}
+          </Stack>
+        </Box>
+      ))}
+    </Stack>
+  );
+}
+
+function groupBy<T>(arr: T[], key: (t: T) => string) {
+  return arr.reduce<Record<string, T[]>>((acc, v) => {
+    const k = key(v);
+    (acc[k] ||= []).push(v);
+    return acc;
+  }, {});
 }

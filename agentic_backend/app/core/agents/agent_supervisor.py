@@ -25,7 +25,7 @@ from app.agents.leader.leader import Leader
 # ❌ remove anyio.abc TaskGroup import; we won't accept a TG anymore
 # import anyio
 # from anyio.abc import TaskGroup
-from app.core.agents.flow import AgentFlow
+from app.core.agents.agent_flow import AgentFlow
 
 logger = logging.getLogger(__name__)
 

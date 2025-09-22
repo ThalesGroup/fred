@@ -20,7 +20,7 @@ from langgraph.graph import MessagesState
 
 from app.agents.leader.structures.decision import ExecuteDecision, PlanDecision
 from app.agents.leader.structures.plan import Plan
-from app.core.agents.flow import AgentFlow
+from app.core.agents.agent_flow import AgentFlow
 
 
 class State(MessagesState):

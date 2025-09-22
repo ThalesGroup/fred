@@ -17,7 +17,6 @@ import {
 import { useState, useEffect, SyntheticEvent, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import SearchIcon from "@mui/icons-material/Search";
-import AddIcon from "@mui/icons-material/Add";
 import FilterListIcon from "@mui/icons-material/FilterList";
 import StarIcon from "@mui/icons-material/Star";
 import LocalOfferIcon from "@mui/icons-material/LocalOffer";

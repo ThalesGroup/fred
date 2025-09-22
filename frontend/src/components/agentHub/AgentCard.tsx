@@ -16,7 +16,7 @@ import LocalOfferIcon from "@mui/icons-material/LocalOffer";
 import SettingsSuggestIcon from "@mui/icons-material/SettingsSuggest"; // for Edit
 import PowerSettingsNewIcon from "@mui/icons-material/PowerSettingsNew";
 import GroupIcon from "@mui/icons-material/Group"; // for crew
-
+import TuneIcon from "@mui/icons-material/Tune";
 import { getAgentBadge } from "../../utils/avatar";
 import { useTranslation } from "react-i18next";
 
@@ -128,8 +128,8 @@ export const AgentCard = ({
             <Tooltip
               title={
                 isFavorite
-                  ? t("agentCard.unfavorite", "Remove from favorites")
-                  : t("agentCard.favorite", "Add to favorites")
+                  ? t("agentCard.unfavorite")
+                  : t("agentCard.favorite")
               }
             >
               <IconButton
@@ -175,20 +175,20 @@ export const AgentCard = ({
         {/* Footer actions */}
  <Stack direction="row" gap={0.5} sx={{ ml: "auto" }}>
   {onEdit && (
-    <Tooltip title={t("agentCard.edit", "Edit")}>
+    <Tooltip title={t("agentCard.edit")}>
       <IconButton
         size="small"
         onClick={() => onEdit(agent)}
         sx={{ color: "text.secondary" }}
         aria-label="edit agent"
       >
-        <SettingsSuggestIcon fontSize="small" />
+        <TuneIcon fontSize="small" />
       </IconButton>
     </Tooltip>
   )}
 
   {onToggleEnabled && (
-    <Tooltip title={agent.enabled ? t("agentCard.disable", "Disable") : t("agentCard.enable", "Enable")}>
+    <Tooltip title={agent.enabled ? t("agentCard.disable") : t("agentCard.enable", "Enable")}>
       <IconButton
         size="small"
         onClick={() => onToggleEnabled(agent)}

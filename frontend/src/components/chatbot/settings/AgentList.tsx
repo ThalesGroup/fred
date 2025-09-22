@@ -59,7 +59,7 @@ const AgentsList = memo(function AgentsList({ agents, selected, onSelect, dense 
         py: 2.5,
       }}
     >
-      <Typography variant="subtitle1" sx={{ mb: 2, fontWeight: 500 }}>
+      <Typography variant="subtitle1" sx={{ mb: 2 }}>
         {t("settings.assistants")}
       </Typography>
 

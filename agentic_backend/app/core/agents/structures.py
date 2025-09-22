@@ -20,7 +20,8 @@ from app.common.structures import MCPServerConfiguration
 
 
 class BaseAgentRequest(BaseModel):
-    agent_type:  Literal["mcp"]  # , "rag", "custom"]  # extendable in future
+    agent_type: Literal["mcp"]  # , "rag", "custom"]  # extendable in future
+
 
 class MCPAgentRequest(BaseAgentRequest):
     type: Literal["mcp"]

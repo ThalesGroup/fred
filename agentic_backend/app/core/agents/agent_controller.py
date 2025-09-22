@@ -21,6 +21,7 @@ from app.common.utils import log_exception
 from app.core.agents.agent_manager import AgentManager
 from app.core.agents.agent_service import AgentAlreadyExistsException, AgentService
 
+
 def get_agent_manager(request: Request) -> AgentManager:
     """Dependency function to retrieve AgentManager from app.state."""
     return request.app.state.agent_manager
@@ -51,7 +52,8 @@ async def create_agent(
 ):
     try:
         service = AgentService(agent_manager=agent_manager)
-        return await service.create_agent(user, agent_settings)
+        await service.create_agent(user, agent_settings)
+        return {"message": f"Agent '{agent_settings.name}' created successfully."}
     except Exception as e:
         log_exception(e)
         raise handle_exception(e)

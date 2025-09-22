@@ -50,7 +50,7 @@ from langgraph.graph import END, START, MessagesState, StateGraph
 from pydantic import BaseModel, Field
 
 from app.common.structures import AgentSettings
-from app.core.agents.flow import AgentFlow
+from app.core.agents.agent_flow import AgentFlow
 
 logger = logging.getLogger(__name__)
 

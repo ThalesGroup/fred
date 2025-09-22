@@ -207,7 +207,7 @@ export default function Chat() {
             }}
           >
             <Typography variant="h6" sx={{ flexGrow: 1, pl: 1 }}>
-              {t("panel.conversationSetup", "Conversation setup")}
+              {t("settings.conversationSetup")}
             </Typography>
             <IconButton size="small" onClick={closeAgents}>
               <ChevronLeftIcon fontSize="small" />

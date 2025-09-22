@@ -12,21 +12,31 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Fred architecture notes for implementers:
+# - Graphs are built PER INSTANCE (self._graph) in async_init().
+#   Why: LangGraph nodes call bound methods (they require `self`) and often depend on
+#   per-instance state (model bindings, user tuning, runtime context). Building at class
+#   import time would capture unbound functions and the wrong lifecycle.
+# - Tuning is declared at CLASS LEVEL (GeneralistExpert.tuning) because it is a static
+#   “capability contract” for the UI. The user’s overrides live in AgentSettings.tuning
+#   and are merged into the instance by AgentFlow.__init__/apply_settings.
+# - No hidden prompt composition: each node explicitly decides which tuned text to use
+#   and whether to include the (optional) user profile. This keeps behavior auditable.
+
 import logging
-from datetime import datetime
 
 from fred_core import get_model
 from app.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
 from langgraph.graph import END, START, MessagesState, StateGraph
 
-from app.core.agents.flow import AgentFlow
+from app.core.agents.agent_flow import AgentFlow
 
 logger = logging.getLogger(__name__)
 
 TUNING = AgentTuning(
     fields=[
         FieldSpec(
-            key="prompts.system",          
+            key="prompts.system",
             type="prompt",
             title="System Prompt",
             description=(
@@ -46,34 +56,22 @@ TUNING = AgentTuning(
     ],
 )
 
-class GeneralistExpert(AgentFlow):
 
+class GeneralistExpert(AgentFlow):
     tuning = TUNING
 
-    """
-    Generalist Expert provides guidance on a wide range of topics
-    without deep specialization.
-    """
-    # def __init__(self, agent_settings: AgentSettings):
-    #     super().__init__(agent_settings=agent_settings)
-
     async def async_init(self):
+        """
+        Instance lifecycle hook.
+        - Bind your model here (per-instance): lets you apply runtime/provider settings safely.
+        - Build the LangGraph here and store it on `self._graph`.
+          This ensures nodes are bound to THIS instance (self) and can safely call instance methods.
+        """
+
         self.model = get_model(self.agent_settings.model)
-        self.base_prompt = self._generate_prompt()
+        # Build a tiny, linear graph:
+        # START → expert (reasoner) → END
         self._graph = self._build_graph()
-
-    def _generate_prompt(self) -> str:
-        today = datetime.now().strftime("%Y-%m-%d")
-
-        return "\n".join(
-            [
-                "You are a friendly generalist expert, skilled at providing guidance on a wide range of topics without deep specialization.",
-                "Your role is to respond with clarity, providing accurate and reliable information.",
-                "When appropriate, highlight elements that could be particularly relevant.",
-                f"The current date is {today}.",
-                "In case of graphical representation, render mermaid diagrams code.",
-            ]
-        )
 
     def _build_graph(self) -> StateGraph:
         builder = StateGraph(MessagesState)
@@ -83,7 +81,24 @@ class GeneralistExpert(AgentFlow):
         return builder
 
     async def reasoner(self, state: MessagesState):
-        messages = self.use_fred_prompts(state["messages"])
-        assert self.model is not None
+        """
+        Single-step reasoning node.
+        Rationale:
+        - We pull the tuned system prompt by key (no magic). If the user updated it in the UI,
+          AgentFlow has already placed the latest value in this instance.
+        - We render {tokens} through AgentFlow.render(...) to resolve simple placeholders.
+        - We *optionally* append the user profile text if this node decides it’s relevant.
+          (Convention: dev chooses; Fred does not inject profile automatically.)
+        - We then prepend it as a SystemMessage and call the model with the user messages.
+        """
+        # 1) choose the tuning field you want. In this case, the system prompt
+        tpl = self.get_tuned_text("prompts.system") or ""
+        # 2) render tokens. You should always do this to resolve {placeholders}
+        #    (e.g. {current_time}, {agent_name}, {user_name}, etc.)
+        sys = self.render(tpl)
+        # 3) optionally add the profile text (if any). It's up to the node to decide
+        #    whether to use it or not.
+        sys = sys + "\n\n" + self.profile_text()
+        messages = self.with_system(sys, state["messages"])
         response = await self.model.ainvoke(messages)
         return {"messages": [response]}
