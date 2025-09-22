@@ -48,6 +48,7 @@ TABULAR_TUNING = AgentTuning(
                 "- Use markdown tables to present tabular results.\n"
                 "- Do NOT invent columns or data that aren't present.\n"
                 "- Format math formulas using LaTeX: `$$...$$` for blocks or `$...$` inline.\n"
+                "- Always write text filters as case-insensitive (use LOWER() or ILIKE) so 'Oui' == 'oui' == 'OUI' for example.\n"
                 "Current date: {today}."
             ),
             ui=UIHints(group="Prompts", multiline=True, markdown=True),
