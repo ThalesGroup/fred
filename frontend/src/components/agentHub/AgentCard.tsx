@@ -1,29 +1,18 @@
 // components/agentHub/AgentCard.tsx
-import {
-  Box,
-  Card,
-  CardContent,
-  Typography,
-  IconButton,
-  Chip,
-  Tooltip,
-  Stack,
-  useTheme,
-} from "@mui/material";
+import { Box, Card, CardContent, Typography, IconButton, Chip, Tooltip, Stack, useTheme } from "@mui/material";
 import StarIcon from "@mui/icons-material/Star";
 import StarOutlineIcon from "@mui/icons-material/StarOutline";
 import LocalOfferIcon from "@mui/icons-material/LocalOffer";
-import SettingsSuggestIcon from "@mui/icons-material/SettingsSuggest"; // for Edit
 import PowerSettingsNewIcon from "@mui/icons-material/PowerSettingsNew";
 import GroupIcon from "@mui/icons-material/Group"; // for crew
 import TuneIcon from "@mui/icons-material/Tune";
+import PowerOffIcon from "@mui/icons-material/PowerOff"; // <-- NEW Import
+
 import { getAgentBadge } from "../../utils/avatar";
 import { useTranslation } from "react-i18next";
 
 // OpenAPI types
-import {
-  Leader,
-} from "../../slices/agentic/agenticOpenApi";
+import { Leader } from "../../slices/agentic/agenticOpenApi";
 import { AnyAgent } from "../../common/agent";
 
 type AgentCardProps = {
@@ -125,13 +114,7 @@ export const AgentCard = ({
           )}
 
           {onToggleFavorite && (
-            <Tooltip
-              title={
-                isFavorite
-                  ? t("agentCard.unfavorite")
-                  : t("agentCard.favorite")
-              }
-            >
+            <Tooltip title={isFavorite ? t("agentCard.unfavorite") : t("agentCard.favorite")}>
               <IconButton
                 size="small"
                 onClick={() => onToggleFavorite(agent.name)}
@@ -171,48 +154,55 @@ export const AgentCard = ({
         >
           {agent.description}
         </Typography>
-
         {/* Footer actions */}
- <Stack direction="row" gap={0.5} sx={{ ml: "auto" }}>
-  {onEdit && (
-    <Tooltip title={t("agentCard.edit")}>
-      <IconButton
-        size="small"
-        onClick={() => onEdit(agent)}
-        sx={{ color: "text.secondary" }}
-        aria-label="edit agent"
-      >
-        <TuneIcon fontSize="small" />
-      </IconButton>
-    </Tooltip>
-  )}
+        <Stack direction="row" gap={0.5} sx={{ ml: "auto" }}>
+          {agent.type === "leader" && onManageCrew && (
+            <Tooltip title={t("agentCard.manageCrew", "Manage crew")}>
+              <IconButton
+                size="small"
+                onClick={() => onManageCrew(agent)}
+                sx={{ color: "text.secondary" }}
+                aria-label="manage crew"
+              >
+                <GroupIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          )}
 
-  {onToggleEnabled && (
-    <Tooltip title={agent.enabled ? t("agentCard.disable") : t("agentCard.enable", "Enable")}>
-      <IconButton
-        size="small"
-        onClick={() => onToggleEnabled(agent)}
-        sx={{ color: agent.enabled ? "warning.main" : "success.main" }}
-        aria-label={agent.enabled ? "disable agent" : "enable agent"}
-      >
-        <PowerSettingsNewIcon fontSize="small" />
-      </IconButton>
-    </Tooltip>
-  )}
+          {onEdit && (
+            <Tooltip title={t("agentCard.edit")}>
+              <IconButton
+                size="small"
+                onClick={() => onEdit(agent)}
+                sx={{ color: "text.secondary" }}
+                aria-label="edit agent"
+              >
+                <TuneIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          )}
 
-  {agent.type === "leader" && onManageCrew && (
-    <Tooltip title={t("agentCard.manageCrew", "Manage crew")}>
-      <IconButton
-        size="small"
-        onClick={() => onManageCrew(agent)}
-        sx={{ color: "text.secondary" }}
-        aria-label="manage crew"
-      >
-        <GroupIcon fontSize="small" />
-      </IconButton>
-    </Tooltip>
-  )}
-</Stack>     </CardContent>
+          {onToggleEnabled && (
+            <Tooltip title={agent.enabled ? t("agentCard.disable") : t("agentCard.enable", "Enable")}>
+              <IconButton
+                size="small"
+                onClick={() => onToggleEnabled(agent)}
+                sx={{ color: "text.secondary" }} // Button color is neutral
+                aria-label={agent.enabled ? "disable agent" : "enable agent"}
+              >
+                {/* Conditional Icon to suggest the NEXT action */}
+                {agent.enabled ? (
+                  // If ENABLED, the next action is to DISABLE (turn OFF)
+                  <PowerOffIcon fontSize="small" />
+                ) : (
+                  // If DISABLED, the next action is to ENABLE (turn ON)
+                  <PowerSettingsNewIcon fontSize="small" />
+                )}
+              </IconButton>
+            </Tooltip>
+          )}
+        </Stack>{" "}
+      </CardContent>
     </Card>
   );
 };
