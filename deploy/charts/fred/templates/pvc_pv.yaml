@@ -6,7 +6,6 @@
   - PVC are created if global.persistence.enabled=true
 */}}
 
-{{- /* Extraire toutes les valeurs globales avant le range */}}
 {{- $persistenceEnabled := .root.Values.global.persistence.enabled }}
 {{- $dynamic := .root.Values.global.persistence.dynamic }}
 {{- $accessModes := .root.Values.global.persistence.accessModes }}
