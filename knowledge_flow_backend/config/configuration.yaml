@@ -115,14 +115,13 @@ model:
 #   # azure use deployment name instead of a plain model name as openai. The principle
 #   # is the same.
 #   name: fred-gpt-4o       # azure: deployment name, ollama: 'qwen2.5:3b-instruct' etc.
-#   settings: {
-#     azure_apim_base_url: "https://tehopenai.openai.azure.com/",
-#     azure_resource_path: "/genai-aoai-inference/v2",
-#     azure_api_version: "2024-06-01",
-#     azure_tenant_id: "737c6905-f186-4bcf-afb3-43e349ee23a3",
-#     azure_client_id: "5e5d67c9-22af-4044-bc8e-5df58d7a5e6e",
-#     azure_client_scope: "api://5e5d67c9-22af-4044-bc8e-5df58d7a5e6e/.default",
-#   }
+#   settings:
+#     azure_apim_base_url: "https://tehopenai.openai.azure.com/"
+#     azure_resource_path: "/genai-aoai-inference/v2"
+#     azure_api_version: "2024-06-01"
+#     azure_tenant_id: "737c6905-f186-4bcf-afb3-43e349ee23a3"
+#     azure_client_id: "5e5d67c9-22af-4044-bc8e-5df58d7a5e6e"
+#     azure_client_scope: "api://5e5d67c9-22af-4044-bc8e-5df58d7a5e6e/.default"
 
 storage:
   postgres:
