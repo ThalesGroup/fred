@@ -96,6 +96,15 @@ applications:
             port: 8000
       startupProbe:
         enabled: false
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+        - "ALL"
+      runAsUser: 1000
+      runAsNonRoot: true
+      seccompProfile:
+        type: RuntimeDefault
     serviceAccount:
       annotations: {}
       labels: {}
@@ -351,7 +360,7 @@ applications:
           name: frontend-front
     probes:
       lifecycle:
-        enabled: false
+        enabled: true
       livenessProbe:
         enabled: true
         data:
@@ -366,6 +375,14 @@ applications:
             port: 80
       startupProbe:
         enabled: false
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+        - "ALL"
+      runAsNonRoot: true
+      seccompProfile:
+        type: RuntimeDefault
     serviceAccount:
       annotations: {}
       labels: {}
@@ -471,6 +488,15 @@ applications:
             port: 8111
       startupProbe:
         enabled: false
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+        - "ALL"
+      runAsUser: 1000
+      runAsNonRoot: true
+      seccompProfile:
+        type: RuntimeDefault
     serviceAccount:
       annotations: {}
       labels: {}
@@ -549,6 +575,7 @@ applications:
         provider: openai
         name: text-embedding-3-large
         settings: {}
+        type: "openai"
       model:
         provider: openai        # openai | azure | ollama
         name: gpt-4o-mini       # azure: deployment name, ollama: 'qwen2.5:3b-instruct' etc.
