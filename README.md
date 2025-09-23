@@ -148,13 +148,13 @@ And then copy-paste your `OPENAI_API_KEY` value in the 2 files:
 #### 4 · Run the services
 
 ```bash
-# Terminal 1 – agentic backend
-cd agentic_backend && make run
+# Terminal 1 – knowledge flow backend
+cd knowledge_flow_backend && make run
 ```
 
 ```bash
-# Terminal 2 – knowledge flow backend
-cd knowledge_flow_backend && make run
+# Terminal 2 – agentic backend
+cd agentic_backend && make run
 ```
 
 ```bash
