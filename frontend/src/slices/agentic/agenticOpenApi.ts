@@ -5,7 +5,7 @@ const injectedRtkApi = api.injectEndpoints({
       CreateAgentAgenticV1AgentsCreatePostApiResponse,
       CreateAgentAgenticV1AgentsCreatePostApiArg
     >({
-      query: (queryArg) => ({ url: `/agentic/v1/agents/create`, method: "POST", body: queryArg.agentSettings }),
+      query: (queryArg) => ({ url: `/agentic/v1/agents/create`, method: "POST", body: queryArg.createMcpAgentRequest }),
     }),
     updateAgentAgenticV1AgentsUpdatePut: build.mutation<
       UpdateAgentAgenticV1AgentsUpdatePutApiResponse,
@@ -110,13 +110,7 @@ const injectedRtkApi = api.injectEndpoints({
 export { injectedRtkApi as agenticApi };
 export type CreateAgentAgenticV1AgentsCreatePostApiResponse = /** status 200 Successful Response */ any;
 export type CreateAgentAgenticV1AgentsCreatePostApiArg = {
-  agentSettings:
-    | ({
-        type: "agent";
-      } & Agent)
-    | ({
-        type: "leader";
-      } & Leader);
+  createMcpAgentRequest: CreateMcpAgentRequest;
 };
 export type UpdateAgentAgenticV1AgentsUpdatePutApiResponse = /** status 200 Successful Response */ any;
 export type UpdateAgentAgenticV1AgentsUpdatePutApiArg = {
@@ -198,6 +192,30 @@ export type ValidationError = {
 export type HttpValidationError = {
   detail?: ValidationError[];
 };
+export type McpServerConfiguration = {
+  name: string;
+  /** MCP server transport. Can be sse, stdio, websocket or streamable_http */
+  transport?: string | null;
+  /** URL and endpoint of the MCP server */
+  url?: string | null;
+  /** How long (in seconds) the client will wait for a new event before disconnecting */
+  sse_read_timeout?: number | null;
+  /** Command to run for stdio transport. Can be uv, uvx, npx and so on. */
+  command?: string | null;
+  /** Args to give the command as a list. ex:  ['--directory', '/directory/to/mcp', 'run', 'server.py'] */
+  args?: string[] | null;
+  /** Environment variables to give the MCP server */
+  env?: {
+    [key: string]: string;
+  } | null;
+};
+export type CreateMcpAgentRequest = {
+  name: string;
+  mcp_servers: McpServerConfiguration[];
+  role: string;
+  description: string;
+  tags?: string[] | null;
+};
 export type ModelConfiguration = {
   /** Provider of the AI model, e.g., openai, ollama, azure. */
   provider?: string | null;
@@ -273,6 +291,8 @@ export type Agent = {
   role: string;
   description: string;
   tuning?: AgentTuning | null;
+  /** List of active MCP server configurations for this agent. */
+  mcp_servers?: McpServerConfiguration[];
   type?: "agent";
 };
 export type Leader = {
@@ -284,6 +304,8 @@ export type Leader = {
   role: string;
   description: string;
   tuning?: AgentTuning | null;
+  /** List of active MCP server configurations for this agent. */
+  mcp_servers?: McpServerConfiguration[];
   type?: "leader";
   /** Names of agents in this leader's crew (if any). */
   crew?: string[];
@@ -549,6 +571,8 @@ export type Agent2 = {
   role: string;
   description: string;
   tuning?: AgentTuning2 | null;
+  /** List of active MCP server configurations for this agent. */
+  mcp_servers?: McpServerConfiguration[];
   type?: "agent";
 };
 export type Leader2 = {
@@ -560,6 +584,8 @@ export type Leader2 = {
   role: string;
   description: string;
   tuning?: AgentTuning2 | null;
+  /** List of active MCP server configurations for this agent. */
+  mcp_servers?: McpServerConfiguration[];
   type?: "leader";
   /** Names of agents in this leader's crew (if any). */
   crew?: string[];

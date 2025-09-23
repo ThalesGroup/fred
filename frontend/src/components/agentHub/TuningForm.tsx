@@ -18,7 +18,7 @@ export function TuningForm({ fields, onChange }: Props) {
         <Box key={groupName} sx={{ mt: 0.5 }}>
           <Typography variant="subtitle2" sx={{ mb: 1 }}>{groupName}</Typography>
           <Stack spacing={1.5}>
-            {groupFields.map((f, i) => {
+            {groupFields.map((f) => {
               const idx = fields.indexOf(f);
               const label = f.title || f.key;
               const val = f.default as any;

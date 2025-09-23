@@ -4,18 +4,16 @@
 
 import json
 import logging
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 from fred_core import get_model
 from langchain_core.messages import HumanMessage, ToolMessage
 from langgraph.constants import START
 from langgraph.graph import MessagesState, StateGraph
 from langgraph.prebuilt import tools_condition
-from pydantic import TypeAdapter
 
 from app.common.mcp_runtime import MCPRuntime
 from app.common.resilient_tool_node import make_resilient_tools_node
-from app.common.structures import AgentSettings
 from app.core.agents.agent_flow import AgentFlow
 from app.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
 
@@ -59,29 +57,15 @@ class MCPAgent(AgentFlow):
 
     tuning = MCP_TUNING
 
-    # Optional UX metadata (can also live entirely in AgentSettings)
-    name: str | None = "MCPExpert"
-    nickname: str | None = "Mitch"
-    role: str | None = "MCP Expert"
-    description: str | None = "Agent dynamically created to use MCP-based tools."
-    icon: str = "agent_generic"
-    categories: List[str] = ["MCP"]
-    tag: str = "mcp"
-
-    def __init__(self, agent_settings: AgentSettings):
-        super().__init__(agent_settings=agent_settings)
-        self.mcp = MCPRuntime(
-            agent_settings=agent_settings,
-            # If you expose runtime scoping (tenant/library/time), keep this provider:
-            context_provider=lambda: self.get_runtime_context(),
-        )
-        # Tolerant adapter for tool payloads (list/dict/strings)
-        self._any_list_adapter: TypeAdapter[List[Any]] = TypeAdapter(List[Any])
-
     # ---------------------------
     # Bootstrap
     # ---------------------------
     async def async_init(self):
+        self.mcp = MCPRuntime(
+            agent_settings=self.agent_settings,
+            # If you expose runtime scoping (tenant/library/time), keep this provider:
+            context_provider=lambda: self.get_runtime_context(),
+        )
         self.model = get_model(self.agent_settings.model)
         await self.mcp.init()
         self.model = self.model.bind_tools(self.mcp.get_tools())

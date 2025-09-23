@@ -73,6 +73,7 @@ export const AgentCard = ({
           gridTemplateColumns: "1fr auto", // left grows, right auto width
           columnGap: 1,
           alignItems: "start",
+          opacity: agent.enabled ? 1 : 0.6,
         }}
       >
         {/* Left: badge + name + role */}
@@ -149,6 +150,7 @@ export const AgentCard = ({
             WebkitLineClamp: 3,
             overflow: "hidden",
             minHeight: "3.6em", // ~3 lines @ 1.2 line-height
+            flexGrow: 1, 
           }}
           title={agent.description || ""}
         >

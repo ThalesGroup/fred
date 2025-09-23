@@ -59,10 +59,6 @@ class AgentService:
         if not agent_settings.class_path:
             agent_settings.class_path = _class_path(MCPAgent)
 
-        # Ensure enabled by default
-        if agent_settings.enabled is None:
-            agent_settings.enabled = True
-
         # Apply default model if not provided (let app context choose)
         try:
             appctx = get_app_context()

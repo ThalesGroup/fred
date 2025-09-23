@@ -19,6 +19,8 @@ import { useTranslation } from "react-i18next";
 import SearchIcon from "@mui/icons-material/Search";
 import FilterListIcon from "@mui/icons-material/FilterList";
 import StarIcon from "@mui/icons-material/Star";
+import AddIcon from "@mui/icons-material/Add";
+
 import LocalOfferIcon from "@mui/icons-material/LocalOffer";
 import Grid2 from "@mui/material/Grid2";
 import { LoadingSpinner } from "../utils/loadingSpinner";
@@ -38,6 +40,7 @@ import {
 // UI union facade
 import { AnyAgent, isLeader } from "../common/agent";
 import { useAgentUpdater } from "../hooks/useAgentUpdater";
+import { CreateAgentModal } from "../components/agentHub/CreateAgentModal";
 
 type AgentCategory = { name: string; isTag?: boolean };
 
@@ -84,15 +87,15 @@ export const AgentHub = () => {
   const [showElements, setShowElements] = useState(false);
   const [favoriteAgents, setFavoriteAgents] = useState<string[]>([]);
   const [categories, setCategories] = useState<AgentCategory[]>([{ name: "all" }, { name: "favorites" }]);
-  // const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
   // drawers / selection
   const [selected, setSelected] = useState<AnyAgent | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [crewOpen, setCrewOpen] = useState(false);
 
-  // const handleOpenCreateAgent = () => setIsCreateModalOpen(true);
-  // const handleCloseCreateAgent = () => setIsCreateModalOpen(false);
+  const handleOpenCreateAgent = () => setIsCreateModalOpen(true);
+  const handleCloseCreateAgent = () => setIsCreateModalOpen(false);
 
   const [triggerGetFlows, { isFetching }] = useLazyGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery();
   const { updateEnabled } = useAgentUpdater();
@@ -285,9 +288,9 @@ export const AgentHub = () => {
                     <Box sx={{ display: "flex", gap: 1 }}>
                       <ActionButton icon={<SearchIcon />}>{t("agentHub.search")}</ActionButton>
                       <ActionButton icon={<FilterListIcon />}>{t("agentHub.filter")}</ActionButton>
-                      {/* <ActionButton icon={<AddIcon />} onClick={handleOpenCreateAgent}>
+                       <ActionButton icon={<AddIcon />} onClick={handleOpenCreateAgent}>
                         {t("agentHub.create")}
-                      </ActionButton> */}
+                      </ActionButton> 
                     </Box>
                   </Box>
 
@@ -297,7 +300,7 @@ export const AgentHub = () => {
                       {filteredAgents.map((agent) => (
                         <Grid2 key={agent.name} size={{ xs: 12, sm: 6, md: 4, lg: 4, xl: 4 }} sx={{ display: "flex" }}>
                           <Fade in timeout={500}>
-                            <Box>
+                            <Box sx={{ width: "100%" }}>
                               <AgentCard
                                 agent={agent}
                                 isFavorite={favoriteAgents.includes(agent.name)}
@@ -341,7 +344,7 @@ export const AgentHub = () => {
                   )}
 
                   {/* Create modal (optional) */}
-                  {/* {isCreateModalOpen && (
+                   {isCreateModalOpen && (
                     <CreateAgentModal
                       open={isCreateModalOpen}
                       onClose={handleCloseCreateAgent}
@@ -350,7 +353,7 @@ export const AgentHub = () => {
                         fetchAgents();
                       }}
                     />
-                  )} */}
+                  )} 
                 </>
               )}
             </CardContent>

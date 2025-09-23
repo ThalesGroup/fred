@@ -157,7 +157,7 @@ ai:
       role: "Advanced Document Retrieval Expert"
       class_path: "app.agents.rags.advanced_rag_expert.AdvancedRagExpert"
       enabled: false
-      tags: ["documents", "advanced"]
+      tags: ["documents"]
       model: {}
       description: >
         An advanced expert in retrieving and processing documents using enhanced retrieval-augmented generation techniques.
