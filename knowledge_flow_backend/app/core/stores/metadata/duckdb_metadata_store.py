@@ -51,7 +51,7 @@ class DuckdbMetadataStore(BaseMetadataStore):
         full_table = self._table()
         with self.store._connect() as conn:
             conn.execute(f"""
-                CREATE TABLE IF NOT EXISTS {full_table} (
+                CREATE TABLE IF NOT EXISTS "{full_table}" (
                     document_uid TEXT PRIMARY KEY,
                     source_tag   TEXT,
                     date_added_to_kb TIMESTAMP,
@@ -60,9 +60,9 @@ class DuckdbMetadataStore(BaseMetadataStore):
                 )
             """)
             # Add missing column if upgrading from an older layout
-            cols = {r[1] for r in conn.execute(f"PRAGMA table_info('{full_table}')").fetchall()}
+            cols = {r[1] for r in conn.execute(f'PRAGMA table_info("{full_table}")').fetchall()}
             if "tag_ids" not in cols:
-                conn.execute(f"ALTER TABLE {full_table} ADD COLUMN tag_ids VARCHAR[]")
+                conn.execute(f'ALTER TABLE "{full_table}" ADD COLUMN tag_ids VARCHAR[]')
 
     # --- serialization helpers ---
 
@@ -83,7 +83,7 @@ class DuckdbMetadataStore(BaseMetadataStore):
     def get_metadata_by_uid(self, document_uid: str) -> Optional[DocumentMetadata]:
         with self.store._connect() as conn:
             row = conn.execute(
-                f"SELECT doc FROM {self._table()} WHERE document_uid = ?",
+                f'SELECT doc FROM "{self._table()}" WHERE document_uid = ?',
                 [document_uid],
             ).fetchone()
         return self._from_json(row[0]) if row else None
@@ -91,7 +91,7 @@ class DuckdbMetadataStore(BaseMetadataStore):
     def list_by_source_tag(self, source_tag: str) -> List[DocumentMetadata]:
         with self.store._connect() as conn:
             rows = conn.execute(
-                f"SELECT doc FROM {self._table()} WHERE source_tag = ?",
+                f'SELECT doc FROM "{self._table()}" WHERE source_tag = ?',
                 [source_tag],
             ).fetchall()
         return [self._from_json(r[0]) for r in rows]
@@ -102,7 +102,7 @@ class DuckdbMetadataStore(BaseMetadataStore):
         """
         with self.store._connect() as conn:
             rows = conn.execute(
-                f"SELECT doc FROM {self._table()} WHERE list_contains(tag_ids, ?)",
+                f'SELECT doc FROM "{self._table()}" WHERE list_contains(tag_ids, ?)',
                 [tag_id],
             ).fetchall()
         return [self._from_json(r[0]) for r in rows]
@@ -112,7 +112,7 @@ class DuckdbMetadataStore(BaseMetadataStore):
         Load all documents then filter in Python for nested keys.
         """
         with self.store._connect() as conn:
-            rows = conn.execute(f"SELECT doc FROM {self._table()}").fetchall()
+            rows = conn.execute(f'SELECT doc FROM "{self._table()}"').fetchall()
         docs = [self._from_json(r[0]) for r in rows]
         return [md for md in docs if self._match_nested(md.model_dump(mode="json"), filters)]
 
@@ -131,7 +131,7 @@ class DuckdbMetadataStore(BaseMetadataStore):
         with self.store._connect() as conn:
             conn.execute(
                 f"""
-                INSERT OR REPLACE INTO {self._table()}
+                INSERT OR REPLACE INTO "{self._table()}"
                 (document_uid, source_tag, date_added_to_kb, tag_ids, doc)
                 VALUES (?, ?, ?, ?, ?)
                 """,
@@ -141,7 +141,7 @@ class DuckdbMetadataStore(BaseMetadataStore):
     def delete_metadata(self, document_uid: str) -> None:
         with self.store._connect() as conn:
             result = conn.execute(
-                f"DELETE FROM {self._table()} WHERE document_uid = ?",
+                f'DELETE FROM "{self._table()}" WHERE document_uid = ?',
                 [document_uid],
             )
         if result.rowcount == 0:
@@ -149,7 +149,7 @@ class DuckdbMetadataStore(BaseMetadataStore):
 
     def clear(self) -> None:
         with self.store._connect() as conn:
-            conn.execute(f"DELETE FROM {self._table()}")
+            conn.execute(f'DELETE FROM "{self._table()}"')
 
     # --- helper: nested filter ---
 

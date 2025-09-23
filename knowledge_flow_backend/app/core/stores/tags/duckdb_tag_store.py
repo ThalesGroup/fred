@@ -35,13 +35,13 @@ class DuckdbTagStore(BaseTagStore):
             # 1) Create table if it doesn't exist (with the full, current schema)
             conn.execute(
                 f"""
-                CREATE TABLE IF NOT EXISTS {self._table()} (
+                CREATE TABLE IF NOT EXISTS "{self._table()}" (
                     id TEXT PRIMARY KEY,
                     created_at TIMESTAMP,
                     updated_at TIMESTAMP,
                     owner_id TEXT,
                     name TEXT,
-                    path TEXT,                     -- ✅ NEW: store parent path (NULL at root)
+                    path TEXT,
                     description TEXT,
                     type TEXT
                 )
@@ -49,9 +49,9 @@ class DuckdbTagStore(BaseTagStore):
             )
 
             # 2) Idempotent migration: add missing columns if upgrading from older schema
-            cols = {row[1] for row in conn.execute(f"PRAGMA table_info('{self._table()}')").fetchall()}
+            cols = {row[1] for row in conn.execute(f'PRAGMA table_info("{self._table()}")').fetchall()}
             if "path" not in cols:
-                conn.execute(f"ALTER TABLE {self._table()} ADD COLUMN path TEXT")
+                conn.execute(f'ALTER TABLE "{self._table()}" ADD COLUMN path TEXT')
                 logger.info(f"[TAGS] Migrated DuckDB table '{self._table()}' - added column 'path'.")
 
         logger.info(f"[TAGS] DuckDB table '{self._table()}' ensured.")
@@ -66,7 +66,7 @@ class DuckdbTagStore(BaseTagStore):
             tag.updated_at,
             tag.owner_id,
             tag.name,
-            tag.path,  # ✅ include path
+            tag.path,
             tag.description,
             tag.type.value,
         )
@@ -79,7 +79,7 @@ class DuckdbTagStore(BaseTagStore):
             updated_at=row[2],
             owner_id=row[3],
             name=row[4],
-            path=row[5],  # ✅ include path
+            path=row[5],
             description=row[6],
             type=TagType(row[7]),
         )
@@ -92,7 +92,7 @@ class DuckdbTagStore(BaseTagStore):
                 rows = conn.execute(
                     f"""
                     SELECT id, created_at, updated_at, owner_id, name, path, description, type
-                    FROM {self._table()}
+                    FROM "{self._table()}"
                     ORDER BY COALESCE(path, ''), name
                     """,
                 ).fetchall()
@@ -106,7 +106,7 @@ class DuckdbTagStore(BaseTagStore):
             row = conn.execute(
                 f"""
                 SELECT id, created_at, updated_at, owner_id, name, path, description, type
-                FROM {self._table()}
+                FROM "{self._table()}"
                 WHERE id = ?
                 """,
                 [tag_id],
@@ -126,7 +126,7 @@ class DuckdbTagStore(BaseTagStore):
             with self.store._connect() as conn:
                 conn.execute(
                     f"""
-                    INSERT INTO {self._table()} (
+                    INSERT INTO "{self._table()}" (
                         id, created_at, updated_at, owner_id, name, path, description, type
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                     """,
@@ -144,7 +144,7 @@ class DuckdbTagStore(BaseTagStore):
             with self.store._connect() as conn:
                 conn.execute(
                     f"""
-                    UPDATE {self._table()}
+                    UPDATE "{self._table()}"
                     SET created_at = ?,
                         updated_at = ?,
                         owner_id   = ?,
@@ -174,7 +174,7 @@ class DuckdbTagStore(BaseTagStore):
     def delete_tag_by_id(self, tag_id: str) -> None:
         try:
             with self.store._connect() as conn:
-                result = conn.execute(f"DELETE FROM {self._table()} WHERE id = ?", [tag_id])
+                result = conn.execute(f'DELETE FROM "{self._table()}" WHERE id = ?', [tag_id])
             if result.rowcount == 0:
                 raise TagNotFoundError(f"Tag with id '{tag_id}' not found.")
             logger.info(f"[TAGS] Deleted tag '{tag_id}'")

@@ -38,7 +38,7 @@ class DuckdbAgentStore(BaseAgentStore):
         with self.store._connect() as conn:
             conn.execute(
                 f"""
-                CREATE TABLE IF NOT EXISTS {self.store._prefixed(self.table_name)} (
+                CREATE TABLE IF NOT EXISTS "{self.store._prefixed(self.table_name)}" (
                     name TEXT PRIMARY KEY,
                     settings_json TEXT
                 )
@@ -62,7 +62,7 @@ class DuckdbAgentStore(BaseAgentStore):
         with self.store._connect() as conn:
             conn.execute(
                 f"""
-                INSERT OR REPLACE INTO {self.store._prefixed(self.table_name)} (name, settings_json)
+                INSERT OR REPLACE INTO "{self.store._prefixed(self.table_name)}" (name, settings_json)
                 VALUES (?, ?)
                 """,
                 (settings.name, json_str),
@@ -77,7 +77,7 @@ class DuckdbAgentStore(BaseAgentStore):
         """
         with self.store._connect() as conn:
             row = conn.execute(
-                f"SELECT settings_json FROM {self.store._prefixed(self.table_name)} WHERE name = ?",
+                f'SELECT settings_json FROM "{self.store._prefixed(self.table_name)}" WHERE name = ?',
                 (name,),
             ).fetchone()
 
@@ -96,7 +96,7 @@ class DuckdbAgentStore(BaseAgentStore):
         """
         with self.store._connect() as conn:
             rows = conn.execute(
-                f"SELECT settings_json FROM {self.store._prefixed(self.table_name)}"
+                f'SELECT settings_json FROM "{self.store._prefixed(self.table_name)}"'
             ).fetchall()
 
         settings_list: List[AgentSettings] = []
@@ -115,7 +115,7 @@ class DuckdbAgentStore(BaseAgentStore):
     def delete(self, name: str) -> None:
         with self.store._connect() as conn:
             conn.execute(
-                f"DELETE FROM {self.store._prefixed(self.table_name)} WHERE name = ?",
+                f'DELETE FROM "{self.store._prefixed(self.table_name)}" WHERE name = ?',
                 (name,),
             )
         logger.info(f"[AGENTS] 🗑️ AgentSettings for '{name}' deleted from DuckDB")
