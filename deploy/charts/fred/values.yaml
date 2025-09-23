@@ -484,15 +484,19 @@ applications:
       livenessProbe:
         enabled: true
         data:
+          failureThreshold: 10
           httpGet:
             path: /knowledge-flow/v1/healthz
             port: 8111
+          periodSeconds: 10
       readinessProbe:
         enabled: true
         data:
+          failureThreshold: 10
           httpGet:
             path: /knowledge-flow/v1/ready
             port: 8111
+          periodSeconds: 10
       startupProbe:
         enabled: false
     securityContext:
