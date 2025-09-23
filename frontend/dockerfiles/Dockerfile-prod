@@ -36,7 +36,7 @@ RUN make build
 FROM nginxinc/nginx-unprivileged:1.27.3-alpine AS runtime
 
 # Copy web app from builder to nginx html directory
-COPY --from=builder /app/dist /usr/share/nginx/html
+COPY --from=builder --chown=nginx:nginx /app/dist /usr/share/nginx/html
 
 # Define server conf for nginx
 RUN cat <<'EOF' > /etc/nginx/conf.d/fred.conf
