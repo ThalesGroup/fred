@@ -1,5 +1,5 @@
 // src/components/agentHub/CrewEditor.tsx
-import { Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, Stack, TextField, Typography } from "@mui/material";
+import { Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, FormControl, InputLabel, MenuItem, Select, Stack, TextField, Typography } from "@mui/material";
 import { useMemo, useState } from "react";
 import { Leader } from "../../slices/agentic/agenticOpenApi";
 import { useAgentUpdater } from "../../hooks/useAgentUpdater";
@@ -22,6 +22,7 @@ export function CrewEditor({ open, leader, allAgents, onClose, onSaved }: Props)
     const next = crew.filter(n => n !== name);
     await updateLeaderCrew(leader, next);
     onSaved?.();
+    onClose(); // Close after removing a member
   };
 
   const addMember = async () => {
@@ -30,9 +31,10 @@ export function CrewEditor({ open, leader, allAgents, onClose, onSaved }: Props)
     await updateLeaderCrew(leader, next);
     setNewMember("");
     onSaved?.();
+    onClose(); // Close after adding a member
   };
 
-  return (
+   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
       <DialogTitle>Crew for {leader?.name}</DialogTitle>
       <DialogContent>
@@ -44,17 +46,21 @@ export function CrewEditor({ open, leader, allAgents, onClose, onSaved }: Props)
 
         <Typography variant="subtitle2" sx={{ mt: 2 }}>Add member</Typography>
         <Stack direction="row" gap={1} sx={{ mt: 1 }}>
-          <TextField
-            select
-            label="Agent"
-            value={newMember}
-            onChange={e => setNewMember(e.target.value)}
-            SelectProps={{ native: true }}
-            fullWidth
-          >
-            <option value=""></option>
-            {candidates.map(n => <option key={n} value={n}>{n}</option>)}
-          </TextField>
+          <FormControl fullWidth>
+            <InputLabel id="select-agent-label">Agent</InputLabel>
+            <Select
+              labelId="select-agent-label"
+              id="select-agent"
+              value={newMember}
+              label="Agent"
+              onChange={e => setNewMember(e.target.value as string)}
+            >
+              <MenuItem value="">
+                <em>None</em>
+              </MenuItem>
+              {candidates.map(n => <MenuItem key={n} value={n}>{n}</MenuItem>)}
+            </Select>
+          </FormControl>
           <Button variant="contained" onClick={addMember} disabled={!newMember || isLoading}>Add</Button>
         </Stack>
       </DialogContent>
