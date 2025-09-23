@@ -34,7 +34,8 @@ MCP_TUNING = AgentTuning(
             ),
             required=True,
             default=(
-                "You are an MCP-enabled assistant. Use the available MCP tools to solve the user's request.\n"
+                "You are an MCP-enabled assistant. Use the available MCP tools to solve the user's request:\n"
+                "- ALWAYS use the tools at your disposal before providing any answer.\n"
                 "- Prefer concrete evidence from tool outputs.\n"
                 "- Be explicit about which tools you used and why.\n"
                 "- When you reference tool results, keep short inline markers (e.g., [tool_name]).\n"
