@@ -5,7 +5,7 @@
       "name": "Debug Agentic Backend (configuration.yaml)",
       "type": "debugpy",
       "request": "launch",
-      "python": "${workspaceFolder}/agentic_backend/.venv/bin/python",
+      "pythonPath": "${workspaceFolder}/agentic_backend/.venv/bin/python",
       "cwd": "${workspaceFolder}/agentic_backend",
       "module": "uvicorn",
       "args": [
@@ -19,6 +19,10 @@
         "info",
         "--loop",
         "asyncio",
+        "--reload",
+        "--reload-dir", "${workspaceFolder}/agentic_backend/config",
+        "--reload-include", "*.py",
+        "--reload-include", "*.yaml"
       ],
       "env": {
         "PYTHONPATH": "${workspaceFolder}/agentic_backend",
@@ -44,7 +48,12 @@
         "--log-level",
         "info",
         "--loop",
-        "asyncio"
+        "asyncio",
+        "--reload",
+        "--reload-dir", "${workspaceFolder}/agentic_backend/config",
+        "--reload-include", "*.py",
+        "--reload-include", "*.yaml",
+
       ],
       "env": {
         "PYTHONPATH": "${workspaceFolder}/agentic_backend",
@@ -70,7 +79,11 @@
         "--log-level",
         "info",
         "--loop",
-        "asyncio"
+        "asyncio",
+        "--reload",
+        "--reload-dir", "${workspaceFolder}/knowledge_flow_backend/config",
+        "--reload-include", "*.py",
+        "--reload-include", "*.yaml"
       ],
       "env": {
         "PYTHONPATH": "${workspaceFolder}/knowledge_flow_backend",
@@ -96,7 +109,11 @@
         "--log-level",
         "info",
         "--loop",
-        "asyncio"
+        "asyncio",
+        "--reload",
+        "--reload-dir", "${workspaceFolder}/knowledge_flow_backend/config",
+        "--reload-include", "*.py",
+        "--reload-include", "*.yaml"
       ],
       "env": {
         "PYTHONPATH": "${workspaceFolder}/knowledge_flow_backend",
