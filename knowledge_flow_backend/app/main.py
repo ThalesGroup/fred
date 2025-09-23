@@ -19,9 +19,11 @@
 Entrypoint for the Knowledge Flow Backend App.
 """
 
+# Standard library
 import logging
 import os
 
+# Third-party
 from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -29,11 +31,13 @@ from fastapi_mcp import AuthConfig, FastApiMCP
 from fred_core import get_current_user, initialize_user_security, register_exception_handlers
 from rich.logging import RichHandler
 
+# Local / first-party
 from app.application_context import ApplicationContext
 from app.application_state import attach_app
 from app.common.http_logging import RequestResponseLogger
 from app.common.structures import Configuration
 from app.common.utils import parse_server_configuration
+from app.core.monitoring.metrics_exporter import start_prometheus_exporter
 from app.core.monitoring.monitoring_controller import MonitoringController
 from app.features.catalog.controller import CatalogController
 from app.features.content.controller import ContentController
@@ -126,6 +130,9 @@ def create_app() -> FastAPI:
     router = APIRouter(prefix=configuration.app.base_url)
 
     MonitoringController(router)
+
+    # TODO : Mix MonitoringController and start_prometheus_exporter to have all under /metrics
+    start_prometheus_exporter(port=configuration.app.metrics_port)
 
     pull_document_service = PullDocumentService()
     # Register controllers
