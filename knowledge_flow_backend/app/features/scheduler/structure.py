@@ -18,13 +18,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional
 
+from fred_core import KeycloakUser
 from pydantic import BaseModel
 
 from app.common.document_structures import AccessInfo, DocumentMetadata, FileInfo, Identity, Processing, SourceInfo, SourceType, Tagging
 from app.core.stores.catalog.base_catalog_store import PullFileEntry
 
 
-class FileToProcess(BaseModel):
+class FileToProcessWithoutUser(BaseModel):
     # Common fields
     source_tag: str
     tags: List[str] = []
@@ -45,8 +46,19 @@ class FileToProcess(BaseModel):
     def is_push(self) -> bool:
         return not self.is_pull()
 
+
+class FileToProcess(FileToProcessWithoutUser):
+    processed_by: KeycloakUser
+
     @classmethod
-    def from_pull_entry(cls, entry: PullFileEntry, source_tag: str) -> "FileToProcess":
+    def from_file_to_process_without_user(cls, file: FileToProcessWithoutUser, user: KeycloakUser) -> "FileToProcess":
+        return cls(
+            **file.model_dump(),
+            processed_by=user,
+        )
+
+    @classmethod
+    def from_pull_entry(cls, entry: PullFileEntry, source_tag: str, user: KeycloakUser) -> "FileToProcess":
         return cls(
             source_tag=source_tag,
             external_path=entry.path,
@@ -54,6 +66,7 @@ class FileToProcess(BaseModel):
             modified_time=entry.modified_time,
             hash=entry.hash or hashlib.sha256(entry.path.encode()).hexdigest(),
             display_name=Path(entry.path).name,
+            processed_by=user,
         )
 
     def to_virtual_metadata(self) -> DocumentMetadata:
@@ -129,5 +142,5 @@ class PipelineDefinition(BaseModel):
 
 
 class ProcessDocumentsRequest(BaseModel):
-    files: List[FileToProcess]
+    files: List[FileToProcessWithoutUser]
     pipeline_name: str

@@ -31,14 +31,13 @@ import {
 
 export const useDocumentActions = (onRefreshData?: () => void) => {
   const { t } = useTranslation();
-  const { showInfo, showError } = useToast();  console.log("useDocumentActions with to review", onRefreshData);
+  const { showInfo, showError } = useToast();
+  console.log("useDocumentActions with to review", onRefreshData);
 
   // API hooks
 
-  const [processDocuments] =
-    useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation();
-  const [scheduleDocuments] =
-    useScheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPostMutation();
+  const [processDocuments] = useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation();
+  const [scheduleDocuments] = useScheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPostMutation();
 
   const handleSchedule = async (files: DocumentMetadata[]) => {
     try {
@@ -48,7 +47,7 @@ export const useDocumentActions = (onRefreshData?: () => void) => {
           return {
             source_tag: f.source.source_tag,
             document_uid: isPull ? undefined : f.identity.document_uid,
-            external_path: isPull ? f.source.pull_location ?? undefined : undefined,
+            external_path: isPull ? (f.source.pull_location ?? undefined) : undefined,
             tags: f.tags.tag_ids || [],
             display_name: f.identity.document_name,
           };
@@ -82,7 +81,7 @@ export const useDocumentActions = (onRefreshData?: () => void) => {
           return {
             source_tag: f.source.source_tag,
             document_uid: isPull ? undefined : f.identity.document_uid,
-            external_path: isPull ? f.source.pull_location ?? undefined : undefined,
+            external_path: isPull ? (f.source.pull_location ?? undefined) : undefined,
             tags: f.tags.tag_ids || [],
             display_name: f.identity.document_name,
           };

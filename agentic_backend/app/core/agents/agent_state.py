@@ -9,11 +9,11 @@ import requests
 from app.core.agents.runtime_context import (
     RuntimeContext,
     get_document_library_tags_ids,
+    get_profile_libraries_ids,
     get_prompt_libraries_ids,
 )
 
 logger = logging.getLogger(__name__)
-
 
 @dataclass
 class Prepared:
@@ -66,6 +66,11 @@ def resolve_prepared(ctx: RuntimeContext, kf_base: str) -> Prepared:
     # 2) Prompts: loop each id, append body when resolvable; ignore failures
     bodies: List[str] = []
     for pid in get_prompt_libraries_ids(ctx) or []:
+        body = _fetch_body(kf_base, pid)
+        if body:
+            bodies.append(body)
+            
+    for pid in get_profile_libraries_ids(ctx) or []:
         body = _fetch_body(kf_base, pid)
         if body:
             bodies.append(body)

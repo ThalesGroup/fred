@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 import { KeyCloakService } from "./KeycloakService";
 
 type Role = "admin" | "contributor" | "viewer";
@@ -39,17 +38,8 @@ const rolePermissions: Record<Role, Permission[]> = {
     "prompt:delete",
     "agent:run",
   ],
-  contributor: [
-    "document:create",
-    "document:toggleRetrievable",
-    "document:view",
-    "prompt:create",
-    "agent:run",
-  ],
-  viewer: [
-    "document:view",
-    "agent:run",
-  ],
+  contributor: ["document:create", "document:toggleRetrievable", "document:view", "prompt:create", "agent:run"],
+  viewer: ["document:view", "agent:run"],
 };
 
 function getCurrentRole(): Role {

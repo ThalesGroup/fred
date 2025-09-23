@@ -389,6 +389,9 @@ const ChatBot = ({
     if (content.templateResourceIds?.length) {
       runtimeContext.selected_template_ids = content.templateResourceIds;
     }
+    if (content.profileResourceIds?.length) {
+      runtimeContext.selected_profile_ids = content.profileResourceIds;
+    }
     runtimeContext.search_policy = content.searchPolicy || "semantic";
 
     // Files upload
@@ -426,17 +429,17 @@ const ChatBot = ({
 
     if (content.text) {
       queryChatBot(content.text.trim(), undefined, runtimeContext);
-    // } else if (content.audio) {
-    //   setWaitResponse(true);
-    //   const audioFile: File = new File([content.audio], "audio.mp3", { type: content.audio.type });
-    //   postTranscribeAudio({ file: audioFile }).then((response) => {
-    //     if (response.data) {
-    //       const message: TranscriptionResponse = response.data as TranscriptionResponse;
-    //       if (message.text) {
-    //         queryChatBot(message.text, undefined, runtimeContext);
-    //       }
-    //     }
-    //   });
+      // } else if (content.audio) {
+      //   setWaitResponse(true);
+      //   const audioFile: File = new File([content.audio], "audio.mp3", { type: content.audio.type });
+      //   postTranscribeAudio({ file: audioFile }).then((response) => {
+      //     if (response.data) {
+      //       const message: TranscriptionResponse = response.data as TranscriptionResponse;
+      //       if (message.text) {
+      //         queryChatBot(message.text, undefined, runtimeContext);
+      //       }
+      //     }
+      //   });
     } else {
       console.warn("No content to send.");
     }

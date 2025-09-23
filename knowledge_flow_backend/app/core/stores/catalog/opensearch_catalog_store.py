@@ -13,6 +13,7 @@
 import logging
 from typing import List
 
+from fred_core import validate_index_mapping
 from opensearchpy import NotFoundError, OpenSearch, RequestsHttpConnection
 
 from app.core.stores.catalog.base_catalog_store import PullFileEntry
@@ -56,6 +57,8 @@ class OpenSearchCatalogStore:
             logger.info(f"[CATALOG] OpenSearch index '{self.index_name}' created.")
         else:
             logger.info(f"[CATALOG] OpenSearch index '{self.index_name}' already exists.")
+            # Validate existing mapping matches expected mapping
+            validate_index_mapping(self.client, self.index_name, CATALOG_INDEX_MAPPING)
 
     def save_entries(self, source_tag: str, entries: List[PullFileEntry]):
         try:

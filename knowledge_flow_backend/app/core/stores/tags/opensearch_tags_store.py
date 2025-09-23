@@ -15,7 +15,7 @@
 import logging
 from typing import List, Optional
 
-from fred_core import KeycloakUser, ThreadSafeLRUCache
+from fred_core import KeycloakUser, ThreadSafeLRUCache, validate_index_mapping
 from opensearchpy import ConflictError, NotFoundError, OpenSearch, RequestsHttpConnection
 
 from app.core.stores.tags.base_tag_store import BaseTagStore, TagAlreadyExistsError, TagNotFoundError
@@ -124,6 +124,8 @@ class OpenSearchTagStore(BaseTagStore):
             logger.info(f"[TAGS] OpenSearch index '{self.index_name}' created.")
         else:
             logger.info(f"[TAGS] OpenSearch index '{self.index_name}' already exists.")
+            # Validate existing mapping matches expected mapping
+            validate_index_mapping(self.client, self.index_name, TAGS_INDEX_MAPPING)
 
     def list_tags_for_user(self, user: KeycloakUser) -> List[Tag]:
         try:

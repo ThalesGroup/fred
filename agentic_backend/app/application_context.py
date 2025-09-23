@@ -41,6 +41,7 @@ from fred_core import (
     LogStoreConfig,
     OpenSearchIndexConfig,
     OpenSearchKPIStore,
+    SQLStorageConfig,
     get_model,
     split_realm_url,
 )
@@ -587,7 +588,6 @@ class ApplicationContext:
                         "     • %-14s DuckDB  path=%s", label, store_cfg.duckdb_path
                     )
                 elif isinstance(store_cfg, OpenSearchIndexConfig):
-                    # These carry index name + opensearch global section
                     os_cfg = cfg.storage.opensearch
                     logger.info(
                         "     • %-14s OpenSearch host=%s index=%s secure=%s verify=%s",
@@ -597,15 +597,29 @@ class ApplicationContext:
                         os_cfg.secure,
                         os_cfg.verify_certs,
                     )
+                elif isinstance(store_cfg, SQLStorageConfig):
+                    # Generic SQL storage (could be MySQL, MariaDB, etc.)
+                    logger.info(
+                        "     • %-14s SQLStorage  dsn=%s  table=%s",
+                        label,
+                        getattr(store_cfg, "dsn", "<unset>"),
+                        getattr(store_cfg, "table_name", "<unset>"),
+                    )
+                elif isinstance(store_cfg, LogStoreConfig):
+                    # No-op KPI / log-only store
+                    logger.info(
+                        "     • %-14s No-op / LogStore  level=%s  (logs only, no persistence)",
+                        label,
+                        getattr(store_cfg, "level", "INFO"),
+                    )
                 else:
-                    # Generic store types from your pydantic StoreConfig could land here
                     logger.info("     • %-14s %s", label, type(store_cfg).__name__)
 
             _describe("agent_store", st.agent_store)
             _describe("session_store", st.session_store)
             _describe("history_store", st.history_store)
             _describe("feedback_store", st.feedback_store)
-            _describe("feedback_store", st.kpi_store)
+            _describe("kpi_store", st.kpi_store)
         except Exception:
             logger.warning(
                 "  ⚠️ Failed to read storage section (some variables may be missing)."

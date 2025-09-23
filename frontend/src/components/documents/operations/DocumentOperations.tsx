@@ -111,8 +111,7 @@ export const DocumentOperations = ({}: DocumentsViewProps) => {
       console.error("Refresh failed:", err);
       showError({
         summary: t("documentLibrary.refreshFailed"),
-        detail:
-          err?.data?.detail || err?.message || "Unknown error occurred while refreshing.",
+        detail: err?.data?.detail || err?.message || "Unknown error occurred while refreshing.",
       });
     }
   };
@@ -135,9 +134,7 @@ export const DocumentOperations = ({}: DocumentsViewProps) => {
           filters,
           offset: (currentPage - 1) * documentsPerPage,
           limit: documentsPerPage,
-          sort_by: [
-            { field: "document_name", direction: "asc" }
-          ],
+          sort_by: [{ field: "document_name", direction: "asc" }],
         },
       }).unwrap();
 
@@ -163,7 +160,15 @@ export const DocumentOperations = ({}: DocumentsViewProps) => {
 
   useEffect(() => {
     fetchFiles();
-  }, [selectedSourceTag, searchQuery, selectedLibrary, selectedStages, searchableFilter, currentPage, documentsPerPage]);
+  }, [
+    selectedSourceTag,
+    searchQuery,
+    selectedLibrary,
+    selectedStages,
+    searchableFilter,
+    currentPage,
+    documentsPerPage,
+  ]);
 
   return (
     <Container maxWidth="xl">
@@ -337,11 +342,7 @@ export const DocumentOperations = ({}: DocumentsViewProps) => {
               {t("documentLibrary.documents", { count: totalDocCount })}
             </Typography>
 
-            <DocumentOperationsTable
-              files={allDocuments}
-              onRefreshData={fetchFiles}
-              showSelectionActions={true}
-            />
+            <DocumentOperationsTable files={allDocuments} onRefreshData={fetchFiles} showSelectionActions={true} />
             <Box display="flex" alignItems="center" mt={3} justifyContent="space-between">
               <Pagination
                 count={Math.ceil((totalDocCount ?? 0) / documentsPerPage)}

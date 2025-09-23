@@ -21,12 +21,12 @@ import svgr from "@svgr/rollup";
 export default defineConfig({
   server: {
     host: "0.0.0.0",
-    port: parseInt(process.env.VITE_PORT || '5173'),
-    allowedHosts: (process.env.VITE_ALLOWED_HOSTS || '').split(',').filter(Boolean),
+    port: parseInt(process.env.VITE_PORT || "5173"),
+    allowedHosts: (process.env.VITE_ALLOWED_HOSTS || "").split(",").filter(Boolean),
     proxy: {
       "/agentic": process.env.VITE_BACKEND_URL || "http://localhost:8000",
       "/knowledge-flow": process.env.VITE_BACKEND_URL_KNOWLEDGE || "http://localhost:8111",
-    }
+    },
   },
   plugins: [
     {
@@ -43,7 +43,7 @@ export default defineConfig({
       },
     },
     react(),
-    svgr({ exportType: "named" })
+    svgr({ exportType: "named" }),
   ],
   optimizeDeps: {
     force: true,

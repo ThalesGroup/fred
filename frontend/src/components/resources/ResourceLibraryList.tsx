@@ -12,25 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 import * as React from "react";
 import AddIcon from "@mui/icons-material/Add";
 import FolderOutlinedIcon from "@mui/icons-material/FolderOutlined";
 import UploadIcon from "@mui/icons-material/Upload";
 import UnfoldMoreIcon from "@mui/icons-material/UnfoldMore";
 import UnfoldLessIcon from "@mui/icons-material/UnfoldLess";
-import {
-  Box,
-  Breadcrumbs,
-  Button,
-  Card,
-  Chip,
-  Link,
-  Typography,
-  IconButton,
-  Tooltip,
-  TextField,
-} from "@mui/material";
+import { Box, Breadcrumbs, Button, Card, Chip, Link, Typography, IconButton, Tooltip, TextField } from "@mui/material";
 import {
   useListAllTagsKnowledgeFlowV1TagsGetQuery,
   ResourceKind,
@@ -49,9 +37,10 @@ import { ResourcePreviewModal } from "./ResourcePreviewModal";
 import { ResourceImportDrawer } from "./ResourceImportDrawer";
 import { useConfirmationDialog } from "../ConfirmationDialogProvider";
 import { useTagCommands } from "../../common/useTagCommands";
+import { ProfileEditorModal } from "./ProfileEditorModal";
 
 /** Small i18n helper */
-export const useKindLabels = (kind: "prompt" | "template") => {
+export const useKindLabels = (kind: "prompt" | "template" | "profile") => {
   const { t } = useTranslation();
   return {
     one: t(`resource.kind.${kind}.one`),
@@ -110,7 +99,7 @@ export default function ResourceLibraryList({ kind }: Props) {
   const clearSelection = React.useCallback(() => setSelectedItems({}), []);
 
   /** ---------------- Data fetching ---------------- */
-  // 1) Tags for this kind (prompt | template)
+  // 1) Tags for this kind (prompt | template | porfile)
   const {
     data: allTags,
     isLoading,
@@ -220,9 +209,6 @@ export default function ResourceLibraryList({ kind }: Props) {
 
     showConfirmationDialog({
       title: t("resourceLibrary.confirmBulkRemoveTitle") || "Remove selected?",
-      message:
-        t("resourceLibrary.confirmBulkRemoveMessage", { count: entries.length }) ||
-        `Remove ${entries.length} selected item(s) from their libraries? This does not delete originals.`,
       onConfirm: async () => {
         const byId = new Map<string | number, Resource>(allResources.map((r) => [r.id, r]));
         for (const [resId, tag] of entries) {
@@ -288,7 +274,7 @@ export default function ResourceLibraryList({ kind }: Props) {
         {/* Search */}
         <TextField
           size="small"
-          placeholder={t("resourceLibrary.searchPlaceholder", {typeOne}) || "Search resources…"}
+          placeholder={t("resourceLibrary.searchPlaceholder", { typeOne }) || "Search resources…"}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           sx={{ minWidth: 260 }}
@@ -386,7 +372,7 @@ export default function ResourceLibraryList({ kind }: Props) {
       )}
 
       {/* Create modals */}
-      {kind === "template" ? (
+      {kind === "template" && (
         <TemplateEditorModal
           isOpen={openCreateResource}
           onClose={() => setOpenCreateResource(false)}
@@ -397,8 +383,21 @@ export default function ResourceLibraryList({ kind }: Props) {
             await Promise.all([refetchTags(), refetchResources()]);
           }}
         />
-      ) : (
+      )}
+      {kind === "prompt" && (
         <PromptEditorModal
+          isOpen={openCreateResource}
+          onClose={() => setOpenCreateResource(false)}
+          onSave={async (payload) => {
+            if (!uploadTargetTagId) return;
+            await createResource(payload, uploadTargetTagId);
+            setOpenCreateResource(false);
+            await Promise.all([refetchTags(), refetchResources()]);
+          }}
+        />
+      )}
+      {kind === "profile" && (
+        <ProfileEditorModal
           isOpen={openCreateResource}
           onClose={() => setOpenCreateResource(false)}
           onSave={async (payload) => {
@@ -412,7 +411,6 @@ export default function ResourceLibraryList({ kind }: Props) {
 
       {/* Preview modal */}
       <ResourcePreviewModal open={!!previewing} resource={previewing} onClose={() => setPreviewing(null)} />
-
       {/* Edit modals (pass-through YAML if present) */}
       {editing &&
         (kind === "template" ? (
@@ -435,7 +433,7 @@ export default function ResourceLibraryList({ kind }: Props) {
               await Promise.all([refetchTags(), refetchResources()]);
             }}
           />
-        ) : (
+        ) : kind === "prompt" ? (
           <PromptEditorModal
             isOpen={!!editing}
             onClose={() => setEditing(null)}
@@ -457,7 +455,28 @@ export default function ResourceLibraryList({ kind }: Props) {
               await Promise.all([refetchTags(), refetchResources()]);
             }}
           />
-        ))}
+        ) : kind === "profile" ? (
+          <ProfileEditorModal
+            isOpen={!!editing}
+            onClose={() => setEditing(null)}
+            initial={{
+              name: editing.name ?? "",
+              description: editing.description ?? "",
+              yaml: editing.content, // on laisse passer le YAML existant si présent
+              labels: (editing as any)?.labels ?? [],
+            }}
+            onSave={async (payload) => {
+              await updateResource(editing.id, {
+                content: payload.content,
+                name: payload.name,
+                description: payload.description,
+                labels: payload.labels,
+              });
+              setEditing(null);
+              await Promise.all([refetchTags(), refetchResources()]);
+            }}
+          />
+        ) : null)}
 
       {/* Import drawer */}
       <ResourceImportDrawer

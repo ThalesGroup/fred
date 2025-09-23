@@ -14,7 +14,6 @@
 
 import {
   Button,
-  CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
@@ -28,12 +27,7 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import yaml from "js-yaml";
-import {
-  buildPromptYaml,
-  looksLikeYamlDoc,
-  splitFrontMatter,
-  buildFrontMatter,
-} from "./resourceYamlUtils";
+import { buildPromptYaml, looksLikeYamlDoc, splitFrontMatter, buildFrontMatter } from "./resourceYamlUtils";
 
 const promptSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -67,7 +61,6 @@ export const PromptEditorModal: React.FC<PromptEditorModalProps> = ({
   onClose,
   onSave,
   initial,
-  getSuggestion,
 }) => {
   const incomingDoc = useMemo(() => (initial as any)?.yaml ?? (initial as any)?.body ?? "", [initial]);
   const isDocMode = useMemo(() => looksLikeYamlDoc(incomingDoc), [incomingDoc]);
@@ -76,7 +69,6 @@ export const PromptEditorModal: React.FC<PromptEditorModalProps> = ({
   const {
     register,
     handleSubmit,
-    setValue,
     reset,
     formState: { errors, isSubmitting },
   } = useForm<PromptFormData>({
@@ -88,7 +80,6 @@ export const PromptEditorModal: React.FC<PromptEditorModalProps> = ({
   const [headerText, setHeaderText] = useState<string>("");
   const [bodyText, setBodyText] = useState<string>("");
   const [headerError, setHeaderError] = useState<string | null>(null);
-  const [suggesting, setSuggesting] = useState(false);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -105,24 +96,6 @@ export const PromptEditorModal: React.FC<PromptEditorModalProps> = ({
       });
     }
   }, [isOpen, isDocMode, incomingDoc, initial?.name, initial?.description, reset]);
-
-  const handleAIHelp = async () => {
-    if (!getSuggestion) return;
-    try {
-      setSuggesting(true);
-      const suggestion = await getSuggestion();
-      if (!suggestion) return;
-      if (isDocMode) {
-        setBodyText(suggestion);
-      } else {
-        setValue("body", suggestion);
-      }
-    } catch (err) {
-      console.error("AI prompt suggestion failed", err);
-    } finally {
-      setSuggesting(false);
-    }
-  };
 
   // ----- Submit handlers -----
   const onSubmitSimple = (data: PromptFormData) => {
@@ -199,16 +172,12 @@ export const PromptEditorModal: React.FC<PromptEditorModalProps> = ({
             </Stack>
           </DialogContent>
           <DialogActions>
-            <Button onClick={onClose} variant="outlined">Cancel</Button>
-            <Button
-              onClick={handleAIHelp}
-              variant="text"
-              disabled={!getSuggestion || suggesting}
-              startIcon={suggesting ? <CircularProgress size={16} /> : undefined}
-            >
-              Get Help from AI
+            <Button onClick={onClose} variant="outlined">
+              Cancel
             </Button>
-            <Button onClick={onSubmitDoc} variant="contained">Save</Button>
+            <Button onClick={onSubmitDoc} variant="contained">
+              Save
+            </Button>
           </DialogActions>
         </>
       ) : (
@@ -241,14 +210,8 @@ export const PromptEditorModal: React.FC<PromptEditorModalProps> = ({
             </Stack>
           </DialogContent>
           <DialogActions>
-            <Button onClick={onClose} variant="outlined">Cancel</Button>
-            <Button
-              onClick={handleAIHelp}
-              variant="text"
-              disabled={!getSuggestion || suggesting}
-              startIcon={suggesting ? <CircularProgress size={16} /> : undefined}
-            >
-              Get Help from AI
+            <Button onClick={onClose} variant="outlined">
+              Cancel
             </Button>
             <Button type="submit" variant="contained" disabled={isSubmitting}>
               Save

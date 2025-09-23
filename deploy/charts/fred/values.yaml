@@ -5,6 +5,13 @@ global:
   create_index:
     enabled: true
     image: "alpine:3.22"
+  persistence:
+    enabled: false                   # if true = Enable the creation of PVC when duckdb is used - Recommended TRUE
+    dynamic: false                   # if true = let the PVCs create PVs if possible and do not create them manually 
+    accessModes: "ReadWriteOnce"
+    reclaimPolicy: "Retain"
+    storageClass: "local-path"       # if empty = default storage class
+    hostPath: "/mnt/fred-data"       # only used if dynamic=false & storageClass=local-path, remind to create this directory on your host
 
 applications:
 
@@ -96,6 +103,15 @@ applications:
             port: 8000
       startupProbe:
         enabled: false
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+        - "ALL"
+      runAsUser: 1000
+      runAsNonRoot: true
+      seccompProfile:
+        type: RuntimeDefault
     serviceAccount:
       annotations: {}
       labels: {}
@@ -351,7 +367,7 @@ applications:
           name: frontend-front
     probes:
       lifecycle:
-        enabled: false
+        enabled: true
       livenessProbe:
         enabled: true
         data:
@@ -366,6 +382,14 @@ applications:
             port: 80
       startupProbe:
         enabled: false
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+        - "ALL"
+      runAsNonRoot: true
+      seccompProfile:
+        type: RuntimeDefault
     serviceAccount:
       annotations: {}
       labels: {}
@@ -471,6 +495,15 @@ applications:
             port: 8111
       startupProbe:
         enabled: false
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+        - "ALL"
+      runAsUser: 1000
+      runAsNonRoot: true
+      seccompProfile:
+        type: RuntimeDefault
     serviceAccount:
       annotations: {}
       labels: {}
@@ -549,6 +582,7 @@ applications:
         provider: openai
         name: text-embedding-3-large
         settings: {}
+        type: "openai"
       model:
         provider: openai        # openai | azure | ollama
         name: gpt-4o-mini       # azure: deployment name, ollama: 'qwen2.5:3b-instruct' etc.

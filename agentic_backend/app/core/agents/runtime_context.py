@@ -1,3 +1,4 @@
+# app/core/agents/runtime_context.py
 # Copyright Thales 2025
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -28,6 +29,7 @@ class RuntimeContext(BaseModel):
     selected_document_libraries_ids: list[str] | None = None
     selected_prompt_ids: list[str] | None = None
     selected_template_ids: list[str] | None = None
+    selected_profile_ids: list[str] | None = None
     search_policy: str | None = None
 
 
@@ -61,3 +63,9 @@ def get_template_libraries_ids(context: RuntimeContext | None) -> list[str] | No
     if not context:
         return None
     return context.selected_template_ids
+
+def get_profile_libraries_ids(context: RuntimeContext | None) -> list[str] | None:
+    """Helper to extract profile library IDs from context."""
+    if not context:
+        return None
+    return context.selected_profile_ids
