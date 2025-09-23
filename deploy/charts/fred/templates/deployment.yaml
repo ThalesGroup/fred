@@ -2,6 +2,9 @@
 
 {{- if .app.deployment.enabled }}
 
+{{- $persistenceEnabled := .root.Values.global.persistence.enabled }}   # we will use it in a loop
+{{- $applicationName := .app.applicationName }}                         # we will use it in a loop
+
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -106,6 +109,18 @@ spec:
 {{ toYaml .app.extraVolumeMounts| nindent 12 }}
           {{- end }}
 
+          {{- range $name, $store := .app.configuration.storage }}
+            {{- $isDuckDB := and (hasSuffix "_store" $name) (eq $store.type "duckdb") }}
+
+              {{- if and $isDuckDB $persistenceEnabled }}
+            - name: {{ $applicationName }}-{{ regexReplaceAll "_" $name "-" }}-pvc
+              mountPath: {{ $store.duckdb_path }}
+              subPath: "{{ base $store.duckdb_path }}"
+              {{- end }}
+            
+          {{- end }}
+
+
           {{- with .app.resources }}
           resources:
 {{ toYaml . | nindent 12 }}
@@ -120,6 +135,17 @@ spec:
       {{- if and .app.extraVolumes (gt (len .app.extraVolumes) 0) }}
 {{ toYaml .app.extraVolumes | nindent 8 }}
       {{- end }}
+
+
+        {{- range $name, $store := .app.configuration.storage }}
+          {{- $isDuckDB := and (hasSuffix "_store" $name) (eq $store.type "duckdb") }}
+          {{- if and $isDuckDB $persistenceEnabled }}
+        - name: {{ $applicationName }}-{{ regexReplaceAll "_" $name "-" }}-pvc
+          persistentVolumeClaim:
+            claimName: {{ $applicationName }}-{{ regexReplaceAll "_" $name "-" }}-pvc
+          {{- end }}
+        {{- end }}
+
 
       {{- with .app.nodeSelector }}
       nodeSelector:

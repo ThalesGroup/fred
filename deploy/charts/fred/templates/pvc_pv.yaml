@@ -1,0 +1,74 @@
+{{- define "common-library.pvc_pv" }}
+
+{{/*
+  Template PVC/PV flexible when duckdb is used.
+  - PV are created if global.persistence.enabled=true and global.persistence.dynamic=false
+  - PVC are created if global.persistence.enabled=true
+*/}}
+
+{{- $persistenceEnabled := .root.Values.global.persistence.enabled }}
+{{- $dynamic := .root.Values.global.persistence.dynamic }}
+{{- $accessModes := .root.Values.global.persistence.accessModes }}
+{{- $reclaimPolicy := .root.Values.global.persistence.reclaimPolicy }}
+{{- $storageClass := .root.Values.global.persistence.storageClass }}
+{{- $hostPath := .root.Values.global.persistence.hostPath }}
+
+{{- range $name, $store := .app.configuration.storage }}
+  {{- $isDuckDB := and (hasSuffix "_store" $name) (eq $store.type "duckdb") }}
+
+  {{- if and $isDuckDB $persistenceEnabled }}
+
+    {{- if not $dynamic }}
+
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: {{ $.app.applicationName }}-{{ regexReplaceAll "_" $name "-" }}-pv
+  labels:
+    app: {{ $.app.applicationName }}
+    type: pv
+spec:
+  capacity:
+    storage: {{ $store.size | default "1Gi" }}
+  accessModes:
+    - {{ $accessModes }}
+  persistentVolumeReclaimPolicy: {{ $reclaimPolicy }}
+  {{- if $storageClass }}
+  storageClassName: {{ $storageClass }}
+  {{- end }}
+  hostPath:
+    path: {{ $hostPath }}
+
+
+    {{- end }}
+
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $.app.applicationName }}-{{ regexReplaceAll "_" $name "-" }}-pvc
+  namespace: {{ $.root.Release.Namespace }}
+  labels:
+    app: {{ $.app.applicationName }}
+    type: pvc
+spec:
+  accessModes:
+    - {{ $accessModes }}
+  resources:
+    requests:
+      storage: {{ $store.size | default "1Gi" }}
+  {{- if not $dynamic }}
+  storageClassName: {{ $storageClass }}
+  {{- else if $storageClass }}
+  storageClassName: {{ $storageClass }}
+  {{- end }}
+
+
+  {{- end }}
+
+{{- end }}
+
+
+{{- end }}
