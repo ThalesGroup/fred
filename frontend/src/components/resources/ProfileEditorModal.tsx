@@ -9,12 +9,16 @@ import {
   TextField,
 } from "@mui/material";
 import * as React from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
+import yaml from "js-yaml"; // <-- NEW Import
 import {
   buildProfileYaml,
   looksLikeYamlDoc,
+  splitFrontMatter, // <-- NEW Import
+  buildFrontMatter, // <-- NEW Import
 } from "./resourceYamlUtils";
 
 const profileSchema = z.object({
@@ -41,8 +45,8 @@ interface ProfileEditorModalProps {
 }
 
 /** Modal supports two modes:
- *  - simple mode (name/description/body)
- *  - doc mode (header YAML + body) when initial content is a full YAML doc
+ * - simple mode (name/description/body)
+ * - doc mode (header YAML + body) when initial content is a full YAML doc
  */
 export const ProfileEditorModal: React.FC<ProfileEditorModalProps> = ({
   isOpen,
@@ -50,16 +54,40 @@ export const ProfileEditorModal: React.FC<ProfileEditorModalProps> = ({
   onSave,
   initial,
 }) => {
+  const incomingDoc = useMemo(() => (initial as any)?.yaml ?? (initial as any)?.body ?? "", [initial]);
+  const isDocMode = useMemo(() => looksLikeYamlDoc(incomingDoc), [incomingDoc]);
 
   // ----- Simple mode form (create) -----
   const {
     register,
     handleSubmit,
+    reset,
     formState: { errors, isSubmitting },
   } = useForm<ProfileFormData>({
     resolver: zodResolver(profileSchema),
     defaultValues: { name: "", description: "", body: "" },
   });
+
+  // ----- Doc mode state (edit header+body) -----
+  const [headerText, setHeaderText] = useState<string>("");
+  const [bodyText, setBodyText] = useState<string>("");
+  const [headerError, setHeaderError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    if (isDocMode) {
+      const { header, body } = splitFrontMatter(incomingDoc);
+      setHeaderText(yaml.dump(header).trim());
+      setBodyText(body);
+    } else {
+      reset({
+        name: initial?.name ?? "",
+        description: initial?.description ?? "",
+        body: incomingDoc || "",
+      });
+    }
+  }, [isOpen, isDocMode, incomingDoc, initial?.name, initial?.description, reset]);
 
 
   // ----- Submit handlers -----
@@ -83,45 +111,106 @@ export const ProfileEditorModal: React.FC<ProfileEditorModalProps> = ({
     onClose();
   };
 
+  const onSubmitDoc = () => {
+    // Parse header YAML back to object
+    let headerObj: Record<string, any>;
+    try {
+      headerObj = (yaml.load(headerText || "") as Record<string, any>) ?? {};
+      setHeaderError(null);
+    } catch (e: any) {
+      setHeaderError(e?.message || "Invalid YAML");
+      return;
+    }
+    // Ensure kind (UI safety; backend can still validate)
+    if (!headerObj.kind) headerObj.kind = "profile"; // <-- Change kind to 'profile'
+
+    const content = buildFrontMatter(headerObj, bodyText);
+    onSave({
+      content,
+      name: headerObj.name,
+      description: headerObj.description,
+      labels: headerObj.labels,
+    });
+    onClose();
+  };
+
+
   return (
     <Dialog open={isOpen} onClose={onClose} fullWidth maxWidth="md">
       <DialogTitle>{initial ? "Edit Profile" : "Create Profile"}</DialogTitle>
 
-      {/* Simple form only */}
-      <form onSubmit={handleSubmit(onSubmitSimple)}>
-        <DialogContent>
-          <Stack spacing={3} mt={1}>
-            <TextField
-              label="Profile Name"
-              fullWidth
-              {...register("name")}
-              error={!!errors.name}
-              helperText={errors.name?.message}
-            />
-            <TextField
-              label="Description (optional)"
-              fullWidth
-              {...register("description")}
-              error={!!errors.description}
-              helperText={errors.description?.message}
-            />
-            <TextField
-              label="Profile Body"
-              fullWidth
-              multiline
-              minRows={14}
-              {...register("body")}
-              error={!!errors.body}
-            />
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={onClose} variant="outlined">Cancel</Button>
-          <Button type="submit" variant="contained" disabled={isSubmitting}>
-            Save
-          </Button>
-        </DialogActions>
-      </form>
+      {/* Render either simple or doc form */}
+      {isDocMode ? (
+        <>
+          <DialogContent>
+            <Stack spacing={3} mt={1}>
+              <TextField
+                label="Header (YAML)"
+                fullWidth
+                multiline
+                minRows={10}
+                value={headerText}
+                onChange={(e) => setHeaderText(e.target.value)}
+                error={!!headerError}
+                helperText={headerError || "Edit profile metadata (version, name, labels, schema, etc.)"}
+              />
+              <TextField
+                label="Body"
+                fullWidth
+                multiline
+                minRows={14}
+                value={bodyText}
+                onChange={(e) => setBodyText(e.target.value)}
+              />
+            </Stack>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={onClose} variant="outlined">
+              Cancel
+            </Button>
+            <Button onClick={onSubmitDoc} variant="contained">
+              Save
+            </Button>
+          </DialogActions>
+        </>
+      ) : (
+        <form onSubmit={handleSubmit(onSubmitSimple)}>
+          <DialogContent>
+            <Stack spacing={3} mt={1}>
+              <TextField
+                label="Profile Name"
+                fullWidth
+                {...register("name")}
+                error={!!errors.name}
+                helperText={errors.name?.message}
+              />
+              <TextField
+                label="Description (optional)"
+                fullWidth
+                {...register("description")}
+                error={!!errors.description}
+                helperText={errors.description?.message}
+              />
+              <TextField
+                label="Profile Body"
+                fullWidth
+                multiline
+                minRows={14}
+                {...register("body")}
+                error={!!errors.body}
+              />
+            </Stack>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={onClose} variant="outlined">
+              Cancel
+            </Button>
+            <Button type="submit" variant="contained" disabled={isSubmitting}>
+              Save
+            </Button>
+          </DialogActions>
+        </form>
+      )}
     </Dialog>
   );
 };

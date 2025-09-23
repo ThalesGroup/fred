@@ -5,6 +5,7 @@ import StarOutlineIcon from "@mui/icons-material/StarOutline";
 import LocalOfferIcon from "@mui/icons-material/LocalOffer";
 import PowerSettingsNewIcon from "@mui/icons-material/PowerSettingsNew";
 import GroupIcon from "@mui/icons-material/Group"; // for crew
+import DeleteIcon from "@mui/icons-material/Delete";
 import TuneIcon from "@mui/icons-material/Tune";
 import PowerOffIcon from "@mui/icons-material/PowerOff"; // <-- NEW Import
 
@@ -22,6 +23,7 @@ type AgentCardProps = {
   onEdit?: (agent: AnyAgent) => void;
   onToggleEnabled?: (agent: AnyAgent) => void;
   onManageCrew?: (leader: Leader & { type: "leader" }) => void; // only visible for leaders
+  onDelete?: (agent: AnyAgent) => void;
 };
 
 /**
@@ -39,6 +41,7 @@ export const AgentCard = ({
   onEdit,
   onToggleEnabled,
   onManageCrew,
+  onDelete
 }: AgentCardProps) => {
   const { t } = useTranslation();
   const theme = useTheme();
@@ -200,6 +203,21 @@ export const AgentCard = ({
                   // If DISABLED, the next action is to ENABLE (turn ON)
                   <PowerSettingsNewIcon fontSize="small" />
                 )}
+              </IconButton>
+            </Tooltip>
+          )}
+          {onDelete && (
+            <Tooltip title={t("agentCard.delete")}>
+              <IconButton
+                size="small"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete(agent);
+                }}
+                sx={{ color: "text.secondary" }} 
+                aria-label="delete agent"
+              >
+                <DeleteIcon fontSize="small" />
               </IconButton>
             </Tooltip>
           )}

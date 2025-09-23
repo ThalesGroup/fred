@@ -95,7 +95,7 @@ class AgentService:
     @authorize(action=Action.DELETE, resource=Resource.AGENTS)
     async def delete_agent(self, user: KeycloakUser, agent_name: str):
         # Unregister from memory
-        await self.agent_manager.unregister_agent(agent_name)
+        await self.agent_manager.delete_agent(agent_name)
 
         # Delete from DuckDB
         self.store.delete(agent_name)

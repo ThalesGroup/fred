@@ -14,7 +14,7 @@ import {
   CardContent,
   ListItemIcon,
 } from "@mui/material";
-import { useState, useEffect, SyntheticEvent, useMemo } from "react";
+import { useState, useEffect, SyntheticEvent, useMemo, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import SearchIcon from "@mui/icons-material/Search";
 import FilterListIcon from "@mui/icons-material/FilterList";
@@ -34,6 +34,7 @@ import { CrewEditor } from "../components/agentHub/CrewEditor";
 // OpenAPI
 import {
   useLazyGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery,
+  useDeleteAgentAgenticV1AgentsNameDeleteMutation,
   Leader,
 } from "../slices/agentic/agenticOpenApi";
 
@@ -41,6 +42,7 @@ import {
 import { AnyAgent, isLeader } from "../common/agent";
 import { useAgentUpdater } from "../hooks/useAgentUpdater";
 import { CreateAgentModal } from "../components/agentHub/CreateAgentModal";
+import { useConfirmationDialog } from "../components/ConfirmationDialogProvider";
 
 type AgentCategory = { name: string; isTag?: boolean };
 
@@ -81,7 +83,7 @@ const ActionButton = ({
 export const AgentHub = () => {
   const theme = useTheme();
   const { t } = useTranslation();
-
+  const { showConfirmationDialog } = useConfirmationDialog();
   const [agents, setAgents] = useState<AnyAgent[]>([]);
   const [tabValue, setTabValue] = useState(0);
   const [showElements, setShowElements] = useState(false);
@@ -93,6 +95,8 @@ export const AgentHub = () => {
   const [selected, setSelected] = useState<AnyAgent | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [crewOpen, setCrewOpen] = useState(false);
+  const [agentToDelete, setAgentToDelete] = useState<AnyAgent | null>(null);
+  const [triggerDeleteAgent] = useDeleteAgentAgenticV1AgentsNameDeleteMutation();
 
   const handleOpenCreateAgent = () => setIsCreateModalOpen(true);
   const handleCloseCreateAgent = () => setIsCreateModalOpen(false);
@@ -157,6 +161,26 @@ export const AgentHub = () => {
     setSelected(leader);
     setCrewOpen(true);
   };
+
+  const handleDeleteAgent = useCallback(
+    (agent: AnyAgent) => {
+      showConfirmationDialog({
+        title: t("agentHub.confirmDeleteTitle") || "Delete Agent?",
+        message:
+          t("agentHub.confirmDeleteMessage", { name: agent.name }) ||
+          `Are you sure you want to delete the agent “${agent.name}”? This action cannot be undone.`,
+        onConfirm: async () => {
+          try {
+            await triggerDeleteAgent({ name: agent.name }).unwrap();
+            fetchAgents();
+          } catch (err) {
+            console.error("Failed to delete agent:", err);
+          }
+        },
+      });
+    },
+    [showConfirmationDialog, triggerDeleteAgent, fetchAgents, t],
+  );
 
   // ------------------------------------------------------------------------
 
@@ -288,9 +312,9 @@ export const AgentHub = () => {
                     <Box sx={{ display: "flex", gap: 1 }}>
                       <ActionButton icon={<SearchIcon />}>{t("agentHub.search")}</ActionButton>
                       <ActionButton icon={<FilterListIcon />}>{t("agentHub.filter")}</ActionButton>
-                       <ActionButton icon={<AddIcon />} onClick={handleOpenCreateAgent}>
+                      <ActionButton icon={<AddIcon />} onClick={handleOpenCreateAgent}>
                         {t("agentHub.create")}
-                      </ActionButton> 
+                      </ActionButton>
                     </Box>
                   </Box>
 
@@ -308,6 +332,7 @@ export const AgentHub = () => {
                                 onEdit={handleEdit}
                                 onToggleEnabled={handleToggleEnabled}
                                 onManageCrew={isLeader(agent) ? handleManageCrew : undefined}
+                                onDelete={handleDeleteAgent}
                               />
                             </Box>
                           </Fade>
@@ -344,7 +369,7 @@ export const AgentHub = () => {
                   )}
 
                   {/* Create modal (optional) */}
-                   {isCreateModalOpen && (
+                  {isCreateModalOpen && (
                     <CreateAgentModal
                       open={isCreateModalOpen}
                       onClose={handleCloseCreateAgent}
@@ -353,7 +378,7 @@ export const AgentHub = () => {
                         fetchAgents();
                       }}
                     />
-                  )} 
+                  )}
                 </>
               )}
             </CardContent>
@@ -361,12 +386,7 @@ export const AgentHub = () => {
         </Fade>
 
         {/* Drawers / Modals */}
-        <AgentEditDrawer
-          open={editOpen}
-          agent={selected}
-          onClose={() => setEditOpen(false)}
-          onSaved={fetchAgents}
-        />
+        <AgentEditDrawer open={editOpen} agent={selected} onClose={() => setEditOpen(false)} onSaved={fetchAgents} />
 
         <CrewEditor
           open={crewOpen}
