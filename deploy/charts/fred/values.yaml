@@ -320,7 +320,7 @@ applications:
         value: "true"
     ports:
       - name: http
-        containerPort: 80
+        containerPort: 8080
     service:
       annotations: {}
       extraLabels: {}
@@ -328,7 +328,7 @@ applications:
       ports:
         - name: http
           port: 80
-          targetPort: 80
+          targetPort: 8080
     ingress:
       enabled: true
       className: "nginx"
@@ -373,13 +373,13 @@ applications:
         data:
           httpGet:
             path: /healthz.html
-            port: 80
+            port: 8080
       readinessProbe:
         enabled: true
         data:
           httpGet:
             path: /ready.html
-            port: 80
+            port: 8080
       startupProbe:
         enabled: false
     securityContext:
