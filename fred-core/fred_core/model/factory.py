@@ -80,7 +80,9 @@ def get_model(cfg: Optional[ModelConfiguration]) -> BaseChatModel:
 
     if provider == "azure":
         _require_env("AZURE_OPENAI_API_KEY")
-        _require_settings(settings, ["azure_endpoint", "azure_api_version"], "Azure chat")
+        _require_settings(
+            settings, ["azure_endpoint", "azure_api_version"], "Azure chat"
+        )
         _info_provider(cfg)
         if not cfg.name:
             raise ValueError("Azure chat requires 'name' (deployment).")
@@ -106,7 +108,7 @@ def get_model(cfg: Optional[ModelConfiguration]) -> BaseChatModel:
         base = settings["azure_apim_base_url"].rstrip("/")
         path = settings["azure_resource_path"].rstrip("/")
         api_version = settings["azure_api_version"]
-        
+
         if not cfg.name:
             raise ValueError("Azure APIM chat requires 'name' (deployment).")
         full_url = f"{base}{path}/deployments/{cfg.name}/chat/completions?api-version={settings['azure_api_version']}"
@@ -121,6 +123,11 @@ def get_model(cfg: Optional[ModelConfiguration]) -> BaseChatModel:
             )
             .get_token(settings["azure_client_scope"])
             .token
+        )
+
+        token_header_and_payload = token.split(".")[:-1]
+        logger.debug(
+            f"🔍 Obtained AAD token for Azure APIM chat (header + payload only): {token_header_and_payload}",
         )
 
         passthrough = {k: v for k, v in settings.items() if k not in required}
