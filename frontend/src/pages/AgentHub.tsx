@@ -95,7 +95,6 @@ export const AgentHub = () => {
   const [selected, setSelected] = useState<AnyAgent | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [crewOpen, setCrewOpen] = useState(false);
-  const [agentToDelete, setAgentToDelete] = useState<AnyAgent | null>(null);
   const [triggerDeleteAgent] = useDeleteAgentAgenticV1AgentsNameDeleteMutation();
 
   const handleOpenCreateAgent = () => setIsCreateModalOpen(true);

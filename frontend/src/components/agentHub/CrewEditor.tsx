@@ -1,5 +1,5 @@
 // src/components/agentHub/CrewEditor.tsx
-import { Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, FormControl, InputLabel, MenuItem, Select, Stack, TextField, Typography } from "@mui/material";
+import { Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, FormControl, InputLabel, MenuItem, Select, Stack, Typography } from "@mui/material";
 import { useMemo, useState } from "react";
 import { Leader } from "../../slices/agentic/agenticOpenApi";
 import { useAgentUpdater } from "../../hooks/useAgentUpdater";

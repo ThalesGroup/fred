@@ -21,7 +21,6 @@ import AttachMoneyIcon from "@mui/icons-material/AttachMoney";
 import VerifiedIcon from "@mui/icons-material/Verified";
 import SecurityIcon from "@mui/icons-material/Security";
 import StarIcon from "@mui/icons-material/Star";
-import { fa } from "zod/v4/locales";
 const colors = [red[800], blue[800], green[800], purple[800], orange[800]];
 export function getFactTypeIcon(factType: string, size: number = 12) {
   const theme = useTheme();
