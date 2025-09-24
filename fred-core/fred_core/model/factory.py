@@ -140,13 +140,8 @@ def get_model(cfg: Optional[ModelConfiguration]) -> BaseChatModel:
         passthrough = {k: v for k, v in settings.items() if k not in required}
         _info_provider(cfg)
 
-        # Important routing note:
-        # Keep azure_endpoint as your APIM base + resource path.
-        # The Azure client composes /openai/deployments/{deployment}/chat/completions
-        # with api_version under the hood. Ensure your APIM route maps accordingly.
         return AzureChatOpenAI(
-            azure_endpoint=f"{base}{path}",
-            azure_deployment=cfg.name,
+            azure_endpoint=f"{base}{path}/deployments/{cfg.name}/chat/completions?api-version={api_version}",
             api_version=api_version,
             azure_ad_token_provider=_token_provider,  # ← per-request AAD token
             default_headers={"TrustNest-Apim-Subscription-Key": os.environ["AZURE_APIM_KEY"]},
@@ -237,8 +232,7 @@ def get_embeddings(cfg: ModelConfiguration) -> LCEmbeddings:
         _info_provider(cfg)
 
         return AzureOpenAIEmbeddings(
-            azure_endpoint=f"{base}{path}",
-            azure_deployment=name,
+            azure_endpoint=f"{base}{path}/deployments/{cfg.name}/embeddings?api-version={api_version}",
             api_version=api_version,
             azure_ad_token_provider=_token_provider,  # ← per-request AAD token
             default_headers={"TrustNest-Apim-Subscription-Key": os.environ["AZURE_APIM_KEY"]},
