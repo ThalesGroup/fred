@@ -49,11 +49,11 @@ class DuckdbCatalogStore:
     def save_entries(self, source_tag: str, entries: List[PullFileEntry]):
         full_table = self.store._prefixed(self.table_name)
         with self.store._connect() as conn:
-            conn.execute(f"DELETE FROM {full_table} WHERE source_tag = ?", [source_tag])
+            conn.execute(f'DELETE FROM "{full_table}" WHERE source_tag = ?', [source_tag])
             for entry in entries:
                 conn.execute(
                     f"""
-                    INSERT INTO {full_table} (source_tag, path, size, modified_time, hash)
+                    INSERT INTO "{full_table}" (source_tag, path, size, modified_time, hash)
                     VALUES (?, ?, ?, ?, ?)
                     """,
                     [source_tag, entry.path, entry.size, entry.modified_time, entry.hash],
@@ -65,7 +65,7 @@ class DuckdbCatalogStore:
             result = conn.execute(
                 f"""
                 SELECT path, size, modified_time, hash
-                FROM {full_table}
+                FROM "{full_table}"
                 WHERE source_tag = ?
                 """,
                 [source_tag],

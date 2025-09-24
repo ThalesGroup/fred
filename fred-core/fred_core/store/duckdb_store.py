@@ -65,7 +65,7 @@ class DuckDBTableStore:
         full_table = self._prefixed(table_name)
         try:
             with self._connect() as con:
-                df = con.execute(f"SELECT * FROM {full_table}").df()
+                df = con.execute(f'SELECT * FROM "{full_table}"').df()
             logger.info(f"Loaded table '{full_table}' from {self.db_path}")
             return df
         except Exception as e:

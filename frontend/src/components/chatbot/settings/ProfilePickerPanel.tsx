@@ -75,7 +75,7 @@ export function ProfilePickerPanel({
     >
       {/* Titre + action à droite */}
       <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <Typography variant="subtitle1" sx={{ fontWeight: 500 }}>
+        <Typography variant="subtitle1" sx={{ pl: 1 }}>
           {t("settings.profile")}
         </Typography>
 

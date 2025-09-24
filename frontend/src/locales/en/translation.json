@@ -167,10 +167,15 @@
     }
   },
   "agentCard": {
-    "edit": "Edit agent",
+    "edit": "Tune the agent exposed parameters",
     "delete": "Delete agent",
     "taggedWith": "Tagged with {{tag}}",
-    "expertIntegrations": "Expert integrations"
+    "expertIntegrations": "Expert integrations",
+    "enabled": "Enable agent",
+    "disable": "Disable agent",
+    "favorite": "Add the agent to your favorites",
+    "unfavorite": "Remove the agent from your favorites"
+
   },
   "dialogs": {
     "create": {

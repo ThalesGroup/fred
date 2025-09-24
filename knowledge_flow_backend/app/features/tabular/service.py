@@ -77,7 +77,7 @@ class TabularService:
         schema = store.get_table_schema(table_name)
         columns = [TabularColumnSchema(name=col, dtype=self._map_sql_type_to_literal(dtype)) for col, dtype in schema]
 
-        count_df = store.execute_sql_query(f"SELECT COUNT(*) AS count FROM {table_name}")
+        count_df = store.execute_sql_query(f'SELECT COUNT(*) AS count FROM "{table_name}"')
         row_count = count_df["count"][0]
 
         return TabularSchemaResponse(document_name=document_name, columns=columns, row_count=row_count)
@@ -92,7 +92,7 @@ class TabularService:
             try:
                 schema_info = store.get_table_schema(table)
                 columns = [TabularColumnSchema(name=col_name, dtype=self._map_sql_type_to_literal(col_type)) for col_name, col_type in schema_info]
-                count_df = store.execute_sql_query(f"SELECT COUNT(*) AS count FROM {table}")
+                count_df = store.execute_sql_query(f'SELECT COUNT(*) AS count FROM "{table}"')
                 row_count = count_df["count"][0]
 
                 responses.append(TabularSchemaResponse(document_name=table, columns=columns, row_count=row_count))

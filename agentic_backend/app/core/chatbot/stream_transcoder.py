@@ -14,7 +14,6 @@ from langchain_core.messages import BaseMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.graph.state import CompiledStateGraph
 
-from app.application_context import get_configuration
 from app.core.chatbot.chat_schema import (
     Channel,
     ChatMessage,
@@ -74,7 +73,7 @@ class StreamTranscoder:
     ) -> List[ChatMessage]:
         config: RunnableConfig = {
             "configurable": {"thread_id": session_id},
-            "recursion_limit": get_configuration().ai.recursion.recursion_limit,
+            "recursion_limit": 40,
         }
 
         out: List[ChatMessage] = []

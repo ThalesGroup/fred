@@ -64,6 +64,7 @@ def get_template_libraries_ids(context: RuntimeContext | None) -> list[str] | No
         return None
     return context.selected_template_ids
 
+
 def get_profile_libraries_ids(context: RuntimeContext | None) -> list[str] | None:
     """Helper to extract profile library IDs from context."""
     if not context:

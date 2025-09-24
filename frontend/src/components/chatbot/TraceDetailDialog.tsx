@@ -13,8 +13,9 @@
 // limitations under the License.
 
 import { Dialog, DialogTitle, DialogContent, DialogActions, Button, Typography, Stack } from "@mui/material";
-import { AgenticFlow, ChatMessage } from "../../slices/agentic/agenticOpenApi";
+import { ChatMessage } from "../../slices/agentic/agenticOpenApi";
 import MessageCard from "./MessageCard";
+import { AnyAgent } from "../../common/agent";
 
 function safeStringify(v: unknown, space = 2) {
   try {
@@ -68,7 +69,7 @@ export default function TraceDetailsDialog({
   open: boolean;
   step?: ChatMessage;
   onClose: () => void;
-  resolveAgent: (m: ChatMessage) => AgenticFlow | undefined;
+  resolveAgent: (m: ChatMessage) => AnyAgent | undefined;
 }) {
   if (!step) return null;
 
@@ -82,7 +83,7 @@ export default function TraceDetailsDialog({
         {step.channel === "tool_call" && <ToolCall m={step} />}
         {step.channel === "tool_result" && <ToolResult m={step} />}
         {step.channel !== "tool_call" && step.channel !== "tool_result" && (
-          <MessageCard message={step} agenticFlow={agent!} currentAgenticFlow={agent!} side="left" enableCopy />
+          <MessageCard message={step} agent={agent!} side="left" enableCopy />
         )}
       </DialogContent>
       <DialogActions>

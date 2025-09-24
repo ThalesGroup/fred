@@ -55,7 +55,7 @@ export const KnowledgeHub = () => {
                 {t("knowledge.viewSelector.profiles")}
               </Button>
             </InvisibleLink>
-            <InvisibleLink to="/knowledge?view=templates">
+            {/* <InvisibleLink to="/knowledge?view=templates">
               <Button variant={selectedView === "templates" ? "contained" : "outlined"}>
                 {t("knowledge.viewSelector.templates")}
               </Button>
@@ -64,7 +64,7 @@ export const KnowledgeHub = () => {
               <Button variant={selectedView === "prompts" ? "contained" : "outlined"}>
                 {t("knowledge.viewSelector.prompts")}
               </Button>
-            </InvisibleLink>
+            </InvisibleLink> */}
             <InvisibleLink to="/knowledge?view=documents">
               <Button variant={selectedView === "documents" ? "contained" : "outlined"}>
                 {t("knowledge.viewSelector.documents")}
@@ -90,7 +90,7 @@ export const KnowledgeHub = () => {
             <DocumentLibraryList />
           </Container>
         )}
-        {selectedView === "prompts" && (
+        {/* {selectedView === "prompts" && (
           <Container maxWidth="xl">
             <ResourceLibraryList kind="prompt" />
           </Container>
@@ -99,7 +99,7 @@ export const KnowledgeHub = () => {
           <Container maxWidth="xl">
             <ResourceLibraryList kind="template" />
           </Container>
-        )}
+        )} */}
         {selectedView === "operations" && <DocumentOperations />}
       </Box>
     </>

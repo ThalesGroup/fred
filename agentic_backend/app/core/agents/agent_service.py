@@ -12,20 +12,27 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from fastapi.responses import JSONResponse
+import logging
+
 from fred_core import Action, KeycloakUser, Resource, authorize
 
 from app.application_context import get_agent_store, get_app_context
-from app.common.structures import AgentSettings, ModelConfiguration
-from app.common.utils import get_class_path
+from app.common.structures import AgentSettings
 from app.core.agents.agent_manager import AgentManager
 from app.core.agents.mcp_agent import MCPAgent
-from app.core.agents.structures import CreateAgentRequest, MCPAgentRequest
+
+logger = logging.getLogger(__name__)
 
 
 # --- Domain Exceptions ---
 class AgentAlreadyExistsException(Exception):
     pass
+
+
+def _class_path(obj_or_type) -> str:
+    """Return fully-qualified class path, e.g. 'app.agents.mcp.mcp_agent.MCPAgent'."""
+    t = obj_or_type if isinstance(obj_or_type, type) else type(obj_or_type)
+    return f"{t.__module__}.{t.__name__}"
 
 
 class AgentService:
@@ -34,65 +41,64 @@ class AgentService:
         self.agent_manager = agent_manager
 
     @authorize(action=Action.CREATE, resource=Resource.AGENTS)
-    async def build_and_register_mcp_agent(
-        self, user: KeycloakUser, req: MCPAgentRequest
-    ):
+    async def create_agent(self, user: KeycloakUser, agent_settings: AgentSettings):
         """
         Builds, registers, and stores the MCP agent, including updating app context and saving to DuckDB.
         """
-        # 1. Create config
-        agent_settings = AgentSettings(
-            type=req.agent_type,
-            name=req.name,
-            class_path=get_class_path(MCPAgent),
-            enabled=True,
-            categories=req.categories or [],
-            tag=req.tag or "mcp",
-            mcp_servers=req.mcp_servers,
-            description=req.description,
-            base_prompt=req.base_prompt,
-            nickname=req.nickname,
-            role=req.role,
-            icon=req.icon,
-            model=ModelConfiguration(),  # empty
-            settings={},
-        )
+        name = agent_settings.name
 
-        # Fill in model from default if not specified
-        agent_settings = get_app_context().apply_default_model_to_agent(agent_settings)
-        # 3. Instantiate and init
-        agent_instance = MCPAgent(
-            agent_settings=agent_settings,
-        )
+        # Guard: disallow duplicates at the store level
+        try:
+            existing = self.store.get(name)
+            if existing:
+                raise AgentAlreadyExistsException(f"Agent '{name}' already exists.")
+        except Exception as e:
+            # If .get raises when not found, ignore; if it returns None when not found, also fine
+            raise e
+
+        # Ensure class_path points to MCPAgent
+        if not agent_settings.class_path:
+            agent_settings.class_path = _class_path(MCPAgent)
+
+        # Apply default model if not provided (let app context choose)
+        try:
+            appctx = get_app_context()
+            agent_settings = appctx.apply_default_model_to_agent(
+                agent_settings
+            )  # no-op if already set
+        except Exception:
+            logger.debug(
+                "No default model applicator available; keeping provided model."
+            )
+
+        # Instantiate and init the runtime agent
+        agent_instance = MCPAgent(agent_settings=agent_settings)
         await agent_instance.async_init()
 
-        # 4. Persist
+        # Persist first (source of truth)
         self.store.save(agent_settings)
-        self.agent_manager.register_dynamic_agent(agent_instance, agent_settings)
-        # 5. Register live
 
-        return JSONResponse(content=agent_instance.to_dict())
+        # Register live (so UI/routing sees it immediately)
+        self.agent_manager.register_dynamic_agent(agent_instance, agent_settings)
+
+        logger.info("✅ Created MCP agent '%s'", name)
 
     @authorize(action=Action.UPDATE, resource=Resource.AGENTS)
-    async def update_agent(
-        self, user: KeycloakUser, name: str, req: CreateAgentRequest
-    ):
-        if name != req.name:
-            raise ValueError("Agent name in URL and body must match.")
-
+    async def update_agent(self, user: KeycloakUser, agent_settings: AgentSettings):
         # Delete existing agent (if any)
-        await self.agent_manager.unregister_agent(name)
-        self.store.delete(name)
+        # await self.agent_manager.unregister_agent(agent_settings)
+        # self.store.delete(agent_settings.name)
 
         # Recreate it using the same logic as in create
-        return await self.build_and_register_mcp_agent(user, req)
+        # return await self.build_and_register_mcp_agent(user, agent_settings)
+        await self.agent_manager.update_agent(agent_settings)
 
     @authorize(action=Action.DELETE, resource=Resource.AGENTS)
-    async def delete_agent(self, user: KeycloakUser, name: str):
+    async def delete_agent(self, user: KeycloakUser, agent_name: str):
         # Unregister from memory
-        await self.agent_manager.unregister_agent(name)
+        await self.agent_manager.delete_agent(agent_name)
 
         # Delete from DuckDB
-        self.store.delete(name)
+        self.store.delete(agent_name)
 
-        return {"message": f"✅ Agent '{name}' deleted successfully."}
+        return {"message": f"✅ Agent '{agent_name}' deleted successfully."}

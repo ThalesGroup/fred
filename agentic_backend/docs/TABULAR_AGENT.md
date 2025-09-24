@@ -31,7 +31,6 @@ The agent is implemented as a subclass of `AgentFlow` and uses the following lif
 | Field           | Value                      |
 |----------------|----------------------------|
 | `name`         | "TabularExpert"            |
-| `nickname`     | "Tessa"                    |
 | `tag`          | "data"                     |
 | `categories`   | ["tabular", "sql"]         |
 | `icon`         | "tabulat_agent"            |

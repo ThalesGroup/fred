@@ -1,16 +1,5 @@
+// src/pages/AgentHub.tsx
 // Copyright Thales 2025
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
 
 import {
   Box,
@@ -25,51 +14,37 @@ import {
   CardContent,
   ListItemIcon,
 } from "@mui/material";
-import { useState, useEffect, SyntheticEvent, useMemo } from "react";
+import { useState, useEffect, SyntheticEvent, useMemo, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import SearchIcon from "@mui/icons-material/Search";
-import AddIcon from "@mui/icons-material/Add";
 import FilterListIcon from "@mui/icons-material/FilterList";
 import StarIcon from "@mui/icons-material/Star";
+import AddIcon from "@mui/icons-material/Add";
+
 import LocalOfferIcon from "@mui/icons-material/LocalOffer";
 import Grid2 from "@mui/material/Grid2";
 import { LoadingSpinner } from "../utils/loadingSpinner";
 import { TopBar } from "../common/TopBar";
 import { AgentCard } from "../components/agentHub/AgentCard";
-import { CreateAgentModal } from "../components/agentHub/CreateAgentModal";
-import { useConfirmationDialog } from "../components/ConfirmationDialogProvider";
+
+// Editor pieces
+import { AgentEditDrawer } from "../components/agentHub/AgentEditDrawer";
+import { CrewEditor } from "../components/agentHub/CrewEditor";
 
 // OpenAPI
 import {
-  AgenticFlow,
-  GetAgenticFlowsAgenticV1ChatbotAgenticflowsGetApiResponse,
-  useDeleteAgentAgenticV1AgentsNameDeleteMutation,
   useLazyGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery,
+  useDeleteAgentAgenticV1AgentsNameDeleteMutation,
+  Leader,
 } from "../slices/agentic/agenticOpenApi";
 
-interface AgentCategory {
-  name: string;
-  isTag?: boolean;
-}
+// UI union facade
+import { AnyAgent, isLeader } from "../common/agent";
+import { useAgentUpdater } from "../hooks/useAgentUpdater";
+import { CreateAgentModal } from "../components/agentHub/CreateAgentModal";
+import { useConfirmationDialog } from "../components/ConfirmationDialogProvider";
 
-const extractUniqueTags = (agents: AgenticFlow[]): string[] =>
-  agents
-    .map((a) => a.tag || "")
-    .filter((t) => t && t.trim() !== "")
-    .filter((tag, idx, self) => self.indexOf(tag) === idx);
-
-const mapFlowsToAgents = (flows: GetAgenticFlowsAgenticV1ChatbotAgenticflowsGetApiResponse): AgenticFlow[] =>
-  (flows || []).map((f) => ({
-    name: f.name,
-    role: f.role,
-    nickname: f.nickname ?? undefined,
-    description: f.description,
-    icon: f.icon ?? undefined,
-    experts: f.experts ?? undefined,
-    tag: f.tag ?? undefined,
-    // keep .tags for legacy code reading it
-    tags: f.tag ?? undefined,
-  })) as AgenticFlow[];
+type AgentCategory = { name: string; isTag?: boolean };
 
 const ActionButton = ({
   icon,
@@ -108,43 +83,32 @@ const ActionButton = ({
 export const AgentHub = () => {
   const theme = useTheme();
   const { t } = useTranslation();
-
-  const [agenticFlows, setAgenticFlows] = useState<AgenticFlow[]>([]);
+  const { showConfirmationDialog } = useConfirmationDialog();
+  const [agents, setAgents] = useState<AnyAgent[]>([]);
   const [tabValue, setTabValue] = useState(0);
   const [showElements, setShowElements] = useState(false);
   const [favoriteAgents, setFavoriteAgents] = useState<string[]>([]);
   const [categories, setCategories] = useState<AgentCategory[]>([{ name: "all" }, { name: "favorites" }]);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
+  // drawers / selection
+  const [selected, setSelected] = useState<AnyAgent | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
+  const [crewOpen, setCrewOpen] = useState(false);
+  const [triggerDeleteAgent] = useDeleteAgentAgenticV1AgentsNameDeleteMutation();
+
   const handleOpenCreateAgent = () => setIsCreateModalOpen(true);
   const handleCloseCreateAgent = () => setIsCreateModalOpen(false);
 
   const [triggerGetFlows, { isFetching }] = useLazyGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery();
-  const [deleteAgent] = useDeleteAgentAgenticV1AgentsNameDeleteMutation();
-  const { showConfirmationDialog } = useConfirmationDialog();
-
-  const handleDeleteAgent = (name: string) => {
-    showConfirmationDialog({
-      title: t("agentHub.confirmDeleteTitle"),
-      message: t("agentHub.confirmDeleteMessage"),
-      onConfirm: async () => {
-        try {
-          await deleteAgent({ name }).unwrap();
-          fetchAgents();
-        } catch (err) {
-          console.error("Failed to delete agent:", err);
-        }
-      },
-    });
-  };
+  const { updateEnabled } = useAgentUpdater();
 
   const fetchAgents = async () => {
     try {
-      const flows = await triggerGetFlows().unwrap();
-      const mapped = mapFlowsToAgents(flows);
-      setAgenticFlows(mapped);
+      const flows = (await triggerGetFlows().unwrap()) as unknown as AnyAgent[];
+      setAgents(flows);
 
-      const tags = extractUniqueTags(mapped);
+      const tags = extractUniqueTags(flows);
       setCategories([{ name: "all" }, { name: "favorites" }, ...tags.map((tag) => ({ name: tag, isTag: true }))]);
 
       const savedFavorites = localStorage.getItem("favoriteAgents");
@@ -163,14 +127,14 @@ export const AgentHub = () => {
   const handleTabChange = (_event: SyntheticEvent, newValue: number) => setTabValue(newValue);
 
   const filteredAgents = useMemo(() => {
-    if (tabValue === 0) return agenticFlows;
-    if (tabValue === 1) return agenticFlows.filter((a) => favoriteAgents.includes(a.name));
+    if (tabValue === 0) return agents;
+    if (tabValue === 1) return agents.filter((a) => favoriteAgents.includes(a.name));
     if (categories.length > 2 && tabValue >= 2) {
       const tagName = categories[tabValue].name;
-      return agenticFlows.filter((a) => a.tag === tagName);
+      return agents.filter((a) => a.tags?.includes(tagName));
     }
-    return agenticFlows;
-  }, [tabValue, agenticFlows, favoriteAgents, categories]);
+    return agents;
+  }, [tabValue, agents, favoriteAgents, categories]);
 
   const toggleFavorite = (agentName: string) => {
     const updated = favoriteAgents.includes(agentName)
@@ -179,6 +143,45 @@ export const AgentHub = () => {
     setFavoriteAgents(updated);
     localStorage.setItem("favoriteAgents", JSON.stringify(updated));
   };
+
+  // ---- ACTION handlers wired to card --------------------------------------
+
+  const handleEdit = (agent: AnyAgent) => {
+    setSelected(agent);
+    setEditOpen(true);
+  };
+
+  const handleToggleEnabled = async (agent: AnyAgent) => {
+    await updateEnabled(agent, !agent.enabled);
+    fetchAgents();
+  };
+
+  const handleManageCrew = (leader: Leader & { type: "leader" }) => {
+    setSelected(leader);
+    setCrewOpen(true);
+  };
+
+  const handleDeleteAgent = useCallback(
+    (agent: AnyAgent) => {
+      showConfirmationDialog({
+        title: t("agentHub.confirmDeleteTitle") || "Delete Agent?",
+        message:
+          t("agentHub.confirmDeleteMessage", { name: agent.name }) ||
+          `Are you sure you want to delete the agent “${agent.name}”? This action cannot be undone.`,
+        onConfirm: async () => {
+          try {
+            await triggerDeleteAgent({ name: agent.name }).unwrap();
+            fetchAgents();
+          } catch (err) {
+            console.error("Failed to delete agent:", err);
+          }
+        },
+      });
+    },
+    [showConfirmationDialog, triggerDeleteAgent, fetchAgents, t],
+  );
+
+  // ------------------------------------------------------------------------
 
   const sectionTitle = useMemo(() => {
     if (tabValue === 0) return t("agentHub.allAgents");
@@ -238,12 +241,9 @@ export const AgentHub = () => {
               >
                 {categories.map((category, index) => {
                   const isFav = category.name === "favorites";
-                  const isTag = !!category.isTag;
                   const count = isFav
                     ? favoriteAgents.length
-                    : isTag
-                      ? agenticFlows.filter((a) => a.tag === category.name).length
-                      : agenticFlows.length;
+                    : agents.filter((a) => a.tags?.includes(category.name)).length;
 
                   return (
                     <Tab
@@ -251,7 +251,7 @@ export const AgentHub = () => {
                       label={
                         <Box sx={{ display: "flex", alignItems: "center" }}>
                           {isFav && <StarIcon fontSize="small" sx={{ mr: 0.5, color: "warning.main" }} />}
-                          {isTag && <LocalOfferIcon fontSize="small" sx={{ mr: 0.5, color: "text.secondary" }} />}
+                          <LocalOfferIcon fontSize="small" sx={{ mr: 0.5, color: "text.secondary" }} />
                           <Typography variant="body2" sx={{ textTransform: "capitalize" }}>
                             {t(`agentHub.categories.${category.name}`, category.name)}
                           </Typography>
@@ -299,9 +299,7 @@ export const AgentHub = () => {
                   <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
                     <Box display="flex" alignItems="center" gap={1}>
                       {tabValue === 1 && <StarIcon fontSize="small" sx={{ color: "warning.main" }} />}
-                      {tabValue >= 2 && categories[tabValue]?.isTag && (
-                        <LocalOfferIcon fontSize="small" sx={{ color: "text.secondary" }} />
-                      )}
+                      {tabValue >= 2 && <LocalOfferIcon fontSize="small" sx={{ color: "text.secondary" }} />}
                       <Typography variant="h6" fontWeight={600}>
                         {sectionTitle}{" "}
                         <Typography component="span" variant="body2" color="text.secondary">
@@ -325,13 +323,15 @@ export const AgentHub = () => {
                       {filteredAgents.map((agent) => (
                         <Grid2 key={agent.name} size={{ xs: 12, sm: 6, md: 4, lg: 4, xl: 4 }} sx={{ display: "flex" }}>
                           <Fade in timeout={500}>
-                            <Box>
+                            <Box sx={{ width: "100%" }}>
                               <AgentCard
                                 agent={agent}
-                                onDelete={handleDeleteAgent}
                                 isFavorite={favoriteAgents.includes(agent.name)}
                                 onToggleFavorite={toggleFavorite}
-                                allAgents={agenticFlows}
+                                onEdit={handleEdit}
+                                onToggleEnabled={handleToggleEnabled}
+                                onManageCrew={isLeader(agent) ? handleManageCrew : undefined}
+                                onDelete={handleDeleteAgent}
                               />
                             </Box>
                           </Fade>
@@ -367,7 +367,7 @@ export const AgentHub = () => {
                     </Box>
                   )}
 
-                  {/* Create modal */}
+                  {/* Create modal (optional) */}
                   {isCreateModalOpen && (
                     <CreateAgentModal
                       open={isCreateModalOpen}
@@ -383,7 +383,32 @@ export const AgentHub = () => {
             </CardContent>
           </Card>
         </Fade>
+
+        {/* Drawers / Modals */}
+        <AgentEditDrawer open={editOpen} agent={selected} onClose={() => setEditOpen(false)} onSaved={fetchAgents} />
+
+        <CrewEditor
+          open={crewOpen}
+          leader={selected && isLeader(selected) ? (selected as Leader & { type: "leader" }) : null}
+          allAgents={agents}
+          onClose={() => setCrewOpen(false)}
+          onSaved={fetchAgents}
+        />
       </Box>
     </>
   );
 };
+
+function extractUniqueTags(agents: AnyAgent[]): string[] {
+  const tagsSet = new Set<string>();
+  agents.forEach((agent) => {
+    if (agent.tags && Array.isArray(agent.tags)) {
+      agent.tags.forEach((tag) => {
+        if (typeof tag === "string" && tag.trim() !== "") {
+          tagsSet.add(tag);
+        }
+      });
+    }
+  });
+  return Array.from(tagsSet);
+}

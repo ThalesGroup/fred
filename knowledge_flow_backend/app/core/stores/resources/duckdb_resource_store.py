@@ -30,7 +30,7 @@ class DuckdbResourceStore(BaseResourceStore):
         full_table = self._table()
         with self.store._connect() as conn:
             conn.execute(f"""
-                CREATE TABLE IF NOT EXISTS {full_table} (
+                CREATE TABLE IF NOT EXISTS "{full_table}" (
                     id TEXT PRIMARY KEY,
                     kind TEXT,
                     version TEXT,
@@ -45,22 +45,22 @@ class DuckdbResourceStore(BaseResourceStore):
                 )
             """)
             # Optional: light migration from earlier drifted schema
-            cols = {r[1] for r in conn.execute(f"PRAGMA table_info('{full_table}')").fetchall()}
+            cols = {r[1] for r in conn.execute(f'PRAGMA table_info("{full_table}")').fetchall()}
             # Add missing columns if the table existed with older layout
             if "labels" not in cols:
-                conn.execute(f"ALTER TABLE {full_table} ADD COLUMN labels VARCHAR[]")
+                conn.execute(f'ALTER TABLE "{full_table}" ADD COLUMN labels VARCHAR[]')
             if "library_tags" not in cols:
-                conn.execute(f"ALTER TABLE {full_table} ADD COLUMN library_tags VARCHAR[]")
+                conn.execute(f'ALTER TABLE "{full_table}" ADD COLUMN library_tags VARCHAR[]')
             if "version" not in cols and "current_version" in cols:
                 # If they had current_version, create a view/alias by adding proper column and copying
-                conn.execute(f"ALTER TABLE {full_table} ADD COLUMN version TEXT")
-                conn.execute(f"UPDATE {full_table} SET version = current_version")
+                conn.execute(f'ALTER TABLE "{full_table}" ADD COLUMN version TEXT')
+                conn.execute(f'UPDATE "{full_table}" SET version = current_version')
             if "author" not in cols and "user" in cols:
-                conn.execute(f"ALTER TABLE {full_table} ADD COLUMN author TEXT")
-                conn.execute(f"UPDATE {full_table} SET author = user")
+                conn.execute(f'ALTER TABLE "{full_table}" ADD COLUMN author TEXT')
+                conn.execute(f'UPDATE "{full_table}" SET author = user')
             if "content" not in cols and "uri" in cols:
-                conn.execute(f"ALTER TABLE {full_table} ADD COLUMN content TEXT")
-                conn.execute(f"UPDATE {full_table} SET content = uri")
+                conn.execute(f'ALTER TABLE "{full_table}" ADD COLUMN content TEXT')
+                conn.execute(f'UPDATE "{full_table}" SET content = uri')
 
     # --- serde ---
 
@@ -102,7 +102,7 @@ class DuckdbResourceStore(BaseResourceStore):
     def list_resources_for_user(self, user: str, kind: ResourceKind) -> List[Resource]:
         with self.store._connect() as conn:
             rows = conn.execute(
-                f"SELECT * FROM {self._table()} WHERE author = ? AND kind = ?",
+                f'SELECT * FROM "{self._table()}" WHERE author = ? AND kind = ?',
                 [user, kind.value],
             ).fetchall()
         return [self._deserialize(r) for r in rows]
@@ -110,7 +110,7 @@ class DuckdbResourceStore(BaseResourceStore):
     def get_all_resources(self, kind: ResourceKind) -> List[Resource]:
         with self.store._connect() as conn:
             rows = conn.execute(
-                f"SELECT * FROM {self._table()} WHERE kind = ?",
+                f'SELECT * FROM "{self._table()}" WHERE kind = ?',
                 [kind.value],
             ).fetchall()
         return [self._deserialize(r) for r in rows]
@@ -118,7 +118,7 @@ class DuckdbResourceStore(BaseResourceStore):
     def get_resource_by_id(self, resource_id: str) -> Resource:
         with self.store._connect() as conn:
             row = conn.execute(
-                f"SELECT * FROM {self._table()} WHERE id = ?",
+                f'SELECT * FROM "{self._table()}" WHERE id = ?',
                 [resource_id],
             ).fetchone()
         if not row:
@@ -135,7 +135,7 @@ class DuckdbResourceStore(BaseResourceStore):
 
         with self.store._connect() as conn:
             conn.execute(
-                f"INSERT INTO {self._table()} (id, kind, version, name, description, labels, author, created_at, updated_at, content, library_tags) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                f'INSERT INTO "{self._table()}" (id, kind, version, name, description, labels, author, created_at, updated_at, content, library_tags) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
                 self._serialize(resource),
             )
         return resource
@@ -147,7 +147,7 @@ class DuckdbResourceStore(BaseResourceStore):
         with self.store._connect() as conn:
             conn.execute(
                 f"""
-                UPDATE {self._table()}
+                UPDATE "{self._table()}"
                 SET
                     kind = ?,
                     version = ?,
@@ -180,7 +180,7 @@ class DuckdbResourceStore(BaseResourceStore):
     def delete_resource(self, resource_id: str) -> None:
         with self.store._connect() as conn:
             result = conn.execute(
-                f"DELETE FROM {self._table()} WHERE id = ?",
+                f'DELETE FROM "{self._table()}" WHERE id = ?',
                 [resource_id],
             )
         if result.rowcount == 0:
@@ -190,7 +190,7 @@ class DuckdbResourceStore(BaseResourceStore):
         # library_tags is a LIST(VARCHAR), so we can use list_contains
         with self.store._connect() as conn:
             rows = conn.execute(
-                f"SELECT * FROM {self._table()} WHERE list_contains(library_tags, ?)",
+                f'SELECT * FROM "{self._table()}" WHERE list_contains(library_tags, ?)',
                 [tag_id],
             ).fetchall()
         if not rows:

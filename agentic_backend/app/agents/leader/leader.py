@@ -16,16 +16,75 @@ from langgraph.graph.state import CompiledStateGraph, StateGraph
 from app.agents.leader.structures.decision import ExecuteDecision, PlanDecision
 from app.agents.leader.structures.plan import Plan
 from app.agents.leader.structures.state import State
-from app.common.structures import AgentSettings
-from app.core.agents.flow import AgentFlow
+from app.core.agents.agent_flow import AgentFlow
+from app.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
 
 logger = logging.getLogger(__name__)
 
+# -----------------------------
+# Spec-only tuning (class-level)
+# -----------------------------
+# Dev note:
+# - This is a *schema* for the UI, not the live values. Live (overridden) values are
+#   provided at runtime via AgentSettings.tuning and applied by AgentFlow.__init__.
+LEADER_TUNING = AgentTuning(
+    fields=[
+        FieldSpec(
+            key="prompts.system",
+            type="prompt",
+            title="Leader System Prompt",
+            description=(
+                "Sets Fred’s leadership persona and guardrails: plan minimally, route deterministically, "
+                "avoid loops, summarize without inventing facts."
+            ),
+            required=True,
+            default=(
+                "You are Fred, a pragmatic team leader. Plan the SHORTEST path to the answer, route to the most "
+                "appropriate expert, supervise execution, validate succinctly, and deliver a clear final answer.\n"
+                "- Prefer 1-step plans when sufficient.\n"
+                "- Be deterministic and avoid re-planning loops.\n"
+                "- Never invent facts beyond what experts produced.\n"
+                "- When you must choose, prioritize correctness and brevity."
+            ),
+            ui=UIHints(group="Prompts", multiline=True, markdown=True),
+        ),
+        FieldSpec(
+            key="routing.prompts.choose_expert",
+            type="prompt",
+            title="Choose-Expert Prompt",
+            description=(
+                "LLM tie-breaker when multiple experts are plausible. "
+                "MUST return exactly one expert name from {options}."
+            ),
+            required=True,
+            default=(
+                "Objective: {objective}\n"
+                "Step {step_number}: {step}\n"
+                "Choose the best expert from: {options}.\n"
+                "Answer with only the expert name."
+            ),
+            ui=UIHints(group="Routing", multiline=True, markdown=False),
+        ),
+        FieldSpec(
+            key="routing.top_k",
+            type="integer",
+            title="Routing Top-K",
+            description="How many top candidates to present to the tie-breaker prompt.",
+            required=False,
+            default=2,
+            ui=UIHints(group="Routing"),
+        ),
+    ],
+)
 
+
+# ---------------
+# UI “thoughts”
+# ---------------
 def mk_thought(
     *, label: str, node: str, task: str, content: str, extras: dict | None = None
 ) -> AIMessage:
-    """UI helper: emit an assistant-side 'thought' (rendered under Thoughts)."""
+    """Emit a zero-token assistant-side 'thought' that the UI renders in a dedicated lane."""
     md = {"thought": content, "extras": {"label": label, "node": node, "task": task}}
     if extras:
         md["extras"].update(extras)
@@ -41,6 +100,7 @@ def _ensure_metadata_dict(msg: BaseMessage) -> dict:
 
 
 def _normalize_choice(raw: str, options: list[str]) -> str | None:
+    """Make the LLM tie-breaker robust to trivial capitalization/spacing issues."""
     if not raw:
         return None
     raw = raw.strip()
@@ -59,64 +119,66 @@ def _normalize_choice(raw: str, options: list[str]) -> str | None:
 @dataclass(frozen=True)
 class ExpertProfile:
     """
-    Why: hard priors for routing—cheap, stable, and explainable.
-    Leader uses this first; LLM only breaks ties among top-2.
+    Hard priors for routing—cheap, stable, explainable.
+    Leader uses this first; LLM only breaks ties among top-K (configurable).
     """
 
     name: str
     categories: tuple[str, ...]
     keywords: tuple[
         str, ...
-    ]  # quick substring hints from description or explicit agent hints
+    ]  # substring hints from description or explicit agent hints
     live_ok: bool  # False for theoretical-only agents
     cost_hint: int  # 1=cheap..3=expensive (tie-break)
     latency_hint: int  # 1=fast..3=slow (tie-break)
 
 
-class Leader(AgentFlow):
+# ========
+# Leader
+# ========
+class LegacyOrchestrator(AgentFlow):
     """
-    Fred = plan/supervise/execute/validate/respond with expert routing.
-    This version prioritizes determinism and short plans to avoid loops.
+    This is the legacy 'Fred' leader. Why legac ? because we are introducing a new version soon
+    that will be much more effective. COnsider this class as a useful example
+    Fred = plan → supervise → execute → validate → respond, with expert routing.
+
+    Design mirrors AgentFlow best practices:
+    - tuning (spec) is class-level → UI contract
+    - per-instance wiring happens in async_init() → binds model, builds `self._graph`, sets chains
+    - NO automatic prompt composition: each node explicitly chooses the tuned text it needs
     """
 
-    name: str = "Leader"
-    nickname: str = "Fred"
-    role: str = "Team Leader"
-    description: str = "Supervises multiple experts to provide answers and insights."
-    icon: str = "fred_agent"
-    tag: str = "leader"
+    tuning = LEADER_TUNING  # spec only; live values come from AgentSettings.tuning
 
-    def __init__(self, agent_settings: AgentSettings):
-        super().__init__(agent_settings=agent_settings)
-        self.max_steps = agent_settings.max_steps
+    # --- lifecycle / bootstrap ------------------------------------------------
+    async def async_init(self):
+        """
+        Bind model, set up registries & chains, and build the LangGraph.
+        This is per-instance because nodes call bound methods and can depend on runtime state.
+        """
+        # Deterministic-ish model for routing/validation
+        self.model = get_model(self.agent_settings.model)
+        try:
+            self.model = self.model.bind(temperature=0, top_p=1)
+        except Exception:
+            logger.warning(
+                "Leader: provider does not support temperature/top_p bind; using defaults."
+            )
 
-        # Expert registry + routing index
+        # Routing / supervision settings
+        self.max_steps = 5
         self.experts: dict[str, AgentFlow] = {}
         self.compiled_expert_graphs: dict[str, CompiledStateGraph] = {}
         self.expert_index: dict[str, ExpertProfile] = {}
-
-        # Anti-loop guards / telemetry
-        self.max_replans: int = min(
-            self.max_steps or 6, 3
-        )  # Why: never replan more than 3 times
+        self.max_replans: int = min(self.max_steps or 6, 3)
         self._replans_done: int = 0
         self._decision_history = deque(maxlen=6)
         self._last_progress_hash: str | None = None
 
-    async def async_init(self):
-        assert self.agent_settings.model is not None, (
-            "Model configuration should not be `None` here"
-        )
-        base = get_model(self.agent_settings.model)
-        try:
-            base = base.bind(temperature=0, top_p=1)  # deterministic routing/validation
-        except Exception:
-            logger.warning("Failed to bind model parameters, using defaults.")
-            pass
-        self.model = base
+        # Graph + typed, structured chains (all consume {"messages":[...]} uniformly)
         self._graph = self._build_graph()
-
-        # ---- structured chains (uniform {"messages":[...]} input) ----
+        if self.agent_settings.model is None:
+            raise ValueError("Leader requires agent_settings.model to build chains.")
         self.plan_chain = get_structured_chain(Plan, self.agent_settings.model)
         self.exec_decision_chain = get_structured_chain(
             ExecuteDecision, self.agent_settings.model
@@ -125,13 +187,9 @@ class Leader(AgentFlow):
             PlanDecision, self.agent_settings.model
         )
 
-    # -------------------------
-    # Expert management
-    # -------------------------
+    # --- expert registry ------------------------------------------------------
     def reset_experts(self) -> None:
-        logger.info(
-            "Resetting Fred experts. Previous experts: %s", list(self.experts.keys())
-        )
+        logger.info("Leader: resetting experts (was: %s)", list(self.experts.keys()))
         self.experts.clear()
         self.compiled_expert_graphs.clear()
         self.expert_index.clear()
@@ -139,18 +197,20 @@ class Leader(AgentFlow):
     def add_expert(
         self, name: str, instance: AgentFlow, compiled_graph: CompiledStateGraph
     ) -> None:
-        """Register an expert and its compiled graph + build routing profile."""
+        """
+        Register an expert, its compiled graph, and its deterministic routing profile.
+        """
         self.experts[name] = instance
         self.compiled_expert_graphs[name] = compiled_graph
 
-        # Why: Prefer explicit agent hints; fallback to description-derived keywords.
+        # Prefer explicit routing hints; else derive shallow keywords from description
         keywords = tuple(
             (getattr(instance, "routing_keywords", []) or [])
-            or instance.description.lower().split()[:8]
+            or (instance.get_description() or "").lower().split()[:8]
         )
         profile = ExpertProfile(
             name=name,
-            categories=tuple(instance.categories or ()),
+            categories=tuple(instance.get_tags() or ()),
             keywords=keywords,
             live_ok=bool(getattr(instance, "live_ok", True)),
             cost_hint=int(getattr(instance, "cost_hint", 2)),
@@ -158,10 +218,12 @@ class Leader(AgentFlow):
         )
         self.expert_index[name] = profile
 
-    # -------------------------
-    # Graph definition
-    # -------------------------
+    # --- graph definition -----------------------------------------------------
     def _build_graph(self) -> StateGraph:
+        """
+        Keep graph construction separate for readability.
+        Compiled once via AgentFlow.get_compiled_graph().
+        """
         builder = StateGraph(State)
         builder.add_node("planning", self.plan)
         builder.add_node("supervise", self.supervise)
@@ -176,16 +238,14 @@ class Leader(AgentFlow):
         builder.add_conditional_edges("validate", self.should_replan)
         builder.add_edge("respond", END)
 
-        logger.info("Created Fred graph")
+        logger.info("Leader: graph created.")
         return builder
 
-    # -------------------------
-    # Routing helpers
-    # -------------------------
+    # --- routing helpers ------------------------------------------------------
     def _hash_progress(
         self, progress: Sequence[tuple[str, Sequence[BaseMessage]]]
     ) -> str:
-        """Why: if this fingerprint doesn't change, we're stalling → exit the loop."""
+        """If this fingerprint doesn't change across loops, we're stalling → exit to validation."""
         parts = []
         for task, msgs in progress or []:
             tail = (msgs[-1].content if msgs else "") or ""
@@ -196,7 +256,10 @@ class Leader(AgentFlow):
         return "|#|".join(parts)
 
     def _rank_experts(self, objective: str, step: str, require_live: bool) -> list[str]:
-        """Why: cheap, deterministic shortlist using categories>keywords + cost/latency tie-breaks."""
+        """
+        Deterministic filter/score: categories > keywords then tie-break by cost/latency hints.
+        This is the cheap, stable shortlist before asking the LLM to break ties.
+        """
         text = f"{objective}\n{step}".lower()
         scored = []
         for name, p in self.expert_index.items():
@@ -212,47 +275,54 @@ class Leader(AgentFlow):
         return [n for _, _, _, n in scored]
 
     async def _choose_expert(self, state: State, step: str, step_number: int) -> str:
+        """
+        Tie-breaker between plausible experts:
+        - shortlist deterministically via _rank_experts
+        - ask the LLM using the *tuned* choose_expert prompt (explicit, auditable)
+        """
         if not self.model:
             raise ValueError("Model is not initialized. Call async_init first.")
+
         objective_msg = state.get("objective") or state["messages"][0]
         objective = getattr(objective_msg, "content", str(objective_msg))
         require_live = any(
             x in objective.lower() for x in ("live", "today", "now", "current")
         )
-
         ranked = self._rank_experts(objective, step, require_live) or list(
             self.experts.keys()
         )
         if len(ranked) == 1:
             return ranked[0]
-
-        top = ranked[:2]
-        prompt = (
-            f"Objective: {objective}\nStep {step_number}: {step}\n"
-            f"Choose the best expert from: {', '.join(top)}. Answer with only the expert name."
+        top_k = self.get_tuned_int("routing.top_k", default=2)
+        top = ranked[:top_k]
+        # Use tuned prompt + safe {token} rendering (unknown tokens remain literal)
+        tpl = self.get_tuned_text("routing.prompts.choose_expert") or ""
+        prompt_text = self.render(
+            tpl,
+            objective=objective,
+            step_number=step_number,
+            step=step,
+            options=", ".join(top),
         )
+
         raw = await self.exec_decision_chain.ainvoke(
-            {"messages": [HumanMessage(content=prompt)]}
+            {"messages": [HumanMessage(content=prompt_text)]}
         )
         choice = getattr(raw, "expert", "") or ""
         return _normalize_choice(choice, top) or top[0]
 
-    # -------------------------
-    # Routing conditions
-    # -------------------------
+    # --- routing conditions ---------------------------------------------------
     async def should_validate(self, state: State) -> Literal["execute", "validate"]:
         progress = state.get("progress") or []
-        max_steps = self.max_steps or 0
-
-        if max_steps and len(progress) >= max_steps:
+        if (self.max_steps or 0) and len(progress) >= (self.max_steps or 0):
             logger.warning(
-                "Reached max_steps=%s, forcing final answer.", self.max_steps
+                "Leader: reached max_steps=%s, forcing validate.", self.max_steps
             )
             return "validate"
 
         curr = self._hash_progress(progress)
         if self._last_progress_hash == curr and progress:
-            logger.warning("Detected stall in progress, moving to validate.")
+            logger.warning("Leader: detected stall in progress, moving to validate.")
             return "validate"
         self._last_progress_hash = curr
 
@@ -269,23 +339,18 @@ class Leader(AgentFlow):
             return "planning"
         return "respond"
 
-    # -------------------------
-    # Nodes
-    # -------------------------
+    # --- nodes ----------------------------------------------------------------
     async def respond(self, state: State):
         if self.model is None:
             self.model = get_model(self.agent_settings.model)
 
-        # Compress step outputs into a single final answer; no new facts.
+        # Compress step outputs into a single final answer; add no new facts.
         step_conclusions_str = ""
         for _, step_responses in state.get("progress") or []:
             step_conclusions_str += f"{step_responses[-1].content}\n"
 
         progress_msg = mk_thought(
-            label="respond",
-            node="respond",
-            task="finalize",
-            content="Summarizing all step conclusions into a final answer…",
+            label="respond", node="respond", task="finalize", content="Summarizing…"
         )
 
         prompt = (
@@ -308,13 +373,16 @@ class Leader(AgentFlow):
         }
 
     async def plan(self, state: State):
+        """
+        Plan minimally:
+        - Initial objective → shortest plan (prefer 1 step).
+        - If partial progress exists → propose at most one additional step.
+        Prompts are explicit and local to this node; no hidden profile/system merges.
+        """
         if not self.model:
             raise ValueError("Model is not initialized. Call async_init first.")
 
-        # Ensure message list exists (MessagesState normally provides it)
         state.setdefault("messages", [])
-
-        # Find last human message as new objective
         new_objective = next(
             (m for m in reversed(state["messages"]) if isinstance(m, HumanMessage)),
             None,
@@ -322,18 +390,19 @@ class Leader(AgentFlow):
         if new_objective is None:
             raise ValueError("No human message found for objective.")
 
-        # First run: init containers
+        # First encounter of this objective → reset plan/progress
         if "initial_objective" not in state:
             state["progress"] = []
             state["plan"] = Plan(steps=[])
             state["initial_objective"] = new_objective
 
-        # Reset when objective changes
         if (
             state["initial_objective"] is None
             or state["initial_objective"].content != new_objective.content
         ):
-            logger.info("New initial objective detected. Resetting plan and progress.")
+            logger.info(
+                "Leader: new initial objective detected. Resetting plan and progress."
+            )
             state["progress"] = []
             state["plan"] = Plan(steps=[])
             state["initial_objective"] = new_objective
@@ -342,7 +411,7 @@ class Leader(AgentFlow):
 
         progress = state.get("progress") or []
 
-        # Re-plan: add strictly necessary minimal steps (at most one).
+        # Re-plan (add *at most one* necessary step)
         if progress:
             objective = state["messages"][-1]
             current_plan = state["plan"]
@@ -355,7 +424,6 @@ class Leader(AgentFlow):
                 "only if strictly necessary to reach the objective. No explanations."
             )
 
-            # Provide experts list as context, not as an instruction to expand plan
             if self.experts:
                 experts_list = "\n".join(
                     [str(expert) for expert in self.experts.values()]
@@ -365,7 +433,6 @@ class Leader(AgentFlow):
                 prompt = base_prompt
 
             messages = step_conclusions + [HumanMessage(content=prompt)]
-            # ⬇️ Use the chain you built in async_init; pass {"messages": ...}
             re_plan_result = await self.plan_chain.ainvoke({"messages": messages})
             re_plan: Plan = (
                 re_plan_result
@@ -383,7 +450,7 @@ class Leader(AgentFlow):
                 "objective": objective,
             }
 
-        # Initial plan: shortest plan that achieves the goal.
+        # Initial plan (prefer shortest)
         else:
             objective = state["messages"][-1]
             base_prompt = (
@@ -396,12 +463,19 @@ class Leader(AgentFlow):
                 experts_list = "\n".join(
                     [str(expert) for expert in self.experts.values()]
                 )
-                prompt = f"Experts available:\n{experts_list}\n\n{base_prompt}"
+                plan_instructions = (
+                    f"Experts available:\n{experts_list}\n\n{base_prompt}"
+                )
             else:
-                prompt = base_prompt
+                plan_instructions = base_prompt
 
-            messages = state["messages"] + [SystemMessage(content=prompt)]
-            # ⬇️ Same here: call the chain with {"messages": ...}
+            # Explicit system: use the tuned leader system prompt for the planning node
+            sys_tpl = self.get_tuned_text("prompts.system") or ""
+            sys_text = self.render(sys_tpl)
+            messages = self.with_system(
+                sys_text, state["messages"] + [SystemMessage(content=plan_instructions)]
+            )
+
             new_plan_result = await self.plan_chain.ainvoke({"messages": messages})
             new_plan: Plan = (
                 new_plan_result
@@ -433,6 +507,11 @@ class Leader(AgentFlow):
         }
 
     async def execute(self, state: State):
+        """
+        Pick expert → run expert graph on a structured job message.
+        Note: we do *not* inject expert system prompts here; each expert’s own node decides
+        how to use its tuned prompts (mirrors the “no magic” rule).
+        """
         if not self.model:
             raise ValueError("Model is not initialized. Call async_init first.")
         progress = state.get("progress") or []
@@ -446,11 +525,9 @@ class Leader(AgentFlow):
             label="expert_select",
             node="execute",
             task="routing",
-            content=f"Selecting the best expert for step {task_number}: {task}",
+            content=f"Selecting expert for step {task_number}: {task}",
         )
-
         selected_expert = await self._choose_expert(state, task, task_number)
-
         decided = mk_thought(
             label="expert_selected",
             node="execute",
@@ -459,7 +536,7 @@ class Leader(AgentFlow):
             extras={"expert": selected_expert, "step": task_number, "task": str(task)},
         )
         logger.info(
-            "Fred selected expert: %s for step %s", selected_expert, task_number
+            "Leader: selected expert=%s for step=%s", selected_expert, task_number
         )
 
         if selected_expert not in self.experts:
@@ -485,20 +562,16 @@ class Leader(AgentFlow):
             plan_update["messages"] = [fail] + (plan_update.get("messages") or [])
             return plan_update
 
-        # Job for the expert (context = plan); we honor UI-selected prompts.
-        task_job = (
-            f"For the following plan:\n\n{state['plan']}\n\n"
-            f"You are tasked with executing step {task_number}, {task}."
-        )
+        # Job for the expert (context includes the plan). Keep this as a SystemMessage so
+        # the expert can prepend its own system prompt separately without ambiguity.
+        task_job = f"For the following plan:\n\n{state['plan']}\n\nYou are tasked with executing step {task_number}, {task}."
         step_conclusions = [sr[-1] for _, sr in progress]
-        base_messages = step_conclusions + [SystemMessage(content=task_job)]
+        expert_messages = step_conclusions + [SystemMessage(content=task_job)]
 
         expert_instance = self.experts[selected_expert]
-        messages = expert_instance.use_fred_prompts(base_messages)
+        response = await compiled.ainvoke({"messages": expert_messages})
 
-        response = await compiled.ainvoke({"messages": messages})
-
-        expert_description = expert_instance.description
+        expert_description = expert_instance.get_description() or ""
         additional_messages: list[BaseMessage] = [picking, decided]
         for message in response.get("messages", []):
             new_message: BaseMessage = message
@@ -525,13 +598,16 @@ class Leader(AgentFlow):
         }
 
     async def validate(self, state: State):
+        """
+        Gate between “respond” and “replan one more step”.
+        Deterministic budget guards protect against loops; the LLM only picks the branch.
+        """
         if not self.model:
             raise ValueError("Model is not initialized. Call async_init first.")
         progress = state.get("progress") or []
-        max_steps = self.max_steps or 0
 
-        # Hard budget guard: steps or replans exceeded → respond now.
-        if (max_steps and len(progress) >= max_steps) or (
+        # Budget guard: steps or replans exceeded → respond now.
+        if ((self.max_steps or 0) and len(progress) >= (self.max_steps or 0)) or (
             self._replans_done >= self.max_replans
         ):
             note = mk_thought(
@@ -566,7 +642,6 @@ class Leader(AgentFlow):
         plan_decision_result = await self.plan_decision_chain.ainvoke(
             {"messages": messages}
         )
-
         plan_decision: PlanDecision = (
             plan_decision_result
             if isinstance(plan_decision_result, PlanDecision)
