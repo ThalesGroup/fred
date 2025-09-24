@@ -179,7 +179,7 @@ class MetadataController:
 
             if config.type == "push":
                 filters = req.filters or {}
-                filters["source_tag"] = req.source_tag
+                filters["source"] = {"source_tag": req.source_tag}
                 docs = self.service.get_documents_metadata(user, filters)
                 sort_by = req.sort_by or [SortOption(field="document_name", direction="asc")]
 
