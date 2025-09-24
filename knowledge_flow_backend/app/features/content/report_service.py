@@ -1,25 +1,27 @@
 # app/features/reports/service.py (excerpt showing rendering + persist)
 from __future__ import annotations
-from pathlib import Path
+
 import tempfile
-from typing import Optional, List
-from uuid import uuid4
 from datetime import datetime, timezone
+from pathlib import Path
+from typing import List, Optional
+from uuid import uuid4
 
 from fred_core import KeycloakUser
+
 from app.common.document_structures import (
     DocumentMetadata,
-    Identity,
-    SourceInfo,
-    SourceType,
     FileInfo,
     FileType,
+    Identity,
     Processing,
     ProcessingStage,
     ProcessingStatus,
+    SourceInfo,
+    SourceType,
     Tagging,
 )
-from app.common.report_util import put_report_extension, ReportExtensionV1
+from app.common.report_util import ReportExtensionV1, put_report_extension
 from app.features.content.rendering_service import RenderingService
 
 
