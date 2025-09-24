@@ -1,6 +1,16 @@
-# fred_core/common/model_hub.py
 # Copyright Thales 2025
-# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 import logging
 import os
@@ -21,7 +31,7 @@ from langchain_openai import (
     ChatOpenAI,
     OpenAIEmbeddings,
 )
-from pydantic import BaseModel, SecretStr
+from pydantic import BaseModel
 
 from fred_core.common.structures import ModelConfiguration
 
@@ -57,8 +67,7 @@ def _info_provider(cfg: ModelConfiguration) -> None:
 
 def get_model(cfg: Optional[ModelConfiguration]) -> BaseChatModel:
     if cfg is None:
-        # this does not happen but in the configuration yaml file model can be undefined
-        # it is set to the default in that case. So basically we should never reach this point.
+        # In YAML, model can be omitted and replaced by default; we should never hit this.
         raise ValueError("Model configuration is None")
     """
     Fred rationale:
@@ -80,9 +89,7 @@ def get_model(cfg: Optional[ModelConfiguration]) -> BaseChatModel:
 
     if provider == "azure":
         _require_env("AZURE_OPENAI_API_KEY")
-        _require_settings(
-            settings, ["azure_endpoint", "azure_api_version"], "Azure chat"
-        )
+        _require_settings(settings, ["azure_endpoint", "azure_api_version"], "Azure chat")
         _info_provider(cfg)
         if not cfg.name:
             raise ValueError("Azure chat requires 'name' (deployment).")
@@ -92,14 +99,17 @@ def get_model(cfg: Optional[ModelConfiguration]) -> BaseChatModel:
         )
 
     if provider == "azureapim":
-        # Strict enterprise setup: APIM subscription + AAD client credentials
+        # Fred rationale (hover):
+        # - Enterprise setup via APIM: APIM subscription header + AAD bearer.
+        # - We DO NOT mint a static token here. We pass an azure_ad_token_provider
+        #   callable so each request gets a fresh token (no 1h expiry issues).
         required = [
             "azure_apim_base_url",
             "azure_resource_path",
             "azure_api_version",
             "azure_tenant_id",
             "azure_client_id",
-            "azure_client_scope",
+            "azure_client_scope",  # e.g., "https://cognitiveservices.azure.com/.default"
         ]
         _require_settings(settings, required, "Azure APIM chat")
         _require_env("AZURE_APIM_KEY")
@@ -111,34 +121,35 @@ def get_model(cfg: Optional[ModelConfiguration]) -> BaseChatModel:
 
         if not cfg.name:
             raise ValueError("Azure APIM chat requires 'name' (deployment).")
-        full_url = f"{base}{path}/deployments/{cfg.name}/chat/completions?api-version={settings['azure_api_version']}"
 
+        # Build a token *provider* (fresh token per call) instead of minting once.
         from azure.identity import ClientSecretCredential
 
-        token = (
-            ClientSecretCredential(
-                tenant_id=settings["azure_tenant_id"],
-                client_id=settings["azure_client_id"],
-                client_secret=client_secret,
-            )
-            .get_token(settings["azure_client_scope"])
-            .token
+        credential = ClientSecretCredential(
+            tenant_id=settings["azure_tenant_id"],
+            client_id=settings["azure_client_id"],
+            client_secret=client_secret,
         )
+        scope = settings["azure_client_scope"]
 
-        token_header_and_payload = token.split(".")[:-1]
-        logger.debug(
-            f"🔍 Obtained AAD token for Azure APIM chat (header + payload only): {token_header_and_payload}",
-        )
+        def _token_provider() -> str:
+            # Called by the SDK on each request → auto-refresh tokens.
+            return credential.get_token(scope).token
 
+        # Pass through any client kwargs that aren't our required keys.
         passthrough = {k: v for k, v in settings.items() if k not in required}
         _info_provider(cfg)
+
+        # Important routing note:
+        # Keep azure_endpoint as your APIM base + resource path.
+        # The Azure client composes /openai/deployments/{deployment}/chat/completions
+        # with api_version under the hood. Ensure your APIM route maps accordingly.
         return AzureChatOpenAI(
-            azure_endpoint=full_url,
-            api_key=SecretStr(token),
+            azure_endpoint=f"{base}{path}",
+            azure_deployment=cfg.name,
             api_version=api_version,
-            default_headers={
-                "TrustNest-Apim-Subscription-Key": os.environ["AZURE_APIM_KEY"]
-            },
+            azure_ad_token_provider=_token_provider,  # ← per-request AAD token
+            default_headers={"TrustNest-Apim-Subscription-Key": os.environ["AZURE_APIM_KEY"]},
             **passthrough,
         )
 
@@ -160,8 +171,8 @@ def get_model(cfg: Optional[ModelConfiguration]) -> BaseChatModel:
 def get_embeddings(cfg: ModelConfiguration) -> LCEmbeddings:
     """
     Fred rationale:
-    - Mirrors get_chat_model() for embeddings.
-    - Keeps auth rules consistent with your "env-only for secrets" policy.
+    - Mirrors get_model() for embeddings.
+    - Keeps auth rules consistent with our "env-only for secrets" policy.
     """
     assert cfg and cfg.provider, "Embedding configuration is required"
     provider = cfg.provider.lower()
@@ -191,6 +202,7 @@ def get_embeddings(cfg: ModelConfiguration) -> LCEmbeddings:
         )
 
     if provider == "azureapim":
+        # Same token-provider logic as chat: per-request AAD token via APIM.
         required = [
             "azure_apim_base_url",
             "azure_resource_path",
@@ -208,29 +220,28 @@ def get_embeddings(cfg: ModelConfiguration) -> LCEmbeddings:
         api_version = settings["azure_api_version"]
         if not name:
             raise ValueError("Azure APIM embeddings require 'name' (deployment).")
-        full_url = f"{base}{path}/deployments/{name}/embeddings?api-version={settings['azure_api_version']}"
 
         from azure.identity import ClientSecretCredential
 
-        token = (
-            ClientSecretCredential(
-                tenant_id=settings["azure_tenant_id"],
-                client_id=settings["azure_client_id"],
-                client_secret=client_secret,
-            )
-            .get_token(settings["azure_client_scope"])
-            .token
+        credential = ClientSecretCredential(
+            tenant_id=settings["azure_tenant_id"],
+            client_id=settings["azure_client_id"],
+            client_secret=client_secret,
         )
+        scope = settings["azure_client_scope"]
+
+        def _token_provider() -> str:
+            return credential.get_token(scope).token
 
         passthrough = {k: v for k, v in settings.items() if k not in required}
         _info_provider(cfg)
+
         return AzureOpenAIEmbeddings(
-            azure_endpoint=full_url,
-            api_key=SecretStr(token),
+            azure_endpoint=f"{base}{path}",
+            azure_deployment=name,
             api_version=api_version,
-            default_headers={
-                "TrustNest-Apim-Subscription-Key": os.environ["AZURE_APIM_KEY"]
-            },
+            azure_ad_token_provider=_token_provider,  # ← per-request AAD token
+            default_headers={"TrustNest-Apim-Subscription-Key": os.environ["AZURE_APIM_KEY"]},
             **passthrough,
         )
 
@@ -255,7 +266,9 @@ def get_structured_chain(schema: Type[BaseModel], model_config: ModelConfigurati
 
     passthrough = ChatPromptTemplate.from_messages([MessagesPlaceholder("messages")])
 
-    if provider in {"openai", "azure"}:
+    # Fred rationale (hover):
+    # - Azure APIM uses the same Azure client; function calling is available if the model supports it.
+    if provider in {"openai", "azure", "azureapim"}:
         try:
             structured = model.with_structured_output(schema, method="function_calling")
             return passthrough | structured
@@ -263,7 +276,7 @@ def get_structured_chain(schema: Type[BaseModel], model_config: ModelConfigurati
             logger.debug(
                 "Function calling not supported, falling back to prompt-based parsing"
             )
-            pass  # fall back below
+            # fall through to parser path
 
     parser = PydanticOutputParser(pydantic_object=schema)
     prompt = ChatPromptTemplate.from_messages(
