@@ -16,11 +16,9 @@ import inspect
 import logging
 import traceback
 from datetime import datetime, timedelta, timezone
-from functools import wraps
 from typing import Dict, Optional
 
 import yaml
-from fastapi import HTTPException
 
 from app.common.structures import (
     Configuration,
