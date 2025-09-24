@@ -6,28 +6,38 @@
 // - Backend owns runtime shape (Agent); UI sends CreateMcpAgentRequest only.
 // - Inline rationale helps devs grasp architecture from the hover context.
 
-import React, { useState } from "react";
-import {
-  Dialog, DialogTitle, DialogContent, DialogActions,
-  TextField, Button, MenuItem, IconButton, Box, Chip, Typography} from "@mui/material";
-import Grid2 from "@mui/material/Grid2";
-import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
-import DeleteIcon from "@mui/icons-material/Delete";
-import AddIcon from "@mui/icons-material/Add";
-import { useTranslation } from "react-i18next";
-import { useForm, Controller, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import AddIcon from "@mui/icons-material/Add";
+import DeleteIcon from "@mui/icons-material/Delete";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import {
+  Box,
+  Button,
+  Chip,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  IconButton,
+  MenuItem,
+  TextField,
+  Typography
+} from "@mui/material";
+import Grid2 from "@mui/material/Grid2";
+import React, { useState } from "react";
+import { Controller, useFieldArray, useForm } from "react-hook-form";
+import { useTranslation } from "react-i18next";
 import { z } from "zod";
 
 // OpenAPI-generated types & hook (regenerated)
 import {
-  useCreateAgentAgenticV1AgentsCreatePostMutation,
   CreateMcpAgentRequest,
   McpServerConfiguration,
+  useCreateAgentAgenticV1AgentsCreatePostMutation,
 } from "../../slices/agentic/agenticOpenApi";
 
-import { createMcpAgentSchema, MCP_TRANSPORTS } from "./agentSchema";
 import { useToast } from "../ToastProvider";
+import { createMcpAgentSchema, MCP_TRANSPORTS } from "./agentSchema";
 
 type FormData = z.infer<ReturnType<typeof createMcpAgentSchema>>;
 
@@ -102,8 +112,8 @@ export const CreateAgentModal: React.FC<CreateAgentModalProps> = ({ open, onClos
       reset();
       onClose();
       showSuccess({
-        title: t("agentHub.messages.creationSuccess", "Agent created"),
-        description: t("agentHub.messages.creationSuccessDetail", "The MCP agent was created successfully."),
+        summary: t("agentHub.messages.creationSuccess", "Agent created"),
+        detail: t("agentHub.messages.creationSuccessDetail", "The MCP agent was created successfully."),
       });
     } catch (e: any) {
       
