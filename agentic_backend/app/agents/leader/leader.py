@@ -16,8 +16,8 @@ from langgraph.graph.state import CompiledStateGraph, StateGraph
 from app.agents.leader.structures.decision import ExecuteDecision, PlanDecision
 from app.agents.leader.structures.plan import Plan
 from app.agents.leader.structures.state import State
-from app.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
 from app.core.agents.agent_flow import AgentFlow
+from app.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
 
 logger = logging.getLogger(__name__)
 

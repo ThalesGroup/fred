@@ -12,7 +12,6 @@ from opensearchpy import NotFoundError, OpenSearch, RequestsHttpConnection
 from pydantic import TypeAdapter
 
 # ⬇️ IMPORTANT: new location that defines the union AgentSettings = Annotated[Union[Agent, Leader], ...]
-
 from app.common.structures import AgentSettings
 from app.core.agents.store.base_agent_store import BaseAgentStore
 

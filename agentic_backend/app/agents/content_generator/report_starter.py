@@ -12,12 +12,12 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, Optional, Sequence
 
+from fred_core import get_model
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from langchain_core.prompts import ChatPromptTemplate
 from langgraph.graph import END, START, MessagesState, StateGraph
 from pydantic import BaseModel, Field
 
-from fred_core import get_model
 from app.core.agents.agent_flow import AgentFlow
 from app.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
 

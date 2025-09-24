@@ -19,8 +19,8 @@ from inspect import iscoroutinefunction
 from typing import Dict, List, Type
 
 from app.common.structures import AgentSettings, Configuration
-from app.core.agents.agent_loader import AgentLoader
 from app.core.agents.agent_flow import AgentFlow
+from app.core.agents.agent_loader import AgentLoader
 from app.core.agents.agent_supervisor import AgentSupervisor
 from app.core.agents.runtime_context import RuntimeContext
 from app.core.agents.store.base_agent_store import BaseAgentStore

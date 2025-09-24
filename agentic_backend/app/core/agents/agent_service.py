@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import logging
+
 from fred_core import Action, KeycloakUser, Resource, authorize
 
 from app.application_context import get_agent_store, get_app_context

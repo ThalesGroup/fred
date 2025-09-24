@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from typing import List, Optional
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fred_core import KeycloakUser, get_current_user
 from pydantic import BaseModel
