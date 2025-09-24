@@ -226,6 +226,11 @@ class SessionOrchestrator:
         sessions = self.session_store.get_for_user(user.uid)
         enriched: List[SessionWithFiles] = []
         for session in sessions:
+            if not self._is_user_action_authorized_on_session(
+                session.id, user, Action.READ
+            ):
+                continue
+
             session_folder = self._get_session_temp_folder(session.id)
             file_names = (
                 [f.name for f in session_folder.iterdir() if f.is_file()]
@@ -290,12 +295,13 @@ class SessionOrchestrator:
 
     # ---------------- Metrics passthrough ----------------
 
+    @authorize(action=Action.READ, resource=Resource.METRICS)
     @authorize(action=Action.READ, resource=Resource.SESSIONS)
     def get_metrics(
         self,
+        user: KeycloakUser,
         start: str,
         end: str,
-        user_id: str,
         precision: str,
         groupby: List[str],
         agg_mapping: dict[str, List[str]],
@@ -306,7 +312,7 @@ class SessionOrchestrator:
             precision=precision,
             groupby=groupby,
             agg_mapping=agg_mapping,
-            user_id=user_id,
+            user_id=user.uid,
         )
 
     # ---------------- internals ----------------
@@ -320,7 +326,7 @@ class SessionOrchestrator:
                 user.uid,
                 action,
                 Resource.SESSIONS,
-                f"Not authorized to {action} session {session_id}",
+                f"Not authorized to {action.value} session {session_id}",
             )
 
     def _is_user_action_authorized_on_session(
