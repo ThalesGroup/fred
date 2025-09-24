@@ -162,12 +162,8 @@ def get_agentic_flows(
 @router.websocket("/chatbot/query/ws")
 async def websocket_chatbot_question(
     websocket: WebSocket,
-    agent_manager: AgentManager = Depends(
-        get_agent_manager_ws
-    ),  # Use WebSocket-specific dependency
-    session_orchestrator: SessionOrchestrator = Depends(
-        get_session_orchestrator_ws
-    ),  # Use WebSocket-specific dependency
+    agent_manager: AgentManager = Depends(get_agent_manager_ws),
+    session_orchestrator: SessionOrchestrator = Depends(get_session_orchestrator_ws),
 ):
     """
     Transport-only:
@@ -177,9 +173,6 @@ async def websocket_chatbot_question(
       - Send FinalEvent or ErrorEvent
       - All heavy lifting is in SessionOrchestrator.chat_ask_websocket()
     """
-    # All other code is the same, but it now uses the injected dependencies
-    # `agent_manager` and `session_orchestrator` which are guaranteed to be
-    # the correct, lifespan-managed instances.
     await websocket.accept()
     auth = websocket.headers.get("authorization") or ""
     token = (
@@ -204,14 +197,12 @@ async def websocket_chatbot_question(
                 client_request = await websocket.receive_json()
                 ask = ChatAskInput(**client_request)
 
+                # Raw callback (the orchestrator will enrich plugins used)
                 async def ws_callback(msg_dict: dict):
                     event = StreamEvent(type="stream", message=ChatMessage(**msg_dict))
                     await websocket.send_text(event.model_dump_json())
 
-                (
-                    session,
-                    final_messages,
-                ) = await session_orchestrator.chat_ask_websocket(  # Use injected object
+                (session, final_messages) = await session_orchestrator.chat_ask_websocket(
                     user=user,
                     callback=ws_callback,
                     session_id=ask.session_id or "unknown-session",
@@ -222,18 +213,14 @@ async def websocket_chatbot_question(
                 )
 
                 await websocket.send_text(
-                    FinalEvent(
-                        type="final", messages=final_messages, session=session
-                    ).model_dump_json()
+                    FinalEvent(type="final", messages=final_messages, session=session).model_dump_json()
                 )
 
             except WebSocketDisconnect:
                 logger.debug("Client disconnected from chatbot WebSocket")
                 break
             except Exception as e:
-                summary = log_exception(
-                    e, "INTERNAL Error processing chatbot client query"
-                )
+                summary = log_exception(e, "INTERNAL Error processing chatbot client query")
                 session_id = (
                     client_request.get("session_id", "unknown-session")
                     if client_request
@@ -241,9 +228,7 @@ async def websocket_chatbot_question(
                 )
                 if websocket.client_state == WebSocketState.CONNECTED:
                     await websocket.send_text(
-                        ErrorEvent(
-                            type="error", content=summary, session_id=session_id
-                        ).model_dump_json()
+                        ErrorEvent(type="error", content=summary, session_id=session_id).model_dump_json()
                     )
                 else:
                     logger.error("[🔌 WebSocket] Connection closed by client.")
@@ -252,9 +237,7 @@ async def websocket_chatbot_question(
         summary = log_exception(e, "EXTERNAL Error processing chatbot client query")
         if websocket.client_state == WebSocketState.CONNECTED:
             await websocket.send_text(
-                ErrorEvent(
-                    type="error", content=summary, session_id="unknown-session"
-                ).model_dump_json()
+                ErrorEvent(type="error", content=summary, session_id="unknown-session").model_dump_json()
             )
 
 
