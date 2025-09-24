@@ -96,7 +96,7 @@ class SessionOrchestrator:
         *,
         user: KeycloakUser,
         callback: CallbackType,
-        session_id: str,
+        session_id: str | None,
         message: str,
         agent_name: str,
         runtime_context: Optional[RuntimeContext] = None,
@@ -111,6 +111,10 @@ class SessionOrchestrator:
           - persist session + history
           - record KPIs (success/error)
         """
+        # Check if user is authorized to talk in this session
+        if session_id is not None:
+            self._authorize_user_action_on_session(session_id, user, Action.UPDATE)
+
         logger.info(
             "chat_ask_websocket user_id=%s session_id=%s agent=%s",
             user.uid,
