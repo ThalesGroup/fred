@@ -49,7 +49,7 @@ export function KeywordsPreview({
     const src = (keywords ?? []).map((k) => (k ?? "").trim()).filter((k) => k.length > 0);
     const seen = new Set<string>();
     const out: string[] = [];
-    for (const k of src) if (!seen.has(k)) (seen.add(k), out.push(k));
+    for (const k of src) if (!seen.has(k)) seen.add(k), out.push(k);
     return out;
   }, [keywords]);
 

@@ -12,15 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import {
-  Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  Stack,
-  TextField,
-} from "@mui/material";
+import { Button, Dialog, DialogActions, DialogContent, DialogTitle, Stack, TextField } from "@mui/material";
 import * as React from "react";
 import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
@@ -56,12 +48,7 @@ interface PromptEditorModalProps {
  *  - simple mode (name/description/body)
  *  - doc mode (header YAML + body) when initial content is a full YAML doc
  */
-export const PromptEditorModal: React.FC<PromptEditorModalProps> = ({
-  isOpen,
-  onClose,
-  onSave,
-  initial,
-}) => {
+export const PromptEditorModal: React.FC<PromptEditorModalProps> = ({ isOpen, onClose, onSave, initial }) => {
   const incomingDoc = useMemo(() => (initial as any)?.yaml ?? (initial as any)?.body ?? "", [initial]);
   const isDocMode = useMemo(() => looksLikeYamlDoc(incomingDoc), [incomingDoc]);
 

@@ -5,9 +5,9 @@
   },
   "resource": {
     "kind": {
-      "prompt":   { "one": "prompt",   "other": "prompts" },
+      "prompt": { "one": "prompt", "other": "prompts" },
       "template": { "one": "modèle", "other": "modèles" },
-      "profile": { "one" : "profil", "other": "profils"}
+      "profile": { "one": "profil", "other": "profils" }
     }
   },
   "validation": {
@@ -232,7 +232,6 @@
       "documents": "Documents",
       "operations": "Opérations",
       "profiles": "Profils"
-
     }
   },
   "documentLibrary": {
@@ -314,7 +313,6 @@
     "removedOneResource": "{{typeOne, capitalize}} supprimé(e) de la bibliothèque.",
     "confirmRemoveTitle": "Supprimer de la bibliothèque ?",
     "confirmRemoveMessage": "Supprimer « {{res}} » de « {{folder}} » ?"
-    
   },
   "documentTable": {
     "selectedCount": "{{count}} sélectionné(s)",

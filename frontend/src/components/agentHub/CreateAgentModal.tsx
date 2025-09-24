@@ -3,43 +3,45 @@
 // Licensed under the Apache License, Version 2.0 (the "License");
 // ...
 
+import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
+import DeleteIcon from "@mui/icons-material/Delete";
+import EmojiObjectsIcon from "@mui/icons-material/EmojiObjects";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import ChipIcon from "@mui/icons-material/Memory";
+import RobotIcon from "@mui/icons-material/SmartToy";
 import {
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  TextField,
-  Button,
-  MenuItem,
-  IconButton,
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
   Box,
+  Button,
   Chip,
-  Typography,
   ChipProps,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  IconButton,
+  MenuItem,
+  TextField,
+  Typography,
 } from "@mui/material";
 import Grid2 from "@mui/material/Grid2";
-import RobotIcon from "@mui/icons-material/SmartToy";
-import ChipIcon from "@mui/icons-material/Memory";
-import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
-import EmojiObjectsIcon from "@mui/icons-material/EmojiObjects";
-import { Accordion, AccordionSummary, AccordionDetails } from "@mui/material";
-import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
-import DeleteIcon from "@mui/icons-material/Delete";
 import { useTranslation } from "react-i18next";
 
 // ✅ OpenAPI-generated hook + types
 
-import { useToast } from "../ToastProvider";
-import { useForm, Controller, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
 import { useState } from "react";
+import { Controller, useFieldArray, useForm } from "react-hook-form";
+import { z } from "zod";
 import {
   CreateAgentAgenticV1AgentsCreatePostApiArg,
   McpAgentRequest,
   McpServerConfiguration,
   useCreateAgentAgenticV1AgentsCreatePostMutation,
 } from "../../slices/agentic/agenticOpenApi";
+import { useToast } from "../ToastProvider";
 import { AGENT_TYPES, createAgentSchema, MCP_TRANSPORTS } from "./agentSchema";
 
 interface CreateAgentModalProps {
@@ -76,7 +78,7 @@ export const CreateAgentModal = ({ open, onClose, onCreated }: CreateAgentModalP
       icon: "Robot",
       agent_type: "mcp",
       categories: [],
-      mcp_servers: [{ name: "", url: "", transport: "sse", sse_read_timeout: 600 }],
+      mcp_servers: [{ name: "", url: "", transport: "streamable_http", sse_read_timeout: 3600 }],
     },
   });
 
@@ -282,6 +284,8 @@ export const CreateAgentModal = ({ open, onClose, onCreated }: CreateAgentModalP
                     maxRows={20}
                     size="small"
                     label={t("agentHub.fields.base_prompt", "Base Prompt")}
+                    error={!!errors.base_prompt}
+                    helperText={errors.base_prompt?.message as string}
                     {...field}
                   />
                 )}
@@ -432,7 +436,7 @@ export const CreateAgentModal = ({ open, onClose, onCreated }: CreateAgentModalP
                   <Button
                     size="small"
                     variant="outlined"
-                    onClick={() => append({ name: "", url: "", transport: "sse" })}
+                    onClick={() => append({ name: "", url: "", transport: "streamable_http" })}
                   >
                     {t("agentHub.actions.add_mcp_server", "+ Add MCP Server")}
                   </Button>

@@ -136,7 +136,7 @@ export const normalizeTemplateHeader = (
 };
 
 /* ===============================
- * PROFILE 
+ * PROFILE
  * =============================== */
 
 /** NEW: Rebuild a profile schema from the body placeholders (même logique que prompt). */
@@ -153,7 +153,7 @@ export const buildProfileSchemaFromBody = (body: string) => {
 export const normalizeProfileHeader = (
   rawHeader: Record<string, any>,
   body: string,
-  opts?: { keepVersion?: boolean; recomputeSchema?: boolean }
+  opts?: { keepVersion?: boolean; recomputeSchema?: boolean },
 ): Record<string, any> => {
   const keepVersion = opts?.keepVersion ?? true;
   const recomputeSchema = opts?.recomputeSchema ?? true;

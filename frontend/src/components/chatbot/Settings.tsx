@@ -93,11 +93,10 @@ export const Settings = ({
   const [selectedProfileIds, setSelectedProfileIds] = useState<string[]>([]);
   const [profilePickerAnchor, setProfilePickerAnchor] = useState<HTMLElement | null>(null);
   const selectedProfileId = selectedProfileIds[0] ?? null;
-  const { data: selectedProfileResource } =
-    useGetResourceKnowledgeFlowV1ResourcesResourceIdGetQuery(
-      { resourceId: selectedProfileId as string },
-      { skip: !selectedProfileId }
-    );
+  const { data: selectedProfileResource } = useGetResourceKnowledgeFlowV1ResourcesResourceIdGetQuery(
+    { resourceId: selectedProfileId as string },
+    { skip: !selectedProfileId },
+  );
   const hasSelectedProfile = !!selectedProfileId; // ← clé pour éviter l'effet de cache RTK
 
   const profileBodyPreview = useMemo(() => {
@@ -184,7 +183,7 @@ export const Settings = ({
       { id: "viz", name: "Visualization", group: "Core", description: "Render charts and diagrams" },
       { id: "github", name: "GitHub", group: "Integrations", description: "Read issues and PRs" },
     ],
-    []
+    [],
   );
 
   // const openPluginPicker = (e: React.MouseEvent, flowName: string) => {
@@ -281,15 +280,9 @@ export const Settings = ({
                     py: 0.75,
                     alignItems: "flex-start",
                     border: `1px solid ${theme.palette.primary.main}`,
-                    backgroundColor:
-                      theme.palette.mode === "dark"
-                        ? "rgba(25,118,210,0.06)"
-                        : "rgba(25,118,210,0.04)",
+                    backgroundColor: theme.palette.mode === "dark" ? "rgba(25,118,210,0.06)" : "rgba(25,118,210,0.04)",
                     "&:hover": {
-                      backgroundColor:
-                        theme.palette.mode === "dark"
-                          ? "rgba(25,118,210,0.1)"
-                          : "rgba(25,118,210,0.08)",
+                      backgroundColor: theme.palette.mode === "dark" ? "rgba(25,118,210,0.1)" : "rgba(25,118,210,0.08)",
                     },
                   }}
                 >
@@ -298,26 +291,27 @@ export const Settings = ({
                       {selectedProfileResource?.name}
                     </Typography>
 
-                    {Array.isArray(selectedProfileResource?.labels) &&
-                      selectedProfileResource!.labels.length > 0 && (
-                        <Typography variant="caption" color="text.secondary" sx={{ display: "block" }} noWrap>
-                          {selectedProfileResource!.labels.join(" · ")}
-                        </Typography>
-                      )}
+                    {Array.isArray(selectedProfileResource?.labels) && selectedProfileResource!.labels.length > 0 && (
+                      <Typography variant="caption" color="text.secondary" sx={{ display: "block" }} noWrap>
+                        {selectedProfileResource!.labels.join(" · ")}
+                      </Typography>
+                    )}
 
                     {profileBodyPreview && (
                       <Typography
                         variant="caption"
                         color="text.secondary"
-                        sx={{
-                          mt: 0.5,
-                          display: "-webkit-box",
-                          WebkitLineClamp: "2",
-                          WebkitBoxOrient: "vertical",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "normal",
-                        } as any}
+                        sx={
+                          {
+                            mt: 0.5,
+                            display: "-webkit-box",
+                            WebkitLineClamp: "2",
+                            WebkitBoxOrient: "vertical",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "normal",
+                          } as any
+                        }
                       >
                         {profileBodyPreview}
                       </Typography>
@@ -444,21 +438,21 @@ export const Settings = ({
                           }}
                         />
 
-                          <Box sx={{ ml: "auto", opacity:0 }}>
-                            <Tooltip disableHoverListener title={t("settings.add", "Add")}>
-                              <IconButton
-                                size="small"
-                                edge="end"
-                                disableRipple
-                                tabIndex={-1}
-                                //onMouseDown={(e) => e.stopPropagation()}
-                                //onClick={(e) => openPluginPicker(e, flow.name)}
-                                sx={{ borderRadius: 1.5 }}
-                              >
-                                <AddIcon fontSize="small" />
-                              </IconButton>
-                            </Tooltip>
-                          </Box>
+                        <Box sx={{ ml: "auto", opacity: 0 }}>
+                          <Tooltip disableHoverListener title={t("settings.add", "Add")}>
+                            <IconButton
+                              size="small"
+                              edge="end"
+                              disableRipple
+                              tabIndex={-1}
+                              //onMouseDown={(e) => e.stopPropagation()}
+                              //onClick={(e) => openPluginPicker(e, flow.name)}
+                              sx={{ borderRadius: 1.5 }}
+                            >
+                              <AddIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                        </Box>
                       </ListItemButton>
                     </Tooltip>
                   </ListItem>
@@ -473,29 +467,28 @@ export const Settings = ({
               </Typography>
             )}
 
-              <Popover
-                open={Boolean(pluginAnchorEl)}
-                anchorEl={pluginAnchorEl}
-                onClose={closePluginPicker}
-                anchorOrigin={{ vertical: "center", horizontal: "right" }}
-                transformOrigin={{ vertical: "center", horizontal: "left" }}
-                PaperProps={{ sx: { p: 1 } }}
-              >
-                <PluginSelector
-                  items={pluginItems}
-                  selectedIds={selectedPluginIdsByAgent[pluginAgent ?? ""] ?? []}
-                  onChange={(ids) =>
-                    setSelectedPluginIdsByAgent((prev) => ({
-                      ...prev,
-                      [(pluginAgent ?? "")]: ids,
-                    }))
-                  }
-                />
-              </Popover>
+            <Popover
+              open={Boolean(pluginAnchorEl)}
+              anchorEl={pluginAnchorEl}
+              onClose={closePluginPicker}
+              anchorOrigin={{ vertical: "center", horizontal: "right" }}
+              transformOrigin={{ vertical: "center", horizontal: "left" }}
+              PaperProps={{ sx: { p: 1 } }}
+            >
+              <PluginSelector
+                items={pluginItems}
+                selectedIds={selectedPluginIdsByAgent[pluginAgent ?? ""] ?? []}
+                onChange={(ids) =>
+                  setSelectedPluginIdsByAgent((prev) => ({
+                    ...prev,
+                    [pluginAgent ?? ""]: ids,
+                  }))
+                }
+              />
+            </Popover>
           </Box>
         </Box>
       </Fade>
-
 
       {/* En-tête des conversations avec bouton d'ajout */}
       <Fade in={showElements} timeout={900}>
