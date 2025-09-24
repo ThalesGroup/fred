@@ -1,5 +1,6 @@
 # app/features/reports/utils.py
-from typing import Optional, Dict, Any
+from typing import Any, Dict, Optional
+
 from app.common.document_structures import DocumentMetadata, ReportExtensionV1
 
 REPORT_EXT_KEY = "report"  # single, stable namespace key

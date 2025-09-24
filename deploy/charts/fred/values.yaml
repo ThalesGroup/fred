@@ -191,19 +191,6 @@ applications:
         recursion:
           recursion_limit: 40 # Number or max recursion use by the agents while using the model
         agents:
-        - name: "Fred"
-          type: "leader"
-          class_path: "app.agents.leader.leader.Leader"
-          enabled: true
-          role: "Multi-Agent Orchestrator"
-          tags: ["orchestrator"]
-          crew:
-            - "Georges"
-            - "Rico Jr."
-            - "Tessa"
-          description: >
-            An orchestrator agent that can delegate tasks to specialized agents in its crew.
-            Fred is capable of managing complex workflows by leveraging the expertise of its team members.
         - name: "Samy"
           type: "agent"
           class_path: "app.agents.sentinel.sentinel_expert.SentinelExpert"

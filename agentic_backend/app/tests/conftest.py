@@ -16,11 +16,10 @@ from pydantic import AnyHttpUrl, AnyUrl
 from app.application_context import ApplicationContext
 
 # ⬇️ NEW: Agent/union + RecursionConfig now live in tuning_spec
-
 # ⬇️ REST of your config types stay where they were
 from app.common.structures import (
-    AIConfig,
     Agent,
+    AIConfig,
     AppConfig,
     Configuration,
     FrontendFlags,

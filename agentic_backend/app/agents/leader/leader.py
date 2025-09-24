@@ -16,8 +16,8 @@ from langgraph.graph.state import CompiledStateGraph, StateGraph
 from app.agents.leader.structures.decision import ExecuteDecision, PlanDecision
 from app.agents.leader.structures.plan import Plan
 from app.agents.leader.structures.state import State
-from app.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
 from app.core.agents.agent_flow import AgentFlow
+from app.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
 
 logger = logging.getLogger(__name__)
 
@@ -136,8 +136,10 @@ class ExpertProfile:
 # ========
 # Leader
 # ========
-class Leader(AgentFlow):
+class LegacyOrchestrator(AgentFlow):
     """
+    This is the legacy 'Fred' leader. Why legac ? because we are introducing a new version soon
+    that will be much more effective. COnsider this class as a useful example
     Fred = plan → supervise → execute → validate → respond, with expert routing.
 
     Design mirrors AgentFlow best practices:
@@ -286,7 +288,6 @@ class Leader(AgentFlow):
         require_live = any(
             x in objective.lower() for x in ("live", "today", "now", "current")
         )
-
         ranked = self._rank_experts(objective, step, require_live) or list(
             self.experts.keys()
         )

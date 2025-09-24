@@ -19,9 +19,9 @@ from inspect import iscoroutinefunction
 from typing import Dict, List, Type
 
 from app.common.structures import AgentSettings, Configuration
+from app.core.agents.agent_flow import AgentFlow
 from app.core.agents.agent_loader import AgentLoader
 from app.core.agents.agent_supervisor import AgentSupervisor
-from app.core.agents.agent_flow import AgentFlow
 from app.core.agents.runtime_context import RuntimeContext
 from app.core.agents.store.base_agent_store import BaseAgentStore
 
@@ -420,7 +420,7 @@ class AgentManager:
 
         logger.info("✅ '%s' updated.", name)
         return True
-    
+
     async def delete_agent(self, name: str) -> bool:
         """
         Deletes an agent from the persistent store and unregisters it from runtime.
@@ -432,16 +432,16 @@ class AgentManager:
         # 2) Remove from the authoritative settings catalog
         settings = self.agent_settings.pop(name, None)
         if not settings:
-            logger.warning("Attempted to delete non-existent agent '%s' from catalog.", name)
+            logger.warning(
+                "Attempted to delete non-existent agent '%s' from catalog.", name
+            )
             return False
 
         # 3) Remove from persistent storage
         try:
             self.store.delete(name)
         except Exception:
-            logger.exception(
-                "Failed to delete agent '%s' from persistent store.", name
-            )
+            logger.exception("Failed to delete agent '%s' from persistent store.", name)
             # We don't return False here because it's still removed from runtime
             # and in-memory catalogs, which is the primary goal.
 
@@ -452,5 +452,7 @@ class AgentManager:
             classes_by_name=self.agent_classes,
         )
 
-        logger.info("🗑️ Agent '%s' and its settings have been permanently deleted.", name)
+        logger.info(
+            "🗑️ Agent '%s' and its settings have been permanently deleted.", name
+        )
         return True

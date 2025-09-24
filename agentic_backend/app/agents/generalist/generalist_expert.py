@@ -26,10 +26,10 @@
 import logging
 
 from fred_core import get_model
-from app.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
 from langgraph.graph import END, START, MessagesState, StateGraph
 
 from app.core.agents.agent_flow import AgentFlow
+from app.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
 
 logger = logging.getLogger(__name__)
 

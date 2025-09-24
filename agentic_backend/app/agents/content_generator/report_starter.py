@@ -1,40 +1,10 @@
-# Copyright Thales 2025
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
-# app/core/agents/ReportStarterAgent.py
+# app/core/agents/report_writer.py
 # -----------------------------------------------------------------------------
-# Goal: a tiny but production-shaped agent that drafts a "Project Status Report".
-# It shows exactly where to put:
-#   - the typed contract (Pydantic model),
-#   - the prompt (swap later for user templates),
-#   - the single LangGraph node (extend later with retrieval/validators/revisions),
-#   - the chat bridge (MessagesState -> AIMessage),
-#   - an optional programmatic entrypoint (generate()).
-#
-# Keep it simple now so it’s obvious how to grow it for real use-cases.
-# -----------------------------------------------------------------------------
-# app/core/agents/ReportStarterAgent.py
-# -----------------------------------------------------------------------------
-# Goal: a tiny but production-shaped agent that drafts a "Project Status Report".
-# It shows exactly where to put:
-#   - the typed contract (Pydantic model),
-#   - the prompt (swap later for user templates),
-#   - the single LangGraph node (extend later with retrieval/validators/revisions),
-#   - the chat bridge (MessagesState -> AIMessage),
-#   - an optional programmatic entrypoint (generate()).
-#
-# Keep it simple now so it’s obvious how to grow it for real use-cases.
+# Fred Agent: ReportWriter
+# Architecture notes (hover-friendly):
+# - Single-node LangGraph: chat → structured report.
+# - Tunables (persona/contract/behavior, style, CIR) exposed via AgentTuning.
+# - System prompt is injected explicitly with AgentFlow.with_system() at the node.
 # -----------------------------------------------------------------------------
 
 from __future__ import annotations
@@ -45,34 +15,38 @@ from typing import Any, Dict, Optional, Sequence
 from fred_core import get_model
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.runnables import Runnable
 from langgraph.graph import END, START, MessagesState, StateGraph
 from pydantic import BaseModel, Field
 
-from app.common.structures import AgentSettings
 from app.core.agents.agent_flow import AgentFlow
+from app.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
 
 logger = logging.getLogger(__name__)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 1) Typed contract (WHY: one source of truth; downstream code stays type-safe)
+# 1) Structured output contract (WHY: downstream tools can consume JSON safely)
 # ──────────────────────────────────────────────────────────────────────────────
 class ProjectStatusReport(BaseModel):
-    summary: str = Field(
-        ..., description="Short snapshot of current project status and outcomes."
+    summary: str = Field(..., description="Snapshot of project status and outcomes.")
+    risks: str = Field(..., description="Key risks or blockers.")
+    next_steps: str = Field(..., description="Concrete actions for the next period.")
+
+    # CIR hooks (optional today; visible for future evolution)
+    cir_research_activities: Optional[str] = Field(
+        None, description="(CIR) Activities with novelty/uncertainty, methods."
     )
-    risks: str = Field(
-        ..., description="Key risks or blockers (technical, schedule, resources)."
+    cir_outputs: Optional[str] = Field(
+        None,
+        description="(CIR) Tangible outputs: prototypes, PoCs, datasets, publications.",
     )
-    next_steps: str = Field(
-        ..., description="Concrete actions planned for the next period."
+    cir_impact: Optional[str] = Field(
+        None, description="(CIR) Expected impact: advances, IP, ROI signals."
     )
 
 
 def _coerce_report(raw: Any) -> ProjectStatusReport:
-    """Normalize dict | BaseModel | ProjectStatusReport -> ProjectStatusReport.
-    WHY: `with_structured_output` may return dict or BaseModel depending on provider/version."""
+    """Accept dict/BaseModel and normalize to our Pydantic type."""
     if isinstance(raw, ProjectStatusReport):
         return raw
     if isinstance(raw, BaseModel):
@@ -82,45 +56,153 @@ def _coerce_report(raw: Any) -> ProjectStatusReport:
     raise TypeError(f"Unsupported structured output type: {type(raw)}")
 
 
-def _to_markdown(r: ProjectStatusReport) -> str:
-    """Single place to render for the UI/exporters."""
-    return (
-        "# Project Status Report\n\n"
-        "## Summary\n"
-        f"{r.summary}\n\n"
-        "## Risks\n"
-        f"{r.risks}\n\n"
-        "## Next Steps\n"
-        f"{r.next_steps}\n"
+def _to_markdown(r: ProjectStatusReport, *, show_cir: bool) -> str:
+    """Single rendering point (WHY: UI/exporters stay consistent)."""
+    parts = [
+        "# Project Status Report",
+        "## Summary",
+        r.summary,
+        "## Risks",
+        r.risks,
+        "## Next Steps",
+        r.next_steps,
+    ]
+    if show_cir:
+        if r.cir_research_activities:
+            parts += ["## CIR — Research Activities", r.cir_research_activities]
+        if r.cir_outputs:
+            parts += ["## CIR — Research Outputs", r.cir_outputs]
+        if r.cir_impact:
+            parts += ["## CIR — Expected Impact", r.cir_impact]
+    return "\n\n".join(parts) + "\n"
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 2) Tuning schema (WHY: the UI surfaces *why* knobs, not just raw fields)
+# ──────────────────────────────────────────────────────────────────────────────
+PERSONA_PROMPT = (
+    "You are a concise, factual project reporter for management consumption. "
+    "Prefer short, informative paragraphs over prose."
+)
+
+CONTRACT_PROMPT = (
+    "Always produce a report with these sections: summary, risks, next_steps. "
+    "When CIR mode is enabled, also produce: cir_research_activities, cir_outputs, cir_impact. "
+    "Keep each section self-contained and actionable."
+)
+
+BEHAVIOR_PROMPT = (
+    "Ask clarifying questions when critical information is missing. "
+    "If risks are absent, say 'No major risks identified'. "
+    "Never invent facts; keep assumptions explicit."
+)
+
+TUNING: AgentTuning = AgentTuning(
+    fields=[
+        # --- Prompt segments ---------------------------------------------------
+        FieldSpec(
+            key="prompts.persona",
+            type="prompt",
+            title="Agent Persona",
+            description="Defines the voice/identity of the reporter.",
+            required=True,
+            default=PERSONA_PROMPT,
+            ui=UIHints(group="Prompts", multiline=True, markdown=True),
+        ),
+        FieldSpec(
+            key="prompts.contract",
+            type="prompt",
+            title="Report Contract",
+            description="Mandatory sections and structural guarantees (incl. CIR).",
+            required=True,
+            default=CONTRACT_PROMPT,
+            ui=UIHints(group="Prompts", multiline=True, markdown=True),
+        ),
+        FieldSpec(
+            key="prompts.behavior",
+            type="prompt",
+            title="Behavioral Rules",
+            description="Fallbacks and guardrails (questions, honesty, brevity).",
+            required=True,
+            default=BEHAVIOR_PROMPT,
+            ui=UIHints(group="Prompts", multiline=True, markdown=True),
+        ),
+        # --- Style knobs -------------------------------------------------------
+        FieldSpec(
+            key="style.max_paragraphs",
+            type="number",
+            title="Max paragraphs per section",
+            description="Hard budget that forces prioritization (management-friendly).",
+            required=False,
+            default=2,
+            min=1,
+            max=6,
+            ui=UIHints(group="Advanced"),
+        ),
+        FieldSpec(
+            key="style.brevity",
+            type="number",
+            title="Brevity (0.0–1.0)",
+            description="Higher → more compression; lower → more detail.",
+            required=False,
+            default=0.7,
+            min=0.0,
+            max=1.0,
+            ui=UIHints(group="Advanced"),
+        ),
+        # --- CIR toggle --------------------------------------------------------
+        FieldSpec(
+            key="output.enable_cir",
+            type="boolean",
+            title="Enable CIR sections",
+            description="Adds CIR sections (activities/outputs/impact) to the report.",
+            required=False,
+            default=False,
+            ui=UIHints(group="Advanced"),
+        ),
+    ]
+)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 3) Prompt builder
+#    Returns ONLY the ChatPromptTemplate. Stores the system text on the agent.
+#    WHY: avoids tuple typing and keeps a simple function contract.
+# ──────────────────────────────────────────────────────────────────────────────
+def _build_prompt(agent: AgentFlow) -> ChatPromptTemplate:
+    persona = agent.get_tuned_text("prompts.persona") or ""
+    contract = agent.get_tuned_text("prompts.contract") or ""
+    behavior = agent.get_tuned_text("prompts.behavior") or ""
+
+    profile = agent.profile_text()
+    profile_block = f"\n\nUSER PROFILE (context-only):\n{profile}" if profile else ""
+
+    # Safe token rendering; unknown tokens remain literal.
+    system_text = agent.render(
+        "{persona}\n\n{contract}\n\n{behavior}\n\nToday: {today}" + profile_block,
+        persona=persona,
+        contract=contract,
+        behavior=behavior,
     )
 
+    # Store for later explicit injection at the node.
+    agent._system_text = system_text  # type: ignore[attr-defined]
 
-# ──────────────────────────────────────────────────────────────────────────────
-# 2) Prompt (WHY: clear intent; drop-in replacement for user templates later)
-# ──────────────────────────────────────────────────────────────────────────────
-def _build_prompt() -> ChatPromptTemplate:
-    # Keep it minimal, factual, concise → good defaults for status docs.
     return ChatPromptTemplate.from_messages(
         [
             (
-                "system",
-                "You are a concise, factual project reporter. Avoid fluff. Use short paragraphs.",
-            ),
-            (
                 "human",
-                "Create a Project Status Report with three sections: summary, risks, next_steps.\n"
+                "Create a Project Status Report.\n"
                 "Project: {project}\n"
                 "Period: {period}\n"
-                "Context (free text from user): {context}",
-            ),
+                "Context: {context}\n",
+            )
         ]
     )
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 3) Chat bridge (WHY: chat sends free text; we need slots for the prompt)
-#    Minimal approach: treat the last human message as 'context'. Defaults handle blanks.
-#    Replace later with: UI form, slot-filler node, or a dedicated 'template loader' tool.
+# 4) Slot extraction (chat → prompt vars; replace later with a UI form)
 # ──────────────────────────────────────────────────────────────────────────────
 def _extract_slots(messages: Sequence[BaseMessage]) -> Dict[str, str]:
     ctx = ""
@@ -132,77 +214,64 @@ def _extract_slots(messages: Sequence[BaseMessage]) -> Dict[str, str]:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 4) The Agent (WHY: single-node LangGraph → trivially extensible later)
-#
-# Example prompts you can type in chat to see this agent work:
-#   1. Minimal free text:
-#      "Project Phoenix is on track overall. Prototype delivered, database unstable.
-#       Next sprint focus: performance tests."
-#
-#   2. Short, structured:
-#      "Status for Project Orion: velocity dropping, vendor API is a blocker,
-#       adding 2 developers next month."
-#
-#   3. Emphasize risks:
-#      "Migration to cloud. Risk: unexpected costs and lack of skills.
-#       Next: training program."
-#
-#   4. Emphasize achievements:
-#      "Project Aurora: Integration tests passed. Minor bugs left.
-#       Next sprint: deploy to staging."
-#
-#   5. Narrative style:
-#      "Project Neptune: finished UI redesign, better feedback scores.
-#       Risk: backend under load. Next: A/B test + infra scaling."
-#
-# Each input → agent forces answer into 3 sections: Summary, Risks, Next Steps.
+# 5) The Agent
 # ──────────────────────────────────────────────────────────────────────────────
-class ReportStarter(AgentFlow):
+class ReportWriter(AgentFlow):
     """
-    Hover-notes for new devs:
-    - In Fred, an Agent is a small LangGraph + lifecycle. One node today; add more later.
-    - We return BOTH: a human-friendly Markdown message (for chat) and
-      a machine-friendly JSON copy in `additional_kwargs` (for exports/revisions).
+    WHY this class exists:
+    - Demonstrates using AgentFlow facilities (tuning readers, explicit system injection,
+      safe template rendering, compiled graph lifecycle).
+    - CIR sections are controlled by a single boolean tuning field.
     """
 
-    name: str = "ReportStarter"
-    nickname: str = "Scribo"
-    role: str = "Generates a simple Project Status Report"
-    description: str = (
-        "Drafts a status report (summary, risks, next steps) as structured output."
-    )
-    icon: str = "report"
-    categories = ["Reports"]
-    tag: str = "report-starter"
-
-    def __init__(self, agent_settings: AgentSettings):
-        super().__init__(agent_settings=agent_settings)
-        self._graph: Optional[StateGraph] = None
-        self._chain: Optional[Runnable] = None
+    tuning = TUNING
+    _system_text = ""
 
     async def async_init(self):
         """
-        WHY async: model factories may perform I/O (OpenAI/Azure/Ollama). Keep __init__ pure.
-        Build the LCEL chain + the uncompiled graph.
+        WHY async: model factories may allocate network clients (OpenAI/Azure/Ollama).
+        Build the graph here, then controllers call get_compiled_graph() to run.
         """
-        model = get_model(self.agent_settings.model)
-        self._chain = _build_prompt() | model.with_structured_output(
-            ProjectStatusReport
-        )
+        # 1) Build prompt and capture system text via _build_prompt()
+        prompt = _build_prompt(self)
 
+        # 2) Bind model with structured output (type-safe contract)
+        model = get_model(self.agent_settings.model)
+        self._chain = prompt | model.with_structured_output(ProjectStatusReport)
+
+        # 3) Single-node LangGraph
         def draft_node(state: MessagesState) -> MessagesState:
-            # Single responsibility: turn "chat message(s)" into a typed report + markdown reply.
             assert self._chain is not None, "Agent not initialized."
-            slots = _extract_slots(state["messages"])
+
+            # Inject tuned system prompt explicitly at the node boundary.
+            messages = self.with_system(self._system_text, state["messages"])
+            slots = _extract_slots(messages)
+
             raw = self._chain.invoke(slots)
             report = _coerce_report(raw)
-            md = _to_markdown(report)
 
-            # Append one assistant message (Markdown for humans, JSON in metadata for machines).
+            # Style knobs (kept for future revision nodes)
+            max_paras = self.get_tuned_int(
+                "style.max_paragraphs", default=2, min_value=1, max_value=6
+            )
+            brevity = self.get_tuned_number(
+                "style.brevity", default=0.7, min_value=0.0, max_value=1.0
+            )
+            enable_cir = bool(self.get_tuned_any("output.enable_cir") or False)
+
+            md = _to_markdown(report, show_cir=enable_cir)
+
             ai = AIMessage(
                 content=md,
                 additional_kwargs={
-                    "fred": {"project_status_report": report.model_dump()}
+                    "fred": {
+                        "project_status_report": report.model_dump(),
+                        "style": {
+                            "max_paragraphs": max_paras,
+                            "brevity": brevity,
+                            "enable_cir": enable_cir,
+                        },
+                    }
                 },
             )
             return {"messages": [*state["messages"], ai]}
@@ -211,23 +280,16 @@ class ReportStarter(AgentFlow):
         g.add_node("draft", draft_node)
         g.add_edge(START, "draft")
         g.add_edge("draft", END)
-
         self._graph = g
-        logger.info(
-            "ReportStarter initialized (MessagesState; uncompiled graph ready)."
-        )
+        logger.info("ReportWriter initialized (uncompiled graph ready).")
 
-    # Optional programmatic entry-point (useful in tests or non-chat flows)
+    # Optional programmatic entry-point (non-chat usage)
     async def generate(
         self, *, project: str, period: str = "Current Period", context: str = ""
     ) -> ProjectStatusReport:
-        """Explicit inputs → typed report. Bypasses chat, returns the Pydantic object."""
+        """Tests or batch jobs can bypass chat and request the typed object directly."""
         assert self._chain is not None, "Call async_init() first."
         raw = self._chain.invoke(
             {"project": project, "period": period, "context": context}
         )
         return _coerce_report(raw)
-
-    @staticmethod
-    def to_markdown(report: ProjectStatusReport) -> str:
-        return _to_markdown(report)

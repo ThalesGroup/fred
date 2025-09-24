@@ -4,10 +4,11 @@
 
 from __future__ import annotations
 
+from typing import List, Optional
+
 from fastapi import APIRouter, Depends, HTTPException
 from fred_core import KeycloakUser, get_current_user
 from pydantic import BaseModel, Field
-from typing import List, Optional
 
 from app.common.utils import log_exception
 from app.features.content.report_service import ReportsService
