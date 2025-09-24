@@ -13,10 +13,11 @@
 # limitations under the License.
 
 import logging
+import re
 from datetime import datetime
 from typing import Dict, List
 
-from fred_core import Action, KeycloakUser, Resource, authorize
+from fred_core import Action, KeycloakUser, Resource, authorize, authorize_or_raise
 from fred_core.store.sql_store import SQLTableStore
 from fred_core.store.structures import StoreInfo
 
@@ -102,25 +103,41 @@ class TabularService:
 
         return responses
 
-    # Read only queries, such as SELECT
     @authorize(action=Action.READ, resource=Resource.TABLES)
-    def query_read(self, user: KeycloakUser, db_name: str, request: RawSQLRequest) -> TabularQueryResponse:
-        sql = request.query.strip()
-        if not sql.lower().lstrip().startswith("select"):
-            raise ValueError("Only SELECT statements are allowed on the read endpoint")
-        store = self._get_store(db_name)
-        df = store.execute_sql_query(sql)
-        return TabularQueryResponse(db_name=db_name, sql_query=sql, rows=df.to_dict(orient="records"), error=None)
+    def query(
+        self,
+        user: KeycloakUser,
+        db_name: str,
+        document_name: str,
+        request: RawSQLRequest
+    ) -> TabularQueryResponse:
 
-    # Write queries such as UPDATE, CREATE, DELETE
-    @authorize(action=Action.UPDATE, resource=Resource.TABLES)
-    @authorize(action=Action.CREATE, resource=Resource.TABLES)
-    @authorize(action=Action.DELETE, resource=Resource.TABLES)
-    def query_write(self, user: KeycloakUser, db_name: str, request: RawSQLRequest) -> TabularQueryResponse:
         sql = request.query.strip()
         if not sql:
             raise ValueError("Empty SQL string provided")
-        self._check_write_allowed(db_name)
-        store = self._get_store(db_name)
-        store.execute_update_query(sql)
-        return TabularQueryResponse(db_name=db_name, sql_query=sql, rows=[], error=None)
+
+        first_token = re.match(r"^\s*(?:--.*\n|\/*.*\*/)*\s*([a-zA-Z]+)", sql, re.DOTALL)
+        first_word = first_token.group(1).lower() if first_token else ""
+
+        read_keywords = {"select", "with", "show", "describe", "pragma", "explain"}
+
+        if first_word not in read_keywords:
+            authorize_or_raise(user, Action.UPDATE, Resource.TABLES)
+
+            if first_word in {"create", "alter"}:
+                authorize_or_raise(user, Action.CREATE, Resource.TABLES)
+            if first_word in {"drop", "truncate"}:
+                authorize_or_raise(user, Action.DELETE, Resource.TABLES)
+
+            self._check_write_allowed(db_name)
+            logger.info(f"[{db_name}] Executing write SQL: {sql}")
+            store = self._get_store(db_name)
+            store.execute_update_query(sql)
+            rows = []
+        else:
+            logger.info(f"[{db_name}] Executing read SQL: {sql}")
+            store = self._get_store(db_name)
+            df = store.execute_sql_query(sql)
+            rows = df.to_dict(orient="records")
+
+        return TabularQueryResponse(db_name=db_name, sql_query=sql, rows=rows, error=None)
