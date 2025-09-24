@@ -29,14 +29,10 @@ import { useTheme } from "@mui/material/styles";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import LibraryBooksOutlinedIcon from "@mui/icons-material/LibraryBooksOutlined";
-import LanOutlinedIcon from "@mui/icons-material/LanOutlined";
-import BuildOutlinedIcon from "@mui/icons-material/BuildOutlined";
 import DescriptionOutlinedIcon from "@mui/icons-material/DescriptionOutlined";
 import PsychologyOutlinedIcon from "@mui/icons-material/PsychologyOutlined";
 import { useState, useMemo, type ReactNode } from "react";
 import RateReviewIcon from "@mui/icons-material/RateReview";
-//import VolumeUpIcon from "@mui/icons-material/VolumeUp";
-//import ClearIcon from "@mui/icons-material/Clear";
 import { getAgentBadge } from "../../utils/avatar.tsx";
 import { useToast } from "../ToastProvider.tsx";
 import { extractHttpErrorMessage } from "../../utils/extractHttpErrorMessage.tsx";
@@ -50,11 +46,14 @@ import { toCopyText, toMarkdown } from "./messageParts.ts";
 import { getExtras, isToolCall, isToolResult } from "./ChatBotUtils.tsx";
 import { FeedbackDialog } from "../feedback/FeedbackDialog.tsx";
 
+/**
+ * Backend "plugins" payload carried under message.metadata.extras.plugins.
+ * Only the keys we keep in the UI (libraries/templates/prompts + search/temperature).
+ */
 type PluginsUsed = {
   libraries?: string[];
-  mcp_services?: string[];
-  tools?: string[];
-  docs_used?: number;
+  templates?: string[];
+  prompts?: string[]; // optional, may mirror metadata.prompts
   search_policy?: string;
   temperature?: number;
 };
@@ -65,26 +64,33 @@ export default function MessageCard({
   side,
   enableCopy = false,
   enableThumbs = false,
-  // enableAudio = false,
   currentAgenticFlow,
   pending = false,
   showMetaChips = true,
   suppressText = false,
-  onCitationHover, // optional: (uid|null) → let parent highlight Sources
-  onCitationClick, // optional: (uid|null) → parent can open dialog
+  onCitationHover,
+  onCitationClick,
+
+  // name maps: id -> human label
+  libraryNameById,
+  templateNameById,
+  promptNameById,
 }: {
   message: ChatMessage;
   agenticFlow: AgenticFlow;
   side: "left" | "right";
   enableCopy?: boolean;
   enableThumbs?: boolean;
-  // enableAudio?: boolean;
   currentAgenticFlow: AgenticFlow;
   pending?: boolean;
   showMetaChips?: boolean;
   suppressText?: boolean;
   onCitationHover?: (uid: string | null) => void;
   onCitationClick?: (uid: string | null) => void;
+
+  libraryNameById?: Record<string, string>;
+  templateNameById?: Record<string, string>;
+  promptNameById?: Record<string, string>;
 }) {
   const theme = useTheme();
   const { showError, showInfo } = useToast();
@@ -92,7 +98,7 @@ export default function MessageCard({
   const [postFeedback] = usePostFeedbackAgenticV1ChatbotFeedbackPostMutation();
   const [feedbackOpen, setFeedbackOpen] = useState(false);
 
-  // --- INSIGHTS (apparait uniquement pour l'IA = side === 'left')
+  // --- INSIGHTS (assistant side only) ---
   const [insightAnchorEl, setInsightAnchorEl] = useState<HTMLElement | null>(null);
   const [insightOpen, setInsightOpen] = useState(false);
   const [bubbleHover, setBubbleHover] = useState(false);
@@ -140,7 +146,7 @@ export default function MessageCard({
     return toMarkdown(parts);
   }, [message.parts, suppressText]);
 
-  // --- METADATA EXTRACTION
+  // --- METADATA EXTRACTION ---
   const meta: any = (message.metadata as any) ?? {};
   const plugins: PluginsUsed = (meta?.extras?.plugins as PluginsUsed) ?? {};
 
@@ -148,27 +154,16 @@ export default function MessageCard({
   const latencyMs: number | undefined =
     meta.latency_ms ?? meta?.timings?.durationMs ?? meta?.latency?.ms ?? undefined;
 
-  // USED ONLY (via extras.plugins) + fallbacks sûrs
-  const libsUsed: string[] | undefined = plugins.libraries;
-  const mcpServices: string[] | undefined = plugins.mcp_services;
+  // Raw ids from backend
+  const libsUsedIds: string[] | undefined = plugins.libraries;
+  const templatesUsedIds: string[] | undefined = plugins.templates;
 
-  // tools: plugins.tools sinon dérive depuis parts[].type === "tool_call"
-  const toolCallsFromParts =
-    (message.parts || [])
-      .filter((p: any) => p?.type === "tool_call")
-      .map((p: any) => p?.name)
-      .filter(Boolean) || [];
+  // Prompts: prefer snapshot at top-level (metadata.prompts), else plugins.prompts
+  const promptsShortIds: string[] | undefined =
+    (Array.isArray(meta.prompts) && meta.prompts.length ? meta.prompts : undefined) ??
+    (plugins.prompts && plugins.prompts.length ? plugins.prompts : undefined);
 
-  const toolCalls: string[] | undefined =
-    (plugins.tools && plugins.tools.length ? plugins.tools : undefined) ||
-    (toolCallsFromParts.length ? toolCallsFromParts : undefined);
-
-  // Docs et sources
-  const sourcesCount: number | undefined = Array.isArray(meta.sources) ? meta.sources.length : undefined;
-  const docsUsed: number | undefined =
-    typeof plugins.docs_used === "number" ? plugins.docs_used : (sourcesCount ? sourcesCount : undefined);
-
-  // Policy & temp (used)
+  // Search policy & temperature (if provided)
   const searchPolicy: string | undefined = plugins.search_policy;
   const usedTemperature: number | undefined =
     typeof plugins.temperature === "number" ? plugins.temperature : undefined;
@@ -176,7 +171,16 @@ export default function MessageCard({
   const inTokens = message.metadata?.token_usage?.input_tokens;
   const outTokens = message.metadata?.token_usage?.output_tokens;
 
-  // --- Plugin indicators (status barre discrète au survol)
+  // ---- Label helpers ----
+  const labelize = (ids?: string[], map?: Record<string, string>) =>
+    (ids ?? []).filter(Boolean).map((id) => map?.[id] || id);
+
+  // Labeled lists (what we actually render)
+  const libsUsed = labelize(libsUsedIds, libraryNameById);
+  const templatesUsed = labelize(templatesUsedIds, templateNameById);
+  const promptsShort = labelize(promptsShortIds, promptNameById);
+
+  // --- Indicator pills (hover toolbar on assistant messages) ---
   type Indicator = { key: string; label: string; enabled: boolean; icon: ReactNode };
   const pluginIndicators: Indicator[] = [
     {
@@ -186,33 +190,19 @@ export default function MessageCard({
       icon: <LibraryBooksOutlinedIcon sx={{ fontSize: 14 }} />,
     },
     {
-      key: "mcp",
-      label: "MCP",
-      enabled: !!(mcpServices && mcpServices.length),
-      icon: <LanOutlinedIcon sx={{ fontSize: 14 }} />,
-    },
-    {
-      key: "tools",
-      label: "Tools",
-      enabled: !!(toolCalls && toolCalls.length),
-      icon: <BuildOutlinedIcon sx={{ fontSize: 14 }} />,
-    },
-    {
-      key: "docs",
-      label: "Docs",
-      enabled: !!(docsUsed || sourcesCount),
+      key: "templates",
+      label: "Templates",
+      enabled: !!(templatesUsed && templatesUsed.length),
       icon: <DescriptionOutlinedIcon sx={{ fontSize: 14 }} />,
     },
     {
       key: "prompts",
       label: "Prompts",
-      // pas de requested côté front; si plus tard tu mets un used prompts pack côté extras.plugins, branche-le ici
       enabled: !!(meta.prompt_pack || meta.system_prompt || (Array.isArray(meta.prompts) && meta.prompts.length)),
       icon: <PsychologyOutlinedIcon sx={{ fontSize: 14 }} />,
     },
   ];
 
-  // --- Helpers d'affichage
   const SectionRow = ({ label, value }: { label: string; value?: string | number }) =>
     value === undefined || value === null || value === "" ? null : (
       <Box display="flex" justifyContent="space-between" gap={1}>
@@ -236,10 +226,8 @@ export default function MessageCard({
 
   const hasPluginsInfo =
     (libsUsed && libsUsed.length) ||
-    (mcpServices && mcpServices.length) ||
-    (toolCalls && toolCalls.length) ||
-    docsUsed ||
-    sourcesCount ||
+    (templatesUsed && templatesUsed.length) ||
+    (promptsShort && promptsShort.length) ||
     modelName ||
     latencyMs ||
     typeof usedTemperature === "number" ||
@@ -275,7 +263,7 @@ export default function MessageCard({
                     wordBreak: "break-word",
                   }}
                 >
-                  {/* Header: task chips + tool-call indicators */}
+                  {/* Header: task chips + indicators */}
                   {(showMetaChips || isCall || isResult) && (
                     <Box display="flex" alignItems="center" gap={1} px={side === "right" ? 0 : 1} pb={0.5}>
                       {showMetaChips && extras?.task && (
@@ -298,7 +286,7 @@ export default function MessageCard({
                         </Typography>
                       )}
 
-                      {/* Barre d'indicateurs de plugins (visible au survol, IA seulement) */}
+                      {/* Hover indicators (assistant only) */}
                       {isAssistant && hasPluginsInfo && (
                         <Box
                           sx={{
@@ -332,7 +320,7 @@ export default function MessageCard({
                             </Tooltip>
                           ))}
 
-                          {/* Pastille info (IA seulement) */}
+                          {/* Info popover */}
                           <Box
                             onMouseEnter={(e) => openInsights(e.currentTarget as HTMLElement)}
                             onMouseLeave={closeInsights}
@@ -359,7 +347,7 @@ export default function MessageCard({
                                   sx={{
                                     p: 1.25,
                                     minWidth: 260,
-                                    maxWidth: 320,
+                                    maxWidth: 360,
                                     borderRadius: 2,
                                     bgcolor:
                                       theme.palette.mode === "dark"
@@ -376,23 +364,21 @@ export default function MessageCard({
                                     <SectionRow label="Node" value={extras?.node as any} />
                                     <SectionRow label="Model" value={modelName} />
                                     <Box display="flex" gap={1}>
-                                      <SectionRow label="Latency" value={latencyMs ? `${latencyMs} ms` : undefined} />
-                                    </Box>
-                                    <Box display="flex" gap={1}>
                                       <SectionRow label="In" value={inTokens} />
                                       <SectionRow label="Out" value={outTokens} />
                                     </Box>
-                                    <SectionRow label="Search" value={searchPolicy} />
-                                    <SectionRow
-                                      label="Temp"
-                                      value={typeof usedTemperature === "number" ? usedTemperature : undefined}
-                                    />
+                                    <Box display="flex" gap={1}>
+                                      <SectionRow label="Latency" value={latencyMs ? `${latencyMs} ms` : undefined} />
+                                      <SectionRow label="Search" value={searchPolicy} />
+                                      <SectionRow
+                                        label="Temp"
+                                        value={typeof usedTemperature === "number" ? usedTemperature : undefined}
+                                      />
+                                    </Box>
 
-                                    {(libsUsed?.length ||
-                                      mcpServices?.length ||
-                                      toolCalls?.length ||
-                                      docsUsed ||
-                                      sourcesCount) ? <Divider flexItem /> : null}
+                                    {(libsUsed?.length || templatesUsed?.length || promptsShort?.length) ? (
+                                      <Divider flexItem />
+                                    ) : null}
 
                                     {libsUsed?.length ? (
                                       <>
@@ -403,28 +389,23 @@ export default function MessageCard({
                                       </>
                                     ) : null}
 
-                                    {mcpServices?.length ? (
+                                    {templatesUsed?.length ? (
                                       <>
                                         <Typography variant="overline" sx={{ opacity: 0.7 }}>
-                                          MCP Services
+                                          Templates
                                         </Typography>
-                                        <PillRow items={mcpServices} />
+                                        <PillRow items={templatesUsed} />
                                       </>
                                     ) : null}
 
-                                    {toolCalls?.length ? (
+                                    {promptsShort?.length ? (
                                       <>
                                         <Typography variant="overline" sx={{ opacity: 0.7 }}>
-                                          Tools
+                                          Prompts
                                         </Typography>
-                                        <PillRow items={toolCalls} />
+                                        <PillRow items={promptsShort} />
                                       </>
                                     ) : null}
-
-                                    <Box display="flex" gap={1}>
-                                      <SectionRow label="Docs" value={docsUsed} />
-                                      <SectionRow label="Sources" value={sourcesCount} />
-                                    </Box>
 
                                     <Divider flexItem />
                                     <Typography variant="caption" sx={{ opacity: 0.7 }}>
@@ -440,7 +421,7 @@ export default function MessageCard({
                     </Box>
                   )}
 
-                  {/* For tool_call: compact args preview */}
+                  {/* For tool_call: compact args preview (kept; not shown in indicators) */}
                   {isCall && message.parts?.[0]?.type === "tool_call" && (
                     <Box px={side === "right" ? 0 : 1} pb={0.5} sx={{ opacity: 0.8 }}>
                       <Typography fontSize=".8rem">

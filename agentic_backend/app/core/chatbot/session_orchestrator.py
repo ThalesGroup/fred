@@ -53,15 +53,8 @@ def _utcnow_dt() -> datetime:
 
 class SessionOrchestrator:
     """
-    Why this class exists (architecture note):
-      Keep the controller thin. This orchestrator is the ONLY entry point used by
-      the WebSocket/API layer to run a chat exchange. It owns:
-        - session lifecycle (get/create, title)
-        - emitting the user message
-        - KPI timing and counters
-        - persistence of session + history
-      It delegates ALL streaming/transcoding of LangGraph events to StreamTranscoder.
-      Result: Single Responsibility, easy to unit test, and the WS layer remains simple.
+    Keep the controller thin. This orchestrator is the ONLY entry point used by
+    the WebSocket/API layer to run a chat exchange.
     """
 
     def __init__(self, session_store: BaseSessionStore, agent_manager: AgentManager):
@@ -95,13 +88,12 @@ class SessionOrchestrator:
         client_exchange_id: Optional[str] = None,
     ) -> Tuple[SessionSchema, List[ChatMessage]]:
         """
-        Entry point called by the WebSocket controller for a user question.
         Responsibility:
           - ensure session exists and rebuild minimal LC history
           - emit the user message
-          - time + run the agent via StreamTranscoder
+          - stream the agent response
           - persist session + history
-          - record KPIs (success/error)
+          - record KPIs
         """
         logger.info(
             "chat_ask_websocket user_id=%s session_id=%s agent=%s",
@@ -154,6 +146,7 @@ class SessionOrchestrator:
 
         # 3) Stream agent responses via the transcoder
         saw_final_assistant = False
+        agent_msgs: List[ChatMessage] = []
         try:
             # Timer covers the entire exchange; status defaults to "error" if exception bubbles.
             with self.kpi.timer(
@@ -176,8 +169,7 @@ class SessionOrchestrator:
                     start_seq=1,  # user message already consumed rank=base_rank
                     callback=callback,
                 )
-                all_msgs.extend(agent_msgs)
-                # Success signal: exactly one assistant/final per exchange (enforced by transcoder)
+                # Mark final presence
                 saw_final_assistant = any(
                     (m.role == Role.assistant and m.channel == Channel.final)
                     for m in agent_msgs
@@ -200,13 +192,24 @@ class SessionOrchestrator:
                 actor=actor,
             )
 
+        # 3.1) MINIMAL PATCH: set visual "prompt used" flags on assistant/final messages only
+        try:
+            self._attach_runtime_markers(
+                agent=agent,
+                runtime_context=runtime_context or getattr(agent, "runtime_context", None),
+                messages=agent_msgs,
+            )
+        except Exception:
+            # Do not fail the exchange if metadata enrichment crashes
+            logger.exception("Failed to attach flags to message metadata")
+
         # 4) Persist session + history
         session.updated_at = _utcnow_dt()
         self.session_store.save(session)
         assert session.user_id == user.uid, "Session/user mismatch"
-        self.history_store.save(session.id, prior + all_msgs, user.uid)
+        self.history_store.save(session.id, prior + all_msgs + agent_msgs, user.uid)
 
-        return session, all_msgs
+        return session, all_msgs + agent_msgs
 
     # ---------------- Session/History helpers (intentionally here) ----------------
 
@@ -215,11 +218,6 @@ class SessionOrchestrator:
         self,
         user: KeycloakUser,
     ) -> List[SessionWithFiles]:
-        """
-        Why here:
-          Listing sessions is part of the conversational lifecycle exposed to the UI.
-          Keeping it on the orchestrator avoids leaking session_store details upward.
-        """
         sessions = self.session_store.get_for_user(user.uid)
         enriched: List[SessionWithFiles] = []
         for session in sessions:
@@ -253,9 +251,7 @@ class SessionOrchestrator:
         self, user: KeycloakUser, session_id: str, agent_name: str, file: UploadFile
     ) -> dict:
         """
-        Purpose:
-          Keep simple "drop a file into this session's temp area" behavior unchanged,
-          so the UI doesn't need to move right now. Can be split later to a dedicated service.
+        Simple "drop a file into this session's temp area" behavior unchanged.
         """
         # TODO: check session belongs to user
         try:
@@ -316,9 +312,7 @@ class SessionOrchestrator:
 
     async def _emit(self, callback: CallbackType, message: ChatMessage) -> None:
         """
-        Purpose:
-          Uniformly support sync OR async callbacks from the WS layer without
-          duplicating code at call sites.
+        Uniformly support sync OR async callbacks from the WS layer.
         """
         result = callback(message.model_dump())
         if asyncio.iscoroutine(result):
@@ -334,11 +328,7 @@ class SessionOrchestrator:
         runtime_context: RuntimeContext | None = None,
     ) -> tuple[SessionSchema, list[BaseMessage], AgentFlow, bool]:
         """
-        Why here:
-          Session creation, title generation and *minimal* LC history reconstruction
-          are orchestration concerns. We keep the LangChain history intentionally
-          lean (user/assistant/system only) to avoid leaking UI-specific messages
-          (tools, thought traces) into the prompt.
+        Session creation, title generation and *minimal* LC history reconstruction.
         """
         session, is_new_session = self._get_or_create_session(
             user_id=user.uid, query=message, session_id=session_id
@@ -390,10 +380,115 @@ class SessionOrchestrator:
         self.session_store.save(session)
         logger.info("Created new session %s for user %s", new_session_id, user_id)
         return session, True
+    
+    def _attach_runtime_markers(
+        self,
+        *,
+        agent: AgentFlow,
+        runtime_context: Optional[RuntimeContext],
+        messages: List[ChatMessage],
+    ) -> None:
+        """
+        Project runtime_context into message.metadata in a generic way:
+        - metadata.system_prompt = "used" (marker only, no secrets)
+        - metadata.prompts = short list of ids (derived from prompts/templates/profiles)
+        - metadata.extras.plugins = {
+                libraries: [...],
+                templates: [...],
+                prompts:   [...],
+                profiles:  [...],
+                search_policy: "semantic|hybrid|strict"
+            }
+        The UI already lights the 'Prompts' pill via metadata.system_prompt/prompts,
+        and the 'Libraries' pill via extras.plugins.libraries.
+        """
+
+        rc = runtime_context or getattr(agent, "runtime_context", None)
+
+        def _collect_ids(names: list[str]) -> list[str]:
+            if rc is None:
+                return []
+            out: list[str] = []
+            for n in names:
+                if hasattr(rc, n):
+                    v = getattr(rc, n) or []
+                    try:
+                        out.extend(str(x) for x in v if x)
+                    except TypeError:
+                        # tolerate non-iterables quietly
+                        pass
+            return out
+
+        # Accept both old/new spellings (snake & camel)
+        alias_map: dict[str, tuple[str, ...]] = {
+            "libraries": ("document_library_ids", "selected_document_libraries_ids",
+                        "documentLibraryIds", "selectedDocumentLibrariesIds"),
+            "prompts":   ("prompt_resource_ids", "selected_prompt_ids",
+                        "promptResourceIds", "selectedPromptIds"),
+            "templates": ("template_resource_ids", "selected_template_ids",
+                        "templateResourceIds", "selectedTemplateIds"),
+            "profiles":  ("profile_resource_ids", "selected_profile_ids",
+                        "profileResourceIds", "selectedProfileIds"),
+        }
+
+        plugins_payload: dict[str, list[str] | str] = {}
+        for key, aliases in alias_map.items():
+            ids = _collect_ids(list(aliases))
+            if ids:
+                plugins_payload[key] = ids
+
+        # Search policy (string)
+        if rc is not None:
+            sp = getattr(rc, "search_policy", None) or getattr(rc, "searchPolicy", None)
+            if sp:
+                plugins_payload["search_policy"] = str(sp)
+
+        # Marker: was any system prompt used? (do not expose its content)
+        has_system_prompt = False
+        for obj in (rc, agent):
+            if obj is None:
+                continue
+            for attr in ("system_prompt", "system_prompt_preview"):
+                if hasattr(obj, attr) and getattr(obj, attr):
+                    has_system_prompt = True
+
+        if not plugins_payload and not has_system_prompt:
+            return  # nothing to attach
+
+        # Short list for top-level metadata.prompts (drives 'Prompts' pill)
+        short_prompts = (
+            (plugins_payload.get("prompts") or [])
+            or (plugins_payload.get("templates") or [])
+            or (plugins_payload.get("profiles") or [])
+        )
+        short_prompts = list(short_prompts)[:3] if short_prompts else []
+
+        for m in messages:
+            if m.role == Role.assistant and m.channel == Channel.final:
+                md = m.metadata or ChatMetadata()
+
+                # Top-level markers
+                if (has_system_prompt or short_prompts) and not md.system_prompt:
+                    md.system_prompt = "used"
+                if short_prompts and not md.prompts:
+                    md.prompts = short_prompts
+
+                # Merge into extras.plugins (non-destructive, compact)
+                plugins = dict(md.extras.get("plugins", {}))
+                for k, v in plugins_payload.items():
+                    if k == "search_policy":
+                        plugins["search_policy"] = v  # string
+                    else:
+                        ids = list(v)[:3] if isinstance(v, list) else []
+                        if ids:
+                            plugins.setdefault(k, ids)
+                md.extras["plugins"] = plugins
+
+                m.metadata = md
+
 
 
 # ---------- pure helpers (kept local for discoverability) ----------
-
 
 def _concat_text_parts(parts) -> str:
     texts: list[str] = []

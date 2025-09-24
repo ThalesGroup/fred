@@ -84,7 +84,7 @@ const ChatBot = ({
     try {
       const uid = KeyCloakService.GetUserId?.() || "anon";
       localStorage.setItem(`chatctx_open:${uid}`, contextOpen ? "1" : "0");
-    } catch {}
+    } catch { }
   }, [contextOpen]);
 
   const { showInfo, showError } = useToast();
@@ -381,18 +381,18 @@ const ChatBot = ({
 
     // Add selected libraries/templates
     if (content.documentLibraryIds?.length) {
-      runtimeContext.selected_document_libraries_ids = content.documentLibraryIds;
+      runtimeContext.document_library_ids = content.documentLibraryIds;
     }
     if (content.promptResourceIds?.length) {
-      runtimeContext.selected_prompt_ids = content.promptResourceIds;
+      runtimeContext.prompt_resource_ids = content.promptResourceIds;
     }
     if (content.templateResourceIds?.length) {
-      runtimeContext.selected_template_ids = content.templateResourceIds;
+      runtimeContext.template_resource_ids = content.templateResourceIds;
     }
     if (content.profileResourceIds?.length) {
-      runtimeContext.selected_profile_ids = content.profileResourceIds;
+      runtimeContext.profile_resource_ids = content.profileResourceIds;
     }
-    runtimeContext.search_policy = content.searchPolicy || "semantic";
+    runtimeContext.search_policy = content.searchPolicy ?? "semantic";
 
     // Files upload
     if (content.files?.length) {
@@ -641,6 +641,9 @@ const ChatBot = ({
                 messages={messages}
                 agenticFlows={agenticFlows}
                 currentAgenticFlow={currentAgenticFlow}
+                libraryNameById={libraryNameMap}
+                templateNameById={templateNameMap}
+                promptNameById={promptNameMap}
               />
               {waitResponse && (
                 <Box mt={1} sx={{ alignSelf: "flex-start" }}>

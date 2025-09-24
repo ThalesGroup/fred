@@ -23,9 +23,22 @@ type Props = {
   messages: ChatMessage[];
   agenticFlows: AgenticFlow[];
   currentAgenticFlow: AgenticFlow;
+
+  // NEW: id → label maps so MessageCard can render names instead of raw ids
+  libraryNameById?: Record<string, string>;
+  templateNameById?: Record<string, string>;
+  promptNameById?: Record<string, string>;
 };
 
-function Area({ messages, agenticFlows, currentAgenticFlow }: Props) {
+function Area({
+  messages,
+  agenticFlows,
+  currentAgenticFlow,
+  // NEW
+  libraryNameById,
+  templateNameById,
+  promptNameById,
+}: Props) {
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   // Hover highlight in Sources (syncs with [n] markers inside MessageCard)
@@ -111,7 +124,7 @@ function Area({ messages, agenticFlows, currentAgenticFlow }: Props) {
         others.push(msg);
       }
 
-      // User bubble (unchanged)
+      // User bubble
       if (userMessage) {
         elements.push(
           <MessageCard
@@ -122,12 +135,15 @@ function Area({ messages, agenticFlows, currentAgenticFlow }: Props) {
             side="right"
             enableCopy
             enableThumbs
-            // enableAudio
+            // Forward maps so IDs resolve to names
+            libraryNameById={libraryNameById}
+            templateNameById={templateNameById}
+            promptNameById={promptNameById}
           />,
         );
       }
 
-      // Reasoning accordion (unchanged)
+      // Reasoning accordion
       if (reasoningSteps.length) {
         elements.push(
           <ReasoningStepsAccordion
@@ -175,7 +191,10 @@ function Area({ messages, agenticFlows, currentAgenticFlow }: Props) {
               side={msg.role === "user" ? "right" : "left"}
               enableCopy
               enableThumbs
-              //  enableAudio
+              // Forward maps
+              libraryNameById={libraryNameById}
+              templateNameById={templateNameById}
+              promptNameById={promptNameById}
               // Hook up hover/click from inline [n] markers to highlight Sources
               onCitationHover={(uid) => setHighlightUid(uid)}
               onCitationClick={(uid) => setHighlightUid(uid)}
@@ -202,7 +221,7 @@ function Area({ messages, agenticFlows, currentAgenticFlow }: Props) {
           );
         }
 
-        // 2) Single MessageCard (always markdown, inline [n] handled inside)
+        // 2) Final message card
         elements.push(
           <MessageCard
             key={`final-${msg.session_id}-${msg.exchange_id}-${msg.rank}`}
@@ -212,9 +231,11 @@ function Area({ messages, agenticFlows, currentAgenticFlow }: Props) {
             side="left"
             enableCopy
             enableThumbs
-            // enableAudio
-            // Keep text; MessageCard → CustomMarkdownRenderer renders it robustly
             suppressText={false}
+            // Forward maps
+            libraryNameById={libraryNameById}
+            templateNameById={templateNameById}
+            promptNameById={promptNameById}
             onCitationHover={(uid) => setHighlightUid(uid)}
             onCitationClick={(uid) => setHighlightUid(uid)}
           />,
@@ -223,7 +244,16 @@ function Area({ messages, agenticFlows, currentAgenticFlow }: Props) {
     }
 
     return elements;
-  }, [messages, agenticFlows, currentAgenticFlow, highlightUid]);
+  }, [
+    messages,
+    agenticFlows,
+    currentAgenticFlow,
+    highlightUid,
+    // keep re-render correct if maps change
+    libraryNameById,
+    templateNameById,
+    promptNameById,
+  ]);
 
   useEffect(() => {
     scrollToBottom();
