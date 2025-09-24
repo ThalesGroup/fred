@@ -2,7 +2,7 @@
 import logging
 
 from fastapi import APIRouter, Depends
-from fred_core import Action, KeycloakUser, KPIQuery, KPIQueryResult, Resource, authorize_or_raise, get_current_user
+from fred_core import Action, FilterTerm, KeycloakUser, KPIQuery, KPIQueryResult, Resource, authorize_or_raise, get_current_user
 
 from app.application_context import get_app_context
 
@@ -27,4 +27,8 @@ class KPIController:
         @router.post("/kpi/query", response_model=KPIQueryResult, tags=["KPI"])
         async def query(body: KPIQuery, user: KeycloakUser = Depends(get_current_user)):
             authorize_or_raise(user, Action.READ, Resource.KPIS)
+
+            # Enforce user scoping
+            body.filters.append(FilterTerm(field="dims.user_id", value=user.uid))
+
             return self.reader.query(body)
