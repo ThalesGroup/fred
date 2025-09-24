@@ -73,20 +73,21 @@ ai:
   recursion:
     recursion_limit: 40 # Number or max recursion use by the agents while using the model
   agents:
-  agents:
-    - name: "Fred"
+    - name: "Apollo"
       type: "leader"
-      class_path: "app.agents.leader.leader.Leader"
+      class_path: "app.agents.leader.leader.LegacyOrchestrator"
       enabled: true
       role: "Multi-Agent Orchestrator"
       tags: ["orchestrator"]
       crew:
         - "Georges"
-        - "Rico Jr."
+        - "Rico Jr." 
         - "Tessa"
       description: >
         An orchestrator agent that can delegate tasks to specialized agents in its crew.
-        Fred is capable of managing complex workflows by leveraging the expertise of its team members.
+        Appolo is capable of managing complex workflows by leveraging the expertise of its team members.
+        Not however that Appolo is now outdated and will be replaced by Helios in the coming weeks. See items
+        as a proof of concept.
     - name: "Samy"
       type: "agent"
       class_path: "app.agents.sentinel.sentinel_expert.SentinelExpert"
@@ -170,12 +171,22 @@ ai:
           transport: streamable_http
           url: http://localhost:8111/knowledge-flow/v1/mcp-advanced-rag
           sse_read_timeout: 2000
-    # - name: "Scribo"
-    #   role: "Simple Report generator"
-    #   description: >
-    #     Generates reports using a hard coded templates. A great starting point to elaborate full fledged report assistants.
-    #   class_path: "app.agents.content_generator.report_starter.ReportStarter"
-    #   enabled: true
+    - name: "Scribo"
+      type: "agent"
+      role: "Structured Report Generator"  
+      description: >
+        Produces concise project status reports with Summary, Risks, and Next Steps.
+        Can optionally include CIR (Crédit d’Impôt Recherche) sections for R&D reporting.
+      class_path: "app.agents.content_generator.report_starter.ReportWriter"
+      enabled: true
+      tags: ["content"]
+      model: {}
+      mcp_servers:
+        - name: knowledge-flow-mcp-server
+          transport: streamable_http
+          url: http://localhost:8111/knowledge-flow/v1/mcp-reports 
+          sse_read_timeout: 2000   
+
 
 storage:
   postgres:

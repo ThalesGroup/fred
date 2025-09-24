@@ -194,4 +194,6 @@ class AgentLoader:
     def _import_agent_class(self, class_path: str) -> Type[AgentFlow]:
         module_name, class_name = class_path.rsplit(".", 1)
         module = importlib.import_module(module_name)
+        if class_name == "Leader":
+            raise ImportError(f"Class '{class_name}' not found in '{module_name}'")
         return getattr(module, class_name)
