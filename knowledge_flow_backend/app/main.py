@@ -36,6 +36,7 @@ from app.common.structures import Configuration
 from app.common.utils import parse_server_configuration
 from app.core.monitoring.monitoring_controller import MonitoringController
 from app.features.catalog.controller import CatalogController
+from app.features.content import report_controller
 from app.features.content.controller import ContentController
 from app.features.ingestion.controller import IngestionController
 from app.features.kpi.kpi_controller import KPIController
@@ -141,7 +142,7 @@ def create_app() -> FastAPI:
     VectorSearchController(router)
     KPIController(router)
     OpenSearchOpsController(router)
-
+    router.include_router(report_controller.router)
     if configuration.scheduler.enabled:
         logger.info("🧩 Activating ingestion scheduler controller.")
         SchedulerController(router)
@@ -149,6 +150,17 @@ def create_app() -> FastAPI:
     logger.info("🧩 All controllers registered.")
     app.include_router(router)
     mcp_prefix = "/knowledge-flow/v1"
+
+    mcp_reports = FastApiMCP(
+        app,
+        name="Knowledge Flow Reports MCP",
+        description="Create Markdown-first reports and get downloadable artifacts.",
+        include_tags=["Reports"],  # ← export only these routes as tools
+        describe_all_responses=True,
+        describe_full_response_schema=True,
+        auth_config=AuthConfig(dependencies=[Depends(get_current_user)]),
+    )
+    mcp_reports.mount_http(mount_path=f"{mcp_prefix}/mcp-reports")
     mcp_opensearch_ops = FastApiMCP(
         app,
         name="Knowledge Flow OpenSearch Ops MCP",

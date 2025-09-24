@@ -48,6 +48,20 @@ class FileType(str, Enum):
     OTHER = "other"
 
 
+class ReportFormat(str, Enum):
+    """Reports only ever publish these concrete file types."""
+
+    MD = FileType.MD.value
+    HTML = FileType.HTML.value
+    PDF = FileType.PDF.value
+
+    @staticmethod
+    def from_file_type(ft: FileType) -> "ReportFormat":
+        if ft in (FileType.MD, FileType.HTML, FileType.PDF):
+            return ReportFormat(ft.value)
+        raise ValueError(f"Unsupported report format: {ft}")
+
+
 class ProcessingStatus(str, Enum):
     NOT_STARTED = "not_started"
     IN_PROGRESS = "in_progress"
@@ -195,6 +209,53 @@ class DocSummary(BaseModel):
     model_name: Optional[str] = Field(default=None, description="LLM/flow used to produce this summary.")
     method: Optional[str] = Field(default=None, description="Algorithm/flow id (e.g., 'SmartDocSummarizer@v1').")
     created_at: Optional[datetime] = Field(default=None, description="UTC when this summary was computed.")
+
+
+class ReportExtensionV1(BaseModel):
+    """
+    Stored under DocumentMetadata.extensions["report"].
+
+    Fred rationale:
+    - Markdown is the canonical source of the report and MUST be persisted.
+    - HTML/PDF are optional sync exports.
+    - Keep v1 tiny and explicit; no revisions/status yet.
+    """
+
+    version: str = "v1"
+    # Optional for traceability (which layout was used to assemble MD)
+    template_id: Optional[str] = None
+
+    # Canonical source (always present)
+    md_url: str = Field(..., description="Public URL to the canonical Markdown file")
+    md_type: FileType = Field(default=FileType.MD, description="Redundant but explicit typing")
+
+    # Optional exports
+    html_url: Optional[str] = Field(default=None, description="URL to rendered HTML, if built")
+    pdf_url: Optional[str] = Field(default=None, description="URL to rendered PDF, if built")
+    html_type: Optional[FileType] = Field(default=None, description="= FileType.HTML when html_url is set")
+    pdf_type: Optional[FileType] = Field(default=None, description="= FileType.PDF when pdf_url is set")
+
+    # Convenience (computed) – which formats are currently available
+    @property
+    def available_formats(self) -> List[ReportFormat]:
+        out: List[ReportFormat] = [ReportFormat.MD]
+        if self.html_url:
+            out.append(ReportFormat.HTML)
+        if self.pdf_url:
+            out.append(ReportFormat.PDF)
+        return out
+
+    @model_validator(mode="after")
+    def _enforce_types_match_urls(self) -> "ReportExtensionV1":
+        # If a URL is present, enforce its FileType counterpart for clarity.
+        if self.html_url and self.html_type not in (None, FileType.HTML):
+            raise ValueError("html_type must be HTML when html_url is set")
+        if self.pdf_url and self.pdf_type not in (None, FileType.PDF):
+            raise ValueError("pdf_type must be PDF when pdf_url is set")
+        # Ensure md_type stays MD
+        if self.md_type != FileType.MD:
+            raise ValueError("md_type must be MD")
+        return self
 
 
 class DocumentMetadata(BaseModel):

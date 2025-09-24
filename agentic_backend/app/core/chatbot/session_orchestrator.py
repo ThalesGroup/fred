@@ -18,13 +18,12 @@ from fred_core import Action, KeycloakUser, KPIActor, KPIWriter, Resource, autho
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 
 from app.application_context import (
-    get_configuration,
     get_default_model,
     get_history_store,
     get_kpi_writer,
 )
+from app.core.agents.agent_flow import AgentFlow
 from app.core.agents.agent_manager import AgentManager
-from app.core.agents.flow import AgentFlow
 from app.core.agents.runtime_context import RuntimeContext
 from app.core.chatbot.chat_schema import (
     Channel,
@@ -75,9 +74,6 @@ class SessionOrchestrator:
 
         # Stateless worker that knows how to turn LangGraph events into ChatMessage[]
         self.transcoder = StreamTranscoder()
-
-        # Cached config
-        self.recursion_limit = get_configuration().ai.recursion.recursion_limit
 
     # ---------------- Public API (used by WS layer) ----------------
 

@@ -24,22 +24,21 @@ import { useToast } from "../ToastProvider.tsx";
 import { extractHttpErrorMessage } from "../../utils/extractHttpErrorMessage.tsx";
 import CustomMarkdownRenderer from "../markdown/CustomMarkdownRenderer.tsx";
 import {
-  AgenticFlow,
   ChatMessage,
   usePostFeedbackAgenticV1ChatbotFeedbackPostMutation,
 } from "../../slices/agentic/agenticOpenApi.ts";
 import { toCopyText, toMarkdown } from "./messageParts.ts";
 import { getExtras, isToolCall, isToolResult } from "./ChatBotUtils.tsx";
 import { FeedbackDialog } from "../feedback/FeedbackDialog.tsx";
+import { AnyAgent } from "../../common/agent.ts";
 
 export default function MessageCard({
   message,
-  agenticFlow,
+  agent,
   side,
   enableCopy = false,
   enableThumbs = false,
   // enableAudio = false,
-  currentAgenticFlow,
   pending = false,
   showMetaChips = true,
   suppressText = false, // hides text parts when true (we still render non-text via markdown)
@@ -47,12 +46,11 @@ export default function MessageCard({
   onCitationClick, // optional: (uid|null) → parent can open dialog
 }: {
   message: ChatMessage;
-  agenticFlow: AgenticFlow;
+  agent: AnyAgent;
   side: "left" | "right";
   enableCopy?: boolean;
   enableThumbs?: boolean;
   // enableAudio?: boolean;
-  currentAgenticFlow: AgenticFlow;
   pending?: boolean;
   showMetaChips?: boolean;
   suppressText?: boolean;
@@ -75,7 +73,7 @@ export default function MessageCard({
         comment,
         messageId: message.exchange_id,
         sessionId: message.session_id,
-        agentName: currentAgenticFlow.name ?? "unknown",
+        agentName: agent.name ?? "unknown",
       },
     }).then((result) => {
       if (result.error) {
@@ -135,10 +133,10 @@ export default function MessageCard({
     <>
       <Grid2 container marginBottom={1}>
         {/* Assistant avatar on the left */}
-        {side === "left" && agenticFlow && (
+        {side === "left" && agent && (
           <Grid2 size="auto" paddingTop={2}>
-            <Tooltip title={`${agenticFlow.nickname}: ${agenticFlow.role}`}>
-              <Box sx={{ mr: 2, mb: 2 }}>{getAgentBadge(agenticFlow.nickname)}</Box>
+            <Tooltip title={`${agent.name}: ${agent.role}`}>
+              <Box sx={{ mr: 2, mb: 2 }}>{getAgentBadge(agent.name, agent.type === "leader")}</Box>
             </Tooltip>
           </Grid2>
         )}

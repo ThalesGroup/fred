@@ -1,18 +1,6 @@
-# Copyright Thales 2025
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 # app/agents/sentinel/sentinel.py
+# Copyright Thales 2025
+# Licensed under the Apache License, Version 2.0
 
 import json
 import logging
@@ -28,133 +16,165 @@ from pydantic import TypeAdapter
 from app.common.mcp_runtime import MCPRuntime
 from app.common.resilient_tool_node import make_resilient_tools_node
 from app.common.structures import AgentSettings
-from app.core.agents.flow import AgentFlow
+from app.core.agents.agent_flow import AgentFlow
+from app.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------
+# Tuning spec (UI-editable)
+# ---------------------------
+SENTINEL_TUNING = AgentTuning(
+    fields=[
+        FieldSpec(
+            key="prompts.system",
+            type="prompt",
+            title="System Prompt",
+            description=(
+                "Sentinel’s operating doctrine. Keep it focused on MCP tools, "
+                "concise ops guidance, and actionable next steps."
+            ),
+            required=True,
+            default=(
+                "You are Sentinel, an operations and monitoring agent for the Fred platform.\n"
+                "Use the available MCP tools to inspect OpenSearch health and application KPIs.\n"
+                "- Use os.* tools for cluster status, shards, indices, mappings, and diagnostics.\n"
+                "- Use kpi.* tools for usage, cost, latency, and error rates.\n"
+                "Return clear, actionable summaries. If something is degraded, propose concrete next steps.\n"
+                "When you reference data from tools, add short bracketed markers like [os_health], [kpi_query].\n"
+                "Prefer structured answers with bullets and short tables when helpful.\n"
+                "Current date: {today}."
+            ),
+            ui=UIHints(group="Prompts", multiline=True, markdown=True),
+        ),
+    ]
+)
 
 
 class SentinelExpert(AgentFlow):
     """
     Sentinel — Ops & Monitoring agent (OpenSearch + KPIs).
 
-    Design goals:
-    - Keep the agent focused on reasoning/presentation.
-    - Push all MCP client/tool refresh logic into MCPRuntime.
-    - Use a resilient ToolNode so transient 401/stream issues turn into
-      structured ToolMessages (not hard failures), then refresh MCP and continue.
+    Pattern alignment with AgentFlow:
+    - Class-level `tuning` (spec only; values come from YAML/DB/UI).
+    - async_init(): set model, init MCP (tools), bind tools, build graph.
+    - Each node chooses if/when to use the tuned prompt (no global magic).
     """
 
-    # Class-level metadata
-    name: str = "SentinelExpert"
-    nickname: str = "Samy"
-    role: str = "Ops & Monitoring Expert"
-    description: str = "Watches your instance, providing real-time monitoring and alerts for performance issues."
-    icon: str = "ops_agent"
-    categories: list[str] = []
-    tag: str = "ops"
+    tuning = SENTINEL_TUNING
 
     def __init__(self, agent_settings: AgentSettings):
         super().__init__(agent_settings=agent_settings)
+        # MCP runtime keeps the tool client fresh and provides a current toolkit.
         self.mcp = MCPRuntime(
             agent_settings=self.agent_settings,
-            # If you expose runtime filtering (tenant/library/time window),
-            # pass a provider: lambda: self.get_runtime_context()
-            context_provider=(lambda: self.get_runtime_context()),
+            context_provider=lambda: self.get_runtime_context(),
         )
-        # Generic adapter that tolerates list/dict tool payloads (we won't enforce a single schema)
+        # Accept list/dict tool payloads and raw strings (we’ll normalize)
         self._any_list_adapter: TypeAdapter[List[Any]] = TypeAdapter(List[Any])
 
+    # ---------------------------
+    # Bootstrap
+    # ---------------------------
     async def async_init(self):
-        # LLM
+        # 1) LLM
         self.model = get_model(self.agent_settings.model)
-        await self.mcp.init()
+
+        # 2) Tools
+        await self.mcp.init()  # start MCP + toolkit
         self.model = self.model.bind_tools(self.mcp.get_tools())
+
+        # 3) Graph
         self._graph = self._build_graph()
 
     async def aclose(self):
-        # Let AgentManager call this on shutdown if it supports it.
+        # Let AgentManager call this on shutdown.
         await self.mcp.aclose()
 
-    def _generate_prompt(self) -> str:
-        return (
-            "You are Sentinel, an operations and monitoring agent for the Fred platform.\n"
-            "Use the available MCP tools to inspect OpenSearch health and application KPIs.\n"
-            "- Use os.* tools for cluster status, shards, indices, mappings, and diagnostics.\n"
-            "- Use kpi.* tools for usage, cost, latency, and error rates.\n"
-            "Return clear, actionable summaries. If something is degraded, propose concrete next steps.\n"
-            "When you reference data from tools, add short bracketed markers like [os_health], [kpi_query].\n"
-            "Prefer structured answers with bullets and short tables when helpful.\n"
-            f"Current date: {self.current_date}.\n"
-        )
-
+    # ---------------------------
+    # Graph
+    # ---------------------------
     def _build_graph(self) -> StateGraph:
         if self.mcp.toolkit is None:
-            raise RuntimeError("Toolkit must be initialized before building graph")
+            raise RuntimeError(
+                "Sentinel: toolkit must be initialized before building the graph."
+            )
 
         builder = StateGraph(MessagesState)
+
+        # LLM node
         builder.add_node("reasoner", self.reasoner)
 
+        # Tools node, with resilient refresh
         async def _refresh_and_rebind():
-            # Refresh MCP (new client + toolkit) and rebind tools into the model.
-            # MCPRuntime handles snapshot logging + safe old-client close.
+            # On transient tool errors (401/timeout/stream close) refresh client & rebind.
             self.model = await self.mcp.refresh_and_bind(self.model)
 
         tools_node = make_resilient_tools_node(
-            get_tools=self.mcp.get_tools,  # always returns the latest tool instances
-            refresh_cb=_refresh_and_rebind,  # on timeout/401/stream close, refresh + rebind
+            get_tools=self.mcp.get_tools,
+            refresh_cb=_refresh_and_rebind,
         )
-
         builder.add_node("tools", tools_node)
+
+        # Flow: START → reasoner → (tools?) → reasoner → …
         builder.add_edge(START, "reasoner")
         builder.add_conditional_edges("reasoner", tools_condition)
         builder.add_edge("tools", "reasoner")
         return builder
 
+    # ---------------------------
+    # LLM node
+    # ---------------------------
     async def reasoner(self, state: MessagesState):
         """
-        One LLM step; may call tools (kpi.* or os.*). After tools run, we collect their
-        outputs (JSON/objects) from ToolMessages and attach to response metadata for the UI.
-
-        Fred rationale:
-        - Run MCP preflight *before* the LLM decides to call tools. This ensures the
-          underlying httpx Auth minted a fresh token (client-credentials) for this turn.
-        - Preflight should be cheap and non-fatal: if it fails, we log and keep going.
+        One LLM step; may decide to call tools (kpi.* or os.*).
+        After tools run, ToolMessages are present in `state["messages"]`.
+        We collect their outputs and attach to the model response metadata for the UI.
         """
         if self.model is None:
             raise RuntimeError(
-                "Model is not initialized. Did you forget to call async_init()?"
+                "Sentinel: model is not initialized. Call async_init() first."
             )
 
-        # if self.toolkit is not None:
-        #     await self._preflight_mcp(timeout_seconds=2.0)
+        # 1) Build the system prompt from tuning (and tokens like {today})
+        tpl = self.get_tuned_text("prompts.system") or ""
+        system_text = self.render(tpl)  # keeps unknown {tokens} literal
 
+        # 2) Ask the model with a single SystemMessage prepended
+        messages = self.with_system(system_text, state["messages"])
         try:
-            response = self.model.invoke([self.base_prompt] + state["messages"])
+            response = await self.model.ainvoke(messages)
 
-            # Collect tool outputs by tool name, keep last result per tool call
+            # 3) Collect tool outputs (latest per tool name) from the history
             tool_payloads: Dict[str, Any] = {}
             for msg in state["messages"]:
-                if isinstance(msg, ToolMessage) and getattr(msg, "name", ""):
+                name = getattr(msg, "name", None)
+                if isinstance(msg, ToolMessage) and isinstance(name, str):
                     raw = msg.content
-                    # Normalize content: accept list/dict directly, else try JSON parse
-                    normalized = raw
+                    # Accept dict/list directly; try JSON decode for strings
+                    normalized: Any = raw
                     if isinstance(raw, str):
                         try:
                             normalized = json.loads(raw)
                         except Exception:
                             normalized = raw  # keep raw string if not JSON
-                    if msg.name is not None:
-                        tool_payloads[msg.name] = normalized
+                    tool_payloads[name] = normalized
 
-            # Attach tool results to metadata for the UI
-            existing = response.response_metadata.get("tools", {})
-            existing.update(tool_payloads)
-            response.response_metadata["tools"] = existing
+            # 4) Attach tool results to metadata for the UI
+            md = getattr(response, "response_metadata", None)
+            if not isinstance(md, dict):
+                md = {}
+            tools_md = md.get("tools", {})
+            if not isinstance(tools_md, dict):
+                tools_md = {}
+            tools_md.update(tool_payloads)
+            md["tools"] = tools_md
+            response.response_metadata = md
 
             return {"messages": [response]}
 
-        except Exception as e:
-            logger.exception("Sentinel: unexpected error: %s", e)
+        except Exception:
+            logger.exception("Sentinel: unexpected error")
             fallback = await self.model.ainvoke(
                 [
                     HumanMessage(

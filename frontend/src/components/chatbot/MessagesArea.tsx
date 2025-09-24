@@ -15,17 +15,18 @@
 import React, { memo, useMemo, useRef, useEffect } from "react";
 import MessageCard from "./MessageCard";
 import Sources from "./Sources";
-import { AgenticFlow, ChatMessage } from "../../slices/agentic/agenticOpenApi";
+import { ChatMessage } from "../../slices/agentic/agenticOpenApi";
 import { getExtras, hasNonEmptyText } from "./ChatBotUtils";
 import ReasoningStepsAccordion from "./ReasoningStepsAccordion";
+import { AnyAgent } from "../../common/agent";
 
 type Props = {
   messages: ChatMessage[];
-  agenticFlows: AgenticFlow[];
-  currentAgenticFlow: AgenticFlow;
+  agents: AnyAgent[];
+  currentAgent: AnyAgent;
 };
 
-function Area({ messages, agenticFlows, currentAgenticFlow }: Props) {
+function Area({ messages, agents, currentAgent }: Props) {
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   // Hover highlight in Sources (syncs with [n] markers inside MessageCard)
@@ -39,9 +40,9 @@ function Area({ messages, agenticFlows, currentAgenticFlow }: Props) {
     }
   };
 
-  const resolveAgenticFlow = (msg: ChatMessage): AgenticFlow => {
-    const agentName = msg.metadata?.agent_name ?? currentAgenticFlow.name;
-    return agenticFlows.find((flow) => flow.name === agentName) ?? currentAgenticFlow;
+  const resolveAgent = (msg: ChatMessage): AnyAgent => {
+    const agentName = msg.metadata?.agent_name ?? currentAgent.name;
+    return agents.find((agent) => agent.name === agentName) ?? currentAgent;
   };
 
   const content = useMemo(() => {
@@ -117,8 +118,7 @@ function Area({ messages, agenticFlows, currentAgenticFlow }: Props) {
           <MessageCard
             key={`user-${userMessage.session_id}-${userMessage.exchange_id}-${userMessage.rank}`}
             message={userMessage}
-            currentAgenticFlow={currentAgenticFlow}
-            agenticFlow={currentAgenticFlow}
+            agent={currentAgent}
             side="right"
             enableCopy
             enableThumbs
@@ -134,7 +134,7 @@ function Area({ messages, agenticFlows, currentAgenticFlow }: Props) {
             key={`trace-${group[0].session_id}-${group[0].exchange_id}`}
             steps={reasoningSteps}
             isOpenByDefault
-            resolveAgent={resolveAgenticFlow}
+            resolveAgent={resolveAgent}
           />,
         );
       }
@@ -154,7 +154,7 @@ function Area({ messages, agenticFlows, currentAgenticFlow }: Props) {
 
       // ---------- intermediary assistant/user messages ----------
       for (const msg of others) {
-        const agenticFlow = resolveAgenticFlow(msg);
+        // const agenticFlow = resolveAgent(msg);
         const inlineSrc = msg.metadata?.sources;
 
         elements.push(
@@ -170,8 +170,7 @@ function Area({ messages, agenticFlows, currentAgenticFlow }: Props) {
 
             <MessageCard
               message={msg}
-              agenticFlow={agenticFlow}
-              currentAgenticFlow={currentAgenticFlow}
+              agent={currentAgent}
               side={msg.role === "user" ? "right" : "left"}
               enableCopy
               enableThumbs
@@ -186,7 +185,7 @@ function Area({ messages, agenticFlows, currentAgenticFlow }: Props) {
 
       // ---------- final assistant message ----------
       for (const msg of finals) {
-        const agenticFlow = resolveAgenticFlow(msg);
+        // const agenticFlow = resolveAgent(msg);
         const finalSources = keptSources ?? (msg.metadata?.sources as any[] | undefined);
 
         // 1) Sources first (expanded)
@@ -207,8 +206,7 @@ function Area({ messages, agenticFlows, currentAgenticFlow }: Props) {
           <MessageCard
             key={`final-${msg.session_id}-${msg.exchange_id}-${msg.rank}`}
             message={msg}
-            agenticFlow={agenticFlow}
-            currentAgenticFlow={currentAgenticFlow}
+            agent={currentAgent}
             side="left"
             enableCopy
             enableThumbs
@@ -223,7 +221,7 @@ function Area({ messages, agenticFlows, currentAgenticFlow }: Props) {
     }
 
     return elements;
-  }, [messages, agenticFlows, currentAgenticFlow, highlightUid]);
+  }, [messages, agents, currentAgent, highlightUid]);
 
   useEffect(() => {
     scrollToBottom();

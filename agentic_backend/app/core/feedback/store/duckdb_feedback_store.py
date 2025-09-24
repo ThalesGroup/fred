@@ -55,14 +55,14 @@ class DuckdbFeedbackStore(BaseFeedbackStore):
     def list(self) -> List[FeedbackRecord]:
         with self.store._connect() as conn:
             rows = conn.execute(
-                f"SELECT * FROM {self.store._prefixed(self.table_name)} ORDER BY created_at DESC"
+                f'SELECT * FROM "{self.store._prefixed(self.table_name)}" ORDER BY created_at DESC'
             ).fetchall()
         return [self._row_to_record(row) for row in rows]
 
     def get(self, feedback_id: str) -> Optional[FeedbackRecord]:
         with self.store._connect() as conn:
             row = conn.execute(
-                f"SELECT * FROM {self.store._prefixed(self.table_name)} WHERE id = ?",
+                f'SELECT * FROM "{self.store._prefixed(self.table_name)}" WHERE id = ?',
                 (feedback_id,),
             ).fetchone()
         return self._row_to_record(row) if row else None
@@ -92,7 +92,7 @@ class DuckdbFeedbackStore(BaseFeedbackStore):
     def delete(self, feedback_id: str) -> None:
         with self.store._connect() as conn:
             result = conn.execute(
-                f"DELETE FROM {self.store._prefixed(self.table_name)} WHERE id = ?",
+                f'DELETE FROM "{self.store._prefixed(self.table_name)}" WHERE id = ?',
                 (feedback_id,),
             )
         if result.rowcount > 0:

@@ -1,24 +1,12 @@
+# app/agents/rag/rag_expert.py
 # Copyright Thales 2025
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
+# Licensed under the Apache License, Version 2.0
 
 import logging
-from datetime import datetime
 from typing import List
 
 from fred_core import VectorSearchHit, get_model
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.graph import END, START, MessagesState, StateGraph
 
 from app.common.rags_utils import (
@@ -27,9 +15,9 @@ from app.common.rags_utils import (
     format_sources_for_prompt,
     sort_hits,
 )
-from app.common.structures import AgentSettings
 from app.common.vector_search_client import VectorSearchClient
-from app.core.agents.flow import AgentFlow
+from app.core.agents.agent_flow import AgentFlow
+from app.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
 from app.core.agents.runtime_context import (
     get_document_library_tags_ids,
     get_search_policy,
@@ -37,47 +25,67 @@ from app.core.agents.runtime_context import (
 
 logger = logging.getLogger(__name__)
 
-
-def rag_preamble(now: str | None = None) -> str:
-    now = now or datetime.now().strftime("%Y-%m-%d")
-    return (
-        "You are an assistant that answers questions strictly based on the retrieved document chunks. "
-        "Always cite your claims using bracketed numeric markers like [1], [2], etc., matching the provided sources list. "
-        "Be concise, factual, and avoid speculation. If evidence is weak or missing, say so.\n"
-        f"Current date: {now}.\n"
-    )
-
-
-def build_rag_prompt(preamble: str, question: str, sources_block: str) -> str:
-    return (
-        f"{preamble}\n"
-        "Use ONLY the sources below. When you state a fact, append a citation like [1] or [1][2]. "
-        "If the sources disagree, say so briefly.\n\n"
-        f"Question:\n{question}\n\n"
-        f"Sources:\n{sources_block}\n"
-    )
+# -----------------------------
+# Spec-only tuning (class-level)
+# -----------------------------
+# Dev note:
+# - These are *UI schema fields* (spec). Live values come from AgentSettings.tuning
+#   and are applied by AgentFlow at runtime.
+RAG_TUNING = AgentTuning(
+    fields=[
+        FieldSpec(
+            key="prompts.system",
+            type="prompt",
+            title="RAG System Prompt",
+            description=(
+                "Sets the assistant policy for evidence-based answers and citation style."
+            ),
+            required=True,
+            default=(
+                "You answer strictly based on the retrieved document chunks.\n"
+                "Always cite claims using bracketed numeric markers like [1], [2], matching the provided sources list.\n"
+                "Be concise and factual. If evidence is weak or missing, say so."
+            ),
+            ui=UIHints(group="Prompts", multiline=True, markdown=True),
+        ),
+        FieldSpec(
+            key="rag.top_k",
+            type="integer",
+            title="Top-K Documents",
+            description="How many chunks to retrieve per question.",
+            required=False,
+            default=3,
+            ui=UIHints(group="Retrieval"),
+        ),
+        FieldSpec(
+            key="prompts.include_profile",
+            type="boolean",
+            title="Append User Profile to System Prompt",
+            description="If true, append the runtime profile text after the system prompt.",
+            required=False,
+            default=False,
+            ui=UIHints(group="Prompts"),
+        ),
+    ]
+)
 
 
 class RagExpert(AgentFlow):
-    name: str = "RagExpert"
-    nickname: str = "Remus"
-    role: str = "Document Retrieval Expert"
-    description: str = "Provides quick answers based on document content, using direct retrieval and generation."
-    icon: str = "rags_agent"
-    categories: List[str] = ["Documentation"]
-    tag: str = "rags"
+    """
+    Retrieval-Augmented Generation expert.
 
-    def __init__(self, agent_settings: AgentSettings):
-        super().__init__(agent_settings=agent_settings)
-        self.top_k = agent_settings.settings.get(
-            "top_k", 3
-        )  # default, can be overridden per call
+    Key principles (aligned with AgentFlow):
+    - No hidden prompt composition. This node explicitly chooses which tuned fields to use.
+    - Graph is built in async_init() and compiled lazily via AgentFlow.get_compiled_graph().
+    - Profile text is *opt-in* (governed by a tuning boolean).
+    """
+
+    tuning = RAG_TUNING  # UI schema only; live values are in AgentSettings.tuning
 
     async def async_init(self):
+        """Bind the model, create the vector search client, and build the graph."""
         self.model = get_model(self.agent_settings.model)
         self.search_client = VectorSearchClient()
-        # Use shared preamble util
-        self.base_prompt = rag_preamble(self.current_date)
         self._graph = self._build_graph()
 
     def _build_graph(self) -> StateGraph:
@@ -87,57 +95,94 @@ class RagExpert(AgentFlow):
         builder.add_edge("reasoner", END)
         return builder
 
+    # -----------------------------
+    # Small helpers (local policy)
+    # -----------------------------
+    def _system_prompt(self) -> str:
+        """
+        Resolve the RAG system prompt from tuning; optionally append profile text if enabled.
+        """
+        sys_tpl = self.get_tuned_text("prompts.system")
+        if not sys_tpl:
+            logger.warning("RagExpert: no tuned system prompt found, using fallback.")
+            raise RuntimeError("RagExpert: no tuned system prompt found.")
+        sys_text = self.render(sys_tpl)  # token-safe rendering (e.g. {today})
+
+        prof = self.profile_text()
+        if prof:
+            sys_text = f"{sys_text}\n\n{prof}"
+
+        return sys_text
+
+    # -----------------------------
+    # Node: reasoner
+    # -----------------------------
     async def _run_reasoning_step(self, state: MessagesState):
         if self.model is None:
             raise RuntimeError(
                 "Model is not initialized. Did you forget to call async_init()?"
             )
 
-        msg = state["messages"][-1]
-        if not isinstance(msg.content, str):
+        # Last user question (MessagesState ensures 'messages' is AnyMessage[])
+        last = state["messages"][-1]
+        if not isinstance(last.content, str):
             raise TypeError(
-                f"Expected string content, got: {type(msg.content).__name__}"
+                f"Expected string content for the last message, got: {type(last.content).__name__}"
             )
-        question = msg.content
+        question = last.content
 
         try:
-            # Build search args
-            document_library_tags_ids = get_document_library_tags_ids(
-                self.get_runtime_context()
-            )
+            # 1) Build retrieval scope from runtime context
+            doc_tag_ids = get_document_library_tags_ids(self.get_runtime_context())
             search_policy = get_search_policy(self.get_runtime_context())
-            # 1) Vector search via client
+            top_k = self.get_tuned_int("search.top_k", default=3)
+
+            # 2) Vector search
             hits: List[VectorSearchHit] = self.search_client.search(
                 question=question,
-                top_k=self.top_k,
-                document_library_tags_ids=document_library_tags_ids,
+                top_k=top_k,
+                document_library_tags_ids=doc_tag_ids,
                 search_policy=search_policy,
             )
             if not hits:
-                warn = f"I couldn't find any relevant documents for “{question}”. Try rephrasing?"
+                warn = "I couldn't find any relevant documents. Try rephrasing or expanding your query?"
                 return {
                     "messages": [await self.model.ainvoke([HumanMessage(content=warn)])]
                 }
 
-            # 2) Deterministic ordering + fill ranks
+            # 3) Deterministic ordering + fill ranks
             hits = sort_hits(hits)
             ensure_ranks(hits)
 
-            # 3) Prompt build with shared utils
+            # 4) Build messages explicitly (no magic)
+            #    - One SystemMessage with policy/tone (from tuning)
+            #    - One HumanMessage with task + formatted sources
+            sys_msg = SystemMessage(content=self._system_prompt())
             sources_block = format_sources_for_prompt(hits, snippet_chars=500)
-            prompt = build_rag_prompt(self.base_prompt, question, sources_block)
+            human_msg = HumanMessage(
+                content=(
+                    "Use ONLY the sources below. When you state a fact, add citations like [1] or [1][2]. "
+                    "If sources disagree or are insufficient, say so briefly.\n\n"
+                    f"Question:\n{question}\n\n"
+                    f"Sources:\n{sources_block}\n"
+                )
+            )
 
-            # 4) Ask the model
-            answer = await self.model.ainvoke([HumanMessage(content=prompt)])
+            # 5) Ask the model
+            answer = await self.model.ainvoke([sys_msg, human_msg])
 
-            # 5) Attach rich sources metadata for the UI
+            # 6) Attach rich sources metadata for the UI
             attach_sources_to_llm_response(answer, hits)
 
             return {"messages": [answer]}
 
         except Exception:
-            logger.exception("Error in agent reasoning.")
+            logger.exception("RagExpert: error in reasoning step.")
             fallback = await self.model.ainvoke(
-                [HumanMessage(content="An error occurred. Please try again later.")]
+                [
+                    HumanMessage(
+                        content="An unexpected error occurred while searching documents. Please try again."
+                    )
+                ]
             )
             return {"messages": [fallback]}

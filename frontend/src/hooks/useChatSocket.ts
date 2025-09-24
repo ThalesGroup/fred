@@ -20,7 +20,6 @@ import { KeyCloakService } from "../security/KeycloakService";
 import { toWsUrl, mergeAuthoritative, upsertOne } from "../components/chatbot/ChatBotUtils";
 
 import type {
-  AgenticFlow,
   ChatAskInput,
   ChatMessage,
   FinalEvent,
@@ -28,6 +27,7 @@ import type {
   SessionSchema,
   StreamEvent,
 } from "../slices/agentic/agenticOpenApi";
+import { AnyAgent } from "../common/agent";
 
 /**
  * WebSocket transport extracted from ChatBot.
@@ -36,11 +36,11 @@ import type {
  */
 export function useChatSocket(params: {
   currentSession: SessionSchema | null;
-  currentAgenticFlow: AgenticFlow;
+  currentAgent: AnyAgent;
   onUpdateOrAddSession?: (s: SessionSchema) => void;
   onBindDraftAgentToSessionId?: (sessionId: string) => void;
 }) {
-  const { currentSession, currentAgenticFlow, onUpdateOrAddSession, onBindDraftAgentToSessionId } = params;
+  const { currentSession, currentAgent, onUpdateOrAddSession, onBindDraftAgentToSessionId } = params;
 
   const webSocketRef = useRef<WebSocket | null>(null);
   const wsTokenRef = useRef<string | null>(null);
@@ -168,12 +168,12 @@ export function useChatSocket(params: {
     async (
       message: string,
       runtimeContext?: RuntimeContext,
-      overrides?: { agent?: AgenticFlow; session?: SessionSchema },
+      overrides?: { agent?: AnyAgent; session?: SessionSchema },
     ) => {
       const socket = await connect();
       if (!socket || socket.readyState !== WebSocket.OPEN) throw new Error("WebSocket not open");
 
-      const agent = overrides?.agent ?? currentAgenticFlow;
+      const agent = overrides?.agent ?? currentAgent;
       const session = overrides?.session ?? currentSession;
 
       const base: ChatAskInput = {
@@ -187,7 +187,7 @@ export function useChatSocket(params: {
       setWaitResponse(true);
       socket.send(JSON.stringify(event));
     },
-    [connect, currentAgenticFlow, currentSession],
+    [connect, currentAgent, currentSession],
   );
 
   return {

@@ -2,10 +2,9 @@
 import { z } from "zod";
 import { TFunction } from "i18next";
 
-export const AGENT_TYPES = ["mcp"] as const;
-export const MCP_TRANSPORTS = ["sse", "http"] as const;
+export const MCP_TRANSPORTS = ["streamable_http", "http"] as const;
 
-export const createAgentSchema = (t: TFunction) => {
+export const createMcpAgentSchema = (t: TFunction) => {
   const get = (key: string, defaultValue?: string) => t(key, { defaultValue });
 
   const mcpServerSchema = z.object({
@@ -20,16 +19,9 @@ export const createAgentSchema = (t: TFunction) => {
 
   return z.object({
     name: z.string().min(1, { message: get("validation.required", "Required") }),
-    nickname: z.string().min(1, { message: get("validation.required", "Required") }),
     description: z.string().min(1, { message: get("validation.required", "Required") }),
     role: z.string().min(1, { message: get("validation.required", "Required") }),
-
-    base_prompt: z.string().min(1, { message: get("validation.required", "Required") }),
-    icon: z.string().optional(),
-
-    agent_type: z.literal("mcp", { message: get("validation.invalid_type", "Invalid type") }),
-
-    categories: z.array(z.string()).optional(),
+    tags: z.array(z.string()).optional(),
     mcp_servers: z.array(mcpServerSchema).min(1, { message: get("validation.required", "Required") }),
   });
 };

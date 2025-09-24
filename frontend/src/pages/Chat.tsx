@@ -16,7 +16,6 @@ import { useRef, useState } from "react";
 import { Box, CircularProgress, Paper, Typography, Divider, IconButton, PaperProps, Grid2 } from "@mui/material";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import {
-  AgenticFlow,
   SessionSchema,
   useGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery,
   useGetSessionsAgenticV1ChatbotSessionsGetQuery,
@@ -29,6 +28,7 @@ import ChatBot from "../components/chatbot/ChatBot";
 import { SidePanelToggle } from "../components/SidePanelToogle";
 import { useTranslation } from "react-i18next";
 import { ProfilePickerPanel } from "../components/chatbot/settings/ProfilePickerPanel";
+import { AnyAgent } from "../common/agent";
 
 const PANEL_W = { xs: 300, sm: 340, md: 360 };
 
@@ -37,7 +37,7 @@ export default function Chat() {
   const { t } = useTranslation();
 
   const {
-    data: flows = [],
+    data: agentsFromServer = [],
     isLoading: flowsLoading,
     isError: flowsError,
     error: flowsErrObj,
@@ -59,16 +59,16 @@ export default function Chat() {
   const {
     sessions,
     currentSession,
-    currentAgenticFlow,
+    currentAgent,
     isCreatingNewConversation,
     selectSession,
-    selectAgenticFlowForCurrentSession,
+    selectAgentForCurrentSession,
     startNewConversation,
     updateOrAddSession,
     bindDraftAgentToSessionId
   } = useSessionOrchestrator({
     sessionsFromServer,
-    flowsFromServer: flows,
+    agentsFromServer,
     loading: sessionsLoading || flowsLoading,
   });
 
@@ -79,8 +79,8 @@ export default function Chat() {
   const openAgents = () => setAgentsOpen(true);
   const closeAgents = () => setAgentsOpen(false);
 
-  const handleSelectAgent = (flow: AgenticFlow) => {
-    selectAgenticFlowForCurrentSession(flow);
+  const handleSelectAgent = (agent: AnyAgent) => {
+    selectAgentForCurrentSession(agent);
   };
 
   const handleCreateNewConversation = () => {
@@ -141,7 +141,15 @@ export default function Chat() {
       </Box>
     );
   }
-  if (flows.length === 0) {
+
+  // After the two queries
+  const allAgents = agentsFromServer ?? [];
+
+  // Treat agents with `enabled === true` as selectable for chat.
+  // (If some payloads don’t include `enabled`, use `a.enabled !== false` instead.)
+  const enabledAgents = allAgents.filter(a => a.enabled === true);
+
+  if (enabledAgents.length === 0) {
     return (
       <Box sx={{ p: 3 }}>
         <Typography variant="h6">No assistants available</Typography>
@@ -175,7 +183,7 @@ export default function Chat() {
         <Box sx={{ position: "absolute", top: 12, left: 12, zIndex: 10 }}>
           <SidePanelToggle
             isOpen={agentsOpen}
-            label={currentAgenticFlow ? currentAgenticFlow.nickname || currentAgenticFlow.name : "Assistants"}
+            label={currentAgent ? currentAgent.name : "Assistants"}
             onToggle={openAgents}
           />
         </Box>
@@ -207,7 +215,7 @@ export default function Chat() {
             }}
           >
             <Typography variant="h6" sx={{ flexGrow: 1, pl: 1 }}>
-              {t("panel.conversationSetup", "Conversation setup")}
+              {t("settings.conversationSetup")}
             </Typography>
             <IconButton size="small" onClick={closeAgents}>
               <ChevronLeftIcon fontSize="small" />
@@ -219,7 +227,7 @@ export default function Chat() {
               onChangeSelectedProfileIds={setSelectedProfileIds}
             />
             <Divider />
-            <AgentsList agenticFlows={flows} selected={currentAgenticFlow} onSelect={handleSelectAgent} />
+            <AgentsList agents={enabledAgents} selected={currentAgent} onSelect={handleSelectAgent} />
             <Divider />
             <ConversationList
               sessions={sessions}
@@ -235,8 +243,8 @@ export default function Chat() {
         <Grid2>
           <ChatBot
             currentChatBotSession={currentSession}
-            currentAgenticFlow={currentAgenticFlow!}
-            agenticFlows={flows}
+            currentAgent={currentAgent!}
+            agents={enabledAgents}
             onUpdateOrAddSession={updateOrAddSession}
             isCreatingNewConversation={isCreatingNewConversation}
             runtimeContext={{

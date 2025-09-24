@@ -167,10 +167,14 @@
     }
   },
   "agentCard": {
-    "edit": "Modifier",
+    "edit": "Modifier les paramètres exposés de l'agent",
     "delete": "Supprimer",
     "taggedWith": "Tagué : {{tag}}",
-    "expertIntegrations": "Intégrations expertes :"
+    "expertIntegrations": "Intégrations expertes :",
+    "enabled": "Activer l'agent",
+    "disable": "Désactiver l'agent",
+    "favorite": "Ajouter l'agent à vos favoris",
+    "unfavorite": "Retirer l'agent de vos favoris"
   },
   "dialogs": {
     "create": {

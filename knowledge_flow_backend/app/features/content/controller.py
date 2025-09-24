@@ -35,7 +35,7 @@ class DocumentContent(BaseModel):
     content: Any = None
     has_binary_content: bool = False
     content_type: str = "application/octet-stream"
-    file_url: str = None
+    file_url: str = ""
     modified: str = ""
     metadata: Dict[str, Any] = {}
 
