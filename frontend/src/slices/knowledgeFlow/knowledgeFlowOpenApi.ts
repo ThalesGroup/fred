@@ -315,6 +315,16 @@ const injectedRtkApi = api.injectEndpoints({
     osDiagnostics: build.query<OsDiagnosticsApiResponse, OsDiagnosticsApiArg>({
       query: () => ({ url: `/knowledge-flow/v1/os/diagnostics` }),
     }),
+    writeReportKnowledgeFlowV1McpReportsWritePost: build.mutation<
+      WriteReportKnowledgeFlowV1McpReportsWritePostApiResponse,
+      WriteReportKnowledgeFlowV1McpReportsWritePostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/mcp/reports/write`,
+        method: "POST",
+        body: queryArg.writeReportRequest,
+      }),
+    }),
     processDocumentsKnowledgeFlowV1ProcessDocumentsPost: build.mutation<
       ProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostApiResponse,
       ProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostApiArg
@@ -559,6 +569,11 @@ export type OsShardsApiArg = {
 };
 export type OsDiagnosticsApiResponse = /** status 200 Successful Response */ any;
 export type OsDiagnosticsApiArg = void;
+export type WriteReportKnowledgeFlowV1McpReportsWritePostApiResponse =
+  /** status 200 Successful Response */ WriteReportResponse;
+export type WriteReportKnowledgeFlowV1McpReportsWritePostApiArg = {
+  writeReportRequest: WriteReportRequest;
+};
 export type ProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostApiResponse = /** status 200 Successful Response */ any;
 export type ProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostApiArg = {
   processDocumentsRequest: ProcessDocumentsRequest;
@@ -912,6 +927,23 @@ export type KpiQuery = {
   limit?: number;
   order_by?: OrderBy | null;
 };
+export type WriteReportResponse = {
+  document_uid: string;
+  md_url: string;
+  html_url?: string | null;
+  pdf_url?: string | null;
+};
+export type WriteReportRequest = {
+  /** Report title shown in UI */
+  title: string;
+  /** Canonical Markdown content (stored as-is) */
+  markdown: string;
+  /** Optional template identifier for traceability */
+  template_id?: string | null;
+  /** UI tags (chips) */
+  tags?: string[];
+  render_formats?: string[];
+};
 export type FileToProcessWithoutUser = {
   source_tag: string;
   tags?: string[];
@@ -998,6 +1030,7 @@ export const {
   useLazyOsShardsQuery,
   useOsDiagnosticsQuery,
   useLazyOsDiagnosticsQuery,
+  useWriteReportKnowledgeFlowV1McpReportsWritePostMutation,
   useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation,
   useScheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPostMutation,
 } = injectedRtkApi;
