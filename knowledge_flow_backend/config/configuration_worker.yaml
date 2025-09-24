@@ -102,9 +102,6 @@ content_storage:
   # secure: False
   # bucket_name: app-bucket
 
-catalog_storage:
-  type: "duckdb"
-  duckdb_path: "~/.fred/knowledge-flow/db.duckdb"
 
 metadata_storage:
   # Metadata Storage Configuration
