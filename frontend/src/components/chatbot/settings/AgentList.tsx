@@ -114,7 +114,7 @@ const AgentsList = memo(function AgentsList({ agents, selected, onSelect, dense 
                   }}
                 >
                   {/* Single source of avatar truth */}
-                  <Box sx={{ mr: 1, lineHeight: 0 }}>{getAgentBadge(agent.name)}</Box>
+                  <Box sx={{ mr: 1, lineHeight: 0 }}>{getAgentBadge(agent.name, agent.type === "leader")}</Box>
 
                   <ListItemText
                     primary={agent.name}

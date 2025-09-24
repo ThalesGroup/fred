@@ -81,7 +81,7 @@ export const AgentCard = ({
       >
         {/* Left: badge + name + role */}
         <Box sx={{ display: "flex", alignItems: "center", minWidth: 0 }}>
-          <Box sx={{ mr: 1, flexShrink: 0, lineHeight: 0 }}>{getAgentBadge(agent.name)}</Box>
+          <Box sx={{ mr: 1, flexShrink: 0, lineHeight: 0 }}>{getAgentBadge(agent.name, agent.type === "leader")}</Box>
           <Box sx={{ minWidth: 0, flex: "1 1 auto" }}>
             <Typography variant="h6" color="text.secondary" sx={{ lineHeight: 1.25 }}>
               {agent.name}

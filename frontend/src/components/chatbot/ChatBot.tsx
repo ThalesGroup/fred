@@ -566,7 +566,7 @@ const ChatBot = ({
                   flexWrap: "nowrap",
                 }}
               >
-                {getAgentBadge(currentAgent.name)}
+                {getAgentBadge(currentAgent.name, currentAgent.type === "leader")}
                 <Typography variant="h5" sx={{ fontWeight: 600, letterSpacing: 0.2 }}>
                   {t("chatbot.startNew", { name: currentAgent.name })}
                 </Typography>

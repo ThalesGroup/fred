@@ -136,7 +136,7 @@ export default function MessageCard({
         {side === "left" && agent && (
           <Grid2 size="auto" paddingTop={2}>
             <Tooltip title={`${agent.name}: ${agent.role}`}>
-              <Box sx={{ mr: 2, mb: 2 }}>{getAgentBadge(agent.name)}</Box>
+              <Box sx={{ mr: 2, mb: 2 }}>{getAgentBadge(agent.name, agent.type === "leader")}</Box>
             </Tooltip>
           </Grid2>
         )}

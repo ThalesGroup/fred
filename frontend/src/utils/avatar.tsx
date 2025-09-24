@@ -21,6 +21,7 @@ import AttachMoneyIcon from "@mui/icons-material/AttachMoney";
 import VerifiedIcon from "@mui/icons-material/Verified";
 import SecurityIcon from "@mui/icons-material/Security";
 import StarIcon from "@mui/icons-material/Star";
+import { fa } from "zod/v4/locales";
 const colors = [red[800], blue[800], green[800], purple[800], orange[800]];
 export function getFactTypeIcon(factType: string, size: number = 12) {
   const theme = useTheme();
@@ -60,19 +61,18 @@ const expertColors: Record<string, string> = {
   Fred: teal[500],
 };
 const fallbackColor = green[500];
-
 export const getAgentAvatar = (name: string, size: number = 28) => {
   const color = expertColors[name] || fallbackColor; // Use mapped color or fallback
   return <Avatar sx={{ bgcolor: color, width: size, height: size }}>{name?.toUpperCase().charAt(0)}</Avatar>;
 };
-export const getAgentBadge = (name: string, size: number = 28) => {
-  const color = expertColors[name] || fallbackColor; // Use mapped color or fallback
+export const getAgentBadge = (name: string, isLeader: boolean = false,  size: number = 28) => {
+  const agentColor = isLeader ?  teal[500] : green[500];
 
   return (
     <Badge
       overlap="circular"
       badgeContent={
-        name === "Fred" ? (
+        isLeader ? (
           <StarIcon
             sx={{
               color: yellow[800], // Star color
@@ -83,7 +83,7 @@ export const getAgentBadge = (name: string, size: number = 28) => {
       }
       anchorOrigin={{ vertical: "top", horizontal: "right" }} // Position of the star
     >
-      <Avatar sx={{ bgcolor: color, width: size, height: size }}>{name?.toUpperCase().charAt(0)}</Avatar>
+      <Avatar sx={{ bgcolor: agentColor, width: size, height: size }}>{name?.toUpperCase().charAt(0)}</Avatar>
     </Badge>
   );
 };
