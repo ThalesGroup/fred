@@ -67,6 +67,7 @@ input_processors:
 content_storage:
   type: minio
   endpoint: http://localhost:9000
+  access_key: "admin"
   bucket_name: "knowledge-flow-content"
   secure: false
 
@@ -88,6 +89,7 @@ document_sources:
     endpoint_url: localhost:9000
     bucket_name: "shared-content"
     prefix: ""
+    access_key: "admin"
     secure: false
 
 model:

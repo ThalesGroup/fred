@@ -84,7 +84,6 @@ input_processors:
 content_storage:
   # The content store type can be either "local" or "minio" or "gcs"
   # If you are using minio, make sure to set the following environment variables:
-  # - MINIO_ACCESS_KEY
   # - MINIO_SECRET_KEY
   # If you are using gcs, make sure to set the following environment variables:
   # - GCS_PROJECT_ID
@@ -98,7 +97,7 @@ content_storage:
   ################################################
   # type: "minio"
   # endpoint: localhost:9000
-  # access_key: minioadmin # Overrides the MINIO_ACCESS_KEY environment variable
+  # access_key: minioadmin
   # secret_key: minioadmin # Overrides the MINIO_SECRET_KEY environment variable
   # secure: False
   # bucket_name: app-bucket

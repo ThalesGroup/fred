@@ -74,11 +74,8 @@ class MinioStorageConfig(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def load_env_if_missing(cls, values: dict) -> dict:
-        values.setdefault("access_key", os.getenv("MINIO_ACCESS_KEY"))
         values.setdefault("secret_key", os.getenv("MINIO_SECRET_KEY"))
 
-        if not values.get("access_key"):
-            raise ValueError("Missing MINIO_ACCESS_KEY environment variable")
         if not values.get("secret_key"):
             raise ValueError("Missing MINIO_SECRET_KEY environment variable")
 
@@ -259,11 +256,7 @@ class MinioPullSource(BasePullSourceConfig):
     @model_validator(mode="before")
     @classmethod
     def load_env_secrets(cls, values: dict) -> dict:
-        values.setdefault("access_key", os.getenv("MINIO_ACCESS_KEY"))
         values.setdefault("secret_key", os.getenv("MINIO_SECRET_KEY"))
-
-        if not values.get("access_key"):
-            raise ValueError("Missing MINIO_ACCESS_KEY environment variable")
 
         if not values.get("secret_key"):
             raise ValueError("Missing MINIO_SECRET_KEY environment variable")
