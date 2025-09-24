@@ -102,30 +102,25 @@ class TabularService:
 
         return responses
 
+    # Read only queries, such as SELECT
     @authorize(action=Action.READ, resource=Resource.TABLES)
-    @authorize(action=Action.UPDATE, resource=Resource.TABLES)
-    @authorize(action=Action.DELETE, resource=Resource.TABLES)
-    @authorize(action=Action.CREATE, resource=Resource.TABLES)
-    def query(self, user: KeycloakUser, db_name: str, document_name: str, request: RawSQLRequest) -> TabularQueryResponse:
-        store = self._get_store(db_name)
+    def query_read(self, user: KeycloakUser, db_name: str, request: RawSQLRequest) -> TabularQueryResponse:
         sql = request.query.strip()
+        if not sql.lower().lstrip().startswith("select"):
+            raise ValueError("Only SELECT statements are allowed on the read endpoint")
+        store = self._get_store(db_name)
+        df = store.execute_sql_query(sql)
+        return TabularQueryResponse(db_name=db_name, sql_query=sql, rows=df.to_dict(orient="records"), error=None)
 
+    # Write queries such as UPDATE, CREATE, DELETE
+    @authorize(action=Action.UPDATE, resource=Resource.TABLES)
+    @authorize(action=Action.CREATE, resource=Resource.TABLES)
+    @authorize(action=Action.DELETE, resource=Resource.TABLES)
+    def query_write(self, user: KeycloakUser, db_name: str, request: RawSQLRequest) -> TabularQueryResponse:
+        sql = request.query.strip()
         if not sql:
             raise ValueError("Empty SQL string provided")
-
-        try:
-            is_write = not sql.lower().lstrip().startswith("select")
-            if is_write:
-                self._check_write_allowed(db_name)
-                logger.info(f"[{db_name}] Executing SQL: {sql}")
-                store.execute_update_query(sql)
-                rows = []
-            else:
-                logger.info(f"[{db_name}] Executing SQL: {sql}")
-                df = store.execute_sql_query(sql)
-                rows = df.to_dict(orient="records")
-            return TabularQueryResponse(db_name=db_name, sql_query=sql, rows=rows, error=None)
-
-        except Exception as e:
-            logger.error(f"[{db_name}] Error during query execution: {e}", exc_info=True)
-            return TabularQueryResponse(db_name=db_name, sql_query=sql, rows=[], error=str(e))
+        self._check_write_allowed(db_name)
+        store = self._get_store(db_name)
+        store.execute_update_query(sql)
+        return TabularQueryResponse(db_name=db_name, sql_query=sql, rows=[], error=None)
