@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 
 import { useLazyGetMarkdownPreviewKnowledgeFlowV1MarkdownDocumentUidGetQuery } from "../slices/knowledgeFlow/knowledgeFlowOpenApi";
 
+import MarkdownContainer from "../components/markdown/MarkdownContainer";
 import MarkdownRendererWithHighlights, { HighlightedPart } from "../components/markdown/MarkdownRendererWithHighlights";
 
 interface MarkdownDocumentViewerProps {
@@ -94,7 +95,7 @@ export const MarkdownDocumentViewer: React.FC<MarkdownDocumentViewerProps> = ({
   };
 
   return (
-    <Box sx={{ width: "80vw", height: "100vh", display: "flex", flexDirection: "column" }}>
+    <Box sx={{ width: "80vw", height: "100vh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
       <AppBar position="static" color="default" elevation={0}>
         <Toolbar>
           <Typography variant="h6" sx={{ flex: 1 }}>
@@ -115,12 +116,14 @@ export const MarkdownDocumentViewer: React.FC<MarkdownDocumentViewerProps> = ({
             <CircularProgress />
           </Box>
         ) : (
-          <MarkdownRendererWithHighlights
-            highlightedParts={[...highlightedParts, ...highlightedPartsFromExtracts]}
-            content={docContent}
-            size="medium"
-            enableEmojiSubstitution
-          />
+            <MarkdownContainer padding={3}>
+              <MarkdownRendererWithHighlights
+                highlightedParts={[...highlightedParts, ...highlightedPartsFromExtracts]}
+                content={docContent}
+                size="medium"
+                enableEmojiSubstitution
+              />
+            </MarkdownContainer>
         )}
       </Box>
     </Box>
