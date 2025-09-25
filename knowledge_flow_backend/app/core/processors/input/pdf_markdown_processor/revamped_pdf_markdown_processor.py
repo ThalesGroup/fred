@@ -1,5 +1,6 @@
 import logging
 import re
+import base64
 from pathlib import Path
 from typing import Optional
 
@@ -7,10 +8,10 @@ import pypdf
 from pypdf.errors import PdfReadError
 from pypdf.generic import NameObject, DictionaryObject
 
+from app.application_context import get_configuration
 from app.core.processors.input.common.base_input_processor import BaseMarkdownProcessor
-from app.core.processors.input.pdf_markdown_processor.pdf_markdown_processor import (
-    PdfMarkdownProcessor as DoclingProcessor,
-)
+from app.core.processors.input.common.image_describer import build_image_describer
+from app.core.processors.input.pdf_markdown_processor.pdf_markdown_processor import PdfMarkdownProcessor as DoclingProcessor
 
 logger = logging.getLogger(__name__)
 
@@ -18,44 +19,40 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
     """
     Fast PDF→Markdown processor.
 
-    • First attempts a quick extraction using pypdf.
-    • If no text is detected (pure image scan),
-      it automatically falls back to PdfMarkdownProcessor (Docling + torch)
-      to perform OCR and include images/tables.
+    • Tries quick extraction using pypdf.
+    • Falls back to Docling OCR if no text is detected (image-only PDF).
+    • Inline images are described and inserted as %%ANNOTATION%% blocks.
     """
 
     def __init__(self):
         super().__init__()
+        cfg = get_configuration()
+        self.process_images = cfg.processing.process_images
+        self.image_describer = build_image_describer(cfg.vision) if self.process_images and cfg.vision else None
         self._docling_fallback: Optional[DoclingProcessor] = None
 
     # ------------------------------------------------------------ #
     # Helpers
     # ------------------------------------------------------------ #
 
-    def _extract_inline_images(self, page) -> list[str]:
-        """Return a list of image names embedded in a page."""
-        images = []
+    def _extract_inline_images(self, page) -> list[bytes]:
+        images: list[bytes] = []
         try:
             xobjects = page["/Resources"].get("/XObject")
             if isinstance(xobjects, DictionaryObject):
                 for name, obj in xobjects.items():
-                    if isinstance(obj.get_object(), DictionaryObject):
-                        subtype = obj.get_object().get("/Subtype")
-                        if subtype == NameObject("/Image"):
-                            images.append(str(name))
-        except Exception:
-            pass
+                    xobj = obj.get_object()
+                    if isinstance(xobj, DictionaryObject) and xobj.get("/Subtype") == NameObject("/Image"):
+                        data = xobj.get_data()
+                        if data:
+                            images.append(data)
+        except Exception as e:
+            logger.warning(f"Image extraction failed on page: {e}")
         return images
 
     def _guess_tables(self, text: str) -> list[str]:
-        """
-        Naively detect table-like blocks by looking for lines
-        with multiple consecutive spaces or tabs.
-        """
-        tables = []
-        lines = text.splitlines()
-        block = []
-        for line in lines:
+        tables, block = [], []
+        for line in text.splitlines():
             if re.search(r"\s{2,}", line) or "\t" in line:
                 block.append(line)
             else:
@@ -71,9 +68,6 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
     # ------------------------------------------------------------ #
 
     def check_file_validity(self, file_path: Path) -> bool:
-        """
-        Verify that the file is a valid, non-empty PDF.
-        """
         try:
             with open(file_path, "rb") as f:
                 reader = pypdf.PdfReader(f)
@@ -88,19 +82,11 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
         return False
 
     def extract_file_metadata(self, file_path: Path) -> dict:
-        """
-        Extract metadata and detect if the PDF contains extractable text.
-        """
         try:
             with open(file_path, "rb") as f:
                 reader = pypdf.PdfReader(f)
                 info = reader.metadata or {}
-
-                # Detect presence of text
-                text_found = any(
-                    (page.extract_text() or "").strip()
-                    for page in reader.pages
-                )
+                text_found = any((page.extract_text() or "").strip() for page in reader.pages)
 
                 return {
                     "title": info.get("/Title") or None,
@@ -125,58 +111,65 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
         document_uid: str | None
     ) -> dict:
         """
-        Convert the PDF to Markdown using pypdf when possible.
-        If no extractable text is found, fall back to the Docling OCR processor.
+        Convert to Markdown using pypdf and fallback to Docling OCR.
+        Preserves page breaks, tables, and inline %%ANNOTATION%% for images.
         """
         output_dir.mkdir(parents=True, exist_ok=True)
         md_path = output_dir / "output.md"
 
-        # First pass: quick text extraction
         try:
             reader = pypdf.PdfReader(str(file_path))
-
             any_text = False
+            annotations: list[str] = []
+
             with md_path.open("w", encoding="utf-8") as md:
                 for i, page in enumerate(reader.pages, start=1):
                     text = page.extract_text() or ""
                     if text.strip():
                         any_text = True
-                    images = self._extract_inline_images(page)
+
                     tables = self._guess_tables(text)
+                    images = self._extract_inline_images(page)
 
-                    md.write(f"# Page {i}\n\n")
+                    # Write page header
+                    md.write(f"{text.strip()}\n\n")  # Preserve original line breaks
+                    for tbl_idx, tbl in enumerate(tables):
+                        md.write(f"<!-- TABLE_START:id={i}-{tbl_idx} -->\n{tbl}\n<!-- TABLE_END -->\n\n")
 
-                    # Annotate detected tables
-                    for idx, tbl in enumerate(tables):
-                        md.write(
-                            f"<!-- TABLE_START:id={i}-{idx} -->\n{tbl}\n<!-- TABLE_END -->\n\n"
-                        )
+                    for raw_img in images:
+                        desc = "Image description not available."
+                        if self.image_describer:
+                            try:
+                                b64 = base64.b64encode(raw_img).decode("ascii")
+                                desc = self.image_describer.describe(b64)
+                            except Exception as e:
+                                logger.warning(f"Image description failed: {e}")
+                        annotations.append(desc)
+                        md.write("%%ANNOTATION%%\n\n")  # preserve placeholder
 
-                    md.write(text + "\n\n")
+            # Fallback to Docling OCR if no text found
+            if not any_text:
+                logger.info("No extractable text detected. Falling back to Docling OCR processor...")
+                if self._docling_fallback is None:
+                    self._docling_fallback = DoclingProcessor()
+                return self._docling_fallback.convert_file_to_markdown(file_path, output_dir, document_uid)
 
-                    for img in images:
-                        md.write(f"![Embedded image: {img}]\n\n")
+            # Replace %%ANNOTATION%% with descriptions
+            if annotations:
+                content = md_path.read_text(encoding="utf-8")
+                for desc in annotations:
+                    content = content.replace("%%ANNOTATION%%", desc, 1)
+                md_path.write_text(content, encoding="utf-8")
 
-            if any_text:
-                return {
-                    "doc_dir": str(output_dir),
-                    "md_file": str(md_path),
-                    "status": "success",
-                    "message": "PDF to Markdown conversion completed using pypdf.",
-                }
-
-            # ------------------------------------------------------------------
-            # Fallback to Docling if no text
-            # ------------------------------------------------------------------
-            logger.info("No extractable text detected. Falling back to Docling OCR processor...")
-            if self._docling_fallback is None:
-                self._docling_fallback = DoclingProcessor()
-            return self._docling_fallback.convert_file_to_markdown(
-                file_path, output_dir, document_uid
-            )
+            return {
+                "doc_dir": str(output_dir),
+                "md_file": str(md_path),
+                "status": "success",
+                "message": "PDF to Markdown conversion completed with page-wise layout and image annotations.",
+            }
 
         except Exception as e:
-            logger.error(f"Fast conversion failed: {e}")
+            logger.error(f"PDF conversion failed: {e}")
             return {
                 "doc_dir": str(output_dir),
                 "md_file": None,
