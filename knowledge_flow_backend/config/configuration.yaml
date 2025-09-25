@@ -48,7 +48,8 @@ scheduler:
 
 input_processors:
   - prefix: ".pdf"
-    class_path: app.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor
+    class_path: app.core.processors.input.pdf_markdown_processor.revamped_pdf_markdown_processor.PdfMarkdownProcessor
+    # class_path: app.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor
   - prefix: ".docx"
     class_path: app.core.processors.input.docx_markdown_processor.docx_markdown_processor.DocxMarkdownProcessor
   - prefix: ".pptx"
@@ -87,8 +88,8 @@ embedding:
 # Configuration for the LLM used for summary, keyword generation
 # and other text generation tasks.
 model:
-  provider: openai        # openai | azure | ollama
-  name: gpt-4o-mini       # azure: deployment name, ollama: 'qwen2.5:3b-instruct' etc.
+  provider: openai # openai | azure | ollama
+  name: gpt-4o-mini # azure: deployment name, ollama: 'qwen2.5:3b-instruct' etc.
   settings:
     # openai: nothing else required (keys in .env)
     # azure: { endpoint: "...", api_version: "2024-08-01-preview" }
