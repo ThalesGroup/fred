@@ -71,10 +71,15 @@ export default function MessageCard({
   onCitationHover,
   onCitationClick,
 
-  // name maps: id -> human label
+  // id -> human label maps
   libraryNameById,
   templateNameById,
   promptNameById,
+
+  // current UI selections (to complement snapshot)
+  currentLibraryIds,
+  currentTemplateIds,
+  currentPromptIds,
 }: {
   message: ChatMessage;
   agenticFlow: AgenticFlow;
@@ -91,6 +96,10 @@ export default function MessageCard({
   libraryNameById?: Record<string, string>;
   templateNameById?: Record<string, string>;
   promptNameById?: Record<string, string>;
+
+  currentLibraryIds?: string[];
+  currentTemplateIds?: string[];
+  currentPromptIds?: string[];
 }) {
   const theme = useTheme();
   const { showError, showInfo } = useToast();
@@ -154,14 +163,18 @@ export default function MessageCard({
   const latencyMs: number | undefined =
     meta.latency_ms ?? meta?.timings?.durationMs ?? meta?.latency?.ms ?? undefined;
 
-  // Raw ids from backend
-  const libsUsedIds: string[] | undefined = plugins.libraries;
-  const templatesUsedIds: string[] | undefined = plugins.templates;
-
-  // Prompts: prefer snapshot at top-level (metadata.prompts), else plugins.prompts
-  const promptsShortIds: string[] | undefined =
+  // Snapshot ids from backend (what was actually applied for this message)
+  const snapLibs: string[] = plugins.libraries ?? [];
+  const snapTemplates: string[] = plugins.templates ?? [];
+  const snapPrompts: string[] =
     (Array.isArray(meta.prompts) && meta.prompts.length ? meta.prompts : undefined) ??
-    (plugins.prompts && plugins.prompts.length ? plugins.prompts : undefined);
+    (plugins.prompts && plugins.prompts.length ? plugins.prompts : []) ??
+    [];
+
+  // Current selections (from UI, may be empty)
+  const curLibs = currentLibraryIds ?? [];
+  const curTemplates = currentTemplateIds ?? [];
+  const curPrompts = currentPromptIds ?? [];
 
   // Search policy & temperature (if provided)
   const searchPolicy: string | undefined = plugins.search_policy;
@@ -171,14 +184,35 @@ export default function MessageCard({
   const inTokens = message.metadata?.token_usage?.input_tokens;
   const outTokens = message.metadata?.token_usage?.output_tokens;
 
-  // ---- Label helpers ----
-  const labelize = (ids?: string[], map?: Record<string, string>) =>
-    (ids ?? []).filter(Boolean).map((id) => map?.[id] || id);
+  // ---- Label helpers & mix logic ----
+  const uniq = (arr: string[]) => Array.from(new Set(arr.filter(Boolean)));
 
-  // Labeled lists (what we actually render)
-  const libsUsed = labelize(libsUsedIds, libraryNameById);
-  const templatesUsed = labelize(templatesUsedIds, templateNameById);
-  const promptsShort = labelize(promptsShortIds, promptNameById);
+  /**
+   * Returns labels for union(snapshot, current). Items present only in current
+   * are suffixed with " (current)" to avoid misleading the user.
+   */
+  const mixWithBadge = (
+    snap: string[],
+    cur: string[],
+    names?: Record<string, string>,
+  ): string[] => {
+    const all = uniq([...snap, ...cur]);
+    return all.map((id) => {
+      const label = names?.[id] || id;
+      const onlyCurrent = !snap.includes(id) && cur.includes(id);
+      return onlyCurrent ? `${label}` : label;
+    });
+  };
+
+  // Final labeled lists used in the UI
+  const libsLabeled = mixWithBadge(snapLibs, curLibs, libraryNameById);
+  const templatesLabeled = mixWithBadge(snapTemplates, curTemplates, templateNameById);
+  const promptsLabeled = mixWithBadge(snapPrompts, curPrompts, promptNameById);
+
+  const noSnapshot =
+    snapLibs.length === 0 && snapTemplates.length === 0 && snapPrompts.length === 0;
+  const hasCurrentOnly =
+    noSnapshot && (curLibs.length > 0 || curTemplates.length > 0 || curPrompts.length > 0);
 
   // --- Indicator pills (hover toolbar on assistant messages) ---
   type Indicator = { key: string; label: string; enabled: boolean; icon: ReactNode };
@@ -186,19 +220,19 @@ export default function MessageCard({
     {
       key: "libraries",
       label: "Libraries",
-      enabled: !!(libsUsed && libsUsed.length),
+      enabled: libsLabeled.length > 0,
       icon: <LibraryBooksOutlinedIcon sx={{ fontSize: 14 }} />,
     },
     {
       key: "templates",
       label: "Templates",
-      enabled: !!(templatesUsed && templatesUsed.length),
+      enabled: templatesLabeled.length > 0,
       icon: <DescriptionOutlinedIcon sx={{ fontSize: 14 }} />,
     },
     {
       key: "prompts",
       label: "Prompts",
-      enabled: !!(meta.prompt_pack || meta.system_prompt || (Array.isArray(meta.prompts) && meta.prompts.length)),
+      enabled: promptsLabeled.length > 0 || !!meta.prompt_pack || !!meta.system_prompt,
       icon: <PsychologyOutlinedIcon sx={{ fontSize: 14 }} />,
     },
   ];
@@ -225,9 +259,9 @@ export default function MessageCard({
     );
 
   const hasPluginsInfo =
-    (libsUsed && libsUsed.length) ||
-    (templatesUsed && templatesUsed.length) ||
-    (promptsShort && promptsShort.length) ||
+    libsLabeled.length > 0 ||
+    templatesLabeled.length > 0 ||
+    promptsLabeled.length > 0 ||
     modelName ||
     latencyMs ||
     typeof usedTemperature === "number" ||
@@ -327,7 +361,7 @@ export default function MessageCard({
                             sx={{ display: "inline-flex" }}
                           >
                             <Tooltip title="Message insights" placement="top">
-                              <IconButton size="small" sx={{ ml: 0.5 }}>
+                              <IconButton size="small" sx={{ ml: 0.5 }} aria-label="message-insights">
                                 <InfoOutlinedIcon fontSize="small" />
                               </IconButton>
                             </Tooltip>
@@ -355,6 +389,8 @@ export default function MessageCard({
                                         : theme.palette.grey[50],
                                     border: `1px solid ${theme.palette.divider}`,
                                   }}
+                                  role="dialog"
+                                  aria-label="Message details"
                                 >
                                   <Stack spacing={1}>
                                     <Typography variant="overline" sx={{ opacity: 0.7, letterSpacing: 0.6 }}>
@@ -376,34 +412,40 @@ export default function MessageCard({
                                       />
                                     </Box>
 
-                                    {(libsUsed?.length || templatesUsed?.length || promptsShort?.length) ? (
+                                    {(libsLabeled.length || templatesLabeled.length || promptsLabeled.length) ? (
                                       <Divider flexItem />
                                     ) : null}
 
-                                    {libsUsed?.length ? (
+                                    {hasCurrentOnly && (
+                                      <Typography variant="caption" sx={{ opacity: 0.7 }}>
+                                        current settings (not snapshot)
+                                      </Typography>
+                                    )}
+
+                                    {libsLabeled.length ? (
                                       <>
                                         <Typography variant="overline" sx={{ opacity: 0.7 }}>
                                           Libraries
                                         </Typography>
-                                        <PillRow items={libsUsed} />
+                                        <PillRow items={libsLabeled} />
                                       </>
                                     ) : null}
 
-                                    {templatesUsed?.length ? (
+                                    {templatesLabeled.length ? (
                                       <>
                                         <Typography variant="overline" sx={{ opacity: 0.7 }}>
                                           Templates
                                         </Typography>
-                                        <PillRow items={templatesUsed} />
+                                        <PillRow items={templatesLabeled} />
                                       </>
                                     ) : null}
 
-                                    {promptsShort?.length ? (
+                                    {promptsLabeled.length ? (
                                       <>
                                         <Typography variant="overline" sx={{ opacity: 0.7 }}>
                                           Prompts
                                         </Typography>
-                                        <PillRow items={promptsShort} />
+                                        <PillRow items={promptsLabeled} />
                                       </>
                                     ) : null}
 
@@ -421,7 +463,7 @@ export default function MessageCard({
                     </Box>
                   )}
 
-                  {/* For tool_call: compact args preview (kept; not shown in indicators) */}
+                  {/* For tool_call: compact args preview */}
                   {isCall && message.parts?.[0]?.type === "tool_call" && (
                     <Box px={side === "right" ? 0 : 1} pb={0.5} sx={{ opacity: 0.8 }}>
                       <Typography fontSize=".8rem">
@@ -458,13 +500,13 @@ export default function MessageCard({
               {side === "left" ? (
                 <Grid2 size={12} display="flex" alignItems="center" gap={1} flexWrap="wrap">
                   {enableCopy && (
-                    <IconButton size="small" onClick={() => copyToClipboard(toCopyText(message.parts))}>
+                    <IconButton size="small" onClick={() => copyToClipboard(toCopyText(message.parts))} aria-label="copy-message">
                       <ContentCopyIcon fontSize="medium" color="inherit" />
                     </IconButton>
                   )}
 
                   {enableThumbs && (
-                    <IconButton size="small" onClick={() => setFeedbackOpen(true)}>
+                    <IconButton size="small" onClick={() => setFeedbackOpen(true)} aria-label="open-feedback">
                       <RateReviewIcon fontSize="medium" color="inherit" />
                     </IconButton>
                   )}

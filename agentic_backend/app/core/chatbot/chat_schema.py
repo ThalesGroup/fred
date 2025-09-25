@@ -165,13 +165,6 @@ class ChatMetadata(BaseModel):
     agent_name: Optional[str] = None
     latency_ms: Optional[int] = None
     finish_reason: Optional[FinishReason] = None
-
-    # --- Minimal visual prompt flags (consumed directly by the UI) ---
-    # NOTE: Do NOT put the full prompt content here. We only expose markers.
-    prompt_pack: Optional[str] = None  # e.g. "base_fr_v3" (id or human label)
-    system_prompt: Optional[str] = None  # marker string like "used" (no secrets)
-    prompts: List[str] = Field(default_factory=list)  # short list of ids/names ("safety", "style_guide")
-
     # Escape hatch for gradual rollout; UI should ignore this.
     extras: Dict[str, Any] = Field(default_factory=dict)
 

@@ -1,16 +1,7 @@
 // Copyright Thales 2025
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// ...
 
 import React, { memo, useMemo, useRef, useEffect } from "react";
 import MessageCard from "./MessageCard";
@@ -24,20 +15,29 @@ type Props = {
   agenticFlows: AgenticFlow[];
   currentAgenticFlow: AgenticFlow;
 
-  // NEW: id → label maps so MessageCard can render names instead of raw ids
+  // id -> label maps
   libraryNameById?: Record<string, string>;
   templateNameById?: Record<string, string>;
   promptNameById?: Record<string, string>;
+
+  // current UI selections (to complement snapshot)
+  currentLibraryIds?: string[];
+  currentTemplateIds?: string[];
+  currentPromptIds?: string[];
 };
 
 function Area({
   messages,
   agenticFlows,
   currentAgenticFlow,
-  // NEW
+
+  // NEW: maps & current selections
   libraryNameById,
   templateNameById,
   promptNameById,
+  currentLibraryIds,
+  currentTemplateIds,
+  currentPromptIds,
 }: Props) {
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -92,7 +92,6 @@ function Area({
         }
 
         const extras = getExtras(msg);
-        // If your pipeline keeps the graded set, prefer that for this exchange
         if (
           extras?.node === "grade_documents" &&
           Array.isArray(msg.metadata?.sources) &&
@@ -124,7 +123,6 @@ function Area({
         others.push(msg);
       }
 
-      // User bubble
       if (userMessage) {
         elements.push(
           <MessageCard
@@ -135,15 +133,16 @@ function Area({
             side="right"
             enableCopy
             enableThumbs
-            // Forward maps so IDs resolve to names
             libraryNameById={libraryNameById}
             templateNameById={templateNameById}
             promptNameById={promptNameById}
+            currentLibraryIds={currentLibraryIds}
+            currentTemplateIds={currentTemplateIds}
+            currentPromptIds={currentPromptIds}
           />,
         );
       }
 
-      // Reasoning accordion
       if (reasoningSteps.length) {
         elements.push(
           <ReasoningStepsAccordion
@@ -191,10 +190,12 @@ function Area({
               side={msg.role === "user" ? "right" : "left"}
               enableCopy
               enableThumbs
-              // Forward maps
               libraryNameById={libraryNameById}
               templateNameById={templateNameById}
               promptNameById={promptNameById}
+              currentLibraryIds={currentLibraryIds}
+              currentTemplateIds={currentTemplateIds}
+              currentPromptIds={currentPromptIds}
               // Hook up hover/click from inline [n] markers to highlight Sources
               onCitationHover={(uid) => setHighlightUid(uid)}
               onCitationClick={(uid) => setHighlightUid(uid)}
@@ -232,10 +233,13 @@ function Area({
             enableCopy
             enableThumbs
             suppressText={false}
-            // Forward maps
+            // maps & current selections
             libraryNameById={libraryNameById}
             templateNameById={templateNameById}
             promptNameById={promptNameById}
+            currentLibraryIds={currentLibraryIds}
+            currentTemplateIds={currentTemplateIds}
+            currentPromptIds={currentPromptIds}
             onCitationHover={(uid) => setHighlightUid(uid)}
             onCitationClick={(uid) => setHighlightUid(uid)}
           />,
@@ -249,10 +253,12 @@ function Area({
     agenticFlows,
     currentAgenticFlow,
     highlightUid,
-    // keep re-render correct if maps change
     libraryNameById,
     templateNameById,
     promptNameById,
+    currentLibraryIds,
+    currentTemplateIds,
+    currentPromptIds,
   ]);
 
   useEffect(() => {
