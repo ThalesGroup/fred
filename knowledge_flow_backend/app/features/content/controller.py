@@ -153,13 +153,24 @@ class ContentController:
             "/raw_content/{document_uid}",
             tags=["Content"],
             summary="Download the original raw document content",
+            response_class=StreamingResponse,  # <-- prevent default JSONResponse in OpenAPI
             responses={
                 200: {
                     "description": "Binary file stream",
-                    "content": {"application/octet-stream": {"schema": {"type": "string", "format": "binary"}}},
+                    "content": {
+                        # list the types you might emit; react-pdf likes application/pdf
+                        "application/pdf": {"schema": {"type": "string", "format": "binary"}},
+                        "application/octet-stream": {"schema": {"type": "string", "format": "binary"}},
+                    },
                 }
             },
         )
         async def download_document(document_uid: str, user: KeycloakUser = Depends(get_current_user)):
             stream, file_name, content_type = await self.service.get_original_content(user, document_uid)
-            return StreamingResponse(content=stream, media_type=content_type, headers={"Content-Disposition": f'attachment; filename="{file_name}"'})
+            # Safety net: if your storage didn’t give a concrete type, fall back to octet-stream
+            media_type = content_type or "application/octet-stream"
+            return StreamingResponse(
+                content=stream,
+                media_type=media_type,
+                headers={"Content-Disposition": f'attachment; filename="{file_name}"'},
+            )
