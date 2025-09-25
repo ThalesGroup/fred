@@ -72,6 +72,8 @@ class RBACProvider(AuthorizationProvider):
             "service_agent": {
                 Resource.TAGS: READ_ONLY,
                 Resource.DOCUMENTS: READ_ONLY,
+                Resource.TABLES_DATABASES: READ_ONLY,
+                Resource.TABLES: READ_ONLY,
             },
         }
 
