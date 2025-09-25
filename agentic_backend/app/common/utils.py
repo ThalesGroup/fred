@@ -16,13 +16,10 @@ import inspect
 import logging
 import traceback
 from datetime import datetime, timedelta, timezone
-from functools import wraps
 from typing import Dict, Optional
 
 import yaml
-from fastapi import HTTPException
 
-from app.common.error import SESSION_NOT_INITIALIZED
 from app.common.structures import (
     Configuration,
 )
@@ -105,57 +102,6 @@ def log_exception(e: Exception, context_message: Optional[str] = None) -> str:
     logger.error("🧵 Stack trace:\n%s", stack_trace, stacklevel=2)
 
     return summary
-
-
-# Decorator for wrapping methods to protect by authentication
-def authorization_required(method):
-    @wraps(method)
-    def wrapper(self, *args, **kwargs):
-        sig = inspect.signature(method)
-        bound_args = sig.bind(self, *args, **kwargs)
-        bound_args.apply_defaults()
-
-        arguments = bound_args.arguments
-        session_id = arguments.get("session_id")
-        user_id = arguments.get("user_id")
-
-        if user_id is None:
-            raise ValueError(f"Missing 'user_id' in method '{method.__name__}'")
-        if session_id is None:
-            raise ValueError(f"Missing 'session_id' in method '{method.__name__}'")
-        if not isinstance(user_id, str):
-            raise ValueError("'user_id' must be of type 'str'")
-        if not isinstance(session_id, str):
-            raise ValueError("'session_id' must be of type 'str'")
-        if not hasattr(self, "get_authorized_user_id") or not callable(
-            getattr(self, "get_authorized_user_id")
-        ):
-            raise NotImplementedError(
-                f"{self.__class__.__name__} must implement 'get_authorized_user_id'"
-            )
-
-        # Get the value of the authorized_user that can access the method. The way to get it depends on the storage type so we have it defined here
-        authorized_user_id = self.get_authorized_user_id(session_id)
-
-        # In case we want to load messages for a user with a non initialized session (i.e when first loading the page, we should not throw an unauthorized exception)
-        if authorized_user_id is SESSION_NOT_INITIALIZED:
-            logger.debug(
-                f"Session '{session_id}' not yet initialized — skipping auth check for method '{method.__name__}'"
-            )
-            return method(self, *args, **kwargs)
-
-        if authorized_user_id != user_id:
-            logger.warning(
-                f"Unauthorized access: user {user_id} to session {session_id} in method '{method.__name__}'"
-            )
-            raise HTTPException(
-                status_code=403,
-                detail=f"Unauthorized access: user {user_id} to session {session_id}",
-            )
-
-        return method(self, *args, **kwargs)
-
-    return wrapper
 
 
 def truncate_datetime(dt: datetime, precision: str) -> datetime:

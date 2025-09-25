@@ -185,10 +185,10 @@ class DuckdbHistoryStore(BaseHistoryStore):
                 SELECT session_id, user_id, rank, timestamp, role, channel,
                        exchange_id, parts_json, metadata_json
                 FROM messages
-                WHERE timestamp >= ? AND timestamp <= ?
+                WHERE timestamp >= ? AND timestamp <= ? AND user_id = ?
                 ORDER BY timestamp
                 """,
-                (start, end),
+                (start, end, user_id),
             ).fetchall()
 
         grouped: Dict[tuple, list] = {}
@@ -304,5 +304,11 @@ class DuckdbHistoryStore(BaseHistoryStore):
 
     @staticmethod
     def _get_path(d: Dict, path: str):
-        # Keys are already flattened in _flatten_message_v2 (e.g., "metadata.model")
+        TOKEN_ALIAS = {
+            "input_tokens": "metadata.token_usage.input_tokens",
+            "output_tokens": "metadata.token_usage.output_tokens",
+            "total_tokens": "metadata.token_usage.total_tokens",
+        }
+        if path in TOKEN_ALIAS:
+            path = TOKEN_ALIAS[path]
         return d.get(path)
