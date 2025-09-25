@@ -136,9 +136,16 @@ const injectedRtkApi = api.injectEndpoints({
     getAllSchemas: build.query<GetAllSchemasApiResponse, GetAllSchemasApiArg>({
       query: (queryArg) => ({ url: `/knowledge-flow/v1/tabular/${queryArg.dbName}/schemas` }),
     }),
-    rawSqlQuery: build.mutation<RawSqlQueryApiResponse, RawSqlQueryApiArg>({
+    rawSqlQueryRead: build.mutation<RawSqlQueryReadApiResponse, RawSqlQueryReadApiArg>({
       query: (queryArg) => ({
-        url: `/knowledge-flow/v1/tabular/${queryArg.dbName}/sql`,
+        url: `/knowledge-flow/v1/tabular/${queryArg.dbName}/sql/read`,
+        method: "POST",
+        body: queryArg.rawSqlRequest,
+      }),
+    }),
+    rawSqlQueryWrite: build.mutation<RawSqlQueryWriteApiResponse, RawSqlQueryWriteApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/tabular/${queryArg.dbName}/sql/write`,
         method: "POST",
         body: queryArg.rawSqlRequest,
       }),
@@ -442,8 +449,14 @@ export type GetAllSchemasApiArg = {
   /** Name of the tabular database */
   dbName: string;
 };
-export type RawSqlQueryApiResponse = /** status 200 Successful Response */ TabularQueryResponse;
-export type RawSqlQueryApiArg = {
+export type RawSqlQueryReadApiResponse = /** status 200 Successful Response */ TabularQueryResponse;
+export type RawSqlQueryReadApiArg = {
+  /** Name of the tabular database */
+  dbName: string;
+  rawSqlRequest: RawSqlRequest;
+};
+export type RawSqlQueryWriteApiResponse = /** status 200 Successful Response */ TabularQueryResponse;
+export type RawSqlQueryWriteApiArg = {
   /** Name of the tabular database */
   dbName: string;
   rawSqlRequest: RawSqlRequest;
@@ -989,7 +1002,8 @@ export const {
   useLazyListTableNamesQuery,
   useGetAllSchemasQuery,
   useLazyGetAllSchemasQuery,
-  useRawSqlQueryMutation,
+  useRawSqlQueryReadMutation,
+  useRawSqlQueryWriteMutation,
   useDeleteTableMutation,
   useListAllTagsKnowledgeFlowV1TagsGetQuery,
   useLazyListAllTagsKnowledgeFlowV1TagsGetQuery,
