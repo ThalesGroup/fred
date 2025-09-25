@@ -29,6 +29,7 @@ from fred_core.common.structures import (
 from fred_core.common.utils import raise_internal_error
 from fred_core.kpi.base_kpi_store import BaseKPIStore
 from fred_core.kpi.kpi_reader_structures import (
+    FilterTerm,
     KPIQuery,
     KPIQueryResult,
     TimeBucket,
@@ -119,6 +120,7 @@ __all__ = [
     "Trace",
     "BaseKPIStore",
     "KpiLogStore",
+    "FilterTerm",
     "KPIQuery",
     "KPIQueryResult",
     "TimeBucket",
