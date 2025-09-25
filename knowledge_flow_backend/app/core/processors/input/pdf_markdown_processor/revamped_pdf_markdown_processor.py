@@ -7,7 +7,6 @@ from langchain.text_splitter import MarkdownHeaderTextSplitter
 from langchain_community.document_loaders.parsers import PyPDFParser, TesseractBlobParser
 from langchain_core.documents.base import Blob
 
-from app.application_context import get_configuration
 from app.core.processors.input.common.base_input_processor import BaseMarkdownProcessor
 from app.core.processors.input.pdf_markdown_processor.pdf_markdown_processor import PdfMarkdownProcessor as DoclingProcessor
 
@@ -24,7 +23,6 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
 
     def __init__(self):
         super().__init__()
-        cfg = get_configuration()
         self._docling_fallback: Optional[DoclingProcessor] = None
 
     # ------------------------------------------------------------ #
