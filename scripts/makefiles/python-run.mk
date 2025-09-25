@@ -22,6 +22,7 @@ run-local: ## Run the app assuming dependencies already exist
 		--loop ${UVICORN_LOOP} \
 		--reload \
 		--reload-dir $(ROOT_DIR)/config \
+		--reload-dir $(ROOT_DIR)/../fred-core \
 		--reload-include *.py \
         --reload-include *.yaml
 

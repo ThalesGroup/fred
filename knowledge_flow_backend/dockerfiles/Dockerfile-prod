@@ -24,14 +24,19 @@ ENV PATH="/app/venv/bin:$PATH"
 # Set working directory
 WORKDIR /app
 
-# Copy pyproject & dependencies files
+# Copy python dependencies files
 COPY knowledge_flow_backend/pyproject.toml knowledge_flow_backend/uv.lock* /app/
-COPY fred-core /fred-core
-COPY knowledge_flow_backend/. /app/
+# Copy Makefile-related files
+COPY knowledge_flow_backend/Makefile /app/
 COPY scripts /scripts
+# Copy fred-core folder as this is a Python-dependency for the backend
+COPY fred-core /fred-core
 
 # Install dependencies using make with both VENV and TARGET properly set
 RUN make dev
+
+# Copy projets
+COPY knowledge_flow_backend/. /app/
 
 # -----------------------------------------------------------------------------
 # FINAL STAGE: PROD IMAGE

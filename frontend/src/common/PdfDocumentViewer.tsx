@@ -3,25 +3,25 @@
 // Design: Prefer { data: ArrayBuffer } for react-pdf, fall back to Blob, then to ObjectURL.
 // Logging: Verbose console logs to diagnose content-type, size, headers, and rendering failures.
 
+import CloseIcon from "@mui/icons-material/Close";
+import DownloadIcon from "@mui/icons-material/Download";
+import RefreshIcon from "@mui/icons-material/Refresh";
+import {
+  AppBar,
+  Box,
+  CircularProgress,
+  IconButton,
+  Toolbar,
+  Tooltip,
+  Typography,
+} from "@mui/material";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Document, Page } from 'react-pdf';
 import 'react-pdf/dist/esm/Page/AnnotationLayer.css';
 import 'react-pdf/dist/esm/Page/TextLayer.css';
-import {
-  AppBar,
-  Toolbar,
-  Box,
-  CircularProgress,
-  Typography,
-  IconButton,
-  Tooltip,
-} from "@mui/material";
-import CloseIcon from "@mui/icons-material/Close";
-import DownloadIcon from "@mui/icons-material/Download";
-import RefreshIcon from "@mui/icons-material/Refresh";
 //import BugReportIcon from "@mui/icons-material/BugReport";
-import { downloadFile } from '../utils/downloadUtils';
 import { useLazyDownloadRawContentBlobQuery } from '../slices/knowledgeFlow/knowledgeFlowApi.blob';
+import { downloadFile } from '../utils/downloadUtils';
 
 interface PdfDocumentViewerProps {
   document: {
@@ -202,7 +202,17 @@ export const PdfDocumentViewer: React.FC<PdfDocumentViewerProps> = ({ document: 
   };
 
   return (
-    <Box sx={{ width: "80vw", height: "100vh", display: "flex", flexDirection: "column" }}>
+     <Box
+      sx={{
+        width: "80vw",
+        height: "100%",      // let Drawer control height
+        maxHeight: "100vh",  // never exceed viewport
+        display: "flex",
+        flexDirection: "column",
+        overflow: "hidden",
+        minHeight: 0,        // ✅ critical for scrollable flex children
+      }}
+    >
       <AppBar position="static" color="default" elevation={0}>
         <Toolbar>
           <Typography variant="h6" sx={{ flex: 1, pr: 1 }}>
@@ -233,17 +243,23 @@ export const PdfDocumentViewer: React.FC<PdfDocumentViewerProps> = ({ document: 
         </Toolbar>
       </AppBar>
 
-      <Box ref={contentRef} 
-        sx={{ 
-            flex: 1, 
-            overflow: "auto", 
-            p: 2, 
-            display: 'flex',
+      <Box
+        ref={contentRef}
+        sx={{
+          flex: 1,
+          minHeight: 0,          // ✅ allow this flex child to actually scroll
+          overflowY: "auto",
+          overflowX: "hidden",
+          p: 2,
+          display: 'flex',
           flexDirection: 'column',
-          alignItems: 'center',    // Centers horizontally (the PDF pages)
-          justifyContent: 'center', // Centers vertically (the entire PDF block)
-             }}>
-        {isLoading ? (
+          alignItems: 'center',  // horizontal centering only
+          justifyContent: 'flex-start', // ✅ start at top
+          boxSizing: "border-box",
+          width: "100%",
+        }}
+      >  
+            {isLoading ? (
           <Box sx={{ display: "flex", justifyContent: "center", mt: 4 }}>
             <CircularProgress />
           </Box>

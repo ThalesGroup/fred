@@ -213,7 +213,7 @@ async def websocket_chatbot_question(
                 ) = await session_orchestrator.chat_ask_websocket(  # Use injected object
                     user=user,
                     callback=ws_callback,
-                    session_id=ask.session_id or "unknown-session",
+                    session_id=ask.session_id,
                     message=ask.message,
                     agent_name=ask.agent_name,
                     runtime_context=ask.runtime_context,
