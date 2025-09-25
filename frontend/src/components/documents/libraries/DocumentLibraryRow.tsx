@@ -16,6 +16,7 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import SearchIcon from "@mui/icons-material/Search";
 import SearchOffIcon from "@mui/icons-material/SearchOff";
 import DownloadIcon from "@mui/icons-material/Download";
+import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf"; 
 import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
 import EventAvailableIcon from "@mui/icons-material/EventAvailable";
 import dayjs from "dayjs";
@@ -32,6 +33,7 @@ import KeywordsPreview from "./KeywordsPreview";
 export type DocumentRowCompactProps = {
   doc: DocumentMetadata;
   onPreview?: (doc: DocumentMetadata) => void;
+  onPdfPreview?: (doc: DocumentMetadata) => void;
   onDownload?: (doc: DocumentMetadata) => void;
   onRemoveFromLibrary?: (doc: DocumentMetadata) => void;
   onToggleRetrievable?: (doc: DocumentMetadata) => void;
@@ -40,6 +42,7 @@ export type DocumentRowCompactProps = {
 export function DocumentRowCompact({
   doc,
   onPreview,
+  onPdfPreview,
   onDownload,
   onRemoveFromLibrary,
   onToggleRetrievable,
@@ -49,6 +52,7 @@ export function DocumentRowCompact({
   const canToggle = can("document:toggleRetrievable");
 
   const formatDate = (date?: string) => (date ? dayjs(date).format("DD/MM/YYYY") : "-");
+  const isPdf = doc.identity.document_name.toLowerCase().endsWith('.pdf');
 
   return (
     <Box
@@ -98,18 +102,29 @@ export function DocumentRowCompact({
         )}
       </Box>
 
-      {/* 4) Preview button (explicit) */}
       <Box sx={{ justifySelf: "start" }}>
-        {onPreview && (
+        {/* 🆕 Condition to show PDF button instead of standard preview */}
+        {onPdfPreview && isPdf ? (
+          <Tooltip 
+            title={t("documentLibrary.viewOriginalPdf", "View Original PDF")}
+          >
+            <IconButton 
+              size="small" 
+              onClick={() => onPdfPreview(doc)} 
+              aria-label={t("documentLibrary.viewOriginalPdf")}
+            >
+              <PictureAsPdfIcon fontSize="inherit" />
+            </IconButton>
+          </Tooltip>
+        ) : onPreview ? (
+          // 👈 Show standard markdown preview button for non-PDF files
           <Tooltip title={t("documentLibrary.preview")}>
             <IconButton size="small" onClick={() => onPreview(doc)} aria-label={t("documentLibrary.preview")}>
               <VisibilityOutlinedIcon fontSize="inherit" />
             </IconButton>
           </Tooltip>
-        )}
-      </Box>
-
-      {/* 5) Status pills */}
+        ) : null}
+      </Box>      {/* 5) Status pills */}
       <Box sx={{ display: "flex", gap: 0.5, justifySelf: "start" }}>
         {DOCUMENT_PROCESSING_STAGES.map((stage) => {
           const status = doc.processing.stages?.[stage] ?? "not_started";

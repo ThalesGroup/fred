@@ -394,5 +394,23 @@
     "strictDescription": "Only use documents that are explicitly relevant to the query.",
     "hybridDescription": "Combine relevant documents with semantic search results.",
     "semanticDescription": "Use semantic search to find related documents."
+  },
+  "sourceDetails": {
+    "bestScore": "best {{score}}%",
+    "license": "license: {{license}}",
+    "confidential": "Confidential",
+    "file": "File",
+    "path": "Path",
+    "author": "Author",
+    "created": "Created",
+    "modified": "Modified",
+    "openSourceDocument": "Open source document",
+    "citedPassagesTitle": "Cited passages ({{count}})",
+    "pageAbbreviation": "p.{{page}}",
+    "editedAbbreviation": "edited {{date}}",
+    "openInPreview": "Preview",
+    "openSource": "Open source",
+    "openAllInPreview": "Open all in preview",
+    "openAllInPdfPreview": "Open all in PDF preview"
   }
 }

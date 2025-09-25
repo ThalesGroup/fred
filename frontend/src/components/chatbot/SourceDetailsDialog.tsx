@@ -17,7 +17,6 @@ import {
   Button,
   Chip,
   Dialog,
-  DialogActions,
   DialogContent,
   DialogTitle,
   Divider,
@@ -27,7 +26,10 @@ import {
 } from "@mui/material";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import { VectorSearchHit } from "../../slices/agentic/agenticOpenApi";
-import { newUseDocumentViewer } from "../../common/newUseDocumentViewer";
+import { useMarkdownDocumentViewer } from "../../common/useMarkdownDocumentViewer";
+import { usePdfDocumentViewer } from "../../common/usePdfDocumentViewer";
+import { useTranslation } from "react-i18next";
+import MarkdownRenderer from "../markdown/MarkdownRenderer";
 
 export function SourceDetailsDialog({
   open,
@@ -40,7 +42,9 @@ export function SourceDetailsDialog({
   documentId: string;
   hits: VectorSearchHit[];
 }) {
-  const { openDocument } = newUseDocumentViewer();
+  const { openMarkdownDocument } = useMarkdownDocumentViewer();
+  const { openPdfDocument } = usePdfDocumentViewer();
+  const { t } = useTranslation();
   if (!open) return null;
   if (!hits?.length) return null;
 
@@ -69,15 +73,14 @@ export function SourceDetailsDialog({
   const tags = Array.from(new Set(deduped.flatMap((h) => h.tag_names || [])));
   const confidential = !!deduped.find((h) => h.confidential)?.confidential;
 
-  const highlightAll = () => {
-    const chunks = deduped.map((h) => h.viewer_fragment || h.content).filter((s): s is string => !!(s && s.trim()));
-    openDocument({ document_uid: documentId }, { chunksToHighlight: chunks });
-    onClose();
-  };
-
   const openSingle = (h: VectorSearchHit) => {
     const chunk = h.viewer_fragment || h.content || "";
-    openDocument({ document_uid: documentId }, { chunksToHighlight: [chunk] });
+    if (h.file_name?.toLowerCase().endsWith(".pdf")) {
+      openPdfDocument({ document_uid: documentId, file_name: h.file_name });
+      onClose();
+      return;
+    }
+    openMarkdownDocument({ document_uid: documentId }, { chunksToHighlight: [chunk] });
     onClose();
   };
 
@@ -89,10 +92,10 @@ export function SourceDetailsDialog({
           {title}
         </Typography>
         <Box sx={{ display: "flex", gap: 0.5, flexWrap: "wrap" }}>
-          <Chip size="small" label={`best ${(bestScore * 100).toFixed(0)}%`} />
-          {language && <Chip size="small" label={language} variant="outlined" />}
-          {license && <Chip size="small" label={`license: ${license}`} variant="outlined" />}
-          {confidential && <Chip size="small" color="warning" label="Confidential" />}
+          <Chip size="small" label={t("sourceDetails.bestScore", { score: (bestScore * 100).toFixed(0) })} />
+          {language && <Chip size="small" label={t("sourceDetails.language", { language })} variant="outlined" />}
+          {license && <Chip size="small" label={t("sourceDetails.license", { license })} variant="outlined" />}
+          {confidential && <Chip size="small" color="warning" label={t("sourceDetails.confidential")} />}
           {tags.slice(0, 6).map((t) => (
             <Chip key={t} size="small" label={t} />
           ))}
@@ -103,11 +106,11 @@ export function SourceDetailsDialog({
       <DialogContent dividers>
         {/* Doc meta */}
         <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1, mb: 1 }}>
-          {fileName && <Meta label="File" value={fileName} />}
-          {filePath && <Meta label="Path" value={filePath} />}
-          {author && <Meta label="Author" value={author} />}
-          {created && <Meta label="Created" value={created} />}
-          {modified && <Meta label="Modified" value={modified} />}
+          {fileName && <Meta label={t("sourceDetails.file")} value={fileName} />}
+          {filePath && <Meta label={t("sourceDetails.path")} value={filePath} />}
+          {author && <Meta label={t("sourceDetails.author")} value={author} />}
+          {created && <Meta label={t("sourceDetails.created")} value={created} />}
+          {modified && <Meta label={t("sourceDetails.modified")} value={modified} />}
         </Box>
 
         {/* External link(s) */}
@@ -120,7 +123,7 @@ export function SourceDetailsDialog({
               rel="noopener noreferrer"
               endIcon={<OpenInNewIcon />}
             >
-              Open source document
+              {t("sourceDetails.openSourceDocument")}
             </Button>
           </Box>
         )}
@@ -129,7 +132,7 @@ export function SourceDetailsDialog({
 
         {/* Passages list */}
         <Typography variant="subtitle2" sx={{ mb: 0.5 }}>
-          Cited passages ({deduped.length})
+          {t("sourceDetails.citedPassagesTitle", { count: deduped.length })}
         </Typography>
 
         <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
@@ -142,14 +145,23 @@ export function SourceDetailsDialog({
                 p: 1,
               }}
             >
-              <Typography variant="body2" sx={{ whiteSpace: "pre-wrap" }}>
-                {h.content?.trim() || h.viewer_fragment?.trim() || "<empty>"}
-              </Typography>
+              <Box sx={{ "& p": { margin: 0 } }}>
+                {" "}
+                {/* Optional styling to remove default paragraph margins */}
+                <MarkdownRenderer
+                  content={h.content?.trim() || h.viewer_fragment?.trim() || "No content available."}
+                  size="small" // Use "small" to keep the passage compact in the dialog
+                  remarkPlugins={[]} // Add any remark plugins if needed
+                  enableEmojiSubstitution={false} // Disable emoji substitution for formal source display
+                />
+              </Box>
               <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>
                 {[
-                  h.page != null ? `p.${h.page}` : null,
+                  h.page != null ? t("sourceDetails.pageAbbreviation", { page: h.page }) : null,
                   h.section || null,
-                  h.modified ? `edited ${new Date(h.modified).toLocaleDateString()}` : null,
+                  h.modified
+                    ? t("sourceDetails.editedAbbreviation", { date: new Date(h.modified).toLocaleDateString() })
+                    : null,
                   typeof h.score === "number" ? `${Math.round(h.score * 100)}%` : null,
                 ]
                   .filter(Boolean)
@@ -158,7 +170,7 @@ export function SourceDetailsDialog({
 
               <Box sx={{ display: "flex", gap: 1, mt: 0.75 }}>
                 <Button size="small" variant="text" onClick={() => openSingle(h)}>
-                  Open in preview
+                  {t("sourceDetails.openInPreview")}
                 </Button>
                 {externalUrl && (
                   <Button
@@ -170,7 +182,7 @@ export function SourceDetailsDialog({
                     rel="noopener noreferrer"
                     endIcon={<OpenInNewIcon />}
                   >
-                    Open source
+                    {t("sourceDetails.openSource")}
                   </Button>
                 )}
               </Box>
@@ -178,11 +190,6 @@ export function SourceDetailsDialog({
           ))}
         </Box>
       </DialogContent>
-
-      <DialogActions sx={{ px: 3, py: 1 }}>
-        <Button onClick={highlightAll}>Open all in preview</Button>
-        <Button onClick={onClose}>Close</Button>
-      </DialogActions>
     </Dialog>
   );
 }

@@ -395,5 +395,23 @@
     "strictDescription": "N'utiliser que des documents explicitement pertinents pour la requête.",
     "hybridDescription": "Combiner des documents pertinents avec des résultats de recherche sémantique.",
     "semanticDescription": "Utiliser la recherche sémantique pour trouver des documents connexes."
+  },
+  "sourceDetails": {
+    "bestScore": "meilleur {{score}}%",
+    "license": "licence : {{license}}",
+    "confidential": "Confidentiel",
+    "file": "Fichier",
+    "path": "Chemin",
+    "author": "Auteur",
+    "created": "Créé",
+    "modified": "Modifié",
+    "openSourceDocument": "Ouvrir le document source",
+    "citedPassagesTitle": "Passages cités ({{count}})",
+    "pageAbbreviation": "p.{{page}}",
+    "editedAbbreviation": "édité {{date}}",
+    "openInPreview": "Prévisualisation",
+    "openSource": "Ouvrir la source",
+    "openAllInPreview": "Tout ouvrir en prévisualisation",
+    "openAllInPdfPreview": "Tout ouvrir en prévisualisation PDF"
   }
 }
