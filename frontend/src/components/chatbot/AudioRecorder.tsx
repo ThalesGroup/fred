@@ -41,8 +41,7 @@ export default function AudioRecorder({
 
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
-  const dataArrayRef = useRef<Uint8Array | null>(null);
-
+  const dataArrayRef = useRef<Uint8Array<ArrayBuffer> | null>(null);
   useEffect(() => {
     if (isRecording) {
       startRecording().then((r) => r);
