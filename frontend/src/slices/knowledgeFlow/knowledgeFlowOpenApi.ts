@@ -416,7 +416,7 @@ export type DownloadDocumentMediaKnowledgeFlowV1MarkdownDocumentUidMediaMediaIdG
   mediaId: string;
 };
 export type DownloadDocumentKnowledgeFlowV1RawContentDocumentUidGetApiResponse =
-  /** status 200 Binary file stream */ any;
+  /** status 200 Binary file stream */ Blob;
 export type DownloadDocumentKnowledgeFlowV1RawContentDocumentUidGetApiArg = {
   documentUid: string;
 };

@@ -11,7 +11,7 @@ import { useLazyGetMarkdownPreviewKnowledgeFlowV1MarkdownDocumentUidGetQuery } f
 
 import MarkdownRendererWithHighlights, { HighlightedPart } from "../components/markdown/MarkdownRendererWithHighlights";
 
-interface DocumentViewerProps {
+interface MarkdownDocumentViewerProps {
   document: {
     document_uid: string;
     file_name?: string;
@@ -31,7 +31,7 @@ const decodeMaybeBase64 = (s: string) => {
   }
 };
 
-export const NewDocumentViewer: React.FC<DocumentViewerProps> = ({
+export const MarkdownDocumentViewer: React.FC<MarkdownDocumentViewerProps> = ({
   document: doc,
   onClose,
   highlightedParts = [],
@@ -39,7 +39,7 @@ export const NewDocumentViewer: React.FC<DocumentViewerProps> = ({
 }) => {
   const [docContent, setDocContent] = useState<string>("");
   const [isLoadingDoc, setIsLoadingDoc] = useState<boolean>(false);
-
+  console.log("Rendering MarkdownDocumentViewer for document:", doc);
   // ⬇️ CHANGE 2: generated API exposes a *query* hook; we use the lazy variant to keep identical call style
   const [triggerGetPreview] = useLazyGetMarkdownPreviewKnowledgeFlowV1MarkdownDocumentUidGetQuery();
 
@@ -127,4 +127,4 @@ export const NewDocumentViewer: React.FC<DocumentViewerProps> = ({
   );
 };
 
-export default NewDocumentViewer;
+export default MarkdownDocumentViewer;
