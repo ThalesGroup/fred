@@ -12,73 +12,127 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import PyPDF2
-from pathlib import Path
-import pypandoc
-import shutil
 import logging
+from pathlib import Path
 
-from knowledge_flow_app.processors.base_file_processor import BaseFileProcessor
+import pypdf
+from pypdf.errors import PdfReadError
 
-# Initialiser le logger
-logger = logging.getLogger("bidgpt_api")
-class PdfProcessor(BaseFileProcessor):
+from app.core.processors.input.common.base_input_processor import BaseMarkdownProcessor
+
+logger = logging.getLogger(__name__)
+
+class PdfProcessor(BaseMarkdownProcessor):
+    """
+    PDF processor using BaseMarkdownProcessor (and BaseInputProcessor).
+    Provides: file validation, metadata extraction and Markdown conversion.
+    """
+
+    def __init__(self):
+        super().__init__()
+
     def check_file_validity(self, file_path: Path) -> bool:
-        """Vérifie si le PDF est lisible (exemple simplifié)."""
+        """
+        Check if the PDF is readable and contains at least one page.
+
+        Args:
+            file_path: Path to the PDF file.
+
+        Returns:
+            True if the file is a valid, non-empty PDF, otherwise False.
+        """
         try:
-            with open(file_path, 'rb') as f:
-                PyPDF2.PdfReader(f)  # va lever une erreur si le PDF est corrompu
-            return True
-        except PyPDF2.errors.PdfReadError as e:
-            logger.error(f"Fichier PDF corrompu: {file_path} - {e}")
-            return False
+            with open(file_path, "rb") as f:
+                reader = pypdf.PdfReader(f)
+                if len(reader.pages) == 0:
+                    logger.warning(f"The PDF file {file_path} is empty.")
+                    return False
+                return True
+        except PdfReadError as e:
+            logger.error(f"Corrupted PDF file: {file_path} - {e}")
         except Exception as e:
-            logger.error(f"Erreur inattendue en vérifiant {file_path}: {e}")
-            return False
+            logger.error(f"Unexpected error while validating {file_path}: {e}")
+        return False
 
     def extract_file_metadata(self, file_path: Path) -> dict:
-        if not self.check_structure(file_path):
-            return {"document_name": file_path.name, "error": "Invalid PDF structure"}
+        """
+        Extract metadata from the PDF as a flat dictionary.
 
-        metadata = {}
+        Keys can include: title, author, page_count, extras.
+
+        Args:
+            file_path: Path to the PDF file.
+
+        Returns:
+            A dictionary containing discovered metadata, or an error field if extraction fails.
+        """
         try:
-            with open(file_path, 'rb') as f:
-                reader = PyPDF2.PdfReader(f)
-                info = reader.metadata  # PyPDF2 v3.x (>= 3.0.0), auparavant c'était reader.getDocumentInfo()
+            with open(file_path, "rb") as f:
+                reader = pypdf.PdfReader(f)
+                info = reader.metadata or {}
 
-                # Certains champs possibles dans le PDF
-                metadata["title"] = info.title
-                metadata["author"] = info.author
-                metadata["subject"] = info.subject
-                # ...
-
-            # Ajout des champs communs
-            metadata = self.add_common_metadata(metadata, file_path)
-
-            # Génération de l'UID
-            unique_id = self.generate_unique_id(metadata)
-            metadata["document_uid"] = unique_id
-
-            return {k: v for k, v in metadata.items() if v}
+                return {
+                    "title": info.get("/Title") or None,
+                    "author": info.get("/Author") or None,
+                    "document_name": file_path.name,
+                    "page_count": len(reader.pages),
+                    "extras": {
+                        "pdf.subject": info.get("/Subject") or None,
+                        "pdf.producer": info.get("/Producer") or None,
+                        "pdf.creator": info.get("/Creator") or None,
+                    },
+                }
         except Exception as e:
-            logger.error(f"Erreur lors de l'extraction des métadonnées PDF: {e}")
+            logger.error(f"Error extracting metadata from PDF: {e}")
             return {"document_name": file_path.name, "error": str(e)}
 
-    def convert_file_to_markdown(self, file_path: Path, output_dir: Path, document_uid: str) -> dict:
+    def convert_file_to_markdown(
+        self,
+        file_path: Path,
+        output_dir: Path,
+        document_uid: str | None
+    ) -> dict:
+        """
+        Convert the PDF to a simple Markdown file using pypdf text extraction.
 
-        doc_dir = output_dir / document_uid
-        doc_dir.mkdir(parents=True, exist_ok=True)
+        Each page’s text is written as a section in the markdown file.
 
-        # Copier le PDF d’origine
-        shutil.copy(file_path, doc_dir / "file.pdf")
+        Args:
+            file_path: Path to the PDF file.
+            output_dir: Directory where the Markdown file will be saved.
+            document_uid: Optional unique document identifier.
 
-        md_path = doc_dir / "file.md"
+        Returns:
+            A dictionary containing:
+            - doc_dir: path to the output directory
+            - md_file: path to the generated Markdown file (or None on failure)
+            - status: "success" or "error"
+            - message: status message or error details
+        """
+        output_dir.mkdir(parents=True, exist_ok=True)
+        md_path = output_dir / "output.md"
 
-        # On tente la conversion PDF → markdown avec pypandoc
-        # NB : La qualité de la conversion dépend de la structure du PDF
         try:
-            pypandoc.convert_file(str(file_path), 'markdown', outputfile=str(md_path))
-        except Exception as e:
-            logger.error(f"Impossible de convertir le PDF en Markdown: {e}")
+            from pypdf import PdfReader
 
-        return {"doc_dir": str(doc_dir), "md_file": str(md_path)}
+            reader = PdfReader(str(file_path))
+            with md_path.open("w", encoding="utf-8") as md:
+                for i, page in enumerate(reader.pages, start=1):
+                    text = page.extract_text() or ""
+                    md.write(f"# Page {i}\n\n{text}\n\n")
+
+        except Exception as e:
+            logger.error(f"Failed to convert PDF to Markdown: {e}")
+            return {
+                "doc_dir": str(output_dir),
+                "md_file": None,
+                "status": "error",
+                "message": str(e),
+            }
+
+        return {
+            "doc_dir": str(output_dir),
+            "md_file": str(md_path),
+            "status": "success",
+            "message": "PDF to Markdown conversion completed using pypdf.",
+        }
