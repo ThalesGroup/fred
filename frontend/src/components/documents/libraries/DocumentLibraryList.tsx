@@ -94,7 +94,7 @@ export default function DocumentLibraryList() {
   const allExpanded = React.useMemo(() => expanded.length > 0, [expanded]);
 
   /* ---------------- Commands ---------------- */
-  const { toggleRetrievable, removeFromLibrary, preview, previewPdf, refresh, download } = useDocumentCommands({
+  const { toggleRetrievable, removeFromLibrary, preview, previewPdf, download } = useDocumentCommands({
     refetchTags: refetch,
     refetchDocs: () => fetchAllDocuments({ filters: {} }),
   });
