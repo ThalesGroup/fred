@@ -202,7 +202,17 @@ export const PdfDocumentViewer: React.FC<PdfDocumentViewerProps> = ({ document: 
   };
 
   return (
-    <Box sx={{ width: "80vw", height: "100vh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+     <Box
+      sx={{
+        width: "80vw",
+        height: "100%",      // let Drawer control height
+        maxHeight: "100vh",  // never exceed viewport
+        display: "flex",
+        flexDirection: "column",
+        overflow: "hidden",
+        minHeight: 0,        // ✅ critical for scrollable flex children
+      }}
+    >
       <AppBar position="static" color="default" elevation={0}>
         <Toolbar>
           <Typography variant="h6" sx={{ flex: 1, pr: 1 }}>
@@ -233,22 +243,23 @@ export const PdfDocumentViewer: React.FC<PdfDocumentViewerProps> = ({ document: 
         </Toolbar>
       </AppBar>
 
-        <Box
-          ref={contentRef}
-          sx={{
-            flex: 1,
-            overflowY: "auto",
-            overflowX: "hidden",
-            p: 2,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            boxSizing: "border-box",
-            width: "100%"
-          }}
-        >
-        {isLoading ? (
+      <Box
+        ref={contentRef}
+        sx={{
+          flex: 1,
+          minHeight: 0,          // ✅ allow this flex child to actually scroll
+          overflowY: "auto",
+          overflowX: "hidden",
+          p: 2,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',  // horizontal centering only
+          justifyContent: 'flex-start', // ✅ start at top
+          boxSizing: "border-box",
+          width: "100%",
+        }}
+      >  
+            {isLoading ? (
           <Box sx={{ display: "flex", justifyContent: "center", mt: 4 }}>
             <CircularProgress />
           </Box>
