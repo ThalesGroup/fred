@@ -22,7 +22,7 @@ from app.core.processors.input.common.base_input_processor import BaseMarkdownPr
 
 logger = logging.getLogger(__name__)
 
-class PdfProcessor(BaseMarkdownProcessor):
+class PdfMarkdownProcessor(BaseMarkdownProcessor):
     """
     PDF processor using BaseMarkdownProcessor (and BaseInputProcessor).
     Provides: file validation, metadata extraction and Markdown conversion.
