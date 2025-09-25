@@ -29,17 +29,19 @@ ENV PATH="/app/venv/bin:$PATH"
 # Set working directory
 WORKDIR /app
 
-# RUN pip install poetry==1.7.1 --root-user-action=ignore && \
-#     poetry install
-
-# Copy pyproject & lock to install deps
+# Copy python dependencies files
 COPY agentic_backend/pyproject.toml agentic_backend/uv.lock* /app/
-COPY fred-core /fred-core
-COPY agentic_backend/. /app/
+# Copy Makefile-related files
+COPY agentic_backend/Makefile /app/
 COPY scripts /scripts
+# Copy fred-core folder as this is a Python-dependency for the backend
+COPY fred-core /fred-core
 
-# Install only dependencies
+# Install dependencies using make with both VENV and TARGET properly set
 RUN make dev
+
+# Copy projets
+COPY agentic_backend/. /app/
 
 # -----------------------------------------------------------------------------
 # FINAL STAGE: PROD IMAGE
