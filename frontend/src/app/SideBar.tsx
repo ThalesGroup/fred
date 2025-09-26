@@ -184,7 +184,6 @@ export default function SideBar({ darkMode, onThemeChange }) {
         "& > * > *": { backgroundColor: sideBarBgColor },
       }}
     >
-      {/* Section du logo */}
       <Box
         sx={{
           display: "flex",
@@ -349,7 +348,7 @@ export default function SideBar({ darkMode, onThemeChange }) {
                             sx={{
                               borderRadius: "8px",
                               mb: 0.0,
-                              height: 36,
+                              height: 32,
                               backgroundColor: childActive ? activeItemBgColor : "transparent",
                               color: childActive ? activeItemTextColor : "text.secondary",
                               "&:hover": {
@@ -363,7 +362,7 @@ export default function SideBar({ darkMode, onThemeChange }) {
                           >
                             <ListItemText
                               primary={
-                                <Typography variant="body2" fontWeight={childActive ? 600 : 400}>
+                                <Typography variant="sidebar" fontWeight={childActive ? 600 : 400}>
                                   {child.label}
                                 </Typography>
                               }

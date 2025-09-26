@@ -222,7 +222,7 @@ export function LogConsoleTile({
   fillParent = true,
 }: {
   start: Date;
-  end: Date;
+  end?: Date; // if undefined it means until "now"
   height?: number;
   defaultService?: string;
   devTail?: boolean;
@@ -264,7 +264,7 @@ export function LogConsoleTile({
   const body: LogQuery = useMemo(
     () => ({
       since: start.toISOString(),
-      until: end.toISOString(),
+      ...(end ? { until: end.toISOString() } : {}),
       limit: 500,
       order: "desc",
       filters: {

@@ -79,7 +79,7 @@ def create_app() -> FastAPI:
     log_setup(
         service_name="agentic",
         log_level=configuration.app.log_level,
-        store_or_getter=lambda: application_context.get_log_store(),
+        store= application_context.get_log_store() ,
     )
     logger.info(f"🛠️ create_app() called with base_url={base_url}")
 

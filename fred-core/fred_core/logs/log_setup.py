@@ -15,11 +15,10 @@
 
 from __future__ import annotations
 
+import asyncio
+import json
 import logging
-from logging import Handler
-from logging.handlers import RotatingFileHandler
-from pathlib import Path
-from typing import Callable, Union
+import threading
 
 from fred_core.logs.base_log_store import BaseLogStore, LogEventDTO
 
@@ -56,64 +55,58 @@ class StoreEmitHandler(logging.Handler):
     def __init__(
         self,
         service_name: str,
-        store_or_getter: Union[BaseLogStore, Callable[[], BaseLogStore]],
+        store: BaseLogStore,
     ):
         super().__init__()
         self.service = service_name
-        self.store_or_getter = store_or_getter
-
-    def _store(self) -> BaseLogStore:
-        return (
-            self.store_or_getter()
-            if callable(self.store_or_getter)
-            else self.store_or_getter
-        )
+        self.store = store
+        self._tls = threading.local()
 
     def emit(self, record: logging.LogRecord) -> None:
-        import asyncio
-        import json
-
-        raw = self.format(record)
-        payload = None
+        if getattr(self._tls, "in_emit", False):
+            return
+        self._tls.in_emit = True
         try:
-            payload = json.loads(raw)
-        except Exception:
-            logger.warning("Log record is not JSON: %s", raw)
-            pass  # formatter should be JSON, but we tolerate plain text
-
-        e = LogEventDTO(
-            ts=payload.get("ts", record.created) if payload else record.created,
-            level=payload.get("level", record.levelname)
-            if payload
-            else record.levelname,  # type: ignore
-            logger=payload.get("logger", record.name) if payload else record.name,
-            file=payload.get("file", record.filename) if payload else record.filename,
-            line=payload.get("line", record.lineno) if payload else record.lineno,
-            msg=payload.get("msg", record.getMessage()) if payload else raw,
-            service=payload.get("service", self.service) if payload else self.service,
-            extra=payload.get("extra") if payload else None,
-        )
-
-        store = self._store()
-        # Never block the app on logging:
-        try:
-            loop = asyncio.get_event_loop()
-            loop.call_soon_threadsafe(store.index_event, e)
-        except RuntimeError:
-            # no running loop (sync context) → call directly
+            raw = self.format(record)
+            payload = None
             try:
-                store.index_event(e)
+                payload = json.loads(raw)
             except Exception:
-                self.handleError(record)
+                print("Log record is not JSON: %s", raw)
+                pass  # formatter should be JSON, but we tolerate plain text
+
+            e = LogEventDTO(
+                ts=payload.get("ts", record.created) if payload else record.created,
+                level=payload.get("level", record.levelname)
+                if payload
+                else record.levelname,  # type: ignore
+                logger=payload.get("logger", record.name) if payload else record.name,
+                file=payload.get("file", record.filename) if payload else record.filename,
+                line=payload.get("line", record.lineno) if payload else record.lineno,
+                msg=payload.get("msg", record.getMessage()) if payload else raw,
+                service=payload.get("service", self.service) if payload else self.service,
+                extra=payload.get("extra") if payload else None,
+            )
+
+            # Never block the app on logging:
+            try:
+                loop = asyncio.get_event_loop()
+                loop.call_soon_threadsafe(self.store.index_event, e)
+            except RuntimeError:
+                # no running loop (sync context) → call directly
+                try:
+                    self.store.index_event(e)
+                except Exception:
+                    self.handleError(record)
+        finally:
+            self._tls.in_emit = False
 
 
 def log_setup(
     *,
     service_name: str,
     log_level: str = "INFO",
-    store_or_getter: Union[BaseLogStore, Callable[[], BaseLogStore]],
-    file_max_mb: int = 20,
-    file_backups: int = 5,
+    store: BaseLogStore,
     include_uvicorn: bool = True,
 ) -> None:
     root = logging.getLogger()
@@ -136,24 +129,18 @@ def log_setup(
         console.setLevel(log_level.upper())
         root.addHandler(console)
 
-    # 2) Rolling JSON file (machine)
-    log_dir = Path.home() / ".fred" / "agentic.logs"
-    log_dir.mkdir(parents=True, exist_ok=True)
-    file_h: Handler = RotatingFileHandler(
-        log_dir / f"{service_name}.log",
-        maxBytes=file_max_mb * 1024 * 1024,
-        backupCount=file_backups,
-        encoding="utf-8",
-    )
-    file_h.setLevel(log_level.upper())
-    file_h.setFormatter(CompactJsonFormatter(service_name))
-    root.addHandler(file_h)
-
     # 3) Store (machine)
-    store_h = StoreEmitHandler(service_name=service_name, store_or_getter=store_or_getter)
+    store_h = StoreEmitHandler(service_name=service_name, store=store)
     store_h.setLevel(log_level.upper())
     store_h.setFormatter(CompactJsonFormatter(service_name))
     root.addHandler(store_h)
+
+    # Fred: prevent client libraries from bouncing through our StoreEmitHandler.
+    for noisy in ("opensearch", "urllib3", "elastic_transport", "elasticsearch", "aiohttp"):
+        lg = logging.getLogger(noisy)
+        lg.handlers.clear()        # their own handlers (if any) → gone
+        lg.setLevel(logging.WARNING)
+        lg.propagate = False       # <-- key: do NOT bubble up to root
 
     # 4) Make uvicorn loggers flow into our handlers (no duplicates)
     if include_uvicorn:

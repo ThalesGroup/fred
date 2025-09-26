@@ -1,20 +1,6 @@
-// Copyright Thales 2025
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
-// - Dedicated, distraction-free log workspace.
-// - Reuses shared DateRangeControls + LogConsoleTile.
-// - Keeps URL-routable so on-calls can share a link.
+// Logs.tsx
+// Purpose (Fred): rolling 2h log workspace tied to "now", NOT a frozen interval.
+// Why: "last-2h" must keep sliding; snapping the end down clips the most recent minutes.
 
 import { useMemo, useState, useEffect } from "react";
 import { Box } from "@mui/material";
@@ -22,42 +8,58 @@ import dayjs, { Dayjs } from "dayjs";
 import { alignDateRangeToPrecision, getPrecisionForRange, TimePrecision } from "../components/monitoring/timeAxis";
 import { LogConsoleTile } from "../components/monitoring/LogConsoleTile";
 
-
 export default function Logs() {
-  const now = dayjs();
-  const [startDate] = useState<Dayjs>(now.subtract(2, "hours"));
-  const [endDate] = useState<Dayjs>(now);
-
-  const precision: TimePrecision = useMemo(
-    () => getPrecisionForRange(startDate.toDate(), endDate.toDate()),
-    [startDate, endDate],
-  );
-  const [alignedStartIso, alignedEndIso] = useMemo(
-    () => alignDateRangeToPrecision(startDate, endDate, precision),
-    [startDate, endDate, precision],
-  );
-
+  // 🔁 Tick drives a rolling window; we recompute "now" every few seconds.
+  const [tick, setTick] = useState(0);
   useEffect(() => {
-    // noop, but kept to mirror MonitoringOverview style
+    const id = setInterval(() => setTick(t => t + 1), 5_000); // 5s feels live without spamming
+    return () => clearInterval(id);
   }, []);
 
+  // ⏱️ Recompute window on each tick → sliding "last 2h"
+  const now = useMemo(() => dayjs(), [tick]);
+  const rawStart: Dayjs = useMemo(() => now.subtract(2, "hours"), [now]);
+  const rawEnd: Dayjs = now; // IMPORTANT: true "now", not aligned/snap-down
+
+  // 📏 Precision is still useful for charts, but we only align the *start*.
+  const precision: TimePrecision = useMemo(
+    () => getPrecisionForRange(rawStart.toDate(), rawEnd.toDate()),
+    [rawStart, rawEnd],
+  );
+
+  // ⚠️ Do NOT align the end; that’s what produced 12:54:59.999Z.
+  const [alignedStartIso /* , alignedEndIso */] = useMemo(
+    () => {
+      const [alignedStart /*, alignedEnd*/] = alignDateRangeToPrecision(rawStart, rawEnd, precision);
+      return [alignedStart /*, alignedEnd*/];
+    },
+    [rawStart, rawEnd, precision],
+  );
+
   return (
-    <Box flexDirection="column" gap={1} p={2}
-    sx={{
-        height: "100vh",            // full viewport
+    <Box
+      flexDirection="column"
+      gap={1}
+      p={2}
+      sx={{
+        height: "100vh",
         display: "flex",
         flexDirection: "column",
-        overflow: "hidden",         // ← important: trap scroll inside children
+        overflow: "hidden",
         p: 2,
         gap: 1,
       }}
     >
       <LogConsoleTile
+        // ✅ Start aligned to bucket boundaries (cheap histograms, stable pages)
         start={new Date(alignedStartIso)}
-        end={new Date(alignedEndIso)}
+        // ✅ End is true "now" → backend can omit lte (open-ended) or use lt(now+1ms)
+        // end={rawEnd.toDate()}
         height={560}
         defaultService="knowledge-flow"
         devTail={false}
+        // (Optional) If your tile supports it, you can pass end={undefined} to mean "until now"
+        // and let the backend omit the lte filter.
       />
     </Box>
   );
