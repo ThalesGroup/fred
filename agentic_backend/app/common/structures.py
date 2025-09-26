@@ -35,8 +35,9 @@ class StorageConfig(BaseModel):
     history_store: StoreConfig
     feedback_store: StoreConfig
     kpi_store: StoreConfig
-    log_store: Optional[LogStorageConfig] = Field(default=None, description="Optional log store")   
-
+    log_store: Optional[LogStorageConfig] = Field(
+        default=None, description="Optional log store"
+    )
 
 
 class TimeoutSettings(BaseModel):

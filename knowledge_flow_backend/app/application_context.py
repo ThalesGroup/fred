@@ -17,12 +17,7 @@ import logging
 import os
 from pathlib import Path
 from typing import Dict, Optional, Type, Union
-from fred_core.logs import (
-    BaseLogStore,
-    OpenSearchLogStore,
-    RamLogStore,
-    InMemoryLogStorageConfig
-)
+from fred_core.logs import BaseLogStore, OpenSearchLogStore, RamLogStore, InMemoryLogStorageConfig
 from fred_core import (
     BaseKPIStore,
     DuckdbStoreConfig,
@@ -395,7 +390,7 @@ class ApplicationContext:
             raise ValueError("Log store configuration is missing or invalid")
 
         return self._log_store_instance
-    
+
     def get_content_store(self) -> BaseContentStore:
         """
         Factory function to get the appropriate storage backend based on configuration.

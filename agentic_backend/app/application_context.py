@@ -34,7 +34,7 @@ from fred_core.logs import (
     BaseLogStore,
     OpenSearchLogStore,
     RamLogStore,
-    InMemoryLogStorageConfig
+    InMemoryLogStorageConfig,
 )
 from fred_core import (
     BaseKPIStore,
@@ -372,7 +372,9 @@ class ApplicationContext:
                 verify_certs=opensearch_config.verify_certs,
             )
         elif isinstance(config, InMemoryLogStorageConfig) or config is None:
-            self._log_store_instance = RamLogStore(capacity=1000)  # Default to in-memory store if not configured
+            self._log_store_instance = RamLogStore(
+                capacity=1000
+            )  # Default to in-memory store if not configured
         else:
             raise ValueError("Log store configuration is missing or invalid")
 

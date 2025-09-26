@@ -74,15 +74,15 @@ def create_app() -> FastAPI:
     config_file = os.environ["CONFIG_FILE"]
     configuration: Configuration = parse_server_configuration(config_file)
     base_url = configuration.app.base_url
-    
 
     application_context = ApplicationContext(configuration)
     log_setup(
         service_name="agentic",
         log_level=configuration.app.log_level,
-        store_or_getter=lambda: application_context.get_log_store(), 
+        store_or_getter=lambda: application_context.get_log_store(),
     )
     logger.info(f"🛠️ create_app() called with base_url={base_url}")
+
     # The correct and final code to use
     @asynccontextmanager
     async def lifespan(app: FastAPI):

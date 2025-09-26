@@ -101,6 +101,7 @@ ContentStorageConfig = Annotated[Union[LocalContentStorageConfig, MinioStorageCo
 class InMemoryVectorStorage(BaseModel):
     type: Literal["in_memory"]
 
+
 class WeaviateVectorStorage(BaseModel):
     type: Literal["weaviate"]
     host: str = Field(default="https://localhost:8080", description="Weaviate host")
@@ -278,6 +279,7 @@ PullSourceConfig = Annotated[
 ]
 DocumentSourceConfig = Annotated[Union[PushSourceConfig, PullSourceConfig], Field(discriminator="type")]
 
+
 class StorageConfig(BaseModel):
     postgres: PostgresStoreConfig
     opensearch: OpenSearchStoreConfig
@@ -288,7 +290,7 @@ class StorageConfig(BaseModel):
     catalog_store: StoreConfig
     tabular_stores: Optional[Dict[str, StoreConfig]] = Field(default=None, description="Optional tabular store")
     vector_store: VectorStorageConfig
-    log_store: Optional[LogStorageConfig] = Field(default=None, description="Optional log store")   
+    log_store: Optional[LogStorageConfig] = Field(default=None, description="Optional log store")
 
 
 class Configuration(BaseModel):

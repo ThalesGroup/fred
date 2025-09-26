@@ -62,11 +62,13 @@ def _norm_origin(o) -> str:
     # Ensure exact match with browser's Origin header (no trailing slash)
     return str(o).rstrip("/")
 
+
 def load_environment(dotenv_path: str = "./config/.env"):
     if load_dotenv(dotenv_path):
         logging.getLogger().info(f"✅ Loaded environment variables from: {dotenv_path}")
     else:
         logging.getLogger().warning(f"⚠️ No .env file found at: {dotenv_path}")
+
 
 # -----------------------
 # APP CREATION
@@ -77,9 +79,8 @@ def create_app() -> FastAPI:
     load_environment()
     config_file = os.environ["CONFIG_FILE"]
     configuration: Configuration = parse_server_configuration(config_file)
-    
+
     base_url = configuration.app.base_url
-    
 
     if not configuration.processing.use_gpu:
         os.environ["CUDA_VISIBLE_DEVICES"] = ""
@@ -93,7 +94,7 @@ def create_app() -> FastAPI:
     log_setup(
         service_name="knowledge-flow",
         log_level=configuration.app.log_level,
-        store_or_getter=lambda: application_context.get_log_store(), 
+        store_or_getter=lambda: application_context.get_log_store(),
     )
     logger.info(f"🛠️ create_app() called with base_url={base_url}")
     application_context._log_config_summary()
