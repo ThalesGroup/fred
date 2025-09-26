@@ -13,9 +13,13 @@
 # limitations under the License.
 
 from __future__ import annotations
-from typing import Any, Dict, List, Literal, Optional, Union, Annotated
+
+from typing import Annotated, Any, Dict, List, Literal, Optional, Union
+
 from pydantic import BaseModel, Field
+
 from fred_core.common.structures import OpenSearchIndexConfig
+
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 
 class InMemoryLogStorageConfig(BaseModel):

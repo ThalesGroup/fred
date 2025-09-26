@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from . import logs  # noqa: F401
 from fred_core.common.fastapi_handlers import register_exception_handlers
 from fred_core.common.lru_cache import ThreadSafeLRUCache
 from fred_core.common.structures import (
@@ -81,6 +80,8 @@ from fred_core.store.opensearch_mapping_validator import validate_index_mapping
 from fred_core.store.sql_store import SQLTableStore
 from fred_core.store.structures import StoreInfo
 from fred_core.store.vector_search import VectorSearchHit
+
+from . import logs  # noqa: F401
 
 __all__ = [
     "logs",

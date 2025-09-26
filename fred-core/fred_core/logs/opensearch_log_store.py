@@ -26,14 +26,12 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional
-
-from fred_core.logs.base_log_store import BaseLogStore, LogEventDTO, LogQuery
-from fred_core.logs.log_structures import LogFilter, LogQueryResult
+from typing import Any, Dict, List, Literal, Optional
 
 from opensearchpy import OpenSearch, OpenSearchException, RequestsHttpConnection
 
-from typing import Literal
+from fred_core.logs.base_log_store import BaseLogStore, LogEventDTO, LogQuery
+from fred_core.logs.log_structures import LogFilter, LogQueryResult
 
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 

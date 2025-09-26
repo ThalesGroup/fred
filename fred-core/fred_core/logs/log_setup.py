@@ -14,16 +14,14 @@
 #
 
 from __future__ import annotations
+
 import logging
 from logging import Handler
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Callable, Union
 
-from fred_core.logs.base_log_store import (
-    BaseLogStore,
-    LogEventDTO
-)
+from fred_core.logs.base_log_store import BaseLogStore, LogEventDTO
 
 try:
     from rich.logging import RichHandler
@@ -72,8 +70,8 @@ class StoreEmitHandler(logging.Handler):
         )
 
     def emit(self, record: logging.LogRecord) -> None:
-        import json
         import asyncio
+        import json
 
         raw = self.format(record)
         payload = None
