@@ -73,7 +73,7 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
         Extract basic metadata from the PDF.
         """
         try:
-            parser = PyPDFParser(mode="single", pages_delimiter="\n\f")
+            parser = PyPDFParser(mode="page", pages_delimiter="\n\f")
             blob = self.blob_from_file(file_path)
             docs = parser.parse(blob)
             page_count = len(docs)
@@ -103,7 +103,7 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
         """
         output_dir.mkdir(parents=True, exist_ok=True)
         md_path = output_dir / "output.md"
-
+        md_path.write_text("")
         try:
             parser = PyPDFParser(
                 mode="single",
