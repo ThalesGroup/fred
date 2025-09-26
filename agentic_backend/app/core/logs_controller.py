@@ -16,16 +16,16 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
 from fred_core import (
-    KeycloakUser,
-    get_current_user,
     Action,
+    KeycloakUser,
     Resource,
     authorize_or_raise,
+    get_current_user,
 )
 from fred_core.logs import LogQuery, LogQueryResult
 
-from app.common.utils import log_exception
 from app.application_context import get_app_context
+from app.common.utils import log_exception
 
 # --- Module-level router (MCP-friendly) ---
 router = APIRouter(tags=["Logs"])

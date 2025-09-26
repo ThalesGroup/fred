@@ -30,12 +30,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from threading import Lock
 from typing import Any, Callable, Dict, List, Optional
-from fred_core.logs import (
-    BaseLogStore,
-    OpenSearchLogStore,
-    RamLogStore,
-    InMemoryLogStorageConfig,
-)
+
 from fred_core import (
     BaseKPIStore,
     BearerAuth,
@@ -49,6 +44,12 @@ from fred_core import (
     SQLStorageConfig,
     get_model,
     split_realm_url,
+)
+from fred_core.logs import (
+    BaseLogStore,
+    InMemoryLogStorageConfig,
+    OpenSearchLogStore,
+    RamLogStore,
 )
 from langchain_core.language_models.base import BaseLanguageModel
 from requests.auth import AuthBase

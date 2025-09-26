@@ -17,7 +17,7 @@ import logging
 import os
 from pathlib import Path
 from typing import Dict, Optional, Type, Union
-from fred_core.logs import BaseLogStore, OpenSearchLogStore, RamLogStore, InMemoryLogStorageConfig
+
 from fred_core import (
     BaseKPIStore,
     DuckdbStoreConfig,
@@ -34,6 +34,7 @@ from fred_core import (
     get_model,
     split_realm_url,
 )
+from fred_core.logs import BaseLogStore, InMemoryLogStorageConfig, OpenSearchLogStore, RamLogStore
 from langchain_core.embeddings import Embeddings
 from opensearchpy import OpenSearch, RequestsHttpConnection
 

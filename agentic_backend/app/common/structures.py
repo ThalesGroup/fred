@@ -14,7 +14,6 @@
 
 from typing import Annotated, Dict, List, Literal, Optional, Union
 
-from fred_core.logs import LogStorageConfig
 from fred_core import (
     ModelConfiguration,
     OpenSearchStoreConfig,
@@ -22,6 +21,7 @@ from fred_core import (
     SecurityConfiguration,
     StoreConfig,
 )
+from fred_core.logs import LogStorageConfig
 from pydantic import BaseModel, Field
 
 from app.core.agents.agent_spec import AgentTuning
