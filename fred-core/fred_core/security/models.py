@@ -43,6 +43,7 @@ class Resource(Enum):
     TABLES_DATABASES = "tables_databases"
     KPIS = "kpis"
     OPENSEARCH = "opensearch"
+    LOGS = "logs"
 
     # Agentic Backend resources
     FEEDBACK = "feedback"

@@ -42,7 +42,9 @@
       "agent": "View agents",
       "workspaces": "View Workspace",
       "account": "View your account",
-      "selectCluster": "Please select a cluster first"
+      "selectCluster": "Please select a cluster first",
+       "monitoring_kpi": "KPI Overview",
+      "monitoring_logs": "Log Console"
     },
     "theme": {
       "light": "light",
@@ -51,7 +53,9 @@
     "footer": {
       "innovationHub": "Innovation hub",
       "website": "Website"
-    }
+    },
+    "monitoring_kpi": "KPI",
+    "monitoring_logs": "Logs"
   },
   "agentHub": {
     "title": "Agent Hub",

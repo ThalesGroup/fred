@@ -89,7 +89,9 @@ def get_model(cfg: Optional[ModelConfiguration]) -> BaseChatModel:
 
     if provider == "azure":
         _require_env("AZURE_OPENAI_API_KEY")
-        _require_settings(settings, ["azure_endpoint", "azure_api_version"], "Azure chat")
+        _require_settings(
+            settings, ["azure_endpoint", "azure_api_version"], "Azure chat"
+        )
         _info_provider(cfg)
         if not cfg.name:
             raise ValueError("Azure chat requires 'name' (deployment).")
@@ -144,7 +146,9 @@ def get_model(cfg: Optional[ModelConfiguration]) -> BaseChatModel:
             azure_endpoint=f"{base}{path}/deployments/{cfg.name}/chat/completions?api-version={api_version}",
             api_version=api_version,
             azure_ad_token_provider=_token_provider,  # ← per-request AAD token
-            default_headers={"TrustNest-Apim-Subscription-Key": os.environ["AZURE_APIM_KEY"]},
+            default_headers={
+                "TrustNest-Apim-Subscription-Key": os.environ["AZURE_APIM_KEY"]
+            },
             **passthrough,
         )
 
@@ -235,7 +239,9 @@ def get_embeddings(cfg: ModelConfiguration) -> LCEmbeddings:
             azure_endpoint=f"{base}{path}/deployments/{cfg.name}/embeddings?api-version={api_version}",
             api_version=api_version,
             azure_ad_token_provider=_token_provider,  # ← per-request AAD token
-            default_headers={"TrustNest-Apim-Subscription-Key": os.environ["AZURE_APIM_KEY"]},
+            default_headers={
+                "TrustNest-Apim-Subscription-Key": os.environ["AZURE_APIM_KEY"]
+            },
             **passthrough,
         )
 

@@ -17,7 +17,9 @@ import os
 from enum import Enum
 from pathlib import Path
 from typing import Annotated, Dict, List, Literal, Optional, Union
-
+from fred_core.logs import (
+    LogStorageConfig,
+)
 from fred_core import ModelConfiguration, OpenSearchStoreConfig, PostgresStoreConfig, SecurityConfiguration, StoreConfig
 from pydantic import BaseModel, Field, model_validator
 
@@ -89,6 +91,7 @@ class LocalContentStorageConfig(BaseModel):
 
 ContentStorageConfig = Annotated[Union[LocalContentStorageConfig, MinioStorageConfig], Field(discriminator="type")]
 
+
 ###########################################################
 #
 #  --- Vector storage configuration
@@ -97,7 +100,6 @@ ContentStorageConfig = Annotated[Union[LocalContentStorageConfig, MinioStorageCo
 
 class InMemoryVectorStorage(BaseModel):
     type: Literal["in_memory"]
-
 
 class WeaviateVectorStorage(BaseModel):
     type: Literal["weaviate"]
@@ -276,7 +278,6 @@ PullSourceConfig = Annotated[
 ]
 DocumentSourceConfig = Annotated[Union[PushSourceConfig, PullSourceConfig], Field(discriminator="type")]
 
-
 class StorageConfig(BaseModel):
     postgres: PostgresStoreConfig
     opensearch: OpenSearchStoreConfig
@@ -287,6 +288,7 @@ class StorageConfig(BaseModel):
     catalog_store: StoreConfig
     tabular_stores: Optional[Dict[str, StoreConfig]] = Field(default=None, description="Optional tabular store")
     vector_store: VectorStorageConfig
+    log_store: Optional[LogStorageConfig] = Field(default=None, description="Optional log store")   
 
 
 class Configuration(BaseModel):

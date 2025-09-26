@@ -21,6 +21,7 @@ import { ProtectedRoute } from "../components/ProtectedRoute";
 import { LayoutWithSidebar } from "../app/LayoutWithSidebar";
 import { Monitoring } from "../pages/Monitoring";
 import Chat from "../pages/Chat";
+import Logs from "../pages/Logs";
 
 const RootLayout = ({ children }: React.PropsWithChildren<{}>) => (
   <ProtectedRoute permission="viewer">
@@ -42,8 +43,12 @@ export const routes: RouteObject[] = [
         element: <Chat />,
       },
       {
-        path: "monitoring",
+        path: "monitoring/kpis",
         element: <Monitoring />,
+      },
+      {
+        path: "monitoring/logs",
+        element: <Logs />,
       },
       {
         path: "account",

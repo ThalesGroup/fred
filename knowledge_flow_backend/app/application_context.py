@@ -17,7 +17,12 @@ import logging
 import os
 from pathlib import Path
 from typing import Dict, Optional, Type, Union
-
+from fred_core.logs import (
+    BaseLogStore,
+    OpenSearchLogStore,
+    RamLogStore,
+    InMemoryLogStorageConfig
+)
 from fred_core import (
     BaseKPIStore,
     DuckdbStoreConfig,
@@ -196,6 +201,7 @@ class ApplicationContext:
     _metadata_store_instance: Optional[BaseMetadataStore] = None
     _tag_store_instance: Optional[BaseTagStore] = None
     _kpi_store_instance: Optional[BaseKPIStore] = None
+    _log_store_instance: Optional[BaseLogStore] = None
     _opensearch_client: Optional[OpenSearch] = None
     _resource_store_instance: Optional[BaseResourceStore] = None
     _tabular_stores: Optional[Dict[str, StoreInfo]] = None
@@ -359,6 +365,37 @@ class ApplicationContext:
         cls = getattr(module, class_name)
         return cls
 
+    def get_log_store(self) -> BaseLogStore:
+        """
+        Factory function to get the appropriate log storage backend based on configuration.
+        Returns:
+            BaseLogStore: An instance of the log storage backend.
+        """
+        if self._log_store_instance is not None:
+            return self._log_store_instance
+
+        config = ApplicationContext.get_instance().get_config().storage.log_store
+        if isinstance(config, OpenSearchIndexConfig):
+            opensearch_config = get_configuration().storage.opensearch
+            password = opensearch_config.password
+            if not password:
+                raise ValueError("Missing OpenSearch credentials: OPENSEARCH_PASSWORD")
+
+            self._log_store_instance = OpenSearchLogStore(
+                host=opensearch_config.host,
+                index=config.index,
+                username=opensearch_config.username,
+                password=password,
+                secure=opensearch_config.secure,
+                verify_certs=opensearch_config.verify_certs,
+            )
+        elif isinstance(config, InMemoryLogStorageConfig) or config is None:
+            self._log_store_instance = RamLogStore(capacity=1000)  # Default to in-memory store if not configured
+        else:
+            raise ValueError("Log store configuration is missing or invalid")
+
+        return self._log_store_instance
+    
     def get_content_store(self) -> BaseContentStore:
         """
         Factory function to get the appropriate storage backend based on configuration.

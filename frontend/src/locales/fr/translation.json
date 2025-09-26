@@ -42,7 +42,9 @@
       "agent": "Voir les agents",
       "workspaces": "Voir les espaces",
       "account": "Voir votre profil",
-      "selectCluster": "Veuillez d'abord sélectionner un cluster"
+      "selectCluster": "Veuillez d'abord sélectionner un cluster",
+      "monitoring_kpi": "Vue d'ensemble des KPI",
+      "monitoring_logs": "Console de logs"
     },
     "theme": {
       "light": "clair",
@@ -51,7 +53,9 @@
     "footer": {
       "innovationHub": "Innovation hub",
       "website": "Site web"
-    }
+    },
+    "monitoring_kpi": "KPI",
+    "monitoring_logs": "Logs"
   },
   "agentHub": {
     "title": "Centre des Agents",

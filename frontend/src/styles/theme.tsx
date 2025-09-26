@@ -290,7 +290,7 @@ const lightTheme = createTheme({
   palette: lightPalette,
   typography: lightTypography,
   layout: {
-    sidebarWidth: 180,
+    sidebarWidth: 200,
     sidebarCollapsedWidth: 80,
   },
   components: {
@@ -396,7 +396,7 @@ const darkTheme = createTheme({
   palette: darkPalette,
   typography: darkTypography,
   layout: {
-    sidebarWidth: 180,
+    sidebarWidth: 200,
     sidebarCollapsedWidth: 80,
   },
   components: {
