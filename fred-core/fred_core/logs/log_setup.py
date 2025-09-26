@@ -30,6 +30,7 @@ try:
 except Exception:  # optional in prod images
     RichHandler = None  # type: ignore
 
+logger = logging.getLogger(__name__)
 
 # --- JSON formatter kept tiny and portable ---
 class CompactJsonFormatter(logging.Formatter):
@@ -79,6 +80,7 @@ class StoreEmitHandler(logging.Handler):
         try:
             payload = json.loads(raw)
         except Exception:
+            logger.warning("Log record is not JSON: %s", raw)
             pass  # formatter should be JSON, but we tolerate plain text
 
         e = LogEventDTO(
