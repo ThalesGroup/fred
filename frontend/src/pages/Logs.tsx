@@ -58,51 +58,50 @@ export default function Logs() {
   }, [rawStart, rawEnd, precision]);
 
   return (
-     <>
-          <TopBar title={t("logs.title")} description={t("logs.description")} />
-         
-    <Box
-      flexDirection="column"
-      gap={1}
-      p={2}
-      sx={{
-        height: "100vh",
-        display: "flex",
-        flexDirection: "column",
-        overflow: "hidden",
-        p: 2,
-        gap: 1,
-      }}
-    >
-      {/* Header: date range + Live toggle */}
-      <Box display="flex" alignItems="center" justifyContent="space-between" gap={1} flexWrap="wrap">
-        <DateRangeControl
-          startDate={startDate}
-          endDate={endDate}
-          setStartDate={setStartDate}
-          setEndDate={(d) => {
-            setEndDate(d);
-            setLive(false); // picker → fixed window
-          }}
-          quickRanges={SHORT_QUICK_RANGES}
-          toleranceMs={90_000} // tighter match for short windows
-          onQuickRangePick={() => setLive(false)} // quick range → live sliding
-        />
-        <FormControlLabel control={
-          <Switch 
-            checked={live} 
-            onChange={(_, v) => setLive(v)} />} 
-            label={t("logs.live")} />
-      </Box>
+    <>
+      <TopBar title={t("logs.title")} description={t("logs.description")} />
+      <Box
+        flexDirection="column"
+        gap={1}
+        p={2}
+        sx={{
+          height: '100%',
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
+          p: 2,
+          gap: 1,
+        }}
+      >
+        {/* Header: date range + Live toggle */}
+        <Box display="flex" alignItems="center" justifyContent="space-between" gap={1} flexWrap="wrap">
+          <DateRangeControl
+            startDate={startDate}
+            endDate={endDate}
+            setStartDate={setStartDate}
+            setEndDate={(d) => {
+              setEndDate(d);
+              setLive(false); // picker → fixed window
+            }}
+            quickRanges={SHORT_QUICK_RANGES}
+            toleranceMs={90_000} // tighter match for short windows
+            onQuickRangePick={() => setLive(false)} // quick range → live sliding
+          />
+          <FormControlLabel
+            control={<Switch checked={live} onChange={(_, v) => setLive(v)} />}
+            label={t("logs.live")}
+          />
+        </Box>
 
-      <LogConsoleTile
-        start={new Date(alignedStartIso)}
-        end={rawEnd.toDate()}    
-        height={560}
-        defaultService="knowledge-flow"
-        devTail={false}
-      />
-    </Box>
+        <LogConsoleTile
+          start={new Date(alignedStartIso)}
+          end={rawEnd.toDate()}
+          height={560}
+          defaultService="knowledge-flow"
+          devTail={false}
+          fillParent={true}
+        />
+      </Box>
     </>
   );
 }

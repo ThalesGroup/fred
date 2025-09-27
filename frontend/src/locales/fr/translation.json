@@ -43,7 +43,7 @@
       "workspaces": "Voir les espaces",
       "account": "Voir votre profil",
       "selectCluster": "Veuillez d'abord sélectionner un cluster",
-      "monitoring_kpi": "Vue d'ensemble des KPI",
+      "monitoring_kpi": "Vue d'ensemble des Kpis",
       "monitoring_logs": "Console de logs"
     },
     "theme": {
@@ -158,7 +158,8 @@
     "description": "Surveillez les logs en temps réel de vos agents et services IA, avec des options de filtrage et de recherche avancées.",
     "live": "En direct",
     "file": "fichier de log",
-    "content": "contenu du log"
+    "content": "contenu du log",
+    "copyAll": "Copier tout ({{count}})"
   },
   "metrics": {
     "error": "Échec du chargement des métriques",

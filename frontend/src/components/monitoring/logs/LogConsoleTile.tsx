@@ -4,8 +4,8 @@
 // - Parent owns time (incl. "Live"); tile never polls on its own.
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Box, Stack, Divider } from "@mui/material";
-
+import { Box, Stack, Divider, Tooltip, Button } from "@mui/material";
+import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import {
   LogEventDto,
   LogQuery,
@@ -16,6 +16,7 @@ import { useQueryLogsAgenticV1LogsQueryPostMutation } from "../../../slices/agen
 import { LogControls } from "./LogControls";
 import type { ServiceId } from "./logType";
 import { LogRow } from "./LogRow";
+import { useTranslation } from "react-i18next";
 
 type Level = LogEventDto["level"];
 const MAX_EVENTS = 1000;
@@ -54,6 +55,7 @@ export function LogConsoleTile({
   devTail?: boolean;
   fillParent?: boolean;
 }) {
+  const { t } = useTranslation();
   // ---- UI filter state ----
   const [minLevel, setMinLevel] = useState<Level>("INFO");
   const [service, setService] = useState<ServiceId>(defaultService as ServiceId);
@@ -101,7 +103,7 @@ export function LogConsoleTile({
     }),
     [start, end, minLevel, service, dLoggerLike, dTextLike],
   );
-
+ 
   const fetchQuery = useCallback(() => {
     postQuery({ logQuery: body }).catch(() => {});
   }, [postQuery, body]);
@@ -117,6 +119,26 @@ export function LogConsoleTile({
     const asc = src.slice().sort((a, b) => a.ts - b.ts);
     return asc.length > MAX_EVENTS ? asc.slice(asc.length - MAX_EVENTS) : asc;
   }, [queryState.data]);
+
+   const copyAll = useCallback(() => {
+    if (events.length === 0) return;
+
+    // Format events into a readable text block
+    const logText = events
+      .map((e) => {
+        // Simple log line format: [Timestamp] [LEVEL] [Origin] Message
+        const ts = new Date(e.ts * 1000).toISOString();
+        const origin = `${e.file}:${e.line}`;
+        const extra = e.extra ? `\n\tEXTRA: ${JSON.stringify(e.extra)}` : "";
+        return `[${ts}] [${e.level}] [${origin}] ${e.msg}${extra}`;
+      })
+      .join('\n');
+
+    // Use navigator.clipboard.writeText to copy
+    navigator.clipboard.writeText(logText)
+      .then(() => console.log('Logs copied to clipboard'))
+      .catch((err) => console.error('Failed to copy logs: ', err));
+  }, [events]);
 
   // ---- Stick to bottom on new data if user is near bottom ----
   useEffect(() => {
@@ -155,6 +177,19 @@ export function LogConsoleTile({
           setTextLike={setTextLike}
           onRefresh={fetchQuery}   // manual refresh remains available
         />
+        <Tooltip title="Copy all visible logs to clipboard">
+          <Button 
+            variant="outlined"
+            size="small"
+            onClick={copyAll}
+            disabled={events.length === 0}
+            startIcon={<ContentCopyIcon />}
+            // Ensure button height matches CONTROL_HEIGHT (32px)
+            sx={{ height: 32 }} 
+          >
+            {t("logs.copyAll", { count: events.length })}
+          </Button>
+        </Tooltip>
       </Stack>
       <Divider />
 

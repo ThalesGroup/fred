@@ -43,7 +43,7 @@
       "workspaces": "View Workspace",
       "account": "View your account",
       "selectCluster": "Please select a cluster first",
-       "monitoring_kpi": "KPI Overview",
+      "monitoring_kpi": "Kpi Dashboard",
       "monitoring_logs": "Log Console"
     },
     "theme": {
@@ -54,7 +54,7 @@
       "innovationHub": "Innovation hub",
       "website": "Website"
     },
-    "monitoring_kpi": "KPI",
+    "monitoring_kpi": "Kpis",
     "monitoring_logs": "Logs"
   },
   "agentHub": {
@@ -158,7 +158,8 @@
     "description": "Monitor real-time logs from your AI agents and services, with advanced filtering and search options.",
     "live": "Live",
     "file": "logger file", 
-    "content": "log content"
+    "content": "log content",
+    "copyAll": "Copy All ({{count}})"
   },
   "metrics": {
     "error": "Failed to load metrics",

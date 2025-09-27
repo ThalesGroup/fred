@@ -161,7 +161,7 @@ export function LogRow({ e }: { e: LogEventDto }) {
 
       {/* copy */}
       <Tooltip title="Copy message">
-        <IconButton size="small" onClick={copy} sx={{ p: 0.25 }}>
+        <IconButton size="small" onClick={copy} sx={{ p: 0.25, color: 'text.secondary'  }}>
           <ContentCopyIcon fontSize="inherit" />
         </IconButton>
       </Tooltip>

@@ -29,8 +29,9 @@ export const LayoutWithSidebar = ({ children }: React.PropsWithChildren<{}>) => 
         <Box
           sx={{
             flexGrow: 1,
-            height: "100vh",
-            overflow: "auto",
+            display: 'flex', // Add display flex
+            flexDirection: 'column', // Add flex direction column
+            width: '100%', // Ensure it takes full width
           }}
         >
           {children}
