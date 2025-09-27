@@ -16,7 +16,7 @@ import { useMemo } from "react";
 import { Box } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import { ResponsiveContainer, CartesianGrid, XAxis, YAxis, Tooltip, Legend, BarChart, Bar } from "recharts";
-import type { KpiQueryResultRow } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import type { KpiQueryResultRow } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { axisTickProps, gridStroke, tooltipStyle, legendStyle, primarySeriesColor } from "./metricChartUtils";
 
 /**

@@ -27,7 +27,7 @@ from fastapi import APIRouter, Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi_mcp import AuthConfig, FastApiMCP
 from fred_core import get_current_user, initialize_user_security, register_exception_handlers
-from rich.logging import RichHandler
+from fred_core.logs import log_setup
 
 from app.application_context import ApplicationContext
 from app.application_state import attach_app
@@ -39,6 +39,7 @@ from app.features.catalog.controller import CatalogController
 from app.features.content import report_controller
 from app.features.content.controller import ContentController
 from app.features.ingestion.controller import IngestionController
+from app.features.kpi import logs_controller
 from app.features.kpi.kpi_controller import KPIController
 from app.features.kpi.opensearch_controller import OpenSearchOpsController
 from app.features.metadata.controller import MetadataController
@@ -62,16 +63,6 @@ def _norm_origin(o) -> str:
     return str(o).rstrip("/")
 
 
-def configure_logging(log_level: str):
-    logging.basicConfig(
-        level=log_level.upper(),
-        format="%(asctime)s - %(levelname)s - %(filename)s - %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-        handlers=[RichHandler(rich_tracebacks=False, show_time=False, show_path=False)],
-    )
-    logging.getLogger(__name__).info(f"Logging configured at {log_level.upper()} level.")
-
-
 def load_environment(dotenv_path: str = "./config/.env"):
     if load_dotenv(dotenv_path):
         logging.getLogger().info(f"✅ Loaded environment variables from: {dotenv_path}")
@@ -88,9 +79,8 @@ def create_app() -> FastAPI:
     load_environment()
     config_file = os.environ["CONFIG_FILE"]
     configuration: Configuration = parse_server_configuration(config_file)
-    configure_logging(configuration.app.log_level)
+
     base_url = configuration.app.base_url
-    logger.info(f"🛠️ create_app() called with base_url={base_url}")
 
     if not configuration.processing.use_gpu:
         os.environ["CUDA_VISIBLE_DEVICES"] = ""
@@ -100,8 +90,14 @@ def create_app() -> FastAPI:
         torch.set_default_device("cpu")
         logger.warning("⚠️ GPU support is disabled. Running on CPU.")
 
-    ApplicationContext(configuration)
-
+    application_context = ApplicationContext(configuration)
+    log_setup(
+        service_name="knowledge-flow",
+        log_level=configuration.app.log_level,
+        store=application_context.get_log_store(),
+    )
+    logger.info(f"🛠️ create_app() called with base_url={base_url}")
+    application_context._log_config_summary()
     app = FastAPI(
         docs_url=f"{configuration.app.base_url}/docs",
         redoc_url=f"{configuration.app.base_url}/redoc",
@@ -142,6 +138,7 @@ def create_app() -> FastAPI:
     VectorSearchController(router)
     KPIController(router)
     OpenSearchOpsController(router)
+    router.include_router(logs_controller.router)
     router.include_router(report_controller.router)
     if configuration.scheduler.enabled:
         logger.info("🧩 Activating ingestion scheduler controller.")

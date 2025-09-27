@@ -19,6 +19,9 @@ from pathlib import Path
 from typing import Annotated, Dict, List, Literal, Optional, Union
 
 from fred_core import ModelConfiguration, OpenSearchStoreConfig, PostgresStoreConfig, SecurityConfiguration, StoreConfig
+from fred_core.logs import (
+    LogStorageConfig,
+)
 from pydantic import BaseModel, Field, model_validator
 
 """
@@ -88,6 +91,7 @@ class LocalContentStorageConfig(BaseModel):
 
 
 ContentStorageConfig = Annotated[Union[LocalContentStorageConfig, MinioStorageConfig], Field(discriminator="type")]
+
 
 ###########################################################
 #
@@ -287,6 +291,7 @@ class StorageConfig(BaseModel):
     catalog_store: StoreConfig
     tabular_stores: Optional[Dict[str, StoreConfig]] = Field(default=None, description="Optional tabular store")
     vector_store: VectorStorageConfig
+    log_store: Optional[LogStorageConfig] = Field(default=None, description="Optional log store")
 
 
 class Configuration(BaseModel):

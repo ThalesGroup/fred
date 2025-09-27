@@ -18,20 +18,19 @@ import dayjs, { Dayjs } from "dayjs";
 import "dayjs/locale/fr";
 
 // Fred: global controls (single Paper at top)
-import DashboardCard from "./DashboardCard";
-import DateRangeControls from "./DateRangeControl";
+import DashboardCard from "../DashboardCard";
 
 // Fred: shared time axis utilities — single source of truth
-import { TimePrecision, getPrecisionForRange, alignDateRangeToPrecision, precisionToInterval } from "./timeAxis";
+import { TimePrecision, getPrecisionForRange, alignDateRangeToPrecision, precisionToInterval } from "../timeAxis";
 
 // Theme-driven chart styling (no time logic here)
 
 // Existing token chart (pure presentational)
 import { TokenUsageChart } from "./TokenUsageChart";
-import { useLazyGetNodeNumericalMetricsAgenticV1MetricsChatbotNumericalGetQuery } from "../../slices/agentic/agenticOpenApi";
+import { useLazyGetNodeNumericalMetricsAgenticV1MetricsChatbotNumericalGetQuery } from "../../../slices/agentic/agenticOpenApi";
 
 // KPI query client
-import { FramelessTile } from "./FramelessTile";
+import { FramelessTile } from "../FramelessTile";
 import { KpiStatusMini } from "./KpiStatusMini";
 import { KpiLatencyMini } from "./KpiLatencyMini";
 import {
@@ -39,10 +38,11 @@ import {
   KpiQuery,
   KpiQueryResult,
   useQueryKnowledgeFlowV1KpiQueryPostMutation,
-} from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+} from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import DateRangeControl from "../common/DateRangeControl";
+import { FULL_QUICK_RANGES } from "../common/dateRangeControlPresets";
 
 /**
- * MonitoringOverview
  *
  * Why (Fred): a single top-level page that owns date range + precision, renders many compact KPI tiles
  * without nesting Papers (no Paper-in-Paper). Tiles are *frameless* and receive shared xDomain + precision.
@@ -50,7 +50,7 @@ import {
  * How to extend: add another <Grid2> with a frameless tile component below. Tiles should accept
  * { start, end, precision, xDomain, viewingMode?, userId?, agentId? } and stay presentational.
  */
-export default function MonitoringOverview() {
+export default function KpiDashboard() {
   const now = dayjs();
 
   // Range state (top-level owns it)
@@ -144,12 +144,14 @@ export default function MonitoringOverview() {
     <Box display="flex" flexDirection="column" gap={2} p={2}>
       {/* Single Paper host: global filters only */}
       <DashboardCard>
-        <DateRangeControls
-          startDate={startDate}
-          endDate={endDate}
-          setStartDate={setStartDate}
-          setEndDate={setEndDate}
-        />
+        <DateRangeControl
+                  startDate={startDate}
+                  endDate={endDate}
+                  setStartDate={setStartDate}
+                  setEndDate={setEndDate} 
+                  quickRanges={FULL_QUICK_RANGES}
+                  toleranceMs={90_000} // tighter match for short windows
+                />
       </DashboardCard>
 
       {/* Compact grid; frameless tiles (Boxes) to avoid Paper-in-Paper */}

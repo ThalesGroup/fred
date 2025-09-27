@@ -16,8 +16,8 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGri
 import dayjs, { ManipulateType } from "dayjs";
 import utc from "dayjs/plugin/utc";
 import { alpha, useTheme } from "@mui/material/styles";
-import { MetricsResponse } from "../../slices/agentic/agenticOpenApi";
-import { precisionToUnit } from "./timeAxis";
+import { MetricsResponse } from "../../../slices/agentic/agenticOpenApi";
+import { precisionToUnit } from "../timeAxis";
 
 dayjs.extend(utc);
 
