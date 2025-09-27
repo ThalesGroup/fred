@@ -210,6 +210,10 @@ storage:
     # while ingesting large documents.
     bulk_size: 1000
 
+  log_store:
+    type: "opensearch"
+    index: log-index
+
   tabular_stores:
     base_database: # Minimal configuration to enable CSV document ingestion
       type: "sql"

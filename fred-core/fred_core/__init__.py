@@ -81,7 +81,10 @@ from fred_core.store.sql_store import SQLTableStore
 from fred_core.store.structures import StoreInfo
 from fred_core.store.vector_search import VectorSearchHit
 
+from . import logs  # noqa: F401
+
 __all__ = [
+    "logs",
     "raise_internal_error",
     "get_current_user",
     "decode_jwt",

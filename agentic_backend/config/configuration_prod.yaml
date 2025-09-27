@@ -220,3 +220,7 @@ storage:
   kpi_store:
     type: "opensearch"
     index: kpi-index
+
+  log_store:
+    type: "opensearch"
+    index: log-index

@@ -19,8 +19,9 @@ import { KnowledgeHub } from "../pages/KnowledgeHub";
 import { AgentHub } from "../pages/AgentHub";
 import { ProtectedRoute } from "../components/ProtectedRoute";
 import { LayoutWithSidebar } from "../app/LayoutWithSidebar";
-import { Monitoring } from "../pages/Monitoring";
+import { Kpis } from "../pages/Kpis";
 import Chat from "../pages/Chat";
+import Logs from "../pages/Logs";
 
 const RootLayout = ({ children }: React.PropsWithChildren<{}>) => (
   <ProtectedRoute permission="viewer">
@@ -42,8 +43,12 @@ export const routes: RouteObject[] = [
         element: <Chat />,
       },
       {
-        path: "monitoring",
-        element: <Monitoring />,
+        path: "monitoring/kpis",
+        element: <Kpis />,
+      },
+      {
+        path: "monitoring/logs",
+        element: <Logs />,
       },
       {
         path: "account",
