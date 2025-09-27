@@ -54,7 +54,7 @@
       "innovationHub": "Innovation hub",
       "website": "Site web"
     },
-    "monitoring_kpi": "KPI",
+    "monitoring_kpi": "Kpis",
     "monitoring_logs": "Logs"
   },
   "agentHub": {
@@ -149,9 +149,16 @@
     "draftNotSaved": "Brouillon • non encore enregistré",
     "profile": "Profil"
   },
-  "monitoring": {
+  "kpis": {
     "title": "Surveillance des agents et services IA",
     "description": "Suivez l’utilisation, la performance et les coûts de tous les agents et services IA — y compris les tokens, la latence et les tendances d’activité."
+  },
+  "logs": {
+    "title": "Console de logs",
+    "description": "Surveillez les logs en temps réel de vos agents et services IA, avec des options de filtrage et de recherche avancées.",
+    "live": "En direct",
+    "file": "fichier de log",
+    "content": "contenu du log"
   },
   "metrics": {
     "error": "Échec du chargement des métriques",

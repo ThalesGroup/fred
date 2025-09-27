@@ -149,9 +149,16 @@
     "newConversationHelp": "Start a new conversation (not yet saved)",
     "draftNotSaved": "Draft • not yet saved"
   },
-  "monitoring": {
+  "kpis": {
     "title": "Agent & AI Service Monitoring",
     "description": "Track usage, performance, and costs across all AI agents and services — including tokens, latency, and activity trends."
+  },
+  "logs": {
+    "title": "Log Console",
+    "description": "Monitor real-time logs from your AI agents and services, with advanced filtering and search options.",
+    "live": "Live",
+    "file": "logger file", 
+    "content": "log content"
   },
   "metrics": {
     "error": "Failed to load metrics",

@@ -1,4 +1,28 @@
-// Compact control bar for the log viewer.
+// Copyright Thales 2025
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+//
+// Purpose (Fred):
+// - Lightweight "Kibana-lite" console for recent logs.
+// - Obeys the page's global date range (start/end) but offers an "Auto-refresh" for recent windows.
+// - Frameless by design; host it inside <FramelessTile> like other minis.
+//
+// How it fits Fred:
+// - Same data flow as KPI tiles: parent owns time range; tile is presentational + fetch logic.
+// - Uses RTK OpenAPI hooks you already generated: useQueryLogs... + useTailLogsFile...
+// - Minimal UI plumbing: level floor, service filter, logger contains, text contains.
+
 
 import {
   Box,
@@ -10,19 +34,18 @@ import {
   MenuItem,
   Select,
   Stack,
-  Switch,
   TextField,
   ToggleButton,
   ToggleButtonGroup,
   Tooltip,
 } from "@mui/material";
 import RefreshIcon from "@mui/icons-material/Refresh";
-import PauseIcon from "@mui/icons-material/Pause";
 import { LEVELS, SERVICE_OPTIONS, Level, ServiceId } from "./logType";
 import InputAdornment from "@mui/material/InputAdornment";
 import ClearIcon from "@mui/icons-material/Clear";
+import { t } from "i18next";
 
-const CONTROL_HEIGHT = 36; // one height to rule them all
+const CONTROL_HEIGHT = 32; // one height to rule them all
 
 const levelColor: Record<Level, "default" | "success" | "info" | "warning" | "error"> = {
   DEBUG: "default",
@@ -56,22 +79,16 @@ function LvlChip({ lvl }: { lvl: Level }) {
 
 export type LogControlsProps = {
   minLevel: Level;
-  setMinLevel: (lvl: Level) => void;
+  setMinLevel: React.Dispatch<React.SetStateAction<Level>>;
 
   service: ServiceId;
-  setService: (s: ServiceId) => void;
+  setService: React.Dispatch<React.SetStateAction<ServiceId>>;
 
   loggerLike: string;
-  setLoggerLike: (v: string) => void;
+  setLoggerLike: React.Dispatch<React.SetStateAction<string>>;
 
   textLike: string;
-  setTextLike: (v: string) => void;
-
-  autoRefresh: boolean;
-  setAutoRefresh: (v: boolean) => void;
-
-  useTail: boolean;
-  setUseTail: (v: boolean) => void;
+  setTextLike: React.Dispatch<React.SetStateAction<string>>;
 
   onRefresh: () => void;
 };
@@ -94,17 +111,16 @@ const FIELD_WRAPPER_SX = {
   "& .MuiInputLabel-root:not(.MuiInputLabel-shrink)": {
     // Calculates vertical center: CONTROL_HEIGHT / 2 - (Label_FontSize / 2) - small adjustment
     // (36 / 2) - 12px = 6px down
-    transform: `translate(14px, ${CONTROL_HEIGHT / 2 - 12}px) scale(1)`, 
+    transform: `translate(14px, ${CONTROL_HEIGHT / 2 - 12}px) scale(1)`,
     // ensure label color matches text color when acting as placeholder
-    color: (t) => t.palette.text.secondary, 
+    color: (t) => t.palette.text.secondary,
   },
   // FIX: Align the label when it is shrinked (on focus/with value)
   "& .MuiInputLabel-shrink": {
     top: 0,
-    transform: 'translate(14px, -9px) scale(0.75)', // Adjusted position for small controls
+    transform: "translate(14px, -9px) scale(0.75)", // Adjusted position for small controls
   },
 };
-
 
 export function LogControls({
   minLevel,
@@ -115,10 +131,6 @@ export function LogControls({
   setLoggerLike,
   textLike,
   setTextLike,
-  autoRefresh,
-  setAutoRefresh,
-  useTail,
-  setUseTail,
   onRefresh,
 }: LogControlsProps) {
   return (
@@ -128,10 +140,12 @@ export function LogControls({
         gap={1}
         alignItems="center"
         flexWrap="wrap"
-        sx={{
-          // Removed the global InputLabel adjustment: "& .MuiInputLabel-root": { top: -6 },
-          // The label alignment is now handled specifically in FIELD_WRAPPER_SX
-        }}
+        sx={
+          {
+            // Removed the global InputLabel adjustment: "& .MuiInputLabel-root": { top: -6 },
+            // The label alignment is now handled specifically in FIELD_WRAPPER_SX
+          }
+        }
       >
         {/* Min level (Select) - Uses FIELD_WRAPPER_SX */}
         <FormControl size="small" variant="outlined" sx={{ minWidth: 160, ...FIELD_WRAPPER_SX }}>
@@ -197,25 +211,27 @@ export function LogControls({
         <TextField
           size="small"
           variant="outlined"
-          label="logger contains"
+          label={t("logs.file")}
           value={loggerLike}
           onChange={(e) => setLoggerLike(e.target.value)}
           // Use FIELD_WRAPPER_SX for alignment consistency
-          sx={{ minWidth: 200, ...FIELD_WRAPPER_SX }} 
-          InputProps={{
-            endAdornment: loggerLike ? (
-              <InputAdornment position="end">
-                <IconButton
-                  size="small"
-                  edge="end"
-                  aria-label="clear logger filter"
-                  onClick={() => setLoggerLike("")}
-                  sx={{ p: 0.5 }} 
-                >
-                  <ClearIcon fontSize="small" />
-                </IconButton>
-              </InputAdornment>
-            ) : null,
+          sx={{ minWidth: 200, ...FIELD_WRAPPER_SX }}
+          slotProps={{
+            input: {
+              endAdornment: loggerLike ? (
+                <InputAdornment position="end">
+                  <IconButton
+                    size="small"
+                    edge="end"
+                    aria-label="clear logger filter"
+                    onClick={() => setLoggerLike("")}
+                    sx={{ p: 0.5 }}
+                  >
+                    <ClearIcon fontSize="small" />
+                  </IconButton>
+                </InputAdornment>
+              ) : null,
+            },
           }}
         />
 
@@ -223,62 +239,46 @@ export function LogControls({
         <TextField
           size="small"
           variant="outlined"
-          label="text contains"
+          label={t("logs.content")}
           value={textLike}
           onChange={(e) => setTextLike(e.target.value)}
           // Use FIELD_WRAPPER_SX for alignment consistency
-          sx={{ minWidth: 240, ...FIELD_WRAPPER_SX }} 
-          InputProps={{
-            endAdornment: textLike ? (
-              <InputAdornment position="end">
-                <IconButton 
-                  size="small" 
-                  edge="end" 
-                  aria-label="clear text filter" 
-                  onClick={() => setTextLike("")}
-                  sx={{ p: 0.5 }} 
-                >
-                  <ClearIcon fontSize="small" />
-                </IconButton>
-              </InputAdornment>
-            ) : null,
+          sx={{ minWidth: 240, ...FIELD_WRAPPER_SX }}
+          slotProps={{
+            input: {
+              endAdornment: loggerLike ? (
+                <InputAdornment position="end">
+                  <IconButton
+                    size="small"
+                    edge="end"
+                    aria-label="clear logger filter"
+                    onClick={() => setLoggerLike("")}
+                    sx={{ p: 0.5 }}
+                  >
+                    <ClearIcon fontSize="small" />
+                  </IconButton>
+                </InputAdornment>
+              ) : null,
+            },
           }}
         />
-        
-        {/* Auto / Tail / Refresh */}
-        <Tooltip title="Auto-refresh every 5s">
-          <Stack direction="row" alignItems="center" sx={{ height: CONTROL_HEIGHT }}>
-            <Switch size="small" checked={autoRefresh} onChange={(e) => setAutoRefresh(e.target.checked)} />
-            <Box sx={{ fontSize: (t) => t.typography.caption.fontSize, color: "text.secondary", ml: 0.25 }}>Auto</Box>
-          </Stack>
-        </Tooltip>
-
-        <Tooltip title={useTail ? "Using file tail (dev)" : "Using structured query"}>
-          <Stack direction="row" alignItems="center" sx={{ height: CONTROL_HEIGHT }}>
-            <Switch size="small" checked={useTail} onChange={(e) => setUseTail(e.target.checked)} />
-            <Box sx={{ fontSize: (t) => t.typography.caption.fontSize, color: "text.secondary", ml: 0.25 }}>
-              {useTail ? "Tail" : "Query"}
-            </Box>
-          </Stack>
-        </Tooltip>
 
         <Tooltip title="Refresh now">
-          {/* Force IconButton to take the same height as the input fields */}
-          <IconButton 
-            size="small" 
-            onClick={onRefresh} 
-            sx={{ 
-              p: 0, 
-              height: CONTROL_HEIGHT, 
-              width: CONTROL_HEIGHT, // Make it square
-              border: (t) => `1px solid ${t.palette.divider}`, // Optional: Add outline to match inputs
+          <IconButton
+            size="small"
+            onClick={onRefresh}
+            sx={{
+              p: 0,
+              height: CONTROL_HEIGHT,
+              width: CONTROL_HEIGHT, // square
+              border: (t) => `1px solid ${t.palette.divider}`,
               borderRadius: (t) => t.shape.borderRadius,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
             }}
           >
-            {autoRefresh ? <PauseIcon fontSize="small" /> : <RefreshIcon fontSize="small" />}
+            <RefreshIcon fontSize="small" />
           </IconButton>
         </Tooltip>
       </Stack>

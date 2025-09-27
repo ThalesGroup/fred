@@ -14,15 +14,15 @@
 
 import { TopBar } from "../common/TopBar";
 import { useTranslation } from "react-i18next";
-import MonitoringOverview from "../components/monitoring/MonitoringOverview";
+import KpiDashboard from "../components/monitoring/kpi/KpiDashboard";
 
-export const Monitoring = () => {
+export const Kpis = () => {
   const { t } = useTranslation();
 
   return (
     <>
-      <TopBar title={t("monitoring.title")} description={t("monitoring.description")} />
-      <MonitoringOverview />
+      <TopBar title={t("kpis.title")} description={t("kpis.description")} />
+      <KpiDashboard />
     </>
   );
 };

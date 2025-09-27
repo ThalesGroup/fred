@@ -38,11 +38,11 @@ export const TopBar = ({ title, description, children, backTo }: TopBarProps) =>
         backgroundSize: "cover",
         backgroundPosition: "center",
         mb: 3,
-        boxShadow: theme.shadows[4],
+        boxShadow: theme.shadows[2],
         justifyContent: "space-between",
         alignItems: "center",
         px: 4,
-        height: 64,
+        height: 62, // match the SideBar height
       }}
     >
       {/* Left content */}

@@ -189,7 +189,8 @@ export default function SideBar({ darkMode, onThemeChange }) {
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          py: 2.5,
+          height: 62, 
+          py: 0.0,
           px: isSidebarSmall ? 1 : 2,
           borderBottom: `1px solid ${theme.palette.divider}`,
         }}
@@ -215,7 +216,6 @@ export default function SideBar({ darkMode, onThemeChange }) {
         </Box>
       </Box>
 
-      {/* NEW, CONSOLIDATED BUTTON LOCATION */}
       <Box sx={{ display: "flex", justifyContent: "center", pt: 2 }}>
         <IconButton
           size="small"

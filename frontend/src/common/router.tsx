@@ -19,7 +19,7 @@ import { KnowledgeHub } from "../pages/KnowledgeHub";
 import { AgentHub } from "../pages/AgentHub";
 import { ProtectedRoute } from "../components/ProtectedRoute";
 import { LayoutWithSidebar } from "../app/LayoutWithSidebar";
-import { Monitoring } from "../pages/Monitoring";
+import { Kpis } from "../pages/Kpis";
 import Chat from "../pages/Chat";
 import Logs from "../pages/Logs";
 
@@ -44,7 +44,7 @@ export const routes: RouteObject[] = [
       },
       {
         path: "monitoring/kpis",
-        element: <Monitoring />,
+        element: <Kpis />,
       },
       {
         path: "monitoring/logs",

@@ -110,18 +110,6 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/agentic/v1/logs/query`, method: "POST", body: queryArg.logQuery }),
     }),
-    tailLogsFileAgenticV1LogsTailGet: build.query<
-      TailLogsFileAgenticV1LogsTailGetApiResponse,
-      TailLogsFileAgenticV1LogsTailGetApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/agentic/v1/logs/tail`,
-        params: {
-          service: queryArg.service,
-          bytes_back: queryArg.bytesBack,
-        },
-      }),
-    }),
   }),
   overrideExisting: false,
 });
@@ -205,13 +193,6 @@ export type DeleteFeedbackAgenticV1ChatbotFeedbackFeedbackIdDeleteApiArg = {
 export type QueryLogsAgenticV1LogsQueryPostApiResponse = /** status 200 Successful Response */ LogQueryResult;
 export type QueryLogsAgenticV1LogsQueryPostApiArg = {
   logQuery: LogQuery;
-};
-export type TailLogsFileAgenticV1LogsTailGetApiResponse = /** status 200 Successful Response */ TailFileResponse;
-export type TailLogsFileAgenticV1LogsTailGetApiArg = {
-  /** Service name, e.g. 'agentic-backend' or 'knowledge-flow' */
-  service: string;
-  /** How many bytes from file end to read */
-  bytesBack?: number;
 };
 export type ValidationError = {
   loc: (string | number)[];
@@ -709,9 +690,6 @@ export type LogQuery = {
   limit?: number;
   order?: "asc" | "desc";
 };
-export type TailFileResponse = {
-  lines?: string[];
-};
 export const {
   useCreateAgentAgenticV1AgentsCreatePostMutation,
   useUpdateAgentAgenticV1AgentsUpdatePutMutation,
@@ -738,6 +716,4 @@ export const {
   usePostFeedbackAgenticV1ChatbotFeedbackPostMutation,
   useDeleteFeedbackAgenticV1ChatbotFeedbackFeedbackIdDeleteMutation,
   useQueryLogsAgenticV1LogsQueryPostMutation,
-  useTailLogsFileAgenticV1LogsTailGetQuery,
-  useLazyTailLogsFileAgenticV1LogsTailGetQuery,
 } = injectedRtkApi;

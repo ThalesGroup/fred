@@ -328,18 +328,6 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/knowledge-flow/v1/logs/query`, method: "POST", body: queryArg.logQuery }),
     }),
-    tailLogsFileKnowledgeFlowV1LogsTailGet: build.query<
-      TailLogsFileKnowledgeFlowV1LogsTailGetApiResponse,
-      TailLogsFileKnowledgeFlowV1LogsTailGetApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/knowledge-flow/v1/logs/tail`,
-        params: {
-          service: queryArg.service,
-          bytes_back: queryArg.bytesBack,
-        },
-      }),
-    }),
     writeReportKnowledgeFlowV1McpReportsWritePost: build.mutation<
       WriteReportKnowledgeFlowV1McpReportsWritePostApiResponse,
       WriteReportKnowledgeFlowV1McpReportsWritePostApiArg
@@ -603,13 +591,6 @@ export type OsDiagnosticsApiArg = void;
 export type QueryLogsKnowledgeFlowV1LogsQueryPostApiResponse = /** status 200 Successful Response */ LogQueryResult;
 export type QueryLogsKnowledgeFlowV1LogsQueryPostApiArg = {
   logQuery: LogQuery;
-};
-export type TailLogsFileKnowledgeFlowV1LogsTailGetApiResponse = /** status 200 Successful Response */ TailFileResponse;
-export type TailLogsFileKnowledgeFlowV1LogsTailGetApiArg = {
-  /** Service name, e.g. 'agentic-backend' or 'knowledge-flow' */
-  service: string;
-  /** How many bytes from file end to read */
-  bytesBack?: number;
 };
 export type WriteReportKnowledgeFlowV1McpReportsWritePostApiResponse =
   /** status 200 Successful Response */ WriteReportResponse;
@@ -998,9 +979,6 @@ export type LogQuery = {
   limit?: number;
   order?: "asc" | "desc";
 };
-export type TailFileResponse = {
-  lines?: string[];
-};
 export type WriteReportResponse = {
   document_uid: string;
   md_url: string;
@@ -1106,8 +1084,6 @@ export const {
   useOsDiagnosticsQuery,
   useLazyOsDiagnosticsQuery,
   useQueryLogsKnowledgeFlowV1LogsQueryPostMutation,
-  useTailLogsFileKnowledgeFlowV1LogsTailGetQuery,
-  useLazyTailLogsFileKnowledgeFlowV1LogsTailGetQuery,
   useWriteReportKnowledgeFlowV1McpReportsWritePostMutation,
   useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation,
   useScheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPostMutation,

@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { Theme, alpha } from "@mui/material/styles";
-import { formatTick, TimePrecision } from "./timeAxis";
+import { formatTick, TimePrecision } from "../timeAxis";
 
 /** Keep it string to match OpenAPI client; but delegate to TimePrecision underneath. */
 export type PrecisionStr = string;
