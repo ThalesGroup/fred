@@ -295,7 +295,7 @@ class ApplicationContext:
         """
         Retrieves the default AI model instance.
         """
-        return get_model(self.configuration.ai.default_model)
+        return get_model(self.configuration.ai.default_chat_model)
 
     # --- Agent classes ---
 

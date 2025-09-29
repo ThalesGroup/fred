@@ -440,13 +440,13 @@ class ApplicationContext:
         - Only secrets live in env; all other wiring lives in YAML.
         - Typed return (Embeddings) keeps the contract clear at call sites.
         """
-        cfg: ModelConfiguration = self.configuration.embedding
+        cfg: ModelConfiguration = self.configuration.embedding_model
         return get_embeddings(cfg)
 
     def get_utility_model(self):
-        if not self.configuration.model:
+        if not self.configuration.chat_model:
             raise ValueError("Utility model configuration is missing.")
-        return get_model(self.configuration.model)
+        return get_model(self.configuration.chat_model)
 
     def get_vision_model(self):
         if not self.configuration.vision:
@@ -467,7 +467,7 @@ class ApplicationContext:
         """
         if self._vector_store_instance is not None:
             return self._vector_store_instance
-        embedding_model_name = self.configuration.embedding.name or "unknown"
+        embedding_model_name = self.configuration.embedding_model.name or "unknown"
         store = self.configuration.storage.vector_store
 
         if isinstance(store, OpenSearchVectorIndexConfig):
@@ -768,7 +768,7 @@ class ApplicationContext:
                 raise ValueError("Invalid Keycloak URL") from e
             _require_env("KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET")
 
-        embedding = self.configuration.embedding
+        embedding = self.configuration.embedding_model
         # Non-secret settings from YAML
         for k, v in (embedding.settings or {}).items():
             # Heuristic mask for anything that *looks* sensitive even if put in YAML by mistake
