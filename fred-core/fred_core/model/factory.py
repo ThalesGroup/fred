@@ -16,7 +16,6 @@ import logging
 import os
 from typing import Dict, Iterable, Optional, Type
 
-from fred_core.model.models import ModelProvider
 from langchain_core.embeddings import Embeddings as LCEmbeddings
 
 # Chat + Embeddings base types
@@ -35,6 +34,7 @@ from langchain_openai import (
 from pydantic import BaseModel
 
 from fred_core.common.structures import ModelConfiguration
+from fred_core.model.models import ModelProvider
 
 logger = logging.getLogger(__name__)
 
