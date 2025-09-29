@@ -25,6 +25,7 @@ from fred_core import (
     KPIWriter,
     LogStoreConfig,
     ModelConfiguration,
+    ModelProvider,
     OpenSearchIndexConfig,
     OpenSearchKPIStore,
     SQLStorageConfig,
@@ -778,14 +779,14 @@ class ApplicationContext:
 
         # Required env vars by provider
         provider = (embedding.provider or "").lower()
-        if provider == "openai":
+        if provider == ModelProvider.OPENAI.value:
             _require_env("OPENAI_API_KEY")
-        elif provider == "azure":
+        elif provider == ModelProvider.AZURE_OPENAI.value:
             _require_env("AZURE_OPENAI_API_KEY")
-        elif provider == "azureapim":
+        elif provider == ModelProvider.AZURE_APIM.value:
             _require_env("AZURE_CLIENT_SECRET")
             _require_env("AZURE_APIM_KEY")
-        elif provider == "ollama":
+        elif provider == ModelProvider.OLLAMA.value:
             # Usually no secrets; base_url is in settings
             pass
         else:

@@ -16,6 +16,7 @@ import logging
 import os
 from typing import Dict, Iterable, Optional, Type
 
+from fred_core.model.models import ModelProvider
 from langchain_core.embeddings import Embeddings as LCEmbeddings
 
 # Chat + Embeddings base types
@@ -78,7 +79,7 @@ def get_model(cfg: Optional[ModelConfiguration]) -> BaseChatModel:
     provider = cfg.provider.lower()
     settings: Dict = dict(cfg.settings or {})
 
-    if provider == "openai":
+    if provider == ModelProvider.OPENAI.value:
         _require_env("OPENAI_API_KEY")
         _info_provider(cfg)
         if not cfg.name:
@@ -87,7 +88,7 @@ def get_model(cfg: Optional[ModelConfiguration]) -> BaseChatModel:
             )
         return ChatOpenAI(model=cfg.name, **settings)
 
-    if provider == "azure":
+    if provider == ModelProvider.AZURE_OPENAI.value:
         _require_env("AZURE_OPENAI_API_KEY")
         _require_settings(
             settings, ["azure_endpoint", "azure_api_version"], "Azure chat"
@@ -100,7 +101,7 @@ def get_model(cfg: Optional[ModelConfiguration]) -> BaseChatModel:
             azure_deployment=cfg.name, api_version=api_version, **settings
         )
 
-    if provider == "azureapim":
+    if provider == ModelProvider.AZURE_APIM.value:
         # Fred rationale (hover):
         # - Enterprise setup via APIM: APIM subscription header + AAD bearer.
         # - We DO NOT mint a static token here. We pass an azure_ad_token_provider
@@ -152,7 +153,7 @@ def get_model(cfg: Optional[ModelConfiguration]) -> BaseChatModel:
             **passthrough,
         )
 
-    if provider == "ollama":
+    if provider == ModelProvider.OLLAMA.value:
         if not cfg.name:
             raise ValueError("Ollama chat requires 'name' (model).")
         base_url = settings.pop("base_url", None)
@@ -178,7 +179,7 @@ def get_embeddings(cfg: ModelConfiguration) -> LCEmbeddings:
     settings: Dict = dict(cfg.settings or {})
     name = cfg.name
 
-    if provider == "openai":
+    if provider == ModelProvider.OPENAI.value:
         _require_env("OPENAI_API_KEY")
         if not name:
             raise ValueError(
@@ -187,7 +188,7 @@ def get_embeddings(cfg: ModelConfiguration) -> LCEmbeddings:
         _info_provider(cfg)
         return OpenAIEmbeddings(model=name, **settings)
 
-    if provider == "azure":
+    if provider == ModelProvider.AZURE_OPENAI.value:
         _require_env("AZURE_OPENAI_API_KEY")
         _require_settings(
             settings, ["azure_endpoint", "azure_api_version"], "Azure embeddings"
@@ -200,7 +201,7 @@ def get_embeddings(cfg: ModelConfiguration) -> LCEmbeddings:
             azure_deployment=name, api_version=api_version, **settings
         )
 
-    if provider == "azureapim":
+    if provider == ModelProvider.AZURE_APIM.value:
         # Same token-provider logic as chat: per-request AAD token via APIM.
         required = [
             "azure_apim_base_url",
@@ -245,7 +246,7 @@ def get_embeddings(cfg: ModelConfiguration) -> LCEmbeddings:
             **passthrough,
         )
 
-    if provider == "ollama":
+    if provider == ModelProvider.OLLAMA.value:
         if not name:
             raise ValueError("Ollama embeddings require 'name' (model).")
         base_url = settings.pop("base_url", None)
