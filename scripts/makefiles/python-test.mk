@@ -30,6 +30,10 @@ integration-up: ## Start integration test dependencies
 integration-down: ## Stop integration test dependencies
 	docker compose -f $(INTEGRATION_COMPOSE) down -v
 
+.PHONY: test-integration-only
+test-integration-only: dev ## Run integration tests that rely on external services
+	${UV} run pytest -m integration
+
 .PHONY: test-integration
 test-integration: dev ## Run integration tests that rely on external services
 	@set -e; trap 'docker compose -f $(INTEGRATION_COMPOSE) down -v' EXIT; \
