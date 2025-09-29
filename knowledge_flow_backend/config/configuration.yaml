@@ -18,12 +18,10 @@ app:
   log_level: "info"
   reload: false
   reload_dir: "."
-
 processing:
   generate_summary: false
   use_gpu: true
   process_images: false
-
 security:
   m2m:
     enabled: false
@@ -35,7 +33,6 @@ security:
     realm_url: "http://app-keycloak:8080/realms/app"
     authorized_origins:
       - "http://localhost:5173"
-
 scheduler:
   enabled: true
   backend: "temporal"
@@ -45,7 +42,6 @@ scheduler:
     task_queue: "ingestion"
     workflow_prefix: "pipeline"
     connect_timeout_seconds: 5
-
 input_processors:
   - prefix: ".pdf"
     class_path: app.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor
@@ -63,37 +59,31 @@ input_processors:
     class_path: app.core.processors.input.pps_tabular_processor.pps_tabular_processor.PpsTabularProcessor
   - prefix: ".jsonl"
     class_path: app.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor
-
 content_storage:
   type: "local"
   root_path: ~/.fred/knowledge-flow/content-storage
-
 document_sources:
   fred:
     type: push
     description: "Documents manually uploaded by users"
-
   local:
     type: pull
     provider: local_path
     base_path: ~/Documents/Fred
     description: "Personal local documents available for pull-mode ingestion"
-
 embedding:
   provider: openai
   name: text-embedding-3-large
   settings: {}
-
 # Configuration for the LLM used for summary, keyword generation
 # and other text generation tasks.
 model:
-  provider: openai        # openai | azure | ollama
-  name: gpt-4o-mini       # azure: deployment name, ollama: 'qwen2.5:3b-instruct' etc.
+  provider: openai # openai | azure | ollama
+  name: gpt-4o-mini # azure: deployment name, ollama: 'qwen2.5:3b-instruct' etc.
   settings:
-    # openai: nothing else required (keys in .env)
-    # azure: { endpoint: "...", api_version: "2024-08-01-preview" }
-    # ollama: { base_url: "http://localhost:11434" }
-
+  # openai: nothing else required (keys in .env)
+  # azure: { endpoint: "...", api_version: "2024-08-01-preview" }
+  # ollama: { base_url: "http://localhost:11434" }
 # model:
 #   provider: ollama
 #   name: qwen2.5:3b-instruct         # any chat-capable Ollama model you pulled
@@ -122,47 +112,37 @@ model:
 #     azure_tenant_id: "737c6905-f186-4bcf-afb3-43e349ee23a3"
 #     azure_client_id: "5e5d67c9-22af-4044-bc8e-5df58d7a5e6e"
 #     azure_client_scope: "api://5e5d67c9-22af-4044-bc8e-5df58d7a5e6e/.default"
-
 storage:
   postgres:
     host: localhost
     port: 5432
     database: fred
     username: admin
-
   opensearch:
     host: https://localhost:9200
     secure: true
     verify_certs: false
     username: admin
-
   catalog_store:
     type: "duckdb"
     duckdb_path: "~/.fred/knowledge-flow/catalog.duckdb"
-
   prompt_store:
     type: "duckdb"
     duckdb_path: "~/.fred/knowledge-flow/prompt.duckdb"
-
   resource_store:
     type: "duckdb"
     duckdb_path: "~/.fred/knowledge-flow/resource.duckdb"
-
   kpi_store:
     type: "log"
     level: "INFO"
-
   tag_store:
     type: "duckdb"
     duckdb_path: "~/.fred/knowledge-flow/tag.duckdb"
-
   metadata_store:
     type: "duckdb"
     duckdb_path: "~/.fred/knowledge-flow/metadata.duckdb"
-
   vector_store:
     type: chroma
-
   tabular_stores:
     base_database: # Minimal configuration to enable CSV document ingestion
       type: "sql"
