@@ -18,6 +18,7 @@ dependencies = [
       "langchain-ollama>=0.3.8",
       "langchain-openai>=0.3.33",
       "azure-identity>=1.25.0",
+      "authzed>=1.22.1",
 ]
 
 [build-system]

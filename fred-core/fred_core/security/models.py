@@ -19,7 +19,7 @@ from typing import Optional
 from fred_core.security.structure import KeycloakUser
 
 
-class Action(Enum):
+class Action(str, Enum):
     """Actions that can be performed on resources."""
 
     CREATE = "create"
@@ -31,7 +31,7 @@ class Action(Enum):
     PROCESS = "process"
 
 
-class Resource(Enum):
+class Resource(str, Enum):
     """Resources in the system that can have permissions applied."""
 
     # Knowledge Flow Backend resources
@@ -51,6 +51,10 @@ class Resource(Enum):
     AGENTS = "agents"
     SESSIONS = "sessions"
     MESSAGE_ATTACHMENTS = "message_attachments"
+
+    # Authorization subject
+    USER = "user"
+    GROUP = "group"
 
 
 class AuthorizationError(Exception):
