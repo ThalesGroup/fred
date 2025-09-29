@@ -39,21 +39,39 @@ class RebacEngine(ABC):
     """Abstract base for relationship-based authorization providers."""
 
     @abstractmethod
-    def add_relation(self, relation: Relation) -> None:
-        """Persist a relationship edge into the underlying store."""
+    def add_relation(self, relation: Relation) -> str | None:
+        """Persist a relationship edge into the underlying store.
 
-    def add_relations(self, relations: Iterable[Relation]) -> None:
-        """Convenience helper to persist multiple relationships."""
+        Returns a backend-specific consistency token when available.
+        """
 
+    def add_relations(self, relations: Iterable[Relation]) -> str | None:
+        """Convenience helper to persist multiple relationships.
+
+        Returns the last non-null consistency token produced.
+        """
+
+        token: str | None = None
         for relation in relations:
-            self.add_relation(relation)
+            token = self.add_relation(relation)
+        return token
 
     @abstractmethod
-    def get_relations_as_subject(self, subject: RebacReference) -> list[Relation]:
+    def get_relations_as_subject(
+        self,
+        subject: RebacReference,
+        *,
+        consistency_token: str | None = None,
+    ) -> list[Relation]:
         """Return all relations where the provided reference is the subject."""
 
     @abstractmethod
-    def get_relations_as_resource(self, resource: RebacReference) -> list[Relation]:
+    def get_relations_as_resource(
+        self,
+        resource: RebacReference,
+        *,
+        consistency_token: str | None = None,
+    ) -> list[Relation]:
         """Return all relations where the provided reference is the resource."""
 
     @abstractmethod
@@ -62,5 +80,7 @@ class RebacEngine(ABC):
         subject: RebacReference,
         permission: Action,
         resource: RebacReference,
+        *,
+        consistency_token: str | None = None,
     ) -> bool:
         """Evaluate whether a subject can perform an action on a resource."""

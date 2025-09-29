@@ -19,3 +19,19 @@ test-one: dev ## Run a specific test by setting TEST=...
 		exit 1; \
 	fi
 	${UV} run pytest -v $(subst ::,::,$(TEST))
+
+INTEGRATION_COMPOSE := $(CURDIR)/docker-compose.integration.yml
+
+.PHONY: integration-up
+integration-up: ## Start integration test dependencies
+	docker compose -f $(INTEGRATION_COMPOSE) up -d
+
+.PHONY: integration-down
+integration-down: ## Stop integration test dependencies
+	docker compose -f $(INTEGRATION_COMPOSE) down -v
+
+.PHONY: test-integration
+test-integration: dev ## Run integration tests that rely on external services
+	@set -e; trap 'docker compose -f $(INTEGRATION_COMPOSE) down -v' EXIT; \
+		docker compose -f $(INTEGRATION_COMPOSE) up -d; \
+		${UV} run pytest -m integration

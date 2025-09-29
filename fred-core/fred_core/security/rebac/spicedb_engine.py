@@ -19,6 +19,7 @@ from authzed.api.v1 import (
     SubjectReference,
     WriteRelationshipsRequest,
     WriteSchemaRequest,
+    ZedToken,
 )
 from grpcutil import insecure_bearer_token_credentials
 
@@ -72,7 +73,7 @@ class SpiceDbRebacEngine(RebacEngine):
         if schema and sync_schema_on_init:
             self.sync_schema(schema)
 
-    def add_relation(self, relation: Relation) -> None:
+    def add_relation(self, relation: Relation) -> str | None:
         relationship = self._relationship_from_dataclass(relation)
         request = WriteRelationshipsRequest(
             updates=[
@@ -82,9 +83,15 @@ class SpiceDbRebacEngine(RebacEngine):
                 )
             ]
         )
-        self._client.WriteRelationships(request)
+        response = self._client.WriteRelationships(request)
+        return response.written_at.token
 
-    def get_relations_as_subject(self, subject: RebacReference) -> list[Relation]:
+    def get_relations_as_subject(
+        self,
+        subject: RebacReference,
+        *,
+        consistency_token: str | None = None,
+    ) -> list[Relation]:
         filters = [
             RelationshipFilter(
                 resource_type=resource_type.value,
@@ -95,45 +102,80 @@ class SpiceDbRebacEngine(RebacEngine):
             )
             for resource_type in self._resource_types
         ]
-        return list(self._read_relationships(filters))
+        return list(
+            self._read_relationships(
+                filters,
+                consistency_token=consistency_token,
+            )
+        )
 
-    def get_relations_as_resource(self, resource: RebacReference) -> list[Relation]:
+    def get_relations_as_resource(
+        self,
+        resource: RebacReference,
+        *,
+        consistency_token: str | None = None,
+    ) -> list[Relation]:
         filter_ = RelationshipFilter(
             resource_type=resource.type.value,
             optional_resource_id=resource.id,
         )
-        return list(self._read_relationships([filter_]))
+        return list(
+            self._read_relationships(
+                [filter_],
+                consistency_token=consistency_token,
+            )
+        )
 
     def has_permission(
         self,
         subject: RebacReference,
         permission: Action,
         resource: RebacReference,
+        *,
+        consistency_token: str | None = None,
     ) -> bool:
-        request = CheckPermissionRequest(
-            resource=self._object_reference(resource),
-            permission=permission.value,
-            subject=SubjectReference(object=self._object_reference(subject)),
-        )
+        request_kwargs = {
+            "resource": self._object_reference(resource),
+            "permission": permission.value,
+            "subject": SubjectReference(object=self._object_reference(subject)),
+        }
+        if consistency_token:
+            request_kwargs["consistency"] = Consistency(
+                at_least_as_fresh=ZedToken(token=consistency_token)
+            )
+        elif self._read_consistency is not None:
+            request_kwargs["consistency"] = self._read_consistency
+        request = CheckPermissionRequest(**request_kwargs)
         response = self._client.CheckPermission(request)
         return (
             response.permissionship
             == CheckPermissionResponse.PERMISSIONSHIP_HAS_PERMISSION
         )
 
-    def sync_schema(self, schema: str) -> None:
+    def sync_schema(self, schema: str) -> str | None:
         """Create or update the SpiceDB schema definition."""
 
         request = WriteSchemaRequest(schema=schema)
-        self._client.WriteSchema(request)
+        response = self._client.WriteSchema(request)
+        return response.written_at.token
 
     def _read_relationships(
-        self, filters: Iterable[RelationshipFilter]
+        self,
+        filters: Iterable[RelationshipFilter],
+        *,
+        consistency_token: str | None = None,
     ) -> Iterator[Relation]:
         """Iterate over relationships matching the filters while de-duplicating."""
         seen: set[Relation] = set()
         for filter_ in filters:
-            if self._read_consistency is not None:
+            if consistency_token:
+                request = ReadRelationshipsRequest(
+                    relationship_filter=filter_,
+                    consistency=Consistency(
+                        at_least_as_fresh=ZedToken(token=consistency_token)
+                    ),
+                )
+            elif self._read_consistency is not None:
                 request = ReadRelationshipsRequest(
                     relationship_filter=filter_,
                     consistency=self._read_consistency,

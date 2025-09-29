@@ -37,3 +37,11 @@ dev = [
 
 [project.optional-dependencies]
 dev = ["bandit>=1.8.6", "basedpyright>=1.31.0", "ruff>=0.12.5"]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+addopts = "-ra"
+markers = [
+    "integration: marks tests that require external services",
+]
+testpaths = ["fred_core/tests"]
