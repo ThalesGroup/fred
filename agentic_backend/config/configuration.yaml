@@ -18,7 +18,6 @@ app:
   log_level: "info"
   reload: false
   reload_dir: "."
-
 security:
   m2m:
     enabled: false
@@ -30,7 +29,6 @@ security:
     realm_url: "http://app-keycloak:8080/realms/app"
     authorized_origins:
       - "http://localhost:5173"
-
 frontend_settings:
   feature_flags:
     # If true activate the backend and frontend modules in charge of K8
@@ -40,7 +38,6 @@ frontend_settings:
     enableElecWarfare: false
   properties:
     logoName: "fred"
-
 ai:
   knowledge_flow_url: "http://localhost:8111/knowledge-flow/v1"
   # Timeout settings for the client
@@ -67,13 +64,11 @@ ai:
       tags: ["orchestrator"]
       crew:
         - "Georges"
-        - "Rico Jr." 
+        - "Rico Jr."
         - "Tessa"
       description: >
-        An orchestrator agent that can delegate tasks to specialized agents in its crew.
-        Appolo is capable of managing complex workflows by leveraging the expertise of its team members.
-        Not however that Appolo is now outdated and will be replaced by Helios in the coming weeks. See items
-        as a proof of concept.
+        An orchestrator agent that can delegate tasks to specialized agents in its crew. Appolo is capable of managing complex workflows by leveraging the expertise of its team members. Not however that Appolo is now outdated and will be replaced by Helios in the coming weeks. See items as a proof of concept.
+
     - name: "Samy"
       type: "agent"
       class_path: "app.agents.sentinel.sentinel_expert.SentinelExpert"
@@ -82,8 +77,8 @@ ai:
       tags: ["monitoring"]
       model: {}
       description: >
-        An expert in monitoring and managing Opensearch instances.
-        Samy can analyze performance metrics, identify issues, and provide recommendations for optimization.
+        An expert in monitoring and managing Opensearch instances. Samy can analyze performance metrics, identify issues, and provide recommendations for optimization.
+
       mcp_servers:
         - name: knowledge-flow-mcp-server
           transport: streamable_http
@@ -97,8 +92,8 @@ ai:
       tags: ["general"]
       model: {}
       description: >
-        A generalist assistant that can handle a wide range of tasks.
-        He is the default assistant that can handle any task that does not require a specialized assistant.
+        A generalist assistant that can handle a wide range of tasks. He is the default assistant that can handle any task that does not require a specialized assistant.
+
     - name: "Tessa"
       type: "agent"
       role: "Data Query and SQL Expert"
@@ -107,8 +102,8 @@ ai:
       tags: ["data"]
       model: {}
       description: >
-        An expert in querying databases and generating SQL queries.
-        Tessa can assist with data retrieval, manipulation, and analysis tasks.
+        An expert in querying databases and generating SQL queries. Tessa can assist with data retrieval, manipulation, and analysis tasks.
+
       mcp_servers:
         - name: knowledge-flow-mcp-server
           transport: streamable_http
@@ -122,8 +117,8 @@ ai:
       tags: ["documents"]
       model: {}
       description: >
-        An expert in retrieving and processing documents using retrieval-augmented generation techniques.
-        Rico Jr. can help with tasks that involve understanding and utilizing large document collections.
+        An expert in retrieving and processing documents using retrieval-augmented generation techniques. Rico Jr. can help with tasks that involve understanding and utilizing large document collections.
+
     - name: "Brontë"
       type: "agent"
       role: "Content Generator Expert"
@@ -132,8 +127,8 @@ ai:
       tags: ["content"]
       model: {}
       description: >
-        An expert in generating content based on templates and knowledge from the knowledge-flow backend.
-        Brontë can assist with creating various types of content efficiently.
+        An expert in generating content based on templates and knowledge from the knowledge-flow backend. Brontë can assist with creating various types of content efficiently.
+
       mcp_servers:
         - name: knowledge-flow-mcp-server
           transport: streamable_http
@@ -147,8 +142,8 @@ ai:
       tags: ["documents"]
       model: {}
       description: >
-        An advanced expert in retrieving and processing documents using enhanced retrieval-augmented generation techniques.
-        Rico Senior is capable of handling more complex document-related tasks with improved accuracy.
+        An advanced expert in retrieving and processing documents using enhanced retrieval-augmented generation techniques. Rico Senior is capable of handling more complex document-related tasks with improved accuracy.
+
       # settings:
       #   chunk_size: 512
       #   chunk_overlap: 64
@@ -159,10 +154,10 @@ ai:
           sse_read_timeout: 2000
     - name: "Scribo"
       type: "agent"
-      role: "Structured Report Generator"  
+      role: "Structured Report Generator"
       description: >
-        Produces concise project status reports with Summary, Risks, and Next Steps.
-        Can optionally include CIR (Crédit d’Impôt Recherche) sections for R&D reporting.
+        Produces concise project status reports with Summary, Risks, and Next Steps. Can optionally include CIR (Crédit d’Impôt Recherche) sections for R&D reporting.
+
       class_path: "app.agents.content_generator.report_starter.ReportWriter"
       enabled: true
       tags: ["content"]
@@ -170,39 +165,31 @@ ai:
       mcp_servers:
         - name: knowledge-flow-mcp-server
           transport: streamable_http
-          url: http://localhost:8111/knowledge-flow/v1/mcp-reports 
-          sse_read_timeout: 2000   
-
+          url: http://localhost:8111/knowledge-flow/v1/mcp-reports
+          sse_read_timeout: 2000
 storage:
   postgres:
     host: localhost
     port: 5432
     database: fred
     username: admin
-
   opensearch:
     host: https://localhost:9200
     secure: true
     verify_certs: false
     username: admin
-
   feedback_store:
     type: "duckdb"
     duckdb_path: "~/.fred/agentic/feedback.duckdb"
-
   agent_store:
     type: "duckdb"
     duckdb_path: "~/.fred/agentic/agent.duckdb"
-
   session_store:
     type: "duckdb"
     duckdb_path: "~/.fred/agentic/session.duckdb"
-
   history_store:
     type: "duckdb"
     duckdb_path: "~/.fred/agentic/history.duckdb"
-
   kpi_store:
     type: "log"
     level: "INFO"
-
