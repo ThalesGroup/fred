@@ -49,6 +49,7 @@ scheduler:
 input_processors:
   - prefix: ".pdf"
     class_path: app.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor
+    # class_path: app.core.processors.input.pdf_markdown_processor.pdf_to_docx_markdown_processor.PdfMarkdownProcessor
   - prefix: ".docx"
     class_path: app.core.processors.input.docx_markdown_processor.docx_markdown_processor.DocxMarkdownProcessor
   - prefix: ".pptx"
@@ -100,7 +101,7 @@ model:
     max_retries: 2 # optional
 embedding:
   provider: openai
-  name: text-embedding-ada-002 # or text-embedding-3-small
+  name: text-embedding-3-large # or text-embedding-3-small
   settings: {}
 vision:
   provider: openai
