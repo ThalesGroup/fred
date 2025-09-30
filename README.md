@@ -93,6 +93,7 @@ By default:
       end
 
       Agentic -->|depends on| Python
+      Agentic -->|depends on| Knowledge
       Agentic -->|depends on| Venv
 
       Knowledge -->|depends on| Python
