@@ -372,7 +372,6 @@ For production mode, please reach out to your DevOps team so that they tune Fred
 | --------------------- | ------------------------------------------------------------------------ |
 | OpenAI (default)      | Add `OPENAI_API_KEY` to `config/.env`; Adjust `configuration.yaml`       |
 | Azure OpenAI          | Add `AZURE_OPENAI_API_KEY` to `config/.env`; Adjust `configuration.yaml` |
-| Azure Open via APIM   | <TODO>                                                                   |
 | Ollama (local models) | Adjust `configuration.yaml`                                              |
 
 See `agentic_backend/config/configuration.yaml` (section `ai:`) and `knowledge_flow_backend/config/configuration.yaml` (sections `chat_model:` and `embedding_model:`)  for concrete examples.
