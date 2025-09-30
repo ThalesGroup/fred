@@ -47,19 +47,20 @@ This means, that by default, Fred stores all data on the local filesystem or thr
 ### Local (Native) Mode
 
 <details>
-  <summary>First, make sure you have all these dependencies in place before moving on</summary> 
+  <summary>First, make sure you have all the requirements in place before moving on</summary> 
 
 - Required 
 
-  | Tool         | Type                       | Version  | Install hint                                                                                   |
-  | ------------ | -------------------------- | -------- | ---------------------------------------------------------------------------------------------- |
-  | Pyenv        | Python installer           | latest   | [Pyenv installation instructions](https://github.com/pyenv/pyenv#installation)                 |
-  | Python       | Programming Language       | 3.12.8   | Use `pyenv install 3.12.8`                                                                     |
-  | python3-venv | Python venv module/package | matching | Already bundled with Python 3 on most systems; else `apt install python3-venv` (Debian/Ubuntu) |
-  | nvm          | Node installer             | latest   | [nvm installation instructions](https://github.com/nvm-sh/nvm#installing-and-updating)         |
-  | Node.js      | Programming Language       | 22.13.0  | Use `nvm install 22.13.0`                                                                      |
-  | Make         | Utility                    | system   | Install via system package manager (e.g. `apt install make`, `brew install make`)              |
-  | yq           | Utility                    | system   | Install via system package manager                                                             |
+  | Tool         | Type                       | Version   | Install hint                                                                                   |
+  | ------------ | -------------------------- | --------- | ---------------------------------------------------------------------------------------------- |
+  | Pyenv        | Python installer           | latest    | [Pyenv installation instructions](https://github.com/pyenv/pyenv#installation)                 |
+  | Python       | Programming Language       | 3.12.8    | Use `pyenv install 3.12.8`                                                                     |
+  | python3-venv | Python venv module/package | matching  | Already bundled with Python 3 on most systems; else `apt install python3-venv` (Debian/Ubuntu) |
+  | nvm          | Node installer             | latest    | [nvm installation instructions](https://github.com/nvm-sh/nvm#installing-and-updating)         |
+  | Node.js      | Programming Language       | 22.13.0   | Use `nvm install 22.13.0`                                                                      |
+  | Make         | Utility                    | system    | Install via system package manager (e.g. `apt install make`, `brew install make`)              |
+  | yq           | Utility                    | system    | Install via system package manager                                                             |
+  | SQLite       | Local RDBMS engine         | >= 3.35.0 | Install via system package manager                                                             |
 
   <details>
     <summary>Dependency details</summary>
@@ -82,6 +83,7 @@ This means, that by default, Fred stores all data on the local filesystem or thr
             Node["Node 22.13.0"]
             Pyenv["Pyenv (Python installer)"]
             NVM["nvm (Node installer)"]
+            SQLite["SQLite"]
             OS["Operating System"]
         end
 
@@ -93,6 +95,7 @@ This means, that by default, Fred stores all data on the local filesystem or thr
 
         Agentic -->|depends on| Python
         Agentic -->|depends on| Venv
+        Agentic -->|depends on| SQLite
 
         Knowledge -->|depends on| Python
         Knowledge -->|depends on| Venv
@@ -107,7 +110,7 @@ This means, that by default, Fred stores all data on the local filesystem or thr
         Pyenv -->|depends on| OS
         NVM -->|depends on| OS
         Make -->|depends on| OS
-        
+        SQLite -->|depends on| OS
         Yq -->|depends on| OS
 
     ```
