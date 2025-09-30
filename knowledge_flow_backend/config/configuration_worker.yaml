@@ -150,7 +150,7 @@ catalog_storage:
 
 # --- Embedding backend ---
 # type: string (e.g., openai, azureopenai, ollama, etc.)
-embedding:
+embedding_model:
   type:
     "openai"
     # -----------------------------------------------------------------------------

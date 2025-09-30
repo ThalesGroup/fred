@@ -179,7 +179,7 @@ applications:
         timeout:
           connect: 5  # Time to wait for a connection in seconds
           read: 15    # Time to wait for a response in seconds
-        default_model:
+        default_chat_model:
           # Required in .env:
           # - OPENAI_API_KEY
           provider: "openai"
@@ -189,7 +189,7 @@ applications:
             max_retries: 2
             request_timeout: 30
         recursion:
-          recursion_limit: 40 # Number or max recursion use by the agents while using the model
+          recursion_limit: 40 # Number or max recursion use by the agents while using the chat model
         agents:
         - name: "Samy"
           type: "agent"
@@ -197,7 +197,7 @@ applications:
           enabled: false
           role: "Opensearch instance monitoring expert"
           tags: ["monitoring"]
-          model: {}
+          chat_model: {}
           description: >
             An expert in monitoring and managing Opensearch instances.
             Samy can analyze performance metrics, identify issues, and provide recommendations for optimization.
@@ -212,7 +212,7 @@ applications:
           enabled: true
           role: "Generalist Assistant"
           tags: ["general"]
-          model: {}
+          chat_model: {}
           description: >
             A generalist assistant that can handle a wide range of tasks.
             He is the default assistant that can handle any task that does not require a specialized assistant.
@@ -222,7 +222,7 @@ applications:
           class_path: "app.agents.tabular.tabular_expert.TabularExpert"
           enabled: true
           tags: ["data"]
-          model: {}
+          chat_model: {}
           description: >
             An expert in querying databases and generating SQL queries.
             Tessa can assist with data retrieval, manipulation, and analysis tasks.
@@ -237,7 +237,7 @@ applications:
           class_path: "app.agents.rags.rag_expert.RagExpert"
           enabled: true
           tags: ["documents"]
-          model: {}
+          chat_model: {}
           description: >
             An expert in retrieving and processing documents using retrieval-augmented generation techniques.
             Rico Jr. can help with tasks that involve understanding and utilizing large document collections.
@@ -247,7 +247,7 @@ applications:
           class_path: "app.agents.content_generator.content_generator_expert.ContentGeneratorExpert"
           enabled: false
           tags: ["content"]
-          model: {}
+          chat_model: {}
           description: >
             An expert in generating content based on templates and knowledge from the knowledge-flow backend.
             Brontë can assist with creating various types of content efficiently.
@@ -262,7 +262,7 @@ applications:
           class_path: "app.agents.rags.advanced_rag_expert.AdvancedRagExpert"
           enabled: false
           tags: ["documents"]
-          model: {}
+          chat_model: {}
           description: >
             An advanced expert in retrieving and processing documents using enhanced retrieval-augmented generation techniques.
             Rico Senior is capable of handling more complex document-related tasks with improved accuracy.
@@ -608,12 +608,12 @@ applications:
           provider: local_path
           base_path: ~/Documents/Fred
           description: "Personal local documents available for pull-mode ingestion"
-      embedding:
+      embedding_model:
         provider: openai
         name: text-embedding-3-large
         settings: {}
         type: "openai"
-      model:
+      chat_model:
         provider: openai        # openai | azure | ollama
         name: gpt-4o-mini       # azure: deployment name, ollama: 'qwen2.5:3b-instruct' etc.
         settings:

@@ -140,7 +140,7 @@ class AIConfig(BaseModel):
     timeout: TimeoutSettings = Field(
         ..., description="Timeout settings for the AI client."
     )
-    default_model: ModelConfiguration = Field(
+    default_chat_model: ModelConfiguration = Field(
         ...,
         description="Default model configuration for all agents and services.",
     )
