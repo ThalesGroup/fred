@@ -163,7 +163,6 @@ Then, depending on your model provider, actions may differ.
       yq eval '.ai.default_chat_model.name = "<your-azure-ai-deployment-name>"' -i agentic_backend/config/configuration.yaml
       yq eval 'del(.ai.default_chat_model.settings)' -i agentic_backend/config/configuration.yaml
       yq eval '.ai.default_chat_model.settings.azure_endpoint = "<your-azure-ai-endpoint>"' -i agentic_backend/config/configuration.yaml
-      yq eval '.ai.default_chat_model.settings.name = "<your-azure-ai-deployment-name>"' -i agentic_backend/config/configuration.yaml
       yq eval '.ai.default_chat_model.settings.azure_api_version = "<your-azure-ai-api-version>"' -i agentic_backend/config/configuration.yaml
       ```
       
