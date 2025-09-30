@@ -1,24 +1,9 @@
 # Fred
 
   - [Getting started](#getting-started)
-    - [Local (Native) Mode](#local-native-mode)
-      - [Prerequisites](#prerequisites)
-        - [Required](#required)
-        - [Optional](#optional)
-      - [Clone](#clone)
-      - [Setup your model provider](#setup-your-model-provider)
-      - [Run the services](#run-the-services)
-    - [Advanced developer tips](#advanced-developer-tips)
-    - [Dev-Container mode](#dev-container-mode)
-    - [Production mode](#production-mode)
   - [Advanced configuration](#advanced-configuration)
-    - [Supported Model Providers](#supported-model-providers)
-    - [Configuration Files](#configuration-files)
-    - [System Architecture](#system-architecture)
-    - [Advanced Integrations](#advanced-integrations)
   - [Documentation](#documentation)
   - [Core Architecture and Licensing Clarity](#core-architecture-and-licensing-clarity)
-    - [Licensing Note](#licensing-note)
   - [Contributing](#contributing)
   - [Community](#community)
   - [Contacts](#contacts)
@@ -203,7 +188,7 @@ cd frontend && make run
 
 Open <http://localhost:5173> in your browser.
 
-### Advanced developer tips
+#### Advanced developer tips
 
 > Prerequisites:
 >
