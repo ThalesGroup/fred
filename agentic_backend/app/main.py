@@ -28,7 +28,7 @@ from dotenv import load_dotenv
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fred_core import initialize_user_security, register_exception_handlers
-from fred_core.logs import log_setup
+from fred_core import log_setup
 
 from app.application_context import (
     ApplicationContext,

@@ -21,7 +21,7 @@ from fred_core import (
     SecurityConfiguration,
     StoreConfig,
 )
-from fred_core.logs import LogStorageConfig
+from fred_core import LogStorageConfig
 from pydantic import BaseModel, Field
 
 from app.core.agents.agent_spec import AgentTuning

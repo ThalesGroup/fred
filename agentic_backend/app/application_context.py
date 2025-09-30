@@ -45,7 +45,7 @@ from fred_core import (
     get_model,
     split_realm_url,
 )
-from fred_core.logs import (
+from fred_core import (
     BaseLogStore,
     InMemoryLogStorageConfig,
     OpenSearchLogStore,
