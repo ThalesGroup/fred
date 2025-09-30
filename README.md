@@ -257,11 +257,11 @@ To get full VS Code Python support (linting, IntelliSense, debugging, etc.) acr
 
 If you prefer a fully containerised IDE with all dependencies running:
 
-1. Install Docker, VS Code (or an equivalent IDE that supports Dev Containers), and the *Dev Containers* extension.  
-2. Create `~/.fred/openai-api-key.env` containing `OPENAI_API_KEY=sk-…`.  
-3. In VS Code, press <kbd>F1</kbd> → **Dev Containers: Reopen in Container**.
+- Install Docker, VS Code (or an equivalent IDE that supports Dev Containers), and the *Dev Containers* extension.  
+- In VS Code, press <kbd>F1</kbd> → **Dev Containers: Reopen in Container**.
 
-The Dev Container starts the `devcontainer` service plus Postgres, OpenSearch, and MinIO. Ports 8000 (backend) and 5173 (frontend) are forwarded automatically.
+The Dev Container starts Fred components alongside all the required dependencies
+Ports 8000 (backend) and 5173 (frontend) are forwarded automatically.
 
 Inside the container, start the servers:
 
