@@ -32,7 +32,7 @@ from fred_core.security.rebac.rebac_engine import (
 )
 from fred_core.security.rebac.schema import DEFAULT_SCHEMA
 
-DEFAULT_TOKEN_ENV = "SPICEDB_TOKEN"
+DEFAULT_TOKEN_ENV = "SPICEDB_TOKEN"  # nosec B105: env var name, not a secret
 
 
 class SpiceDbRebacEngine(RebacEngine):
