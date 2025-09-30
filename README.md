@@ -31,9 +31,12 @@ Contents:
 
 ## Getting started
 
-In order to ensure a smooth and simple first good experience for newcomers, Fred's maintainers make sure that no external services are necessary to begin. 
+In order to ensure a smooth and simple first good experience for newcomers, Fred's maintainers make sure that starting Fred locally requires no additional components to begin. 
 
-This means, that by default, Fred stores all data on the local filesystem or through local-first tools like DuckDB for SQL-like data and ChromaDB for local embeddings. Data here means for instance metrics, chat conversations, document uploads, and embeddings.
+This means, that by default:
+
+- Fred stores all data on the local filesystem or through local-first tools like DuckDB for SQL-like data and ChromaDB for local embeddings. Data here means for instance metrics, chat conversations, document uploads, and embeddings.
+- Authentication and authorization is mocked.
 
 > **Note:**   
 > The only external requirement to utilize Fred's capabilities is access to Large Language Model (LLM) APIs via a model provider. Here are available options:
