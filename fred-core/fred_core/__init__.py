@@ -47,6 +47,7 @@ from fred_core.kpi.kpi_writer_structures import (
 from fred_core.kpi.log_kpi_store import KpiLogStore
 from fred_core.kpi.opensearch_kpi_store import OpenSearchKPIStore
 from fred_core.model.factory import get_embeddings, get_model, get_structured_chain
+from fred_core.model.models import ModelProvider
 from fred_core.security.authorization import (
     NO_AUTHZ_CHECK_USER,
     TODO_PASS_REAL_USER,
@@ -143,4 +144,5 @@ __all__ = [
     "SQLStorageConfig",
     "SQLTableStore",
     "StoreInfo",
+    "ModelProvider",
 ]

@@ -267,7 +267,7 @@ class ApplicationContext:
     def _merge_with_default_model(
         self, model: Optional[ModelConfiguration]
     ) -> ModelConfiguration:
-        default_model = self.configuration.ai.default_model.model_dump(
+        default_model = self.configuration.ai.default_chat_model.model_dump(
             exclude_unset=True
         )
         model_dict = model.model_dump(exclude_unset=True) if model else {}
@@ -295,7 +295,7 @@ class ApplicationContext:
         """
         Retrieves the default AI model instance.
         """
-        return get_model(self.configuration.ai.default_model)
+        return get_model(self.configuration.ai.default_chat_model)
 
     # --- Agent classes ---
 
