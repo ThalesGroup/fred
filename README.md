@@ -28,7 +28,6 @@ Contents:
   - [Community](#community)
   - [Contacts](#contacts)
 
-
 ## Getting started
 
 In order to ensure a smooth and simple first good experience for newcomers, Fred's maintainers make sure that starting Fred locally requires no additional components to begin. 
@@ -134,7 +133,7 @@ git clone https://github.com/ThalesGroup/fred.git
 cd fred
 ```
 
-#### Setup your model provider
+#### Setup your model provider and model settings
 
 First, copy the 2 dotenv files templates:
 
@@ -169,13 +168,41 @@ Then, depending on your model provider, actions may differ.
 <details>
   <summary>Azure OpenAI</summary>
 
-  - Set your model provider in the configuration files.
-    
-    ```bash
-    yq eval '.ai.default_chat_model.provider = "azure-openai"' -i agentic_backend/config/configuration.yaml
-    yq eval '.chat_model.provider = "azure-openai"' -i knowledge_flow_backend/config/configuration.yaml
-    yq eval '.embedding_model.provider = "azure-openai"' -i knowledge_flow_backend/config/configuration.yaml
+  - Agentic backend configuration
+  
+    - Chat model
+      
+      ```bash
+      yq eval '.ai.default_chat_model.provider = "azure-openai"' -i agentic_backend/config/configuration.yaml
+      yq eval '.ai.default_chat_model.name = "<your-azure-ai-deployment-name>"' -i agentic_backend/config/configuration.yaml
+      yq eval 'del(.ai.default_chat_model.settings)' -i agentic_backend/config/configuration.yaml
+      yq eval '.ai.default_chat_model.settings.azure_endpoint = "<your-azure-ai-endpoint>"' -i agentic_backend/config/configuration.yaml
+      yq eval '.ai.default_chat_model.settings.name = "<your-azure-ai-deployment-name>"' -i agentic_backend/config/configuration.yaml
+      yq eval '.ai.default_chat_model.settings.azure_api_version = "<your-azure-ai-api-version>"' -i agentic_backend/config/configuration.yaml
+      ```
+      
+  - Knowledge Flow backend configuration
+  
+    - Chat model
+  
+      ```bash
+      yq eval '.chat_model.provider = "azure-openai"' -i knowledge_flow_backend/config/configuration.yaml
+      yq eval '.chat_model.name = "<your-azure-ai-deployment-name>"' -i knowledge_flow_backend/config/configuration.yaml
+      yq eval 'del(.chat_model.settings)' -i agentic_backend/config/configuration.yaml
+      yq eval '.chat_model.settings.azure_endpoint = "<your-azure-ai-endpoint>"' -i knowledge_flow_backend/config/configuration.yaml
+      yq eval '.chat_model.settings.azure_api_version = "<your-azure-ai-api-version>"' -i knowledge_flow_backend/config/configuration.yaml
+      ```
 
+    - Embedding model
+      
+      ```bash
+      yq eval '.embedding_model.provider = "azure-openai"' -i knowledge_flow_backend/config/configuration.yaml
+      yq eval '.embedding_model.name = "<your-azure-ai-deployment-name>"' -i knowledge_flow_backend/config/configuration.yaml
+      yq eval 'del(.embedding_model.settings)' -i agentic_backend/config/configuration.yaml
+      yq eval '.embedding_model.settings.azure_endpoint = "<your-azure-ai-endpoint>"' -i knowledge_flow_backend/config/configuration.yaml
+      yq eval '.embedding_model.settings.azure_api_version = "<your-azure-ai-api-version>"' -i knowledge_flow_backend/config/configuration.yaml
+      ```
+    
   - Copy-paste your `AZURE_OPENAI_API_KEY` value in the 2 files:
 
     - `agentic_backend/config/.env`
