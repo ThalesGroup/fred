@@ -143,12 +143,23 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
     def ann_search(self, query: str, *, k: int, search_filter: Optional[SearchFilter] = None) -> List[AnnHit]:
         """
         ANN (semantic) search honoring library/document filters.
-        Returns hydrated Documents with cosine similarity scores.
+        Uses in-query filtering when available (efficient_filter), falls back to filter, then boolean_filter.
         """
-        filters = self._to_filter_clause(search_filter)  # now List[Dict] | None
-        kwargs: Dict = {"boolean_filter": filters} if filters else {}
+        filters = self._to_filter_clause(search_filter)  # List[Dict] | None
 
-        pairs = self._lc.similarity_search_with_score(query, k=k, **kwargs)
+        # Prefer in-query filtering (pre-filtering) for Lucene/HNSW on OS 2.19
+        if filters:
+            try:
+                pairs = self._lc.similarity_search_with_score(query, k=k, efficient_filter=filters)
+            except TypeError:
+                # Older langchain-community: route via 'filter' if available
+                try:
+                    pairs = self._lc.similarity_search_with_score(query, k=k, filter=filters)
+                except TypeError:
+                    # Last resort: post-filter (works everywhere, but less efficient)
+                    pairs = self._lc.similarity_search_with_score(query, k=k, boolean_filter=filters)
+        else:
+            pairs = self._lc.similarity_search_with_score(query, k=k)
 
         hits: List[AnnHit] = []
         model_name = self._embedding_model_name or "unknown"
