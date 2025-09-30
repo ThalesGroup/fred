@@ -3,7 +3,7 @@
 .PHONY: test
 test: dev ## Run all tests
 	@echo "************ TESTING ************"
-	${UV} run pytest --cov=. --cov-config=.coveragerc --cov-report=html
+	${UV} run pytest -m "not integration" --cov=. --cov-config=.coveragerc --cov-report=html
 	@echo "✅ Coverage report: htmlcov/index.html"
 	@xdg-open htmlcov/index.html || echo "📎 Open manually htmlcov/index.html"
 
