@@ -2,13 +2,13 @@
 
 Fred is both:
 
-- An innovation lab — to help developers rapidly explore agentic patterns, domain-specific logic, and custom tools.
+- An innovation lab — helping developers rapidly explore agentic patterns, domain-specific logic, and custom tools.  
 - A production-ready platform — already integrated with real enterprise constraints: auth, security, document lifecycle, and deployment best practices.
 
 It is composed of:
 
 - a **Python agentic backend** (FastAPI + LangGraph)  
-- a **Python knowledge flow backend** (FastAPI) for document ingestion and vector search
+- a **Python knowledge flow backend** (FastAPI) for document ingestion and vector search  
 - a **React frontend**  
 
 Fred is not a framework, but a full reference implementation that shows how to build practical multi-agent applications with LangChain and LangGraph. Agents cooperate to answer technical, context-aware questions.
@@ -19,8 +19,8 @@ Contents:
 
   - [Getting started](#getting-started)
     - [Local (Native) Mode](#local-native-mode)
-    - [Dev-Container mode](#dev-container-mode)
-    - [Production mode](#production-mode)
+    - [Dev Container Mode](#dev-container-mode)
+    - [Production Mode](#production-mode)
   - [Advanced configuration](#advanced-configuration)
   - [Documentation](#documentation)
   - [Core Architecture and Licensing Clarity](#core-architecture-and-licensing-clarity)
@@ -30,101 +30,87 @@ Contents:
 
 ## Getting started
 
-In order to ensure a smooth and simple first good experience for newcomers, Fred's maintainers make sure that starting Fred locally requires no additional components to begin. 
+To ensure a smooth first-time experience, Fred’s maintainers designed local startup to require no additional external components.
 
-This means, that by default:
+By default:
 
-- Fred stores all data on the local filesystem or through local-first tools like DuckDB for SQL-like data and ChromaDB for local embeddings. Data here means for instance metrics, chat conversations, document uploads, and embeddings.
-- Authentication and authorization is mocked.
+- Fred stores all data on the local filesystem or through local-first tools such as DuckDB (for SQL-like data) and ChromaDB (for local embeddings). Data includes metrics, chat conversations, document uploads, and embeddings.  
+- Authentication and authorization are mocked.
 
-> **Note:**   
-> The only external requirement to utilize Fred's capabilities is access to Large Language Model (LLM) APIs via a model provider. Here are available options:
+> **Note:**  
+> The only external requirement is access to Large Language Model (LLM) APIs via a model provider. Supported options include:
 > 
-> - **Public OpenAI APIs:** Connect using your OpenAI API key.
-> - **Private Ollama Server:** Host open-source models such as Mistral, Qwen, Gemma, and Phi on your own or a shared server.
-> - **Private Azure AI Endpoints:** Connect using your Azure OpenAI key.
-> 
-> Detailed instructions for configuring your selected model provider will be provided in the following sections.
+> - **Public OpenAI APIs:** Connect using your OpenAI API key.  
+> - **Private Ollama Server:** Host open-source models such as Mistral, Qwen, Gemma, and Phi locally or on a shared server.  
+> - **Private Azure AI Endpoints:** Connect using your Azure OpenAI key.  
+>
+> Detailed instructions for configuring your chosen model provider are provided below.
 
 ### Local (Native) Mode
 
 <details>
-  <summary>First, make sure you have all the requirements in place before moving on</summary> 
+  <summary>First, make sure you have all the requirements installed</summary> 
 
-- Required 
-
-  | Tool         | Type                       | Version   | Install hint                                                                                   |
-  | ------------ | -------------------------- | --------- | ---------------------------------------------------------------------------------------------- |
-  | Pyenv        | Python installer           | latest    | [Pyenv installation instructions](https://github.com/pyenv/pyenv#installation)                 |
-  | Python       | Programming Language       | 3.12.8    | Use `pyenv install 3.12.8`                                                                     |
-  | python3-venv | Python venv module/package | matching  | Already bundled with Python 3 on most systems; else `apt install python3-venv` (Debian/Ubuntu) |
-  | nvm          | Node installer             | latest    | [nvm installation instructions](https://github.com/nvm-sh/nvm#installing-and-updating)         |
-  | Node.js      | Programming Language       | 22.13.0   | Use `nvm install 22.13.0`                                                                      |
-  | Make         | Utility                    | system    | Install via system package manager (e.g. `apt install make`, `brew install make`)              |
-  | yq           | Utility                    | system    | Install via system package manager                                                             |
-  | SQLite       | Local RDBMS engine         | >= 3.35.0 | Install via system package manager                                                             |
+  | Tool         | Type                       | Version                                                                | Install hint                                                                                |
+  | ------------ | -------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+  | Pyenv        | Python installer           | latest                                                                 | [Pyenv installation instructions](https://github.com/pyenv/pyenv#installation)              |
+  | Python       | Programming language       | 3.12.8                                                                 | Use `pyenv install 3.12.8`                                                                  |
+  | python3-venv | Python venv module/package | matching                                                               | Bundled with Python 3 on most systems; otherwise `apt install python3-venv` (Debian/Ubuntu) |
+  | nvm          | Node installer             | latest                                                                 | [nvm installation instructions](https://github.com/nvm-sh/nvm#installing-and-updating)      |
+  | Node.js      | Programming language       | 22.13.0                                                                | Use `nvm install 22.13.0`                                                                   |
+  | Make         | Utility                    | system                                                                 | Install via system package manager (e.g., `apt install make`, `brew install make`)          |
+  | yq           | Utility                    | system                                                                 | Install via system package manager                                                          |
+  | SQLite       | Local RDBMS engine         | ≥ 3.35.0                                                               | Install via system package manager                                                          |
+  | Pandoc       | 2.9.2.1                    | [Pandoc installation instructions](https://pandoc.org/installing.html) | For DOCX document ingestion                                                                 |
 
   <details>
     <summary>Dependency details</summary>
 
-    Here are some details about the dependencies' relationships:
+  ```mermaid
+  graph TD
+      subgraph FredComponents["Fred Components"]
+        style FredComponents fill:#b0e57c,stroke:#333,stroke-width:2px  %% Green Color
+          Agentic["agentic_backend"]
+          Knowledge["knowledge_flow_backend"]
+          Frontend["frontend"]
+      end
 
-    ```mermaid
-    graph TD
-        subgraph FredComponents["Fred Components"]
-          style FredComponents fill:#b0e57c,stroke:#333,stroke-width:2px  %% Green Color
-            Agentic["agentic_backend"]
-            Knowledge["knowledge_flow_backend"]
-            Frontend["frontend"]
-        end
+      subgraph ExternalDependencies["External Dependencies"]
+        style ExternalDependencies fill:#74a3d9,stroke:#333,stroke-width:2px  %% Blue Color
+          Venv["python3-venv"]
+          Python["Python 3.12.8"]
+          SQLite["SQLite"]
+          Pandoc["Pandoc"]
+          Pyenv["Pyenv (Python installer)"]
+          Node["Node 22.13.0"]
+          NVM["nvm (Node installer)"]
+      end
 
-        subgraph ExternalDependencies["External Dependencies"]
-          style ExternalDependencies fill:#74a3d9,stroke:#333,stroke-width:2px  %% Blue Color
-            Python["Python 3.12.8"]
-            Venv["python3-venv"]
-            Node["Node 22.13.0"]
-            Pyenv["Pyenv (Python installer)"]
-            NVM["nvm (Node installer)"]
-            SQLite["SQLite"]
-            OS["Operating System"]
-        end
+      subgraph Utilities["Utilities"]
+        style Utilities fill:#f9d5e5,stroke:#333,stroke-width:2px  %% Pink Color
+          Make["Make utility"]
+          Yq["yq (YAML processor)"]
+      end
 
-        subgraph Utilities["Utilities"]
-          style Utilities fill:#f9d5e5,stroke:#333,stroke-width:2px  %% Pink Color
-            Make["Make utility"]
-            Yq["yq (YAML processor)"]
-        end
+      Agentic -->|depends on| Python
+      Agentic -->|depends on| Venv
 
-        Agentic -->|depends on| Python
-        Agentic -->|depends on| Venv
-        Agentic -->|depends on| SQLite
+      Knowledge -->|depends on| Python
+      Knowledge -->|depends on| Venv
+      Knowledge -->|depends on| Pandoc
+      Knowledge -->|depends on| SQLite
 
-        Knowledge -->|depends on| Python
-        Knowledge -->|depends on| Venv
+      Frontend -->|depends on| Node
 
-        Frontend -->|depends on| Node
+      Python -->|depends on| Pyenv
 
-        Python -->|depends on| Pyenv
-        Venv -->|depends on| OS
+      Node -->|depends on| NVM
 
-        Node -->|depends on| NVM
-
-        Pyenv -->|depends on| OS
-        NVM -->|depends on| OS
-        Make -->|depends on| OS
-        SQLite -->|depends on| OS
-        Yq -->|depends on| OS
-
-    ```
+  ```
   </details>
 
-- Optional
-
-  | Tool   | Version | Install hint                                                           | Comment                     |
-  | ------ | ------- | ---------------------------------------------------------------------- | --------------------------- |
-  | Pandoc | 2.9.2.1 | [Pandoc installation instructions](https://pandoc.org/installing.html) | For docx document ingestion |
-
 </details>
+
 
 #### Clone
 
