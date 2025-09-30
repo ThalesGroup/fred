@@ -19,26 +19,19 @@ Contents:
 
   - [Getting started](#getting-started)
     - [Local (Native) Mode](#local-native-mode)
-    - [Dev Container Mode](#dev-container-mode)
-    - [Production Mode](#production-mode)
+    - [Dev-Container mode](#dev-container-mode)
+    - [Production mode](#production-mode)
   - [Advanced configuration](#advanced-configuration)
-  - [Documentation](#documentation)
   - [Core Architecture and Licensing Clarity](#core-architecture-and-licensing-clarity)
+  - [Documentation](#documentation)
   - [Contributing](#contributing)
   - [Community](#community)
   - [Contacts](#contacts)
 
 ## Getting started
 
-To ensure a smooth first-time experience, Fred’s maintainers designed local startup to require no additional external components.
-
-By default:
-
-- Fred stores all data on the local filesystem or through local-first tools such as DuckDB (for SQL-like data) and ChromaDB (for local embeddings). Data includes metrics, chat conversations, document uploads, and embeddings.  
-- Authentication and authorization are mocked.
-
 > **Note:**  
-> The only external requirement is access to Large Language Model (LLM) APIs via a model provider. Supported options include:
+> Accross all setup modes, a common requirement is to have access to Large Language Model (LLM) APIs via a model provider. Supported options include:
 > 
 > - **Public OpenAI APIs:** Connect using your OpenAI API key.  
 > - **Private Ollama Server:** Host open-source models such as Mistral, Qwen, Gemma, and Phi locally or on a shared server.  
@@ -47,6 +40,15 @@ By default:
 > Detailed instructions for configuring your chosen model provider are provided below.
 
 ### Local (Native) Mode
+
+To ensure a smooth first-time experience, Fred’s maintainers designed local startup to require no additional external components (except, of course, to LLM APIs).
+
+By default:
+
+- Fred stores all data on the local filesystem or through local-first tools such as DuckDB (for SQL-like data) and ChromaDB (for local embeddings). Data includes metrics, chat conversations, document uploads, and embeddings.  
+- Authentication and authorization are mocked.
+
+#### Prerequisites
 
 <details>
   <summary>First, make sure you have all the requirements installed</summary> 
@@ -316,29 +318,45 @@ See `agentic_backend/config/configuration.yaml` (section `ai:`) and `knowledge_f
 - Enable Keycloak or another OIDC provider for authentication  
 - Persist metrics and files in OpenSearch and MinIO  
 
-## Documentation
-
-- Main docs: <https://fredk8.dev/docs>  
-- [Features overview](./docs/FEATURES.md)  ← start here if you’re evaluating Fred
-- [Agentic backend README](./agentic_backend/README.md)  
-- [Agentic backend agentic design](./agentic_backend/docs/AGENTS.md)  
-- [MCP](./agentic_backend/docs/MCP.md)
-- [Frontend README](./frontend/README.md)  
-- [Knowledge Flow backend README](./knowledge_flow_backend/README.md)
-- [Keycloak](./docs/KEYCLOAK.md)
-- [Developer Tools](./developer_tools/README.md)
-- [Code of Conduct](./docs/CODE_OF_CONDUCT.md)
-- [Security](./docs/SECURITY.md)  
-- [Python Coding Guide](./docs/PYTHON_CODING_GUIDELINES.md)
-- [Contributing](./docs/CONTRIBUTING.md)
-
-
 ## Core Architecture and Licensing Clarity
 
 The three components just described form the *entirety of the Fred platform*. They are self-contained and do not
 require any external dependencies such as MinIO, OpenSearch, or Weaviate.
 
 Instead, Fred is designed with a modular architecture that allows optional integration with these technologies. By default, a minimal Fred deployment can use just the local filesystem for all storage needs.
+
+## Documentation
+
+- Generic information
+
+  - [Main docs](https://fredk8.dev/docs)  
+  - [Features overview](./docs/FEATURES.md)
+
+- Agentic backend
+  
+  - [Agentic backend README](./agentic_backend/README.md)  
+  - [Agentic backend agentic design](./agentic_backend/docs/AGENTS.md)  
+  - [MCP capabilities for agent](./agentic_backend/docs/MCP.md)
+
+- Knowledge Flow backend
+
+  - [Knowledge Flow backend README](./knowledge_flow_backend/README.md)
+
+- Frontend
+
+  - [Frontend README](./frontend/README.md)  
+
+- Security-related topics
+
+  - [Security overview](./docs/SECURITY.md)  
+  - [Keycloak](./docs/KEYCLOAK.md)
+
+- Developer and contributors guides
+
+  - [Developer Tools](./developer_tools/README.md)
+  - [Code of Conduct](./docs/CODE_OF_CONDUCT.md)
+  - [Python Coding Guide](./docs/PYTHON_CODING_GUIDELINES.md)
+  - [Contributing](./docs/CONTRIBUTING.md)
 
 ### Licensing Note
 
