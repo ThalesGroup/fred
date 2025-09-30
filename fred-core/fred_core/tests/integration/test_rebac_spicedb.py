@@ -46,11 +46,14 @@ def spicedb_engine() -> SpiceDbRebacEngine:
             engine = SpiceDbRebacEngine(
                 endpoint=SPICEDB_ENDPOINT,
                 token=token,
-                resource_types=(Resource.TAGS, Resource.GROUP, Resource.DOCUMENTS),
                 insecure=True,
             )
             # Trigger a cheap RPC call to confirm the server is reachable.
-            engine.get_relations_as_subject(probe_subject)
+            engine.lookup_resources(
+                subject=probe_subject,
+                permission=Action.READ,
+                resource_type=Resource.TAGS,
+            )
             return engine
         except grpc.RpcError as exc:  # pragma: no cover - depends on external service
             last_error = exc
@@ -132,5 +135,65 @@ def test_parent_relationships_extend_permissions(
         owner,
         Action.DELETE,
         document,
+        consistency_token=token,
+    )
+
+
+@pytest.mark.integration
+def test_list_documents_user_can_read(spicedb_engine: SpiceDbRebacEngine) -> None:
+    user = _make_reference(Resource.USER, prefix="reader")
+    team = _make_reference(Resource.GROUP, prefix="team")
+    tag = _make_reference(Resource.TAGS, prefix="tag")
+    subTag = _make_reference(Resource.TAGS, prefix="subtag")
+    document1 = _make_reference(Resource.DOCUMENTS, prefix="doc1")
+    document2 = _make_reference(Resource.DOCUMENTS, prefix="doc2")
+
+    private_tag = _make_reference(Resource.TAGS, prefix="private-tag")
+    private_document = _make_reference(Resource.DOCUMENTS, prefix="doc-private")
+
+    token = spicedb_engine.add_relations(
+        [
+            Relation(subject=user, relation=RelationType.MEMBER, resource=team),
+            Relation(subject=team, relation=RelationType.EDITOR, resource=tag),
+            # Add document1 directly in tag
+            Relation(subject=tag, relation=RelationType.PARENT, resource=document1),
+            # Add document2 via a sub-tag
+            Relation(subject=tag, relation=RelationType.PARENT, resource=subTag),
+            Relation(subject=subTag, relation=RelationType.PARENT, resource=document2),
+            # Private document in private tag not accessible to the user
+            Relation(
+                subject=private_tag,
+                relation=RelationType.PARENT,
+                resource=private_document,
+            ),
+        ]
+    )
+
+    readable_documents = spicedb_engine.lookup_resources(
+        subject=user,
+        permission=Action.READ,
+        resource_type=Resource.DOCUMENTS,
+        consistency_token=token,
+    )
+    readable_document_ids = {reference.id for reference in readable_documents}
+    assert readable_document_ids == {document1.id, document2.id}, (
+        f"Unexpected documents for {user.id}: {readable_document_ids}"
+    )
+
+    assert all(
+        reference.type is Resource.DOCUMENTS for reference in readable_documents
+    ), "Lookup must return document references"
+
+    assert spicedb_engine.has_permission(
+        user,
+        Action.READ,
+        document1,
+        consistency_token=token,
+    )
+
+    assert not spicedb_engine.has_permission(
+        user,
+        Action.READ,
+        private_document,
         consistency_token=token,
     )

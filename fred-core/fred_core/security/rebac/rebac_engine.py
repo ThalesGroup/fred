@@ -57,22 +57,15 @@ class RebacEngine(ABC):
         return token
 
     @abstractmethod
-    def get_relations_as_subject(
+    def lookup_resources(
         self,
+        *,
         subject: RebacReference,
-        *,
+        permission: Action,
+        resource_type: Resource,
         consistency_token: str | None = None,
-    ) -> list[Relation]:
-        """Return all relations where the provided reference is the subject."""
-
-    @abstractmethod
-    def get_relations_as_resource(
-        self,
-        resource: RebacReference,
-        *,
-        consistency_token: str | None = None,
-    ) -> list[Relation]:
-        """Return all relations where the provided reference is the resource."""
+    ) -> list[RebacReference]:
+        """Return resource identifiers the subject can access for a permission."""
 
     @abstractmethod
     def has_permission(
