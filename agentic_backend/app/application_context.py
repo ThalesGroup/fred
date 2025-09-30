@@ -33,23 +33,21 @@ from typing import Any, Callable, Dict, List, Optional
 
 from fred_core import (
     BaseKPIStore,
+    BaseLogStore,
     BearerAuth,
     ClientCredentialsProvider,
     DuckdbStoreConfig,
+    InMemoryLogStorageConfig,
     KpiLogStore,
     KPIWriter,
     LogStoreConfig,
     OpenSearchIndexConfig,
     OpenSearchKPIStore,
+    OpenSearchLogStore,
+    RamLogStore,
     SQLStorageConfig,
     get_model,
     split_realm_url,
-)
-from fred_core import (
-    BaseLogStore,
-    InMemoryLogStorageConfig,
-    OpenSearchLogStore,
-    RamLogStore,
 )
 from langchain_core.language_models.base import BaseLanguageModel
 from requests.auth import AuthBase

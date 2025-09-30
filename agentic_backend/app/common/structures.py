@@ -15,13 +15,13 @@
 from typing import Annotated, Dict, List, Literal, Optional, Union
 
 from fred_core import (
+    LogStorageConfig,
     ModelConfiguration,
     OpenSearchStoreConfig,
     PostgresStoreConfig,
     SecurityConfiguration,
     StoreConfig,
 )
-from fred_core import LogStorageConfig
 from pydantic import BaseModel, Field
 
 from app.core.agents.agent_spec import AgentTuning
