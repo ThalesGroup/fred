@@ -284,15 +284,13 @@ For production mode, please reach out to your DevOps team so that they tune Fred
 
 ## Advanced configuration
 
-### Supported Model Providers
+### System Architecture
 
-| Provider              | How to enable                                                                  |
-| --------------------- | ------------------------------------------------------------------------------ |
-| OpenAI (default)      | Add `OPENAI_API_KEY` to `config/.env`                                          |
-| Azure OpenAI          | Add `AZURE_OPENAI_API_KEY` and endpoint variables; adjust `configuration.yaml` |
-| Ollama (local models) | Set `OLLAMA_BASE_URL` and model name in `configuration.yaml`                   |
-
-See `agentic_backend/config/configuration.yaml` (section `ai:`) for concrete examples.
+| Component              | Location                   | Role                                                                  |
+| ---------------------- | -------------------------- | --------------------------------------------------------------------- |
+| Frontend UI            | `./frontend`               | React-based chatbot                                                   |
+| Agentic backend        | `./agentic_backend`        | Multi-agent API server                                                |
+| Knowledge Flow backend | `./knowledge_flow_backend` | **Optional** knowledge management component (document ingestion & Co) |
 
 ### Configuration Files
 
@@ -303,13 +301,15 @@ See `agentic_backend/config/configuration.yaml` (section `ai:`) for concrete exa
 | `agentic_backend/config/configuration.yaml`        | Functional settings (providers, agents, feature flags). | -                                                                   |
 | `knowledge_flow_backend/config/configuration.yaml` | Same as above                                           | -                                                                   |
 
-### System Architecture
+### Supported Model Providers
 
-| Component              | Location                   | Role                                                                  |
-| ---------------------- | -------------------------- | --------------------------------------------------------------------- |
-| Frontend UI            | `./frontend`               | React-based chatbot                                                   |
-| Agentic backend        | `./agentic_backend`        | Multi-agent API server                                                |
-| Knowledge Flow backend | `./knowledge_flow_backend` | **Optional** knowledge management component (document ingestion & Co) |
+| Provider              | How to enable                                                      |
+| --------------------- | ------------------------------------------------------------------ |
+| OpenAI (default)      | Add `OPENAI_API_KEY` to `config/.env`; adjust `configuration.yaml` |
+| Azure OpenAI          | Add `AZURE_OPENAI_API_KEY`; adjust `configuration.yaml`            |
+| Ollama (local models) | Set `OLLAMA_BASE_URL` and model name in `configuration.yaml`       |
+
+See `agentic_backend/config/configuration.yaml` (section `ai:`) and `knowledge_flow_backend/config/configuration.yaml` (sections `chat_model:` and `embedding_model:`)  for concrete examples.
 
 ### Advanced Integrations
 
