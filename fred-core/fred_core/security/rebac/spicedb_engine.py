@@ -21,7 +21,7 @@ from authzed.api.v1 import (
     WriteSchemaRequest,
     ZedToken,
 )
-from grpcutil import insecure_bearer_token_credentials
+from grpcutil import bearer_token_credentials, insecure_bearer_token_credentials
 
 from fred_core.security.models import Action, Resource
 from fred_core.security.rebac.rebac_engine import (
@@ -48,6 +48,7 @@ class SpiceDbRebacEngine(RebacEngine):
         write_operation: RelationshipUpdate._Operation.ValueType = RelationshipUpdate.Operation.OPERATION_TOUCH,
         schema: str | None = DEFAULT_SCHEMA,
         sync_schema_on_init: bool = True,
+        insecure: bool = False,
     ) -> None:
         resolved_endpoint = endpoint
         if not resolved_endpoint:
@@ -61,7 +62,10 @@ class SpiceDbRebacEngine(RebacEngine):
                 "SpiceDB token must be provided via parameter or environment",
             )
 
-        credentials = insecure_bearer_token_credentials(resolved_token)
+        if insecure:
+            credentials = insecure_bearer_token_credentials(resolved_token)
+        else:
+            credentials = bearer_token_credentials(resolved_token)
         self._client = Client(resolved_endpoint, credentials)
 
         self._resource_types: tuple[Resource, ...] = (

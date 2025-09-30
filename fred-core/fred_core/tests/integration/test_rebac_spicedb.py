@@ -47,6 +47,7 @@ def spicedb_engine() -> SpiceDbRebacEngine:
                 endpoint=SPICEDB_ENDPOINT,
                 token=token,
                 resource_types=(Resource.TAGS, Resource.GROUP, Resource.DOCUMENTS),
+                insecure=True,
             )
             # Trigger a cheap RPC call to confirm the server is reachable.
             engine.get_relations_as_subject(probe_subject)
