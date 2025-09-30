@@ -35,7 +35,7 @@ from fred_core import (
     get_model,
     split_realm_url,
 )
-from fred_core.logs import BaseLogStore, InMemoryLogStorageConfig, OpenSearchLogStore, RamLogStore
+from fred_core import BaseLogStore, InMemoryLogStorageConfig, OpenSearchLogStore, RamLogStore
 from langchain_core.embeddings import Embeddings
 from opensearchpy import OpenSearch, RequestsHttpConnection
 

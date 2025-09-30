@@ -82,10 +82,31 @@ from fred_core.store.sql_store import SQLTableStore
 from fred_core.store.structures import StoreInfo
 from fred_core.store.vector_search import VectorSearchHit
 
-from . import logs  # noqa: F401
+from fred_core.logs.base_log_store import BaseLogStore
+from fred_core.logs.log_setup import StoreEmitHandler, log_setup
+from fred_core.logs.log_structures import (
+    InMemoryLogStorageConfig,
+    LogEventDTO,
+    LogQuery,
+    LogQueryResult,
+    LogStorageConfig,
+    TailFileResponse,
+)
+from fred_core.logs.memory_log_store import RamLogStore
+from fred_core.logs.opensearch_log_store import OpenSearchLogStore
 
 __all__ = [
-    "logs",
+    "BaseLogStore",
+    "LogEventDTO",
+    "LogQuery",
+    "LogQueryResult",
+    "OpenSearchLogStore",
+    "RamLogStore",
+    "StoreEmitHandler",
+    "TailFileResponse",
+    "log_setup",
+    "LogStorageConfig",
+    "InMemoryLogStorageConfig",
     "raise_internal_error",
     "get_current_user",
     "decode_jwt",
