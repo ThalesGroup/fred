@@ -1,27 +1,26 @@
 # Fred
 
-- [Fred](#fred)
-  - [Core Architecture and Licensing Clarity](#core-architecture-and-licensing-clarity)
-    - [Licensing Note](#licensing-note)
   - [Getting started](#getting-started)
     - [Local (Native) Mode](#local-native-mode)
-      - [1 · Prerequisites](#1--prerequisites)
+      - [Prerequisites](#prerequisites)
         - [Required](#required)
         - [Optional](#optional)
-      - [2 · Clone](#2--clone)
-      - [3 · Add your OpenAI key](#3--add-your-openai-key)
-      - [4 · Run the services](#4--run-the-services)
-      - [Advanced developer tips](#advanced-developer-tips)
-        - [Prerequisites](#prerequisites)
+      - [Clone](#clone)
+      - [Setup your model provider](#setup-your-model-provider)
+      - [Run the services](#run-the-services)
+    - [Advanced developer tips](#advanced-developer-tips)
     - [Dev-Container mode](#dev-container-mode)
+    - [Production mode](#production-mode)
   - [Advanced configuration](#advanced-configuration)
     - [Supported Model Providers](#supported-model-providers)
     - [Configuration Files](#configuration-files)
     - [System Architecture](#system-architecture)
     - [Advanced Integrations](#advanced-integrations)
   - [Documentation](#documentation)
+  - [Core Architecture and Licensing Clarity](#core-architecture-and-licensing-clarity)
+    - [Licensing Note](#licensing-note)
   - [Contributing](#contributing)
-  - [License](#license)
+  - [Community](#community)
   - [Contacts](#contacts)
 
 Fred is both:
@@ -39,40 +38,26 @@ Fred is not a framework, but a full reference implementation that shows how to b
 
 See the project site: <https://fredk8.dev>
 
----
-
-## Core Architecture and Licensing Clarity
-
-The three components just described form the *entirety of the Fred platform*. They are self-contained and do not
-require any external dependencies such as MinIO, OpenSearch, or Weaviate.
-
-Instead, Fred is designed with a modular architecture that allows optional integration with these technologies. By default, a minimal Fred deployment can use just the local filesystem for all storage needs.
-
-### Licensing Note
-
-Fred is released under the **Apache License 2.0**. It does *not embed or depend on any LGPLv3 or copyleft-licensed components. Optional integrations (like OpenSearch or Weaviate) are configured externally and do not contaminate Fred's licensing.
-This ensures maximum freedom and clarity for commercial and internal use.
-
-In short: Fred is 100% Apache 2.0, and you stay in full control of any additional components.
-
----
-
 ## Getting started
 
-Fred works out of the box when you provide **one secret** — your OpenAI API key.  
-Defaults:
+In order to ensure a smooth and simple first good experience for newcomers, Fred's maintainers make sure that no external services are necessary to begin. 
 
-- Keycloak is bypassed by a mock `admin/admin` user  
-- All data (metrics, conversations, uploads) is stored on the local filesystem  
-- No external services are required
+This means, that by default, Fred stores all data on the local filesystem or through local-first tools like DuckDB for SQL-like data and ChromaDB for local embeddings. Data here means for instance metrics, chat conversations, document uploads, and embeddings.
 
-Production services and databases can be added later or via the **deployment factory** repository.
+> **Note:**   
+> The only external requirement to utilize Fred's capabilities is access to Large Language Model (LLM) APIs via a model provider. Here are |available options:
+> 
+> - **Public OpenAI APIs:** Connect using your OpenAI API key.
+> - **Private Ollama Server:** Host open-source models such as Mistral, Qwen, Gemma, and Phi on your own or a shared server.
+> - **Private Azure AI Endpoints:** Connect using your Azure OpenAI key.
+> 
+> Detailed instructions for configuring your selected model provider will be provided in the following sections.
 
 ### Local (Native) Mode
 
-#### 1 · Prerequisites
+#### Prerequisites 
 
-##### Required
+##### Required 
 
 | Tool         | Type                       | Version  | Install hint                                                                                   |
 | ------------ | -------------------------- | -------- | ---------------------------------------------------------------------------------------------- |
@@ -82,40 +67,60 @@ Production services and databases can be added later or via the **deployment fac
 | nvm          | Node installer             | latest   | [nvm installation instructions](https://github.com/nvm-sh/nvm#installing-and-updating)         |
 | Node.js      | Programming Language       | 22.13.0  | Use `nvm install 22.13.0`                                                                      |
 | Make         | Utility                    | system   | Install via system package manager (e.g. `apt install make`, `brew install make`)              |
+| yq           | Utility                    | system   | Install via system package manager                                                             |
 
-```mermaid
-graph TD
-    Agentic["agentic_backend"]
-    Knowledge["knowledge_flow_backend"]
-    Frontend["frontend"]
-    Python["Python 3.12.8"]
-    Venv["python3-venv"]
-    Node["Node 22.13.0"]
-    Pyenv["Pyenv (Python installer)"]
-    NVM["nvm (Node installer)"]
-    Make["Make utility"]
-    OS["Operating System"]
+<details>
+  <summary>Dependency details</summary>
 
-    Agentic --> Python
-    Agentic --> Venv
-    Agentic --> Make
+  Here are some details about the dependencies' relationships:
 
-    Knowledge --> Python
-    Knowledge --> Venv
-    Knowledge --> Make
+  ```mermaid
+  graph TD
+      subgraph FredComponents["Fred Components"]
+        style FredComponents fill:#b0e57c,stroke:#333,stroke-width:2px  %% Green Color
+          Agentic["agentic_backend"]
+          Knowledge["knowledge_flow_backend"]
+          Frontend["frontend"]
+      end
 
-    Frontend --> Node
-    Frontend --> Make
+      subgraph ExternalDependencies["External Dependencies"]
+        style ExternalDependencies fill:#74a3d9,stroke:#333,stroke-width:2px  %% Blue Color
+          Python["Python 3.12.8"]
+          Venv["python3-venv"]
+          Node["Node 22.13.0"]
+          Pyenv["Pyenv (Python installer)"]
+          NVM["nvm (Node installer)"]
+          OS["Operating System"]
+      end
 
-    Python --> Pyenv
-    Venv --> OS
+      subgraph Utilities["Utilities"]
+        style Utilities fill:#f9d5e5,stroke:#333,stroke-width:2px  %% Pink Color
+          Make["Make utility"]
+          Yq["yq (YAML processor)"]
+      end
 
-    Node --> NVM
+      Agentic -->|depends on| Python
+      Agentic -->|depends on| Venv
 
-    Pyenv --> OS
-    NVM --> OS
-    Make --> OS
-```
+      Knowledge -->|depends on| Python
+      Knowledge -->|depends on| Venv
+
+      Frontend -->|depends on| Node
+
+      Python -->|depends on| Pyenv
+      Venv -->|depends on| OS
+
+      Node -->|depends on| NVM
+
+      Pyenv -->|depends on| OS
+      NVM -->|depends on| OS
+      Make -->|depends on| OS
+      
+      Yq -->|depends on| OS
+
+  ```
+
+</details>
 
 ##### Optional
 
@@ -123,14 +128,16 @@ graph TD
 | ------ | ------- | ---------------------------------------------------------------------- | --------------------------- |
 | Pandoc | 2.9.2.1 | [Pandoc installation instructions](https://pandoc.org/installing.html) | For docx document ingestion |
 
-#### 2 · Clone
+#### Clone
 
 ```bash
 git clone https://github.com/ThalesGroup/fred.git
 cd fred
 ```
 
-#### 3 · Add your OpenAI key
+#### Setup your model provider
+
+First, copy the 2 dotenv files templates:
 
 ```bash
 # Copy the 2 environment files templates
@@ -138,14 +145,46 @@ cp agentic_backend/config/.env.template agentic_backend/config/.env
 cp knowledge_flow_backend/config/.env.template knowledge_flow_backend/config/.env
 ```
 
-And then copy-paste your `OPENAI_API_KEY` value in the 2 files:
+Then, depending on your model provider, actions may differ. 
 
-- `agentic_backend/config/.env`
-- `knowledge_flow_backend/config/.env`
+<details>
+  <summary>OpenAI</summary>
 
-⚠️ An `OPENAI_API_KEY` from a free openAI account unfortunately does not work.
+  - Set the model provider in the configuration files.
+    
+    ```bash
+    yq eval '.ai.default_chat_model.provider = "openai"' -i agentic_backend/config/configuration.yaml
+    yq eval '.chat_model.provider = "openai"' -i knowledge_flow_backend/config/configuration.yaml
+    yq eval '.embedding_model.provider = "openai"' -i knowledge_flow_backend/config/configuration.yaml
+    ```
 
-#### 4 · Run the services
+  - Copy-paste your `OPENAI_API_KEY` value in the 2 files:
+
+    - `agentic_backend/config/.env`
+    - `knowledge_flow_backend/config/.env`
+
+    > Warning: ⚠️ An `OPENAI_API_KEY` from a free OpenAI account unfortunately does not work.
+
+</details>
+
+<details>
+  <summary>Azure OpenAI</summary>
+
+  - Set your model provider in the configuration files.
+    
+    ```bash
+    yq eval '.ai.default_chat_model.provider = "azure-openai"' -i agentic_backend/config/configuration.yaml
+    yq eval '.chat_model.provider = "azure-openai"' -i knowledge_flow_backend/config/configuration.yaml
+    yq eval '.embedding_model.provider = "azure-openai"' -i knowledge_flow_backend/config/configuration.yaml
+
+  - Copy-paste your `AZURE_OPENAI_API_KEY` value in the 2 files:
+
+    - `agentic_backend/config/.env`
+    - `knowledge_flow_backend/config/.env`
+
+</details>
+
+#### Run the services
 
 ```bash
 # Terminal 1 – knowledge flow backend
@@ -164,42 +203,41 @@ cd frontend && make run
 
 Open <http://localhost:5173> in your browser.
 
-#### Advanced developer tips
+### Advanced developer tips
+
+> Prerequisites:
+>
+> - [Visual Studio Code](https://code.visualstudio.com/)  
+> - VS Code extensions:
+>   - **Python** (ms-python.python)  
+>   - **Pylance** (ms-python.vscode-pylance)  
 
 To get full VS Code Python support (linting, IntelliSense, debugging, etc.) across our repo, we provide:
 
-1. A VS Code workspace file `fred.code-workspace` that loads all sub‑projects.
-2. Per‑folder `.vscode/settings.json` files in each Python backend to pin the interpreter.
-
-##### Prerequisites
-
-- [Visual Studio Code](https://code.visualstudio.com/)  
-- VS Code extensions:
-  - **Python** (ms-python.python)  
-  - **Pylance** (ms-python.vscode-pylance)  
-
-1. Open the workspace
+<details>
+  <summary>1. A VS Code workspace file `fred.code-workspace` that loads all sub‑projects.</summary>
 
   After cloning the repo, you can open Fred's VS Code workspace with `code fred.code-workspace`
 
   When you open Fred's VS Code workspace, VS Code will load four folders:
 
-- ``fred`` – for any repo‑wide files, scripts, etc
-- ``agentic_backend`` – first Python backend
-- ``knowledge_flow_backend`` – second Python backend
-- ``fred-core`` - a common python library for both python backends
-- ``frontend`` – UI
+  - ``fred`` – for any repo‑wide files, scripts, etc
+  - ``agentic_backend`` – first Python backend
+  - ``knowledge_flow_backend`` – second Python backend
+  - ``fred-core`` - a common python library for both python backends
+  - ``frontend`` – UI
+</details>
 
-2. Per‑folder Python interpreters
+<details>
+  <summary>2. Per‑folder `.vscode/settings.json` files in each Python backend to pin the interpreter.</summary>
 
-    Each backend ships its own virtual environment under .venv. We’ve added a per‑folder VS Code setting (see for instance ``agentic_backend/.vscode/settings.json``) to automatically pick it:
+  Each backend ships its own virtual environment under .venv. We’ve added a per‑folder VS Code setting (see for instance ``agentic_backend/.vscode/settings.json``) to automatically pick it:
 
-    This ensures that as soon as you open a Python file under agentic_backend/ (or knowledge_flow_backend/), VS Code will:
+  This ensures that as soon as you open a Python file under agentic_backend/ (or knowledge_flow_backend/), VS Code will:
 
-    - Activate that folder’s virtual environment
-    - Provide linting, IntelliSense, formatting, and debugging using the correct Python
-
----
+  - Activate that folder’s virtual environment
+  - Provide linting, IntelliSense, formatting, and debugging using the correct Python
+</details>
 
 ### Dev-Container mode
 
@@ -228,7 +266,9 @@ cd knowledge_flow_backend && make run
 cd frontend && make run
 ```
 
----
+### Production mode
+
+For production mode, please reach out to your DevOps team so that they deploy 
 
 ## Advanced configuration
 
@@ -242,8 +282,6 @@ cd frontend && make run
 
 See `agentic_backend/config/configuration.yaml` (section `ai:`) for concrete examples.
 
----
-
 ### Configuration Files
 
 | File                                               | Purpose                                                 | Tip                                                                 |
@@ -253,8 +291,6 @@ See `agentic_backend/config/configuration.yaml` (section `ai:`) for concrete exa
 | `agentic_backend/config/configuration.yaml`        | Functional settings (providers, agents, feature flags). | -                                                                   |
 | `knowledge_flow_backend/config/configuration.yaml` | Same as above                                           | -                                                                   |
 
----
-
 ### System Architecture
 
 | Component              | Location                   | Role                                                                  |
@@ -263,14 +299,10 @@ See `agentic_backend/config/configuration.yaml` (section `ai:`) for concrete exa
 | Agentic backend        | `./agentic_backend`        | Multi-agent API server                                                |
 | Knowledge Flow backend | `./knowledge_flow_backend` | **Optional** knowledge management component (document ingestion & Co) |
 
----
-
 ### Advanced Integrations
 
 - Enable Keycloak or another OIDC provider for authentication  
 - Persist metrics and files in OpenSearch and MinIO  
-
----
 
 ## Documentation
 
@@ -284,12 +316,26 @@ See `agentic_backend/config/configuration.yaml` (section `ai:`) for concrete exa
 - [Keycloak](./docs/KEYCLOAK.md)
 - [Developer Tools](./developer_tools/README.md)
 - [Code of Conduct](./docs/CODE_OF_CONDUCT.md)
-- [License](./docs/LICENSE.md)  
 - [Security](./docs/SECURITY.md)  
 - [Python Coding Guide](./docs/PYTHON_CODING_GUIDELINES.md)
 - [Contributing](./docs/CONTRIBUTING.md)
 
----
+
+## Core Architecture and Licensing Clarity
+
+The three components just described form the *entirety of the Fred platform*. They are self-contained and do not
+require any external dependencies such as MinIO, OpenSearch, or Weaviate.
+
+Instead, Fred is designed with a modular architecture that allows optional integration with these technologies. By default, a minimal Fred deployment can use just the local filesystem for all storage needs.
+
+### Licensing Note
+
+Fred is released under the **Apache License 2.0**. It does *not embed or depend on any LGPLv3 or copyleft-licensed components. Optional integrations (like OpenSearch or Weaviate) are configured externally and do not contaminate Fred's licensing.
+This ensures maximum freedom and clarity for commercial and internal use.
+
+In short: Fred is 100% Apache 2.0, and you stay in full control of any additional components.
+
+See the [LICENSE](LICENSE.md) for more details.
 
 ## Contributing
 
@@ -300,14 +346,6 @@ We welcome pull requests and issues. Start with the [Contributing guide](./CONTR
 Join the discussion on our [Discord server](https://discord.gg/F6qh4Bnk)!
 
 [![Join our Discord](https://img.shields.io/badge/chat-on%20Discord-7289da?logo=discord&logoColor=white)](https://discord.gg/F6qh4Bnk)
-
----
-
-## License
-
-Apache 2.0 — see [LICENSE](./LICENSE)
-
----
 
 ## Contacts
 
