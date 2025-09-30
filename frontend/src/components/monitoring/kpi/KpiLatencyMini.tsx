@@ -17,8 +17,8 @@ import { Box } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import { ResponsiveContainer, CartesianGrid, XAxis, YAxis, Tooltip, Legend, LineChart, Line } from "recharts";
 import { axisTickProps, gridStroke, tooltipStyle, legendStyle } from "./metricChartUtils";
-import { TimePrecision, iterateBuckets, buildPaddedDomain, formatTick } from "./timeAxis";
-import type { KpiQueryResultRow } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { TimePrecision, iterateBuckets, buildPaddedDomain, formatTick } from "../timeAxis";
+import type { KpiQueryResultRow } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 
 export function KpiLatencyMini({
   start,

@@ -43,6 +43,7 @@ class Resource(str, Enum):
     TABLES_DATABASES = "tables_database"
     KPIS = "kpi"
     OPENSEARCH = "opensearch"
+    LOGS = "logs"
 
     # Agentic Backend resources
     FEEDBACK = "feedback"

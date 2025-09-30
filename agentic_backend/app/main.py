@@ -28,7 +28,7 @@ from dotenv import load_dotenv
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fred_core import initialize_user_security, register_exception_handlers
-from rich.logging import RichHandler
+from fred_core.logs import log_setup
 
 from app.application_context import (
     ApplicationContext,
@@ -37,6 +37,7 @@ from app.application_context import (
 )
 from app.common.structures import Configuration
 from app.common.utils import parse_server_configuration
+from app.core import logs_controller
 from app.core.agents import agent_controller
 from app.core.agents.agent_manager import AgentManager
 from app.core.chatbot import chatbot_controller
@@ -56,18 +57,6 @@ def _norm_origin(o) -> str:
     return str(o).rstrip("/")
 
 
-def configure_logging(log_level: str):
-    logging.basicConfig(
-        level=log_level.upper(),
-        format="%(asctime)s - %(levelname)s - %(filename)s - %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-        handlers=[RichHandler(rich_tracebacks=False, show_time=False, show_path=False)],
-    )
-    logging.getLogger(__name__).info(
-        f"Logging configured at {log_level.upper()} level."
-    )
-
-
 def load_environment(dotenv_path: str = "./config/.env"):
     if load_dotenv(dotenv_path):
         logging.getLogger().info(f"✅ Loaded environment variables from: {dotenv_path}")
@@ -84,11 +73,15 @@ def create_app() -> FastAPI:
     load_environment()
     config_file = os.environ["CONFIG_FILE"]
     configuration: Configuration = parse_server_configuration(config_file)
-    configure_logging(configuration.app.log_level)
     base_url = configuration.app.base_url
-    logger.info(f"🛠️ create_app() called with base_url={base_url}")
 
-    ApplicationContext(configuration)
+    application_context = ApplicationContext(configuration)
+    log_setup(
+        service_name="agentic",
+        log_level=configuration.app.log_level,
+        store=application_context.get_log_store(),
+    )
+    logger.info(f"🛠️ create_app() called with base_url={base_url}")
 
     # The correct and final code to use
     @asynccontextmanager
@@ -156,6 +149,7 @@ def create_app() -> FastAPI:
     router.include_router(chatbot_controller.router)
     router.include_router(monitoring_controller.router)
     router.include_router(feedback_controller.router)
+    router.include_router(logs_controller.router)
     app.include_router(router)
     logger.info("🧩 All controllers registered.")
     return app

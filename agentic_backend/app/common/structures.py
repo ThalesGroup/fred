@@ -21,6 +21,7 @@ from fred_core import (
     SecurityConfiguration,
     StoreConfig,
 )
+from fred_core.logs import LogStorageConfig
 from pydantic import BaseModel, Field
 
 from app.core.agents.agent_spec import AgentTuning
@@ -34,6 +35,9 @@ class StorageConfig(BaseModel):
     history_store: StoreConfig
     feedback_store: StoreConfig
     kpi_store: StoreConfig
+    log_store: Optional[LogStorageConfig] = Field(
+        default=None, description="Optional log store"
+    )
 
 
 class TimeoutSettings(BaseModel):

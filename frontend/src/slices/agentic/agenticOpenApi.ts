@@ -104,6 +104,12 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/agentic/v1/chatbot/feedback/${queryArg.feedbackId}`, method: "DELETE" }),
     }),
+    queryLogsAgenticV1LogsQueryPost: build.mutation<
+      QueryLogsAgenticV1LogsQueryPostApiResponse,
+      QueryLogsAgenticV1LogsQueryPostApiArg
+    >({
+      query: (queryArg) => ({ url: `/agentic/v1/logs/query`, method: "POST", body: queryArg.logQuery }),
+    }),
   }),
   overrideExisting: false,
 });
@@ -183,6 +189,10 @@ export type PostFeedbackAgenticV1ChatbotFeedbackPostApiArg = {
 export type DeleteFeedbackAgenticV1ChatbotFeedbackFeedbackIdDeleteApiResponse = unknown;
 export type DeleteFeedbackAgenticV1ChatbotFeedbackFeedbackIdDeleteApiArg = {
   feedbackId: string;
+};
+export type QueryLogsAgenticV1LogsQueryPostApiResponse = /** status 200 Successful Response */ LogQueryResult;
+export type QueryLogsAgenticV1LogsQueryPostApiArg = {
+  logQuery: LogQuery;
 };
 export type ValidationError = {
   loc: (string | number)[];
@@ -651,6 +661,35 @@ export type FeedbackPayload = {
   sessionId: string;
   agentName: string;
 };
+export type LogEventDto = {
+  ts: number;
+  level: "DEBUG" | "INFO" | "WARNING" | "ERROR" | "CRITICAL";
+  logger: string;
+  file: string;
+  line: number;
+  msg: string;
+  service?: string | null;
+  extra?: {
+    [key: string]: any;
+  } | null;
+};
+export type LogQueryResult = {
+  events?: LogEventDto[];
+};
+export type LogFilter = {
+  level_at_least?: ("DEBUG" | "INFO" | "WARNING" | "ERROR" | "CRITICAL") | null;
+  logger_like?: string | null;
+  service?: string | null;
+  text_like?: string | null;
+};
+export type LogQuery = {
+  /** ISO or 'now-10m' */
+  since: string;
+  until?: string | null;
+  filters?: LogFilter;
+  limit?: number;
+  order?: "asc" | "desc";
+};
 export const {
   useCreateAgentAgenticV1AgentsCreatePostMutation,
   useUpdateAgentAgenticV1AgentsUpdatePutMutation,
@@ -676,4 +715,5 @@ export const {
   useLazyGetFeedbackAgenticV1ChatbotFeedbackGetQuery,
   usePostFeedbackAgenticV1ChatbotFeedbackPostMutation,
   useDeleteFeedbackAgenticV1ChatbotFeedbackFeedbackIdDeleteMutation,
+  useQueryLogsAgenticV1LogsQueryPostMutation,
 } = injectedRtkApi;

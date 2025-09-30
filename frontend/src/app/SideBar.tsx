@@ -27,7 +27,7 @@ import {
   useTheme,
 } from "@mui/material";
 import { useLocation, useNavigate } from "react-router-dom";
-
+import { Collapse } from "@mui/material";
 import AccountCircleIcon from "@mui/icons-material/AccountCircle";
 import ChatIcon from "@mui/icons-material/Chat";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
@@ -37,11 +37,21 @@ import GroupIcon from "@mui/icons-material/Group";
 import LightModeIcon from "@mui/icons-material/LightMode";
 import MenuBookIcon from "@mui/icons-material/MenuBook";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
-import { useContext } from "react";
+import { useContext, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { getProperty } from "../common/config.tsx";
 import { ImageComponent } from "../utils/image.tsx";
 import { ApplicationContext } from "./ApplicationContextProvider.tsx";
+
+type MenuItemCfg = {
+  key: string;
+  label: string;
+  icon: React.ReactNode;
+  url?: string; // top-level items may navigate OR just expand
+  canBeDisabled: boolean;
+  tooltip: string;
+  children?: MenuItemCfg[];
+};
 
 export default function SideBar({ darkMode, onThemeChange }) {
   const { t } = useTranslation();
@@ -60,7 +70,7 @@ export default function SideBar({ darkMode, onThemeChange }) {
 
   const hoverColor = theme.palette.sidebar.hoverColor;
 
-  const menuItems = [
+  const menuItems: MenuItemCfg[] = [
     {
       key: "chat",
       label: t("sidebar.chat"),
@@ -73,9 +83,27 @@ export default function SideBar({ darkMode, onThemeChange }) {
       key: "monitoring",
       label: t("sidebar.monitoring"),
       icon: <MonitorHeartIcon />,
-      url: `/monitoring`,
+      // parent URL is optional; we’ll expand/collapse instead of navigating
       canBeDisabled: false,
       tooltip: t("sidebar.tooltip.monitoring"),
+      children: [
+        {
+          key: "monitoring-kpi",
+          label: t("sidebar.monitoring_kpi") || "KPI",
+          icon: <MonitorHeartIcon />,
+          url: `/monitoring/kpis`,
+          canBeDisabled: false,
+          tooltip: t("sidebar.tooltip.monitoring_kpi") || "KPI Overview",
+        },
+        {
+          key: "monitoring-logs",
+          label: t("sidebar.monitoring_logs") || "Logs",
+          icon: <MenuBookIcon />, // pick a terminal/article icon if you prefer
+          url: `/monitoring/logs`,
+          canBeDisabled: false,
+          tooltip: t("sidebar.tooltip.monitoring_logs") || "Log Console",
+        },
+      ],
     },
     {
       key: "knowledge",
@@ -102,7 +130,6 @@ export default function SideBar({ darkMode, onThemeChange }) {
       tooltip: t("sidebar.tooltip.account"),
     },
   ];
-
   const { isSidebarCollapsed, toggleSidebar } = applicationContext;
   const isSidebarSmall = smallScreen || isSidebarCollapsed;
   const sidebarWidth = isSidebarCollapsed ? theme.layout.sidebarCollapsedWidth : theme.layout.sidebarWidth;
@@ -114,6 +141,24 @@ export default function SideBar({ darkMode, onThemeChange }) {
 
     return currentPathBase === menuPathBase || currentPathBase.startsWith(menuPathBase + "/");
   };
+  const isAnyChildActive = (children?: MenuItemCfg[]) => !!children?.some((c) => c.url && isActive(c.url));
+
+  // NEW: open/close state for expandable parents (key → boolean)
+  const [openKeys, setOpenKeys] = useState<Record<string, boolean>>({});
+
+  // Auto-expand a parent if a child is active (keeps fresh on navigation)
+  useEffect(() => {
+    setOpenKeys((prev) => {
+      const next = { ...prev };
+      for (const it of menuItems) {
+        if (it.children && isAnyChildActive(it.children)) {
+          next[it.key] = true;
+        }
+      }
+      return next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname]);
 
   const logoName = getProperty("logoName") || "fred";
 
@@ -122,6 +167,8 @@ export default function SideBar({ darkMode, onThemeChange }) {
       height="100vh"
       width={sidebarWidth}
       sx={{
+        flex: `0 0 ${sidebarWidth}px`, // ← fixed flex-basis
+        minWidth: sidebarWidth, // ← safety
         bgcolor: sideBarBgColor,
         color: "text.primary",
         borderRight: `1px solid ${theme.palette.divider}`,
@@ -137,13 +184,13 @@ export default function SideBar({ darkMode, onThemeChange }) {
         "& > * > *": { backgroundColor: sideBarBgColor },
       }}
     >
-      {/* Section du logo */}
       <Box
         sx={{
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          py: 2.5,
+          height: 62, 
+          py: 0.0,
           px: isSidebarSmall ? 1 : 2,
           borderBottom: `1px solid ${theme.palette.divider}`,
         }}
@@ -169,7 +216,6 @@ export default function SideBar({ darkMode, onThemeChange }) {
         </Box>
       </Box>
 
-      {/* NEW, CONSOLIDATED BUTTON LOCATION */}
       <Box sx={{ display: "flex", justifyContent: "center", pt: 2 }}>
         <IconButton
           size="small"
@@ -199,41 +245,72 @@ export default function SideBar({ darkMode, onThemeChange }) {
         }}
       >
         {menuItems.map((item) => {
-          const active = isActive(item.url);
-          return (
-            <Tooltip key={item.key} title={item.tooltip} placement="right" arrow>
-              <ListItem
-                component="div"
-                sx={{
-                  borderRadius: "8px",
-                  mb: 0.8,
-                  height: 44,
-                  justifyContent: isSidebarSmall ? "center" : "flex-start",
-                  backgroundColor: active ? activeItemBgColor : "transparent",
-                  color: active ? activeItemTextColor : "text.secondary",
-                  "&:hover": {
-                    backgroundColor: active ? activeItemBgColor : hoverColor,
-                    color: active ? activeItemTextColor : "text.primary",
-                  },
-                  transition: "all 0.2s",
-                  px: isSidebarSmall ? 1 : 2,
-                  position: "relative",
-                  cursor: "pointer",
-                  opacity: 1,
-                  pointerEvents: "auto",
-                }}
-                onClick={() => navigate(item.url)}
-              >
-                <ListItemIcon
+          const hasChildren = !!item.children?.length;
+          const active = item.url ? isActive(item.url) : isAnyChildActive(item.children);
+          const opened = !!openKeys[item.key];
+
+          // collapsed sidebar: show only top icons, no children
+          if (isSidebarSmall) {
+            return (
+              <Tooltip key={item.key} title={item.tooltip} placement="right" arrow>
+                <ListItem
+                  component="div"
+                  onClick={() => (item.url ? navigate(item.url) : setOpenKeys((s) => ({ ...s, [item.key]: !opened })))}
                   sx={{
-                    color: "inherit",
-                    minWidth: isSidebarSmall ? "auto" : 40,
-                    fontSize: "1.2rem",
+                    borderRadius: "8px",
+                    mb: 0.8,
+                    height: 44,
+                    justifyContent: "center",
+                    backgroundColor: active ? activeItemBgColor : "transparent",
+                    color: active ? activeItemTextColor : "text.secondary",
+                    "&:hover": {
+                      backgroundColor: active ? activeItemBgColor : hoverColor,
+                      color: active ? activeItemTextColor : "text.primary",
+                    },
+                    transition: "all 0.2s",
+                    px: 1,
+                    cursor: "pointer",
                   }}
                 >
-                  {item.icon}
-                </ListItemIcon>
-                {!isSidebarSmall && (
+                  <ListItemIcon sx={{ color: "inherit", minWidth: "auto", fontSize: "1.2rem" }}>
+                    {item.icon}
+                  </ListItemIcon>
+                </ListItem>
+              </Tooltip>
+            );
+          }
+
+          // expanded sidebar: render parent + (optional) children
+          return (
+            <Box key={item.key}>
+              <Tooltip title={item.tooltip} placement="right" arrow>
+                <ListItem
+                  component="div"
+                  onClick={() => {
+                    if (hasChildren) {
+                      setOpenKeys((s) => ({ ...s, [item.key]: !opened }));
+                    } else if (item.url) {
+                      navigate(item.url);
+                    }
+                  }}
+                  sx={{
+                    borderRadius: "8px",
+                    mb: 0.8,
+                    height: 44,
+                    justifyContent: "flex-start",
+                    backgroundColor: active ? activeItemBgColor : "transparent",
+                    color: active ? activeItemTextColor : "text.secondary",
+                    "&:hover": {
+                      backgroundColor: active ? activeItemBgColor : hoverColor,
+                      color: active ? activeItemTextColor : "text.primary",
+                    },
+                    transition: "all 0.2s",
+                    px: 2,
+                    position: "relative",
+                    cursor: "pointer",
+                  }}
+                >
+                  <ListItemIcon sx={{ color: "inherit", minWidth: 40, fontSize: "1.2rem" }}>{item.icon}</ListItemIcon>
                   <ListItemText
                     primary={
                       <Typography variant="sidebar" fontWeight={active ? 500 : 300}>
@@ -241,23 +318,63 @@ export default function SideBar({ darkMode, onThemeChange }) {
                       </Typography>
                     }
                   />
-                )}
-                {active && !isSidebarSmall && (
-                  <Box
-                    sx={{
-                      width: 3,
-                      height: 16,
-                      bgcolor: theme.palette.primary.main,
-                      borderRadius: 4,
-                      position: "absolute",
-                      right: 12,
-                      top: "50%",
-                      transform: "translateY(-50%)",
-                    }}
-                  />
-                )}
-              </ListItem>
-            </Tooltip>
+                  {active && (
+                    <Box
+                      sx={{
+                        width: 3,
+                        height: 16,
+                        bgcolor: theme.palette.primary.main,
+                        borderRadius: 4,
+                        position: "absolute",
+                        right: 12,
+                        top: "50%",
+                        transform: "translateY(-50%)",
+                      }}
+                    />
+                  )}
+                </ListItem>
+              </Tooltip>
+
+              {hasChildren && (
+                <Collapse in={opened} timeout="auto" unmountOnExit>
+                  <List component="div" disablePadding sx={{ pl: 5, pr: 1 }}>
+                    {item.children!.map((child) => {
+                      const childActive = !!child.url && isActive(child.url);
+                      return (
+                        <Tooltip key={child.key} title={child.tooltip} placement="right" arrow>
+                          <ListItem
+                            component="div"
+                            onClick={() => child.url && navigate(child.url)}
+                            sx={{
+                              borderRadius: "8px",
+                              mb: 0.0,
+                              height: 32,
+                              backgroundColor: childActive ? activeItemBgColor : "transparent",
+                              color: childActive ? activeItemTextColor : "text.secondary",
+                              "&:hover": {
+                                backgroundColor: childActive ? activeItemBgColor : hoverColor,
+                                color: childActive ? activeItemTextColor : "text.primary",
+                              },
+                              transition: "all 0.2s",
+                              px: 1,
+                              cursor: "pointer",
+                            }}
+                          >
+                            <ListItemText
+                              primary={
+                                <Typography variant="sidebar" fontWeight={childActive ? 600 : 400}>
+                                  {child.label}
+                                </Typography>
+                              }
+                            />
+                          </ListItem>
+                        </Tooltip>
+                      );
+                    })}
+                  </List>
+                </Collapse>
+              )}
+            </Box>
           );
         })}
       </List>
