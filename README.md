@@ -163,6 +163,7 @@ Then, depending on your model provider, actions may differ.
       ```bash
       yq eval '.chat_model.provider = "openai"' -i knowledge_flow_backend/config/configuration.yaml
       yq eval '.chat_model.name = "<your-openai-model-name>"' -i knowledge_flow_backend/config/configuration.yaml
+	    yq eval 'del(.chat_model.settings)' -i knowledge_flow_backend/config/configuration.yaml
       ```
 
     - Embedding model
@@ -170,6 +171,7 @@ Then, depending on your model provider, actions may differ.
       ```bash
       yq eval '.embedding_model.provider = "openai"' -i knowledge_flow_backend/config/configuration.yaml
       yq eval '.embedding_model.name = "<your-openai-model-name>"' -i knowledge_flow_backend/config/configuration.yaml
+	    yq eval 'del(.embedding_model.settings)' -i knowledge_flow_backend/config/configuration.yaml
       ```
 
   - Copy-paste your `OPENAI_API_KEY` value in the 2 files:
