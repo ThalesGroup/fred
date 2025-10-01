@@ -203,7 +203,7 @@ Then, depending on your model provider, actions may differ.
       ```bash
       yq eval '.chat_model.provider = "azure-openai"' -i knowledge_flow_backend/config/configuration.yaml
       yq eval '.chat_model.name = "<your-azure-openai-deployment-name>"' -i knowledge_flow_backend/config/configuration.yaml
-      yq eval 'del(.chat_model.settings)' -i agentic_backend/config/configuration.yaml
+      yq eval 'del(.chat_model.settings)' -i knowledge_flow_backend/config/configuration.yaml
       yq eval '.chat_model.settings.azure_endpoint = "<your-azure-openai-endpoint>"' -i knowledge_flow_backend/config/configuration.yaml
       yq eval '.chat_model.settings.azure_openai_api_version = "<your-azure-openai-api-version>"' -i knowledge_flow_backend/config/configuration.yaml
       ```
@@ -213,7 +213,7 @@ Then, depending on your model provider, actions may differ.
       ```bash
       yq eval '.embedding_model.provider = "azure-openai"' -i knowledge_flow_backend/config/configuration.yaml
       yq eval '.embedding_model.name = "<your-azure-openai-deployment-name>"' -i knowledge_flow_backend/config/configuration.yaml
-      yq eval 'del(.embedding_model.settings)' -i agentic_backend/config/configuration.yaml
+      yq eval 'del(.embedding_model.settings)' -i knowledge_flow_backend/config/configuration.yaml
       yq eval '.embedding_model.settings.azure_endpoint = "<your-azure-openai-endpoint>"' -i knowledge_flow_backend/config/configuration.yaml
       yq eval '.embedding_model.settings.azure_openai_api_version = "<your-azure-openai-api-version>"' -i knowledge_flow_backend/config/configuration.yaml
       ```
