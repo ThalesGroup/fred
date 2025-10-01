@@ -11,3 +11,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+from enum import Enum
+
+
+class ModelProvider(Enum):
+    """Enumeration of model providers available in the system."""
+
+    AZURE_APIM = "azure-apim"
+    AZURE_OPENAI = "azure-openai"
+    OLLAMA = "ollama"
+    OPENAI = "openai"

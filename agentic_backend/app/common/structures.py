@@ -15,13 +15,13 @@
 from typing import Annotated, Dict, List, Literal, Optional, Union
 
 from fred_core import (
+    LogStorageConfig,
     ModelConfiguration,
     OpenSearchStoreConfig,
     PostgresStoreConfig,
     SecurityConfiguration,
     StoreConfig,
 )
-from fred_core.logs import LogStorageConfig
 from pydantic import BaseModel, Field
 
 from app.core.agents.agent_spec import AgentTuning
@@ -140,7 +140,7 @@ class AIConfig(BaseModel):
     timeout: TimeoutSettings = Field(
         ..., description="Timeout settings for the AI client."
     )
-    default_model: ModelConfiguration = Field(
+    default_chat_model: ModelConfiguration = Field(
         ...,
         description="Default model configuration for all agents and services.",
     )

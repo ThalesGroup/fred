@@ -98,12 +98,12 @@ def app_context(monkeypatch, fake_embedder):
             type="local",
             root_path="/tmp/knowledge-flow-test-content",
         ),
-        model=ModelConfiguration(
+        chat_model=ModelConfiguration(
             provider="openai",
             name="gpt-4o",
             settings={"temperature": 0, "max_retries": 1},
         ),
-        embedding=ModelConfiguration(
+        embedding_model=ModelConfiguration(
             provider="openai",
             name="text-embedding-3-large",
             settings={},
