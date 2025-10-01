@@ -9,7 +9,6 @@
 //   and an onSelect callback. Conversation concerns live elsewhere.
 // - Kept small, testable, and memoized: avoids sidebar re-renders when sessions update.
 
-import { memo, useMemo, useCallback } from "react";
 import {
   Box,
   Divider,
@@ -17,14 +16,16 @@ import {
   ListItem,
   ListItemButton,
   ListItemText,
+  SxProps,
+  Theme,
   Tooltip,
   Typography,
   useTheme,
-  Theme,
 } from "@mui/material";
+import { memo, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { getAgentBadge } from "../../../utils/avatar";
 import { AnyAgent } from "../../../common/agent";
+import { getAgentBadge } from "../../../utils/avatar";
 
 // Public contract kept minimal on purpose:
 // - agents: source of truth from backend
@@ -36,10 +37,13 @@ export type AgentsListProps = {
   onSelect: (flow: AnyAgent) => void;
   // Optional: override item density if needed in other places (defaults to "dense")
   dense?: boolean;
+  sx?: SxProps<Theme>;
 };
 
-const AgentsList = memo(function AgentsList({ agents, selected, onSelect, dense = true }: AgentsListProps) {
+const AgentsList = memo(function AgentsList({ agents, selected, onSelect, dense = true, sx = [] }: AgentsListProps) {
   const theme = useTheme<Theme>();
+  const isDarkTheme = theme.palette.mode === "dark";
+
   const { t } = useTranslation();
   const selectedName = selected?.name;
 
@@ -50,20 +54,38 @@ const AgentsList = memo(function AgentsList({ agents, selected, onSelect, dense 
     <Box
       role="navigation"
       aria-label={t("settings.assistants")}
-      sx={{
-        // Fred: side surfaces come from theme; parent controls width/placement.
-        backgroundColor: theme.palette.sidebar.background,
-        color: theme.palette.text.primary,
-        borderBottom: `1px solid ${theme.palette.divider}`,
-        px: 2,
-        py: 2.5,
-      }}
+      sx={[
+        {
+          // Fred: side surfaces come from theme; parent controls width/placement.
+          backgroundColor: theme.palette.sidebar.background,
+          color: theme.palette.text.primary,
+          borderBottom: `1px solid ${theme.palette.divider}`,
+          py: 2,
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
+        },
+        ...(Array.isArray(sx) ? sx : [sx]),
+      ]}
     >
-      <Typography variant="subtitle1" sx={{ mb: 2 }}>
+      <Typography variant="subtitle1" sx={{ mb: 2, px: 2 }}>
         {t("settings.assistants")}
       </Typography>
 
-      <List dense={dense} disablePadding>
+      <List
+        dense={dense}
+        disablePadding
+        sx={{
+          overflowY: "auto",
+          flex: 1,
+          px: 2,
+          "&::-webkit-scrollbar": { width: "5px" },
+          "&::-webkit-scrollbar-thumb": {
+            backgroundColor: isDarkTheme ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)",
+            borderRadius: "3px",
+          },
+        }}
+      >
         {items.map((agent) => {
           const isSelected = selectedName === agent.name;
 

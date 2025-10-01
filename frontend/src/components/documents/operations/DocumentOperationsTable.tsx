@@ -38,11 +38,11 @@ import {
   TagWithItemsId,
   useLazyGetTagKnowledgeFlowV1TagsTagIdGetQuery,
 } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { DOCUMENT_PROCESSING_STAGES } from "../../../utils/const";
+import { getDocumentIcon } from "../common/DocumentIcon";
+import { useDocumentActions } from "../common/useDocumentActions";
 import { CustomRowAction, DocumentTableRowActionsMenu } from "./DocumentOperationsTableRowActionsMenu";
 import { CustomBulkAction, DocumentOperationsTableSelectionToolbar } from "./DocumentOperationsTableSelectionToolbar";
-import { useDocumentActions } from "../common/useDocumentActions";
-import { getDocumentIcon } from "../common/DocumentIcon";
-import { DOCUMENT_PROCESSING_STAGES } from "../../../utils/const";
 
 // Todo: use `DocumentMetadata` directly (as `DocumentMetadata` is auto-generated from OpenAPI spec)
 
@@ -224,7 +224,16 @@ export const DocumentOperationsTable: React.FC<DocumentOperationsTableProps> = (
         />
       )}
 
-      <TableContainer>
+    <TableContainer
+      sx={{
+        flex: 1,
+        minHeight: 0,
+        height: "100%",
+        width: "100%",
+        maxHeight: "40vh",
+        overflowY: "auto",
+      }}
+      >
         <Table size="medium">
           <TableHead>
             <TableRow>
