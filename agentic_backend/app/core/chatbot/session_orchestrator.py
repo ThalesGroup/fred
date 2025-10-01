@@ -458,12 +458,21 @@ class SessionOrchestrator:
 
         # Build the exact payload the frontend reads
         plugins: dict[str, list[str] | str] = {}
-        if libraries:     plugins["libraries"] = libraries
-        if templates:     plugins["templates"] = templates
-        if prompts:       plugins["prompts"]   = prompts
-        if profiles:      plugins["profiles"]  = profiles
-        if search_policy: plugins["search_policy"] = str(search_policy)
 
+        if libraries:
+            plugins["libraries"] = libraries
+
+        if templates:
+            plugins["templates"] = templates
+
+        if prompts:
+            plugins["prompts"] = prompts
+
+        if profiles:
+            plugins["profiles"] = profiles
+
+        if search_policy:
+            plugins["search_policy"] = str(search_policy)
         if not plugins:
             return
 
