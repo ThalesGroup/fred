@@ -30,8 +30,6 @@ function Area({
 
   // NEW: maps & current selections
   libraryNameById,
-  templateNameById,
-  promptNameById,
   profileNameById,
 }: Props) {
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
