@@ -14,7 +14,6 @@
 
 import {
   Box,
-  Button,
   Checkbox,
   Container,
   FormControl,
@@ -31,16 +30,17 @@ import {
   SelectChangeEvent,
   TextField,
   Typography,
-  useTheme,
+  useTheme
 } from "@mui/material";
 
 import ClearIcon from "@mui/icons-material/Clear";
 import LibraryBooksRoundedIcon from "@mui/icons-material/LibraryBooksRounded";
 import SearchIcon from "@mui/icons-material/Search";
-import RefreshIcon from "@mui/icons-material/Refresh";
 
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useDocumentSources } from "../../../hooks/useDocumentSources";
+import { useDocumentTags } from "../../../hooks/useDocumentTags";
 import { KeyCloakService } from "../../../security/KeycloakService";
 import {
   DocumentMetadata,
@@ -48,13 +48,11 @@ import {
   useBrowseDocumentsKnowledgeFlowV1DocumentsBrowsePostMutation,
   useRescanCatalogSourceKnowledgeFlowV1PullCatalogRescanSourceTagPostMutation,
 } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { DOCUMENT_PROCESSING_STAGES } from "../../../utils/const";
 import { EmptyState } from "../../EmptyState";
 import { TableSkeleton } from "../../TableSkeleton";
 import { useToast } from "../../ToastProvider";
 import { DocumentOperationsTable } from "./DocumentOperationsTable";
-import { useDocumentSources } from "../../../hooks/useDocumentSources";
-import { useDocumentTags } from "../../../hooks/useDocumentTags";
-import { DOCUMENT_PROCESSING_STAGES } from "../../../utils/const";
 
 interface DocumentsViewProps {}
 
@@ -172,42 +170,6 @@ export const DocumentOperations = ({}: DocumentsViewProps) => {
 
   return (
     <Container maxWidth="xl">
-      {/* Source Selector and Upload Button */}
-      <Box display="flex" justifyContent="flex-end" alignItems="center" gap={2} mb={2}>
-        <FormControl size="small" sx={{ minWidth: 200 }}>
-          <InputLabel id="sources-label">Document Sources</InputLabel>
-          <Select
-            labelId="sources-label"
-            value={selectedSourceTag || ""}
-            onChange={(e: SelectChangeEvent) => {
-              const value = e.target.value;
-              setSelectedSourceTag(value === "" ? null : value);
-            }}
-            input={<OutlinedInput label="Document Sources" />}
-          >
-            {allSources?.map((source) => (
-              <MenuItem key={source.tag} value={source.tag}>
-                <Box title={source.description || source.tag} sx={{ overflow: "hidden", textOverflow: "ellipsis" }}>
-                  {source.tag}
-                </Box>
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-
-        {userInfo.canManageDocuments && isPullMode && (
-          <Button
-            variant="contained"
-            startIcon={<RefreshIcon />}
-            onClick={() => handleRefreshPullSource()}
-            size="medium"
-            sx={{ borderRadius: "8px" }}
-          >
-            {t("documentLibrary.refresh")}
-          </Button>
-        )}
-      </Box>
-
       {/* Filter Section */}
       <Paper
         elevation={2}
@@ -280,35 +242,67 @@ export const DocumentOperations = ({}: DocumentsViewProps) => {
                 </FormControl>
               </Grid2>
             </Grid2>
-            <TextField
-              fullWidth
-              placeholder={t("documentLibrary.searchPlaceholder")}
-              variant="outlined"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              slotProps={{
-                input: {
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <SearchIcon color="action" />
-                    </InputAdornment>
-                  ),
-                  endAdornment: searchQuery && (
-                    <InputAdornment position="end">
-                      <IconButton
-                        aria-label={t("documentLibrary.clearSearch")}
-                        onClick={() => setSearchQuery("")}
-                        edge="end"
-                        size="small"
-                      >
-                        <ClearIcon />
-                      </IconButton>
-                    </InputAdornment>
-                  ),
-                },
-              }}
-              size="small"
-            />
+
+            {/* Search + Sources inline to save up space */}
+            <Grid2 container spacing={2}>
+              <Grid2 size={{ xs: 12, md: 9 }}>
+                <TextField
+                  fullWidth
+                  placeholder={t("documentLibrary.searchPlaceholder")}
+                  variant="outlined"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  slotProps={{
+                    input: {
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <SearchIcon color="action" />
+                        </InputAdornment>
+                      ),
+                      endAdornment: searchQuery && (
+                        <InputAdornment position="end">
+                          <IconButton
+                            aria-label={t("documentLibrary.clearSearch")}
+                            onClick={() => setSearchQuery("")}
+                            edge="end"
+                            size="small"
+                          >
+                            <ClearIcon />
+                          </IconButton>
+                        </InputAdornment>
+                      ),
+                    },
+                  }}
+                  size="small"
+                />
+              </Grid2>
+
+              <Grid2 size={{ xs: 12, md: 3 }}>
+                <FormControl fullWidth size="small">
+                  <InputLabel id="sources-label">Document Sources</InputLabel>
+                  <Select
+                    labelId="sources-label"
+                    value={selectedSourceTag || ""}
+                    onChange={(e: SelectChangeEvent) => {
+                      const value = e.target.value;
+                      setSelectedSourceTag(value === "" ? null : value);
+                    }}
+                    input={<OutlinedInput label="Document Sources" />}
+                  >
+                    {allSources?.map((source) => (
+                      <MenuItem key={source.tag} value={source.tag}>
+                        <Box
+                          title={source.description || source.tag}
+                          sx={{ overflow: "hidden", textOverflow: "ellipsis" }}
+                        >
+                          {source.tag}
+                        </Box>
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid2>
+            </Grid2>
           </Grid2>
         </Grid2>
       </Paper>
