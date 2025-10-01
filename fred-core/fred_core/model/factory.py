@@ -91,12 +91,12 @@ def get_model(cfg: Optional[ModelConfiguration]) -> BaseChatModel:
     if provider == ModelProvider.AZURE_OPENAI.value:
         _require_env("AZURE_OPENAI_API_KEY")
         _require_settings(
-            settings, ["azure_endpoint", "azure_api_version"], "Azure chat"
+            settings, ["azure_endpoint", "azure_openai_api_version"], "Azure chat"
         )
         _info_provider(cfg)
         if not cfg.name:
             raise ValueError("Azure chat requires 'name' (deployment).")
-        api_version = settings.pop("azure_api_version")
+        api_version = settings.pop("azure_openai_api_version")
         return AzureChatOpenAI(
             azure_deployment=cfg.name, api_version=api_version, **settings
         )
@@ -107,20 +107,20 @@ def get_model(cfg: Optional[ModelConfiguration]) -> BaseChatModel:
         # - We DO NOT mint a static token here. We pass an azure_ad_token_provider
         #   callable so each request gets a fresh token (no 1h expiry issues).
         required = [
+            "azure_ad_client_id",
+            "azure_ad_client_scope",  # e.g., "https://cognitiveservices.azure.com/.default"
             "azure_apim_base_url",
-            "azure_resource_path",
-            "azure_api_version",
+            "azure_apim_resource_path",
+            "azure_openai_api_version",
             "azure_tenant_id",
-            "azure_client_id",
-            "azure_client_scope",  # e.g., "https://cognitiveservices.azure.com/.default"
         ]
         _require_settings(settings, required, "Azure APIM chat")
-        _require_env("AZURE_APIM_KEY")
-        client_secret = _require_env("AZURE_CLIENT_SECRET")
+        _require_env("AZURE_APIM_SUBSCRIPTION_KEY")
+        client_secret = _require_env("AZURE_AD_CLIENT_SECRET")
 
         base = settings["azure_apim_base_url"].rstrip("/")
-        path = settings["azure_resource_path"].rstrip("/")
-        api_version = settings["azure_api_version"]
+        path = settings["azure_apim_resource_path"].rstrip("/")
+        api_version = settings["azure_openai_api_version"]
 
         if not cfg.name:
             raise ValueError("Azure APIM chat requires 'name' (deployment).")
@@ -130,10 +130,10 @@ def get_model(cfg: Optional[ModelConfiguration]) -> BaseChatModel:
 
         credential = ClientSecretCredential(
             tenant_id=settings["azure_tenant_id"],
-            client_id=settings["azure_client_id"],
+            client_id=settings["azure_ad_client_id"],
             client_secret=client_secret,
         )
-        scope = settings["azure_client_scope"]
+        scope = settings["azure_ad_client_scope"]
 
         def _token_provider() -> str:
             # Called by the SDK on each request → auto-refresh tokens.
@@ -148,7 +148,9 @@ def get_model(cfg: Optional[ModelConfiguration]) -> BaseChatModel:
             api_version=api_version,
             azure_ad_token_provider=_token_provider,  # ← per-request AAD token
             default_headers={
-                "TrustNest-Apim-Subscription-Key": os.environ["AZURE_APIM_KEY"]
+                "TrustNest-Apim-Subscription-Key": os.environ[
+                    "AZURE_APIM_SUBSCRIPTION_KEY"
+                ]
             },
             **passthrough,
         )
@@ -191,11 +193,11 @@ def get_embeddings(cfg: ModelConfiguration) -> LCEmbeddings:
     if provider == ModelProvider.AZURE_OPENAI.value:
         _require_env("AZURE_OPENAI_API_KEY")
         _require_settings(
-            settings, ["azure_endpoint", "azure_api_version"], "Azure embeddings"
+            settings, ["azure_endpoint", "azure_openai_api_version"], "Azure embeddings"
         )
         if not name:
             raise ValueError("Azure embeddings require 'name' (deployment).")
-        api_version = settings.pop("azure_api_version")
+        api_version = settings.pop("azure_openai_api_version")
         _info_provider(cfg)
         return AzureOpenAIEmbeddings(
             azure_deployment=name, api_version=api_version, **settings
@@ -204,20 +206,20 @@ def get_embeddings(cfg: ModelConfiguration) -> LCEmbeddings:
     if provider == ModelProvider.AZURE_APIM.value:
         # Same token-provider logic as chat: per-request AAD token via APIM.
         required = [
+            "azure_ad_client_id",
+            "azure_ad_client_scope",
             "azure_apim_base_url",
-            "azure_resource_path",
-            "azure_api_version",
+            "azure_apim_resource_path",
+            "azure_openai_api_version",
             "azure_tenant_id",
-            "azure_client_id",
-            "azure_client_scope",
         ]
         _require_settings(settings, required, "Azure APIM embeddings")
-        _require_env("AZURE_APIM_KEY")
-        client_secret = _require_env("AZURE_CLIENT_SECRET")
+        _require_env("AZURE_APIM_SUBSCRIPTION_KEY")
+        client_secret = _require_env("AZURE_AD_CLIENT_SECRET")
 
         base = settings["azure_apim_base_url"].rstrip("/")
-        path = settings["azure_resource_path"].rstrip("/")
-        api_version = settings["azure_api_version"]
+        path = settings["azure_apim_resource_path"].rstrip("/")
+        api_version = settings["azure_openai_api_version"]
         if not name:
             raise ValueError("Azure APIM embeddings require 'name' (deployment).")
 
@@ -225,10 +227,10 @@ def get_embeddings(cfg: ModelConfiguration) -> LCEmbeddings:
 
         credential = ClientSecretCredential(
             tenant_id=settings["azure_tenant_id"],
-            client_id=settings["azure_client_id"],
+            client_id=settings["azure_ad_client_id"],
             client_secret=client_secret,
         )
-        scope = settings["azure_client_scope"]
+        scope = settings["azure_ad_client_scope"]
 
         def _token_provider() -> str:
             return credential.get_token(scope).token
@@ -241,7 +243,9 @@ def get_embeddings(cfg: ModelConfiguration) -> LCEmbeddings:
             api_version=api_version,
             azure_ad_token_provider=_token_provider,  # ← per-request AAD token
             default_headers={
-                "TrustNest-Apim-Subscription-Key": os.environ["AZURE_APIM_KEY"]
+                "TrustNest-Apim-Subscription-Key": os.environ[
+                    "AZURE_APIM_SUBSCRIPTION_KEY"
+                ]
             },
             **passthrough,
         )
@@ -269,7 +273,11 @@ def get_structured_chain(schema: Type[BaseModel], model_config: ModelConfigurati
 
     # Fred rationale (hover):
     # - Azure APIM uses the same Azure client; function calling is available if the model supports it.
-    if provider in {"openai", "azure", "azureapim"}:
+    if provider in {
+        ModelProvider.OPENAI.value,
+        ModelProvider.AZURE_OPENAI.value,
+        ModelProvider.AZURE_APIM.value,
+    }:
         try:
             structured = model.with_structured_output(schema, method="function_calling")
             return passthrough | structured
