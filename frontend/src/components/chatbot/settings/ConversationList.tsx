@@ -161,7 +161,7 @@ export const ConversationList: React.FC<ConversationListProps> = (props) => {
             overflowY: "auto",
             px: 1.5,
             py: 1,
-            "&::-webkit-scrollbar": { width: "3px" },
+            "&::-webkit-scrollbar": { width: "5px" },
             "&::-webkit-scrollbar-thumb": {
               backgroundColor: isDarkTheme ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)",
               borderRadius: "3px",

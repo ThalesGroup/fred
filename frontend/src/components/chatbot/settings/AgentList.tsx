@@ -42,6 +42,8 @@ export type AgentsListProps = {
 
 const AgentsList = memo(function AgentsList({ agents, selected, onSelect, dense = true, sx = [] }: AgentsListProps) {
   const theme = useTheme<Theme>();
+  const isDarkTheme = theme.palette.mode === "dark";
+
   const { t } = useTranslation();
   const selectedName = selected?.name;
 
@@ -70,7 +72,20 @@ const AgentsList = memo(function AgentsList({ agents, selected, onSelect, dense 
         {t("settings.assistants")}
       </Typography>
 
-      <List dense={dense} disablePadding sx={{ overflowY: "auto", flex: 1, px: 2 }}>
+      <List
+        dense={dense}
+        disablePadding
+        sx={{
+          overflowY: "auto",
+          flex: 1,
+          px: 2,
+          "&::-webkit-scrollbar": { width: "5px" },
+          "&::-webkit-scrollbar-thumb": {
+            backgroundColor: isDarkTheme ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)",
+            borderRadius: "3px",
+          },
+        }}
+      >
         {items.map((agent) => {
           const isSelected = selectedName === agent.name;
 
