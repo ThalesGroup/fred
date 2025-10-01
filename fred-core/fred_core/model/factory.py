@@ -133,7 +133,7 @@ def get_model(cfg: Optional[ModelConfiguration]) -> BaseChatModel:
             client_id=settings["azure_ad_client_id"],
             client_secret=client_secret,
         )
-        scope = settings["azure_ad_client_id"]
+        scope = settings["azure_ad_client_scope"]
 
         def _token_provider() -> str:
             # Called by the SDK on each request → auto-refresh tokens.
