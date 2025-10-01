@@ -14,6 +14,7 @@
 
 import {
   Box,
+  Button,
   Checkbox,
   Container,
   FormControl,
@@ -35,6 +36,7 @@ import {
 
 import ClearIcon from "@mui/icons-material/Clear";
 import LibraryBooksRoundedIcon from "@mui/icons-material/LibraryBooksRounded";
+import RefreshIcon from "@mui/icons-material/Refresh";
 import SearchIcon from "@mui/icons-material/Search";
 
 import { useEffect, useState } from "react";
@@ -74,7 +76,7 @@ export const DocumentOperations = ({}: DocumentsViewProps) => {
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedSourceTag, setSelectedSourceTag] = useState<string | null>(null);
 
-  // Filter states (moved from DocumentLibrary)
+  // Filter states
   const [selectedLibrary, setSelectLibraries] = useState<string[]>([]);
   const [selectedStages, setSelectedStages] = useState<string[]>([]);
   const [searchableFilter, setSearchableFilter] = useState<"all" | "true" | "false">("all");
@@ -84,6 +86,7 @@ export const DocumentOperations = ({}: DocumentsViewProps) => {
   const [allDocuments, setAllDocuments] = useState<DocumentMetadata[]>([]);
   const [totalDocCount, setTotalDocCount] = useState<number>();
 
+  // Source + Permissions
   const selectedSource = allSources?.find((s) => s.tag === selectedSourceTag);
   const isPullMode = selectedSource?.type === "pull";
 
@@ -97,6 +100,7 @@ export const DocumentOperations = ({}: DocumentsViewProps) => {
     canManageDocuments: hasDocumentManagementPermission(),
     roles: KeyCloakService.GetUserRoles(),
   };
+
   const handleRefreshPullSource = async () => {
     if (!selectedSourceTag) return;
     try {
@@ -104,7 +108,7 @@ export const DocumentOperations = ({}: DocumentsViewProps) => {
         sourceTag: selectedSourceTag,
       };
       await rescanCatalogSource(args).unwrap();
-      await fetchFiles(); // Re-fetch after refresh
+      await fetchFiles();
     } catch (err: any) {
       console.error("Refresh failed:", err);
       showError({
@@ -113,15 +117,14 @@ export const DocumentOperations = ({}: DocumentsViewProps) => {
       });
     }
   };
+
   const fetchFiles = async () => {
     if (!selectedSourceTag) return;
     const filters = {
       ...(searchQuery ? { document_name: searchQuery } : {}),
       ...(selectedLibrary.length > 0 ? { tags: selectedLibrary } : {}),
       ...(selectedStages.length > 0
-        ? {
-            processing_stages: Object.fromEntries(selectedStages.map((stage) => [stage, "done"])),
-          }
+        ? { processing_stages: Object.fromEntries(selectedStages.map((stage) => [stage, "done"])) }
         : {}),
       ...(searchableFilter !== "all" ? { retrievable: searchableFilter === "true" } : {}),
     };
@@ -138,7 +141,7 @@ export const DocumentOperations = ({}: DocumentsViewProps) => {
 
       setTotalDocCount(response.total);
       setAllDocuments(response.documents);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error fetching documents:", error);
       showError({
         summary: "Fetch Failed",
@@ -150,41 +153,26 @@ export const DocumentOperations = ({}: DocumentsViewProps) => {
   useEffect(() => {
     if (allSources && selectedSourceTag === null) {
       const pushSource = allSources.find((s) => s.type === "push");
-      if (pushSource) {
-        setSelectedSourceTag(pushSource.tag);
-      }
+      if (pushSource) setSelectedSourceTag(pushSource.tag);
     }
   }, [allSources, selectedSourceTag]);
 
   useEffect(() => {
     fetchFiles();
-  }, [
-    selectedSourceTag,
-    searchQuery,
-    selectedLibrary,
-    selectedStages,
-    searchableFilter,
-    currentPage,
-    documentsPerPage,
-  ]);
+  }, [selectedSourceTag, searchQuery, selectedLibrary, selectedStages, searchableFilter, currentPage, documentsPerPage]);
 
   return (
     <Container maxWidth="xl">
       {/* Filter Section */}
       <Paper
         elevation={2}
-        sx={{
-          p: 3,
-          borderRadius: 4,
-          border: `1px solid ${theme.palette.divider}`,
-          mb: 3,
-        }}
+        sx={{ p: 3, borderRadius: 4, border: `1px solid ${theme.palette.divider}`, mb: 3 }}
       >
-        {/* Filters */}
         <Grid2 container spacing={2} alignItems="center">
           <Grid2 size={{ xs: 12, md: 12 }}>
+            {/* Top Filters */}
             <Grid2 container spacing={2} sx={{ mb: 2 }}>
-              {/* Tags filter */}
+              {/* Library filter */}
               <Grid2 size={{ xs: 4 }}>
                 <FormControl fullWidth size="small">
                   <InputLabel>Library</InputLabel>
@@ -243,9 +231,9 @@ export const DocumentOperations = ({}: DocumentsViewProps) => {
               </Grid2>
             </Grid2>
 
-            {/* Search + Sources inline to save up space */}
+            {/* Search + Sources inline */}
             <Grid2 container spacing={2}>
-              <Grid2 size={{ xs: 12, md: 9 }}>
+              <Grid2 size={{ xs: 12, md: 8 }}>
                 <TextField
                   fullWidth
                   placeholder={t("documentLibrary.searchPlaceholder")}
@@ -277,7 +265,7 @@ export const DocumentOperations = ({}: DocumentsViewProps) => {
                 />
               </Grid2>
 
-              <Grid2 size={{ xs: 12, md: 3 }}>
+              <Grid2 size={{ xs: 12, md: 4 }} display="flex" gap={1}>
                 <FormControl fullWidth size="small">
                   <InputLabel id="sources-label">Document Sources</InputLabel>
                   <Select
@@ -301,6 +289,16 @@ export const DocumentOperations = ({}: DocumentsViewProps) => {
                     ))}
                   </Select>
                 </FormControl>
+
+                {userInfo.canManageDocuments && isPullMode && (
+                  <Button
+                    variant="outlined"
+                    onClick={handleRefreshPullSource}
+                    sx={{ minWidth: "auto", px: 2 }}
+                  >
+                    <RefreshIcon />
+                  </Button>
+                )}
               </Grid2>
             </Grid2>
           </Grid2>
@@ -310,13 +308,7 @@ export const DocumentOperations = ({}: DocumentsViewProps) => {
       {/* Documents Section */}
       <Paper
         elevation={2}
-        sx={{
-          p: 3,
-          borderRadius: 4,
-          mb: 3,
-          border: `1px solid ${theme.palette.divider}`,
-          position: "relative",
-        }}
+        sx={{ p: 3, borderRadius: 4, mb: 3, border: `1px solid ${theme.palette.divider}`, position: "relative" }}
       >
         {isLoading ? (
           <TableSkeleton
@@ -337,6 +329,7 @@ export const DocumentOperations = ({}: DocumentsViewProps) => {
             </Typography>
 
             <DocumentOperationsTable files={allDocuments} onRefreshData={fetchFiles} showSelectionActions={true} />
+
             <Box display="flex" alignItems="center" mt={3} justifyContent="space-between">
               <Pagination
                 count={Math.ceil((totalDocCount ?? 0) / documentsPerPage)}
