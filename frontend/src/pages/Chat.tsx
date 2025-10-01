@@ -109,8 +109,12 @@ export default function Chat() {
   if (flowsError) {
     return (
       <Box sx={{ p: 3 }}>
-        <Typography variant="h6" color="error">Failed to load assistants</Typography>
-        <Typography variant="body2" sx={{ mt: 1 }}>{(flowsErrObj as any)?.data?.detail || "Please try again later."}</Typography>
+        <Typography variant="h6" color="error">
+          Failed to load assistants
+        </Typography>
+        <Typography variant="body2" sx={{ mt: 1 }}>
+          {(flowsErrObj as any)?.data?.detail || "Please try again later."}
+        </Typography>
       </Box>
     );
   }
@@ -118,19 +122,25 @@ export default function Chat() {
   if (sessionsError) {
     return (
       <Box sx={{ p: 3 }}>
-        <Typography variant="h6" color="error">Failed to load conversations</Typography>
-        <Typography variant="body2" sx={{ mt: 1 }}>{(sessionsErrObj as any)?.data?.detail || "Please try again later."}</Typography>
+        <Typography variant="h6" color="error">
+          Failed to load conversations
+        </Typography>
+        <Typography variant="body2" sx={{ mt: 1 }}>
+          {(sessionsErrObj as any)?.data?.detail || "Please try again later."}
+        </Typography>
       </Box>
     );
   }
 
-  const enabledAgents = (agentsFromServer ?? []).filter(a => a.enabled === true);
+  const enabledAgents = (agentsFromServer ?? []).filter((a) => a.enabled === true);
 
   if (enabledAgents.length === 0) {
     return (
       <Box sx={{ p: 3 }}>
         <Typography variant="h6">No assistants available</Typography>
-        <Typography variant="body2" sx={{ mt: 1, opacity: 0.7 }}>Check your backend configuration.</Typography>
+        <Typography variant="body2" sx={{ mt: 1, opacity: 0.7 }}>
+          Check your backend configuration.
+        </Typography>
       </Box>
     );
   }
@@ -193,6 +203,7 @@ export default function Chat() {
                 <ChevronLeftIcon fontSize="small" />
               </IconButton>
             </Box>
+
             {/* Profile Section */}
             <Box sx={{ flex: "0 0 auto" }}>
               <ProfilePickerPanel
@@ -204,31 +215,25 @@ export default function Chat() {
             <Divider />
 
             {/* Agents Section */}
-            <Box sx={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
-              <Box sx={{ flex: 1, minHeight: 0, overflow: "auto" }}>
-                <AgentsList
-                  agents={enabledAgents}
-                  selected={currentAgent}
-                  onSelect={handleSelectAgent}
-                />
-              </Box>
-            </Box>
+            <AgentsList
+              agents={enabledAgents}
+              selected={currentAgent}
+              onSelect={handleSelectAgent}
+              sx={{ flex: 1, minHeight: 0, overflow: "hidden" }}
+            />
 
             <Divider />
 
             {/* Conversations Section */}
-            <Box sx={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
-              <Box sx={{ flex: 1, minHeight: 0, overflow: "auto" }}>
-                <ConversationList
-                  sessions={sessions}
-                  currentSession={currentSession}
-                  onSelectSession={handleSelectSession}
-                  onCreateNewConversation={handleCreateNewConversation}
-                  onDeleteSession={handleDeleteSession}
-                  isCreatingNewConversation={isCreatingNewConversation}
-                />
-              </Box>
-            </Box>
+            <ConversationList
+              sessions={sessions}
+              currentSession={currentSession}
+              onSelectSession={handleSelectSession}
+              onCreateNewConversation={handleCreateNewConversation}
+              onDeleteSession={handleDeleteSession}
+              isCreatingNewConversation={isCreatingNewConversation}
+              sx={{ flex: 1, minHeight: 0, overflow: "hidden" }}
+            />
           </Box>
         </Paper>
 

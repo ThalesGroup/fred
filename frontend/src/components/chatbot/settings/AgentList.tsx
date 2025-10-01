@@ -16,6 +16,7 @@ import {
   ListItem,
   ListItemButton,
   ListItemText,
+  SxProps,
   Theme,
   Tooltip,
   Typography,
@@ -36,9 +37,10 @@ export type AgentsListProps = {
   onSelect: (flow: AnyAgent) => void;
   // Optional: override item density if needed in other places (defaults to "dense")
   dense?: boolean;
+  sx?: SxProps<Theme>;
 };
 
-const AgentsList = memo(function AgentsList({ agents, selected, onSelect, dense = true }: AgentsListProps) {
+const AgentsList = memo(function AgentsList({ agents, selected, onSelect, dense = true, sx = [] }: AgentsListProps) {
   const theme = useTheme<Theme>();
   const { t } = useTranslation();
   const selectedName = selected?.name;
@@ -50,20 +52,25 @@ const AgentsList = memo(function AgentsList({ agents, selected, onSelect, dense 
     <Box
       role="navigation"
       aria-label={t("settings.assistants")}
-      sx={{
-        // Fred: side surfaces come from theme; parent controls width/placement.
-        backgroundColor: theme.palette.sidebar.background,
-        color: theme.palette.text.primary,
-        borderBottom: `1px solid ${theme.palette.divider}`,
-        px: 2,
-        py: 2.5,
-      }}
+      sx={[
+        {
+          // Fred: side surfaces come from theme; parent controls width/placement.
+          backgroundColor: theme.palette.sidebar.background,
+          color: theme.palette.text.primary,
+          borderBottom: `1px solid ${theme.palette.divider}`,
+          pt: 2,
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
+        },
+        ...(Array.isArray(sx) ? sx : [sx]),
+      ]}
     >
       <Typography variant="subtitle1" sx={{ mb: 2 }}>
         {t("settings.assistants")}
       </Typography>
 
-      <List dense={dense} disablePadding>
+      <List dense={dense} disablePadding sx={{ overflowY: "auto", flex: 1, px: 2 }}>
         {items.map((agent) => {
           const isSelected = selectedName === agent.name;
 
