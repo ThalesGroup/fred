@@ -4,20 +4,20 @@
 // You may not use this file except in compliance with the License.
 // http://www.apache.org/licenses/LICENSE-2.0
 
-import { useMemo, useState } from "react";
+import AddIcon from "@mui/icons-material/Add";
 import {
   Box,
   IconButton,
   List,
   ListItem,
   ListItemButton,
+  Theme,
   Tooltip,
   Typography,
   useTheme,
-  Theme,
 } from "@mui/material";
-import AddIcon from "@mui/icons-material/Add";
 import Popover from "@mui/material/Popover";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   useGetResourceKnowledgeFlowV1ResourcesResourceIdGetQuery,

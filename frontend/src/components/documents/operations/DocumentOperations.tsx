@@ -31,16 +31,18 @@ import {
   SelectChangeEvent,
   TextField,
   Typography,
-  useTheme,
+  useTheme
 } from "@mui/material";
 
 import ClearIcon from "@mui/icons-material/Clear";
 import LibraryBooksRoundedIcon from "@mui/icons-material/LibraryBooksRounded";
-import SearchIcon from "@mui/icons-material/Search";
 import RefreshIcon from "@mui/icons-material/Refresh";
+import SearchIcon from "@mui/icons-material/Search";
 
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useDocumentSources } from "../../../hooks/useDocumentSources";
+import { useDocumentTags } from "../../../hooks/useDocumentTags";
 import { KeyCloakService } from "../../../security/KeycloakService";
 import {
   DocumentMetadata,
@@ -48,13 +50,11 @@ import {
   useBrowseDocumentsKnowledgeFlowV1DocumentsBrowsePostMutation,
   useRescanCatalogSourceKnowledgeFlowV1PullCatalogRescanSourceTagPostMutation,
 } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { DOCUMENT_PROCESSING_STAGES } from "../../../utils/const";
 import { EmptyState } from "../../EmptyState";
 import { TableSkeleton } from "../../TableSkeleton";
 import { useToast } from "../../ToastProvider";
 import { DocumentOperationsTable } from "./DocumentOperationsTable";
-import { useDocumentSources } from "../../../hooks/useDocumentSources";
-import { useDocumentTags } from "../../../hooks/useDocumentTags";
-import { DOCUMENT_PROCESSING_STAGES } from "../../../utils/const";
 
 interface DocumentsViewProps {}
 
@@ -76,7 +76,7 @@ export const DocumentOperations = ({}: DocumentsViewProps) => {
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedSourceTag, setSelectedSourceTag] = useState<string | null>(null);
 
-  // Filter states (moved from DocumentLibrary)
+  // Filter states
   const [selectedLibrary, setSelectLibraries] = useState<string[]>([]);
   const [selectedStages, setSelectedStages] = useState<string[]>([]);
   const [searchableFilter, setSearchableFilter] = useState<"all" | "true" | "false">("all");
@@ -86,6 +86,7 @@ export const DocumentOperations = ({}: DocumentsViewProps) => {
   const [allDocuments, setAllDocuments] = useState<DocumentMetadata[]>([]);
   const [totalDocCount, setTotalDocCount] = useState<number>();
 
+  // Source + Permissions
   const selectedSource = allSources?.find((s) => s.tag === selectedSourceTag);
   const isPullMode = selectedSource?.type === "pull";
 
@@ -99,6 +100,7 @@ export const DocumentOperations = ({}: DocumentsViewProps) => {
     canManageDocuments: hasDocumentManagementPermission(),
     roles: KeyCloakService.GetUserRoles(),
   };
+
   const handleRefreshPullSource = async () => {
     if (!selectedSourceTag) return;
     try {
@@ -106,7 +108,7 @@ export const DocumentOperations = ({}: DocumentsViewProps) => {
         sourceTag: selectedSourceTag,
       };
       await rescanCatalogSource(args).unwrap();
-      await fetchFiles(); // Re-fetch after refresh
+      await fetchFiles();
     } catch (err: any) {
       console.error("Refresh failed:", err);
       showError({
@@ -115,15 +117,14 @@ export const DocumentOperations = ({}: DocumentsViewProps) => {
       });
     }
   };
+
   const fetchFiles = async () => {
     if (!selectedSourceTag) return;
     const filters = {
       ...(searchQuery ? { document_name: searchQuery } : {}),
       ...(selectedLibrary.length > 0 ? { tags: selectedLibrary } : {}),
       ...(selectedStages.length > 0
-        ? {
-            processing_stages: Object.fromEntries(selectedStages.map((stage) => [stage, "done"])),
-          }
+        ? { processing_stages: Object.fromEntries(selectedStages.map((stage) => [stage, "done"])) }
         : {}),
       ...(searchableFilter !== "all" ? { retrievable: searchableFilter === "true" } : {}),
     };
@@ -140,7 +141,7 @@ export const DocumentOperations = ({}: DocumentsViewProps) => {
 
       setTotalDocCount(response.total);
       setAllDocuments(response.documents);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error fetching documents:", error);
       showError({
         summary: "Fetch Failed",
@@ -152,77 +153,26 @@ export const DocumentOperations = ({}: DocumentsViewProps) => {
   useEffect(() => {
     if (allSources && selectedSourceTag === null) {
       const pushSource = allSources.find((s) => s.type === "push");
-      if (pushSource) {
-        setSelectedSourceTag(pushSource.tag);
-      }
+      if (pushSource) setSelectedSourceTag(pushSource.tag);
     }
   }, [allSources, selectedSourceTag]);
 
   useEffect(() => {
     fetchFiles();
-  }, [
-    selectedSourceTag,
-    searchQuery,
-    selectedLibrary,
-    selectedStages,
-    searchableFilter,
-    currentPage,
-    documentsPerPage,
-  ]);
+  }, [selectedSourceTag, searchQuery, selectedLibrary, selectedStages, searchableFilter, currentPage, documentsPerPage]);
 
   return (
     <Container maxWidth="xl">
-      {/* Source Selector and Upload Button */}
-      <Box display="flex" justifyContent="flex-end" alignItems="center" gap={2} mb={2}>
-        <FormControl size="small" sx={{ minWidth: 200 }}>
-          <InputLabel id="sources-label">Document Sources</InputLabel>
-          <Select
-            labelId="sources-label"
-            value={selectedSourceTag || ""}
-            onChange={(e: SelectChangeEvent) => {
-              const value = e.target.value;
-              setSelectedSourceTag(value === "" ? null : value);
-            }}
-            input={<OutlinedInput label="Document Sources" />}
-          >
-            {allSources?.map((source) => (
-              <MenuItem key={source.tag} value={source.tag}>
-                <Box title={source.description || source.tag} sx={{ overflow: "hidden", textOverflow: "ellipsis" }}>
-                  {source.tag}
-                </Box>
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-
-        {userInfo.canManageDocuments && isPullMode && (
-          <Button
-            variant="contained"
-            startIcon={<RefreshIcon />}
-            onClick={() => handleRefreshPullSource()}
-            size="medium"
-            sx={{ borderRadius: "8px" }}
-          >
-            {t("documentLibrary.refresh")}
-          </Button>
-        )}
-      </Box>
-
       {/* Filter Section */}
       <Paper
         elevation={2}
-        sx={{
-          p: 3,
-          borderRadius: 4,
-          border: `1px solid ${theme.palette.divider}`,
-          mb: 3,
-        }}
+        sx={{ p: 3, borderRadius: 4, border: `1px solid ${theme.palette.divider}`, mb: 3 }}
       >
-        {/* Filters */}
         <Grid2 container spacing={2} alignItems="center">
           <Grid2 size={{ xs: 12, md: 12 }}>
+            {/* Top Filters */}
             <Grid2 container spacing={2} sx={{ mb: 2 }}>
-              {/* Tags filter */}
+              {/* Library filter */}
               <Grid2 size={{ xs: 4 }}>
                 <FormControl fullWidth size="small">
                   <InputLabel>Library</InputLabel>
@@ -280,35 +230,77 @@ export const DocumentOperations = ({}: DocumentsViewProps) => {
                 </FormControl>
               </Grid2>
             </Grid2>
-            <TextField
-              fullWidth
-              placeholder={t("documentLibrary.searchPlaceholder")}
-              variant="outlined"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              slotProps={{
-                input: {
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <SearchIcon color="action" />
-                    </InputAdornment>
-                  ),
-                  endAdornment: searchQuery && (
-                    <InputAdornment position="end">
-                      <IconButton
-                        aria-label={t("documentLibrary.clearSearch")}
-                        onClick={() => setSearchQuery("")}
-                        edge="end"
-                        size="small"
-                      >
-                        <ClearIcon />
-                      </IconButton>
-                    </InputAdornment>
-                  ),
-                },
-              }}
-              size="small"
-            />
+
+            {/* Search + Sources inline */}
+            <Grid2 container spacing={2}>
+              <Grid2 size={{ xs: 12, md: 8 }}>
+                <TextField
+                  fullWidth
+                  placeholder={t("documentLibrary.searchPlaceholder")}
+                  variant="outlined"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  slotProps={{
+                    input: {
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <SearchIcon color="action" />
+                        </InputAdornment>
+                      ),
+                      endAdornment: searchQuery && (
+                        <InputAdornment position="end">
+                          <IconButton
+                            aria-label={t("documentLibrary.clearSearch")}
+                            onClick={() => setSearchQuery("")}
+                            edge="end"
+                            size="small"
+                          >
+                            <ClearIcon />
+                          </IconButton>
+                        </InputAdornment>
+                      ),
+                    },
+                  }}
+                  size="small"
+                />
+              </Grid2>
+
+              <Grid2 size={{ xs: 12, md: 4 }} display="flex" gap={1}>
+                <FormControl fullWidth size="small">
+                  <InputLabel id="sources-label">Document Sources</InputLabel>
+                  <Select
+                    labelId="sources-label"
+                    value={selectedSourceTag || ""}
+                    onChange={(e: SelectChangeEvent) => {
+                      const value = e.target.value;
+                      setSelectedSourceTag(value === "" ? null : value);
+                    }}
+                    input={<OutlinedInput label="Document Sources" />}
+                  >
+                    {allSources?.map((source) => (
+                      <MenuItem key={source.tag} value={source.tag}>
+                        <Box
+                          title={source.description || source.tag}
+                          sx={{ overflow: "hidden", textOverflow: "ellipsis" }}
+                        >
+                          {source.tag}
+                        </Box>
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+
+                {userInfo.canManageDocuments && isPullMode && (
+                  <Button
+                    variant="outlined"
+                    onClick={handleRefreshPullSource}
+                    sx={{ minWidth: "auto", px: 2 }}
+                  >
+                    <RefreshIcon />
+                  </Button>
+                )}
+              </Grid2>
+            </Grid2>
           </Grid2>
         </Grid2>
       </Paper>
@@ -316,13 +308,7 @@ export const DocumentOperations = ({}: DocumentsViewProps) => {
       {/* Documents Section */}
       <Paper
         elevation={2}
-        sx={{
-          p: 3,
-          borderRadius: 4,
-          mb: 3,
-          border: `1px solid ${theme.palette.divider}`,
-          position: "relative",
-        }}
+        sx={{ p: 3, borderRadius: 4, mb: 3, border: `1px solid ${theme.palette.divider}`, position: "relative" }}
       >
         {isLoading ? (
           <TableSkeleton
@@ -343,6 +329,7 @@ export const DocumentOperations = ({}: DocumentsViewProps) => {
             </Typography>
 
             <DocumentOperationsTable files={allDocuments} onRefreshData={fetchFiles} showSelectionActions={true} />
+
             <Box display="flex" alignItems="center" mt={3} justifyContent="space-between">
               <Pagination
                 count={Math.ceil((totalDocCount ?? 0) / documentsPerPage)}
