@@ -20,8 +20,6 @@ import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import PersonOutlinedIcon from "@mui/icons-material/PersonOutline";
 import LibraryBooksOutlinedIcon from "@mui/icons-material/LibraryBooksOutlined";
-import DescriptionOutlinedIcon from "@mui/icons-material/DescriptionOutlined";
-import PsychologyOutlinedIcon from "@mui/icons-material/PsychologyOutlined";
 import { useState, useMemo, type ReactNode } from "react";
 import RateReviewIcon from "@mui/icons-material/RateReview";
 import { getAgentBadge } from "../../utils/avatar.tsx";
@@ -57,11 +55,7 @@ export default function MessageCard({
   suppressText = false,
   onCitationHover,
   onCitationClick,
-
-  // maps id -> label
   libraryNameById,
-  templateNameById,
-  promptNameById,
   profileNameById
 }: {
   message: ChatMessage;
@@ -76,8 +70,6 @@ export default function MessageCard({
   onCitationClick?: (uid: string | null) => void;
 
   libraryNameById?: Record<string, string>;
-  templateNameById?: Record<string, string>;
-  promptNameById?: Record<string, string>;
   profileNameById?: Record<string, string>;
 }) {
   const theme = useTheme();
@@ -144,8 +136,6 @@ export default function MessageCard({
 
   // IDs réellement utilisés pour CE message (pas d’état courant UI)
   const libsIds = Array.isArray(plugins.libraries) ? plugins.libraries : [];
-  const tplIds = Array.isArray(plugins.templates) ? plugins.templates : [];
-  const prmIds = Array.isArray(plugins.prompts) ? plugins.prompts : [];
   const prfIds = Array.isArray(plugins.profiles) ? plugins.profiles : [];
 
   const searchPolicy: string | undefined = plugins.search_policy;
@@ -162,8 +152,6 @@ export default function MessageCard({
     (ids ?? []).filter(Boolean).map((id) => map?.[id] || id);
 
   const libsLabeled = labelize(libsIds, libraryNameById);
-  const tplsLabeled = labelize(tplIds, templateNameById);
-  const prmsLabeled = labelize(prmIds, promptNameById);
   const prfsLabeled = labelize(prfIds, profileNameById)
 
   // --- Indicator pills (uniquement snapshot)
@@ -176,20 +164,8 @@ export default function MessageCard({
       icon: <LibraryBooksOutlinedIcon sx={{ fontSize: 14 }} />,
     },
     {
-      key: "templates",
-      label: "Templates",
-      enabled: tplsLabeled.length > 0,
-      icon: <DescriptionOutlinedIcon sx={{ fontSize: 14 }} />,
-    },
-    {
-      key: "prompts",
-      label: "Prompts",
-      enabled: prmsLabeled.length > 0,
-      icon: <PsychologyOutlinedIcon sx={{ fontSize: 14 }} />,
-    },
-    {
       key: "profiles",
-      label: "profiles",
+      label: "Profiles",
       enabled: prfsLabeled.length > 0,
       icon: <PersonOutlinedIcon sx={{ fontSize: 14 }} />,
     },
@@ -218,8 +194,6 @@ export default function MessageCard({
 
   const hasPluginsInfo =
     libsLabeled.length > 0 ||
-    tplsLabeled.length > 0 ||
-    prmsLabeled.length > 0 ||
     modelName ||
     latencyMs ||
     typeof usedTemperature === "number" ||
@@ -384,7 +358,7 @@ export default function MessageCard({
                                       />
                                     </Box>
 
-                                    {(libsLabeled.length || tplsLabeled.length || prmsLabeled.length || prfsLabeled.length) ? (
+                                    {(libsLabeled.length || prfsLabeled.length) ? (
                                       <Divider flexItem />
                                     ) : null}
 
@@ -394,24 +368,6 @@ export default function MessageCard({
                                           Libraries
                                         </Typography>
                                         <PillRow items={libsLabeled} />
-                                      </>
-                                    ) : null}
-
-                                    {tplsLabeled.length ? (
-                                      <>
-                                        <Typography variant="overline" sx={{ opacity: 0.7 }}>
-                                          Templates
-                                        </Typography>
-                                        <PillRow items={tplsLabeled} />
-                                      </>
-                                    ) : null}
-
-                                    {prmsLabeled.length ? (
-                                      <>
-                                        <Typography variant="overline" sx={{ opacity: 0.7 }}>
-                                          Prompts
-                                        </Typography>
-                                        <PillRow items={prmsLabeled} />
                                       </>
                                     ) : null}
 

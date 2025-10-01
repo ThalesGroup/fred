@@ -391,14 +391,6 @@ const ChatBot = ({
       runtimeContext.document_library_ids = content.documentLibraryIds;
       runtimeContext.selected_document_libraries_ids = content.documentLibraryIds;
     }
-    if (content.promptResourceIds?.length) {
-      runtimeContext.selected_prompt_ids = content.promptResourceIds;
-      runtimeContext.prompt_resource_ids = content.promptResourceIds;
-    }
-    if (content.templateResourceIds?.length) {
-      runtimeContext.selected_template_ids = content.templateResourceIds;
-      runtimeContext.template_resource_ids = content.templateResourceIds;
-    }
     if (content.profileResourceIds?.length) {
       runtimeContext.selected_profile_ids = content.profileResourceIds;
       runtimeContext.profile_resource_ids = content.profileResourceIds;
@@ -653,8 +645,6 @@ const ChatBot = ({
                 agents={agents}
                 currentAgent={currentAgent}
                 libraryNameById={libraryNameMap}
-                templateNameById={templateNameMap}
-                promptNameById={promptNameMap}
                 profileNameById={profileNameMap}
               />
               {waitResponse && (

@@ -200,7 +200,7 @@ class SessionOrchestrator:
                 actor=actor,
             )
 
-        # 3.1) MINIMAL PATCH: set visual "prompt used" flags on assistant/final messages only
+        # 3.1) Set visual flags on assistant/final messages only
         try:
             self._attach_runtime_markers(
                 agent=agent,

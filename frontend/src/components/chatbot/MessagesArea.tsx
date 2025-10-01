@@ -119,8 +119,6 @@ function Area({
       }
 
       if (userMessage) {
-        const agentForUser = resolveAgenticFlow(userMessage);
-
         elements.push(
           <MessageCard
             key={`user-${userMessage.session_id}-${userMessage.exchange_id}-${userMessage.rank}`}
@@ -131,8 +129,6 @@ function Area({
             enableThumbs
             suppressText={false}
             libraryNameById={libraryNameById}
-            templateNameById={templateNameById}
-            promptNameById={promptNameById}
             profileNameById={profileNameById}
             onCitationHover={(uid) => setHighlightUid(uid)}
             onCitationClick={(uid) => setHighlightUid(uid)}
@@ -189,8 +185,6 @@ function Area({
               enableThumbs
               suppressText={false}
               libraryNameById={libraryNameById}
-              templateNameById={templateNameById}
-              promptNameById={promptNameById}
               profileNameById={profileNameById}
               onCitationHover={(uid) => setHighlightUid(uid)}
               onCitationClick={(uid) => setHighlightUid(uid)}
@@ -229,8 +223,6 @@ function Area({
             enableThumbs
             suppressText={false}
             libraryNameById={libraryNameById}
-            templateNameById={templateNameById}
-            promptNameById={promptNameById}
             profileNameById={profileNameById}
             onCitationHover={(uid) => setHighlightUid(uid)}
             onCitationClick={(uid) => setHighlightUid(uid)}
@@ -247,8 +239,7 @@ function Area({
     currentAgent,
     highlightUid,
     libraryNameById,
-    templateNameById,
-    promptNameById,
+    profileNameById
   ]);
 
   useEffect(() => {
