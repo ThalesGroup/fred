@@ -18,9 +18,13 @@ from enum import Enum
 from pathlib import Path
 from typing import Annotated, Dict, List, Literal, Optional, Union
 
-from fred_core import ModelConfiguration, OpenSearchStoreConfig, PostgresStoreConfig, SecurityConfiguration, StoreConfig
 from fred_core import (
     LogStorageConfig,
+    ModelConfiguration,
+    OpenSearchStoreConfig,
+    PostgresStoreConfig,
+    SecurityConfiguration,
+    StoreConfig,
 )
 from pydantic import BaseModel, Field, model_validator
 
