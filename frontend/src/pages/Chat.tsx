@@ -219,7 +219,7 @@ export default function Chat() {
               agents={enabledAgents}
               selected={currentAgent}
               onSelect={handleSelectAgent}
-              sx={{ flex: 1, minHeight: 0, overflow: "hidden" }}
+              sx={{ flex: 1, minHeight: 0, overflow: "hidden", maxHeight: "fit-content" }}
             />
 
             <Divider />

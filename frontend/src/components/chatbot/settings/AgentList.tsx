@@ -60,7 +60,7 @@ const AgentsList = memo(function AgentsList({ agents, selected, onSelect, dense 
           backgroundColor: theme.palette.sidebar.background,
           color: theme.palette.text.primary,
           borderBottom: `1px solid ${theme.palette.divider}`,
-          pt: 2,
+          py: 2,
           display: "flex",
           flexDirection: "column",
           overflow: "hidden",
