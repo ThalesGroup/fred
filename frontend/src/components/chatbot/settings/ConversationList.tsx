@@ -133,9 +133,7 @@ export const ConversationList: React.FC<ConversationListProps> = (props) => {
             mt: 1,
           }}
         >
-          <Typography variant="body2" sx={{ color: "text.secondary" }}>
-            {t("settings.conversations")}
-          </Typography>
+          <Typography variant="subtitle1">{t("settings.conversations")}</Typography>
           <Tooltip title={t("settings.newConversation")}>
             <IconButton
               onClick={onCreateNewConversation}
