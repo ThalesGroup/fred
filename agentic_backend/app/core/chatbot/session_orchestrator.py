@@ -427,94 +427,52 @@ class SessionOrchestrator:
         messages: List[ChatMessage],
     ) -> None:
         """
-        Project runtime_context into message.metadata in a generic way:
-        - metadata.system_prompt = "used" (marker only, no secrets)
-        - metadata.prompts = short list of ids (derived from prompts/templates/profiles)
-        - metadata.extras.plugins = {
-                libraries: [...],
-                templates: [...],
-                prompts:   [...],
-                profiles:  [...],
-                search_policy: "semantic|hybrid|strict"
-            }
-        The UI already lights the 'Prompts' pill via metadata.system_prompt/prompts,
-        and the 'Libraries' pill via extras.plugins.libraries.
+        Minimal projection of runtime_context into message.metadata.extras.plugins.
+
+        Goal:
+        - Tag ONLY the assistant/final messages produced in THIS exchange
+            (the messages passed in), with a snapshot of what was selected.
+        - Write exactly the keys the frontend expects:
+            plugins = { libraries, profiles, search_policy }
+        - No system/prompt mixing, no UI state, no merges with previous messages.
+        - Overwrite is intentional: reflect the exact snapshot of THIS message.
         """
 
         rc = runtime_context or getattr(agent, "runtime_context", None)
         if rc is None:
             return
 
-        def _as_list(v) -> list[str]:
-            if v is None:
+        def _ls(v) -> list[str]:
+            """Normalize any input to a clean list[str] (None/single/iterable -> list[str])."""
+            if not v:
                 return []
             if isinstance(v, (list, tuple, set)):
                 return [str(x) for x in v if x]
             return [str(v)]
 
-        def _collect(*names: str) -> list[str]:
-            out: list[str] = []
-            for n in names:
-                if hasattr(rc, n):
-                    out.extend(_as_list(getattr(rc, n)))
-            # déduplique proprement
-            seen, uniq = set(), []
-            for x in out:
-                if x and x not in seen:
-                    seen.add(x)
-                    uniq.append(x)
-            return uniq
+        libraries = _ls(getattr(rc, "document_library_ids", []))
+        templates = _ls(getattr(rc, "selected_template_ids", []) or getattr(rc, "template_resource_ids", []))
+        prompts   = _ls(getattr(rc, "selected_prompt_ids",   []) or getattr(rc, "prompt_resource_ids",   []))
+        profiles  = _ls(getattr(rc, "selected_profile_ids",  []) or getattr(rc, "profile_resource_ids",  []))
+        search_policy = getattr(rc, "search_policy", None)
 
-        # accepte snake/camel + legacy
-        alias_map: dict[str, tuple[str, ...]] = {
-            "libraries": (
-                "document_library_ids",
-                "selected_document_libraries_ids",
-                "documentLibraryIds",
-                "selectedDocumentLibrariesIds",
-            ),
-            "templates": (
-                "template_resource_ids",
-                "selected_template_ids",
-                "templateResourceIds",
-                "selectedTemplateIds",
-            ),
-            "prompts": (
-                "prompt_resource_ids",
-                "selected_prompt_ids",
-                "promptResourceIds",
-                "selectedPromptIds",
-            ),
-            "profiles": (
-                "profile_resource_ids",
-                "selected_profile_ids",
-                "profileResourceIds",
-                "selectedProfileIds",
-            ),
-        }
+        # Build the exact payload the frontend reads
+        plugins: dict[str, list[str] | str] = {}
+        if libraries:     plugins["libraries"] = libraries
+        if templates:     plugins["templates"] = templates
+        if prompts:       plugins["prompts"]   = prompts
+        if profiles:      plugins["profiles"]  = profiles
+        if search_policy: plugins["search_policy"] = str(search_policy)
 
-        payload: dict[str, list[str] | str] = {}
-        for key, aliases in alias_map.items():
-            ids = _collect(*aliases)
-            if ids:
-                payload[key] = ids
-
-        sp = getattr(rc, "search_policy", None) or getattr(rc, "searchPolicy", None)
-        if sp:
-            payload["search_policy"] = str(sp)
-
-        if not payload:
+        if not plugins:
             return
 
+        # Stamp ONLY the assistant/final messages of this exchange with the snapshot
         for m in messages:
             if m.role == Role.assistant and m.channel == Channel.final:
                 md = m.metadata or ChatMetadata()
                 ex = dict(md.extras or {})
-                plugins = dict(ex.get("plugins") or {})
-                # merge non destructif, mais on écrase les clés fournies pour refléter la réalité de CE message
-                for k, v in payload.items():
-                    plugins[k] = v
-                ex["plugins"] = plugins
+                ex["plugins"] = plugins  # overwrite on purpose: reflect this message's snapshot
                 md.extras = ex
                 m.metadata = md
 
