@@ -33,23 +33,21 @@ from typing import Any, Callable, Dict, List, Optional
 
 from fred_core import (
     BaseKPIStore,
+    BaseLogStore,
     BearerAuth,
     ClientCredentialsProvider,
     DuckdbStoreConfig,
+    InMemoryLogStorageConfig,
     KpiLogStore,
     KPIWriter,
     LogStoreConfig,
     OpenSearchIndexConfig,
     OpenSearchKPIStore,
+    OpenSearchLogStore,
+    RamLogStore,
     SQLStorageConfig,
     get_model,
     split_realm_url,
-)
-from fred_core.logs import (
-    BaseLogStore,
-    InMemoryLogStorageConfig,
-    OpenSearchLogStore,
-    RamLogStore,
 )
 from langchain_core.language_models.base import BaseLanguageModel
 from requests.auth import AuthBase
@@ -267,7 +265,7 @@ class ApplicationContext:
     def _merge_with_default_model(
         self, model: Optional[ModelConfiguration]
     ) -> ModelConfiguration:
-        default_model = self.configuration.ai.default_model.model_dump(
+        default_model = self.configuration.ai.default_chat_model.model_dump(
             exclude_unset=True
         )
         model_dict = model.model_dump(exclude_unset=True) if model else {}
@@ -295,7 +293,7 @@ class ApplicationContext:
         """
         Retrieves the default AI model instance.
         """
-        return get_model(self.configuration.ai.default_model)
+        return get_model(self.configuration.ai.default_chat_model)
 
     # --- Agent classes ---
 

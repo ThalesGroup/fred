@@ -92,13 +92,13 @@ document_sources:
     access_key: "admin"
     secure: false
 
-model:
+chat_model:
   provider: openai
   name: gpt-4o-mini # any chat-capable model (gpt-4o, gpt-4o-mini, gpt-4.1, etc.)
   settings:
     temperature: 0 # optional, forwarded to LangChain wrapper
     max_retries: 2 # optional
-embedding:
+embedding_model:
   provider: openai
   name: text-embedding-ada-002 # or text-embedding-3-small
   settings: {}
@@ -109,39 +109,39 @@ vision:
     temperature: 0 # optional
     max_retries: 2 # optional
 
-# model:
+# chat_model:
 #   provider: ollama
 #   name: qwen2.5:3b-instruct         # any chat-capable Ollama model you pulled
 #   settings:
 #     base_url: http://localhost:11434
 #     temperature: 0.7                # optional, forwarded to LangChain Ollama wrapper
 
-# embedding:
+# embedding_model:
 #   provider: ollama
 #   name: nomic-embed-text            # embedding model served by Ollama
 #   settings:
 #     base_url: http://localhost:11434
 
-# model:
+# chat_model:
 #   provider: azure
-#   # azure use deployment name instead of a plain model name as openai. The principle
+#   # azure use deployment name instead of a plain model name as OpenAI does. The principle
 #   # is the same.
 #   name: fred-gpt-4o              # Azure deployment name for your chat model
 #   settings:
 #     azure_endpoint: https://<your-azure-openai>.openai.azure.com
 #     azure_api_version: 2024-05-01-preview
-# embedding:
+# embedding_model:
 #   provider: azure
-#   # azure use deployment name instead of a plain model name as openai. The principle
+#   # azure use deployment name instead of a plain model name as OpenAI does. The principle
 #   # is the same.
 #   name: fred-embed-3             # Azure deployment name for your embedding model
 #   settings:
 #     azure_endpoint: https://<your-azure-openai>.openai.azure.com
 #     azure_api_version: 2024-05-01-preview
 
-# embedding:
+# embedding_model:
 #   provider: azureapim
-#   # azure use deployment name instead of a plain model name as openai. The principle
+#   # azure use deployment name instead of a plain model name as OpenAI does. The principle
 #   # is the same.
 #   name: fred-text-embedding-3-large
 #   settings:
@@ -152,9 +152,9 @@ vision:
 #     azure_client_id: "your-client-id"
 #     azure_client_scope: "api://your-client-id/.default"
 
-# model:
+# chat_model:
 #   provider: azureapim        # openai | azure | ollama
-#   # azure use deployment name instead of a plain model name as openai. The principle
+#   # azure use deployment name instead of a plain model name as OpenAI does. The principle
 #   # is the same.
 #   name: gpt-4o
 #   settings:

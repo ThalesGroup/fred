@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Annotated, Dict, List, Literal, Optional, Union
 
 from fred_core import ModelConfiguration, OpenSearchStoreConfig, PostgresStoreConfig, SecurityConfiguration, StoreConfig
-from fred_core.logs import (
+from fred_core import (
     LogStorageConfig,
 )
 from pydantic import BaseModel, Field, model_validator
@@ -296,12 +296,12 @@ class StorageConfig(BaseModel):
 
 class Configuration(BaseModel):
     app: AppConfig
-    model: ModelConfiguration
+    chat_model: ModelConfiguration
     security: SecurityConfiguration
     input_processors: List[ProcessorConfig]
     output_processors: Optional[List[ProcessorConfig]] = None
     content_storage: ContentStorageConfig = Field(..., description="Content Storage configuration")
-    embedding: ModelConfiguration
+    embedding_model: ModelConfiguration
     vision: Optional[ModelConfiguration] = None
     scheduler: SchedulerConfig
     processing: ProcessingConfig = Field(default_factory=ProcessingConfig, description="A collection of feature flags to enable or disable optional functionality.")

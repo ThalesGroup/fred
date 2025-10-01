@@ -55,7 +55,7 @@ class VectorizationProcessor(BaseOutputProcessor):
         logger.info(f"🧠 Embedder initialized: {self.embedder.__class__.__name__}")
 
         self.smart_summarizer = SmartDocSummarizer(
-            model_config=self.context.configuration.model,
+            model_config=self.context.configuration.chat_model,
             splitter=self.splitter,
             opts={  # hardcoded; move to config later
                 "sum_enabled": True,

@@ -147,16 +147,18 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
         """
         filters = self._to_filter_clause(search_filter)  # List[Dict] | None
 
-        # Prefer in-query filtering (pre-filtering) for Lucene/HNSW on OS 2.19
         if filters:
+            in_query_filter = {"bool": {"filter": filters}}  # <-- wrap the list for knn.filter
+
             try:
-                pairs = self._lc.similarity_search_with_score(query, k=k, efficient_filter=filters)
+                # Preferred: in-query efficient filter
+                pairs = self._lc.similarity_search_with_score(query, k=k, efficient_filter=in_query_filter)
             except TypeError:
-                # Older langchain-community: route via 'filter' if available
                 try:
-                    pairs = self._lc.similarity_search_with_score(query, k=k, filter=filters)
+                    # Fallback: some LC versions accept 'filter' for the same purpose
+                    pairs = self._lc.similarity_search_with_score(query, k=k, filter=in_query_filter)
                 except TypeError:
-                    # Last resort: post-filter (works everywhere, but less efficient)
+                    # Last resort: post-filter (list is expected here)
                     pairs = self._lc.similarity_search_with_score(query, k=k, boolean_filter=filters)
         else:
             pairs = self._lc.similarity_search_with_score(query, k=k)
@@ -169,7 +171,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
             cid = doc.metadata.get(CHUNK_ID_FIELD) or doc.metadata.get("_id")
             if cid and CHUNK_ID_FIELD not in doc.metadata:
                 doc.metadata[CHUNK_ID_FIELD] = cid
-            doc.metadata["score"] = score
+            doc.metadata["score"] = float(score)
             doc.metadata["rank"] = rank
             doc.metadata["retrieved_at"] = now_iso
             doc.metadata.setdefault("embedding_model", model_name)
@@ -177,7 +179,8 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
             doc.metadata.setdefault("token_count", len((doc.page_content or "").split()))
             hits.append(AnnHit(document=doc, score=float(score)))
 
-        return hits
+        return hits 
+
 
     # ---------- LexicalSearchable capability ----------
 
