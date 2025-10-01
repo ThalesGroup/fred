@@ -307,8 +307,6 @@ applications:
           level: "INFO"
 
     dotenv:
-      AZURE_AD_CLIENT_SECRET: ""
-      AZURE_APIM_SUBSCRIPTION_KEY: ""
       AZURE_OPENAI_API_KEY: ""
       KEYCLOAK_AGENTIC_CLIENT_SECRET: ""
       OPENAI_API_KEY: ""
@@ -656,9 +654,6 @@ applications:
             mode: "read_and_write"
 
     dotenv:
-      AZURE_AD_CLIENT_SECRET: ""
-      AZURE_APIM_SUBSCRIPTION_KEY: ""
-      AZURE_OPENAI_API_KEY: ""
       KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET: ""
       MINIO_SECRET_KEY: ""
       OPENAI_API_KEY: ""
