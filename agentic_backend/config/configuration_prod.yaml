@@ -18,7 +18,7 @@ app:
   log_level: "info"
   reload: false
   reload_dir: "."
-  
+
 security:
   m2m:
     enabled: true
@@ -50,20 +50,20 @@ ai:
   default_chat_model:
     # Required in .env:
     # - OPENAI_API_KEY
-    # provider: "azure"
+    # provider: "azure-openai"
     # name: "gpt-4o"
     # settings:
     #   azure_apim_base_url: "https://tehopenai.openai.azure.com/"
-    #   azureapi_version: "2024-06-01"
-    # provider: "azureapim"
+    #   azure_openai_api_version: "2024-06-01"
+    # provider: "azure-apim"
     # name: "gpt-4o"
     # settings:
     #   azure_apim_base_url: "https://trustnest.azure-api.net"
-    #   azure_resource_path: "/genai-aoai-inference/v2"
-    #   azure_api_version: "2024-06-01"
+    #   azure_apim_resource_path: "/genai-aoai-inference/v2"
+    #   azure_openai_api_version: "2024-06-01"
     #   azure_tenant_id: "your-tenant-id"
-    #   azure_client_id: "your-client-id"
-    #   azure_client_scope: "api://your-client-id/.default"
+    #   azure_ad_client_id: "your-client-id"
+    #   azure_ad_client_scope: "api://your-client-id/.default"
     provider: "openai"
     name: "gpt-4o"
     settings:
@@ -81,7 +81,7 @@ ai:
       tags: ["orchestrator"]
       crew:
         - "Georges"
-        - "Rico Jr." 
+        - "Rico Jr."
         - "Tessa"
       description: >
         An orchestrator agent that can delegate tasks to specialized agents in its crew.
@@ -173,7 +173,7 @@ ai:
           sse_read_timeout: 2000
     - name: "Scribo"
       type: "agent"
-      role: "Structured Report Generator"  
+      role: "Structured Report Generator"
       description: >
         Produces concise project status reports with Summary, Risks, and Next Steps.
         Can optionally include CIR (Crédit d’Impôt Recherche) sections for R&D reporting.
@@ -184,9 +184,8 @@ ai:
       mcp_servers:
         - name: knowledge-flow-mcp-server
           transport: streamable_http
-          url: http://localhost:8111/knowledge-flow/v1/mcp-reports 
-          sse_read_timeout: 2000   
-
+          url: http://localhost:8111/knowledge-flow/v1/mcp-reports
+          sse_read_timeout: 2000
 
 storage:
   postgres:
