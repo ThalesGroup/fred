@@ -77,17 +77,33 @@ class SearchPolicyName(str, Enum):
 @dataclass(frozen=True)
 class HybridPolicy:
     """
-    Hybrid (default) — BM25 + ANN with RRF fusion.
-    Why: robust general default; resists semantic drift while keeping recall.
+    Hybrid (default) — BM25 + ANN with RRF fusion and soft lexical signals.
+    Robust default: resists semantic drift while keeping recall.
     """
 
+    # ---- Output & fetch sizes ----
     k_final: int = 8
     fetch_k_ann: int = 60
     fetch_k_bm25: int = 60
+
+    # ---- Thresholds ----
     vector_min_cosine: float = 0.45
     bm25_min_score: float = 1.5
+
+    # ---- RRF fusion ----
     rrf_k: int = 60
+    w_ann: float = 1.0
+    w_bm25: float = 0.9
+
+    # ---- Diversity / MMR ----
     use_mmr: bool = True
+
+    # ---- Soft signal bonuses (never hard filters) ----
+    enable_soft_signals: bool = True
+    who_query_boost: float = 0.02
+    capitalized_terms_bonus: float = 0.08
+    quoted_phrases_bonus: float = 0.12
+    soft_bonus_cap: float = 0.25
 
 
 @dataclass(frozen=True)

@@ -143,12 +143,25 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
     def ann_search(self, query: str, *, k: int, search_filter: Optional[SearchFilter] = None) -> List[AnnHit]:
         """
         ANN (semantic) search honoring library/document filters.
-        Returns hydrated Documents with cosine similarity scores.
+        Uses in-query filtering when available (efficient_filter), falls back to filter, then boolean_filter.
         """
-        filters = self._to_filter_clause(search_filter)  # now List[Dict] | None
-        kwargs: Dict = {"boolean_filter": filters} if filters else {}
+        filters = self._to_filter_clause(search_filter)  # List[Dict] | None
 
-        pairs = self._lc.similarity_search_with_score(query, k=k, **kwargs)
+        if filters:
+            in_query_filter = {"bool": {"filter": filters}}  # <-- wrap the list for knn.filter
+
+            try:
+                # Preferred: in-query efficient filter
+                pairs = self._lc.similarity_search_with_score(query, k=k, efficient_filter=in_query_filter)
+            except TypeError:
+                try:
+                    # Fallback: some LC versions accept 'filter' for the same purpose
+                    pairs = self._lc.similarity_search_with_score(query, k=k, filter=in_query_filter)
+                except TypeError:
+                    # Last resort: post-filter (list is expected here)
+                    pairs = self._lc.similarity_search_with_score(query, k=k, boolean_filter=filters)
+        else:
+            pairs = self._lc.similarity_search_with_score(query, k=k)
 
         hits: List[AnnHit] = []
         model_name = self._embedding_model_name or "unknown"
@@ -158,7 +171,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
             cid = doc.metadata.get(CHUNK_ID_FIELD) or doc.metadata.get("_id")
             if cid and CHUNK_ID_FIELD not in doc.metadata:
                 doc.metadata[CHUNK_ID_FIELD] = cid
-            doc.metadata["score"] = score
+            doc.metadata["score"] = float(score)
             doc.metadata["rank"] = rank
             doc.metadata["retrieved_at"] = now_iso
             doc.metadata.setdefault("embedding_model", model_name)
@@ -166,7 +179,8 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
             doc.metadata.setdefault("token_count", len((doc.page_content or "").split()))
             hits.append(AnnHit(document=doc, score=float(score)))
 
-        return hits
+        return hits 
+
 
     # ---------- LexicalSearchable capability ----------
 
