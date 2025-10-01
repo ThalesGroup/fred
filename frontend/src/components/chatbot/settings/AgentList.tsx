@@ -9,7 +9,6 @@
 //   and an onSelect callback. Conversation concerns live elsewhere.
 // - Kept small, testable, and memoized: avoids sidebar re-renders when sessions update.
 
-import { memo, useMemo, useCallback } from "react";
 import {
   Box,
   Divider,
@@ -17,14 +16,15 @@ import {
   ListItem,
   ListItemButton,
   ListItemText,
+  Theme,
   Tooltip,
   Typography,
   useTheme,
-  Theme,
 } from "@mui/material";
+import { memo, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { getAgentBadge } from "../../../utils/avatar";
 import { AnyAgent } from "../../../common/agent";
+import { getAgentBadge } from "../../../utils/avatar";
 
 // Public contract kept minimal on purpose:
 // - agents: source of truth from backend
