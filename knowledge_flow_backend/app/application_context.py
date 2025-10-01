@@ -25,6 +25,7 @@ from fred_core import (
     KPIWriter,
     LogStoreConfig,
     ModelConfiguration,
+    ModelProvider,
     OpenSearchIndexConfig,
     OpenSearchKPIStore,
     SQLStorageConfig,
@@ -34,6 +35,7 @@ from fred_core import (
     get_model,
     split_realm_url,
 )
+from fred_core import BaseLogStore, InMemoryLogStorageConfig, OpenSearchLogStore, RamLogStore
 from langchain_core.embeddings import Embeddings
 from opensearchpy import OpenSearch, RequestsHttpConnection
 
@@ -196,6 +198,7 @@ class ApplicationContext:
     _metadata_store_instance: Optional[BaseMetadataStore] = None
     _tag_store_instance: Optional[BaseTagStore] = None
     _kpi_store_instance: Optional[BaseKPIStore] = None
+    _log_store_instance: Optional[BaseLogStore] = None
     _opensearch_client: Optional[OpenSearch] = None
     _resource_store_instance: Optional[BaseResourceStore] = None
     _tabular_stores: Optional[Dict[str, StoreInfo]] = None
@@ -359,6 +362,37 @@ class ApplicationContext:
         cls = getattr(module, class_name)
         return cls
 
+    def get_log_store(self) -> BaseLogStore:
+        """
+        Factory function to get the appropriate log storage backend based on configuration.
+        Returns:
+            BaseLogStore: An instance of the log storage backend.
+        """
+        if self._log_store_instance is not None:
+            return self._log_store_instance
+
+        config = ApplicationContext.get_instance().get_config().storage.log_store
+        if isinstance(config, OpenSearchIndexConfig):
+            opensearch_config = get_configuration().storage.opensearch
+            password = opensearch_config.password
+            if not password:
+                raise ValueError("Missing OpenSearch credentials: OPENSEARCH_PASSWORD")
+
+            self._log_store_instance = OpenSearchLogStore(
+                host=opensearch_config.host,
+                index=config.index,
+                username=opensearch_config.username,
+                password=password,
+                secure=opensearch_config.secure,
+                verify_certs=opensearch_config.verify_certs,
+            )
+        elif isinstance(config, InMemoryLogStorageConfig) or config is None:
+            self._log_store_instance = RamLogStore(capacity=1000)  # Default to in-memory store if not configured
+        else:
+            raise ValueError("Log store configuration is missing or invalid")
+
+        return self._log_store_instance
+
     def get_content_store(self) -> BaseContentStore:
         """
         Factory function to get the appropriate storage backend based on configuration.
@@ -406,13 +440,13 @@ class ApplicationContext:
         - Only secrets live in env; all other wiring lives in YAML.
         - Typed return (Embeddings) keeps the contract clear at call sites.
         """
-        cfg: ModelConfiguration = self.configuration.embedding
+        cfg: ModelConfiguration = self.configuration.embedding_model
         return get_embeddings(cfg)
 
     def get_utility_model(self):
-        if not self.configuration.model:
+        if not self.configuration.chat_model:
             raise ValueError("Utility model configuration is missing.")
-        return get_model(self.configuration.model)
+        return get_model(self.configuration.chat_model)
 
     def get_vision_model(self):
         if not self.configuration.vision:
@@ -433,7 +467,7 @@ class ApplicationContext:
         """
         if self._vector_store_instance is not None:
             return self._vector_store_instance
-        embedding_model_name = self.configuration.embedding.name or "unknown"
+        embedding_model_name = self.configuration.embedding_model.name or "unknown"
         store = self.configuration.storage.vector_store
 
         if isinstance(store, OpenSearchVectorIndexConfig):
@@ -734,7 +768,7 @@ class ApplicationContext:
                 raise ValueError("Invalid Keycloak URL") from e
             _require_env("KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET")
 
-        embedding = self.configuration.embedding
+        embedding = self.configuration.embedding_model
         # Non-secret settings from YAML
         for k, v in (embedding.settings or {}).items():
             # Heuristic mask for anything that *looks* sensitive even if put in YAML by mistake
@@ -745,14 +779,14 @@ class ApplicationContext:
 
         # Required env vars by provider
         provider = (embedding.provider or "").lower()
-        if provider == "openai":
+        if provider == ModelProvider.OPENAI.value:
             _require_env("OPENAI_API_KEY")
-        elif provider == "azure":
+        elif provider == ModelProvider.AZURE_OPENAI.value:
             _require_env("AZURE_OPENAI_API_KEY")
-        elif provider == "azureapim":
+        elif provider == ModelProvider.AZURE_APIM.value:
             _require_env("AZURE_CLIENT_SECRET")
             _require_env("AZURE_APIM_KEY")
-        elif provider == "ollama":
+        elif provider == ModelProvider.OLLAMA.value:
             # Usually no secrets; base_url is in settings
             pass
         else:

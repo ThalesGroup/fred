@@ -6,14 +6,15 @@
 import React, { memo, useMemo, useRef, useEffect } from "react";
 import MessageCard from "./MessageCard";
 import Sources from "./Sources";
-import { AgenticFlow, ChatMessage } from "../../slices/agentic/agenticOpenApi";
+import { ChatMessage } from "../../slices/agentic/agenticOpenApi";
 import { getExtras, hasNonEmptyText } from "./ChatBotUtils";
 import ReasoningStepsAccordion from "./ReasoningStepsAccordion";
+import { AnyAgent } from "../../common/agent";
 
 type Props = {
   messages: ChatMessage[];
-  agenticFlows: AgenticFlow[];
-  currentAgenticFlow: AgenticFlow;
+  agents: AnyAgent[];
+  currentAgent: AnyAgent;
 
   // id -> label maps
   libraryNameById?: Record<string, string>;
@@ -24,8 +25,8 @@ type Props = {
 
 function Area({
   messages,
-  agenticFlows,
-  currentAgenticFlow,
+  agents,
+  currentAgent,
 
   // NEW: maps & current selections
   libraryNameById,
@@ -46,9 +47,9 @@ function Area({
     }
   };
 
-  const resolveAgenticFlow = (msg: ChatMessage): AgenticFlow => {
-    const agentName = msg.metadata?.agent_name ?? currentAgenticFlow.name;
-    return agenticFlows.find((flow) => flow.name === agentName) ?? currentAgenticFlow;
+  const resolveAgent = (msg: ChatMessage): AnyAgent => {
+    const agentName = msg.metadata?.agent_name ?? currentAgent.name;
+    return agents.find((agent) => agent.name === agentName) ?? currentAgent;
   };
 
   const content = useMemo(() => {
@@ -124,8 +125,7 @@ function Area({
           <MessageCard
             key={`user-${userMessage.session_id}-${userMessage.exchange_id}-${userMessage.rank}`}
             message={userMessage}
-            currentAgenticFlow={currentAgenticFlow}
-            agenticFlow={agentForUser}
+            agent={currentAgent}
             side="right"
             enableCopy
             enableThumbs
@@ -146,7 +146,7 @@ function Area({
             key={`trace-${group[0].session_id}-${group[0].exchange_id}`}
             steps={reasoningSteps}
             isOpenByDefault
-            resolveAgent={resolveAgenticFlow}
+            resolveAgent={resolveAgent}
           />,
         );
       }
@@ -166,7 +166,7 @@ function Area({
 
       // ---------- intermediary assistant/user messages ----------
       for (const msg of others) {
-        const agenticFlow = resolveAgenticFlow(msg);
+        // const agenticFlow = resolveAgent(msg);
         const inlineSrc = msg.metadata?.sources;
 
         elements.push(
@@ -183,9 +183,8 @@ function Area({
             <MessageCard
               key={`final-${msg.session_id}-${msg.exchange_id}-${msg.rank}`}
               message={msg}
-              agenticFlow={agenticFlow}
-              currentAgenticFlow={currentAgenticFlow}
-              side="left"
+              agent={currentAgent}
+              side={msg.role === "user" ? "right" : "left"}
               enableCopy
               enableThumbs
               suppressText={false}
@@ -203,7 +202,7 @@ function Area({
 
       // ---------- final assistant message ----------
       for (const msg of finals) {
-        const agenticFlow = resolveAgenticFlow(msg);
+        // const agenticFlow = resolveAgent(msg);
         const finalSources = keptSources ?? (msg.metadata?.sources as any[] | undefined);
 
         // 1) Sources first (expanded)
@@ -224,8 +223,7 @@ function Area({
           <MessageCard
             key={`final-${msg.session_id}-${msg.exchange_id}-${msg.rank}`}
             message={msg}
-            agenticFlow={agenticFlow}
-            currentAgenticFlow={currentAgenticFlow}
+            agent={currentAgent}
             side="left"
             enableCopy
             enableThumbs
@@ -245,8 +243,8 @@ function Area({
     return elements;
   }, [
     messages,
-    agenticFlows,
-    currentAgenticFlow,
+    agents,
+    currentAgent,
     highlightUid,
     libraryNameById,
     templateNameById,

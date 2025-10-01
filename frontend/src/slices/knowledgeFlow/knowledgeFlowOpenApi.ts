@@ -136,9 +136,16 @@ const injectedRtkApi = api.injectEndpoints({
     getAllSchemas: build.query<GetAllSchemasApiResponse, GetAllSchemasApiArg>({
       query: (queryArg) => ({ url: `/knowledge-flow/v1/tabular/${queryArg.dbName}/schemas` }),
     }),
-    rawSqlQuery: build.mutation<RawSqlQueryApiResponse, RawSqlQueryApiArg>({
+    rawSqlQueryRead: build.mutation<RawSqlQueryReadApiResponse, RawSqlQueryReadApiArg>({
       query: (queryArg) => ({
-        url: `/knowledge-flow/v1/tabular/${queryArg.dbName}/sql`,
+        url: `/knowledge-flow/v1/tabular/${queryArg.dbName}/sql/read`,
+        method: "POST",
+        body: queryArg.rawSqlRequest,
+      }),
+    }),
+    rawSqlQueryWrite: build.mutation<RawSqlQueryWriteApiResponse, RawSqlQueryWriteApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/tabular/${queryArg.dbName}/sql/write`,
         method: "POST",
         body: queryArg.rawSqlRequest,
       }),
@@ -315,6 +322,22 @@ const injectedRtkApi = api.injectEndpoints({
     osDiagnostics: build.query<OsDiagnosticsApiResponse, OsDiagnosticsApiArg>({
       query: () => ({ url: `/knowledge-flow/v1/os/diagnostics` }),
     }),
+    queryLogsKnowledgeFlowV1LogsQueryPost: build.mutation<
+      QueryLogsKnowledgeFlowV1LogsQueryPostApiResponse,
+      QueryLogsKnowledgeFlowV1LogsQueryPostApiArg
+    >({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/logs/query`, method: "POST", body: queryArg.logQuery }),
+    }),
+    writeReportKnowledgeFlowV1McpReportsWritePost: build.mutation<
+      WriteReportKnowledgeFlowV1McpReportsWritePostApiResponse,
+      WriteReportKnowledgeFlowV1McpReportsWritePostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/mcp/reports/write`,
+        method: "POST",
+        body: queryArg.writeReportRequest,
+      }),
+    }),
     processDocumentsKnowledgeFlowV1ProcessDocumentsPost: build.mutation<
       ProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostApiResponse,
       ProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostApiArg
@@ -406,7 +429,7 @@ export type DownloadDocumentMediaKnowledgeFlowV1MarkdownDocumentUidMediaMediaIdG
   mediaId: string;
 };
 export type DownloadDocumentKnowledgeFlowV1RawContentDocumentUidGetApiResponse =
-  /** status 200 Binary file stream */ any;
+  /** status 200 Binary file stream */ Blob;
 export type DownloadDocumentKnowledgeFlowV1RawContentDocumentUidGetApiArg = {
   documentUid: string;
 };
@@ -432,8 +455,14 @@ export type GetAllSchemasApiArg = {
   /** Name of the tabular database */
   dbName: string;
 };
-export type RawSqlQueryApiResponse = /** status 200 Successful Response */ TabularQueryResponse;
-export type RawSqlQueryApiArg = {
+export type RawSqlQueryReadApiResponse = /** status 200 Successful Response */ TabularQueryResponse;
+export type RawSqlQueryReadApiArg = {
+  /** Name of the tabular database */
+  dbName: string;
+  rawSqlRequest: RawSqlRequest;
+};
+export type RawSqlQueryWriteApiResponse = /** status 200 Successful Response */ TabularQueryResponse;
+export type RawSqlQueryWriteApiArg = {
   /** Name of the tabular database */
   dbName: string;
   rawSqlRequest: RawSqlRequest;
@@ -559,6 +588,15 @@ export type OsShardsApiArg = {
 };
 export type OsDiagnosticsApiResponse = /** status 200 Successful Response */ any;
 export type OsDiagnosticsApiArg = void;
+export type QueryLogsKnowledgeFlowV1LogsQueryPostApiResponse = /** status 200 Successful Response */ LogQueryResult;
+export type QueryLogsKnowledgeFlowV1LogsQueryPostApiArg = {
+  logQuery: LogQuery;
+};
+export type WriteReportKnowledgeFlowV1McpReportsWritePostApiResponse =
+  /** status 200 Successful Response */ WriteReportResponse;
+export type WriteReportKnowledgeFlowV1McpReportsWritePostApiArg = {
+  writeReportRequest: WriteReportRequest;
+};
 export type ProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostApiResponse = /** status 200 Successful Response */ any;
 export type ProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostApiArg = {
   processDocumentsRequest: ProcessDocumentsRequest;
@@ -912,6 +950,52 @@ export type KpiQuery = {
   limit?: number;
   order_by?: OrderBy | null;
 };
+export type LogEventDto = {
+  ts: number;
+  level: "DEBUG" | "INFO" | "WARNING" | "ERROR" | "CRITICAL";
+  logger: string;
+  file: string;
+  line: number;
+  msg: string;
+  service?: string | null;
+  extra?: {
+    [key: string]: any;
+  } | null;
+};
+export type LogQueryResult = {
+  events?: LogEventDto[];
+};
+export type LogFilter = {
+  level_at_least?: ("DEBUG" | "INFO" | "WARNING" | "ERROR" | "CRITICAL") | null;
+  logger_like?: string | null;
+  service?: string | null;
+  text_like?: string | null;
+};
+export type LogQuery = {
+  /** ISO or 'now-10m' */
+  since: string;
+  until?: string | null;
+  filters?: LogFilter;
+  limit?: number;
+  order?: "asc" | "desc";
+};
+export type WriteReportResponse = {
+  document_uid: string;
+  md_url: string;
+  html_url?: string | null;
+  pdf_url?: string | null;
+};
+export type WriteReportRequest = {
+  /** Report title shown in UI */
+  title: string;
+  /** Canonical Markdown content (stored as-is) */
+  markdown: string;
+  /** Optional template identifier for traceability */
+  template_id?: string | null;
+  /** UI tags (chips) */
+  tags?: string[];
+  render_formats?: string[];
+};
 export type FileToProcessWithoutUser = {
   source_tag: string;
   tags?: string[];
@@ -957,7 +1041,8 @@ export const {
   useLazyListTableNamesQuery,
   useGetAllSchemasQuery,
   useLazyGetAllSchemasQuery,
-  useRawSqlQueryMutation,
+  useRawSqlQueryReadMutation,
+  useRawSqlQueryWriteMutation,
   useDeleteTableMutation,
   useListAllTagsKnowledgeFlowV1TagsGetQuery,
   useLazyListAllTagsKnowledgeFlowV1TagsGetQuery,
@@ -998,6 +1083,8 @@ export const {
   useLazyOsShardsQuery,
   useOsDiagnosticsQuery,
   useLazyOsDiagnosticsQuery,
+  useQueryLogsKnowledgeFlowV1LogsQueryPostMutation,
+  useWriteReportKnowledgeFlowV1McpReportsWritePostMutation,
   useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation,
   useScheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPostMutation,
 } = injectedRtkApi;

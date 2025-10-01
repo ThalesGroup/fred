@@ -18,7 +18,7 @@ from pydantic import TypeAdapter, ValidationError
 from app.common.mcp_runtime import MCPRuntime
 from app.common.resilient_tool_node import make_resilient_tools_node
 from app.common.structures import AgentSettings
-from app.core.agents.flow import AgentFlow
+from app.core.agents.agent_flow import AgentFlow
 
 logger = logging.getLogger(__name__)
 

@@ -290,7 +290,7 @@ const lightTheme = createTheme({
   palette: lightPalette,
   typography: lightTypography,
   layout: {
-    sidebarWidth: 180,
+    sidebarWidth: 200,
     sidebarCollapsedWidth: 80,
   },
   components: {
@@ -299,24 +299,40 @@ const lightTheme = createTheme({
       defaultProps: {
         arrow: true,
         disableInteractive: true,
-        enterDelay: 900,
-        enterNextDelay: 200,
-        leaveDelay: 100,
-        enterTouchDelay: 800,
-        leaveTouchDelay: 3000,
+        placement: "top",
+        enterDelay: 800,
+        enterNextDelay: 300,
+        leaveDelay: 80,
+        enterTouchDelay: 600,
+        leaveTouchDelay: 2500,
+        slotProps: {
+          popper: {
+            modifiers: [{ name: "offset", options: { offset: [0, 8] } }],
+          },
+        },
       },
       styleOverrides: {
-        tooltip: {
-          fontSize: "1.0rem",
-          fontWeight: "300",
-          backgroundColor: lightPalette.background.paper,
-          color: lightPalette.text.primary,
-          padding: "12px 16px",
-          borderRadius: "8px",
-          boxShadow: "0px 2px 4px rgba(0, 0, 0, 0.1)",
+        tooltip: ({ theme }) => ({
+          background: theme.palette.surfaces.raised,
+          color: theme.palette.text.primary,
+          fontSize: theme.typography.body1.fontSize, // ⬅ use body2 baseline (~0.875rem)
+          fontWeight: 400, // a touch heavier for readability
+          padding: "8px 12px",
+          borderRadius: 8,
+          border: `1px solid ${theme.palette.divider}`,
+          boxShadow: theme.palette.mode === "dark" ? "0 8px 24px rgba(0,0,0,0.35)" : "0 6px 16px rgba(0,0,0,0.12)",
           maxWidth: 360,
+        }),
+        arrow: ({ theme }) => ({
+          color: "transparent",
+          "&:before": {
+            background: theme.palette.surfaces.raised,
+            border: `1px solid ${theme.palette.divider}`,
+          },
+        }),
+        popper: {
+          backdropFilter: "blur(6px)",
         },
-        arrow: { color: lightPalette.background.paper },
       },
     },
     MuiTypography: {
@@ -380,34 +396,50 @@ const darkTheme = createTheme({
   palette: darkPalette,
   typography: darkTypography,
   layout: {
-    sidebarWidth: 180,
+    sidebarWidth: 200,
     sidebarCollapsedWidth: 80,
   },
   components: {
     // Keep your existing overrides...
+    // in lightTheme.components / darkTheme.components
     MuiTooltip: {
       defaultProps: {
         arrow: true,
         disableInteractive: true,
-        enterDelay: 900,
-        enterNextDelay: 200,
-        leaveDelay: 100,
-        enterTouchDelay: 800,
-        leaveTouchDelay: 3000,
+        placement: "top",
+        enterDelay: 800,
+        enterNextDelay: 300,
+        leaveDelay: 80,
+        enterTouchDelay: 600,
+        leaveTouchDelay: 2500,
+        slotProps: {
+          popper: {
+            modifiers: [{ name: "offset", options: { offset: [0, 8] } }],
+          },
+        },
       },
       styleOverrides: {
-        tooltip: {
-          fontSize: "1.0rem",
-          fontWeight: "300",
-          backgroundColor: darkPalette.background.paper,
-          color: darkPalette.text.primary,
-          padding: "12px 16px",
-          borderRadius: "8px",
-          boxShadow: "0px 2px 4px rgba(0, 0, 0, 0.1)",
+        tooltip: ({ theme }) => ({
+          background: theme.palette.surfaces.raised,
+          color: theme.palette.text.primary,
+          fontSize: theme.typography.body1.fontSize, // ⬅ use body2 baseline (~0.875rem)
+          fontWeight: 400, // a touch heavier for readability
+          padding: "8px 12px",
+          borderRadius: 8,
+          border: `1px solid ${theme.palette.divider}`,
+          boxShadow: theme.palette.mode === "dark" ? "0 8px 24px rgba(0,0,0,0.35)" : "0 6px 16px rgba(0,0,0,0.12)",
           maxWidth: 360,
+        }),
+        arrow: ({ theme }) => ({
+          color: "transparent",
+          "&:before": {
+            background: theme.palette.surfaces.raised,
+            border: `1px solid ${theme.palette.divider}`,
+          },
+        }),
+        popper: {
+          backdropFilter: "blur(6px)",
         },
-        arrow: { color: darkPalette.background.paper },
-        popper: { backdropFilter: "blur(8px)" },
       },
     },
     MuiTypography: {

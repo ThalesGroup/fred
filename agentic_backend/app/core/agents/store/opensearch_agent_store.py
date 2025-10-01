@@ -1,55 +1,59 @@
+# app/core/agents/store/opensearch_agent_store.py
 # Copyright Thales 2025
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# Apache-2.0
 
+from __future__ import annotations
 
 import logging
 from typing import List, Optional
 
 from fred_core import validate_index_mapping
 from opensearchpy import NotFoundError, OpenSearch, RequestsHttpConnection
+from pydantic import TypeAdapter
 
+# ⬇️ IMPORTANT: new location that defines the union AgentSettings = Annotated[Union[Agent, Leader], ...]
 from app.common.structures import AgentSettings
 from app.core.agents.store.base_agent_store import BaseAgentStore
 
 logger = logging.getLogger(__name__)
 
+# Why this mapping:
+# - We keep only fields present in the new BaseAgent/Agent/Leader model tree.
+# - Strings we filter on (name, type, role, tags) are keywords.
+# - Human text (description) is text.
+# - Complex configs (model, tuning, mcp_servers) stay enabled objects for retrieval.
 AGENTS_INDEX_MAPPING = {
     "mappings": {
+        "dynamic": False,
         "properties": {
             "name": {"type": "keyword"},
-            "type": {"type": "keyword"},
+            "type": {"type": "keyword"},  # "agent" | "leader" (discriminator)
             "enabled": {"type": "boolean"},
-            "categories": {"type": "keyword"},
-            "settings": {"type": "object", "enabled": True},
+            "tags": {
+                "type": "keyword"
+            },  # replaces previous singular "tag"/"categories"
+            "role": {"type": "keyword"},  # user-facing “what it is”
+            "description": {"type": "text"},  # human text
+            "class_path": {"type": "keyword", "null_value": "null"},
             "model": {"type": "object", "enabled": True},
-            "tag": {"type": "keyword"},
-            "mcp_servers": {"type": "nested"},
-            "max_steps": {"type": "integer"},
-            "description": {"type": "text"},
-            "base_prompt": {"type": "text"},
-            "nickname": {"type": "text"},
-            "role": {"type": "text"},
-            "icon": {"type": "keyword"},
-        }
+            "tuning": {"type": "object", "enabled": True},
+            "mcp_servers": {
+                "type": "object",
+                "enabled": True,
+            },  # not nested until we need nested queries
+        },
     }
 }
+
+# Discriminated-union (de)serializer
+AgentSettingsAdapter = TypeAdapter(AgentSettings)
 
 
 class OpenSearchAgentStore(BaseAgentStore):
     """
-    OpenSearch implementation of BaseAgentStore.
-    Each agent is stored under its name as document ID.
+    Fred rationale:
+    - Agents are keyed by `name` (document ID).
+    - We store the Pydantic-union payload as-is; mapping exposes only filter/search fields.
     """
 
     def __init__(
@@ -77,37 +81,50 @@ class OpenSearchAgentStore(BaseAgentStore):
             logger.info(
                 f"[AGENTS] OpenSearch index '{self.index_name}' already exists."
             )
-            # Validate existing mapping matches expected mapping
             validate_index_mapping(self.client, self.index_name, AGENTS_INDEX_MAPPING)
 
+    # ---------------- CRUD ----------------
+
     def save(self, settings: AgentSettings) -> None:
+        """
+        Why model_dump(mode='json'):
+        - Ensures union payload (with 'type' discriminator) is serialized consistently
+          and excludes pydantic internals.
+        """
         try:
-            self.client.index(
-                index=self.index_name,
-                id=settings.name,
-                body=settings.model_dump(mode="json"),
+            body = AgentSettingsAdapter.dump_python(
+                settings, mode="json", exclude_none=True
             )
+            self.client.index(index=self.index_name, id=settings.name, body=body)
             logger.info(f"[AGENTS] Agent '{settings.name}' saved")
         except Exception as e:
             logger.error(f"[AGENTS] Failed to save agent '{settings.name}': {e}")
             raise
 
     def load_all(self) -> List[AgentSettings]:
+        """
+        We keep it simple (<=1000). If you expect more, switch to scroll or search_after.
+        """
         try:
             result = self.client.search(
                 index=self.index_name,
                 body={"query": {"match_all": {}}},
                 params={"size": 1000},
             )
-            return [AgentSettings(**hit["_source"]) for hit in result["hits"]["hits"]]
+            docs = [hit["_source"] for hit in result["hits"]["hits"]]
+            # ⬇️ Union-safe validation
+            return [AgentSettingsAdapter.validate_python(doc) for doc in docs]
         except Exception as e:
             logger.error(f"[AGENTS] Failed to list agents: {e}")
             raise
 
     def get(self, name: str) -> Optional[AgentSettings]:
+        """
+        Union-safe load using TypeAdapter.
+        """
         try:
             result = self.client.get(index=self.index_name, id=name)
-            return AgentSettings(**result["_source"])
+            return AgentSettingsAdapter.validate_python(result["_source"])
         except NotFoundError:
             return None
         except Exception as e:

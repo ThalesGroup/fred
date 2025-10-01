@@ -41,7 +41,7 @@ from app.common.structures import (
     AgentSettings,
     Configuration,
 )
-from app.core.agents.flow import AgentFlow
+from app.core.agents.agent_flow import AgentFlow
 from app.core.agents.store.base_agent_store import BaseAgentStore
 
 logger = logging.getLogger(__name__)
@@ -79,7 +79,13 @@ class AgentLoader:
         for agent_cfg in self.config.ai.agents:
             if not agent_cfg.enabled:
                 continue
-
+            if not agent_cfg.class_path:
+                logger.warning(
+                    "No class_path for static agent '%s' — skipping.",
+                    agent_cfg.name,
+                )
+                failed[agent_cfg.name] = agent_cfg
+                continue
             try:
                 cls = self._import_agent_class(agent_cfg.class_path)
                 if not issubclass(cls, AgentFlow):
@@ -133,6 +139,12 @@ class AgentLoader:
                 )
                 continue
 
+            if not agent_settings.enabled:
+                logger.info(
+                    "↪️ Skipping disabled persisted agent: %s", agent_settings.name
+                )
+                continue
+
             try:
                 cls = self._import_agent_class(agent_settings.class_path)
                 if not issubclass(cls, AgentFlow):
@@ -182,4 +194,6 @@ class AgentLoader:
     def _import_agent_class(self, class_path: str) -> Type[AgentFlow]:
         module_name, class_name = class_path.rsplit(".", 1)
         module = importlib.import_module(module_name)
+        if class_name == "Leader":
+            raise ImportError(f"Class '{class_name}' not found in '{module_name}'")
         return getattr(module, class_name)

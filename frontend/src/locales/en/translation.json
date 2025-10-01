@@ -42,7 +42,9 @@
       "agent": "View agents",
       "workspaces": "View Workspace",
       "account": "View your account",
-      "selectCluster": "Please select a cluster first"
+      "selectCluster": "Please select a cluster first",
+      "monitoring_kpi": "Kpi Dashboard",
+      "monitoring_logs": "Log Console"
     },
     "theme": {
       "light": "light",
@@ -51,7 +53,9 @@
     "footer": {
       "innovationHub": "Innovation hub",
       "website": "Website"
-    }
+    },
+    "monitoring_kpi": "Kpis",
+    "monitoring_logs": "Logs"
   },
   "agentHub": {
     "title": "Agent Hub",
@@ -145,9 +149,17 @@
     "newConversationHelp": "Start a new conversation (not yet saved)",
     "draftNotSaved": "Draft • not yet saved"
   },
-  "monitoring": {
+  "kpis": {
     "title": "Agent & AI Service Monitoring",
     "description": "Track usage, performance, and costs across all AI agents and services — including tokens, latency, and activity trends."
+  },
+  "logs": {
+    "title": "Log Console",
+    "description": "Monitor real-time logs from your AI agents and services, with advanced filtering and search options.",
+    "live": "Live",
+    "file": "logger file", 
+    "content": "log content",
+    "copyAll": "Copy All ({{count}})"
   },
   "metrics": {
     "error": "Failed to load metrics",
@@ -167,10 +179,15 @@
     }
   },
   "agentCard": {
-    "edit": "Edit agent",
+    "edit": "Tune the agent exposed parameters",
     "delete": "Delete agent",
     "taggedWith": "Tagged with {{tag}}",
-    "expertIntegrations": "Expert integrations"
+    "expertIntegrations": "Expert integrations",
+    "enabled": "Enable agent",
+    "disable": "Disable agent",
+    "favorite": "Add the agent to your favorites",
+    "unfavorite": "Remove the agent from your favorites"
+
   },
   "dialogs": {
     "create": {
@@ -389,5 +406,23 @@
     "strictDescription": "Only use documents that are explicitly relevant to the query.",
     "hybridDescription": "Combine relevant documents with semantic search results.",
     "semanticDescription": "Use semantic search to find related documents."
+  },
+  "sourceDetails": {
+    "bestScore": "best {{score}}%",
+    "license": "license: {{license}}",
+    "confidential": "Confidential",
+    "file": "File",
+    "path": "Path",
+    "author": "Author",
+    "created": "Created",
+    "modified": "Modified",
+    "openSourceDocument": "Open source document",
+    "citedPassagesTitle": "Cited passages ({{count}})",
+    "pageAbbreviation": "p.{{page}}",
+    "editedAbbreviation": "edited {{date}}",
+    "openInPreview": "Preview",
+    "openSource": "Open source",
+    "openAllInPreview": "Open all in preview",
+    "openAllInPdfPreview": "Open all in PDF preview"
   }
 }

@@ -42,7 +42,9 @@
       "agent": "Voir les agents",
       "workspaces": "Voir les espaces",
       "account": "Voir votre profil",
-      "selectCluster": "Veuillez d'abord sélectionner un cluster"
+      "selectCluster": "Veuillez d'abord sélectionner un cluster",
+      "monitoring_kpi": "Vue d'ensemble des Kpis",
+      "monitoring_logs": "Console de logs"
     },
     "theme": {
       "light": "clair",
@@ -51,7 +53,9 @@
     "footer": {
       "innovationHub": "Innovation hub",
       "website": "Site web"
-    }
+    },
+    "monitoring_kpi": "Kpis",
+    "monitoring_logs": "Logs"
   },
   "agentHub": {
     "title": "Centre des Agents",
@@ -145,9 +149,17 @@
     "draftNotSaved": "Brouillon • non encore enregistré",
     "profile": "Profil"
   },
-  "monitoring": {
+  "kpis": {
     "title": "Surveillance des agents et services IA",
     "description": "Suivez l’utilisation, la performance et les coûts de tous les agents et services IA — y compris les tokens, la latence et les tendances d’activité."
+  },
+  "logs": {
+    "title": "Console de logs",
+    "description": "Surveillez les logs en temps réel de vos agents et services IA, avec des options de filtrage et de recherche avancées.",
+    "live": "En direct",
+    "file": "fichier de log",
+    "content": "contenu du log",
+    "copyAll": "Copier tout ({{count}})"
   },
   "metrics": {
     "error": "Échec du chargement des métriques",
@@ -167,10 +179,14 @@
     }
   },
   "agentCard": {
-    "edit": "Modifier",
+    "edit": "Modifier les paramètres exposés de l'agent",
     "delete": "Supprimer",
     "taggedWith": "Tagué : {{tag}}",
-    "expertIntegrations": "Intégrations expertes :"
+    "expertIntegrations": "Intégrations expertes :",
+    "enabled": "Activer l'agent",
+    "disable": "Désactiver l'agent",
+    "favorite": "Ajouter l'agent à vos favoris",
+    "unfavorite": "Retirer l'agent de vos favoris"
   },
   "dialogs": {
     "create": {
@@ -391,5 +407,23 @@
     "strictDescription": "N'utiliser que des documents explicitement pertinents pour la requête.",
     "hybridDescription": "Combiner des documents pertinents avec des résultats de recherche sémantique.",
     "semanticDescription": "Utiliser la recherche sémantique pour trouver des documents connexes."
+  },
+  "sourceDetails": {
+    "bestScore": "meilleur {{score}}%",
+    "license": "licence : {{license}}",
+    "confidential": "Confidentiel",
+    "file": "Fichier",
+    "path": "Chemin",
+    "author": "Auteur",
+    "created": "Créé",
+    "modified": "Modifié",
+    "openSourceDocument": "Ouvrir le document source",
+    "citedPassagesTitle": "Passages cités ({{count}})",
+    "pageAbbreviation": "p.{{page}}",
+    "editedAbbreviation": "édité {{date}}",
+    "openInPreview": "Prévisualisation",
+    "openSource": "Ouvrir la source",
+    "openAllInPreview": "Tout ouvrir en prévisualisation",
+    "openAllInPdfPreview": "Tout ouvrir en prévisualisation PDF"
   }
 }

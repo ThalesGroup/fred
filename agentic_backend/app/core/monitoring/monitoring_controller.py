@@ -23,8 +23,9 @@ from fastapi import (
 )
 from fred_core import KeycloakUser, get_current_user
 
+from app.core.chatbot.chatbot_controller import get_session_orchestrator
 from app.core.chatbot.metric_structures import MetricsResponse
-from app.core.monitoring.monitoring_service import AppMonitoringMetricsService
+from app.core.chatbot.session_orchestrator import SessionOrchestrator
 
 logger = logging.getLogger(__name__)
 
@@ -37,11 +38,6 @@ def _split_csv(values: list[str]) -> list[str]:
     for v in values or []:
         out.extend([p.strip() for p in v.split(",") if p and p.strip()])
     return out
-
-
-# Dependency function to get the service instance
-def get_monitoring_service() -> AppMonitoringMetricsService:
-    return AppMonitoringMetricsService()
 
 
 @router.get("/healthz", summary="Liveness check for Kubernetes")
@@ -66,7 +62,7 @@ def get_node_numerical_metrics(
     agg: List[str] = Query(default=[]),
     groupby: List[str] = Query(default=[]),
     user: KeycloakUser = Depends(get_current_user),
-    service: AppMonitoringMetricsService = Depends(get_monitoring_service),
+    session_orchestrator: SessionOrchestrator = Depends(get_session_orchestrator),
 ) -> MetricsResponse:
     agg = _split_csv(agg)  # supports ?agg=a:b&agg=c:d OR ?agg=a:b,c:d
     groupby = _split_csv(groupby)
@@ -79,12 +75,12 @@ def get_node_numerical_metrics(
         if op not in SUPPORTED_OPS:
             raise HTTPException(400, detail=f"Unsupported aggregation op: {op}")
         agg_mapping.setdefault(field, []).append(op)
-    return service.get_node_numerical_metrics(
+
+    return session_orchestrator.get_metrics(
         user,
         start=start,
         end=end,
         precision=precision,
         groupby=groupby,
         agg_mapping=agg_mapping,
-        user_id=user.uid,
     )

@@ -9,22 +9,11 @@
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Copyright Thales 2025
+//
 
 import { Button } from "@mui/material";
 import { ReactNode } from "react";
-
-export type QuickRangeType =
-  | "today"
-  | "yesterday"
-  | "thisWeek"
-  | "thisMonth"
-  | "thisYear"
-  | "last12h"
-  | "last24h"
-  | "last7d"
-  | "last30d";
 
 type Props = {
   isSel: boolean;
@@ -38,7 +27,7 @@ export default function QuickRangeButton({ isSel, onClick, label }: Props) {
       onClick={onClick}
       variant={isSel ? "contained" : "outlined"}
       size="small"
-      sx={{ px: 1.2, py: 0.3, mr: 0.5, mb: 0.5, textTransform: "none", fontSize: 12, lineHeight: 1.2 }}
+     sx={{ py: 0.3,  textTransform: "none", fontSize: 12, lineHeight: 1.2 }}
     >
       {label}
     </Button>

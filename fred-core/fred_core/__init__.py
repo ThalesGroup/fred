@@ -29,6 +29,7 @@ from fred_core.common.structures import (
 from fred_core.common.utils import raise_internal_error
 from fred_core.kpi.base_kpi_store import BaseKPIStore
 from fred_core.kpi.kpi_reader_structures import (
+    FilterTerm,
     KPIQuery,
     KPIQueryResult,
     TimeBucket,
@@ -46,6 +47,7 @@ from fred_core.kpi.kpi_writer_structures import (
 from fred_core.kpi.log_kpi_store import KpiLogStore
 from fred_core.kpi.opensearch_kpi_store import OpenSearchKPIStore
 from fred_core.model.factory import get_embeddings, get_model, get_structured_chain
+from fred_core.model.models import ModelProvider
 from fred_core.security.authorization import (
     NO_AUTHZ_CHECK_USER,
     TODO_PASS_REAL_USER,
@@ -80,7 +82,31 @@ from fred_core.store.sql_store import SQLTableStore
 from fred_core.store.structures import StoreInfo
 from fred_core.store.vector_search import VectorSearchHit
 
+from fred_core.logs.base_log_store import BaseLogStore
+from fred_core.logs.log_setup import StoreEmitHandler, log_setup
+from fred_core.logs.log_structures import (
+    InMemoryLogStorageConfig,
+    LogEventDTO,
+    LogQuery,
+    LogQueryResult,
+    LogStorageConfig,
+    TailFileResponse,
+)
+from fred_core.logs.memory_log_store import RamLogStore
+from fred_core.logs.opensearch_log_store import OpenSearchLogStore
+
 __all__ = [
+    "BaseLogStore",
+    "LogEventDTO",
+    "LogQuery",
+    "LogQueryResult",
+    "OpenSearchLogStore",
+    "RamLogStore",
+    "StoreEmitHandler",
+    "TailFileResponse",
+    "log_setup",
+    "LogStorageConfig",
+    "InMemoryLogStorageConfig",
     "raise_internal_error",
     "get_current_user",
     "decode_jwt",
@@ -119,6 +145,7 @@ __all__ = [
     "Trace",
     "BaseKPIStore",
     "KpiLogStore",
+    "FilterTerm",
     "KPIQuery",
     "KPIQueryResult",
     "TimeBucket",
@@ -138,4 +165,5 @@ __all__ = [
     "SQLStorageConfig",
     "SQLTableStore",
     "StoreInfo",
+    "ModelProvider",
 ]

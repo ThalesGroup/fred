@@ -1,19 +1,4 @@
-# Copyright Thales 2025
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 # app/tests/conftest.py
-
 
 import pytest
 from fastapi import APIRouter, FastAPI
@@ -29,8 +14,11 @@ from fred_core import (
 from pydantic import AnyHttpUrl, AnyUrl
 
 from app.application_context import ApplicationContext
+
+# ⬇️ NEW: Agent/union + RecursionConfig now live in tuning_spec
+# ⬇️ REST of your config types stay where they were
 from app.common.structures import (
-    AgentSettings,
+    Agent,
     AIConfig,
     AppConfig,
     Configuration,
@@ -38,7 +26,6 @@ from app.common.structures import (
     FrontendSettings,
     ModelConfiguration,
     Properties,
-    RecursionConfig,
     StorageConfig,
     TimeoutSettings,
 )
@@ -81,13 +68,14 @@ def minimal_generalist_config() -> Configuration:
         ai=AIConfig(
             knowledge_flow_url="http://localhost:8000/agentic/v1",
             timeout=TimeoutSettings(connect=5, read=15),
-            default_model=ModelConfiguration(
+            default_chat_model=ModelConfiguration(
                 provider="openai",
                 name="gpt-4o",
                 settings={"temperature": 0.0, "max_retries": 2, "request_timeout": 30},
             ),
             agents=[
-                AgentSettings(
+                # ⬇️ instantiate the concrete Agent (discriminator handled automatically)
+                Agent(
                     name="GeneralistExpert",
                     role="Generalist",
                     description="Generalist",
@@ -102,9 +90,11 @@ def minimal_generalist_config() -> Configuration:
                             "request_timeout": 30,
                         },
                     ),
-                )
+                    tags=["test"],  # optional; good to exercise schema
+                    # mcp_servers=[],  # optional; default ok
+                    # tuning=None,     # optional; default ok
+                ),
             ],
-            recursion=RecursionConfig(recursion_limit=40),
         ),
         storage=StorageConfig(
             postgres=PostgresStoreConfig(
@@ -135,6 +125,5 @@ def app_context(minimal_generalist_config):
 def client(app_context) -> TestClient:
     app = FastAPI()
     router = APIRouter(prefix="/agentic/v1")
-    # ChatbotController(router)
     app.include_router(router)
     return TestClient(app)

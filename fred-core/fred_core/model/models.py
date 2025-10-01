@@ -12,15 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from abc import ABC, abstractmethod
-
-from app.common.error import AuthorizationSentinel
+from enum import Enum
 
 
-class BaseSecuredResourceAccess(ABC):
-    @abstractmethod
-    def get_authorized_user_id(self, session_id: str) -> str | AuthorizationSentinel:
-        """
-        Get the authorized user_id that can access a session
-        """
-        pass
+class ModelProvider(Enum):
+    """Enumeration of model providers available in the system."""
+
+    AZURE_APIM = "azure-apim"
+    AZURE_OPENAI = "azure-openai"
+    OLLAMA = "ollama"
+    OPENAI = "openai"

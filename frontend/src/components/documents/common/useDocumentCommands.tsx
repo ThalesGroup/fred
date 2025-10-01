@@ -23,9 +23,10 @@ import {
 } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { useToast } from "../../ToastProvider";
 import { useTranslation } from "react-i18next";
-import { newUseDocumentViewer } from "../../../common/newUseDocumentViewer";
+import { useMarkdownDocumentViewer } from "../../../common/useMarkdownDocumentViewer";
 import { downloadFile } from "../../../utils/downloadUtils";
 import { useLazyDownloadRawContentBlobQuery } from "../../../slices/knowledgeFlow/knowledgeFlowApi.blob";
+import { usePdfDocumentViewer } from "../../../common/usePdfDocumentViewer";
 
 type DocumentRefreshers = {
   refetchTags?: () => Promise<any>;
@@ -41,7 +42,8 @@ export function useDocumentCommands({ refetchTags, refetchDocs }: DocumentRefres
   const [updateRetrievable] =
     useUpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutMutation();
   const [fetchAllDocuments] = useSearchDocumentMetadataKnowledgeFlowV1DocumentsMetadataSearchPostMutation();
-  const { openDocument } = newUseDocumentViewer();
+  const { openMarkdownDocument } = useMarkdownDocumentViewer();
+  const { openPdfDocument } = usePdfDocumentViewer();
   const [triggerDownloadBlob] = useLazyDownloadRawContentBlobQuery();
   const refresh = useCallback(async () => {
     await Promise.all([refetchTags?.(), refetchDocs ? refetchDocs() : fetchAllDocuments({ filters: {} })]);
@@ -102,12 +104,23 @@ export function useDocumentCommands({ refetchTags, refetchDocs }: DocumentRefres
     (doc: DocumentMetadata) => {
       const name = doc.identity.title || doc.identity.document_name || doc.identity.document_uid;
 
-      openDocument({
+      openMarkdownDocument({
         document_uid: doc.identity.document_uid,
         file_name: name,
       });
     },
-    [openDocument],
+    [openMarkdownDocument],
+  );
+  const previewPdf = useCallback(
+    (doc: DocumentMetadata) => {
+      const name = doc.identity.title || doc.identity.document_name || doc.identity.document_uid;
+
+      openPdfDocument({
+        document_uid: doc.identity.document_uid,
+        file_name: name,
+      });
+    },
+    [openPdfDocument],
   );
   const download = useCallback(
     async (doc: DocumentMetadata) => {
@@ -130,5 +143,5 @@ export function useDocumentCommands({ refetchTags, refetchDocs }: DocumentRefres
     },
     [triggerDownloadBlob, showError],
   );
-  return { toggleRetrievable, removeFromLibrary, preview, refresh, download };
+  return { toggleRetrievable, removeFromLibrary, preview, previewPdf, refresh, download };
 }

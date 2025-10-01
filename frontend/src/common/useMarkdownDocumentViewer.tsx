@@ -13,27 +13,27 @@
 // limitations under the License.
 
 import { useDrawer } from "../components/DrawerProvider";
-import NewDocumentViewer from "./NewDocumentViewer";
+import MarkdownDocumentViewer from "./MarkdownDocumentViewer";
 
-export interface NewDocumentViewerDocument {
+export interface MarkdownDocumentViewer {
   document_uid: string;
   file_name?: string;
   file_url?: string;
   content?: string;
 }
 
-export interface NewDocumentViewerOptions {
+export interface MarkdownDocumentViewerOptions {
   highlightedParts?: any[];
   chunksToHighlight?: string[];
 }
 
-export const newUseDocumentViewer = () => {
+export const useMarkdownDocumentViewer = () => {
   const { openDrawer, closeDrawer } = useDrawer();
 
-  const openDocument = (doc: NewDocumentViewerDocument, options?: NewDocumentViewerOptions) => {
+  const openMarkdownDocument = (doc: MarkdownDocumentViewer, options?: MarkdownDocumentViewerOptions) => {
     openDrawer({
       content: (
-        <NewDocumentViewer
+        <MarkdownDocumentViewer
           document={doc}
           onClose={closeDrawer}
           highlightedParts={options?.highlightedParts}
@@ -45,12 +45,12 @@ export const newUseDocumentViewer = () => {
   };
   screenX;
 
-  const closeDocument = () => {
+  const closeMarkdownDocument = () => {
     closeDrawer();
   };
 
   return {
-    openDocument,
-    closeDocument,
+    openMarkdownDocument,
+    closeMarkdownDocument,
   };
 };

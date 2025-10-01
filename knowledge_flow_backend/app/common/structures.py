@@ -19,6 +19,9 @@ from pathlib import Path
 from typing import Annotated, Dict, List, Literal, Optional, Union
 
 from fred_core import ModelConfiguration, OpenSearchStoreConfig, PostgresStoreConfig, SecurityConfiguration, StoreConfig
+from fred_core import (
+    LogStorageConfig,
+)
 from pydantic import BaseModel, Field, model_validator
 
 """
@@ -74,11 +77,8 @@ class MinioStorageConfig(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def load_env_if_missing(cls, values: dict) -> dict:
-        values.setdefault("access_key", os.getenv("MINIO_ACCESS_KEY"))
         values.setdefault("secret_key", os.getenv("MINIO_SECRET_KEY"))
 
-        if not values.get("access_key"):
-            raise ValueError("Missing MINIO_ACCESS_KEY environment variable")
         if not values.get("secret_key"):
             raise ValueError("Missing MINIO_SECRET_KEY environment variable")
 
@@ -91,6 +91,7 @@ class LocalContentStorageConfig(BaseModel):
 
 
 ContentStorageConfig = Annotated[Union[LocalContentStorageConfig, MinioStorageConfig], Field(discriminator="type")]
+
 
 ###########################################################
 #
@@ -259,11 +260,7 @@ class MinioPullSource(BasePullSourceConfig):
     @model_validator(mode="before")
     @classmethod
     def load_env_secrets(cls, values: dict) -> dict:
-        values.setdefault("access_key", os.getenv("MINIO_ACCESS_KEY"))
         values.setdefault("secret_key", os.getenv("MINIO_SECRET_KEY"))
-
-        if not values.get("access_key"):
-            raise ValueError("Missing MINIO_ACCESS_KEY environment variable")
 
         if not values.get("secret_key"):
             raise ValueError("Missing MINIO_SECRET_KEY environment variable")
@@ -294,16 +291,17 @@ class StorageConfig(BaseModel):
     catalog_store: StoreConfig
     tabular_stores: Optional[Dict[str, StoreConfig]] = Field(default=None, description="Optional tabular store")
     vector_store: VectorStorageConfig
+    log_store: Optional[LogStorageConfig] = Field(default=None, description="Optional log store")
 
 
 class Configuration(BaseModel):
     app: AppConfig
-    model: ModelConfiguration
+    chat_model: ModelConfiguration
     security: SecurityConfiguration
     input_processors: List[ProcessorConfig]
     output_processors: Optional[List[ProcessorConfig]] = None
     content_storage: ContentStorageConfig = Field(..., description="Content Storage configuration")
-    embedding: ModelConfiguration
+    embedding_model: ModelConfiguration
     vision: Optional[ModelConfiguration] = None
     scheduler: SchedulerConfig
     processing: ProcessingConfig = Field(default_factory=ProcessingConfig, description="A collection of feature flags to enable or disable optional functionality.")

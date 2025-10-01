@@ -14,17 +14,24 @@ from typing import Awaitable, Callable, List, Optional, Tuple
 from uuid import uuid4
 
 from fastapi import UploadFile
-from fred_core import Action, KeycloakUser, KPIActor, KPIWriter, Resource, authorize
+from fred_core import (
+    Action,
+    AuthorizationError,
+    KeycloakUser,
+    KPIActor,
+    KPIWriter,
+    Resource,
+    authorize,
+)
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 
 from app.application_context import (
-    get_configuration,
     get_default_model,
     get_history_store,
     get_kpi_writer,
 )
+from app.core.agents.agent_flow import AgentFlow
 from app.core.agents.agent_manager import AgentManager
-from app.core.agents.flow import AgentFlow
 from app.core.agents.runtime_context import RuntimeContext
 from app.core.chatbot.chat_schema import (
     Channel,
@@ -69,9 +76,6 @@ class SessionOrchestrator:
         # Stateless worker that knows how to turn LangGraph events into ChatMessage[]
         self.transcoder = StreamTranscoder()
 
-        # Cached config
-        self.recursion_limit = get_configuration().ai.recursion.recursion_limit
-
     # ---------------- Public API (used by WS layer) ----------------
 
     @authorize(action=Action.CREATE, resource=Resource.SESSIONS)
@@ -81,7 +85,7 @@ class SessionOrchestrator:
         *,
         user: KeycloakUser,
         callback: CallbackType,
-        session_id: str,
+        session_id: str | None,
         message: str,
         agent_name: str,
         runtime_context: Optional[RuntimeContext] = None,
@@ -95,6 +99,10 @@ class SessionOrchestrator:
           - persist session + history
           - record KPIs
         """
+        # Check if user is authorized to talk in this session
+        if session_id is not None:
+            self._authorize_user_action_on_session(session_id, user, Action.UPDATE)
+
         logger.info(
             "chat_ask_websocket user_id=%s session_id=%s agent=%s",
             user.uid,
@@ -221,6 +229,11 @@ class SessionOrchestrator:
         sessions = self.session_store.get_for_user(user.uid)
         enriched: List[SessionWithFiles] = []
         for session in sessions:
+            if not self._is_user_action_authorized_on_session(
+                session.id, user, Action.READ
+            ):
+                continue
+
             session_folder = self._get_session_temp_folder(session.id)
             file_names = (
                 [f.name for f in session_folder.iterdir() if f.is_file()]
@@ -236,12 +249,12 @@ class SessionOrchestrator:
     def get_session_history(
         self, session_id: str, user: KeycloakUser
     ) -> List[ChatMessage]:
-        # TODO: check session belongs to user
+        self._authorize_user_action_on_session(session_id, user, Action.READ)
         return self.history_store.get(session_id) or []
 
     @authorize(action=Action.DELETE, resource=Resource.SESSIONS)
     def delete_session(self, session_id: str, user: KeycloakUser) -> None:
-        # TODO: check session belongs to user
+        self._authorize_user_action_on_session(session_id, user, Action.DELETE)
         self.session_store.delete(session_id)
 
     # ---------------- File uploads (kept for backward compatibility) ----------------
@@ -253,7 +266,7 @@ class SessionOrchestrator:
         """
         Simple "drop a file into this session's temp area" behavior unchanged.
         """
-        # TODO: check session belongs to user
+        self._authorize_user_action_on_session(session_id, user, Action.UPDATE)
         try:
             session_folder = self._get_session_temp_folder(session_id)
             if file.filename is None:
@@ -283,12 +296,13 @@ class SessionOrchestrator:
 
     # ---------------- Metrics passthrough ----------------
 
+    @authorize(action=Action.READ, resource=Resource.METRICS)
     @authorize(action=Action.READ, resource=Resource.SESSIONS)
     def get_metrics(
         self,
+        user: KeycloakUser,
         start: str,
         end: str,
-        user_id: str,
         precision: str,
         groupby: List[str],
         agg_mapping: dict[str, List[str]],
@@ -299,10 +313,34 @@ class SessionOrchestrator:
             precision=precision,
             groupby=groupby,
             agg_mapping=agg_mapping,
-            user_id=user_id,
+            user_id=user.uid,
         )
 
     # ---------------- internals ----------------
+
+    def _authorize_user_action_on_session(
+        self, session_id: str, user: KeycloakUser, action: Action
+    ):
+        """Raise an AuthorizationError if a user can't perform an action on a session"""
+        if not self._is_user_action_authorized_on_session(session_id, user, action):
+            raise AuthorizationError(
+                user.uid,
+                action,
+                Resource.SESSIONS,
+                f"Not authorized to {action.value} session {session_id}",
+            )
+
+    def _is_user_action_authorized_on_session(
+        self, session_id: str, user: KeycloakUser, action: Action
+    ) -> bool:
+        """Check if a user can perform an action on a session"""
+        session = self.session_store.get(session_id)
+        if session is None:
+            return False
+
+        # For now, ignore action, only owners can access their sessions
+        # action is passed for future flexibility (ex: session sharing with attached permissions)
+        return session.user_id == user.uid
 
     def _get_session_temp_folder(self, session_id: str) -> Path:
         base_temp_dir = Path(tempfile.gettempdir()) / "chatbot_uploads"

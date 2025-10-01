@@ -39,10 +39,9 @@ from pydantic import BaseModel, Field
 from starlette.websockets import WebSocketState
 
 from app.application_context import get_configuration
-from app.common.structures import FrontendSettings
+from app.common.structures import AgentSettings, FrontendSettings
 from app.common.utils import log_exception
 from app.core.agents.agent_manager import AgentManager
-from app.core.agents.agentic_flow import AgenticFlow
 from app.core.agents.runtime_context import RuntimeContext
 from app.core.chatbot.chat_schema import (
     ChatAskInput,
@@ -155,7 +154,7 @@ def get_frontend_config() -> FrontendConfigDTO:
 def get_agentic_flows(
     user: KeycloakUser = Depends(get_current_user),
     agent_manager: AgentManager = Depends(get_agent_manager),  # Inject the dependency
-) -> List[AgenticFlow]:
+) -> List[AgentSettings]:
     return agent_manager.get_agentic_flows()
 
 
@@ -205,7 +204,7 @@ async def websocket_chatbot_question(
                 (session, final_messages) = await session_orchestrator.chat_ask_websocket(
                     user=user,
                     callback=ws_callback,
-                    session_id=ask.session_id or "unknown-session",
+                    session_id=ask.session_id,
                     message=ask.message,
                     agent_name=ask.agent_name,
                     runtime_context=ask.runtime_context,

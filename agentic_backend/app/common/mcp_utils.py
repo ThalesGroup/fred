@@ -79,6 +79,7 @@ class MCPConnectionError(Exception):
     def __init__(self, message, exceptions):
         super().__init__(message)
         self.exceptions = exceptions
+        self.reason = message
 
 
 def _mask_auth_value(v: str | None) -> str:

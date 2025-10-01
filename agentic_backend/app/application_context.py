@@ -33,14 +33,18 @@ from typing import Any, Callable, Dict, List, Optional
 
 from fred_core import (
     BaseKPIStore,
+    BaseLogStore,
     BearerAuth,
     ClientCredentialsProvider,
     DuckdbStoreConfig,
+    InMemoryLogStorageConfig,
     KpiLogStore,
     KPIWriter,
     LogStoreConfig,
     OpenSearchIndexConfig,
     OpenSearchKPIStore,
+    OpenSearchLogStore,
+    RamLogStore,
     SQLStorageConfig,
     get_model,
     split_realm_url,
@@ -226,6 +230,7 @@ class ApplicationContext:
     _session_store_instance: Optional[BaseSessionStore] = None
     _history_store_instance: Optional[BaseHistoryStore] = None
     _kpi_store_instance: Optional[BaseKPIStore] = None
+    _log_store_instance: Optional[BaseLogStore] = None
     _outbound_auth: OutboundAuth | None = None
     _kpi_writer: Optional[KPIWriter] = None
 
@@ -260,7 +265,7 @@ class ApplicationContext:
     def _merge_with_default_model(
         self, model: Optional[ModelConfiguration]
     ) -> ModelConfiguration:
-        default_model = self.configuration.ai.default_model.model_dump(
+        default_model = self.configuration.ai.default_chat_model.model_dump(
             exclude_unset=True
         )
         model_dict = model.model_dump(exclude_unset=True) if model else {}
@@ -288,7 +293,7 @@ class ApplicationContext:
         """
         Retrieves the default AI model instance.
         """
-        return get_model(self.configuration.ai.default_model)
+        return get_model(self.configuration.ai.default_chat_model)
 
     # --- Agent classes ---
 
@@ -340,6 +345,39 @@ class ApplicationContext:
             )
         else:
             raise ValueError("Unsupported sessions storage backend")
+
+    def get_log_store(self) -> BaseLogStore:
+        """
+        Factory function to get the appropriate log storage backend based on configuration.
+        Returns:
+            BaseLogStore: An instance of the log storage backend.
+        """
+        if self._log_store_instance is not None:
+            return self._log_store_instance
+
+        config = self.configuration.storage.log_store
+        if isinstance(config, OpenSearchIndexConfig):
+            opensearch_config = get_configuration().storage.opensearch
+            password = opensearch_config.password
+            if not password:
+                raise ValueError("Missing OpenSearch credentials: OPENSEARCH_PASSWORD")
+
+            self._log_store_instance = OpenSearchLogStore(
+                host=opensearch_config.host,
+                index=config.index,
+                username=opensearch_config.username,
+                password=password,
+                secure=opensearch_config.secure,
+                verify_certs=opensearch_config.verify_certs,
+            )
+        elif isinstance(config, InMemoryLogStorageConfig) or config is None:
+            self._log_store_instance = RamLogStore(
+                capacity=1000
+            )  # Default to in-memory store if not configured
+        else:
+            raise ValueError("Log store configuration is missing or invalid")
+
+        return self._log_store_instance
 
     def get_history_store(self) -> BaseHistoryStore:
         """

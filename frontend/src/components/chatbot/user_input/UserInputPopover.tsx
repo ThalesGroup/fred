@@ -33,8 +33,8 @@ import AttachFileIcon from "@mui/icons-material/AttachFile";
 import MicIcon from "@mui/icons-material/Mic";
 import StopIcon from "@mui/icons-material/Stop";
 import LibraryBooksIcon from "@mui/icons-material/LibraryBooks";
-import AutoFixHighIcon from "@mui/icons-material/AutoFixHigh";
-import DescriptionIcon from "@mui/icons-material/Description";
+// import AutoFixHighIcon from "@mui/icons-material/AutoFixHigh";
+// import DescriptionIcon from "@mui/icons-material/Description";
 import TravelExploreIcon from "@mui/icons-material/TravelExplore";
 
 import { ChatDocumentLibrariesSelectionCard } from "../ChatDocumentLibrariesSelectionCard.tsx";
@@ -84,8 +84,8 @@ export const UserInputPopover: React.FC<UserInputPopoverProps> = ({
   selectedTemplateResourceIds,
   selectedSearchPolicyName,
   libNameById,
-  promptNameById,
-  templateNameById,
+  // promptNameById,
+  // templateNameById,
   searchPolicyLabels,
   setPickerView,
   setPlusAnchor,
@@ -94,8 +94,8 @@ export const UserInputPopover: React.FC<UserInputPopoverProps> = ({
   setTemplates,
   setSearchPolicy,
   onRemoveLib,
-  onRemovePrompt,
-  onRemoveTemplate,
+  // onRemovePrompt,
+  // onRemoveTemplate,
   onAttachFileClick,
   onRecordAudioClick,
   enableFilesAttachment,
@@ -183,7 +183,7 @@ export const UserInputPopover: React.FC<UserInputPopoverProps> = ({
           </Box>
           <Divider sx={{ my: 1 }} />
 
-          {sectionHeader(
+          {/* {sectionHeader(
             <AutoFixHighIcon fontSize="small" />,
             t("knowledge.viewSelector.prompts"),
             selectedPromptResourceIds.length,
@@ -202,10 +202,10 @@ export const UserInputPopover: React.FC<UserInputPopoverProps> = ({
                 {t("common.noneSelected")}
               </Typography>
             )}
-          </Box>
-          <Divider sx={{ my: 1 }} />
+          </Box> */}
+          {/* <Divider sx={{ my: 1 }} /> */}
 
-          {sectionHeader(
+          {/* {sectionHeader(
             <DescriptionIcon fontSize="small" />,
             t("knowledge.viewSelector.templates"),
             selectedTemplateResourceIds.length,
@@ -230,7 +230,7 @@ export const UserInputPopover: React.FC<UserInputPopoverProps> = ({
               </Typography>
             )}
           </Box>
-          <Divider sx={{ my: 1 }} />
+          <Divider sx={{ my: 1 }} /> */}
 
           {sectionHeader(<TravelExploreIcon fontSize="small" />, t("search.policy", "Search policy"), 1, () =>
             setPickerView("search_policy"),

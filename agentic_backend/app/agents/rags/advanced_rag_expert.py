@@ -30,7 +30,7 @@ from app.agents.rags.structures import (
 from app.common.rags_utils import attach_sources_to_llm_response
 from app.common.structures import AgentSettings
 from app.common.vector_search_client import VectorSearchClient
-from app.core.agents.flow import AgentFlow
+from app.core.agents.agent_flow import AgentFlow
 from app.core.agents.runtime_context import (
     get_document_library_tags_ids,
     get_search_policy,

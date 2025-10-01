@@ -10,17 +10,17 @@ from app.core.agents.runtime_context import (
     RuntimeContext,
     get_document_library_tags_ids,
     get_profile_libraries_ids,
-    get_prompt_libraries_ids,
 )
 
 logger = logging.getLogger(__name__)
+
 
 @dataclass
 class Prepared:
     # RAG scoping (always a list)
     doc_tag_ids: List[str] = field(default_factory=list)
-    # Concatenated prompt(s) body text ("" when none)
-    prompt_text: str = ""
+    # Concatenated profile prompt(s) body text ("" when none)
+    prompt_profile_text: str = ""
 
 
 def _split_front_matter(text: str) -> str:
@@ -60,20 +60,21 @@ def _fetch_body(kf_base: str, rid: str, timeout: float = 8.0) -> Optional[str]:
 
 
 def resolve_prepared(ctx: RuntimeContext, kf_base: str) -> Prepared:
+    """
+    Resolve and return the prepared data for the given runtime context.
+    This includes:
+        1) Document library tags for RAG scoping.
+        2) Concatenated profile prompt bodies.
+    """
     # 1) Document libraries for RAG scoping
     doc_tags = list(get_document_library_tags_ids(ctx) or [])
 
     # 2) Prompts: loop each id, append body when resolvable; ignore failures
     bodies: List[str] = []
-    for pid in get_prompt_libraries_ids(ctx) or []:
-        body = _fetch_body(kf_base, pid)
-        if body:
-            bodies.append(body)
-            
     for pid in get_profile_libraries_ids(ctx) or []:
         body = _fetch_body(kf_base, pid)
         if body:
             bodies.append(body)
 
-    prompt_text = "\n\n".join(bodies) if bodies else ""
-    return Prepared(doc_tag_ids=doc_tags, prompt_text=prompt_text)
+    prompt_profile_text = "\n\n".join(bodies) if bodies else ""
+    return Prepared(doc_tag_ids=doc_tags, prompt_profile_text=prompt_profile_text)

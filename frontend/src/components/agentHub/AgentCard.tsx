@@ -1,33 +1,53 @@
 // components/agentHub/AgentCard.tsx
-import { Box, Card, CardContent, Typography, IconButton, Chip, Tooltip, Avatar, useTheme } from "@mui/material";
+import { Box, Card, CardContent, Typography, IconButton, Chip, Tooltip, Stack, useTheme } from "@mui/material";
 import StarIcon from "@mui/icons-material/Star";
 import StarOutlineIcon from "@mui/icons-material/StarOutline";
 import LocalOfferIcon from "@mui/icons-material/LocalOffer";
+import PowerSettingsNewIcon from "@mui/icons-material/PowerSettingsNew";
+import GroupIcon from "@mui/icons-material/Group"; // for crew
 import DeleteIcon from "@mui/icons-material/Delete";
+import TuneIcon from "@mui/icons-material/Tune";
+import PowerOffIcon from "@mui/icons-material/PowerOff"; // <-- NEW Import
 
 import { getAgentBadge } from "../../utils/avatar";
 import { useTranslation } from "react-i18next";
-import { AgenticFlow } from "../../slices/agentic/agenticOpenApi";
 
-interface AgentCardProps {
-  agent: AgenticFlow;
-  isFavorite: boolean;
-  onToggleFavorite: (name: string) => void;
-  onDelete: (name: string) => void;
-  allAgents: AgenticFlow[];
-}
+// OpenAPI types
+import { Leader } from "../../slices/agentic/agenticOpenApi";
+import { AnyAgent } from "../../common/agent";
 
-export const AgentCard = ({ agent, isFavorite, onToggleFavorite, onDelete, allAgents = [] }: AgentCardProps) => {
+type AgentCardProps = {
+  agent: AnyAgent;
+  isFavorite?: boolean;
+  onToggleFavorite?: (name: string) => void;
+  onEdit?: (agent: AnyAgent) => void;
+  onToggleEnabled?: (agent: AnyAgent) => void;
+  onManageCrew?: (leader: Leader & { type: "leader" }) => void; // only visible for leaders
+  onDelete?: (agent: AnyAgent) => void;
+};
+
+/**
+ * Fred architecture note (hover-worthy):
+ * - The card shows **functional identity** (name, role, tags) to help users pick the right agent.
+ * - Actions follow our minimal contract:
+ *   Edit → schema-driven tuning UI
+ *   Enable/Disable → operational switch (no delete)
+ *   Manage Crew → leader-only relation editor (leader owns crew membership)
+ */
+export const AgentCard = ({
+  agent,
+  isFavorite = false,
+  onToggleFavorite,
+  onEdit,
+  onToggleEnabled,
+  onManageCrew,
+  onDelete
+}: AgentCardProps) => {
   const { t } = useTranslation();
   const theme = useTheme();
 
-  // Keep the grid tidy: cap visible experts to avoid variable card heights
-  const MAX_VISIBLE_EXPERTS = 4;
-  const expertObjects = (agent.experts || [])
-    .map((name) => allAgents.find((a) => a.name === name))
-    .filter(Boolean) as AgenticFlow[];
-  const visibleExperts = expertObjects.slice(0, MAX_VISIBLE_EXPERTS);
-  const hiddenCount = Math.max(0, expertObjects.length - visibleExperts.length);
+  const tags = agent.tags ?? [];
+  const tagLabel = tags.join(", ");
 
   return (
     <Card
@@ -48,60 +68,47 @@ export const AgentCard = ({ agent, isFavorite, onToggleFavorite, onDelete, allAg
       }}
     >
       {/* Header */}
-      {/* Header */}
       <Box
         sx={{
           p: 1.5,
           pb: 0.5,
           display: "grid",
-          gridTemplateColumns: "1fr auto", // ← left grows, right is only as wide as needed
+          gridTemplateColumns: "1fr auto", // left grows, right auto width
           columnGap: 1,
           alignItems: "start",
+          opacity: agent.enabled ? 1 : 0.5,
         }}
       >
-        {/* Left side: badge + text (flex, allow shrink/ellipsis) */}
+        {/* Left: badge + name + role */}
         <Box sx={{ display: "flex", alignItems: "center", minWidth: 0 }}>
-          <Box sx={{ mr: 1, flexShrink: 0, lineHeight: 0 }}>{getAgentBadge(agent.nickname)}</Box>
+          <Box sx={{ mr: 1, flexShrink: 0, lineHeight: 0 }}>{getAgentBadge(agent.name, agent.type === "leader")}</Box>
           <Box sx={{ minWidth: 0, flex: "1 1 auto" }}>
-            <Typography
-              variant="subtitle1"
-              noWrap
-              sx={{
-                fontWeight: 600,
-                lineHeight: 1.2,
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                maxWidth: "100%", // ← no artificial cap anymore
-                display: "block",
-              }}
-              title={agent.nickname}
-            >
-              {agent.nickname}
+            <Typography variant="h6" color="text.secondary" sx={{ lineHeight: 1.25 }}>
+              {agent.name}
             </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ fontStyle: "italic", lineHeight: 1.25 }}>
+            <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.25 }}>
               {agent.role}
             </Typography>
           </Box>
         </Box>
 
-        {/* Right side: tag + actions (auto width) */}
+        {/* Right: tags + favorite */}
         <Box sx={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
-          {agent.tag && (
-            <Tooltip title={t("agentCard.taggedWith", { tag: agent.tag })}>
+          {tags.length > 0 && (
+            <Tooltip title={t("agentCard.taggedWith", { tag: tagLabel })}>
               <Chip
                 icon={<LocalOfferIcon fontSize="small" />}
-                label={agent.tag}
+                label={tagLabel}
                 size="small"
                 sx={{
                   mr: 0.5,
                   height: 22,
                   fontSize: "0.7rem",
                   bgcolor: "transparent",
-                  border: (theme) => `1px solid ${theme.palette.divider}`,
+                  border: (th) => `1px solid ${th.palette.divider}`,
                   "& .MuiChip-icon": { mr: 0.25 },
-                  // keep the chip tidy so the name can breathe
                   "& .MuiChip-label": {
-                    maxWidth: 110,
+                    maxWidth: 140,
                     overflow: "hidden",
                     textOverflow: "ellipsis",
                   },
@@ -110,27 +117,17 @@ export const AgentCard = ({ agent, isFavorite, onToggleFavorite, onDelete, allAg
             </Tooltip>
           )}
 
-          <Tooltip
-            title={
-              isFavorite
-                ? t("agentCard.unfavorite", "Remove from favorites")
-                : t("agentCard.favorite", "Add to favorites")
-            }
-          >
-            <IconButton
-              size="small"
-              onClick={() => onToggleFavorite(agent.name)}
-              sx={{ color: isFavorite ? "warning.main" : "text.secondary" }}
-            >
-              {isFavorite ? <StarIcon fontSize="small" /> : <StarOutlineIcon fontSize="small" />}
-            </IconButton>
-          </Tooltip>
-
-          <Tooltip title={t("agentCard.delete")}>
-            <IconButton size="small" onClick={() => onDelete(agent.name)} sx={{ ml: 0.25, color: "text.secondary" }}>
-              <DeleteIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
+          {onToggleFavorite && (
+            <Tooltip title={isFavorite ? t("agentCard.unfavorite") : t("agentCard.favorite")}>
+              <IconButton
+                size="small"
+                onClick={() => onToggleFavorite(agent.name)}
+                sx={{ color: isFavorite ? "warning.main" : "text.secondary" }}
+              >
+                {isFavorite ? <StarIcon fontSize="small" /> : <StarOutlineIcon fontSize="small" />}
+              </IconButton>
+            </Tooltip>
+          )}
         </Box>
       </Box>
 
@@ -145,7 +142,7 @@ export const AgentCard = ({ agent, isFavorite, onToggleFavorite, onDelete, allAg
           flexGrow: 1,
         }}
       >
-        {/* Description — clamped to 3 lines for uniform height */}
+        {/* Description — clamp to 3 lines for uniform height */}
         <Typography
           variant="body2"
           color="text.secondary"
@@ -156,73 +153,76 @@ export const AgentCard = ({ agent, isFavorite, onToggleFavorite, onDelete, allAg
             WebkitLineClamp: 3,
             overflow: "hidden",
             minHeight: "3.6em", // ~3 lines @ 1.2 line-height
+            flexGrow: 1, 
+            opacity: agent.enabled ? 1 : 0.5,
           }}
           title={agent.description || ""}
         >
           {agent.description}
         </Typography>
+        {/* Footer actions */}
+        <Stack direction="row" gap={0.5} sx={{ ml: "auto" }}>
+          {agent.type === "leader" && onManageCrew && (
+            <Tooltip title={t("agentCard.manageCrew", "Manage crew")}>
+              <IconButton
+                size="small"
+                onClick={() => onManageCrew(agent)}
+                sx={{ color: "text.secondary" }}
+                aria-label="manage crew"
+              >
+                <GroupIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          )}
 
-        {/* Experts (fixed-height block; shows up to 4 + “+N”) */}
-        {expertObjects.length > 0 && (
-          <Box sx={{ mt: 0.5 }}>
-            <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.5 }}>
-              {t("agentCard.expertIntegrations")}
-            </Typography>
-            <Box
-              sx={{
-                display: "flex",
-                flexWrap: "wrap",
-                gap: 0.5,
-                // keep the section compact & equal across cards
-                maxHeight: 48,
-                overflow: "hidden",
-                position: "relative",
-              }}
-            >
-              {visibleExperts.map((exp) => (
-                <Tooltip key={exp.name} title={exp.description || ""}>
-                  <Chip
-                    size="small"
-                    avatar={<Avatar sx={{ width: 18, height: 18, fontSize: 10 }}>{getAgentBadge(exp.nickname)}</Avatar>}
-                    label={exp.nickname}
-                    sx={{
-                      height: 22,
-                      fontSize: "0.7rem",
-                      bgcolor: "transparent",
-                      border: `1px solid ${theme.palette.divider}`,
-                      "& .MuiChip-avatar": {
-                        width: 18,
-                        height: 18,
-                        mr: 0.5,
-                      },
-                      "& .MuiChip-label": { px: 0.5 },
-                    }}
-                  />
-                </Tooltip>
-              ))}
+          {onEdit && (
+            <Tooltip title={t("agentCard.edit")}>
+              <IconButton
+                size="small"
+                onClick={() => onEdit(agent)}
+                sx={{ color: "text.secondary" }}
+                aria-label="edit agent"
+              >
+                <TuneIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          )}
 
-              {hiddenCount > 0 && (
-                <Tooltip
-                  title={expertObjects
-                    .slice(MAX_VISIBLE_EXPERTS)
-                    .map((e) => e.nickname)
-                    .join(", ")}
-                >
-                  <Chip
-                    size="small"
-                    label={`+${hiddenCount}`}
-                    sx={{
-                      height: 22,
-                      fontSize: "0.7rem",
-                      bgcolor: "transparent",
-                      border: `1px solid ${theme.palette.divider}`,
-                    }}
-                  />
-                </Tooltip>
-              )}
-            </Box>
-          </Box>
-        )}
+          {onToggleEnabled && (
+            <Tooltip title={agent.enabled ? t("agentCard.disable") : t("agentCard.enable", "Enable")}>
+              <IconButton
+                size="small"
+                onClick={() => onToggleEnabled(agent)}
+                sx={{ color: "text.secondary" }} // Button color is neutral
+                aria-label={agent.enabled ? "disable agent" : "enable agent"}
+              >
+                {/* Conditional Icon to suggest the NEXT action */}
+                {agent.enabled ? (
+                  // If ENABLED, the next action is to DISABLE (turn OFF)
+                  <PowerOffIcon fontSize="small" />
+                ) : (
+                  // If DISABLED, the next action is to ENABLE (turn ON)
+                  <PowerSettingsNewIcon fontSize="small" />
+                )}
+              </IconButton>
+            </Tooltip>
+          )}
+          {onDelete && (
+            <Tooltip title={t("agentCard.delete")}>
+              <IconButton
+                size="small"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete(agent);
+                }}
+                sx={{ color: "text.secondary" }} 
+                aria-label="delete agent"
+              >
+                <DeleteIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          )}
+        </Stack>{" "}
       </CardContent>
     </Card>
   );

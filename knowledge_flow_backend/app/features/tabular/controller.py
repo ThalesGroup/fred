@@ -66,21 +66,42 @@ class TabularController:
                 raise e
 
         @router.post(
-            "/tabular/{db_name}/sql",
+            "/tabular/{db_name}/sql/read",
             response_model=TabularQueryResponse,
             tags=["Tabular"],
-            summary="Execute raw SQL query in a database",
-            operation_id="raw_sql_query",
-            description="Submit a raw SQL string. Use with caution: query is executed directly.",
+            summary="Execute a read-only SQL query",
+            operation_id="raw_sql_query_read",
         )
-        async def raw_sql_query(db_name: str = Path(..., description="Name of the tabular database"), request: RawSQLRequest = Body(...), user: KeycloakUser = Depends(get_current_user)):
+        async def raw_sql_query_read(
+            db_name: str = Path(..., description="Name of the tabular database"),
+            request: RawSQLRequest = Body(...),
+            user: KeycloakUser = Depends(get_current_user),
+        ):
             try:
-                return self.service.query(user, db_name=db_name, document_name="raw_sql", request=request)
+                return self.service.query_read(user, db_name=db_name, request=request)
+            except Exception as e:
+                logger.exception(f"[{db_name}] Read-only SQL execution failed")
+                raise e
+
+        @router.post(
+            "/tabular/{db_name}/sql/write",
+            response_model=TabularQueryResponse,
+            tags=["Tabular"],
+            summary="Execute a write SQL query",
+            operation_id="raw_sql_query_write",
+        )
+        async def raw_sql_query_write(
+            db_name: str = Path(..., description="Name of the tabular database"),
+            request: RawSQLRequest = Body(...),
+            user: KeycloakUser = Depends(get_current_user),
+        ):
+            try:
+                return self.service.query_write(user, db_name=db_name, request=request)
             except PermissionError as e:
-                logger.warning(f"[{db_name}] Forbidden SQL query attempt: {e}")
+                logger.warning(f"[{db_name}] Forbidden write attempt: {e}")
                 raise HTTPException(status_code=403, detail=str(e))
             except Exception as e:
-                logger.exception(f"[{db_name}] Raw SQL execution failed")
+                logger.exception(f"[{db_name}] Write SQL execution failed")
                 raise e
 
         @router.delete("/tabular/{db_name}/tables/{table_name}", status_code=204, tags=["Tabular"], summary="Delete a table from a database", operation_id="delete_table")

@@ -56,16 +56,6 @@
                 }
             }
         ],
-        "./app/features/content/controller.py": [
-            {
-                "code": "reportAssignmentType",
-                "range": {
-                    "startColumn": 20,
-                    "endColumn": 24,
-                    "lineCount": 1
-                }
-            }
-        ],
         "./app/features/tabular/service.py": [
             {
                 "code": "reportArgumentType",

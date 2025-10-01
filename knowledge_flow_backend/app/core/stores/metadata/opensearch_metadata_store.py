@@ -443,19 +443,31 @@ class OpenSearchMetadataStore(BaseMetadataStore):
     def _build_must_clauses(self, filters_dict: dict) -> List[dict]:
         must: List[dict] = []
 
+        # Prefixes that are flattened in the OpenSearch index
+        flattened_prefixes = {"identity", "source", "file", "tags", "access", "summary"}
+
+        def create_clause(field: str, value):
+            """Create appropriate OpenSearch clause based on value type"""
+            if isinstance(value, list):
+                return {"terms": {field: value}}
+            else:
+                return {"term": {field: value}}
+
         def flatten(prefix: str, val):
             if isinstance(val, dict):
                 for k, v in val.items():
-                    yield from flatten(f"{prefix}.{k}", v)
+                    # If the prefix is in flattened_prefixes, skip it and use just the key
+                    if prefix in flattened_prefixes:
+                        yield from flatten(k, v)
+                    else:
+                        yield from flatten(f"{prefix}.{k}", v)
             else:
                 yield (prefix, val)
 
         for field, value in filters_dict.items():
             if isinstance(value, dict):
                 for flat_field, flat_value in flatten(field, value):
-                    must.append({"term": {flat_field: flat_value}})
-            elif isinstance(value, list):
-                must.append({"terms": {field: value}})
+                    must.append(create_clause(flat_field, flat_value))
             else:
-                must.append({"term": {field: value}})
+                must.append(create_clause(field, value))
         return must
