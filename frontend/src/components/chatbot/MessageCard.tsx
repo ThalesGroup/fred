@@ -1,16 +1,6 @@
+// MessageCard.tsx
 // Copyright Thales 2025
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Licensed under the Apache License, Version 2.0
 
 import {
   Box,
@@ -28,6 +18,7 @@ import {
 import { useTheme } from "@mui/material/styles";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
+import PersonOutlinedIcon from "@mui/icons-material/PersonOutline";
 import LibraryBooksOutlinedIcon from "@mui/icons-material/LibraryBooksOutlined";
 import DescriptionOutlinedIcon from "@mui/icons-material/DescriptionOutlined";
 import PsychologyOutlinedIcon from "@mui/icons-material/PsychologyOutlined";
@@ -46,16 +37,13 @@ import { toCopyText, toMarkdown } from "./messageParts.ts";
 import { getExtras, isToolCall, isToolResult } from "./ChatBotUtils.tsx";
 import { FeedbackDialog } from "../feedback/FeedbackDialog.tsx";
 
-/**
- * Backend "plugins" payload carried under message.metadata.extras.plugins.
- * Only the keys we keep in the UI (libraries/templates/prompts + search/temperature).
- */
 type PluginsUsed = {
   libraries?: string[];
   templates?: string[];
-  prompts?: string[]; // optional, may mirror metadata.prompts
-  search_policy?: string;
-  temperature?: number;
+  prompts?: string[];
+  profiles?: string[];       // optionnel
+  search_policy?: string;    // optionnel
+  temperature?: number;      // optionnel
 };
 
 export default function MessageCard({
@@ -71,15 +59,11 @@ export default function MessageCard({
   onCitationHover,
   onCitationClick,
 
-  // id -> human label maps
+  // maps id -> label
   libraryNameById,
   templateNameById,
   promptNameById,
-
-  // current UI selections (to complement snapshot)
-  currentLibraryIds,
-  currentTemplateIds,
-  currentPromptIds,
+  profileNameById
 }: {
   message: ChatMessage;
   agenticFlow: AgenticFlow;
@@ -96,10 +80,7 @@ export default function MessageCard({
   libraryNameById?: Record<string, string>;
   templateNameById?: Record<string, string>;
   promptNameById?: Record<string, string>;
-
-  currentLibraryIds?: string[];
-  currentTemplateIds?: string[];
-  currentPromptIds?: string[];
+  profileNameById?: Record<string, string>;
 }) {
   const theme = useTheme();
   const { showError, showInfo } = useToast();
@@ -142,20 +123,20 @@ export default function MessageCard({
   };
 
   const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text).catch(() => {});
+    navigator.clipboard.writeText(text).catch(() => { });
   };
 
   const extras = getExtras(message);
   const isCall = isToolCall(message);
   const isResult = isToolResult(message);
 
-  // Build the markdown content once (optionally filtering out text parts)
+  // Build markdown once
   const mdContent = useMemo(() => {
     const parts = suppressText ? (message.parts || []).filter((p: any) => p?.type !== "text") : message.parts || [];
     return toMarkdown(parts);
   }, [message.parts, suppressText]);
 
-  // --- METADATA EXTRACTION ---
+  // --- METADATA snapshot (par message) ---
   const meta: any = (message.metadata as any) ?? {};
   const plugins: PluginsUsed = (meta?.extras?.plugins as PluginsUsed) ?? {};
 
@@ -163,58 +144,31 @@ export default function MessageCard({
   const latencyMs: number | undefined =
     meta.latency_ms ?? meta?.timings?.durationMs ?? meta?.latency?.ms ?? undefined;
 
-  // Snapshot ids from backend (what was actually applied for this message)
-  const snapLibs: string[] = plugins.libraries ?? [];
-  const snapTemplates: string[] = plugins.templates ?? [];
-  const snapPrompts: string[] =
-    (Array.isArray(meta.prompts) && meta.prompts.length ? meta.prompts : undefined) ??
-    (plugins.prompts && plugins.prompts.length ? plugins.prompts : []) ??
-    [];
+  // IDs réellement utilisés pour CE message (pas d’état courant UI)
+  const libsIds = Array.isArray(plugins.libraries) ? plugins.libraries : [];
+  const tplIds = Array.isArray(plugins.templates) ? plugins.templates : [];
+  const prmIds = Array.isArray(plugins.prompts) ? plugins.prompts : [];
+  const prfIds = Array.isArray(plugins.profiles) ? plugins.profiles : [];
 
-  // Current selections (from UI, may be empty)
-  const curLibs = currentLibraryIds ?? [];
-  const curTemplates = currentTemplateIds ?? [];
-  const curPrompts = currentPromptIds ?? [];
-
-  // Search policy & temperature (if provided)
   const searchPolicy: string | undefined = plugins.search_policy;
   const usedTemperature: number | undefined =
-    typeof plugins.temperature === "number" ? plugins.temperature : undefined;
+    typeof (meta?.temperature ?? plugins.temperature) === "number"
+      ? (meta?.temperature ?? plugins.temperature)
+      : undefined;
 
   const inTokens = message.metadata?.token_usage?.input_tokens;
   const outTokens = message.metadata?.token_usage?.output_tokens;
 
-  // ---- Label helpers & mix logic ----
-  const uniq = (arr: string[]) => Array.from(new Set(arr.filter(Boolean)));
+  // Label helpers
+  const labelize = (ids: string[] | undefined, map?: Record<string, string>) =>
+    (ids ?? []).filter(Boolean).map((id) => map?.[id] || id);
 
-  /**
-   * Returns labels for union(snapshot, current). Items present only in current
-   * are suffixed with " (current)" to avoid misleading the user.
-   */
-  const mixWithBadge = (
-    snap: string[],
-    cur: string[],
-    names?: Record<string, string>,
-  ): string[] => {
-    const all = uniq([...snap, ...cur]);
-    return all.map((id) => {
-      const label = names?.[id] || id;
-      const onlyCurrent = !snap.includes(id) && cur.includes(id);
-      return onlyCurrent ? `${label}` : label;
-    });
-  };
+  const libsLabeled = labelize(libsIds, libraryNameById);
+  const tplsLabeled = labelize(tplIds, templateNameById);
+  const prmsLabeled = labelize(prmIds, promptNameById);
+  const prfsLabeled = labelize(prfIds, profileNameById)
 
-  // Final labeled lists used in the UI
-  const libsLabeled = mixWithBadge(snapLibs, curLibs, libraryNameById);
-  const templatesLabeled = mixWithBadge(snapTemplates, curTemplates, templateNameById);
-  const promptsLabeled = mixWithBadge(snapPrompts, curPrompts, promptNameById);
-
-  const noSnapshot =
-    snapLibs.length === 0 && snapTemplates.length === 0 && snapPrompts.length === 0;
-  const hasCurrentOnly =
-    noSnapshot && (curLibs.length > 0 || curTemplates.length > 0 || curPrompts.length > 0);
-
-  // --- Indicator pills (hover toolbar on assistant messages) ---
+  // --- Indicator pills (uniquement snapshot)
   type Indicator = { key: string; label: string; enabled: boolean; icon: ReactNode };
   const pluginIndicators: Indicator[] = [
     {
@@ -226,14 +180,20 @@ export default function MessageCard({
     {
       key: "templates",
       label: "Templates",
-      enabled: templatesLabeled.length > 0,
+      enabled: tplsLabeled.length > 0,
       icon: <DescriptionOutlinedIcon sx={{ fontSize: 14 }} />,
     },
     {
       key: "prompts",
       label: "Prompts",
-      enabled: promptsLabeled.length > 0 || !!meta.prompt_pack || !!meta.system_prompt,
+      enabled: prmsLabeled.length > 0,
       icon: <PsychologyOutlinedIcon sx={{ fontSize: 14 }} />,
+    },
+    {
+      key: "profiles",
+      label: "profiles",
+      enabled: prfsLabeled.length > 0,
+      icon: <PersonOutlinedIcon sx={{ fontSize: 14 }} />,
     },
   ];
 
@@ -260,8 +220,8 @@ export default function MessageCard({
 
   const hasPluginsInfo =
     libsLabeled.length > 0 ||
-    templatesLabeled.length > 0 ||
-    promptsLabeled.length > 0 ||
+    tplsLabeled.length > 0 ||
+    prmsLabeled.length > 0 ||
     modelName ||
     latencyMs ||
     typeof usedTemperature === "number" ||
@@ -360,11 +320,9 @@ export default function MessageCard({
                             onMouseLeave={closeInsights}
                             sx={{ display: "inline-flex" }}
                           >
-                            <Tooltip title="Message insights" placement="top">
-                              <IconButton size="small" sx={{ ml: 0.5 }} aria-label="message-insights">
-                                <InfoOutlinedIcon fontSize="small" />
-                              </IconButton>
-                            </Tooltip>
+                            <IconButton size="small" sx={{ ml: 0.5 }} aria-label="message-insights">
+                              <InfoOutlinedIcon fontSize="small" />
+                            </IconButton>
 
                             <Popper
                               open={insightOpen}
@@ -396,15 +354,31 @@ export default function MessageCard({
                                     <Typography variant="overline" sx={{ opacity: 0.7, letterSpacing: 0.6 }}>
                                       Overview
                                     </Typography>
+
                                     <SectionRow label="Task" value={extras?.task as any} />
                                     <SectionRow label="Node" value={extras?.node as any} />
                                     <SectionRow label="Model" value={modelName} />
+
+                                    {/* Tokens: total + détail clair */}
+                                    {(() => {
+                                      const inTok = Math.max(0, Number(inTokens ?? 0));   // prompt + system + contexte récupéré
+                                      const outTok = Math.max(0, Number(outTokens ?? 0)); // réponse du modèle
+                                      const totalTok = inTok + outTok;
+                                      const fmt = (n: number) => n.toLocaleString();
+
+                                      return (
+                                        <>
+                                          <SectionRow label="Tokens used" value={fmt(totalTok)} />
+                                          <Box sx={{ pl: 1.5 }}>
+                                            <SectionRow label="From user (prompt+context)" value={fmt(inTok)} />
+                                            <SectionRow label="From model (response)" value={fmt(outTok)} />
+                                          </Box>
+                                        </>
+                                      );
+                                    })()}
+
                                     <Box display="flex" gap={1}>
-                                      <SectionRow label="In" value={inTokens} />
-                                      <SectionRow label="Out" value={outTokens} />
-                                    </Box>
-                                    <Box display="flex" gap={1}>
-                                      <SectionRow label="Latency" value={latencyMs ? `${latencyMs} ms` : undefined} />
+                                      <SectionRow label="Latency" value={latencyMs != null ? `${latencyMs.toLocaleString()} ms` : undefined} />
                                       <SectionRow label="Search" value={searchPolicy} />
                                       <SectionRow
                                         label="Temp"
@@ -412,15 +386,9 @@ export default function MessageCard({
                                       />
                                     </Box>
 
-                                    {(libsLabeled.length || templatesLabeled.length || promptsLabeled.length) ? (
+                                    {(libsLabeled.length || tplsLabeled.length || prmsLabeled.length || prfsLabeled.length) ? (
                                       <Divider flexItem />
                                     ) : null}
-
-                                    {hasCurrentOnly && (
-                                      <Typography variant="caption" sx={{ opacity: 0.7 }}>
-                                        current settings (not snapshot)
-                                      </Typography>
-                                    )}
 
                                     {libsLabeled.length ? (
                                       <>
@@ -431,21 +399,30 @@ export default function MessageCard({
                                       </>
                                     ) : null}
 
-                                    {templatesLabeled.length ? (
+                                    {tplsLabeled.length ? (
                                       <>
                                         <Typography variant="overline" sx={{ opacity: 0.7 }}>
                                           Templates
                                         </Typography>
-                                        <PillRow items={templatesLabeled} />
+                                        <PillRow items={tplsLabeled} />
                                       </>
                                     ) : null}
 
-                                    {promptsLabeled.length ? (
+                                    {prmsLabeled.length ? (
                                       <>
                                         <Typography variant="overline" sx={{ opacity: 0.7 }}>
                                           Prompts
                                         </Typography>
-                                        <PillRow items={promptsLabeled} />
+                                        <PillRow items={prmsLabeled} />
+                                      </>
+                                    ) : null}
+
+                                    {prfsLabeled.length ? (
+                                      <>
+                                        <Typography variant="overline" sx={{ opacity: 0.7 }}>
+                                          Profiles
+                                        </Typography>
+                                        <PillRow items={prfsLabeled} />
                                       </>
                                     ) : null}
 
@@ -454,6 +431,7 @@ export default function MessageCard({
                                       AI content may be incorrect.
                                     </Typography>
                                   </Stack>
+
                                 </Paper>
                               </ClickAwayListener>
                             </Popper>
@@ -463,7 +441,7 @@ export default function MessageCard({
                     </Box>
                   )}
 
-                  {/* For tool_call: compact args preview */}
+                  {/* tool_call compact args */}
                   {isCall && message.parts?.[0]?.type === "tool_call" && (
                     <Box px={side === "right" ? 0 : 1} pb={0.5} sx={{ opacity: 0.8 }}>
                       <Typography fontSize=".8rem">
@@ -476,7 +454,7 @@ export default function MessageCard({
                     </Box>
                   )}
 
-                  {/* Main content: ALWAYS markdown */}
+                  {/* Main content */}
                   <Box px={side === "right" ? 0 : 1} pb={0.5}>
                     <CustomMarkdownRenderer
                       content={mdContent}

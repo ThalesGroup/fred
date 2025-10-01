@@ -19,11 +19,7 @@ type Props = {
   libraryNameById?: Record<string, string>;
   templateNameById?: Record<string, string>;
   promptNameById?: Record<string, string>;
-
-  // current UI selections (to complement snapshot)
-  currentLibraryIds?: string[];
-  currentTemplateIds?: string[];
-  currentPromptIds?: string[];
+  profileNameById?: Record<string, string>;
 };
 
 function Area({
@@ -35,9 +31,7 @@ function Area({
   libraryNameById,
   templateNameById,
   promptNameById,
-  currentLibraryIds,
-  currentTemplateIds,
-  currentPromptIds,
+  profileNameById,
 }: Props) {
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -124,21 +118,24 @@ function Area({
       }
 
       if (userMessage) {
+        const agentForUser = resolveAgenticFlow(userMessage);
+
         elements.push(
           <MessageCard
             key={`user-${userMessage.session_id}-${userMessage.exchange_id}-${userMessage.rank}`}
             message={userMessage}
             currentAgenticFlow={currentAgenticFlow}
-            agenticFlow={currentAgenticFlow}
+            agenticFlow={agentForUser}
             side="right"
             enableCopy
             enableThumbs
+            suppressText={false}
             libraryNameById={libraryNameById}
             templateNameById={templateNameById}
             promptNameById={promptNameById}
-            currentLibraryIds={currentLibraryIds}
-            currentTemplateIds={currentTemplateIds}
-            currentPromptIds={currentPromptIds}
+            profileNameById={profileNameById}
+            onCitationHover={(uid) => setHighlightUid(uid)}
+            onCitationClick={(uid) => setHighlightUid(uid)}
           />,
         );
       }
@@ -184,22 +181,22 @@ function Area({
             )}
 
             <MessageCard
+              key={`final-${msg.session_id}-${msg.exchange_id}-${msg.rank}`}
               message={msg}
               agenticFlow={agenticFlow}
               currentAgenticFlow={currentAgenticFlow}
-              side={msg.role === "user" ? "right" : "left"}
+              side="left"
               enableCopy
               enableThumbs
+              suppressText={false}
               libraryNameById={libraryNameById}
               templateNameById={templateNameById}
               promptNameById={promptNameById}
-              currentLibraryIds={currentLibraryIds}
-              currentTemplateIds={currentTemplateIds}
-              currentPromptIds={currentPromptIds}
-              // Hook up hover/click from inline [n] markers to highlight Sources
+              profileNameById={profileNameById}
               onCitationHover={(uid) => setHighlightUid(uid)}
               onCitationClick={(uid) => setHighlightUid(uid)}
             />
+
           </React.Fragment>,
         );
       }
@@ -233,16 +230,14 @@ function Area({
             enableCopy
             enableThumbs
             suppressText={false}
-            // maps & current selections
             libraryNameById={libraryNameById}
             templateNameById={templateNameById}
             promptNameById={promptNameById}
-            currentLibraryIds={currentLibraryIds}
-            currentTemplateIds={currentTemplateIds}
-            currentPromptIds={currentPromptIds}
+            profileNameById={profileNameById}
             onCitationHover={(uid) => setHighlightUid(uid)}
             onCitationClick={(uid) => setHighlightUid(uid)}
-          />,
+          />
+
         );
       }
     }
@@ -256,9 +251,6 @@ function Area({
     libraryNameById,
     templateNameById,
     promptNameById,
-    currentLibraryIds,
-    currentTemplateIds,
-    currentPromptIds,
   ]);
 
   useEffect(() => {

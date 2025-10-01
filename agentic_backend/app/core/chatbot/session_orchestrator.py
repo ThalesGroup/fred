@@ -404,88 +404,81 @@ class SessionOrchestrator:
         """
 
         rc = runtime_context or getattr(agent, "runtime_context", None)
+        if rc is None:
+            return
 
-        def _collect_ids(names: list[str]) -> list[str]:
-            if rc is None:
+        def _as_list(v) -> list[str]:
+            if v is None:
                 return []
+            if isinstance(v, (list, tuple, set)):
+                return [str(x) for x in v if x]
+            return [str(v)]
+
+        def _collect(*names: str) -> list[str]:
             out: list[str] = []
             for n in names:
                 if hasattr(rc, n):
-                    v = getattr(rc, n) or []
-                    try:
-                        out.extend(str(x) for x in v if x)
-                    except TypeError:
-                        # tolerate non-iterables quietly
-                        pass
-            return out
+                    out.extend(_as_list(getattr(rc, n)))
+            # déduplique proprement
+            seen, uniq = set(), []
+            for x in out:
+                if x and x not in seen:
+                    seen.add(x)
+                    uniq.append(x)
+            return uniq
 
-        # Accept both old/new spellings (snake & camel)
+        # accepte snake/camel + legacy
         alias_map: dict[str, tuple[str, ...]] = {
-            "libraries": ("document_library_ids", "selected_document_libraries_ids",
-                        "documentLibraryIds", "selectedDocumentLibrariesIds"),
-            "prompts":   ("prompt_resource_ids", "selected_prompt_ids",
-                        "promptResourceIds", "selectedPromptIds"),
-            "templates": ("template_resource_ids", "selected_template_ids",
-                        "templateResourceIds", "selectedTemplateIds"),
-            "profiles":  ("profile_resource_ids", "selected_profile_ids",
-                        "profileResourceIds", "selectedProfileIds"),
+            "libraries": (
+                "document_library_ids",
+                "selected_document_libraries_ids",
+                "documentLibraryIds",
+                "selectedDocumentLibrariesIds",
+            ),
+            "templates": (
+                "template_resource_ids",
+                "selected_template_ids",
+                "templateResourceIds",
+                "selectedTemplateIds",
+            ),
+            "prompts": (
+                "prompt_resource_ids",
+                "selected_prompt_ids",
+                "promptResourceIds",
+                "selectedPromptIds",
+            ),
+            "profiles": (
+                "profile_resource_ids",
+                "selected_profile_ids",
+                "profileResourceIds",
+                "selectedProfileIds",
+            ),
         }
 
-        plugins_payload: dict[str, list[str] | str] = {}
+        payload: dict[str, list[str] | str] = {}
         for key, aliases in alias_map.items():
-            ids = _collect_ids(list(aliases))
+            ids = _collect(*aliases)
             if ids:
-                plugins_payload[key] = ids
+                payload[key] = ids
 
-        # Search policy (string)
-        if rc is not None:
-            sp = getattr(rc, "search_policy", None) or getattr(rc, "searchPolicy", None)
-            if sp:
-                plugins_payload["search_policy"] = str(sp)
+        sp = getattr(rc, "search_policy", None) or getattr(rc, "searchPolicy", None)
+        if sp:
+            payload["search_policy"] = str(sp)
 
-        # Marker: was any system prompt used? (do not expose its content)
-        has_system_prompt = False
-        for obj in (rc, agent):
-            if obj is None:
-                continue
-            for attr in ("system_prompt", "system_prompt_preview"):
-                if hasattr(obj, attr) and getattr(obj, attr):
-                    has_system_prompt = True
-
-        if not plugins_payload and not has_system_prompt:
-            return  # nothing to attach
-
-        # Short list for top-level metadata.prompts (drives 'Prompts' pill)
-        short_prompts = (
-            (plugins_payload.get("prompts") or [])
-            or (plugins_payload.get("templates") or [])
-            or (plugins_payload.get("profiles") or [])
-        )
-        short_prompts = list(short_prompts)[:3] if short_prompts else []
+        if not payload:
+            return
 
         for m in messages:
             if m.role == Role.assistant and m.channel == Channel.final:
                 md = m.metadata or ChatMetadata()
-
-                # Top-level markers
-                if (has_system_prompt or short_prompts) and not md.system_prompt:
-                    md.system_prompt = "used"
-                if short_prompts and not md.prompts:
-                    md.prompts = short_prompts
-
-                # Merge into extras.plugins (non-destructive, compact)
-                plugins = dict(md.extras.get("plugins", {}))
-                for k, v in plugins_payload.items():
-                    if k == "search_policy":
-                        plugins["search_policy"] = v  # string
-                    else:
-                        ids = list(v)[:3] if isinstance(v, list) else []
-                        if ids:
-                            plugins.setdefault(k, ids)
-                md.extras["plugins"] = plugins
-
+                ex = dict(md.extras or {})
+                plugins = dict(ex.get("plugins") or {})
+                # merge non destructif, mais on écrase les clés fournies pour refléter la réalité de CE message
+                for k, v in payload.items():
+                    plugins[k] = v
+                ex["plugins"] = plugins
+                md.extras = ex
                 m.metadata = md
-
 
 
 # ---------- pure helpers (kept local for discoverability) ----------

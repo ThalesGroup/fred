@@ -97,6 +97,9 @@ const ChatBot = ({
   const { data: docLibs = [] } = useListAllTagsKnowledgeFlowV1TagsGetQuery({ type: "document" as TagType });
   const { data: promptResources = [] } = useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery({ kind: "prompt" });
   const { data: templateResources = [] } = useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery({ kind: "template" });
+  const { data: profileResources = [] } =
+    useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery({ kind: "profile" });
+
 
   const libraryNameMap = useMemo(
     () => Object.fromEntries((docLibs as any[]).map((x: any) => [x.id, x.name])),
@@ -109,6 +112,10 @@ const ChatBot = ({
   const templateNameMap = useMemo(
     () => Object.fromEntries((templateResources as any[]).map((x: any) => [x.id, x.name ?? x.id])),
     [templateResources],
+  );
+  const profileNameMap = useMemo(
+    () => Object.fromEntries((profileResources as any[]).map((x: any) => [x.id, x.name ?? x.id])),
+    [profileResources],
   );
 
   // Lazy messages fetcher
@@ -648,9 +655,7 @@ const ChatBot = ({
                 libraryNameById={libraryNameMap}
                 templateNameById={templateNameMap}
                 promptNameById={promptNameMap}
-                currentLibraryIds={userInputContext?.documentLibraryIds ?? []}
-                currentTemplateIds={userInputContext?.templateResourceIds ?? []}
-                currentPromptIds={userInputContext?.promptResourceIds ?? []}
+                profileNameById={profileNameMap}
               />
               {waitResponse && (
                 <Box mt={1} sx={{ alignSelf: "flex-start" }}>
