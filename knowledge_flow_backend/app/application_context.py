@@ -20,7 +20,9 @@ from typing import Dict, Optional, Type, Union
 
 from fred_core import (
     BaseKPIStore,
+    BaseLogStore,
     DuckdbStoreConfig,
+    InMemoryLogStorageConfig,
     KpiLogStore,
     KPIWriter,
     LogStoreConfig,
@@ -28,6 +30,8 @@ from fred_core import (
     ModelProvider,
     OpenSearchIndexConfig,
     OpenSearchKPIStore,
+    OpenSearchLogStore,
+    RamLogStore,
     SQLStorageConfig,
     SQLTableStore,
     StoreInfo,
@@ -35,7 +39,6 @@ from fred_core import (
     get_model,
     split_realm_url,
 )
-from fred_core import BaseLogStore, InMemoryLogStorageConfig, OpenSearchLogStore, RamLogStore
 from langchain_core.embeddings import Embeddings
 from opensearchpy import OpenSearch, RequestsHttpConnection
 
