@@ -82,13 +82,13 @@ def get_node_numerical_metrics(
         agg_mapping=agg_mapping,
     )
 
-def start_prometheus_exporter(port: int = 8082):
+def start_prometheus_exporter(port: int = 9090):
     logger.info(f"Starting Prometheus exporter on port {port}")
     start_http_server(port)
 
     def collect_metrics():
         while True:
-            # ici tu pourrais ajouter psutil.cpu_percent(), mem, etc.
+            # Here we will be able to add custom metrics
             import time
             time.sleep(5)
 

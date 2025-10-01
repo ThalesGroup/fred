@@ -160,8 +160,8 @@ class AppConfig(BaseModel):
     name: Optional[str] = "Knowledge Flow Backend"
     base_url: str = "/knowledge-flow/v1"
     address: str = "127.0.0.1"
-    port: int = 8000
-    metrics_port: int = 8001
+    port: int = 8111
+    metrics_port: int = 9111
     log_level: str = "info"
     reload: bool = False
     reload_dir: str = "."

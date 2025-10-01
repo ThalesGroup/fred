@@ -6,7 +6,7 @@ from prometheus_client import start_http_server
 logger = logging.getLogger(__name__)
 
 
-def start_prometheus_exporter(port: int = 8081):
+def start_prometheus_exporter(port: int = 9111):
     logger.info(f"Starting Prometheus exporter on port {port}")
     start_http_server(port)
 

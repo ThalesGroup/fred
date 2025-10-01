@@ -15,7 +15,7 @@ app:
   base_url: "/agentic/v1"
   address: "127.0.0.1"
   port: 8000
-  metrics_port: 9000
+  metrics_port: 9090
   log_level: "info"
   reload: false
   reload_dir: "."

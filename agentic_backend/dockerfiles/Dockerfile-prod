@@ -94,7 +94,7 @@ ENV PYTHONPATH=/app
 USER ${USER_NAME}
 
 # Expose port for the app and the metrics
-EXPOSE 8000 9000
+EXPOSE 8000 9090
 
 # Entrypoint without make
 ENTRYPOINT ["uvicorn", "app.main:create_app", "--factory"]

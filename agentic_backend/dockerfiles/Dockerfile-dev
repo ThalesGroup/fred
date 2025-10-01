@@ -46,7 +46,7 @@ USER ${USER_NAME}
 RUN make dev
 
 # Expose FastAPI default port for the app and the metrics
-EXPOSE 8000 9000
+EXPOSE 8000 9090
 
 # Run the application
 ENV PYTHONPATH=/app
