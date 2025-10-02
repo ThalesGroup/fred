@@ -295,7 +295,7 @@ export type AgentTuning = {
 export type AgentChatOptions = {
   search_policy_selection?: boolean;
   libraries_selection?: boolean;
-  attach_audio_files?: boolean;
+  record_audio_files?: boolean;
   attach_files?: boolean;
 };
 export type Agent = {

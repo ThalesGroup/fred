@@ -267,7 +267,7 @@ export const UserInputPopover: React.FC<UserInputPopoverProps> = ({
                 />
               </MenuItem>
             )}
-            {agentChatOptions?.attach_audio_files && (
+            {agentChatOptions?.record_audio_files && (
               <MenuItem onClick={onRecordAudioClick}>
                 <ListItemIcon>
                   {isRecording ? <StopIcon fontSize="small" /> : <MicIcon fontSize="small" />}
