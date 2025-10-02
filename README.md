@@ -312,7 +312,7 @@ Then, depending on your model provider, actions may differ.
       yq eval '.embedding_model.settings.azure_tenant_id = "<your-azure-tenant-id>"' -i knowledge_flow_backend/config/configuration.yaml
       ```
     
-  - Copy-paste your `AZURE_OPENAI_API_KEY` value in the 2 files:
+  - Copy-paste your `AZURE_AD_CLIENT_SECRET` and `AZURE_APIM_SUBSCRIPTION_KEY` values in the 2 files:
 
     - `agentic_backend/config/.env`
     - `knowledge_flow_backend/config/.env`
