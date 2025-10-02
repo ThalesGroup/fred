@@ -47,6 +47,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Mapping, Optional, Sequence
 
 import chromadb
+from chromadb.config import Settings
 from langchain.schema.document import Document
 from langchain_core.embeddings import Embeddings
 
@@ -171,7 +172,7 @@ class ChromaDBVectorStore(BaseVectorStore, FetchById):
         self.collection_name = collection_name
         self.embeddings = embeddings
         self.embedding_model_name = embedding_model_name
-        client = chromadb.PersistentClient(path=self.persist_path)
+        client = chromadb.PersistentClient(path=self.persist_path, settings=Settings(anonymized_telemetry=False))
         self._collection = client.get_or_create_collection(
             name=self.collection_name,
             metadata={"hnsw:space": "cosine"},  # ensure cosine distance
