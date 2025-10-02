@@ -29,6 +29,11 @@ security:
     realm_url: "http://app-keycloak:8080/realms/app"
   authorized_origins:
     - "http://localhost:5173"
+  rebac:
+    type: spicedb
+    endpoint: "http://localhost:50051"
+    insecure: true
+
 frontend_settings:
   feature_flags:
     # If true activate the backend and frontend modules in charge of K8

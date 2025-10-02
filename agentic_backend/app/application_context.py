@@ -45,10 +45,19 @@ from fred_core import (
     OpenSearchKPIStore,
     OpenSearchLogStore,
     RamLogStore,
+    SpiceDbRebacConfig,
     SQLStorageConfig,
     get_model,
     split_realm_url,
 )
+from fred_core.logs import (
+    BaseLogStore,
+    InMemoryLogStorageConfig,
+    OpenSearchLogStore,
+    RamLogStore,
+)
+from fred_core.security.rebac.rebac_engine import RebacEngine
+from fred_core.security.rebac.spicedb_engine import SpiceDbRebacEngine
 from langchain_core.language_models.base import BaseLanguageModel
 from requests.auth import AuthBase
 
@@ -128,6 +137,12 @@ def get_history_store() -> BaseHistoryStore:
 
 def get_kpi_writer() -> KPIWriter:
     return get_app_context().get_kpi_writer()
+
+
+def get_rebac_engine() -> RebacEngine:
+    """Expose the shared ReBAC engine instance."""
+
+    return get_app_context().get_rebac_engine()
 
 
 def get_agent_store() -> BaseAgentStore:
@@ -233,6 +248,7 @@ class ApplicationContext:
     _log_store_instance: Optional[BaseLogStore] = None
     _outbound_auth: OutboundAuth | None = None
     _kpi_writer: Optional[KPIWriter] = None
+    _rebac_engine: Optional[RebacEngine] = None
 
     def __new__(cls, configuration: Configuration):
         with cls._lock:
@@ -565,6 +581,32 @@ class ApplicationContext:
         )
         return self._outbound_auth
 
+    def get_rebac_engine(self) -> RebacEngine:
+        if self._rebac_engine is not None:
+            return self._rebac_engine
+
+        rebac_config = self.configuration.security.rebac
+        if isinstance(rebac_config, SpiceDbRebacConfig):
+            token_env_var = rebac_config.token_env_var
+            token = os.getenv(token_env_var)
+            if not token:
+                raise ValueError(
+                    f"Missing SpiceDB token environment variable: {token_env_var}"
+                )
+
+            logger.info(
+                "Initializing SpiceDB ReBAC engine (endpoint=%s, insecure=%s)",
+                rebac_config.endpoint,
+                rebac_config.insecure,
+            )
+            self._rebac_engine = SpiceDbRebacEngine(rebac_config, token=token)
+        else:
+            raise ValueError(
+                f"Unsupported ReBAC engine type: {getattr(rebac_config, 'type', rebac_config)}"
+            )
+
+        return self._rebac_engine
+
     def _log_config_summary(self) -> None:
         """
         Log a crisp, admin-friendly summary of the Agentic configuration and warn on common mistakes.
@@ -717,5 +759,26 @@ class ApplicationContext:
                 "Ensure client_id matches the secret you provisioned.",
                 m2m_sec.client_id,
             )
+
+        rebac_cfg = cfg.security.rebac
+        if isinstance(rebac_cfg, SpiceDbRebacConfig):
+            logger.info("  🕸️ ReBAC engine: %s", rebac_cfg.type)
+            logger.info("     • endpoint: %s", rebac_cfg.endpoint)
+            logger.info("     • insecure: %s", rebac_cfg.insecure)
+            logger.info("     • sync_schema_on_init: %s", rebac_cfg.sync_schema_on_init)
+            token_value = os.getenv(rebac_cfg.token_env_var, "")
+            if token_value:
+                logger.info(
+                    "     • %s: present (%s)",
+                    rebac_cfg.token_env_var,
+                    _mask(token_value),
+                )
+            else:
+                logger.warning(
+                    "     ⚠️ %s is not set — ReBAC authorization calls will fail.",
+                    rebac_cfg.token_env_var,
+                )
+        else:
+            logger.info("  🕸️ ReBAC engine: disabled")
 
         logger.info("────────────────────────────────────────────────────────────────")

@@ -5,6 +5,10 @@ services:
     image: authzed/spicedb:v1.36.0
     command:
       - serve-testing
+      - --grpc-addr
+      - ":60051"
+      - --readonly-grpc-addr
+      - ":60052"
     ports:
-      - "50051:50051"
-      - "50052:50052"
+      - "60051:60051"
+      - "60052:60052"

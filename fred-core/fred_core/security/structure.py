@@ -12,9 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List
+from typing import Annotated, List, Literal, Union
 
-from pydantic import AnyHttpUrl, AnyUrl, BaseModel
+from pydantic import AnyHttpUrl, AnyUrl, BaseModel, Field
 
 
 class KeycloakUser(BaseModel):
@@ -44,7 +44,30 @@ class UserSecurity(BaseModel):
     client_id: str
 
 
+class SpiceDbRebacConfig(BaseModel):
+    """Configuration for a SpiceDB-backed relationship engine."""
+
+    type: Literal["spicedb"] = "spicedb"
+    endpoint: str = Field(
+        ..., description="gRPC endpoint for the SpiceDB implementation (host:port)"
+    )
+    insecure: bool = Field(
+        default=False, description="Use insecure connection instead of TLS"
+    )
+    sync_schema_on_init: bool = Field(
+        default=True, description="Synchronize schema when building the engine"
+    )
+    token_env_var: str = Field(
+        default="SPICEDB_TOKEN",
+        description="Environment variable that stores the SpiceDB preshared key",
+    )
+
+
+RebacConfiguration = Annotated[Union[SpiceDbRebacConfig], Field(discriminator="type")]
+
+
 class SecurityConfiguration(BaseModel):
     m2m: M2MSecurity
     user: UserSecurity
     authorized_origins: List[AnyHttpUrl] = []
+    rebac: RebacConfiguration
