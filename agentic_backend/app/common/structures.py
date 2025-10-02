@@ -80,7 +80,6 @@ class RecursionConfig(BaseModel):
 class AgentChatOptions(BaseModel):
     search_policy_selection: bool = False
     libraries_selection: bool = False
-    profiles_selection: bool = True
     attach_audio_files: bool = True
     attach_files: bool = True
 
