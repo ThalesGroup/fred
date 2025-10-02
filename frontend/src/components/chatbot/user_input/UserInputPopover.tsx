@@ -12,35 +12,36 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import React, { SetStateAction } from "react";
-import {
-  Popover,
-  Box,
-  Divider,
-  Stack,
-  Typography,
-  Chip,
-  Tooltip,
-  IconButton,
-  MenuList,
-  MenuItem,
-  ListItemIcon,
-  ListItemText,
-} from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
-import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import AttachFileIcon from "@mui/icons-material/AttachFile";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import LibraryBooksIcon from "@mui/icons-material/LibraryBooks";
 import MicIcon from "@mui/icons-material/Mic";
 import StopIcon from "@mui/icons-material/Stop";
-import LibraryBooksIcon from "@mui/icons-material/LibraryBooks";
+import {
+  Box,
+  Chip,
+  Divider,
+  IconButton,
+  ListItemIcon,
+  ListItemText,
+  MenuItem,
+  MenuList,
+  Popover,
+  Stack,
+  Tooltip,
+  Typography,
+} from "@mui/material";
+import React, { SetStateAction } from "react";
 // import AutoFixHighIcon from "@mui/icons-material/AutoFixHigh";
 // import DescriptionIcon from "@mui/icons-material/Description";
 import TravelExploreIcon from "@mui/icons-material/TravelExplore";
 
+import { useTranslation } from "react-i18next";
+import { AgentChatOptions } from "../../../slices/agentic/agenticOpenApi.ts";
+import { SearchPolicyName } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi.ts";
 import { ChatDocumentLibrariesSelectionCard } from "../ChatDocumentLibrariesSelectionCard.tsx";
 import { ChatResourcesSelectionCard } from "../ChatResourcesSelectionCard.tsx";
-import { SearchPolicyName } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi.ts";
-import { useTranslation } from "react-i18next";
 
 type PickerView = null | "libraries" | "prompts" | "templates" | "search_policy";
 
@@ -67,8 +68,7 @@ interface UserInputPopoverProps {
   onRemoveTemplate: (id: string) => void;
   onAttachFileClick: () => void;
   onRecordAudioClick: () => void;
-  enableFilesAttachment: boolean;
-  enableAudioAttachment: boolean;
+  agentChatOptions?: AgentChatOptions;
   filesBlob: File[] | null;
 }
 
@@ -98,8 +98,7 @@ export const UserInputPopover: React.FC<UserInputPopoverProps> = ({
   // onRemoveTemplate,
   onAttachFileClick,
   onRecordAudioClick,
-  enableFilesAttachment,
-  enableAudioAttachment,
+  agentChatOptions,
   filesBlob,
 }) => {
   const { t } = useTranslation();
@@ -161,27 +160,31 @@ export const UserInputPopover: React.FC<UserInputPopoverProps> = ({
     >
       {!pickerView && (
         <Box sx={{ display: "flex", flexDirection: "column" }}>
-          {sectionHeader(
-            <LibraryBooksIcon fontSize="small" />,
-            t("knowledge.viewSelector.libraries"),
-            selectedDocumentLibrariesIds.length,
-            () => setPickerView("libraries"),
-            () => setLibs([]),
+          {agentChatOptions?.libraries_selection && (
+            <>
+              {sectionHeader(
+                <LibraryBooksIcon fontSize="small" />,
+                t("knowledge.viewSelector.libraries"),
+                selectedDocumentLibrariesIds.length,
+                () => setPickerView("libraries"),
+                () => setLibs([]),
+              )}
+              <Box sx={{ mb: 1 }}>
+                {selectedDocumentLibrariesIds.length ? (
+                  <Stack direction="row" flexWrap="wrap" gap={0.75}>
+                    {selectedDocumentLibrariesIds.map((id) => (
+                      <Chip key={id} size="small" label={libNameById[id] ?? id} onDelete={() => onRemoveLib(id)} />
+                    ))}
+                  </Stack>
+                ) : (
+                  <Typography variant="caption" color="text.secondary">
+                    {t("common.noneSelected")}
+                  </Typography>
+                )}
+              </Box>
+              <Divider sx={{ my: 1 }} />
+            </>
           )}
-          <Box sx={{ mb: 1 }}>
-            {selectedDocumentLibrariesIds.length ? (
-              <Stack direction="row" flexWrap="wrap" gap={0.75}>
-                {selectedDocumentLibrariesIds.map((id) => (
-                  <Chip key={id} size="small" label={libNameById[id] ?? id} onDelete={() => onRemoveLib(id)} />
-                ))}
-              </Stack>
-            ) : (
-              <Typography variant="caption" color="text.secondary">
-                {t("common.noneSelected")}
-              </Typography>
-            )}
-          </Box>
-          <Divider sx={{ my: 1 }} />
 
           {/* {sectionHeader(
             <AutoFixHighIcon fontSize="small" />,
@@ -232,18 +235,22 @@ export const UserInputPopover: React.FC<UserInputPopoverProps> = ({
           </Box>
           <Divider sx={{ my: 1 }} /> */}
 
-          {sectionHeader(<TravelExploreIcon fontSize="small" />, t("search.policy", "Search policy"), 1, () =>
-            setPickerView("search_policy"),
+          {agentChatOptions?.search_policy_selection && (
+            <>
+              {sectionHeader(<TravelExploreIcon fontSize="small" />, t("search.policy", "Search policy"), 1, () =>
+                setPickerView("search_policy"),
+              )}
+              <Box sx={{ mb: 1 }}>
+                <Stack direction="row" flexWrap="wrap" gap={0.75}>
+                  <Chip size="small" label={searchPolicyLabels[selectedSearchPolicyName]} />
+                </Stack>
+              </Box>
+              <Divider sx={{ my: 1 }} />
+            </>
           )}
-          <Box sx={{ mb: 1 }}>
-            <Stack direction="row" flexWrap="wrap" gap={0.75}>
-              <Chip size="small" label={searchPolicyLabels[selectedSearchPolicyName]} />
-            </Stack>
-          </Box>
-          <Divider sx={{ my: 1 }} />
 
           <MenuList dense sx={{ py: 0.25 }}>
-            {enableFilesAttachment && (
+            {agentChatOptions?.attach_files && (
               <MenuItem onClick={onAttachFileClick}>
                 <ListItemIcon>
                   <AttachFileIcon fontSize="small" />
@@ -260,7 +267,7 @@ export const UserInputPopover: React.FC<UserInputPopoverProps> = ({
                 />
               </MenuItem>
             )}
-            {enableAudioAttachment && (
+            {agentChatOptions?.attach_audio_files && (
               <MenuItem onClick={onRecordAudioClick}>
                 <ListItemIcon>
                   {isRecording ? <StopIcon fontSize="small" /> : <MicIcon fontSize="small" />}
