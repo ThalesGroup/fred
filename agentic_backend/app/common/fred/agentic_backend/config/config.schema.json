@@ -1,0 +1,1339 @@
+{
+  "$defs": {
+    "AIConfig": {
+      "properties": {
+        "knowledge_flow_url": {
+          "description": "URL of the Knowledge Flow backend.",
+          "title": "Knowledge Flow Url",
+          "type": "string"
+        },
+        "timeout": {
+          "$ref": "#/$defs/TimeoutSettings",
+          "description": "Timeout settings for the AI client."
+        },
+        "default_chat_model": {
+          "$ref": "#/$defs/ModelConfiguration",
+          "description": "Default model configuration for all agents and services."
+        },
+        "agents": {
+          "description": "List of AI agents.",
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "agent": "#/$defs/Agent",
+                "leader": "#/$defs/Leader"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/Agent"
+              },
+              {
+                "$ref": "#/$defs/Leader"
+              }
+            ]
+          },
+          "title": "Agents",
+          "type": "array"
+        }
+      },
+      "required": [
+        "knowledge_flow_url",
+        "timeout",
+        "default_chat_model"
+      ],
+      "title": "AIConfig",
+      "type": "object"
+    },
+    "Agent": {
+      "description": "Why this subclass:\n- Regular agents don’t own crew. They can be *selected* into a leader’s crew.",
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "class_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Class Path"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ModelConfiguration"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "tags": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Tags",
+          "type": "array"
+        },
+        "role": {
+          "title": "Role",
+          "type": "string"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "tuning": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AgentTuning"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "mcp_servers": {
+          "description": "List of active MCP server configurations for this agent.",
+          "items": {
+            "$ref": "#/$defs/MCPServerConfiguration"
+          },
+          "title": "Mcp Servers",
+          "type": "array"
+        },
+        "type": {
+          "const": "agent",
+          "default": "agent",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "role",
+        "description"
+      ],
+      "title": "Agent",
+      "type": "object"
+    },
+    "AgentTuning": {
+      "properties": {
+        "fields": {
+          "items": {
+            "$ref": "#/$defs/FieldSpec"
+          },
+          "title": "Fields",
+          "type": "array"
+        },
+        "mcp_servers": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/McpServerSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "AgentTuning",
+      "type": "object"
+    },
+    "AppConfig": {
+      "properties": {
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "Agentic Backend",
+          "title": "Name"
+        },
+        "base_url": {
+          "default": "/agentic/v1",
+          "title": "Base Url",
+          "type": "string"
+        },
+        "address": {
+          "default": "127.0.0.1",
+          "title": "Address",
+          "type": "string"
+        },
+        "port": {
+          "default": 8000,
+          "title": "Port",
+          "type": "integer"
+        },
+        "log_level": {
+          "default": "info",
+          "title": "Log Level",
+          "type": "string"
+        },
+        "reload": {
+          "default": false,
+          "title": "Reload",
+          "type": "boolean"
+        },
+        "reload_dir": {
+          "default": ".",
+          "title": "Reload Dir",
+          "type": "string"
+        }
+      },
+      "title": "AppConfig",
+      "type": "object"
+    },
+    "DuckdbStoreConfig": {
+      "properties": {
+        "type": {
+          "const": "duckdb",
+          "title": "Type",
+          "type": "string"
+        },
+        "duckdb_path": {
+          "description": "Path to the DuckDB database file.",
+          "title": "Duckdb Path",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "duckdb_path"
+      ],
+      "title": "DuckdbStoreConfig",
+      "type": "object"
+    },
+    "FieldSpec": {
+      "properties": {
+        "key": {
+          "title": "Key",
+          "type": "string"
+        },
+        "type": {
+          "enum": [
+            "string",
+            "text",
+            "number",
+            "integer",
+            "boolean",
+            "select",
+            "array",
+            "object",
+            "prompt",
+            "secret",
+            "url"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "required": {
+          "default": false,
+          "title": "Required",
+          "type": "boolean"
+        },
+        "default": {
+          "anyOf": [
+            {},
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Default"
+        },
+        "enum": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Enum"
+        },
+        "min": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Min"
+        },
+        "max": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max"
+        },
+        "pattern": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Pattern"
+        },
+        "item_type": {
+          "anyOf": [
+            {
+              "enum": [
+                "string",
+                "text",
+                "number",
+                "integer",
+                "boolean",
+                "select",
+                "array",
+                "object",
+                "prompt",
+                "secret",
+                "url"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Item Type"
+        },
+        "ui": {
+          "$ref": "#/$defs/UIHints",
+          "default": {
+            "multiline": false,
+            "max_lines": 6,
+            "placeholder": null,
+            "markdown": false,
+            "textarea": false,
+            "group": null
+          }
+        }
+      },
+      "required": [
+        "key",
+        "type",
+        "title"
+      ],
+      "title": "FieldSpec",
+      "type": "object"
+    },
+    "FrontendFlags": {
+      "properties": {
+        "enableK8Features": {
+          "default": false,
+          "title": "Enablek8Features",
+          "type": "boolean"
+        },
+        "enableElecWarfare": {
+          "default": false,
+          "title": "Enableelecwarfare",
+          "type": "boolean"
+        }
+      },
+      "title": "FrontendFlags",
+      "type": "object"
+    },
+    "FrontendSettings": {
+      "properties": {
+        "feature_flags": {
+          "$ref": "#/$defs/FrontendFlags"
+        },
+        "properties": {
+          "$ref": "#/$defs/Properties"
+        }
+      },
+      "required": [
+        "feature_flags",
+        "properties"
+      ],
+      "title": "FrontendSettings",
+      "type": "object"
+    },
+    "InMemoryLogStorageConfig": {
+      "properties": {
+        "type": {
+          "const": "in_memory",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "InMemoryLogStorageConfig",
+      "type": "object"
+    },
+    "Leader": {
+      "description": "Why this subclass:\n- Crew membership is defined *once*, at the leader level, to avoid drift.\n- You can include by names and/or by tags; optional excludes too.",
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "class_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Class Path"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ModelConfiguration"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "tags": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Tags",
+          "type": "array"
+        },
+        "role": {
+          "title": "Role",
+          "type": "string"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "tuning": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AgentTuning"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "mcp_servers": {
+          "description": "List of active MCP server configurations for this agent.",
+          "items": {
+            "$ref": "#/$defs/MCPServerConfiguration"
+          },
+          "title": "Mcp Servers",
+          "type": "array"
+        },
+        "type": {
+          "const": "leader",
+          "default": "leader",
+          "title": "Type",
+          "type": "string"
+        },
+        "crew": {
+          "description": "Names of agents in this leader's crew (if any).",
+          "items": {
+            "type": "string"
+          },
+          "title": "Crew",
+          "type": "array"
+        }
+      },
+      "required": [
+        "name",
+        "role",
+        "description"
+      ],
+      "title": "Leader",
+      "type": "object"
+    },
+    "LogStoreConfig": {
+      "properties": {
+        "type": {
+          "const": "log",
+          "title": "Type",
+          "type": "string"
+        },
+        "level": {
+          "description": "Logging level",
+          "title": "Level",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "level"
+      ],
+      "title": "LogStoreConfig",
+      "type": "object"
+    },
+    "M2MSecurity": {
+      "description": "Configuration for machine-to-machine authentication.",
+      "properties": {
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "realm_url": {
+          "format": "uri",
+          "minLength": 1,
+          "title": "Realm Url",
+          "type": "string"
+        },
+        "client_id": {
+          "title": "Client Id",
+          "type": "string"
+        },
+        "audience": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Audience"
+        }
+      },
+      "required": [
+        "realm_url",
+        "client_id"
+      ],
+      "title": "M2MSecurity",
+      "type": "object"
+    },
+    "MCPServerConfiguration": {
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "transport": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "sse",
+          "description": "MCP server transport. Can be sse, stdio, websocket or streamable_http",
+          "title": "Transport"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "URL and endpoint of the MCP server",
+          "title": "Url"
+        },
+        "sse_read_timeout": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": 300,
+          "description": "How long (in seconds) the client will wait for a new event before disconnecting",
+          "title": "Sse Read Timeout"
+        },
+        "command": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Command to run for stdio transport. Can be uv, uvx, npx and so on.",
+          "title": "Command"
+        },
+        "args": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Args to give the command as a list. ex:  ['--directory', '/directory/to/mcp', 'run', 'server.py']",
+          "title": "Args"
+        },
+        "env": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Environment variables to give the MCP server",
+          "title": "Env"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "MCPServerConfiguration",
+      "type": "object"
+    },
+    "McpServerSpec": {
+      "properties": {
+        "allow_user_add": {
+          "default": true,
+          "title": "Allow User Add",
+          "type": "boolean"
+        },
+        "allowed_transports": {
+          "default": [
+            "streamable_http",
+            "sse",
+            "http"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "title": "Allowed Transports",
+          "type": "array"
+        },
+        "required_fields": {
+          "default": [
+            "name",
+            "transport",
+            "url"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "title": "Required Fields",
+          "type": "array"
+        }
+      },
+      "title": "McpServerSpec",
+      "type": "object"
+    },
+    "ModelConfiguration": {
+      "properties": {
+        "provider": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Provider of the AI model, e.g., openai, ollama, azure.",
+          "title": "Provider"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Model name, e.g., gpt-4o, llama2.",
+          "title": "Name"
+        },
+        "settings": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Additional provider-specific settings, e.g., Azure deployment name.",
+          "title": "Settings"
+        }
+      },
+      "title": "ModelConfiguration",
+      "type": "object"
+    },
+    "OpenSearchIndexConfig": {
+      "properties": {
+        "type": {
+          "const": "opensearch",
+          "title": "Type",
+          "type": "string"
+        },
+        "index": {
+          "description": "OpenSearch index name",
+          "title": "Index",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "index"
+      ],
+      "title": "OpenSearchIndexConfig",
+      "type": "object"
+    },
+    "OpenSearchStoreConfig": {
+      "properties": {
+        "host": {
+          "description": "OpenSearch host URL",
+          "title": "Host",
+          "type": "string"
+        },
+        "username": {
+          "description": "Username from env",
+          "title": "Username",
+          "type": "string"
+        },
+        "password": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Password from env",
+          "title": "Password"
+        },
+        "secure": {
+          "default": false,
+          "description": "Use TLS (https)",
+          "title": "Secure",
+          "type": "boolean"
+        },
+        "verify_certs": {
+          "default": false,
+          "description": "Verify TLS certs",
+          "title": "Verify Certs",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "host",
+        "username"
+      ],
+      "title": "OpenSearchStoreConfig",
+      "type": "object"
+    },
+    "PostgresStoreConfig": {
+      "properties": {
+        "host": {
+          "description": "PostgreSQL host",
+          "title": "Host",
+          "type": "string"
+        },
+        "port": {
+          "default": 5432,
+          "title": "Port",
+          "type": "integer"
+        },
+        "database": {
+          "title": "Database",
+          "type": "string"
+        },
+        "username": {
+          "title": "Username",
+          "type": "string"
+        },
+        "password": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Password"
+        }
+      },
+      "required": [
+        "host",
+        "database",
+        "username"
+      ],
+      "title": "PostgresStoreConfig",
+      "type": "object"
+    },
+    "PostgresTableConfig": {
+      "properties": {
+        "type": {
+          "const": "postgres",
+          "title": "Type",
+          "type": "string"
+        },
+        "table": {
+          "title": "Table",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "table"
+      ],
+      "title": "PostgresTableConfig",
+      "type": "object"
+    },
+    "Properties": {
+      "properties": {
+        "logoName": {
+          "default": "fred",
+          "title": "Logoname",
+          "type": "string"
+        }
+      },
+      "title": "Properties",
+      "type": "object"
+    },
+    "SQLStorageConfig": {
+      "properties": {
+        "type": {
+          "const": "sql",
+          "default": "sql",
+          "title": "Type",
+          "type": "string"
+        },
+        "driver": {
+          "title": "Driver",
+          "type": "string"
+        },
+        "mode": {
+          "enum": [
+            "read_and_write",
+            "read_only"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "database": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Database"
+        },
+        "host": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Host"
+        },
+        "port": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Port"
+        },
+        "username": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Username"
+        },
+        "password": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Password"
+        },
+        "path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Path"
+        }
+      },
+      "required": [
+        "driver",
+        "mode"
+      ],
+      "title": "SQLStorageConfig",
+      "type": "object"
+    },
+    "SecurityConfiguration": {
+      "properties": {
+        "m2m": {
+          "$ref": "#/$defs/M2MSecurity"
+        },
+        "user": {
+          "$ref": "#/$defs/UserSecurity"
+        }
+      },
+      "required": [
+        "m2m",
+        "user"
+      ],
+      "title": "SecurityConfiguration",
+      "type": "object"
+    },
+    "StorageConfig": {
+      "properties": {
+        "postgres": {
+          "$ref": "#/$defs/PostgresStoreConfig"
+        },
+        "opensearch": {
+          "$ref": "#/$defs/OpenSearchStoreConfig"
+        },
+        "agent_store": {
+          "discriminator": {
+            "mapping": {
+              "duckdb": "#/$defs/DuckdbStoreConfig",
+              "log": "#/$defs/LogStoreConfig",
+              "opensearch": "#/$defs/OpenSearchIndexConfig",
+              "postgres": "#/$defs/PostgresTableConfig",
+              "sql": "#/$defs/SQLStorageConfig"
+            },
+            "propertyName": "type"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/DuckdbStoreConfig"
+            },
+            {
+              "$ref": "#/$defs/PostgresTableConfig"
+            },
+            {
+              "$ref": "#/$defs/OpenSearchIndexConfig"
+            },
+            {
+              "$ref": "#/$defs/SQLStorageConfig"
+            },
+            {
+              "$ref": "#/$defs/LogStoreConfig"
+            }
+          ],
+          "title": "Agent Store"
+        },
+        "session_store": {
+          "discriminator": {
+            "mapping": {
+              "duckdb": "#/$defs/DuckdbStoreConfig",
+              "log": "#/$defs/LogStoreConfig",
+              "opensearch": "#/$defs/OpenSearchIndexConfig",
+              "postgres": "#/$defs/PostgresTableConfig",
+              "sql": "#/$defs/SQLStorageConfig"
+            },
+            "propertyName": "type"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/DuckdbStoreConfig"
+            },
+            {
+              "$ref": "#/$defs/PostgresTableConfig"
+            },
+            {
+              "$ref": "#/$defs/OpenSearchIndexConfig"
+            },
+            {
+              "$ref": "#/$defs/SQLStorageConfig"
+            },
+            {
+              "$ref": "#/$defs/LogStoreConfig"
+            }
+          ],
+          "title": "Session Store"
+        },
+        "history_store": {
+          "discriminator": {
+            "mapping": {
+              "duckdb": "#/$defs/DuckdbStoreConfig",
+              "log": "#/$defs/LogStoreConfig",
+              "opensearch": "#/$defs/OpenSearchIndexConfig",
+              "postgres": "#/$defs/PostgresTableConfig",
+              "sql": "#/$defs/SQLStorageConfig"
+            },
+            "propertyName": "type"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/DuckdbStoreConfig"
+            },
+            {
+              "$ref": "#/$defs/PostgresTableConfig"
+            },
+            {
+              "$ref": "#/$defs/OpenSearchIndexConfig"
+            },
+            {
+              "$ref": "#/$defs/SQLStorageConfig"
+            },
+            {
+              "$ref": "#/$defs/LogStoreConfig"
+            }
+          ],
+          "title": "History Store"
+        },
+        "feedback_store": {
+          "discriminator": {
+            "mapping": {
+              "duckdb": "#/$defs/DuckdbStoreConfig",
+              "log": "#/$defs/LogStoreConfig",
+              "opensearch": "#/$defs/OpenSearchIndexConfig",
+              "postgres": "#/$defs/PostgresTableConfig",
+              "sql": "#/$defs/SQLStorageConfig"
+            },
+            "propertyName": "type"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/DuckdbStoreConfig"
+            },
+            {
+              "$ref": "#/$defs/PostgresTableConfig"
+            },
+            {
+              "$ref": "#/$defs/OpenSearchIndexConfig"
+            },
+            {
+              "$ref": "#/$defs/SQLStorageConfig"
+            },
+            {
+              "$ref": "#/$defs/LogStoreConfig"
+            }
+          ],
+          "title": "Feedback Store"
+        },
+        "kpi_store": {
+          "discriminator": {
+            "mapping": {
+              "duckdb": "#/$defs/DuckdbStoreConfig",
+              "log": "#/$defs/LogStoreConfig",
+              "opensearch": "#/$defs/OpenSearchIndexConfig",
+              "postgres": "#/$defs/PostgresTableConfig",
+              "sql": "#/$defs/SQLStorageConfig"
+            },
+            "propertyName": "type"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/DuckdbStoreConfig"
+            },
+            {
+              "$ref": "#/$defs/PostgresTableConfig"
+            },
+            {
+              "$ref": "#/$defs/OpenSearchIndexConfig"
+            },
+            {
+              "$ref": "#/$defs/SQLStorageConfig"
+            },
+            {
+              "$ref": "#/$defs/LogStoreConfig"
+            }
+          ],
+          "title": "Kpi Store"
+        },
+        "log_store": {
+          "anyOf": [
+            {
+              "discriminator": {
+                "mapping": {
+                  "in_memory": "#/$defs/InMemoryLogStorageConfig",
+                  "opensearch": "#/$defs/OpenSearchIndexConfig"
+                },
+                "propertyName": "type"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/InMemoryLogStorageConfig"
+                },
+                {
+                  "$ref": "#/$defs/OpenSearchIndexConfig"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional log store",
+          "title": "Log Store"
+        }
+      },
+      "required": [
+        "postgres",
+        "opensearch",
+        "agent_store",
+        "session_store",
+        "history_store",
+        "feedback_store",
+        "kpi_store"
+      ],
+      "title": "StorageConfig",
+      "type": "object"
+    },
+    "TimeoutSettings": {
+      "properties": {
+        "connect": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": 5,
+          "description": "Time to wait for a connection in seconds.",
+          "title": "Connect"
+        },
+        "read": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": 15,
+          "description": "Time to wait for a response in seconds.",
+          "title": "Read"
+        }
+      },
+      "title": "TimeoutSettings",
+      "type": "object"
+    },
+    "UIHints": {
+      "properties": {
+        "multiline": {
+          "default": false,
+          "title": "Multiline",
+          "type": "boolean"
+        },
+        "max_lines": {
+          "default": 6,
+          "title": "Max Lines",
+          "type": "integer"
+        },
+        "placeholder": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Placeholder"
+        },
+        "markdown": {
+          "default": false,
+          "title": "Markdown",
+          "type": "boolean"
+        },
+        "textarea": {
+          "default": false,
+          "title": "Textarea",
+          "type": "boolean"
+        },
+        "group": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Group"
+        }
+      },
+      "title": "UIHints",
+      "type": "object"
+    },
+    "UserSecurity": {
+      "description": "Configuration for user authentication.",
+      "properties": {
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "realm_url": {
+          "format": "uri",
+          "minLength": 1,
+          "title": "Realm Url",
+          "type": "string"
+        },
+        "client_id": {
+          "title": "Client Id",
+          "type": "string"
+        },
+        "authorized_origins": {
+          "default": [],
+          "items": {
+            "format": "uri",
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Authorized Origins",
+          "type": "array"
+        }
+      },
+      "required": [
+        "realm_url",
+        "client_id"
+      ],
+      "title": "UserSecurity",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "app": {
+      "$ref": "#/$defs/AppConfig"
+    },
+    "security": {
+      "$ref": "#/$defs/SecurityConfiguration"
+    },
+    "frontend_settings": {
+      "$ref": "#/$defs/FrontendSettings"
+    },
+    "ai": {
+      "$ref": "#/$defs/AIConfig"
+    },
+    "storage": {
+      "$ref": "#/$defs/StorageConfig"
+    }
+  },
+  "required": [
+    "app",
+    "security",
+    "frontend_settings",
+    "ai",
+    "storage"
+  ],
+  "title": "Configuration",
+  "type": "object"
+}

@@ -30,3 +30,7 @@ docker-run: ## Run the app in Docker
 		-p $(PORT):$(PORT) \
 		-v $(realpath app/config/configuration.yaml):/app/configuration.yaml \
 		$(IMAGE_FULL) --config-path /app/configuration.yaml
+
+.PHONY: generate-config-schema
+generate-config-schema: 
+	python -m app.common.structures

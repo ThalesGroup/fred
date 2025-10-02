@@ -179,3 +179,20 @@ class Configuration(BaseModel):
     frontend_settings: FrontendSettings
     ai: AIConfig
     storage: StorageConfig
+
+
+if __name__ == "__main__":
+    import json
+    import os
+
+    schema = Configuration.model_json_schema()
+
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    output_path = os.path.join(
+        base_dir, "fred/agentic_backend/config/config.schema.json"
+    )
+
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(schema, f, indent=2, ensure_ascii=False)
+    print(f"Schema written to {output_path} ✅")
