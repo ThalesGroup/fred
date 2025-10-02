@@ -42,9 +42,9 @@ class UserSecurity(BaseModel):
     enabled: bool = True
     realm_url: AnyUrl
     client_id: str
-    authorized_origins: List[AnyHttpUrl] = []
 
 
 class SecurityConfiguration(BaseModel):
     m2m: M2MSecurity
     user: UserSecurity
+    authorized_origins: List[AnyHttpUrl] = []

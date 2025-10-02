@@ -85,8 +85,9 @@ security:
     enabled: true
     client_id: "app"                              # Frontend client
     realm_url: "http://app-keycloak:8080/realms/app"
-    authorized_origins:
-      - "http://localhost:5173"                   # CORS for dev UI
+
+  authorized_origins:
+    - "http://localhost:5173"                   # CORS for dev UI
 ```
 
 #### Required environment variable (secret)
@@ -121,8 +122,9 @@ security:
     enabled: true
     client_id: "app"
     realm_url: "http://app-keycloak:8080/realms/app"
-    authorized_origins:
-      - "http://localhost:5173"
+  
+  authorized_origins:
+    - "http://localhost:5173"
 ```
 
 #### Required environment variable (secret, only if KF calls others)
@@ -222,7 +224,7 @@ Authorization denied: user=<uid> roles=<[]> action=read resource=documents
 - **User token has no roles** → user not in group/role, or `roles` scope missing on `app`.
 - **307 → 401** on MCP base → wrong trailing slash or ingress redirect; base **must end with `/`**.
 - **`aud` denied** (strict mode) → add Audience mapper for `knowledge-flow`.
-- **CORS errors** → add the UI origin under `security.user.authorized_origins` (Agentic and KF).
+- **CORS errors** → add the UI origin under `security.authorized_origins` (Agentic and KF).
 - **KF calling others fails** → set `KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET` and use `security.m2m` from KF.
 
 ---

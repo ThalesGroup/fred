@@ -45,8 +45,8 @@ def minimal_generalist_config() -> Configuration:
             enabled=False,
             realm_url=AnyUrl("http://localhost:8080/realms/fake-user-realm"),
             client_id="fake-user-client",
-            authorized_origins=[AnyHttpUrl("http://localhost:5173")],
         ),
+        authorized_origins=[AnyHttpUrl("http://localhost:5173")],
     )
 
     return Configuration(
