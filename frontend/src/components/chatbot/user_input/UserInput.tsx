@@ -5,14 +5,15 @@
 
 // User input component for the chatbot
 
-import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
 import AddIcon from "@mui/icons-material/Add";
+import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import AudioController from "../AudioController.tsx";
 import AudioRecorder from "../AudioRecorder.tsx";
 
-import { Grid2, IconButton, InputBase, Tooltip, useTheme, Box, Stack } from "@mui/material";
+import { Box, Grid2, IconButton, InputBase, Stack, Tooltip, useTheme } from "@mui/material";
 
+import { useTranslation } from "react-i18next";
 import {
   Resource,
   SearchPolicyName,
@@ -20,9 +21,9 @@ import {
   useListAllTagsKnowledgeFlowV1TagsGetQuery,
   useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery,
 } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi.ts";
-import { useTranslation } from "react-i18next";
 
 // Import the new sub-components
+import { AgentChatOptions } from "../../../slices/agentic/agenticOpenApi.ts";
 import { UserInputAttachments } from "./UserInputAttachments.tsx";
 import { UserInputPopover } from "./UserInputPopover.tsx";
 
@@ -71,8 +72,7 @@ function saveSessionCtx(sessionId: string | undefined, ctx: PersistedCtx) {
 }
 
 export default function UserInput({
-  enableFilesAttachment = false,
-  enableAudioAttachment = false,
+  agentChatOptions,
   isWaiting = false,
   onSend = () => {},
   onContextChange,
@@ -82,8 +82,7 @@ export default function UserInput({
   initialTemplateResourceIds,
   initialSearchPolicy = "semantic",
 }: {
-  enableFilesAttachment: boolean;
-  enableAudioAttachment: boolean;
+  agentChatOptions?: AgentChatOptions;
   isWaiting: boolean;
   onSend: (content: UserInputContent) => void;
   onContextChange?: (ctx: UserInputContent) => void;
@@ -494,8 +493,7 @@ export default function UserInput({
             setPickerView(null);
             setPlusAnchor(null);
           }}
-          enableFilesAttachment={enableFilesAttachment}
-          enableAudioAttachment={enableAudioAttachment}
+          agentChatOptions={agentChatOptions}
           filesBlob={filesBlob}
         />
       </Grid2>

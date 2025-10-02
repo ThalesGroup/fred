@@ -78,12 +78,12 @@ ai:
       chat_model: {}
       description: >
         An expert in monitoring and managing Opensearch instances. Samy can analyze performance metrics, identify issues, and provide recommendations for optimization.
-
       mcp_servers:
         - name: knowledge-flow-mcp-server
           transport: streamable_http
           url: http://localhost:8111/knowledge-flow/v1/mcp-opensearch-ops
           sse_read_timeout: 2000
+
     - name: "Georges"
       type: "agent"
       class_path: "app.agents.generalist.generalist_expert.GeneralistExpert"
@@ -103,12 +103,14 @@ ai:
       chat_model: {}
       description: >
         An expert in querying databases and generating SQL queries. Tessa can assist with data retrieval, manipulation, and analysis tasks.
-
       mcp_servers:
         - name: knowledge-flow-mcp-server
           transport: streamable_http
           url: http://localhost:8111/knowledge-flow/v1/mcp-tabular
           sse_read_timeout: 2000
+      chat_options:
+        libraries_selection: true
+
     - name: "Rico Jr."
       type: "agent"
       role: "Document Retrieval Expert"
@@ -118,6 +120,9 @@ ai:
       chat_model: {}
       description: >
         An expert in retrieving and processing documents using retrieval-augmented generation techniques. Rico Jr. can help with tasks that involve understanding and utilizing large document collections.
+      chat_options:
+        libraries_selection: true
+        search_policy_selection: true
 
     - name: "Brontë"
       type: "agent"
@@ -128,12 +133,12 @@ ai:
       chat_model: {}
       description: >
         An expert in generating content based on templates and knowledge from the knowledge-flow backend. Brontë can assist with creating various types of content efficiently.
-
       mcp_servers:
         - name: knowledge-flow-mcp-server
           transport: streamable_http
           url: http://localhost:8111/knowledge-flow/v1/mcp-resources
           sse_read_timeout: 2000
+
     - name: "Rico Senior"
       type: "agent"
       role: "Advanced Document Retrieval Expert"
@@ -143,7 +148,6 @@ ai:
       chat_model: {}
       description: >
         An advanced expert in retrieving and processing documents using enhanced retrieval-augmented generation techniques. Rico Senior is capable of handling more complex document-related tasks with improved accuracy.
-
       # settings:
       #   chunk_size: 512
       #   chunk_overlap: 64
@@ -152,12 +156,15 @@ ai:
           transport: streamable_http
           url: http://localhost:8111/knowledge-flow/v1/mcp-advanced-rag
           sse_read_timeout: 2000
+      chat_options:
+        libraries_selection: true
+        search_policy_selection: true
+
     - name: "Scribo"
       type: "agent"
       role: "Structured Report Generator"
       description: >
         Produces concise project status reports with Summary, Risks, and Next Steps. Can optionally include CIR (Crédit d’Impôt Recherche) sections for R&D reporting.
-
       class_path: "app.agents.content_generator.report_starter.ReportWriter"
       enabled: true
       tags: ["content"]
@@ -167,6 +174,7 @@ ai:
           transport: streamable_http
           url: http://localhost:8111/knowledge-flow/v1/mcp-reports
           sse_read_timeout: 2000
+
 storage:
   postgres:
     host: localhost
