@@ -3,7 +3,7 @@
 .PHONY: test
 test: dev ## Run all tests
 	@echo "************ TESTING ************"
-	${UV} run pytest --cov=. --cov-config=.coveragerc --cov-report=html
+	${UV} run pytest -m "not integration" --cov=. --cov-config=.coveragerc --cov-report=html
 	@echo "✅ Coverage report: htmlcov/index.html"
 	@xdg-open htmlcov/index.html || echo "📎 Open manually htmlcov/index.html"
 
@@ -19,3 +19,23 @@ test-one: dev ## Run a specific test by setting TEST=...
 		exit 1; \
 	fi
 	${UV} run pytest -v $(subst ::,::,$(TEST))
+
+INTEGRATION_COMPOSE := $(CURDIR)/docker-compose.integration.yml
+
+.PHONY: integration-up
+integration-up: ## Start integration test dependencies
+	docker compose -f $(INTEGRATION_COMPOSE) up -d
+
+.PHONY: integration-down
+integration-down: ## Stop integration test dependencies
+	docker compose -f $(INTEGRATION_COMPOSE) down -v
+
+.PHONY: test-integration-only
+test-integration-only: dev ## Run integration tests that rely on external services
+	${UV} run pytest -m integration
+
+.PHONY: test-integration
+test-integration: dev ## Run integration tests that rely on external services
+	@set -e; trap 'docker compose -f $(INTEGRATION_COMPOSE) down -v' EXIT; \
+		docker compose -f $(INTEGRATION_COMPOSE) up -d; \
+		${UV} run pytest -m integration
