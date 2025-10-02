@@ -33,8 +33,8 @@ security:
     enabled: true
     client_id: "app"
     realm_url: "http://app-keycloak:8080/realms/app"
-    authorized_origins:
-      - "http://localhost:5173"
+  authorized_origins:
+    - "http://localhost:5173"
 
 scheduler:
   enabled: true

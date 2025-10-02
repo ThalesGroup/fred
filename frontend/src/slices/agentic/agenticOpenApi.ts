@@ -562,7 +562,6 @@ export type UserSecurity = {
   enabled?: boolean;
   realm_url: string;
   client_id: string;
-  authorized_origins?: string[];
 };
 export type FrontendConfigDto = {
   frontend_settings: FrontendSettings;
