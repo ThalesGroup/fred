@@ -38,6 +38,7 @@ frontend_settings:
     enableElecWarfare: false
   properties:
     logoName: "fred"
+    siteDisplayName: "Fred"
 ai:
   knowledge_flow_url: "http://localhost:8111/knowledge-flow/v1"
   # Timeout settings for the client
