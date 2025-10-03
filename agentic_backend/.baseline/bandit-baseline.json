@@ -1,6 +1,6 @@
 {
   "errors": [],
-  "generated_at": "2025-08-08T05:11:19Z",
+  "generated_at": "2025-10-03T14:17:46Z",
   "metrics": {
     "_totals": {
       "CONFIDENCE.HIGH": 0,
@@ -11,7 +11,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 6,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 5593,
+      "loc": 8494,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -41,6 +41,45 @@
       "nosec": 0,
       "skipped_tests": 0
     },
+    "app/agents/content_generator/__init__.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 0,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "app/agents/content_generator/content_generator_expert.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 126,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "app/agents/content_generator/report_starter.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 220,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
     "app/agents/documents/documents_expert.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
@@ -50,20 +89,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 168,
-      "nosec": 0,
-      "skipped_tests": 0
-    },
-    "app/agents/documents/documents_expert_toolkit.py": {
-      "CONFIDENCE.HIGH": 0,
-      "CONFIDENCE.LOW": 0,
-      "CONFIDENCE.MEDIUM": 0,
-      "CONFIDENCE.UNDEFINED": 0,
-      "SEVERITY.HIGH": 0,
-      "SEVERITY.LOW": 0,
-      "SEVERITY.MEDIUM": 0,
-      "SEVERITY.UNDEFINED": 0,
-      "loc": 32,
+      "loc": 135,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -89,46 +115,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 63,
-      "nosec": 0,
-      "skipped_tests": 0
-    },
-    "app/agents/jira/__init__.py": {
-      "CONFIDENCE.HIGH": 0,
-      "CONFIDENCE.LOW": 0,
-      "CONFIDENCE.MEDIUM": 0,
-      "CONFIDENCE.UNDEFINED": 0,
-      "SEVERITY.HIGH": 0,
-      "SEVERITY.LOW": 0,
-      "SEVERITY.MEDIUM": 0,
-      "SEVERITY.UNDEFINED": 0,
-      "loc": 0,
-      "nosec": 0,
-      "skipped_tests": 0
-    },
-    "app/agents/jira/jira_expert.py": {
-      "CONFIDENCE.HIGH": 0,
-      "CONFIDENCE.LOW": 0,
-      "CONFIDENCE.MEDIUM": 0,
-      "CONFIDENCE.UNDEFINED": 0,
-      "SEVERITY.HIGH": 0,
-      "SEVERITY.LOW": 0,
-      "SEVERITY.MEDIUM": 0,
-      "SEVERITY.UNDEFINED": 0,
-      "loc": 85,
-      "nosec": 0,
-      "skipped_tests": 0
-    },
-    "app/agents/jira/jira_toolkit.py": {
-      "CONFIDENCE.HIGH": 0,
-      "CONFIDENCE.LOW": 0,
-      "CONFIDENCE.MEDIUM": 0,
-      "CONFIDENCE.UNDEFINED": 0,
-      "SEVERITY.HIGH": 0,
-      "SEVERITY.LOW": 0,
-      "SEVERITY.MEDIUM": 0,
-      "SEVERITY.UNDEFINED": 0,
-      "loc": 25,
+      "loc": 62,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -154,7 +141,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 374,
+      "loc": 556,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -180,7 +167,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 18,
+      "loc": 10,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -223,7 +210,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/agents/rags/chief_rags_expert.py": {
+    "app/agents/rags/advanced_rag_expert.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -232,11 +219,11 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 470,
+      "loc": 442,
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/agents/rags/rags_expert.py": {
+    "app/agents/rags/rag_expert.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -245,7 +232,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 134,
+      "loc": 142,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -258,7 +245,20 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 48,
+      "loc": 47,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "app/agents/sentinel/sentinel_expert.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 129,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -271,20 +271,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 126,
-      "nosec": 0,
-      "skipped_tests": 0
-    },
-    "app/agents/tabular/tabular_toolkit.py": {
-      "CONFIDENCE.HIGH": 0,
-      "CONFIDENCE.LOW": 0,
-      "CONFIDENCE.MEDIUM": 0,
-      "CONFIDENCE.UNDEFINED": 0,
-      "SEVERITY.HIGH": 0,
-      "SEVERITY.LOW": 0,
-      "SEVERITY.MEDIUM": 0,
-      "SEVERITY.UNDEFINED": 0,
-      "loc": 25,
+      "loc": 159,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -297,7 +284,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 302,
+      "loc": 561,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -314,19 +301,6 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/common/document_source.py": {
-      "CONFIDENCE.HIGH": 0,
-      "CONFIDENCE.LOW": 0,
-      "CONFIDENCE.MEDIUM": 0,
-      "CONFIDENCE.UNDEFINED": 0,
-      "SEVERITY.HIGH": 0,
-      "SEVERITY.LOW": 0,
-      "SEVERITY.MEDIUM": 0,
-      "SEVERITY.UNDEFINED": 0,
-      "loc": 20,
-      "nosec": 0,
-      "skipped_tests": 0
-    },
     "app/common/error.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
@@ -336,7 +310,33 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 19,
+      "loc": 17,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "app/common/mcp_runtime.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 217,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "app/common/mcp_toolkit.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 72,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -349,7 +349,46 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 30,
+      "loc": 285,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "app/common/rags_settings.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 9,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "app/common/rags_utils.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 118,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "app/common/resilient_tool_node.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 133,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -362,7 +401,20 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 120,
+      "loc": 131,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "app/common/tools_utils.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 32,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -375,7 +427,20 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 109,
+      "loc": 92,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "app/common/vector_search_client.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 91,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -401,7 +466,33 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 54,
+      "loc": 83,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "app/core/agents/agent_flow.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 293,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "app/core/agents/agent_loader.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 150,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -427,11 +518,11 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 51,
+      "loc": 53,
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/agents/agentic_flow.py": {
+    "app/core/agents/agent_spec.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -440,7 +531,33 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 19,
+      "loc": 43,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "app/core/agents/agent_state.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 62,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "app/core/agents/agent_supervisor.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 104,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -453,20 +570,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 75,
-      "nosec": 0,
-      "skipped_tests": 0
-    },
-    "app/core/agents/flow.py": {
-      "CONFIDENCE.HIGH": 0,
-      "CONFIDENCE.LOW": 0,
-      "CONFIDENCE.MEDIUM": 0,
-      "CONFIDENCE.UNDEFINED": 0,
-      "SEVERITY.HIGH": 0,
-      "SEVERITY.LOW": 0,
-      "SEVERITY.MEDIUM": 0,
-      "SEVERITY.UNDEFINED": 0,
-      "loc": 132,
+      "loc": 170,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -479,7 +583,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 91,
+      "loc": 119,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -505,7 +609,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 15,
+      "loc": 38,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -544,7 +648,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 3,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 70,
+      "loc": 96,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -557,20 +661,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 95,
-      "nosec": 0,
-      "skipped_tests": 0
-    },
-    "app/core/agents/structures.py": {
-      "CONFIDENCE.HIGH": 0,
-      "CONFIDENCE.LOW": 0,
-      "CONFIDENCE.MEDIUM": 0,
-      "CONFIDENCE.UNDEFINED": 0,
-      "SEVERITY.HIGH": 0,
-      "SEVERITY.LOW": 0,
-      "SEVERITY.MEDIUM": 0,
-      "SEVERITY.UNDEFINED": 0,
-      "loc": 38,
+      "loc": 114,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -596,7 +687,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 118,
+      "loc": 200,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -609,11 +700,11 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 313,
+      "loc": 251,
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/chatbot/chatbot_error.py": {
+    "app/core/chatbot/message_part.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -622,33 +713,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 9,
-      "nosec": 0,
-      "skipped_tests": 0
-    },
-    "app/core/chatbot/chatbot_message.py": {
-      "CONFIDENCE.HIGH": 0,
-      "CONFIDENCE.LOW": 0,
-      "CONFIDENCE.MEDIUM": 0,
-      "CONFIDENCE.UNDEFINED": 0,
-      "SEVERITY.HIGH": 0,
-      "SEVERITY.LOW": 0,
-      "SEVERITY.MEDIUM": 0,
-      "SEVERITY.UNDEFINED": 0,
-      "loc": 30,
-      "nosec": 0,
-      "skipped_tests": 0
-    },
-    "app/core/chatbot/chatbot_utils.py": {
-      "CONFIDENCE.HIGH": 0,
-      "CONFIDENCE.LOW": 0,
-      "CONFIDENCE.MEDIUM": 0,
-      "CONFIDENCE.UNDEFINED": 0,
-      "SEVERITY.HIGH": 0,
-      "SEVERITY.LOW": 0,
-      "SEVERITY.MEDIUM": 0,
-      "SEVERITY.UNDEFINED": 0,
-      "loc": 55,
+      "loc": 143,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -665,6 +730,32 @@
       "nosec": 0,
       "skipped_tests": 0
     },
+    "app/core/chatbot/session_orchestrator.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 361,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "app/core/chatbot/stream_transcoder.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 232,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
     "app/core/feedback/__init__.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
@@ -678,7 +769,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/feedback/controller.py": {
+    "app/core/feedback/feedback_controller.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -687,11 +778,11 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 80,
+      "loc": 69,
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/feedback/service.py": {
+    "app/core/feedback/feedback_service.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -700,7 +791,20 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 31,
+      "loc": 38,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "app/core/feedback/feedback_structures.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 32,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -752,11 +856,11 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 107,
+      "loc": 109,
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/feedback/structures.py": {
+    "app/core/logs_controller.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -765,11 +869,11 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 32,
+      "loc": 38,
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/model/azure_apim_model.py": {
+    "app/core/monitoring/base_history_store.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -778,11 +882,11 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 37,
+      "loc": 30,
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/model/azure_apim_settings.py": {
+    "app/core/monitoring/duckdb_history_store.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -791,11 +895,11 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 15,
+      "loc": 269,
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/model/model_factory.py": {
+    "app/core/monitoring/monitoring_controller.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -804,7 +908,20 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 105,
+      "loc": 58,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "app/core/monitoring/opensearch_history_store.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 536,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -821,19 +938,6 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/session/session_manager.py": {
-      "CONFIDENCE.HIGH": 0,
-      "CONFIDENCE.LOW": 0,
-      "CONFIDENCE.MEDIUM": 0,
-      "CONFIDENCE.UNDEFINED": 0,
-      "SEVERITY.HIGH": 0,
-      "SEVERITY.LOW": 0,
-      "SEVERITY.MEDIUM": 0,
-      "SEVERITY.UNDEFINED": 0,
-      "loc": 431,
-      "nosec": 0,
-      "skipped_tests": 0
-    },
     "app/core/session/stores/__init__.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
@@ -844,32 +948,6 @@
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
       "loc": 0,
-      "nosec": 0,
-      "skipped_tests": 0
-    },
-    "app/core/session/stores/base_history_store.py": {
-      "CONFIDENCE.HIGH": 0,
-      "CONFIDENCE.LOW": 0,
-      "CONFIDENCE.MEDIUM": 0,
-      "CONFIDENCE.UNDEFINED": 0,
-      "SEVERITY.HIGH": 0,
-      "SEVERITY.LOW": 0,
-      "SEVERITY.MEDIUM": 0,
-      "SEVERITY.UNDEFINED": 0,
-      "loc": 32,
-      "nosec": 0,
-      "skipped_tests": 0
-    },
-    "app/core/session/stores/base_secure_resource_access.py": {
-      "CONFIDENCE.HIGH": 0,
-      "CONFIDENCE.LOW": 0,
-      "CONFIDENCE.MEDIUM": 0,
-      "CONFIDENCE.UNDEFINED": 0,
-      "SEVERITY.HIGH": 0,
-      "SEVERITY.LOW": 0,
-      "SEVERITY.MEDIUM": 0,
-      "SEVERITY.UNDEFINED": 0,
-      "loc": 9,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -886,19 +964,6 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/session/stores/duckdb_history_store.py": {
-      "CONFIDENCE.HIGH": 0,
-      "CONFIDENCE.LOW": 0,
-      "CONFIDENCE.MEDIUM": 0,
-      "CONFIDENCE.UNDEFINED": 0,
-      "SEVERITY.HIGH": 0,
-      "SEVERITY.LOW": 0,
-      "SEVERITY.MEDIUM": 0,
-      "SEVERITY.UNDEFINED": 0,
-      "loc": 174,
-      "nosec": 0,
-      "skipped_tests": 0
-    },
     "app/core/session/stores/duckdb_session_store.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
@@ -908,20 +973,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 48,
-      "nosec": 0,
-      "skipped_tests": 0
-    },
-    "app/core/session/stores/opensearch_history_index.py": {
-      "CONFIDENCE.HIGH": 0,
-      "CONFIDENCE.LOW": 0,
-      "CONFIDENCE.MEDIUM": 0,
-      "CONFIDENCE.UNDEFINED": 0,
-      "SEVERITY.HIGH": 0,
-      "SEVERITY.LOW": 0,
-      "SEVERITY.MEDIUM": 0,
-      "SEVERITY.UNDEFINED": 0,
-      "loc": 208,
+      "loc": 72,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -934,11 +986,11 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 96,
+      "loc": 100,
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/session/stores/utils.py": {
+    "app/deps/__init__.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -947,7 +999,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 38,
+      "loc": 0,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -960,7 +1012,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 82,
+      "loc": 101,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -999,7 +1051,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 104,
+      "loc": 113,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1019,9 +1071,9 @@
   },
   "results": [
     {
-      "code": "62             row = conn.execute(\n63                 f\"SELECT settings_json FROM {self.store._prefixed(self.table_name)} WHERE name = ?\",\n64                 (name,),\n",
+      "code": "79             row = conn.execute(\n80                 f'SELECT settings_json FROM \"{self.store._prefixed(self.table_name)}\" WHERE name = ?',\n81                 (name,),\n",
       "col_offset": 18,
-      "end_col_offset": 44,
+      "end_col_offset": 45,
       "filename": "app/core/agents/store/duckdb_agent_store.py",
       "issue_confidence": "MEDIUM",
       "issue_cwe": {
@@ -1030,18 +1082,18 @@
       },
       "issue_severity": "MEDIUM",
       "issue_text": "Possible SQL injection vector through string-based query construction.",
-      "line_number": 63,
+      "line_number": 80,
       "line_range": [
-        63
+        80
       ],
       "more_info": "https://bandit.readthedocs.io/en/1.8.6/plugins/b608_hardcoded_sql_expressions.html",
       "test_id": "B608",
       "test_name": "hardcoded_sql_expressions"
     },
     {
-      "code": "75             rows = conn.execute(\n76                 f\"SELECT settings_json FROM {self.store._prefixed(self.table_name)}\"\n77             ).fetchall()\n",
+      "code": "98             rows = conn.execute(\n99                 f'SELECT settings_json FROM \"{self.store._prefixed(self.table_name)}\"'\n100             ).fetchall()\n",
       "col_offset": 18,
-      "end_col_offset": 44,
+      "end_col_offset": 45,
       "filename": "app/core/agents/store/duckdb_agent_store.py",
       "issue_confidence": "MEDIUM",
       "issue_cwe": {
@@ -1050,18 +1102,18 @@
       },
       "issue_severity": "MEDIUM",
       "issue_text": "Possible SQL injection vector through string-based query construction.",
-      "line_number": 76,
+      "line_number": 99,
       "line_range": [
-        76
+        99
       ],
       "more_info": "https://bandit.readthedocs.io/en/1.8.6/plugins/b608_hardcoded_sql_expressions.html",
       "test_id": "B608",
       "test_name": "hardcoded_sql_expressions"
     },
     {
-      "code": "90             conn.execute(\n91                 f\"DELETE FROM {self.store._prefixed(self.table_name)} WHERE name = ?\",\n92                 (name,),\n",
+      "code": "117             conn.execute(\n118                 f'DELETE FROM \"{self.store._prefixed(self.table_name)}\" WHERE name = ?',\n119                 (name,),\n",
       "col_offset": 18,
-      "end_col_offset": 30,
+      "end_col_offset": 31,
       "filename": "app/core/agents/store/duckdb_agent_store.py",
       "issue_confidence": "MEDIUM",
       "issue_cwe": {
@@ -1070,18 +1122,18 @@
       },
       "issue_severity": "MEDIUM",
       "issue_text": "Possible SQL injection vector through string-based query construction.",
-      "line_number": 91,
+      "line_number": 118,
       "line_range": [
-        91
+        118
       ],
       "more_info": "https://bandit.readthedocs.io/en/1.8.6/plugins/b608_hardcoded_sql_expressions.html",
       "test_id": "B608",
       "test_name": "hardcoded_sql_expressions"
     },
     {
-      "code": "56             rows = conn.execute(\n57                 f\"SELECT * FROM {self.store._prefixed(self.table_name)} ORDER BY created_at DESC\"\n58             ).fetchall()\n",
+      "code": "57             rows = conn.execute(\n58                 f'SELECT * FROM \"{self.store._prefixed(self.table_name)}\" ORDER BY created_at DESC'\n59             ).fetchall()\n",
       "col_offset": 18,
-      "end_col_offset": 32,
+      "end_col_offset": 33,
       "filename": "app/core/feedback/store/duckdb_feedback_store.py",
       "issue_confidence": "MEDIUM",
       "issue_cwe": {
@@ -1090,18 +1142,18 @@
       },
       "issue_severity": "MEDIUM",
       "issue_text": "Possible SQL injection vector through string-based query construction.",
-      "line_number": 57,
+      "line_number": 58,
       "line_range": [
-        57
+        58
       ],
       "more_info": "https://bandit.readthedocs.io/en/1.8.6/plugins/b608_hardcoded_sql_expressions.html",
       "test_id": "B608",
       "test_name": "hardcoded_sql_expressions"
     },
     {
-      "code": "63             row = conn.execute(\n64                 f\"SELECT * FROM {self.store._prefixed(self.table_name)} WHERE id = ?\",\n65                 (feedback_id,),\n",
+      "code": "64             row = conn.execute(\n65                 f'SELECT * FROM \"{self.store._prefixed(self.table_name)}\" WHERE id = ?',\n66                 (feedback_id,),\n",
       "col_offset": 18,
-      "end_col_offset": 32,
+      "end_col_offset": 33,
       "filename": "app/core/feedback/store/duckdb_feedback_store.py",
       "issue_confidence": "MEDIUM",
       "issue_cwe": {
@@ -1110,18 +1162,18 @@
       },
       "issue_severity": "MEDIUM",
       "issue_text": "Possible SQL injection vector through string-based query construction.",
-      "line_number": 64,
+      "line_number": 65,
       "line_range": [
-        64
+        65
       ],
       "more_info": "https://bandit.readthedocs.io/en/1.8.6/plugins/b608_hardcoded_sql_expressions.html",
       "test_id": "B608",
       "test_name": "hardcoded_sql_expressions"
     },
     {
-      "code": "93             result = conn.execute(\n94                 f\"DELETE FROM {self.store._prefixed(self.table_name)} WHERE id = ?\",\n95                 (feedback_id,),\n",
+      "code": "94             result = conn.execute(\n95                 f'DELETE FROM \"{self.store._prefixed(self.table_name)}\" WHERE id = ?',\n96                 (feedback_id,),\n",
       "col_offset": 18,
-      "end_col_offset": 30,
+      "end_col_offset": 31,
       "filename": "app/core/feedback/store/duckdb_feedback_store.py",
       "issue_confidence": "MEDIUM",
       "issue_cwe": {
@@ -1130,9 +1182,9 @@
       },
       "issue_severity": "MEDIUM",
       "issue_text": "Possible SQL injection vector through string-based query construction.",
-      "line_number": 94,
+      "line_number": 95,
       "line_range": [
-        94
+        95
       ],
       "more_info": "https://bandit.readthedocs.io/en/1.8.6/plugins/b608_hardcoded_sql_expressions.html",
       "test_id": "B608",

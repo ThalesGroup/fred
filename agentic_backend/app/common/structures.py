@@ -181,6 +181,7 @@ class Configuration(BaseModel):
     ai: AIConfig
     storage: StorageConfig
 
+
 class ProfileMessage(SystemMessage):
     def __init__(self, content: str):
         super().__init__(content=content)

@@ -126,7 +126,7 @@ class MCPAgent(AgentFlow):
         # 2) Ask the model (prepend a single SystemMessage)
         messages = self.with_system(system_text, state["messages"])
         messages = self.with_profile_text(messages)
-        
+
         try:
             response = await self.model.ainvoke(messages)
 

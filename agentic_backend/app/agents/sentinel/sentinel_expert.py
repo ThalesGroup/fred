@@ -143,8 +143,8 @@ class SentinelExpert(AgentFlow):
         # 2) Ask the model with a single SystemMessage prepended
         messages = self.with_system(system_text, state["messages"])
         messages = self.with_profile_text(messages)
-        
-        try:       
+
+        try:
             response = await self.model.ainvoke(messages)
 
             # 3) Collect tool outputs (latest per tool name) from the history

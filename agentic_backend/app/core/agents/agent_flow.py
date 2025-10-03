@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 class _SafeDict(dict):
     def __missing__(self, key):  # keep unknown tokens literal: {key}
         return "{" + key + "}"
-    
+
 
 class AgentFlow:
     """
@@ -217,10 +217,8 @@ class AgentFlow:
         - Accepts AnyMessage/Sequence to play nicely with LangChain's typing.
         """
         return [SystemMessage(content=system_text), *messages]
-    
-    def with_profile_text(
-        self, messages: Sequence[AnyMessage]
-    ) -> list[AnyMessage]:
+
+    def with_profile_text(self, messages: Sequence[AnyMessage]) -> list[AnyMessage]:
         """
         Wrap the profile description in a SystemMessage at the end of the messages.
 
@@ -234,7 +232,6 @@ class AgentFlow:
             return list(messages)
         messages.append(ProfileMessage(content=profile))
         return messages
-
 
     def get_compiled_graph(self) -> CompiledStateGraph:
         """
