@@ -553,6 +553,7 @@ export type FrontendFlags = {
 };
 export type Properties = {
   logoName?: string;
+  siteDisplayName?: string;
 };
 export type FrontendSettings = {
   feature_flags: FrontendFlags;
