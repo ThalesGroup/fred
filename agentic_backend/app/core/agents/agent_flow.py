@@ -217,6 +217,25 @@ class AgentFlow:
         - Accepts AnyMessage/Sequence to play nicely with LangChain's typing.
         """
         return [SystemMessage(content=system_text), *messages]
+    
+    def with_profile_text(
+        self, messages: Sequence[AnyMessage]
+    ) -> list[AnyMessage]:
+        """
+        Wrap a message list with a single SystemMessage at the end.
+
+        Why:
+        - Keep control explicit: the agent chooses exactly when a system instruction
+          applies (e.g., inject the tuned system prompt for this node, optionally
+          followed by the user profile or other context).
+
+        Notes:
+        - Accepts AnyMessage/Sequence to play nicely with LangChain's typing.
+        """
+        if self.profile_text():
+            return [*messages,SystemMessage(content=self.profile_text())]
+        else :
+            return [*messages]
 
     def get_compiled_graph(self) -> CompiledStateGraph:
         """
