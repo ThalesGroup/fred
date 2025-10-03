@@ -169,7 +169,10 @@ class RagExpert(AgentFlow):
             )
 
             # 5) Ask the model
-            answer = await self.model.ainvoke([sys_msg, human_msg])
+            messages = [sys_msg, human_msg]
+            messages = self.with_profile_text(messages)
+
+            answer = await self.model.ainvoke(messages)
 
             # 6) Attach rich sources metadata for the UI
             attach_sources_to_llm_response(answer, hits)

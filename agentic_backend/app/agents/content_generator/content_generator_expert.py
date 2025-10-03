@@ -148,8 +148,7 @@ class ContentGeneratorExpert(AgentFlow):
 
         # 4. Wrap and invoke the model.
         messages = self.with_system(sys_prompt, state["messages"])
-
-        assert self.model is not None
+        messages = self.with_profile_text(messages)
         response = await self.model.ainvoke(messages)
         return {"messages": [response]}
 

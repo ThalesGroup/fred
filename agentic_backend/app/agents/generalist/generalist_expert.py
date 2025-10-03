@@ -98,7 +98,8 @@ class GeneralistExpert(AgentFlow):
         sys = self.render(tpl)
         # 3) optionally add the profile text (if any). It's up to the node to decide
         #    whether to use it or not.
-        sys = sys + "\n\n" + self.profile_text()
+
         messages = self.with_system(sys, state["messages"])
+        messages = self.with_profile_text(messages)
         response = await self.model.ainvoke(messages)
         return {"messages": [response]}

@@ -23,7 +23,7 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph.state import CompiledStateGraph
 
 from app.application_context import get_knowledge_flow_base_url
-from app.common.structures import AgentSettings
+from app.common.structures import AgentSettings, ProfileMessage
 from app.core.agents.agent_spec import AgentTuning, FieldSpec
 from app.core.agents.agent_state import Prepared, resolve_prepared
 from app.core.agents.runtime_context import RuntimeContext
@@ -217,6 +217,21 @@ class AgentFlow:
         - Accepts AnyMessage/Sequence to play nicely with LangChain's typing.
         """
         return [SystemMessage(content=system_text), *messages]
+
+    def with_profile_text(self, messages: Sequence[AnyMessage]) -> list[AnyMessage]:
+        """
+        Wrap the profile description in a SystemMessage at the end of the messages.
+
+        Why:
+        - Force the system to take it into account.
+
+        """
+        messages = [msg for msg in messages if not isinstance(msg, ProfileMessage)]
+        profile = self.profile_text()
+        if not profile:
+            return list(messages)
+        messages.append(ProfileMessage(content=profile))
+        return messages
 
     def get_compiled_graph(self) -> CompiledStateGraph:
         """
