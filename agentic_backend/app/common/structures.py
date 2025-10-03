@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from typing import Annotated, Dict, List, Literal, Optional, Union
+from langchain_core.messages import SystemMessage
 
 from fred_core import (
     LogStorageConfig,
@@ -179,3 +180,7 @@ class Configuration(BaseModel):
     frontend_settings: FrontendSettings
     ai: AIConfig
     storage: StorageConfig
+
+class ProfileMessage(SystemMessage):
+    def __init__(self, content: str):
+        super().__init__(content=content)

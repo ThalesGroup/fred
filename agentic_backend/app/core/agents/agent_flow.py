@@ -23,7 +23,7 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph.state import CompiledStateGraph
 
 from app.application_context import get_knowledge_flow_base_url
-from app.common.structures import AgentSettings
+from app.common.structures import AgentSettings, ProfileMessage
 from app.core.agents.agent_spec import AgentTuning, FieldSpec
 from app.core.agents.agent_state import Prepared, resolve_prepared
 from app.core.agents.runtime_context import RuntimeContext
@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 class _SafeDict(dict):
     def __missing__(self, key):  # keep unknown tokens literal: {key}
         return "{" + key + "}"
-
+    
 
 class AgentFlow:
     """
@@ -222,20 +222,19 @@ class AgentFlow:
         self, messages: Sequence[AnyMessage]
     ) -> list[AnyMessage]:
         """
-        Wrap a message list with a single SystemMessage at the end.
+        Wrap the profile description in a SystemMessage at the end of the messages.
 
         Why:
-        - Keep control explicit: the agent chooses exactly when a system instruction
-          applies (e.g., inject the tuned system prompt for this node, optionally
-          followed by the user profile or other context).
+        - Force the system to take it into account.
 
-        Notes:
-        - Accepts AnyMessage/Sequence to play nicely with LangChain's typing.
         """
-        if self.profile_text():
-            return [*messages,SystemMessage(content=self.profile_text())]
-        else :
-            return [*messages]
+        messages = [msg for msg in messages if not isinstance(msg, ProfileMessage)]
+        profile = self.profile_text()
+        if not profile:
+            return list(messages)
+        messages.append(ProfileMessage(content=profile))
+        return messages
+
 
     def get_compiled_graph(self) -> CompiledStateGraph:
         """
