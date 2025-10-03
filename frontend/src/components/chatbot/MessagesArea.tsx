@@ -1,16 +1,7 @@
 // Copyright Thales 2025
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// ...
 
 import React, { memo, useMemo, useRef, useEffect } from "react";
 import MessageCard from "./MessageCard";
@@ -24,9 +15,23 @@ type Props = {
   messages: ChatMessage[];
   agents: AnyAgent[];
   currentAgent: AnyAgent;
+
+  // id -> label maps
+  libraryNameById?: Record<string, string>;
+  templateNameById?: Record<string, string>;
+  promptNameById?: Record<string, string>;
+  profileNameById?: Record<string, string>;
 };
 
-function Area({ messages, agents, currentAgent }: Props) {
+function Area({
+  messages,
+  agents,
+  currentAgent,
+
+  // NEW: maps & current selections
+  libraryNameById,
+  profileNameById,
+}: Props) {
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   // Hover highlight in Sources (syncs with [n] markers inside MessageCard)
@@ -80,7 +85,6 @@ function Area({ messages, agents, currentAgent }: Props) {
         }
 
         const extras = getExtras(msg);
-        // If your pipeline keeps the graded set, prefer that for this exchange
         if (
           extras?.node === "grade_documents" &&
           Array.isArray(msg.metadata?.sources) &&
@@ -112,7 +116,6 @@ function Area({ messages, agents, currentAgent }: Props) {
         others.push(msg);
       }
 
-      // User bubble (unchanged)
       if (userMessage) {
         elements.push(
           <MessageCard
@@ -122,12 +125,15 @@ function Area({ messages, agents, currentAgent }: Props) {
             side="right"
             enableCopy
             enableThumbs
-            // enableAudio
+            suppressText={false}
+            libraryNameById={libraryNameById}
+            profileNameById={profileNameById}
+            onCitationHover={(uid) => setHighlightUid(uid)}
+            onCitationClick={(uid) => setHighlightUid(uid)}
           />,
         );
       }
 
-      // Reasoning accordion (unchanged)
       if (reasoningSteps.length) {
         elements.push(
           <ReasoningStepsAccordion
@@ -169,16 +175,19 @@ function Area({ messages, agents, currentAgent }: Props) {
             )}
 
             <MessageCard
+              key={`final-${msg.session_id}-${msg.exchange_id}-${msg.rank}`}
               message={msg}
               agent={currentAgent}
               side={msg.role === "user" ? "right" : "left"}
               enableCopy
               enableThumbs
-              //  enableAudio
-              // Hook up hover/click from inline [n] markers to highlight Sources
+              suppressText={false}
+              libraryNameById={libraryNameById}
+              profileNameById={profileNameById}
               onCitationHover={(uid) => setHighlightUid(uid)}
               onCitationClick={(uid) => setHighlightUid(uid)}
             />
+
           </React.Fragment>,
         );
       }
@@ -201,7 +210,7 @@ function Area({ messages, agents, currentAgent }: Props) {
           );
         }
 
-        // 2) Single MessageCard (always markdown, inline [n] handled inside)
+        // 2) Final message card
         elements.push(
           <MessageCard
             key={`final-${msg.session_id}-${msg.exchange_id}-${msg.rank}`}
@@ -210,18 +219,26 @@ function Area({ messages, agents, currentAgent }: Props) {
             side="left"
             enableCopy
             enableThumbs
-            // enableAudio
-            // Keep text; MessageCard → CustomMarkdownRenderer renders it robustly
             suppressText={false}
+            libraryNameById={libraryNameById}
+            profileNameById={profileNameById}
             onCitationHover={(uid) => setHighlightUid(uid)}
             onCitationClick={(uid) => setHighlightUid(uid)}
-          />,
+          />
+
         );
       }
     }
 
     return elements;
-  }, [messages, agents, currentAgent, highlightUid]);
+  }, [
+    messages,
+    agents,
+    currentAgent,
+    highlightUid,
+    libraryNameById,
+    profileNameById
+  ]);
 
   useEffect(() => {
     scrollToBottom();

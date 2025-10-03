@@ -84,7 +84,7 @@ const ChatBot = ({
     try {
       const uid = KeyCloakService.GetUserId?.() || "anon";
       localStorage.setItem(`chatctx_open:${uid}`, contextOpen ? "1" : "0");
-    } catch {}
+    } catch { }
   }, [contextOpen]);
 
   const { showInfo, showError } = useToast();
@@ -97,6 +97,9 @@ const ChatBot = ({
   const { data: docLibs = [] } = useListAllTagsKnowledgeFlowV1TagsGetQuery({ type: "document" as TagType });
   const { data: promptResources = [] } = useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery({ kind: "prompt" });
   const { data: templateResources = [] } = useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery({ kind: "template" });
+  const { data: profileResources = [] } =
+    useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery({ kind: "profile" });
+
 
   const libraryNameMap = useMemo(
     () => Object.fromEntries((docLibs as any[]).map((x: any) => [x.id, x.name])),
@@ -109,6 +112,10 @@ const ChatBot = ({
   const templateNameMap = useMemo(
     () => Object.fromEntries((templateResources as any[]).map((x: any) => [x.id, x.name ?? x.id])),
     [templateResources],
+  );
+  const profileNameMap = useMemo(
+    () => Object.fromEntries((profileResources as any[]).map((x: any) => [x.id, x.name ?? x.id])),
+    [profileResources],
   );
 
   // Lazy messages fetcher
@@ -381,18 +388,14 @@ const ChatBot = ({
 
     // Add selected libraries/templates
     if (content.documentLibraryIds?.length) {
+      runtimeContext.document_library_ids = content.documentLibraryIds;
       runtimeContext.selected_document_libraries_ids = content.documentLibraryIds;
-    }
-    if (content.promptResourceIds?.length) {
-      runtimeContext.selected_prompt_ids = content.promptResourceIds;
-    }
-    if (content.templateResourceIds?.length) {
-      runtimeContext.selected_template_ids = content.templateResourceIds;
     }
     if (content.profileResourceIds?.length) {
       runtimeContext.selected_profile_ids = content.profileResourceIds;
+      runtimeContext.profile_resource_ids = content.profileResourceIds;
     }
-    runtimeContext.search_policy = content.searchPolicy || "semantic";
+    runtimeContext.search_policy = content.searchPolicy ?? "semantic";
 
     // Files upload
     if (content.files?.length) {
@@ -641,6 +644,8 @@ const ChatBot = ({
                 messages={messages}
                 agents={agents}
                 currentAgent={currentAgent}
+                libraryNameById={libraryNameMap}
+                profileNameById={profileNameMap}
               />
               {waitResponse && (
                 <Box mt={1} sx={{ alignSelf: "flex-start" }}>
