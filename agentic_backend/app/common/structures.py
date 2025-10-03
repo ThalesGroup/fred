@@ -13,7 +13,6 @@
 # limitations under the License.
 
 from typing import Annotated, Dict, List, Literal, Optional, Union
-from langchain_core.messages import SystemMessage
 
 from fred_core import (
     LogStorageConfig,
@@ -23,6 +22,7 @@ from fred_core import (
     SecurityConfiguration,
     StoreConfig,
 )
+from langchain_core.messages import SystemMessage
 from pydantic import BaseModel, Field
 
 from app.core.agents.agent_spec import AgentTuning
