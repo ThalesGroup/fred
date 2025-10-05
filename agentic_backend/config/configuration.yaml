@@ -49,10 +49,6 @@ ai:
     # - OPENAI_API_KEY
     provider: "openai"
     name: "gpt-4o"
-    settings:
-      temperature: 0.0
-      max_retries: 2
-      request_timeout: 30
   recursion:
     recursion_limit: 40 # Number or max recursion use by the agents while using the chat_model
   agents:

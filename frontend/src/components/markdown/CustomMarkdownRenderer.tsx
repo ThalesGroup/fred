@@ -1,7 +1,7 @@
 // Copyright Thales 2025
 // Licensed under the Apache License, Version 2.0
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { Box, Modal } from "@mui/material";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
@@ -10,6 +10,9 @@ import katex from "katex";
 import "katex/dist/katex.min.css";
 import CropFreeIcon from "@mui/icons-material/CropFree";
 import ReactDOMServer from "react-dom/server";
+import { ApplicationContext } from '../../app/ApplicationContextProvider.tsx';
+
+
 
 interface CitationHooks {
   /** Given [n], return a UID (or null if none) */
@@ -96,6 +99,9 @@ export default function CustomMarkdownRenderer({
   enableEmojiSubstitution = false,
   citations,
 }: Props) {
+  const context = useContext(ApplicationContext);
+  const { darkMode } = context || { darkMode: false };
+  console.log("Dark mode in markdown renderer:", darkMode);
   const containerRef = useRef<HTMLDivElement>(null);
   const [html, setHtml] = useState("");
   const [zoomSvg, setZoomSvg] = useState<string | null>(null);
@@ -120,8 +126,15 @@ export default function CustomMarkdownRenderer({
   /* --------------------------------------------------------- */
   /* Markdown → HTML (sanitized)                               */
   /* --------------------------------------------------------- */
+
+
   useEffect(() => {
     const renderer = new marked.Renderer();
+
+
+    const themeColors = darkMode
+    ? { bg: '#2d2d2dff', text: '#e0f2fe' } // Dark mode
+    : { bg: '#f8fafc', text: '#2e2e2eff' }; // Light mode
 
     renderer.code = ({ text, lang }) => {
       if (lang === "mermaid") {
@@ -133,7 +146,7 @@ export default function CustomMarkdownRenderer({
             <div class="mermaid" id="${id}">${text}</div>
           </div>`;
       }
-      return `<pre><code>${DOMPurify.sanitize(text)}</code></pre>`;
+      return `<pre style="background-color: ${themeColors.bg}; color: ${themeColors.text}; border-radius: 8px; padding: 16px; overflow-x: auto; margin: 8px 0;"><code style="background-color: inherit; color: inherit; font-family: monospace;">${DOMPurify.sanitize(text)}</code></pre>`;
     };
 
     // --- KaTeX extension ---
@@ -212,7 +225,7 @@ export default function CustomMarkdownRenderer({
         }),
       );
     })();
-  }, [processedMarkdown]);
+  }, [processedMarkdown, darkMode]);
 
   /* --------------------------------------------------------- */
   /* Render diagrams + attach zoom handlers                    */
