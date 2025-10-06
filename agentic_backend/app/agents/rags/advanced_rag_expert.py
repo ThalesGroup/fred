@@ -400,7 +400,7 @@ class AdvancedRagExpert(AgentFlow):
 
         # Si on a des instructions, on ajoute la variable dans le template
         if profile_instructions:
-            base_prompt = "{profile_instructions}\n\n" + base_prompt
+            base_prompt = base_prompt + "\n\n{profile_instructions}"
             prompt = ChatPromptTemplate.from_template(base_prompt)
             variables = {
                 "profile_instructions": profile_instructions,

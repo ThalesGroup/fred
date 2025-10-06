@@ -108,10 +108,6 @@ class RagExpert(AgentFlow):
             raise RuntimeError("RagExpert: no tuned system prompt found.")
         sys_text = self.render(sys_tpl)  # token-safe rendering (e.g. {today})
 
-        prof = self.profile_text()
-        if prof:
-            sys_text = f"{sys_text}\n\n{prof}"
-
         return sys_text
 
     # -----------------------------
