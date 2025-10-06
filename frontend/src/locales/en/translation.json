@@ -7,7 +7,7 @@
     "kind": {
       "prompt":   { "one": "prompt",   "other": "prompts" },
       "template": { "one": "template", "other": "templates" },
-      "chat-context": { "one" : "chat context", "other": "Chat contexts"}
+      "chat-context": { "one" : "chat context", "other": "chat contexts"}
     }
   },
   "validation": {
