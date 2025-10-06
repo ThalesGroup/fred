@@ -49,7 +49,7 @@ export function DocumentRowCompact({
 }: DocumentRowCompactProps) {
   const { t } = useTranslation();
   const { can } = usePermissions();
-  const canToggle = can("documents:update");
+  const canToggle = can("documents", "update");
 
   const formatDate = (date?: string) => (date ? dayjs(date).format("DD/MM/YYYY") : "-");
   const isPdf = doc.identity.document_name.toLowerCase().endsWith('.pdf');
