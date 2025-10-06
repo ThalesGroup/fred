@@ -248,7 +248,7 @@
       "prompts": "Prompts",
       "documents": "Documents",
       "operations": "Opérations",
-      "profiles": "Contextes de conversation"
+      "chatContexts": "Contextes de conversation"
 
     }
   },
