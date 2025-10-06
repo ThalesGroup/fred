@@ -29,19 +29,21 @@ import { ResourceKind, useKindLabels } from "./resourceLabels";
 import * as React from "react";
 import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
+import { useTranslation } from "react-i18next";
 import { z } from "zod";
+import { ResourceKind, useKindLabels } from "./resourceLabels";
 import {
   buildFrontMatter,
   buildProfileYaml,
   looksLikeYamlDoc,
   splitFrontMatter,
 } from "./resourceYamlUtils";
-
 const profileSchema = z.object({
   name: z.string().min(1, "Name is required"),
   description: z.string().optional(),
   body: z.string().min(1, "Profile body is required"),
 });
+
 
 type ProfileFormData = z.infer<typeof profileSchema>;
 
