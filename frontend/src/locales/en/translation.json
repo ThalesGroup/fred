@@ -7,7 +7,7 @@
     "kind": {
       "prompt":   { "one": "prompt",   "other": "prompts" },
       "template": { "one": "template", "other": "templates" },
-      "profile": { "one" : "chat context", "other": "chat contexts"}
+      "chat-context": { "one" : "chat context", "other": "Chat contexts"}
     }
   },
   "validation": {
@@ -120,6 +120,7 @@
     "hideAudio": "Hide audio controller",
     "searchDocumentLibraries": "Search document libraries...",
     "searchPromptLibraries": "Search prompt libraries...",
+    "searchChatContextLibraries": "Search chat context libraries...",
     "startNew": "Start a new conversation with {{name}}",
     "changeAssistant": "You can select another assistant in the settings panel.",
     "tooltip": {
@@ -144,7 +145,7 @@
     "newConversation": "New conversation",
     "noConversation": "No conversation",
     "delete": "Delete",
-    "profile": "Chat context",
+    "chatContext": "Chat context",
     "conversationSetup": "Conversation setup",
     "newConversationHelp": "Start a new conversation (not yet saved)",
     "draftNotSaved": "Draft • not yet saved"
@@ -248,7 +249,7 @@
       "prompts": "Prompts",
       "documents": "Documents",
       "operations": "Operations",
-      "profiles": "Chat contexts"
+      "chatContexts": "Chat contexts"
     }
   },
   "documentLibrary": {

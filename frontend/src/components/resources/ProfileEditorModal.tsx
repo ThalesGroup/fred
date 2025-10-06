@@ -143,7 +143,7 @@ export const ProfileEditorModal: React.FC<ProfileEditorModalProps> = ({
       return;
     }
     // Ensure kind (UI safety; backend can still validate)
-    if (!headerObj.kind) headerObj.kind = "profile";
+    if (!headerObj.kind) headerObj.kind = "chat-context"; // <-- Change kind to 'chat-context'
 
     const content = buildFrontMatter(headerObj, bodyText);
     onSave({
@@ -202,7 +202,7 @@ export const ProfileEditorModal: React.FC<ProfileEditorModalProps> = ({
           <DialogContent>
             <Stack spacing={3} mt={1}>
               <TextField
-                label="Context Name"
+                label="Chat Context Name"
                 fullWidth
                 {...register("name")}
                 error={!!errors.name}
@@ -216,7 +216,7 @@ export const ProfileEditorModal: React.FC<ProfileEditorModalProps> = ({
                 helperText={errors.description?.message}
               />
               <TextField
-                label="Context Body"
+                label="Chat Context Body"
                 fullWidth
                 multiline
                 minRows={14}

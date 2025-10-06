@@ -7,7 +7,7 @@
     "kind": {
       "prompt":   { "one": "prompt",   "other": "prompts" },
       "template": { "one": "modèle", "other": "modèles" },
-      "profile": { "one" : "contexte de conversation", "other": "contextes de conversation"}
+      "chat-context": { "one" : "contexte de conversation", "other": "Contextes de conversation"}
     }
   },
   "validation": {
@@ -120,6 +120,7 @@
     "hideAudio": "Masquer le contrôleur audio",
     "searchDocumentLibraries": "Rechercher dans les bibliothèques de documents...",
     "searchPromptLibraries": "Rechercher dans les bibliothèques de prompts...",
+    "searchChatContextLibraries": "Rechercher dans les bibliothèques de contextes de conversations...",
     "startNew": "Commencer une nouvelle conversation avec {{name}}",
     "changeAssistant": "Vous pouvez sélectionner un autre assistant dans le panneau des paramètres.",
     "tooltip": {
@@ -147,7 +148,7 @@
     "conversationSetup": "Configuration de la conversation",
     "newConversationHelp": "Commencer une nouvelle conversation (non encore enregistrée)",
     "draftNotSaved": "Brouillon • non encore enregistré",
-    "profile": "Contexte de conversation"
+    "chatContext": "Contexte de conversation"
   },
   "kpis": {
     "title": "Surveillance des agents et services IA",
