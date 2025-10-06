@@ -143,7 +143,7 @@ export const ProfileEditorModal: React.FC<ProfileEditorModalProps> = ({
       return;
     }
     // Ensure kind (UI safety; backend can still validate)
-    if (!headerObj.kind) headerObj.kind = "chat-context"; // <-- Change kind to 'chat-context'
+    if (!headerObj.kind) headerObj.kind = "chat-context";
 
     const content = buildFrontMatter(headerObj, bodyText);
     onSave({
