@@ -15,6 +15,7 @@ from app.common.rags_utils import (
     format_sources_for_prompt,
     sort_hits,
 )
+from app.common.structures import AgentChatOptions
 from app.common.vector_search_client import VectorSearchClient
 from app.core.agents.agent_flow import AgentFlow
 from app.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
@@ -81,6 +82,10 @@ class RagExpert(AgentFlow):
     """
 
     tuning = RAG_TUNING  # UI schema only; live values are in AgentSettings.tuning
+    default_chat_options = AgentChatOptions(
+        search_policy_selection=True,
+        libraries_selection=True,
+    )
 
     async def async_init(self):
         """Bind the model, create the vector search client, and build the graph."""

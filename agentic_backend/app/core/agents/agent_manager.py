@@ -82,12 +82,12 @@ class AgentManager:
 
         # (1) Catalog ← YAML
         for cfg in self.config.ai.agents:
-            self.agent_settings[cfg.name] = cfg  # disabled are included on purpose
+            self.agent_settings[cfg.name] = self._merge_with_class_defaults(cfg)
 
         # (2) Catalog ← Store (authoritative if exists)
         try:
             for cfg in self.store.load_all():
-                self.agent_settings[cfg.name] = cfg  # overrides YAML snapshot
+                self.agent_settings[cfg.name] = self._merge_with_class_defaults(cfg)
         except Exception:
             logger.exception("Failed to hydrate catalog from store.")
 
@@ -256,8 +256,14 @@ class AgentManager:
         Internal helper: registers an already-initialized agent (typically at startup).
         Adds it to the runtime maps so it's discoverable and usable.
         """
+        merged_settings = self._merge_with_class_defaults(settings)
+
+        # Keep the runtime instance aligned with the stored settings
+        instance.agent_settings = merged_settings
+        instance._tuning = merged_settings.tuning
+
         self.agent_classes[name] = type(instance)
-        self.agent_settings[name] = settings
+        self.agent_settings[name] = merged_settings
         self.agent_instances[name] = instance
 
     async def unregister_agent(self, name: str):
@@ -284,8 +290,13 @@ class AgentManager:
         Register a dynamically created agent immediately into runtime + catalog.
         """
         name = settings.name
+        merged_settings = self._merge_with_class_defaults(settings)
+
+        instance.agent_settings = merged_settings
+        instance._tuning = merged_settings.tuning
+
         self.agent_classes[name] = type(instance)
-        self.agent_settings[name] = settings
+        self.agent_settings[name] = merged_settings
         self.agent_instances[name] = instance  # ⬅️ add to runtime (bug fix)
         logger.info(
             "✅ Registered dynamic agent '%s' (%s).", name, type(instance).__name__
@@ -294,9 +305,28 @@ class AgentManager:
     def get_agentic_flows(self) -> List[AgentSettings]:
         # flows = []
         return self.list_agents()
-        # for _name, instance in self.agent_instances.items():
-        #     flows.append(instance.get_settings())
-        # return flows
+
+    def _merge_with_class_defaults(self, settings: AgentSettings) -> AgentSettings:
+        """Try to overlay class-declared defaults onto the given settings."""
+
+        if not settings.class_path:
+            return settings
+
+        try:
+            agent_cls = self.agent_classes.get(settings.name)
+            if not agent_cls:
+                agent_cls = self.loader._import_agent_class(settings.class_path)
+            if not issubclass(agent_cls, AgentFlow):
+                return settings
+        except Exception as err:
+            logger.debug(
+                "Unable to merge defaults for '%s' (class import failed): %s",
+                settings.name,
+                err,
+            )
+            return settings
+
+        return agent_cls.merge_settings_with_class_defaults(settings)
 
     def get_agent_instance(
         self, name: str, runtime_context: RuntimeContext | None = None
