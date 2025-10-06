@@ -55,21 +55,6 @@ class AgentManager:
         self.failed_agents: Dict[str, AgentSettings] = {}
         self.agent_classes: Dict[str, Type[AgentFlow]] = {}
 
-    def list_running_agents(self) -> List[AgentSettings]:
-        """
-        Routing/runtime view.
-        Returns only agents that are instantiated and can answer right now.
-        """
-        return [inst.get_settings() for inst in self.agent_instances.values()]
-
-    def list_agents(self) -> List[AgentSettings]:
-        """
-        Fred rationale:
-        - `agent_instances` == runtime (what can answer right now).
-        - `agent_settings`  == source of truth for discovery (what exists, even if disabled).
-        """
-        return list(self.agent_settings.values())
-
     async def initialize_and_start_retries(self):
         """
         Boot order:
@@ -172,83 +157,6 @@ class AgentManager:
             logger.exception(f"❌ Failed to recover agent '{agent_cfg.name}': {e}")
             self.failed_agents[agent_cfg.name] = agent_cfg
 
-    async def _register_static_agent(self, agent_cfg: AgentSettings) -> bool:
-        if not agent_cfg.class_path:
-            logger.error(
-                f"❌ Cannot register static agent '{agent_cfg.name}' without a class_path."
-            )
-            return False
-        try:
-            module_name, class_name = agent_cfg.class_path.rsplit(".", 1)
-            module = importlib.import_module(module_name)
-            cls = getattr(module, class_name)
-        except (ValueError, ImportError, AttributeError) as e:
-            logger.error(
-                f"❌ Failed to import class '{agent_cfg.class_path}' for '{agent_cfg.name}': {e}"
-            )
-            return False
-
-        if not issubclass(cls, (AgentFlow)):
-            logger.error(
-                f"Class '{agent_cfg.class_path}' is not a supported Flow or AgentFlow."
-            )
-            return False
-
-        try:
-            instance = cls(agent_settings=agent_cfg)
-            if iscoroutinefunction(getattr(instance, "async_init", None)):
-                await instance.async_init()
-
-            self._register_loaded_agent(agent_cfg.name, instance, agent_cfg)
-            logger.info(
-                f"✅ Registered static agent '{agent_cfg.name}' from configuration."
-            )
-            return True
-        except Exception as e:
-            logger.error(
-                f"❌ Failed to instantiate or register static agent '{agent_cfg.name}': {e}"
-            )
-            return False
-
-    def _try_seed_agent(self, agent_cfg: AgentSettings):
-        if not agent_cfg.class_path:
-            logger.error(
-                f"❌ Cannot seed agent '{agent_cfg.name}' without a class_path."
-            )
-            return
-        """
-        Attempts to load the class for the given agent and instantiate it.
-        If successful, saves it to persistent store.
-        Logs detailed errors for class import/instantiation issues.
-        """
-        try:
-            module_name, class_name = agent_cfg.class_path.rsplit(".", 1)
-            module = importlib.import_module(module_name)
-            cls = getattr(module, class_name)
-        except (ValueError, ImportError, AttributeError) as e:
-            logger.error(
-                f"❌ Failed to load class '{agent_cfg.class_path}' for '{agent_cfg.name}': {e}"
-            )
-            return
-
-        if not issubclass(cls, (AgentFlow)):
-            logger.error(
-                f"Class '{agent_cfg.class_path}' is not a supported Flow or AgentFlow."
-            )
-            return
-
-        try:
-            cls(agent_settings=agent_cfg)  # Validate constructor works
-        except Exception as e:
-            logger.error(f"❌ Failed to instantiate '{agent_cfg.name}': {e}")
-            return
-
-        try:
-            self.store.save(agent_cfg)
-            logger.info(f"✅ Seeded agent '{agent_cfg.name}' from config into storage.")
-        except Exception as e:
-            logger.error(f"❌ Failed to save agent '{agent_cfg.name}': {e}")
-
     def _register_loaded_agent(
         self, name: str, instance: AgentFlow, settings: AgentSettings
     ):
@@ -265,25 +173,6 @@ class AgentManager:
         self.agent_classes[name] = type(instance)
         self.agent_settings[name] = merged_settings
         self.agent_instances[name] = instance
-
-    async def unregister_agent(self, name: str):
-        """
-        Remove runtime presence only. Keep AgentSettings in the catalog
-        so the Agent Hub still shows the agent (now disabled/offline).
-        """
-        try:
-            agent = self.get_agent_instance(name)
-            close = getattr(agent, "aclose", None)
-            if close and iscoroutinefunction(close):
-                await close()
-        except Exception:
-            logger.debug("Unregister: aclose for %s failed/ignored.", name)
-
-        self.agent_classes.pop(name, None)
-        # ⬇️ intentionally do **not** remove self.agent_settings[name]
-        logger.info(
-            "🗑️ Unregistered agent '%s' from runtime (settings preserved).", name
-        )
 
     def register_dynamic_agent(self, instance: AgentFlow, settings: AgentSettings):
         """
@@ -303,8 +192,7 @@ class AgentManager:
         )
 
     def get_agentic_flows(self) -> List[AgentSettings]:
-        # flows = []
-        return self.list_agents()
+        return list(self.agent_settings.values())
 
     def _merge_with_class_defaults(self, settings: AgentSettings) -> AgentSettings:
         """Try to overlay class-declared defaults onto the given settings."""
@@ -338,16 +226,7 @@ class AgentManager:
             instance.set_runtime_context(runtime_context)
         return instance
 
-    def get_agent_settings(self, name: str) -> AgentSettings:
-        settings = self.agent_settings.get(name)
-        if not settings:
-            raise ValueError(f"No agent settings for '{name}'")
-        return settings
-
-    def get_agent_classes(self) -> Dict[str, Type[AgentFlow]]:
-        return self.agent_classes
-
-    async def aclose_single(self, name: str) -> bool:
+    async def _aclose_single(self, name: str) -> bool:
         """
         Gracefully shut down a single runtime instance.
         Catalog entry (AgentSettings) is **retained**.
@@ -368,26 +247,13 @@ class AgentManager:
         Shut down all runtime instances. Catalog stays intact.
         """
         for name in list(self.agent_instances.keys()):
-            await self.aclose_single(name)
+            await self._aclose_single(name)
 
         self.supervisor.stop_retry_loop()
         # NOTE: do not clear self.agent_settings — the catalog is persistent
         self.agent_instances.clear()
         self.agent_classes.clear()
         logger.info("🗑️ AgentManager runtime cleanup complete (catalog preserved).")
-
-    # --- small helpers ------------------------------------------------------
-    def _is_leader_kind(self, settings: AgentSettings | None) -> bool:
-        """
-        Fred rationale:
-        - 'leader' is a *routing role*, not a different base type.
-        - We accept either 'kind' or 'type' (depending on which layer constructed the payload).
-        """
-        if not settings:
-            return False
-        # tolerate either naming to keep backend decoupled from UI
-        kind = getattr(settings, "kind", None) or getattr(settings, "type", None)
-        return str(kind or "").lower() == "leader"
 
     async def _ensure_running_instance(self, cfg: AgentSettings) -> AgentFlow:
         inst = self.agent_instances.get(cfg.name)
@@ -402,7 +268,6 @@ class AgentManager:
         self._register_loaded_agent(cfg.name, instance, cfg)
         return instance
 
-    # --- the update you asked for ------------------------------------------
     async def update_agent(self, new_settings: AgentSettings) -> bool:
         """
         Contract:
@@ -422,7 +287,7 @@ class AgentManager:
 
         # 2) Disabled → unregister instance; keep latest settings for UI/discovery
         if new_settings.enabled is False:
-            await self.aclose_single(name)  # unregister + shutdown
+            await self._aclose_single(name)  # unregister + shutdown
             self.agent_settings[name] = new_settings  # keep the disabled snapshot
             # Safe & simple: leaders might reference this agent → rewire
             self.supervisor.inject_experts_into_leaders(
@@ -456,7 +321,7 @@ class AgentManager:
         Deletes an agent from the persistent store and unregisters it from runtime.
         """
         # 1) Shut down and remove from runtime registries
-        await self.aclose_single(name)
+        await self._aclose_single(name)
         self.agent_classes.pop(name, None)
 
         # 2) Remove from the authoritative settings catalog
