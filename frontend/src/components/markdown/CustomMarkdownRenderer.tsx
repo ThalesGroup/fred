@@ -2,7 +2,7 @@
 // Licensed under the Apache License, Version 2.0
 
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
-import { Box, Modal } from "@mui/material";
+import { Box, Modal, useTheme } from "@mui/material";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
 import mermaid from "mermaid";
@@ -126,15 +126,11 @@ export default function CustomMarkdownRenderer({
   /* --------------------------------------------------------- */
   /* Markdown → HTML (sanitized)                               */
   /* --------------------------------------------------------- */
-
+ 
+  const theme = useTheme();
 
   useEffect(() => {
     const renderer = new marked.Renderer();
-
-
-    const themeColors = darkMode
-    ? { bg: '#2d2d2dff', text: '#e0f2fe' } // Dark mode
-    : { bg: '#f8fafc', text: '#2e2e2eff' }; // Light mode
 
     renderer.code = ({ text, lang }) => {
       if (lang === "mermaid") {
@@ -146,7 +142,7 @@ export default function CustomMarkdownRenderer({
             <div class="mermaid" id="${id}">${text}</div>
           </div>`;
       }
-      return `<pre style="background-color: ${themeColors.bg}; color: ${themeColors.text}; border-radius: 8px; padding: 16px; overflow-x: auto; margin: 8px 0;"><code style="background-color: inherit; color: inherit; font-family: monospace;">${DOMPurify.sanitize(text)}</code></pre>`;
+      return `<pre style="background-color: ${theme.palette.background.paper}; color: ${theme.typography.markdown.code.color}; border-radius: 8px; padding: 16px; overflow-x: auto; margin: 8px 0;"><code style="background-color: inherit; color: inherit; font-family: monospace;">${DOMPurify.sanitize(text)}</code></pre>`;
     };
 
     // --- KaTeX extension ---
