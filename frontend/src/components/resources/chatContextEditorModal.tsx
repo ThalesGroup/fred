@@ -54,7 +54,7 @@ type ResourceCreateLike = {
   content: string; // YAML with '---'
 };
 
-interface ProfileEditorModalProps {
+interface ChatContextEditorModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (payload: { name?: string; description?: string; labels?: string[]; content: string }) => void;
@@ -67,7 +67,7 @@ interface ProfileEditorModalProps {
  * - simple mode (name/description/body)
  * - doc mode (header YAML + body) when initial content is a full YAML doc
  */
-export const ProfileEditorModal: React.FC<ProfileEditorModalProps> = ({
+export const ChatContextEditorModal: React.FC<ChatContextEditorModalProps> = ({
   isOpen,
   onClose,
   onSave,

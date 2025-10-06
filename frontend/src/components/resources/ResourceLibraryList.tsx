@@ -31,7 +31,6 @@ import {
 } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { useConfirmationDialog } from "../ConfirmationDialogProvider";
 import { buildTree, findNode, TagNode } from "../tags/tagTree";
-import { ProfileEditorModal } from "./ProfileEditorModal";
 import { PromptEditorModal } from "./PromptEditorModal";
 import { ResourceImportDrawer } from "./ResourceImportDrawer";
 import { ResourceLibraryTree } from "./ResourceLibraryTree";
@@ -397,7 +396,7 @@ export default function ResourceLibraryList({ kind }: Props) {
         />
       )}
       {kind === "chat-context" && (
-        <ProfileEditorModal
+        <chatContextEditorModal
           isOpen={openCreateResource}
           onClose={() => setOpenCreateResource(false)}
           onSave={async (payload) => {
@@ -456,7 +455,7 @@ export default function ResourceLibraryList({ kind }: Props) {
             }}
           />
         ) : kind === "chat-context" ? (
-          <ProfileEditorModal
+          <chatContextEditorModal
             isOpen={!!editing}
             onClose={() => setEditing(null)}
             initial={{
