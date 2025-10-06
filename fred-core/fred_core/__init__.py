@@ -83,6 +83,7 @@ from fred_core.security.keycloak import (
     split_realm_url,
 )
 from fred_core.security.outbound import BearerAuth, ClientCredentialsProvider
+from fred_core.security.rbac import RBACProvider
 from fred_core.security.structure import (
     KeycloakUser,
     M2MSecurity,
@@ -116,6 +117,7 @@ __all__ = [
     "UserSecurity",
     "TODO_PASS_REAL_USER",
     "NO_AUTHZ_CHECK_USER",
+    "RBACProvider",
     "Action",
     "Resource",
     "AuthorizationError",

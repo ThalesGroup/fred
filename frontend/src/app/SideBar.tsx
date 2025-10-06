@@ -62,12 +62,15 @@ export default function SideBar({ darkMode, onThemeChange }) {
   const applicationContext = useContext(ApplicationContext);
   const smallScreen = useMediaQuery(theme.breakpoints.down("md"));
 
-  const { role } = usePermissions();
+  const { can } = usePermissions();
 
   const sideBarBgColor = theme.palette.sidebar.background;
   const activeItemBgColor = theme.palette.sidebar.activeItem;
   const activeItemTextColor = theme.palette.primary.main;
   const hoverColor = theme.palette.sidebar.hoverColor;
+
+  const canReadKpis = can("kpis", "create");
+  const canReadOpenSearch = can("opensearch", "read");
 
   const menuItems: MenuItemCfg[] = [
     {
@@ -79,7 +82,8 @@ export default function SideBar({ darkMode, onThemeChange }) {
       tooltip: t("sidebar.tooltip.chat"),
     },
 
-    ...(role === "admin"
+    // Only show monitoring if user has permission
+    ...(canReadKpis || canReadOpenSearch
       ? [
           {
             key: "monitoring",
@@ -88,27 +92,34 @@ export default function SideBar({ darkMode, onThemeChange }) {
             canBeDisabled: false,
             tooltip: t("sidebar.tooltip.monitoring"),
             children: [
-              {
-                key: "monitoring-kpi",
-                label: t("sidebar.monitoring_kpi") || "KPI",
-                icon: <MonitorHeartIcon />,
-                url: `/monitoring/kpis`,
-                canBeDisabled: false,
-                tooltip: t("sidebar.tooltip.monitoring_kpi") || "KPI Overview",
-              },
-              {
-                key: "monitoring-logs",
-                label: t("sidebar.monitoring_logs") || "Logs",
-                icon: <MenuBookIcon />,
-                url: `/monitoring/logs`,
-                canBeDisabled: false,
-                tooltip: t("sidebar.tooltip.monitoring_logs") || "Log Console",
-              },
+              ...(canReadKpis
+                ? [
+                    {
+                      key: "monitoring-kpi",
+                      label: t("sidebar.monitoring_kpi") || "KPI",
+                      icon: <MonitorHeartIcon />,
+                      url: `/monitoring/kpis`,
+                      canBeDisabled: false,
+                      tooltip: t("sidebar.tooltip.monitoring_kpi") || "KPI Overview",
+                    },
+                  ]
+                : []),
+              ...(canReadOpenSearch
+                ? [
+                    {
+                      key: "monitoring-logs",
+                      label: t("sidebar.monitoring_logs") || "Logs",
+                      icon: <MenuBookIcon />,
+                      url: `/monitoring/logs`,
+                      canBeDisabled: false,
+                      tooltip: t("sidebar.tooltip.monitoring_logs") || "Log Console",
+                    },
+                  ]
+                : []),
             ],
           },
         ]
-      : []),
-    {
+      : []),    {
       key: "knowledge",
       label: t("sidebar.knowledge"),
       icon: <MenuBookIcon />,
@@ -133,11 +144,11 @@ export default function SideBar({ darkMode, onThemeChange }) {
       tooltip: t("sidebar.tooltip.account"),
     },
   ];
+
   const { isSidebarCollapsed, toggleSidebar } = applicationContext;
   const isSidebarSmall = smallScreen || isSidebarCollapsed;
   const sidebarWidth = isSidebarCollapsed ? theme.layout.sidebarCollapsedWidth : theme.layout.sidebarWidth;
 
-  // Helper function to check if the current path matches the menu item path
   const isActive = (path: string) => {
     const menuPathBase = path.split("?")[0];
     const currentPathBase = location.pathname;

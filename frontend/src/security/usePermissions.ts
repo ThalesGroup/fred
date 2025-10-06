@@ -12,86 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { useEffect, useState } from "react";
+import { getConfig, loadPermissions } from "../common/config";
 import { KeyCloakService } from "./KeycloakService";
 
-// Roles consistent with backend RBAC
-type Role = "admin" | "editor" | "viewer" | "service_agent";
-
-// Permissions mapped to backend Actions/Resources
-type Permission =
-  | "tags:create"
-  | "tags:read"
-  | "tags:update"
-  | "tags:delete"
-  | "documents:create"
-  | "documents:read"
-  | "documents:update"
-  | "documents:delete"
-  | "resources:create"
-  | "resources:read"
-  | "resources:update"
-  | "resources:delete"
-  | "feedback:create"
-  | "prompt:create"
-  | "metrics:read"
-  | "agents:read"
-  | "sessions:create"
-  | "sessions:read"
-  | "sessions:update"
-  | "sessions:delete"
-  | "message_attachments:create";
-
-// Role permission mapping
-const rolePermissions: Record<Role, Permission[]> = {
-  admin: [
-    // Admin can do everything
-    "tags:create", "tags:read", "tags:update", "tags:delete",
-    "documents:create", "documents:read", "documents:update", "documents:delete",
-    "resources:create", "resources:read", "resources:update", "resources:delete",
-    "feedback:create",
-    "prompt:create",
-    "metrics:read",
-    "agents:read",
-    "sessions:create", "sessions:read", "sessions:update", "sessions:delete",
-    "message_attachments:create",
-  ],
-
-  editor: [
-    // Editor can CRUD most things
-    "tags:create", "tags:read", "tags:update", "tags:delete",
-    "documents:create", "documents:read", "documents:update", "documents:delete",
-    "resources:create", "resources:read", "resources:update", "resources:delete",
-    "feedback:create",
-    "prompt:create",
-    "metrics:read",
-    "agents:read",
-    "sessions:create", "sessions:read", "sessions:update", "sessions:delete",
-    "message_attachments:create",
-  ],
-
-  viewer: [
-    // Viewer is mostly read-only, but can create feedback, sessions, and prompts
-    "tags:read",
-    "documents:read",
-    "resources:read",
-    "metrics:read",
-    "agents:read",
-    "feedback:create",
-    "prompt:create",
-    "sessions:create", "sessions:read", "sessions:update", "sessions:delete",
-    "message_attachments:create",
-  ],
-
-  service_agent: [
-    // Read-only for selected resources
-    "tags:read",
-    "documents:read",
-    "resources:read",
-  ],
-};
-
 // Get the current user’s role based on Keycloak roles
-function getCurrentRole(): Role {
+function getCurrentRole(): string {
   const roles = KeyCloakService.GetUserRoles() || [];
   if (roles.includes("admin")) return "admin";
   if (roles.includes("editor")) return "editor";
@@ -100,9 +26,25 @@ function getCurrentRole(): Role {
 }
 
 // Hook to check permissions
-export function usePermissions() {
-  const role = getCurrentRole();
-  const can = (perm: Permission): boolean =>
-    rolePermissions[role]?.includes(perm) ?? false;
-  return { role, can };
-}
+export const usePermissions = () => {
+  const [permissions, setPermissions] = useState<string[]>(getConfig().permissions);
+
+  // Loads permissions at mount time
+  useEffect(() => {
+    const fetchPermissions = async () => {
+      const perms = await loadPermissions();
+      setPermissions(perms);
+    };
+    fetchPermissions();
+  }, []);
+
+  const can = (resource: string, action: string) =>
+    permissions.some(p => p.toLowerCase() === `${resource}:${action}`.toLowerCase());
+
+  const refreshPermissions = async () => {
+    const perms = await loadPermissions();
+    setPermissions(perms);
+  };
+
+  return { permissions, can, refreshPermissions, role: getCurrentRole() };
+};

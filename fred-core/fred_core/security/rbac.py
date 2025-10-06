@@ -108,3 +108,18 @@ class RBACProvider(AuthorizationProvider):
 
         resource_permissions = self.role_permissions[role].get(resource, set())
         return action in resource_permissions
+
+    def list_permissions_for_user(self, user: KeycloakUser) -> list[str]:
+        """
+        Return a flat list of 'resource:action' strings the user is allowed to perform.
+        """
+        allowed: list[str] = []
+        for role in user.roles:
+            if role not in self.role_permissions:
+                continue
+            for resource, actions in self.role_permissions[role].items():
+                for action in actions:
+                    key = f"{resource.value}:{action.value}"
+                    if key not in allowed:
+                        allowed.append(key)
+        return allowed

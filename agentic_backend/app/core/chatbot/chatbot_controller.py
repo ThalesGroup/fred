@@ -15,7 +15,7 @@
 from __future__ import annotations
 
 import logging
-from typing import List, Literal, Union
+from typing import List, Literal, Union, Optional
 
 from fastapi import (
     APIRouter,
@@ -34,6 +34,7 @@ from fred_core import (
     VectorSearchHit,
     decode_jwt,
     get_current_user,
+    RBACProvider
 )
 from pydantic import BaseModel, Field
 from starlette.websockets import WebSocketState
@@ -114,6 +115,8 @@ def get_session_orchestrator_ws(websocket: WebSocket) -> SessionOrchestrator:
     """Dependency to get the session_orchestrator from app.state for WebSocket."""
     return websocket.app.state.session_orchestrator
 
+# Create a RBAC provider object to retrieve user permissions in the config/permissions route
+rbac_provider = RBACProvider()
 
 # Create an APIRouter instance here
 router = APIRouter(tags=["Frontend"])
@@ -145,6 +148,16 @@ def get_frontend_config() -> FrontendConfigDTO:
         ),
     )
 
+@router.get(
+    "/config/permissions",
+    summary="Get the current user's permissions",
+    response_model=list[str],
+)
+def get_user_permissions(current_user: KeycloakUser = Depends(get_current_user)) -> list[str]:
+    """
+    Return a flat list of 'resource:action' strings the user is allowed to perform.:
+    """
+    return rbac_provider.list_permissions_for_user(current_user)
 
 @router.get(
     "/chatbot/agenticflows",
