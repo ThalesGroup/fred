@@ -222,6 +222,8 @@ class TagService:
                 self.document_metadata_service.remove_tag_id_from_document(user, doc, tag_id, modified_by=user.uid)
         elif tag.type == TagType.PROMPT:
             self.resource_service.remove_tag_from_resources(ResourceKind.PROMPT, tag_id)
+        elif tag.type == TagType.CHAT_CONTEXT:
+            self.resource_service.remove_tag_from_resources(ResourceKind.CHAT_CONTEXT, tag_id)
         elif tag.type == TagType.TEMPLATE:
             # BUGFIX: was PROMPT before; must be TEMPLATE
             self.resource_service.remove_tag_from_resources(ResourceKind.TEMPLATE, tag_id)
