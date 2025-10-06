@@ -15,7 +15,7 @@
 from __future__ import annotations
 
 import logging
-from typing import List, Literal, Union, Optional
+from typing import List, Literal, Union
 
 from fastapi import (
     APIRouter,
@@ -30,11 +30,11 @@ from fastapi import (
 )
 from fred_core import (
     KeycloakUser,
+    RBACProvider,
     UserSecurity,
     VectorSearchHit,
     decode_jwt,
     get_current_user,
-    RBACProvider
 )
 from pydantic import BaseModel, Field
 from starlette.websockets import WebSocketState
