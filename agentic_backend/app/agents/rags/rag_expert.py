@@ -146,9 +146,9 @@ class RagExpert(AgentFlow):
             )
             if not hits:
                 warn = "I couldn't find any relevant documents. Try rephrasing or expanding your query?"
-                return {
-                    "messages": [await self.model.ainvoke([HumanMessage(content=warn)])]
-                }
+                messages = self.with_profile_text([HumanMessage(content=warn)])
+
+                return {"messages": [await self.model.ainvoke(messages)]}
 
             # 3) Deterministic ordering + fill ranks
             hits = sort_hits(hits)
