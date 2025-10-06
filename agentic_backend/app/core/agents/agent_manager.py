@@ -165,10 +165,7 @@ class AgentManager:
         Adds it to the runtime maps so it's discoverable and usable.
         """
         merged_settings = self._merge_with_class_defaults(settings)
-
-        # Keep the runtime instance aligned with the stored settings
-        instance.agent_settings = merged_settings
-        instance._tuning = merged_settings.tuning
+        instance.apply_settings(merged_settings)
 
         self.agent_classes[name] = type(instance)
         self.agent_settings[name] = merged_settings
@@ -180,9 +177,7 @@ class AgentManager:
         """
         name = settings.name
         merged_settings = self._merge_with_class_defaults(settings)
-
-        instance.agent_settings = merged_settings
-        instance._tuning = merged_settings.tuning
+        instance.apply_settings(merged_settings)
 
         self.agent_classes[name] = type(instance)
         self.agent_settings[name] = merged_settings
@@ -276,6 +271,7 @@ class AgentManager:
         - Leaders: crew changes are honored by a deterministic rewire pass.
         """
         name = new_settings.name
+        merged_settings = self._merge_with_class_defaults(new_settings)
 
         # 1) Persist source of truth (DB)
         try:
@@ -288,7 +284,7 @@ class AgentManager:
         # 2) Disabled → unregister instance; keep latest settings for UI/discovery
         if new_settings.enabled is False:
             await self._aclose_single(name)  # unregister + shutdown
-            self.agent_settings[name] = new_settings  # keep the disabled snapshot
+            self.agent_settings[name] = merged_settings  # keep the disabled snapshot
             # Safe & simple: leaders might reference this agent → rewire
             self.supervisor.inject_experts_into_leaders(
                 agents_by_name=self.agent_instances,
@@ -299,9 +295,11 @@ class AgentManager:
             return True
 
         # 3) Enabled → ensure instance, then apply new settings atomically
-        instance = await self._ensure_running_instance(new_settings)
-        instance.apply_settings(new_settings)  # sets agent_settings + resolves _tuning
-        self.agent_settings[name] = new_settings  # registry snapshot
+        instance = await self._ensure_running_instance(merged_settings)
+        instance.apply_settings(
+            merged_settings
+        )  # sets agent_settings + resolves _tuning
+        self.agent_settings[name] = merged_settings  # registry snapshot
 
         # 4) Crew wiring: cheap to rebuild; avoids corner-cases
         #    If you want to optimize later, gate this on:
