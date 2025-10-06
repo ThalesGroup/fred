@@ -7,7 +7,7 @@
     "kind": {
       "prompt":   { "one": "prompt",   "other": "prompts" },
       "template": { "one": "template", "other": "templates" },
-      "profile": { "one" : "context", "other": "contexts"}
+      "profile": { "one" : "chat context", "other": "chat contexts"}
     }
   },
   "validation": {
@@ -144,7 +144,7 @@
     "newConversation": "New conversation",
     "noConversation": "No conversation",
     "delete": "Delete",
-    "profile": "Context",
+    "profile": "Chat context",
     "conversationSetup": "Conversation setup",
     "newConversationHelp": "Start a new conversation (not yet saved)",
     "draftNotSaved": "Draft • not yet saved"
@@ -241,14 +241,14 @@
   },
   "knowledge": {
     "title": "Resources",
-    "description": "Manage your document, prompt, context and template libraries",
+    "description": "Manage your document and chat context libraries",
     "viewSelector": {
       "libraries": "Libraries",
       "templates": "Templates",
       "prompts": "Prompts",
       "documents": "Documents",
       "operations": "Operations",
-      "profiles": "Contexts"
+      "profiles": "Chat contexts"
     }
   },
   "documentLibrary": {

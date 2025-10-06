@@ -7,7 +7,7 @@
     "kind": {
       "prompt":   { "one": "prompt",   "other": "prompts" },
       "template": { "one": "modèle", "other": "modèles" },
-      "profile": { "one" : "contexte", "other": "contextes"}
+      "profile": { "one" : "contexte de conversation", "other": "contextes de conversation"}
     }
   },
   "validation": {
@@ -147,7 +147,7 @@
     "conversationSetup": "Configuration de la conversation",
     "newConversationHelp": "Commencer une nouvelle conversation (non encore enregistrée)",
     "draftNotSaved": "Brouillon • non encore enregistré",
-    "profile": "Contexte"
+    "profile": "Contexte de conversation"
   },
   "kpis": {
     "title": "Surveillance des agents et services IA",
@@ -240,14 +240,14 @@
   },
   "knowledge": {
     "title": "Ressources",
-    "description": "Gérez vos documents, prompts, contextes et modèles",
+    "description": "Gérez vos documents et contextes de conversation",
     "viewSelector": {
       "libraries": "Bibliothèques",
       "templates": "Modèles",
       "prompts": "Prompts",
       "documents": "Documents",
       "operations": "Opérations",
-      "profiles": "Contextes"
+      "profiles": "Contextes de conversation"
 
     }
   },
