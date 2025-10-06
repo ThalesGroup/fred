@@ -787,8 +787,8 @@ class ApplicationContext:
         elif provider == ModelProvider.AZURE_OPENAI.value:
             _require_env("AZURE_OPENAI_API_KEY")
         elif provider == ModelProvider.AZURE_APIM.value:
-            _require_env("AZURE_CLIENT_SECRET")
-            _require_env("AZURE_APIM_KEY")
+            _require_env("AZURE_AD_CLIENT_SECRET")
+            _require_env("AZURE_APIM_SUBSCRIPTION_KEY")
         elif provider == ModelProvider.OLLAMA.value:
             # Usually no secrets; base_url is in settings
             pass
