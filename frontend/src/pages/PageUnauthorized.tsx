@@ -1,3 +1,4 @@
+
 // Copyright Thales 2025
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,21 +13,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Navigate } from "react-router-dom";
-import { usePermissions } from "../security/usePermissions";
+import { useTranslation } from "react-i18next";
+import { PageError } from "./PageError";
 
-interface ProtectedRouteProps {
-  children: JSX.Element;
-  resource: string;
-  action: string;
+export default function Unauthorized() {
+  const { t } = useTranslation();
+
+  return (
+    <PageError
+      title={t("unauthorized.title", "Unauthorized")}
+      message={t(
+        "unauthorized.message",
+        "You do not have the required permissions to access this page."
+      )}
+    />
+  );
 }
-
-export const ProtectedRoute = ({ children, resource, action }: ProtectedRouteProps) => {
-  const { can } = usePermissions();
-
-  if (!can(resource, action)) {
-    return <Navigate to="/unauthorized" replace />;
-  }
-
-  return children;
-};

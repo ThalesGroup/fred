@@ -424,5 +424,12 @@
     "openSource": "Open source",
     "openAllInPreview": "Open all in preview",
     "openAllInPdfPreview": "Open all in PDF preview"
+  },
+  "pageError": {
+    "message": "Back to Home"
+  },
+  "unauthorized": {
+    "title": "Unauthorized",
+    "message": "You do not have the required permissions to access this page."
   }
 }

@@ -13,20 +13,19 @@
 // limitations under the License.
 
 import { createBrowserRouter, RouteObject } from "react-router-dom";
-import { Profile } from "../pages/Profile";
-import { PageError } from "../pages/PageError";
-import { KnowledgeHub } from "../pages/KnowledgeHub";
-import { AgentHub } from "../pages/AgentHub";
-import { ProtectedRoute } from "../components/ProtectedRoute";
 import { LayoutWithSidebar } from "../app/LayoutWithSidebar";
-import { Kpis } from "../pages/Kpis";
+import { ProtectedRoute } from "../components/ProtectedRoute";
+import { AgentHub } from "../pages/AgentHub";
 import Chat from "../pages/Chat";
+import { KnowledgeHub } from "../pages/KnowledgeHub";
+import { Kpis } from "../pages/Kpis";
 import Logs from "../pages/Logs";
+import { PageError } from "../pages/PageError";
+import Unauthorized from "../pages/PageUnauthorized";
+import { Profile } from "../pages/Profile";
 
 const RootLayout = ({ children }: React.PropsWithChildren<{}>) => (
-  <ProtectedRoute permission="viewer">
-    <LayoutWithSidebar>{children}</LayoutWithSidebar>
-  </ProtectedRoute>
+  <LayoutWithSidebar>{children}</LayoutWithSidebar>
 );
 
 export const routes: RouteObject[] = [
@@ -44,11 +43,19 @@ export const routes: RouteObject[] = [
       },
       {
         path: "monitoring/kpis",
-        element: <Kpis />,
+        element: (
+          <ProtectedRoute resource="kpis" action="read">
+            <Kpis />
+          </ProtectedRoute>
+        ),
       },
       {
         path: "monitoring/logs",
-        element: <Logs />,
+        element: (
+          <ProtectedRoute resource="opensearch" action="read">
+            <Logs />
+          </ProtectedRoute>
+        ),
       },
       {
         path: "account",
@@ -64,7 +71,10 @@ export const routes: RouteObject[] = [
       },
     ].filter(Boolean),
   },
-
+  {
+    path: "unauthorized",
+    element: <Unauthorized />,
+  },
   {
     path: "/knowledge",
     element: (
