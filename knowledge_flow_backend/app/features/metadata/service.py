@@ -124,16 +124,16 @@ class MetadataService:
             metadata.tags.tag_ids = new_ids
 
             if not new_ids:
-                if ProcessingStage.VECTORIZED in metadata.processing.stages :
+                if ProcessingStage.VECTORIZED in metadata.processing.stages:
                     if self.vector_store is None:
                         self.vector_store = ApplicationContext.get_instance().get_vector_store()
-                    try :
+                    try:
                         self.vector_store.delete_vectors_for_document(document_uid=metadata.document_uid)
                         logger.info(f"[METADATA] Deleted document '{metadata.document_name}' because no tags remain (last removed by '{modified_by}')")
                     except Exception as e:
                         logger.warning(f"Could not delete vector of'{metadata.document_name}': {e}")
 
-                if ProcessingStage.SQL_INDEXED in metadata.processing.stages :
+                if ProcessingStage.SQL_INDEXED in metadata.processing.stages:
                     if self.csv_input_store is None:
                         self.csv_input_store = ApplicationContext.get_instance().get_csv_input_store()
                     table_name = sanitize_sql_name(metadata.document_name.rsplit(".", 1)[0])
@@ -142,7 +142,7 @@ class MetadataService:
                         logger.info(f"[TABULAR] Deleted SQL table '{table_name}' linked to '{metadata.document_name}'")
                     except Exception as e:
                         logger.warning(f"Could not delete SQL table '{table_name}': {e}")
-                
+
                 self.metadata_store.delete_metadata(metadata.document_uid)
 
             else:
