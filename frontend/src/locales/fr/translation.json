@@ -304,6 +304,7 @@
     "preview": "Aperçu",
     "createLibrary": "Créer une bibliothèque",
     "createResource": "Créer un {{typeOne}}",
+    "editResource": "Éditer un {{typeOne}}",
     "importResource": "Importer un {{typeOne}} depuis un fichier",
     "folders": "Dossiers",
     "loadingLibraries": "Chargement des bibliothèques…",

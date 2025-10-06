@@ -304,6 +304,7 @@
     "preview": "Preview",
     "createLibrary": "Create library",
     "createResource": "Add {{typeOne}} to library",
+    "editResource": "Edit a {{typeOne}}",
     "importResource": "Import {{typeOne}} from file",
     "folders": "Folders",
     "loadingLibraries": "Loading libraries…",
