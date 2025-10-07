@@ -49,7 +49,8 @@ export function DocumentRowCompact({
 }: DocumentRowCompactProps) {
   const { t } = useTranslation();
   const { can } = usePermissions();
-  const canToggle = can("documents", "update");
+  const canToggle = can("document", "update");
+  const canDelete = can("document", "delete");
 
   const formatDate = (date?: string) => (date ? dayjs(date).format("DD/MM/YYYY") : "-");
   const isPdf = doc.identity.document_name.toLowerCase().endsWith('.pdf');
@@ -215,9 +216,16 @@ export function DocumentRowCompact({
         )}
         {onRemoveFromLibrary && (
           <Tooltip title={t("documentLibrary.removeFromLibrary")}>
-            <IconButton size="small" onClick={() => onRemoveFromLibrary(doc)}>
-              <DeleteIcon fontSize="inherit" />
-            </IconButton>
+              <IconButton
+                size="small"
+                disabled={!canDelete}
+                onClick={() => {
+                  if (!canDelete) return;
+                  onRemoveFromLibrary(doc);
+                }}
+              >
+                <DeleteIcon fontSize="inherit" />
+              </IconButton>
           </Tooltip>
         )}
       </Box>

@@ -12,19 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import * as React from "react";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import FolderOpenOutlinedIcon from "@mui/icons-material/FolderOpenOutlined";
+import FolderOutlinedIcon from "@mui/icons-material/FolderOutlined";
+import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
+import KeyboardArrowRightIcon from "@mui/icons-material/KeyboardArrowRight";
 import { Box, Checkbox, IconButton, Tooltip } from "@mui/material";
 import { SimpleTreeView } from "@mui/x-tree-view/SimpleTreeView";
 import { TreeItem } from "@mui/x-tree-view/TreeItem";
-import FolderOutlinedIcon from "@mui/icons-material/FolderOutlined";
-import FolderOpenOutlinedIcon from "@mui/icons-material/FolderOpenOutlined";
-import KeyboardArrowRightIcon from "@mui/icons-material/KeyboardArrowRight";
-import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
-import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import * as React from "react";
 
+import type { DocumentMetadata, TagWithItemsId } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { TagNode } from "../../tags/tagTree";
 import { DocumentRowCompact } from "./DocumentLibraryRow";
-import type { DocumentMetadata, TagWithItemsId } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 
 /* --------------------------------------------------------------------------
  * Helpers (tiny & explicit)
@@ -83,6 +83,7 @@ interface DocumentLibraryTreeProps {
   /** docUid -> tag to delete from (selection context) */
   selectedDocs: Record<string, TagWithItemsId>;
   setSelectedDocs: React.Dispatch<React.SetStateAction<Record<string, TagWithItemsId>>>;
+  canDelete?: boolean;
 }
 
 export function DocumentLibraryTree({
@@ -101,6 +102,7 @@ export function DocumentLibraryTree({
   onDeleteFolder,
   selectedDocs,
   setSelectedDocs,
+  canDelete = true,
 }: DocumentLibraryTreeProps) {
   /** Select/unselect all docs in a folder’s subtree (by that folder’s primary tag). */
   const toggleFolderSelection = React.useCallback(
@@ -199,8 +201,9 @@ export function DocumentLibraryTree({
                       size="small"
                       onClick={(e) => {
                         e.stopPropagation();
-                        onDeleteFolder(folderTag);
+                        if (canDelete) onDeleteFolder(folderTag);
                       }}
+                      disabled={!canDelete}
                     >
                       <DeleteOutlineIcon fontSize="small" />
                     </IconButton>
@@ -247,7 +250,10 @@ export function DocumentLibraryTree({
                       onPreview={onPreview}
                       onPdfPreview={onPdfPreview}
                       onDownload={onDownload}
-                      onRemoveFromLibrary={(d) => tag && onRemoveFromLibrary(d, tag)}
+                      onRemoveFromLibrary={(d) => {
+                        if (!canDelete || !tag) return;
+                        onRemoveFromLibrary(d, tag);
+                      }}
                       onToggleRetrievable={onToggleRetrievable}
                     />
                   </Box>

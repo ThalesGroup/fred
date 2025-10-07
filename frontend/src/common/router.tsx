@@ -45,7 +45,7 @@ export const routes: RouteObject[] = [
       {
         path: "monitoring/kpis",
         element: (
-          <ProtectedRoute resource="kpis" action="read">
+          <ProtectedRoute resource="kpi" action="create">
             <Kpis />
           </ProtectedRoute>
         ),
@@ -53,7 +53,11 @@ export const routes: RouteObject[] = [
       {
         path: "monitoring/logs",
         element: (
-          <ProtectedRoute resource="opensearch" action="read">
+          <ProtectedRoute
+            resource={["opensearch", "logs"]}
+            action="create"
+            anyResource // means that any of the permissions is enough so the user can have opensearch:create || logs:create and it would let the user pass.
+          >
             <Logs />
           </ProtectedRoute>
         ),

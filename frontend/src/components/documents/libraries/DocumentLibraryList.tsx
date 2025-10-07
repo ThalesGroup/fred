@@ -22,6 +22,8 @@ import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { LibraryCreateDrawer } from "../../../common/LibraryCreateDrawer";
 import { useTagCommands } from "../../../common/useTagCommands";
+import { usePermissions } from "../../../security/usePermissions";
+
 import {
   DocumentMetadata,
   TagWithItemsId,
@@ -50,6 +52,10 @@ export default function DocumentLibraryList() {
   const [selectedDocs, setSelectedDocs] = React.useState<Record<string, TagWithItemsId>>({});
   const selectedCount = React.useMemo(() => Object.keys(selectedDocs).length, [selectedDocs]);
   const clearSelection = React.useCallback(() => setSelectedDocs({}), []);
+
+  // Permissions (RBAC)
+  const { can } = usePermissions();
+  const canDeleteDocs = can("document", "delete");
 
   /* ---------------- Data fetching ---------------- */
   const {
@@ -238,7 +244,13 @@ export default function DocumentLibraryList() {
           <Button size="small" variant="outlined" onClick={clearSelection}>
             {t("documentLibrary.clearSelection") || "Clear selection"}
           </Button>
-          <Button size="small" variant="contained" color="error" onClick={bulkRemoveFromLibrary}>
+          <Button
+            size="small"
+            variant="contained"
+            color="error"
+            onClick={bulkRemoveFromLibrary}
+            disabled={!canDeleteDocs}
+          >
             {t("documentLibrary.bulkRemoveFromLibrary") || "Remove from library"}
           </Button>
         </Card>
@@ -317,6 +329,7 @@ export default function DocumentLibraryList() {
               selectedDocs={selectedDocs}
               setSelectedDocs={setSelectedDocs}
               onDeleteFolder={confirmDeleteFolder}
+              canDelete={canDeleteDocs}
             />
           </Box>
         </Card>

@@ -16,17 +16,22 @@ import { Navigate } from "react-router-dom";
 import { usePermissions } from "../security/usePermissions";
 
 interface ProtectedRouteProps {
-  children: JSX.Element;
-  resource: string;
+  resource: string | string[];
   action: string;
+  anyResource?: boolean;
+  children: React.ReactNode;
 }
 
-export const ProtectedRoute = ({ children, resource, action }: ProtectedRouteProps) => {
+export const ProtectedRoute = ({ children, resource, action, anyResource = false }: ProtectedRouteProps) => {
   const { can } = usePermissions();
 
-  if (!can(resource, action)) {
-    return <Navigate to="/unauthorized" replace />;
-  }
+  const allowed = Array.isArray(resource)
+    ? anyResource
+      ? resource.some(r => can(r, action))
+      : resource.every(r => can(r, action))
+    : can(resource, action);
 
-  return children;
+  if (!allowed) return <Navigate to="/unauthorized" replace />;
+
+  return <>{children}</>;
 };

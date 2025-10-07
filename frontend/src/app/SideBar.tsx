@@ -69,9 +69,12 @@ export default function SideBar({ darkMode, onThemeChange }) {
   const activeItemTextColor = theme.palette.primary.main;
   const hoverColor = theme.palette.sidebar.hoverColor;
 
-  const canReadKpis = can("kpis", "create");
-  const canReadOpenSearch = can("opensearch", "read");
-  const canReadLogs = can("logs", "read");
+  // Here we set the "can" action to "create" since we want the viewer role not to see kpis and logs.
+  // We also can remove the read_only allowed action to the viewer; to: kpi, opensearch & logs in rbac.py in fred_core/security
+  // but for now we can leave it like that. 
+  const canReadKpis = can("kpi", "create");
+  const canReadOpenSearch = can("opensearch", "create");
+  const canReadLogs = can("logs", "create");
 
   const menuItems: MenuItemCfg[] = [
     {
