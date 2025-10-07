@@ -28,7 +28,7 @@ from app.agents.rags.structures import (
     RephraseQueryOutput,
 )
 from app.common.rags_utils import attach_sources_to_llm_response
-from app.common.structures import AgentSettings
+from app.common.structures import AgentChatOptions, AgentSettings
 from app.common.vector_search_client import VectorSearchClient
 from app.core.agents.agent_flow import AgentFlow
 from app.core.agents.runtime_context import (
@@ -131,6 +131,10 @@ class AdvancedRagExpert(AgentFlow):
     icon: str = "rags_agent"
     categories: List[str] = ["Documentation"]
     tag: str = "rags"
+    default_chat_options = AgentChatOptions(
+        search_policy_selection=True,
+        libraries_selection=True,
+    )
 
     def __init__(self, agent_settings: AgentSettings):
         super().__init__(agent_settings=agent_settings)
