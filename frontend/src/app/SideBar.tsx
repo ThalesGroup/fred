@@ -71,6 +71,7 @@ export default function SideBar({ darkMode, onThemeChange }) {
 
   const canReadKpis = can("kpis", "create");
   const canReadOpenSearch = can("opensearch", "read");
+  const canReadLogs = can("logs", "read");
 
   const menuItems: MenuItemCfg[] = [
     {
@@ -83,7 +84,7 @@ export default function SideBar({ darkMode, onThemeChange }) {
     },
 
     // Only show monitoring if user has permission
-    ...(canReadKpis || canReadOpenSearch
+    ...(canReadKpis || canReadOpenSearch || canReadLogs
       ? [
           {
             key: "monitoring",
@@ -104,7 +105,7 @@ export default function SideBar({ darkMode, onThemeChange }) {
                     },
                   ]
                 : []),
-              ...(canReadOpenSearch
+              ...(canReadOpenSearch || canReadLogs
                 ? [
                     {
                       key: "monitoring-logs",
