@@ -23,7 +23,6 @@ import {
   TextField,
 } from "@mui/material";
 import yaml from "js-yaml";
-import { useTranslation } from "react-i18next";
 import { ResourceKind, useKindLabels } from "./resourceLabels";
 
 import * as React from "react";
@@ -31,7 +30,6 @@ import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { z } from "zod";
-import { ResourceKind, useKindLabels } from "./resourceLabels";
 import {
   buildFrontMatter,
   buildProfileYaml,

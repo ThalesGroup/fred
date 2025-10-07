@@ -58,10 +58,10 @@ RAG_TUNING = AgentTuning(
             ui=UIHints(group="Retrieval"),
         ),
         FieldSpec(
-            key="prompts.include_profile",
+            key="prompts.include_chat_context",
             type="boolean",
-            title="Append User Profile to System Prompt",
-            description="If true, append the runtime profile text after the system prompt.",
+            title="Append Chat Context to System Prompt",
+            description="If true, append the runtime chat context text after the system prompt.",
             required=False,
             default=False,
             ui=UIHints(group="Prompts"),
@@ -77,7 +77,7 @@ class RagExpert(AgentFlow):
     Key principles (aligned with AgentFlow):
     - No hidden prompt composition. This node explicitly chooses which tuned fields to use.
     - Graph is built in async_init() and compiled lazily via AgentFlow.get_compiled_graph().
-    - Profile text is *opt-in* (governed by a tuning boolean).
+    - Chat context text is *opt-in* (governed by a tuning boolean).
     """
 
     tuning = RAG_TUNING  # UI schema only; live values are in AgentSettings.tuning
@@ -100,7 +100,7 @@ class RagExpert(AgentFlow):
     # -----------------------------
     def _system_prompt(self) -> str:
         """
-        Resolve the RAG system prompt from tuning; optionally append profile text if enabled.
+        Resolve the RAG system prompt from tuning; optionally append chat_context text if enabled.
         """
         sys_tpl = self.get_tuned_text("prompts.system")
         if not sys_tpl:
@@ -142,7 +142,7 @@ class RagExpert(AgentFlow):
             )
             if not hits:
                 warn = "I couldn't find any relevant documents. Try rephrasing or expanding your query?"
-                messages = self.with_profile_text([HumanMessage(content=warn)])
+                messages = self.with_chat_context_text([HumanMessage(content=warn)])
 
                 return {"messages": [await self.model.ainvoke(messages)]}
 
@@ -166,7 +166,7 @@ class RagExpert(AgentFlow):
 
             # 5) Ask the model
             messages = [sys_msg, human_msg]
-            messages = self.with_profile_text(messages)
+            messages = self.with_chat_context_text(messages)
 
             answer = await self.model.ainvoke(messages)
 
