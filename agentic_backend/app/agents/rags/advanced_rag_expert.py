@@ -390,7 +390,7 @@ class AdvancedRagExpert(AgentFlow):
             for d in documents
         )
 
-        profile_instructions = self.profile_text()
+        chat_context_instructions = self.chat_context_text()
 
         base_prompt = (
             "You are an assistant that answers questions based on retrieved documents.\n"
@@ -399,11 +399,11 @@ class AdvancedRagExpert(AgentFlow):
         )
 
         # Si on a des instructions, on ajoute la variable dans le template
-        if profile_instructions:
-            base_prompt = base_prompt + "\n\n{profile_instructions}"
+        if chat_context_instructions:
+            base_prompt = base_prompt + "\n\n{chat_context_instructions}"
             prompt = ChatPromptTemplate.from_template(base_prompt)
             variables = {
-                "profile_instructions": profile_instructions,
+                "chat_context_instructions": chat_context_instructions,
                 "context": context,
                 "question": question,
             }
