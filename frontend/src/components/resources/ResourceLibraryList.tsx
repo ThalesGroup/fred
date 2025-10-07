@@ -191,10 +191,8 @@ export default function ResourceLibraryList({ kind }: Props) {
     (res: Resource, tag: TagWithItemsId) => {
       const name = res.name || String(res.id);
       showConfirmationDialog({
-        title: t("resourceLibrary.confirmRemoveTitle") || "Remove from library?",
-        message:
-          t("resourceLibrary.confirmRemoveMessage", { res: name, folder: tag.name }) ||
-          `Remove “${name}” from “${tag.name}”? This does not delete the original resource.`,
+        title: t("resourceLibrary.confirmRemoveTitle"),
+        message: t("resourceLibrary.confirmRemoveMessage", { res: name, folder: tag.name }),
         onConfirm: () => {
           void removeFromLibrary(res, tag);
         },

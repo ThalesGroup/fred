@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import React, { memo, useMemo, useRef, useEffect } from "react";
-import MessageCard from "./MessageCard";
-import Sources from "./Sources";
+import React, { memo, useEffect, useMemo, useRef } from "react";
+import { AnyAgent } from "../../common/agent";
 import { ChatMessage } from "../../slices/agentic/agenticOpenApi";
 import { getExtras, hasNonEmptyText } from "./ChatBotUtils";
+import MessageCard from "./MessageCard";
 import ReasoningStepsAccordion from "./ReasoningStepsAccordion";
-import { AnyAgent } from "../../common/agent";
+import Sources from "./Sources";
 
 type Props = {
   messages: ChatMessage[];
@@ -200,13 +200,13 @@ function Area({ messages, agents, currentAgent }: Props) {
             />,
           );
         }
-
+        const agent = resolveAgent(msg);
         // 2) Single MessageCard (always markdown, inline [n] handled inside)
         elements.push(
           <MessageCard
             key={`final-${msg.session_id}-${msg.exchange_id}-${msg.rank}`}
             message={msg}
-            agent={currentAgent}
+            agent={agent}
             side="left"
             enableCopy
             enableThumbs
