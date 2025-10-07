@@ -427,5 +427,12 @@
     "openSource": "Ouvrir la source",
     "openAllInPreview": "Tout ouvrir en prévisualisation",
     "openAllInPdfPreview": "Tout ouvrir en prévisualisation PDF"
+  },
+  "pageError": {
+    "message": "Back to Home"
+  },
+  "unauthorized": {
+    "title": "Accès non autorisé",
+    "message": "Vous n'êtes pas autorisé à voir cette page."
   }
 }
