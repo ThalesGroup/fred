@@ -14,11 +14,11 @@
 
 import CheckIcon from "@mui/icons-material/Check";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
-import DownloadIcon from "@mui/icons-material/Download";
-import { Box, IconButton, Tooltip, Typography, useTheme } from "@mui/material";
+// import DownloadIcon from "@mui/icons-material/Download"; // REMOVED: Mermaid Download
+import { Box, IconButton, Typography, useTheme } from "@mui/material";
 import "katex/dist/katex.min.css";
-import mermaid from "mermaid";
-import { createElement, useEffect, useMemo, useRef, useState } from "react";
+// import mermaid from "mermaid"; // REMOVED: Mermaid Import
+import { createElement, useEffect, useRef, useState } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { prism, vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
@@ -51,7 +51,7 @@ export interface MarkdownRendererProps {
   /** Optional citation behavior; if omitted, renderer ignores [n] */
   citations?: CitationHooks; // <-- ADDED PROP
 }
-// ... [replaceStageDirectionsWithEmoji and CodeBlockContainer remain the same]
+// ... [replaceStageDirectionsWithEmoji remains the same]
 function replaceStageDirectionsWithEmoji(text: string): string {
   return text
     .replace(/\badjusts glasses\b/gi, "🤓")
@@ -66,20 +66,25 @@ function replaceStageDirectionsWithEmoji(text: string): string {
 }
 
 /* -------------------------------------------------------------------------- */
-/* NEW: CODE BLOCK CONTAINER FOR COPY/DOWNLOAD FUNCTIONALITY                   */
+/* CODE BLOCK CONTAINER FOR COPY/DOWNLOAD FUNCTIONALITY (Mermaid Removed)     */
 /* -------------------------------------------------------------------------- */
 
 interface CodeBlockContainerProps {
   children: React.ReactNode;
   codeContent: string;
   language?: string; // For display and file extension
-  isMermaid: boolean;
+  // isMermaid: boolean; // REMOVED: Mermaid Prop
 }
 
-const CodeBlockContainer: React.FC<CodeBlockContainerProps> = ({ children, codeContent, language, isMermaid }) => {
+const CodeBlockContainer: React.FC<CodeBlockContainerProps> = ({
+  children,
+  codeContent,
+  language /* , isMermaid */,
+}) => {
   const theme = useTheme();
   const [copied, setCopied] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null); // Ref to target the rendered SVG for download
+  const containerRef = useRef<HTMLDivElement>(null); // Ref for potential future use (or remove if not needed)
+
   const handleCopy = () => {
     navigator.clipboard.writeText(codeContent).then(() => {
       setCopied(true);
@@ -87,34 +92,18 @@ const CodeBlockContainer: React.FC<CodeBlockContainerProps> = ({ children, codeC
     });
   };
 
-  const handleDownload = () => {
-    if (!containerRef.current || !isMermaid) return;
-
-    // Find the rendered SVG element inside the container
-    const svgElement = containerRef.current.querySelector("svg");
-    if (!svgElement) return;
-
-    // Serialize the SVG to a string
-    const svgString = new XMLSerializer().serializeToString(svgElement);
-    const blob = new Blob([svgString], { type: "image/svg+xml" });
-    const url = URL.createObjectURL(blob);
-
-    // Create a temporary link and trigger download
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `diagram-${Date.now()}.svg`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
+  // const handleDownload = () => {
+  //   // REMOVED: All Mermaid Download Logic
+  //   if (!containerRef.current || !isMermaid) return;
+  //   // ... (SVG serialization and download)
+  // };
 
   const backgroundColor = theme.palette.mode === "dark" ? theme.palette.grey[900] : theme.palette.grey[200];
   const headerColor = theme.palette.mode === "dark" ? theme.palette.grey[700] : theme.palette.grey[300];
 
   return (
     <Box
-      ref={containerRef} // This ref is for Mermaid download logic
+      ref={containerRef}
       sx={{
         border: `1px solid ${theme.palette.divider}`,
         borderRadius: 1,
@@ -141,46 +130,41 @@ const CodeBlockContainer: React.FC<CodeBlockContainerProps> = ({ children, codeC
             color: theme.palette.text.secondary,
           }}
         >
-          {isMermaid ? "Diagram (Mermaid)" : language || "Code"}
+          {/* {isMermaid ? "Diagram (Mermaid)" : language || "Code"} */} {/* Simplified to: */}
+          {language || "Code"}
         </Typography>
 
         {/* Action Buttons */}
         <Box>
-          {/* Copy Button */}
-          {!isMermaid && (
-            <IconButton size="small" onClick={handleCopy} color={copied ? "success" : "default"}>
-              {/* Conditional Icon Rendering */}
-              {copied ? (
-                <CheckIcon fontSize="inherit" /> // Show Checkmark on success
-              ) : (
-                <ContentCopyIcon fontSize="inherit" /> // Show Copy icon by default
-              )}
-            </IconButton>
-          )}
+          {/* Copy Button (Now always present for code blocks) */}
+          <IconButton size="small" onClick={handleCopy} color={copied ? "success" : "default"}>
+            {/* Conditional Icon Rendering */}
+            {copied ? (
+              <CheckIcon fontSize="inherit" /> // Show Checkmark on success
+            ) : (
+              <ContentCopyIcon fontSize="inherit" /> // Show Copy icon by default
+            )}
+          </IconButton>
 
-          {/* Download Button for Diagrams */}
-          {isMermaid && (
+          {/* Download Button for Diagrams (REMOVED) */}
+          {/* {isMermaid && (
             <Tooltip title="Download Diagram (SVG)" placement="top">
               <IconButton size="small" onClick={handleDownload} color="default">
                 <DownloadIcon fontSize="inherit" />
               </IconButton>
             </Tooltip>
-          )}
+          )} */}
         </Box>
       </Box>
 
       {/* Content Area */}
-      <Box sx={{ p: isMermaid ? 0 : 0, backgroundColor: backgroundColor }}>{children}</Box>
+      {/* Mermaid content area had different padding (0). Now standardized: */}
+      <Box sx={{ p: 0, backgroundColor: backgroundColor }}>{children}</Box>
     </Box>
   );
 };
 
-// Turn:
-// :::details Why a custom renderer?
-// Body...
-// :::
-// into:
-// <details><summary>Why a custom renderer?</summary>Body...</details>
+// ... [remarkDetailsContainers remains the same]
 function remarkDetailsContainers() {
   return (tree: any) => {
     visit(tree, (node: any, idx: number | null, parent: any) => {
@@ -222,50 +206,13 @@ function remarkDetailsContainers() {
   };
 }
 
-// ... [MermaidDiagram, useCodeHighlightStyle, and CustomCodeComponent remain the same]
 /* -------------------------------------------------------------------------- */
-/* MERMAID LOGIC (Minor adjustment for ref usage)                             */
+/* MERMAID LOGIC (REMOVED)                                                    */
 /* -------------------------------------------------------------------------- */
 
-// Stable Mermaid Rendering Component (Needs ref to allow parent container to target SVG)
-const MermaidDiagram: React.FC<{ value: string }> = ({ value }) => {
-  const ref = useRef<HTMLDivElement>(null);
-
-  // Generates a stable, unique ID for Mermaid's render target
-  const diagramId = useMemo(() => `mermaid-svg-${Math.random().toString(36).substring(2, 9)}`, []);
-
-  useEffect(() => {
-    // (Mermaid logic remains the same)
-    if (!ref.current) return;
-    mermaid.initialize({ startOnLoad: false, securityLevel: "loose" });
-    ref.current.innerHTML = `<div id="${diagramId}">${value}</div>`;
-
-    const renderDiagram = async () => {
-      try {
-        const { svg } = await mermaid.render(diagramId, value);
-        if (ref.current) {
-          ref.current.innerHTML = svg;
-        }
-      } catch (e) {
-        if (ref.current) {
-          ref.current.innerHTML = `<pre style="color: red; text-align: left; padding: 10px; border: 1px dashed red;">Mermaid Error: ${e.message || "Syntax Error"}</pre>`;
-        }
-      }
-    };
-
-    renderDiagram();
-  }, [value, diagramId]);
-
-  // IMPORTANT: The ref is still here to capture the final SVG output
-  return (
-    <div
-      ref={ref}
-      className="mermaid-wrapper"
-      // Important: Remove inner padding/margin to let the outer container handle it
-      style={{ textAlign: "center", minHeight: "100px" }}
-    />
-  );
-};
+// const MermaidDiagram: React.FC<{ value: string }> = ({ value }) => {
+//   // REMOVED: Entire MermaidDiagram component
+// };
 
 /* -------------------------------------------------------------------------- */
 /* HIGHLIGHTER THEME PICKER (No change needed here)                            */
@@ -277,22 +224,21 @@ const useCodeHighlightStyle = () => {
   return isDarkMode ? vscDarkPlus : prism;
 };
 
-// Custom Code Component (UPDATED to use CodeBlockContainer)
+// Custom Code Component (UPDATED to remove Mermaid logic)
 const CustomCodeComponent: Components["code"] = ({ className, children, ...props }) => {
   const codeStyle = useCodeHighlightStyle();
   const match = /language-(\w+)/.exec(className || "");
   const lang = match?.[1];
-  const codeContent = String(children); // Keep original children for codeContent, trimming handled by render
+  const codeContent = String(children);
 
-  // 1. Handle Mermaid Diagrams
-  if (lang === "mermaid") {
-    // Wrap Mermaid in the container
-    return (
-      <CodeBlockContainer codeContent={codeContent} language={lang} isMermaid={true}>
-        <MermaidDiagram value={codeContent} />
-      </CodeBlockContainer>
-    );
-  }
+  // 1. Handle Mermaid Diagrams (REMOVED)
+  // if (lang === "mermaid") {
+  //   return (
+  //     <CodeBlockContainer codeContent={codeContent} language={lang} isMermaid={true}>
+  //       <MermaidDiagram value={codeContent} />
+  //     </CodeBlockContainer>
+  //   );
+  // }
 
   // 2. Handle Fenced Code Blocks (Syntax Highlighting)
   if (lang) {
@@ -312,7 +258,7 @@ const CustomCodeComponent: Components["code"] = ({ className, children, ...props
 
     // Wrap the Highlighter in the container
     return (
-      <CodeBlockContainer codeContent={codeContent} language={lang} isMermaid={false}>
+      <CodeBlockContainer codeContent={codeContent} language={lang}>
         {highlighter}
       </CodeBlockContainer>
     );
@@ -333,6 +279,7 @@ function forEachTextNode(root: HTMLElement, excludeSelector: string, fn: (textNo
       const parent = node.parentElement;
       if (!parent) return NodeFilter.FILTER_REJECT;
       // Exclude nodes inside pre, code, etc.
+      // NOTE: Removed '.mermaid' from the exclusion selector
       if (parent.closest(excludeSelector)) return NodeFilter.FILTER_REJECT;
       // Only process text nodes that contain a potential citation pattern
       if (!node.nodeValue || !node.nodeValue.match(/\[\d+\]/)) {
@@ -378,8 +325,8 @@ const useCitationEnrichment = (containerRef: React.RefObject<HTMLElement>, citat
     const container = containerRef.current;
 
     // 1) Inject <sup.fred-cite> for every [n] in text nodes (exclude code-like)
-    // Note: The exclude selector is critical to prevent code blocks from being parsed
-    forEachTextNode(container, "pre, code, kbd, samp, .fred-cite, .mermaid", injectCitationSup);
+    // Removed '.mermaid' from the exclude selector
+    forEachTextNode(container, "pre, code, kbd, samp, .fred-cite", injectCitationSup);
 
     // 2) Attach handlers and ARIA to the newly created <sup> elements
     const nodes = Array.from(container.querySelectorAll<HTMLElement>("sup.fred-cite"));
@@ -434,7 +381,7 @@ const useCitationEnrichment = (containerRef: React.RefObject<HTMLElement>, citat
 };
 
 /* -------------------------------------------------------------------------- */
-/* MARKDOWN RENDERER CORE (Imports updated, logic unchanged)                   */
+/* MARKDOWN RENDERER CORE (Mermaid Initialization Removed)                     */
 /* -------------------------------------------------------------------------- */
 
 export default function MarkdownRenderer({
@@ -475,6 +422,26 @@ export default function MarkdownRenderer({
       details: ["open"], // allow the boolean 'open' attribute
     },
   };
+
+  /* --------------------------------------------------------- */
+  /* Mermaid theming (REMOVED: Initialization useEffect)       */
+  /* --------------------------------------------------------- */
+  // useEffect(() => {
+  //   mermaid.initialize({
+  //     startOnLoad: false,
+  //     securityLevel: "loose",
+  //     theme: theme.palette.mode === "dark" ? "dark" : "default",
+  //     themeVariables: {
+  //       primaryColor: theme.palette.primary.main,
+  //       primaryTextColor: theme.palette.getContrastText(theme.palette.primary.main),
+  //       lineColor: theme.palette.divider,
+  //       background: theme.palette.background.paper,
+  //       noteBkgColor: theme.palette.background.paper,
+  //       noteTextColor: theme.palette.text.primary,
+  //     },
+  //     loader: { loadAll: true },
+  //   } as any);
+  // }, [theme.palette.mode, theme.palette.primary.main, theme.palette.divider, theme.palette.background.paper]);
 
   return (
     <Box
