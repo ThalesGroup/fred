@@ -18,8 +18,8 @@ import { useTranslation } from "react-i18next";
 import { AnyAgent } from "../common/agent";
 import ChatBot from "../components/chatbot/ChatBot";
 import AgentsList from "../components/chatbot/settings/AgentList";
+import { ChatContextPickerPanel } from "../components/chatbot/settings/ChatContextPickerPanel";
 import { ConversationList } from "../components/chatbot/settings/ConversationList";
-import { ProfilePickerPanel } from "../components/chatbot/settings/ProfilePickerPanel";
 import { SidePanelToggle } from "../components/SidePanelToogle";
 import { useSessionOrchestrator } from "../hooks/useSessionOrchestrator";
 import {
@@ -73,7 +73,7 @@ export default function Chat() {
   });
 
   const [baseRuntimeContext] = useState<Record<string, any>>({});
-  const [selectedProfileIds, setSelectedProfileIds] = useState<string[]>([]);
+  const [selectedChatContextIds, setSelectedChatContextIds] = useState<string[]>([]);
   const [agentsOpen, setAgentsOpen] = useState(false);
 
   const openAgents = () => setAgentsOpen(true);
@@ -204,11 +204,11 @@ export default function Chat() {
               </IconButton>
             </Box>
 
-            {/* Profile Section */}
+            {/* Chat Context Section */}
             <Box sx={{ flex: "0 0 auto" }}>
-              <ProfilePickerPanel
-                selectedProfileIds={selectedProfileIds}
-                onChangeSelectedProfileIds={setSelectedProfileIds}
+              <ChatContextPickerPanel
+                selectedChatContextIds={selectedChatContextIds}
+                onChangeSelectedChatContextIds={setSelectedChatContextIds}
               />
             </Box>
 
@@ -247,7 +247,7 @@ export default function Chat() {
             isCreatingNewConversation={isCreatingNewConversation}
             runtimeContext={{
               ...baseRuntimeContext,
-              selected_profile_ids: selectedProfileIds.length ? selectedProfileIds : undefined,
+              selected_chat_context_ids: selectedChatContextIds.length ? selectedChatContextIds : undefined,
             }}
             onBindDraftAgentToSessionId={bindDraftAgentToSessionId}
           />

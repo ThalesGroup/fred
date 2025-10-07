@@ -14,6 +14,7 @@
 
 import { createBrowserRouter, RouteObject } from "react-router-dom";
 import { LayoutWithSidebar } from "../app/LayoutWithSidebar";
+import RendererPlayground from "../components/markdown/RenderedPlayground";
 import { ProtectedRoute } from "../components/ProtectedRoute";
 import { AgentHub } from "../pages/AgentHub";
 import Chat from "../pages/Chat";
@@ -64,6 +65,10 @@ export const routes: RouteObject[] = [
       {
         path: "knowledge",
         element: <KnowledgeHub />,
+      },
+      {
+        path: "test-renderer",
+        element: <RendererPlayground />,
       },
       {
         path: "agentHub",

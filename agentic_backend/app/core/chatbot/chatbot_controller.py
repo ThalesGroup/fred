@@ -144,7 +144,6 @@ def get_frontend_config() -> FrontendConfigDTO:
             enabled=cfg.security.user.enabled,
             realm_url=cfg.security.user.realm_url,
             client_id=cfg.security.user.client_id,
-            authorized_origins=cfg.security.user.authorized_origins,
         ),
     )
 

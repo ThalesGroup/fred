@@ -360,7 +360,10 @@ class LegacyOrchestrator(AgentFlow):
             f"Final answer to the objective: {state['objective']}"
         )
 
-        response = await self.model.ainvoke([HumanMessage(content=prompt)])
+        messages = [HumanMessage(content=prompt)]
+        messages = self.with_chat_context_text(messages)
+
+        response = await self.model.ainvoke(messages)
         response = AIMessage(
             content=response.content,
             response_metadata={

@@ -1,0 +1,29 @@
+definition user {}
+
+definition group {
+	relation member: user | group
+	permission member_recursive = member + member->member_recursive
+}
+
+definition tag {
+	relation owner: user | group
+	relation editor: user | group
+	relation viewer: user | group
+	relation parent: tag
+	permission read = viewer + editor + owner + editor->member_recursive + viewer->member_recursive + owner->member_recursive + parent->read
+	permission write = editor + owner + editor->member_recursive + owner->member_recursive + parent->write
+	permission update = editor + owner + editor->member_recursive + owner->member_recursive + parent->update
+	permission delete = owner + owner->member_recursive + parent->delete
+	permission share = owner + owner->member_recursive + parent->share
+	permission create = editor + owner + editor->member_recursive + owner->member_recursive + parent->create
+}
+
+definition document {
+	relation parent: tag
+	permission read = parent->read
+	permission write = parent->write
+	permission update = parent->update
+	permission delete = parent->delete
+	permission share = parent->share
+	permission create = parent->create
+}

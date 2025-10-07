@@ -58,10 +58,10 @@ RAG_TUNING = AgentTuning(
             ui=UIHints(group="Retrieval"),
         ),
         FieldSpec(
-            key="prompts.include_profile",
+            key="prompts.include_chat_context",
             type="boolean",
-            title="Append User Profile to System Prompt",
-            description="If true, append the runtime profile text after the system prompt.",
+            title="Append Chat Context to System Prompt",
+            description="If true, append the runtime chat context text after the system prompt.",
             required=False,
             default=False,
             ui=UIHints(group="Prompts"),
@@ -77,7 +77,7 @@ class RagExpert(AgentFlow):
     Key principles (aligned with AgentFlow):
     - No hidden prompt composition. This node explicitly chooses which tuned fields to use.
     - Graph is built in async_init() and compiled lazily via AgentFlow.get_compiled_graph().
-    - Profile text is *opt-in* (governed by a tuning boolean).
+    - Chat context text is *opt-in* (governed by a tuning boolean).
     """
 
     tuning = RAG_TUNING  # UI schema only; live values are in AgentSettings.tuning
@@ -100,17 +100,13 @@ class RagExpert(AgentFlow):
     # -----------------------------
     def _system_prompt(self) -> str:
         """
-        Resolve the RAG system prompt from tuning; optionally append profile text if enabled.
+        Resolve the RAG system prompt from tuning; optionally append chat context text if enabled.
         """
         sys_tpl = self.get_tuned_text("prompts.system")
         if not sys_tpl:
             logger.warning("RagExpert: no tuned system prompt found, using fallback.")
             raise RuntimeError("RagExpert: no tuned system prompt found.")
         sys_text = self.render(sys_tpl)  # token-safe rendering (e.g. {today})
-
-        prof = self.profile_text()
-        if prof:
-            sys_text = f"{sys_text}\n\n{prof}"
 
         return sys_text
 
@@ -146,9 +142,9 @@ class RagExpert(AgentFlow):
             )
             if not hits:
                 warn = "I couldn't find any relevant documents. Try rephrasing or expanding your query?"
-                return {
-                    "messages": [await self.model.ainvoke([HumanMessage(content=warn)])]
-                }
+                messages = self.with_chat_context_text([HumanMessage(content=warn)])
+
+                return {"messages": [await self.model.ainvoke(messages)]}
 
             # 3) Deterministic ordering + fill ranks
             hits = sort_hits(hits)
@@ -169,7 +165,10 @@ class RagExpert(AgentFlow):
             )
 
             # 5) Ask the model
-            answer = await self.model.ainvoke([sys_msg, human_msg])
+            messages = [sys_msg, human_msg]
+            messages = self.with_chat_context_text(messages)
+
+            answer = await self.model.ainvoke(messages)
 
             # 6) Attach rich sources metadata for the UI
             attach_sources_to_llm_response(answer, hits)

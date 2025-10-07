@@ -23,7 +23,7 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph.state import CompiledStateGraph
 
 from app.application_context import get_knowledge_flow_base_url
-from app.common.structures import AgentSettings
+from app.common.structures import AgentSettings, ChatContextMessage
 from app.core.agents.agent_spec import AgentTuning, FieldSpec
 from app.core.agents.agent_state import Prepared, resolve_prepared
 from app.core.agents.runtime_context import RuntimeContext
@@ -150,20 +150,20 @@ class AgentFlow:
         """Return the current effective AgentSettings for this instance."""
         return self.agent_settings
 
-    def profile_text(self) -> str:
+    def chat_context_text(self) -> str:
         """
-        Return the *user profile* text from the runtime context (if any).
+        Return the *chat context* text from the runtime context (if any).
 
         When to use:
-        - Only when a node explicitly needs user profile info (e.g., tone/role constraints
+        - Only when a node explicitly needs chat context info (e.g., tone/role constraints
           about the user). We DO NOT auto-merge this into every prompt.
 
         Contract:
-        - If your agent ignores profiles, simply don't call this method.
+        - If your agent ignores chat context, simply don't call this method.
         """
         ctx = self.get_runtime_context() or RuntimeContext()
         prepared: Prepared = resolve_prepared(ctx, get_knowledge_flow_base_url())
-        return (prepared.prompt_profile_text or "").strip()
+        return (prepared.prompt_chat_context_text or "").strip()
 
     def render(self, template: str, **tokens) -> str:
         """
@@ -211,12 +211,29 @@ class AgentFlow:
         Why:
         - Keep control explicit: the agent chooses exactly when a system instruction
           applies (e.g., inject the tuned system prompt for this node, optionally
-          followed by the user profile or other context).
+          followed by the chat context or other context).
 
         Notes:
         - Accepts AnyMessage/Sequence to play nicely with LangChain's typing.
         """
         return [SystemMessage(content=system_text), *messages]
+
+    def with_chat_context_text(
+        self, messages: Sequence[AnyMessage]
+    ) -> list[AnyMessage]:
+        """
+        Wrap the chat context description in a SystemMessage at the end of the messages.
+
+        Why:
+        - Force the system to take it into account.
+
+        """
+        messages = [msg for msg in messages if not isinstance(msg, ChatContextMessage)]
+        chat_context = self.chat_context_text()
+        if not chat_context:
+            return list(messages)
+        messages.append(ChatContextMessage(content=chat_context))
+        return messages
 
     def get_compiled_graph(self) -> CompiledStateGraph:
         """

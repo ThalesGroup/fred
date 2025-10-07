@@ -478,7 +478,7 @@ export type RuntimeContext = {
   selected_document_libraries_ids?: string[] | null;
   selected_prompt_ids?: string[] | null;
   selected_template_ids?: string[] | null;
-  selected_profile_ids?: string[] | null;
+  selected_chat_context_ids?: string[] | null;
   search_policy?: string | null;
   [key: string]: any;
 };
@@ -571,7 +571,6 @@ export type UserSecurity = {
   enabled?: boolean;
   realm_url: string;
   client_id: string;
-  authorized_origins?: string[];
 };
 export type FrontendConfigDto = {
   frontend_settings: FrontendSettings;

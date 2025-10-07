@@ -390,16 +390,33 @@ class AdvancedRagExpert(AgentFlow):
             for d in documents
         )
 
-        prompt = ChatPromptTemplate.from_template(
+        chat_context_instructions = self.chat_context_text()
+
+        base_prompt = (
             "You are an assistant that answers questions based on retrieved documents.\n"
             "Use the documents to support your response with citations.\n\n"
             "{context}\n\nQuestion: {question}"
         )
 
+        # Si on a des instructions, on ajoute la variable dans le template
+        if chat_context_instructions:
+            base_prompt = base_prompt + "\n\n{chat_context_instructions}"
+            prompt = ChatPromptTemplate.from_template(base_prompt)
+            variables = {
+                "chat_context_instructions": chat_context_instructions,
+                "context": context,
+                "question": question,
+            }
+        else:
+            prompt = ChatPromptTemplate.from_template(base_prompt)
+            variables = {
+                "context": context,
+                "question": question,
+            }
+
         if self.model is None:
             raise ValueError("model is None")
 
-        # Small progress thought (so UI can show a step)
         progress = mk_thought(
             label="generate",
             node="generate",
@@ -407,9 +424,8 @@ class AdvancedRagExpert(AgentFlow):
             content="Drafting an answer from selected documents…",
         )
 
-        response = await (prompt | self.model).ainvoke(
-            {"context": context, "question": question}
-        )
+        response = await (prompt | self.model).ainvoke(variables)
+
         response = cast(AIMessage, response)
         attach_sources_to_llm_response(
             response, documents
