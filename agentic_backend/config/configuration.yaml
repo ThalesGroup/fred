@@ -27,8 +27,8 @@ security:
     enabled: false
     client_id: "app"
     realm_url: "http://app-keycloak:8080/realms/app"
-    authorized_origins:
-      - "http://localhost:5173"
+  authorized_origins:
+    - "http://localhost:5173"
 frontend_settings:
   feature_flags:
     # If true activate the backend and frontend modules in charge of K8
