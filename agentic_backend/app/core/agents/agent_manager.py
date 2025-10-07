@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import asyncio
-import importlib
 import logging
 from inspect import iscoroutinefunction
 from typing import Dict, List, Type
