@@ -603,8 +603,7 @@ const ChatBot = ({
             {/* Input area */}
             <Box sx={{ width: "min(900px, 100%)" }}>
               <UserInput
-                enableFilesAttachment
-                enableAudioAttachment
+                agentChatOptions={currentAgent.chat_options}
                 isWaiting={waitResponse}
                 onSend={handleSend}
                 onContextChange={setUserInputContext}
@@ -652,8 +651,7 @@ const ChatBot = ({
             {/* User input area */}
             <Grid2 container width="100%" alignContent="center">
               <UserInput
-                enableFilesAttachment={true}
-                enableAudioAttachment={true}
+                agentChatOptions={currentAgent.chat_options}
                 isWaiting={waitResponse}
                 onSend={handleSend}
                 onContextChange={setUserInputContext}

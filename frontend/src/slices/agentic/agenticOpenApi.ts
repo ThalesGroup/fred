@@ -300,6 +300,12 @@ export type AgentTuning = {
   fields?: FieldSpec[];
   mcp_servers?: McpServerSpec | null;
 };
+export type AgentChatOptions = {
+  search_policy_selection?: boolean;
+  libraries_selection?: boolean;
+  record_audio_files?: boolean;
+  attach_files?: boolean;
+};
 export type Agent = {
   name: string;
   enabled?: boolean;
@@ -311,6 +317,7 @@ export type Agent = {
   tuning?: AgentTuning | null;
   /** List of active MCP server configurations for this agent. */
   mcp_servers?: McpServerConfiguration[];
+  chat_options?: AgentChatOptions;
   type?: "agent";
 };
 export type Leader = {
@@ -324,6 +331,7 @@ export type Leader = {
   tuning?: AgentTuning | null;
   /** List of active MCP server configurations for this agent. */
   mcp_servers?: McpServerConfiguration[];
+  chat_options?: AgentChatOptions;
   type?: "leader";
   /** Names of agents in this leader's crew (if any). */
   crew?: string[];
@@ -591,6 +599,7 @@ export type Agent2 = {
   tuning?: AgentTuning2 | null;
   /** List of active MCP server configurations for this agent. */
   mcp_servers?: McpServerConfiguration[];
+  chat_options?: AgentChatOptions;
   type?: "agent";
 };
 export type Leader2 = {
@@ -604,6 +613,7 @@ export type Leader2 = {
   tuning?: AgentTuning2 | null;
   /** List of active MCP server configurations for this agent. */
   mcp_servers?: McpServerConfiguration[];
+  chat_options?: AgentChatOptions;
   type?: "leader";
   /** Names of agents in this leader's crew (if any). */
   crew?: string[];

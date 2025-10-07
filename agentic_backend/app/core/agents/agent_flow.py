@@ -23,7 +23,11 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph.state import CompiledStateGraph
 
 from app.application_context import get_knowledge_flow_base_url
-from app.common.structures import AgentSettings, ChatContextMessage
+from app.common.structures import (
+    AgentChatOptions,
+    AgentSettings,
+    ChatContextMessage,
+)
 from app.core.agents.agent_spec import AgentTuning, FieldSpec
 from app.core.agents.agent_state import Prepared, resolve_prepared
 from app.core.agents.runtime_context import RuntimeContext
@@ -55,6 +59,7 @@ class AgentFlow:
 
     # Subclasses MUST override this with a concrete AgentTuning
     tuning: ClassVar[Optional[AgentTuning]] = None
+    default_chat_options: ClassVar[Optional[AgentChatOptions]] = None
 
     def __init__(self, agent_settings: AgentSettings):
         """
@@ -72,10 +77,7 @@ class AgentFlow:
                 - categories: (Optional) Categories that the agent is part of.
                 - tag:s (Optional) Short tag identifier for the agent.
         """
-
-        self.agent_settings = agent_settings
-        self._tuning = agent_settings.tuning or self.__class__.tuning
-        self.agent_settings.tuning = self._tuning  # ensure it's set
+        self.apply_settings(agent_settings)
         self.current_date = datetime.now().strftime("%Y-%m-%d")
         self.model = None  # Will be set in async_init
         self._graph = None  # Will be built in async_init
@@ -105,8 +107,39 @@ class AgentFlow:
         - Note: this does not recompile the graph or rebuild models; call your own
           re-init logic if tuneables require it.
         """
-        self.agent_settings = new_settings
-        self._tuning = new_settings.tuning or type(self).tuning
+        merged_settings = type(self).merge_settings_with_class_defaults(new_settings)
+        self.agent_settings = merged_settings
+        self._tuning = merged_settings.tuning
+        self.agent_settings.tuning = self._tuning
+
+    @classmethod
+    def merge_settings_with_class_defaults(
+        cls, settings: AgentSettings
+    ) -> AgentSettings:
+        """Return a copy of settings augmented with class-level defaults."""
+
+        merged = settings.model_copy(deep=True)
+
+        resolved_tuning = merged.tuning or cls.tuning
+        if resolved_tuning is not None:
+            merged.tuning = resolved_tuning.model_copy(deep=True)
+
+        merged.chat_options = cls._merge_chat_options(merged.chat_options)
+        return merged
+
+    @classmethod
+    def _merge_chat_options(
+        cls, current: Optional[AgentChatOptions]
+    ) -> AgentChatOptions:
+        base = cls.default_chat_options or AgentChatOptions()
+        effective = base.model_copy(deep=True)
+        if not current:
+            return effective
+
+        overrides = current.model_dump(exclude_unset=True)
+        if overrides:
+            effective = effective.model_copy(update=overrides)
+        return effective
 
     def get_name(self) -> str:
         """
