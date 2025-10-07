@@ -147,12 +147,6 @@ applications:
         log_level: "info"
         reload: false
         reload_dir: "."
-        security:
-          enabled: false
-          client_id: "app"
-          keycloak_url: "http://idp.dev.fred.thalesgroup.com/realms/app"
-          authorized_origins:
-            -  "http://fred.dev.fred.thalesgroup.com:80"
       security:
         m2m:
           enabled: true
@@ -162,8 +156,8 @@ applications:
           enabled: true
           client_id: "app"
           realm_url: "http://idp.dev.fred.thalesgroup.com/realms/app"
-          authorized_origins:
-            - "http://fred.dev.fred.thalesgroup.com:80"
+        authorized_origins:
+          - "http://fred.dev.fred.thalesgroup.com:80"
       frontend_settings:
         feature_flags:
           # If true activate the backend and frontend modules in charge of K8
@@ -561,8 +555,8 @@ applications:
           enabled: true
           client_id: "app"
           realm_url: "http://idp.dev.fred.thalesgroup.com/realms/app"
-          authorized_origins:
-            - "http://fred.dev.fred.thalesgroup.com:80"
+        authorized_origins:
+          - "http://fred.dev.fred.thalesgroup.com:80"
       scheduler:
         enabled: true
         backend: "temporal"
