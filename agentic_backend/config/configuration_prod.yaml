@@ -32,7 +32,7 @@ security:
     - "http://localhost:5173"
   rebac:
     type: spicedb
-    endpoint: "http://localhost:50051"
+    endpoint: "localhost:50051"
     insecure: true
 
 frontend_settings:
