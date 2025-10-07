@@ -66,7 +66,7 @@ type Props = {
   tree: TagNode;
   expanded: string[];
   setExpanded: (ids: string[]) => void;
-  selectedFolder?: string;
+  selectedFolder: string | null;
   setSelectedFolder: (full: string) => void;
   getChildren: (n: TagNode) => TagNode[];
   resources: Resource[];
@@ -171,7 +171,7 @@ export function ResourceLibraryTree({
               }}
               onClick={(e) => {
                 e.stopPropagation();
-                setSelectedFolder(c.full);
+                setSelectedFolder(isSelected ? null : c.full); 
               }}
             >
               {/* Left: tri-state + folder icon + name */}
