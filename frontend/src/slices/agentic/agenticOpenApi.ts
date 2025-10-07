@@ -31,6 +31,12 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: () => ({ url: `/agentic/v1/config/frontend_settings` }),
     }),
+    getUserPermissionsAgenticV1ConfigPermissionsGet: build.query<
+      GetUserPermissionsAgenticV1ConfigPermissionsGetApiResponse,
+      GetUserPermissionsAgenticV1ConfigPermissionsGetApiArg
+    >({
+      query: () => ({ url: `/agentic/v1/config/permissions` }),
+    }),
     getAgenticFlowsAgenticV1ChatbotAgenticflowsGet: build.query<
       GetAgenticFlowsAgenticV1ChatbotAgenticflowsGetApiResponse,
       GetAgenticFlowsAgenticV1ChatbotAgenticflowsGetApiArg
@@ -139,6 +145,8 @@ export type EchoSchemaAgenticV1SchemasEchoPostApiArg = {
 export type GetFrontendConfigAgenticV1ConfigFrontendSettingsGetApiResponse =
   /** status 200 Successful Response */ FrontendConfigDto;
 export type GetFrontendConfigAgenticV1ConfigFrontendSettingsGetApiArg = void;
+export type GetUserPermissionsAgenticV1ConfigPermissionsGetApiResponse = /** status 200 Successful Response */ string[];
+export type GetUserPermissionsAgenticV1ConfigPermissionsGetApiArg = void;
 export type GetAgenticFlowsAgenticV1ChatbotAgenticflowsGetApiResponse = /** status 200 Successful Response */ (
   | ({
       type: "agent";
@@ -698,6 +706,8 @@ export const {
   useEchoSchemaAgenticV1SchemasEchoPostMutation,
   useGetFrontendConfigAgenticV1ConfigFrontendSettingsGetQuery,
   useLazyGetFrontendConfigAgenticV1ConfigFrontendSettingsGetQuery,
+  useGetUserPermissionsAgenticV1ConfigPermissionsGetQuery,
+  useLazyGetUserPermissionsAgenticV1ConfigPermissionsGetQuery,
   useGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery,
   useLazyGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery,
   useGetSessionsAgenticV1ChatbotSessionsGetQuery,
