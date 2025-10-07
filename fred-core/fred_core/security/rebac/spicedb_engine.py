@@ -23,8 +23,7 @@ from grpcutil import bearer_token_credentials, insecure_bearer_token_credentials
 from fred_core.security.models import Action, Resource
 from fred_core.security.rebac.rebac_engine import RebacEngine, RebacReference, Relation
 from fred_core.security.rebac.schema import DEFAULT_SCHEMA
-
-DEFAULT_TOKEN_ENV = "SPICEDB_TOKEN"  # nosec B105: env var name, not a secret
+from fred_core.security.structure import SpiceDbRebacConfig
 
 
 class SpiceDbRebacEngine(RebacEngine):
@@ -32,37 +31,32 @@ class SpiceDbRebacEngine(RebacEngine):
 
     def __init__(
         self,
+        config: SpiceDbRebacConfig,
         *,
-        endpoint: str | None = None,
         token: str | None = None,
         read_consistency: Consistency | None = None,
         write_operation: RelationshipUpdate._Operation.ValueType = RelationshipUpdate.Operation.OPERATION_TOUCH,
         schema: str | None = DEFAULT_SCHEMA,
-        sync_schema_on_init: bool = True,
-        insecure: bool = False,
     ) -> None:
-        resolved_endpoint = endpoint
-        if not resolved_endpoint:
-            raise ValueError(
-                "SpiceDB endpoint must be provided via parameter or environment",
-            )
+        if not config.endpoint:
+            raise ValueError("SpiceDB endpoint must be provided in configuration")
 
-        resolved_token = token or os.getenv(DEFAULT_TOKEN_ENV)
+        resolved_token = token or os.getenv(config.token_env_var)
         if not resolved_token:
             raise ValueError(
-                f"SpiceDB token must be provided via parameter or environment ({DEFAULT_TOKEN_ENV})",
+                f"SpiceDB token must be provided via parameter or environment ({config.token_env_var})",
             )
 
-        if insecure:
+        if config.insecure:
             credentials = insecure_bearer_token_credentials(resolved_token)
         else:
             credentials = bearer_token_credentials(resolved_token)
-        self._client = Client(resolved_endpoint, credentials)
+        self._client = Client(config.endpoint, credentials)
 
         self._read_consistency = read_consistency
         self._write_operation = write_operation
 
-        if schema and sync_schema_on_init:
+        if schema and config.sync_schema_on_init:
             self.sync_schema(schema)
 
     def add_relation(self, relation: Relation) -> str | None:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import time
 import uuid
 
@@ -11,8 +12,9 @@ import pytest
 from fred_core.security.models import Action, Resource
 from fred_core.security.rebac.rebac_engine import RebacReference, Relation, RelationType
 from fred_core.security.rebac.spicedb_engine import SpiceDbRebacEngine
+from fred_core.security.structure import SpiceDbRebacConfig
 
-SPICEDB_ENDPOINT = "localhost:50051"
+SPICEDB_ENDPOINT = os.getenv("SPICEDB_TEST_ENDPOINT", "localhost:50051")
 
 
 def _integration_token() -> str:
@@ -44,9 +46,12 @@ def spicedb_engine() -> SpiceDbRebacEngine:
     for attempt in range(1, MAX_STARTUP_ATTEMPTS + 1):
         try:
             engine = SpiceDbRebacEngine(
-                endpoint=SPICEDB_ENDPOINT,
+                SpiceDbRebacConfig(
+                    endpoint=SPICEDB_ENDPOINT,
+                    insecure=True,
+                    sync_schema_on_init=True,
+                ),
                 token=token,
-                insecure=True,
             )
             # Trigger a cheap RPC call to confirm the server is reachable.
             engine.lookup_resources(

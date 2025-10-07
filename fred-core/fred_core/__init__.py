@@ -87,6 +87,8 @@ from fred_core.security.rbac import RBACProvider
 from fred_core.security.structure import (
     KeycloakUser,
     M2MSecurity,
+    RebacConfiguration,
+    SpiceDbRebacConfig,
     SecurityConfiguration,
     UserSecurity,
 )
@@ -114,6 +116,8 @@ __all__ = [
     "KeycloakUser",
     "SecurityConfiguration",
     "M2MSecurity",
+    "RebacConfiguration",
+    "SpiceDbRebacConfig",
     "UserSecurity",
     "TODO_PASS_REAL_USER",
     "NO_AUTHZ_CHECK_USER",
