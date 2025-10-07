@@ -32,9 +32,10 @@ class BaseInputProcessor(ABC):
 
     # ---------- internal helpers ----------
 
-    def _generate_file_unique_id(self, document_name: str) -> str:
-        """Stable uid from file name (you can swap impl later if needed)."""
-        return hashlib.sha256(document_name.encode("utf-8")).hexdigest()
+    def _generate_file_unique_id(self, document_name: str, tags: list[str]) -> str:
+        """Stable uid from file name and tags (you can swap impl later if needed)."""
+        unique_string = document_name + "".join(tags)
+        return hashlib.sha256(unique_string.encode("utf-8")).hexdigest()
 
     @staticmethod
     def _ext_to_filetype(name: str) -> FileType:
@@ -94,7 +95,7 @@ class BaseInputProcessor(ABC):
         """
         Build the v2 nested DocumentMetadata with the minimal facts we know now.
         """
-        document_uid = self._generate_file_unique_id(file_path.name)
+        document_uid = self._generate_file_unique_id(file_path.name, tags)
         source_type: SourceType = resolve_source_type(source_tag)
 
         identity = Identity(
