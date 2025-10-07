@@ -1,0 +1,10 @@
+version: "3.9"
+
+services:
+  spicedb:
+    image: authzed/spicedb:v1.36.0
+    command:
+      - serve-testing
+    ports:
+      - "50051:50051"
+      - "50052:50052"
