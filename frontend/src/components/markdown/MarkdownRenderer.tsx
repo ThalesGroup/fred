@@ -12,13 +12,35 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useTheme } from "@mui/material";
+import CheckIcon from "@mui/icons-material/Check";
+import ContentCopyIcon from "@mui/icons-material/ContentCopy";
+import DownloadIcon from "@mui/icons-material/Download";
+import { Box, IconButton, Tooltip, Typography, useTheme } from "@mui/material";
+import "katex/dist/katex.min.css";
+import mermaid from "mermaid";
+import { createElement, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
-import type { PluggableList } from "unified";
-import { getMarkdownComponents } from "./GetMarkdownComponents";
-import remarkGfm from "remark-gfm";
+import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
+import { prism, vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
+import rehypeKatex from "rehype-katex";
 import rehypeRaw from "rehype-raw";
-import rehypeSanitize from "rehype-sanitize";
+import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
+import remarkDirective from "remark-directive";
+import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
+import type { PluggableList } from "unified";
+import { visit } from "unist-util-visit";
+import { getMarkdownComponents } from "./GetMarkdownComponents";
+
+// --- NEW CITATION INTERFACES ---
+interface CitationHooks {
+  /** Given [n], return a UID (or null if none) */
+  getUidForNumber: (n: number) => string | null;
+  /** Hover sync to Sources; pass null on leave */
+  onHover?: (uid: string | null) => void;
+  /** Click to open/select; optional */
+  onClick?: (uid: string | null) => void;
+}
 
 export interface MarkdownRendererProps {
   content: string;
@@ -26,8 +48,10 @@ export interface MarkdownRendererProps {
   enableEmojiSubstitution?: boolean;
   remarkPlugins?: PluggableList;
   components?: Components;
+  /** Optional citation behavior; if omitted, renderer ignores [n] */
+  citations?: CitationHooks; // <-- ADDED PROP
 }
-
+// ... [replaceStageDirectionsWithEmoji and CodeBlockContainer remain the same]
 function replaceStageDirectionsWithEmoji(text: string): string {
   return text
     .replace(/\badjusts glasses\b/gi, "🤓")
@@ -41,63 +65,455 @@ function replaceStageDirectionsWithEmoji(text: string): string {
     .replace(/\bclears throat\b/gi, "😶‍🌫️");
 }
 
-/**
- * MarkdownRenderer
- *
- * A lightweight wrapper around `react-markdown` that provides consistent, theme-aware
- * markdown rendering across your application, with optional customization for chat-like use cases.
- *
- * Features:
- * - Applies MUI theme-based typography styles via `getMarkdownComponents`
- * - Supports size scaling (`small`, `medium`, `large`)
- * - Optionally replaces common stage directions with emojis for conversational rendering
- * - Automatically supports mermaid diagrams (```mermaid blocks)
- *
- * ---
- *
- * Example usage:
- * ```tsx
- * <MarkdownRenderer content="**Hello** _world_!" size="small" />
- * ```
- *
- * ---
- *
- * @param {string} content - Markdown string to render.
- * @param {'small' | 'medium' | 'large'} [size='medium'] - Optional size control for font scaling.
- * @param {boolean} [enableEmojiSubstitution=false] - If true, replaces stage directions like "shrugs" or "smiles" with emojis.
- * @param {PluggableList} [remarkPlugins] - Optional list of remark plugins to customize markdown parsing and rendering.
- * @param {Components} [components] - Optional custom components to override default markdown rendering.
- *
- * @returns {JSX.Element} A React component that renders styled markdown content.
- */
+/* -------------------------------------------------------------------------- */
+/* NEW: CODE BLOCK CONTAINER FOR COPY/DOWNLOAD FUNCTIONALITY                   */
+/* -------------------------------------------------------------------------- */
+
+interface CodeBlockContainerProps {
+  children: React.ReactNode;
+  codeContent: string;
+  language?: string; // For display and file extension
+  isMermaid: boolean;
+}
+
+const CodeBlockContainer: React.FC<CodeBlockContainerProps> = ({ children, codeContent, language, isMermaid }) => {
+  const theme = useTheme();
+  const [copied, setCopied] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null); // Ref to target the rendered SVG for download
+  const handleCopy = () => {
+    navigator.clipboard.writeText(codeContent).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
+  const handleDownload = () => {
+    if (!containerRef.current || !isMermaid) return;
+
+    // Find the rendered SVG element inside the container
+    const svgElement = containerRef.current.querySelector("svg");
+    if (!svgElement) return;
+
+    // Serialize the SVG to a string
+    const svgString = new XMLSerializer().serializeToString(svgElement);
+    const blob = new Blob([svgString], { type: "image/svg+xml" });
+    const url = URL.createObjectURL(blob);
+
+    // Create a temporary link and trigger download
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `diagram-${Date.now()}.svg`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const backgroundColor = theme.palette.mode === "dark" ? theme.palette.grey[900] : theme.palette.grey[200];
+  const headerColor = theme.palette.mode === "dark" ? theme.palette.grey[700] : theme.palette.grey[300];
+
+  return (
+    <Box
+      ref={containerRef} // This ref is for Mermaid download logic
+      sx={{
+        border: `1px solid ${theme.palette.divider}`,
+        borderRadius: 1,
+        overflow: "hidden",
+        mb: 2, // Margin bottom for separation
+      }}
+    >
+      {/* Toolbar Header */}
+      <Box
+        sx={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          p: 1,
+          backgroundColor: headerColor,
+        }}
+      >
+        {/* Language/Type Display */}
+        <Typography
+          variant="caption"
+          sx={{
+            textTransform: "uppercase",
+            fontWeight: "bold",
+            color: theme.palette.text.secondary,
+          }}
+        >
+          {isMermaid ? "Diagram (Mermaid)" : language || "Code"}
+        </Typography>
+
+        {/* Action Buttons */}
+        <Box>
+          {/* Copy Button */}
+          {!isMermaid && (
+            <IconButton size="small" onClick={handleCopy} color={copied ? "success" : "default"}>
+              {/* Conditional Icon Rendering */}
+              {copied ? (
+                <CheckIcon fontSize="inherit" /> // Show Checkmark on success
+              ) : (
+                <ContentCopyIcon fontSize="inherit" /> // Show Copy icon by default
+              )}
+            </IconButton>
+          )}
+
+          {/* Download Button for Diagrams */}
+          {isMermaid && (
+            <Tooltip title="Download Diagram (SVG)" placement="top">
+              <IconButton size="small" onClick={handleDownload} color="default">
+                <DownloadIcon fontSize="inherit" />
+              </IconButton>
+            </Tooltip>
+          )}
+        </Box>
+      </Box>
+
+      {/* Content Area */}
+      <Box sx={{ p: isMermaid ? 0 : 0, backgroundColor: backgroundColor }}>{children}</Box>
+    </Box>
+  );
+};
+
+// Turn:
+// :::details Why a custom renderer?
+// Body...
+// :::
+// into:
+// <details><summary>Why a custom renderer?</summary>Body...</details>
+function remarkDetailsContainers() {
+  return (tree: any) => {
+    visit(tree, (node: any, idx: number | null, parent: any) => {
+      if (!parent) return;
+
+      // remark-directive marks this as: containerDirective with name 'details'
+      if (node.type === "containerDirective" && node.name === "details") {
+        // Extract summary: prefer explicit label ":::details[Summary]" if present,
+        // else use the first paragraph's text
+        let summaryText = "";
+        if (node.label) {
+          summaryText = String(node.label);
+        } else if (node.children?.length && node.children[0]?.type === "paragraph") {
+          const firstPara = node.children[0];
+          summaryText = firstPara.children?.map((c: any) => c.value || "").join("") || "Details";
+          // remove that paragraph from body
+          node.children = node.children.slice(1);
+        } else {
+          summaryText = "Details";
+        }
+
+        // Build <details><summary>…</summary>…</details>
+        const detailsHast = {
+          type: "containerDirective",
+          data: { hName: "details" },
+          children: [
+            {
+              type: "textDirective",
+              data: { hName: "summary" },
+              children: [{ type: "text", value: summaryText }],
+            },
+            ...node.children,
+          ],
+        };
+
+        parent.children[idx!] = detailsHast;
+      }
+    });
+  };
+}
+
+// ... [MermaidDiagram, useCodeHighlightStyle, and CustomCodeComponent remain the same]
+/* -------------------------------------------------------------------------- */
+/* MERMAID LOGIC (Minor adjustment for ref usage)                             */
+/* -------------------------------------------------------------------------- */
+
+// Stable Mermaid Rendering Component (Needs ref to allow parent container to target SVG)
+const MermaidDiagram: React.FC<{ value: string }> = ({ value }) => {
+  const ref = useRef<HTMLDivElement>(null);
+
+  // Generates a stable, unique ID for Mermaid's render target
+  const diagramId = useMemo(() => `mermaid-svg-${Math.random().toString(36).substring(2, 9)}`, []);
+
+  useEffect(() => {
+    // (Mermaid logic remains the same)
+    if (!ref.current) return;
+    mermaid.initialize({ startOnLoad: false, securityLevel: "loose" });
+    ref.current.innerHTML = `<div id="${diagramId}">${value}</div>`;
+
+    const renderDiagram = async () => {
+      try {
+        const { svg } = await mermaid.render(diagramId, value);
+        if (ref.current) {
+          ref.current.innerHTML = svg;
+        }
+      } catch (e) {
+        if (ref.current) {
+          ref.current.innerHTML = `<pre style="color: red; text-align: left; padding: 10px; border: 1px dashed red;">Mermaid Error: ${e.message || "Syntax Error"}</pre>`;
+        }
+      }
+    };
+
+    renderDiagram();
+  }, [value, diagramId]);
+
+  // IMPORTANT: The ref is still here to capture the final SVG output
+  return (
+    <div
+      ref={ref}
+      className="mermaid-wrapper"
+      // Important: Remove inner padding/margin to let the outer container handle it
+      style={{ textAlign: "center", minHeight: "100px" }}
+    />
+  );
+};
+
+/* -------------------------------------------------------------------------- */
+/* HIGHLIGHTER THEME PICKER (No change needed here)                            */
+/* -------------------------------------------------------------------------- */
+
+const useCodeHighlightStyle = () => {
+  const theme = useTheme();
+  const isDarkMode = theme.palette.mode === "dark";
+  return isDarkMode ? vscDarkPlus : prism;
+};
+
+// Custom Code Component (UPDATED to use CodeBlockContainer)
+const CustomCodeComponent: Components["code"] = ({ className, children, ...props }) => {
+  const codeStyle = useCodeHighlightStyle();
+  const match = /language-(\w+)/.exec(className || "");
+  const lang = match?.[1];
+  const codeContent = String(children); // Keep original children for codeContent, trimming handled by render
+
+  // 1. Handle Mermaid Diagrams
+  if (lang === "mermaid") {
+    // Wrap Mermaid in the container
+    return (
+      <CodeBlockContainer codeContent={codeContent} language={lang} isMermaid={true}>
+        <MermaidDiagram value={codeContent} />
+      </CodeBlockContainer>
+    );
+  }
+
+  // 2. Handle Fenced Code Blocks (Syntax Highlighting)
+  if (lang) {
+    // The rendered element (SyntaxHighlighter) needs to be nested inside the container
+    const highlighter = (
+      <SyntaxHighlighter
+        language={lang}
+        style={codeStyle}
+        PreTag="pre"
+        // Ensure PreTag gets NO padding/margin from react-syntax-highlighter
+        customStyle={{ margin: 0, padding: 16 }}
+        {...props}
+      >
+        {codeContent.trim()} {/* Trim content passed to highlighter */}
+      </SyntaxHighlighter>
+    );
+
+    // Wrap the Highlighter in the container
+    return (
+      <CodeBlockContainer codeContent={codeContent} language={lang} isMermaid={false}>
+        {highlighter}
+      </CodeBlockContainer>
+    );
+  }
+
+  // 3. Fallback for Inline Code (Do NOT wrap inline code in the container)
+  return createElement("code", { className, ...props }, children);
+};
+
+/* -------------------------------------------------------------------------- */
+/* NEW: CITATION HOOKS (Logic moved from your old renderer)                    */
+/* -------------------------------------------------------------------------- */
+
+/** Walk all text nodes under root, excluding code/citations, to inject sup tags */
+function forEachTextNode(root: HTMLElement, excludeSelector: string, fn: (textNode: Text) => void) {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+    acceptNode(node) {
+      const parent = node.parentElement;
+      if (!parent) return NodeFilter.FILTER_REJECT;
+      // Exclude nodes inside pre, code, etc.
+      if (parent.closest(excludeSelector)) return NodeFilter.FILTER_REJECT;
+      // Only process text nodes that contain a potential citation pattern
+      if (!node.nodeValue || !node.nodeValue.match(/\[\d+\]/)) {
+        return NodeFilter.FILTER_SKIP;
+      }
+      return NodeFilter.FILTER_ACCEPT;
+    },
+  });
+  let node: Node | null;
+  while ((node = walker.nextNode())) fn(node as Text);
+}
+
+/** Replace [n] in a text node with <sup class="fred-cite" data-n="n">[n]</sup> */
+function injectCitationSup(textNode: Text) {
+  const parent = textNode.parentNode as HTMLElement;
+  const txt = textNode.nodeValue || "";
+  // Split by citation pattern, keeping the delimiters
+  const parts = txt.split(/(\[\d+\])/g);
+  if (parts.length === 1) return;
+
+  const frag = document.createDocumentFragment();
+  for (const part of parts) {
+    const m = part.match(/^\[(\d+)\]$/);
+    if (!m) {
+      frag.appendChild(document.createTextNode(part));
+      continue;
+    }
+    const n = Number(m[1]);
+    const sup = document.createElement("sup");
+    sup.className = "fred-cite";
+    sup.setAttribute("data-n", String(n));
+    sup.textContent = `[${n}]`;
+    frag.appendChild(sup);
+  }
+  // Replace the original text node with the new fragment
+  parent.replaceChild(frag, textNode);
+}
+
+const useCitationEnrichment = (containerRef: React.RefObject<HTMLElement>, citations?: CitationHooks) => {
+  useEffect(() => {
+    if (!containerRef.current || !citations) return;
+
+    const container = containerRef.current;
+
+    // 1) Inject <sup.fred-cite> for every [n] in text nodes (exclude code-like)
+    // Note: The exclude selector is critical to prevent code blocks from being parsed
+    forEachTextNode(container, "pre, code, kbd, samp, .fred-cite, .mermaid", injectCitationSup);
+
+    // 2) Attach handlers and ARIA to the newly created <sup> elements
+    const nodes = Array.from(container.querySelectorAll<HTMLElement>("sup.fred-cite"));
+
+    const onEnter = (e: Event) => {
+      const el = e.currentTarget as HTMLElement;
+      const n = Number(el.getAttribute("data-n") || "0");
+      const uid = citations.getUidForNumber(n);
+      el.classList.add("fred-cite--hover");
+      citations.onHover?.(uid);
+    };
+    const onLeave = (e: Event) => {
+      const el = e.currentTarget as HTMLElement;
+      el.classList.remove("fred-cite--hover");
+      citations.onHover?.(null);
+    };
+    const onClick = (e: Event) => {
+      const el = e.currentTarget as HTMLElement;
+      const n = Number(el.getAttribute("data-n") || "0");
+      const uid = citations.getUidForNumber(n);
+      citations.onClick?.(uid);
+    };
+    const onKeydown = (ke: KeyboardEvent) => {
+      if (ke.key === "Enter" || ke.key === " ") {
+        ke.preventDefault();
+        onClick(ke as unknown as Event);
+      }
+    };
+
+    nodes.forEach((el) => {
+      el.setAttribute("role", "button");
+      el.setAttribute("tabindex", "0");
+      el.setAttribute("aria-label", `Citation ${el.getAttribute("data-n")}`);
+      el.addEventListener("mouseenter", onEnter);
+      el.addEventListener("mouseleave", onLeave);
+      el.addEventListener("click", onClick);
+      el.addEventListener("keydown", onKeydown);
+    });
+
+    // Cleanup
+    return () => {
+      nodes.forEach((el) => {
+        el.removeEventListener("mouseenter", onEnter);
+        el.removeEventListener("mouseleave", onLeave);
+        el.removeEventListener("click", onClick);
+        el.removeEventListener("keydown", onKeydown);
+        // Note: We don't remove the <sup> elements themselves here,
+        // as they will be re-rendered and replaced by the next ReactMarkdown run.
+      });
+    };
+  }, [containerRef, citations]);
+};
+
+/* -------------------------------------------------------------------------- */
+/* MARKDOWN RENDERER CORE (Imports updated, logic unchanged)                   */
+/* -------------------------------------------------------------------------- */
+
 export default function MarkdownRenderer({
   content,
   size = "medium",
   enableEmojiSubstitution = false,
-  remarkPlugins,
+  remarkPlugins = [],
+  citations, // <-- DESTUCTURE CITATIONS PROP
   ...props
 }: MarkdownRendererProps) {
   const theme = useTheme();
-  const components = getMarkdownComponents({
-    theme,
-    size,
-    enableEmojiFix: true,
-  });
+  const containerRef = useRef<HTMLDivElement>(null); // Ref to hold the root DOM element
+
+  // Execute the custom citation logic hook after rendering
+  useCitationEnrichment(containerRef, citations); // <-- CALL THE NEW HOOK HERE
+
   const finalContent = enableEmojiSubstitution
     ? replaceStageDirectionsWithEmoji(content || "")
     : content || "No markdown content provided.";
 
+  const baseComponents = getMarkdownComponents({
+    theme,
+    size,
+    enableEmojiFix: true,
+  });
+
+  const finalComponents: Components = {
+    ...baseComponents,
+    code: CustomCodeComponent,
+    ...(props.components || {}),
+  };
+
+  const sanitizeSchema = {
+    ...defaultSchema,
+    tagNames: [...(defaultSchema.tagNames || []), "details", "summary"],
+    attributes: {
+      ...(defaultSchema.attributes || {}),
+      details: ["open"], // allow the boolean 'open' attribute
+    },
+  };
+
   return (
-    <ReactMarkdown
-      skipHtml={true}
-      components={{
-        ...components,
-        ...(props.components || {}),
+    <Box
+      ref={containerRef}
+      sx={{
+        "& .fred-cite": {
+          position: "relative",
+          top: "-0.2em",
+          marginLeft: "2px",
+          marginRight: "2px",
+          padding: "0 4px",
+          borderRadius: "10px",
+          fontSize: "0.85em",
+          userSelect: "none",
+          cursor: "pointer",
+          background: theme.palette.action.hover,
+          border: `1px solid ${theme.palette.divider}`,
+          transition: "background 0.2s",
+        },
+        "& .fred-cite--hover": {
+          background: theme.palette.action.selected,
+          borderColor: theme.palette.action.active,
+        },
       }}
-      remarkPlugins={[remarkGfm, ...remarkPlugins]}
-      rehypePlugins={[rehypeRaw, rehypeSanitize]}
     >
-      {finalContent}
-    </ReactMarkdown>
+      <ReactMarkdown
+        skipHtml={false}
+        components={finalComponents}
+        remarkPlugins={[
+          remarkGfm,
+          remarkMath,
+          remarkDirective, // 👈 must come before our details transformer
+          remarkDetailsContainers, // 👈 turns :::details into real <details>
+          ...remarkPlugins,
+        ]}
+        rehypePlugins={[rehypeRaw, [rehypeSanitize, sanitizeSchema], rehypeKatex]}
+      >
+        {finalContent}
+      </ReactMarkdown>
+    </Box>
   );
 }

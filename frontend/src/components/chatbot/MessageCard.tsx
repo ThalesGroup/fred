@@ -12,25 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Box, Grid2, IconButton, Tooltip, Chip, Typography } from "@mui/material";
-import { useTheme } from "@mui/material/styles";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
-import { useState, useMemo } from "react";
 import RateReviewIcon from "@mui/icons-material/RateReview";
+import { Box, Chip, Grid2, IconButton, Tooltip, Typography } from "@mui/material";
+import { useTheme } from "@mui/material/styles";
+import { useMemo, useState } from "react";
 //import VolumeUpIcon from "@mui/icons-material/VolumeUp";
 //import ClearIcon from "@mui/icons-material/Clear";
-import { getAgentBadge } from "../../utils/avatar.tsx";
-import { useToast } from "../ToastProvider.tsx";
-import { extractHttpErrorMessage } from "../../utils/extractHttpErrorMessage.tsx";
-import CustomMarkdownRenderer from "../markdown/CustomMarkdownRenderer.tsx";
+import { AnyAgent } from "../../common/agent.ts";
 import {
   ChatMessage,
   usePostFeedbackAgenticV1ChatbotFeedbackPostMutation,
 } from "../../slices/agentic/agenticOpenApi.ts";
-import { toCopyText, toMarkdown } from "./messageParts.ts";
-import { getExtras, isToolCall, isToolResult } from "./ChatBotUtils.tsx";
+import { getAgentBadge } from "../../utils/avatar.tsx";
+import { extractHttpErrorMessage } from "../../utils/extractHttpErrorMessage.tsx";
 import { FeedbackDialog } from "../feedback/FeedbackDialog.tsx";
-import { AnyAgent } from "../../common/agent.ts";
+import MarkdownRenderer from "../markdown/MarkdownRenderer.tsx";
+import { useToast } from "../ToastProvider.tsx";
+import { getExtras, isToolCall, isToolResult } from "./ChatBotUtils.tsx";
+import { toCopyText, toMarkdown } from "./messageParts.ts";
 
 export default function MessageCard({
   message,
@@ -197,7 +197,7 @@ export default function MessageCard({
 
                   {/* Main content (single path): ALWAYS markdown, with optional citationMap */}
                   <Box px={side === "right" ? 0 : 1} pb={0.5}>
-                    <CustomMarkdownRenderer
+                    <MarkdownRenderer
                       content={mdContent}
                       size="medium"
                       citations={{
@@ -211,7 +211,7 @@ export default function MessageCard({
                         onHover: onCitationHover, // already coming from parent
                         onClick: onCitationClick, // optional
                       }}
-                    />
+                    />{" "}
                   </Box>
                 </Box>
               </Grid2>
