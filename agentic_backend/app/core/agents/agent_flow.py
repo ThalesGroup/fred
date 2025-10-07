@@ -73,11 +73,7 @@ class AgentFlow:
                 - categories: (Optional) Categories that the agent is part of.
                 - tag:s (Optional) Short tag identifier for the agent.
         """
-
-        merged_settings = type(self).merge_settings_with_class_defaults(agent_settings)
-        self.agent_settings = merged_settings
-        self._tuning = merged_settings.tuning
-        self.agent_settings.tuning = self._tuning
+        self.apply_settings(agent_settings)
         self.current_date = datetime.now().strftime("%Y-%m-%d")
         self.model = None  # Will be set in async_init
         self._graph = None  # Will be built in async_init
