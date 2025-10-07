@@ -85,6 +85,7 @@ from fred_core.security.keycloak import (
 from fred_core.security.outbound import BearerAuth, ClientCredentialsProvider
 from fred_core.security.rebac.rebac_engine import (
     DocumentPermission,
+    RebacEngine,
     RebacPermission,
     RebacReference,
     Relation,
@@ -185,4 +186,5 @@ __all__ = [
     "TagPermission",
     "DocumentPermission",
     "RebacPermission",
+    "RebacEngine",
 ]

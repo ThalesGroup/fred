@@ -48,6 +48,14 @@ class DocumentPermission(str, Enum):
 RebacPermission = TagPermission | DocumentPermission
 
 
+def _resource_for_permission(permission: RebacPermission) -> Resource:
+    if isinstance(permission, TagPermission):
+        return Resource.TAGS
+    if isinstance(permission, DocumentPermission):
+        return Resource.DOCUMENTS
+    raise ValueError(f"Unsupported permission type: {permission!r}")
+
+
 @dataclass(frozen=True)
 class Relation:
     """Edge connecting a subject (holder) to a resource (target)."""
@@ -97,13 +105,28 @@ class RebacEngine(ABC):
     @abstractmethod
     def lookup_resources(
         self,
-        *,
         subject: RebacReference,
         permission: RebacPermission,
         resource_type: Resource,
+        *,
         consistency_token: str | None = None,
     ) -> list[RebacReference]:
         """Return resource identifiers the subject can access for a permission."""
+
+    def lookup_user_resources(
+        self,
+        user: KeycloakUser,
+        permission: RebacPermission,
+        *,
+        consistency_token: str | None = None,
+    ) -> list[RebacReference]:
+        """Convenience helper to lookup resources for a user."""
+        return self.lookup_resources(
+            subject=RebacReference(Resource.USER, user.uid),
+            permission=permission,
+            resource_type=_resource_for_permission(permission),
+            consistency_token=consistency_token,
+        )
 
     @abstractmethod
     def has_permission(
@@ -129,19 +152,19 @@ class RebacEngine(ABC):
             subject, permission, resource, consistency_token=consistency_token
         ):
             raise AuthorizationError(
-                f"Not authorized to {permission} {resource.type} {resource.id}"
+                subject.id, permission.value, resource.type, resource.id
             )
 
     def check_user_permission_or_raise(
         self,
         user: KeycloakUser,
         permission: RebacPermission,
-        resource_type: Resource,
         resource_id: str,
         *,
         consistency_token: str | None = None,
     ) -> None:
         """Convenience helper to check permission for a user, raising if unauthorized."""
+        resource_type = _resource_for_permission(permission)
         self.check_permission_or_raise(
             RebacReference(Resource.USER, user.uid),
             permission,

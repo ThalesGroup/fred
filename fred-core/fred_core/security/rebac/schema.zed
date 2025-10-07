@@ -15,7 +15,7 @@ definition tag {
 	// -> must be at least viewer
 	permission read = viewer + editor + owner + editor->member_recursive + viewer->member_recursive + owner->member_recursive + parent->read
 
-	// Can update tag: change its name, description...
+	// Can update tag: change its name, description... add or remove content (like documents) in the tag
 	// -> must be at least editor
 	permission update = editor + owner + editor->member_recursive + owner->member_recursive + parent->update
 
@@ -26,10 +26,6 @@ definition tag {
 	// Can share tag: add/remove editors/viewers
 	// -> must be owner
 	permission share = owner + owner->member_recursive + parent->share
-
-	// Can manage content: add/remove documents in the tag
-	// -> must be at least editor
-	permission manage_content = editor + owner + editor->member_recursive + owner->member_recursive + parent->manage_content
 }
 
 definition document {
@@ -41,9 +37,13 @@ definition document {
 
 	// Can update document: change its name, content...
 	// -> must be able to manage parent tag (at least editor)
-	permission update = parent->manage_content
+	permission update = parent->update
 
 	// Can delete document
 	// -> must be able to manage parent tag (at least editor)
-	permission delete = parent->manage_content
+	permission delete = parent->update
+
+	// Can process document: for RAG or SQL data extraction
+	// -> must be able to manage parent tag (at least editor)
+	permission process = parent->update
 }

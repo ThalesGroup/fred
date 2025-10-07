@@ -324,7 +324,7 @@ class SessionOrchestrator:
         if not self._is_user_action_authorized_on_session(session_id, user, action):
             raise AuthorizationError(
                 user.uid,
-                action,
+                action.value,
                 Resource.SESSIONS,
                 f"Not authorized to {action.value} session {session_id}",
             )

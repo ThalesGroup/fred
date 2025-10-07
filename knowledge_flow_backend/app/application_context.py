@@ -32,6 +32,9 @@ from fred_core import (
     OpenSearchKPIStore,
     OpenSearchLogStore,
     RamLogStore,
+    RebacEngine,
+    SpiceDbRebacConfig,
+    SpiceDbRebacEngine,
     SQLStorageConfig,
     SQLTableStore,
     StoreInfo,
@@ -39,10 +42,6 @@ from fred_core import (
     get_model,
     split_realm_url,
 )
-from fred_core.logs import BaseLogStore, InMemoryLogStorageConfig, OpenSearchLogStore, RamLogStore
-from fred_core.security.rebac.rebac_engine import RebacEngine
-from fred_core.security.rebac.spicedb_engine import SpiceDbRebacEngine
-from fred_core.security.structure import SpiceDbRebacConfig
 from langchain_core.embeddings import Embeddings
 from opensearchpy import OpenSearch, RequestsHttpConnection
 

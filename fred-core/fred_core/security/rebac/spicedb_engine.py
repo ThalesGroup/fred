@@ -7,13 +7,13 @@ import os
 from authzed.api.v1 import (
     CheckPermissionRequest,
     CheckPermissionResponse,
-    Client,
     Consistency,
     LookupResourcesRequest,
     ObjectReference,
     Relationship,
     RelationshipUpdate,
     SubjectReference,
+    SyncClient,
     WriteRelationshipsRequest,
     WriteSchemaRequest,
     ZedToken,
@@ -56,7 +56,8 @@ class SpiceDbRebacEngine(RebacEngine):
             credentials = insecure_bearer_token_credentials(resolved_token)
         else:
             credentials = bearer_token_credentials(resolved_token)
-        self._client = Client(config.endpoint, credentials)
+
+        self._client = SyncClient(config.endpoint, credentials)
 
         self._read_consistency = read_consistency
         self._write_operation = write_operation
@@ -79,10 +80,10 @@ class SpiceDbRebacEngine(RebacEngine):
 
     def lookup_resources(
         self,
-        *,
         subject: RebacReference,
         permission: RebacPermission,
         resource_type: Resource,
+        *,
         consistency_token: str | None = None,
     ) -> list[RebacReference]:
         request_kwargs = {
