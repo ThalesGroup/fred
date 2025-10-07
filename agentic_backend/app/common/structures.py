@@ -22,6 +22,7 @@ from fred_core import (
     SecurityConfiguration,
     StoreConfig,
 )
+from langchain_core.messages import SystemMessage
 from pydantic import BaseModel, Field
 
 from app.core.agents.agent_spec import AgentTuning
@@ -156,6 +157,7 @@ class FrontendFlags(BaseModel):
 
 class Properties(BaseModel):
     logoName: str = "fred"
+    siteDisplayName: str = "Fred"
 
 
 class FrontendSettings(BaseModel):
@@ -179,3 +181,8 @@ class Configuration(BaseModel):
     frontend_settings: FrontendSettings
     ai: AIConfig
     storage: StorageConfig
+
+
+class ProfileMessage(SystemMessage):
+    def __init__(self, content: str):
+        super().__init__(content=content)

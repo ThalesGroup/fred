@@ -151,11 +151,11 @@ applications:
         m2m:
           enabled: true
           client_id: "agentic"
-          realm_url: "http://app-keycloak:8080/realms/app"
+          realm_url: "http://idp.dev.fred.thalesgroup.com/realms/app"
         user:
           enabled: true
           client_id: "app"
-          realm_url: "http://app-keycloak:8080/realms/app"
+          realm_url: "http://idp.dev.fred.thalesgroup.com/realms/app"
         authorized_origins:
           - "http://fred.dev.fred.thalesgroup.com:80"
       frontend_settings:
@@ -198,7 +198,7 @@ applications:
           mcp_servers:
             - name: knowledge-flow-mcp-server
               transport: streamable_http
-              url: http://localhost:8111/knowledge-flow/v1/mcp-opensearch-ops
+              url: http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-opensearch-ops
               sse_read_timeout: 2000
         - name: "Georges"
           type: "agent"
@@ -223,7 +223,7 @@ applications:
           mcp_servers:
             - name: knowledge-flow-mcp-server
               transport: streamable_http
-              url: http://localhost:8111/knowledge-flow/v1/mcp-tabular
+              url: http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-tabular
               sse_read_timeout: 2000
         - name: "Rico Jr."
           type: "agent"
@@ -248,7 +248,7 @@ applications:
           mcp_servers:
             - name: knowledge-flow-mcp-server
               transport: streamable_http
-              url: http://localhost:8111/knowledge-flow/v1/mcp-resources
+              url: http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-resources
               sse_read_timeout: 2000
         - name: "Rico Senior"
           type: "agent"
@@ -266,7 +266,7 @@ applications:
           mcp_servers:
             - name: knowledge-flow-mcp-server
               transport: streamable_http
-              url: http://localhost:8111/knowledge-flow/v1/mcp-advanced-rag
+              url: http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-advanced-rag
               sse_read_timeout: 2000
 
       storage:
@@ -417,9 +417,9 @@ applications:
       backend: false
     configuration:
       config_json:
-        backend_url_api: "http://agentic-backend.dev.fred.thalesgroup.com:8080"
-        backend_url_knowledge: "https://knowledge-flow-backend.dev.fred.thalesgroup.com:8080"
-        websocket_url: "ws://agentic-backend.dev.fred.thalesgroup.com/fred/chatbot/query"
+        backend_url_api: "http://fred.dev.fred.thalesgroup.com"
+        backend_url_knowledge: "https://fred.dev.fred.thalesgroup.com"
+        websocket_url: "ws://fred.dev.fred.thalesgroup.com/fred/chatbot/query"
 
   knowledge-flow-backend:
     enabled: true
@@ -550,11 +550,11 @@ applications:
         m2m:
           enabled: true
           client_id: "knowledge-flow"
-          realm_url: "http://app-keycloak:8080/realms/app"
+          realm_url: "http://idp.dev.fred.thalesgroup.com/realms/app"
         user:
           enabled: true
           client_id: "app"
-          realm_url: "http://app-keycloak:8080/realms/app"
+          realm_url: "http://idp.dev.fred.thalesgroup.com/realms/app"
         authorized_origins:
           - "http://fred.dev.fred.thalesgroup.com:80"
       scheduler:

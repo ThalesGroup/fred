@@ -13,15 +13,16 @@
 // limitations under the License.
 
 import { createBrowserRouter, RouteObject } from "react-router-dom";
-import { Profile } from "../pages/Profile";
-import { PageError } from "../pages/PageError";
-import { KnowledgeHub } from "../pages/KnowledgeHub";
-import { AgentHub } from "../pages/AgentHub";
-import { ProtectedRoute } from "../components/ProtectedRoute";
 import { LayoutWithSidebar } from "../app/LayoutWithSidebar";
-import { Kpis } from "../pages/Kpis";
+import RendererPlayground from "../components/markdown/RenderedPlayground";
+import { ProtectedRoute } from "../components/ProtectedRoute";
+import { AgentHub } from "../pages/AgentHub";
 import Chat from "../pages/Chat";
+import { KnowledgeHub } from "../pages/KnowledgeHub";
+import { Kpis } from "../pages/Kpis";
 import Logs from "../pages/Logs";
+import { PageError } from "../pages/PageError";
+import { Profile } from "../pages/Profile";
 
 const RootLayout = ({ children }: React.PropsWithChildren<{}>) => (
   <ProtectedRoute permission="viewer">
@@ -57,6 +58,10 @@ export const routes: RouteObject[] = [
       {
         path: "knowledge",
         element: <KnowledgeHub />,
+      },
+      {
+        path: "test-renderer",
+        element: <RendererPlayground />,
       },
       {
         path: "agentHub",

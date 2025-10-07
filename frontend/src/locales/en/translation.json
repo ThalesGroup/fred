@@ -7,7 +7,7 @@
     "kind": {
       "prompt":   { "one": "prompt",   "other": "prompts" },
       "template": { "one": "template", "other": "templates" },
-      "profile": { "one" : "profile", "other": "profiles"}
+      "profile": { "one" : "context", "other": "contexts"}
     }
   },
   "validation": {
@@ -144,7 +144,7 @@
     "newConversation": "New conversation",
     "noConversation": "No conversation",
     "delete": "Delete",
-    "profile": "Profile",
+    "profile": "Context",
     "conversationSetup": "Conversation setup",
     "newConversationHelp": "Start a new conversation (not yet saved)",
     "draftNotSaved": "Draft • not yet saved"
@@ -241,14 +241,14 @@
   },
   "knowledge": {
     "title": "Resources",
-    "description": "Manage your document, prompt, profile and template libraries",
+    "description": "Manage your document, prompt, context and template libraries",
     "viewSelector": {
       "libraries": "Libraries",
       "templates": "Templates",
       "prompts": "Prompts",
       "documents": "Documents",
       "operations": "Operations",
-      "profiles": "Profiles"
+      "profiles": "Contexts"
     }
   },
   "documentLibrary": {
@@ -304,6 +304,7 @@
     "preview": "Preview",
     "createLibrary": "Create library",
     "createResource": "Add {{typeOne}} to library",
+    "editResource": "Edit a {{typeOne}}",
     "importResource": "Import {{typeOne}} from file",
     "folders": "Folders",
     "loadingLibraries": "Loading libraries…",
