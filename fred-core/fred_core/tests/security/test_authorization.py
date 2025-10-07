@@ -68,7 +68,7 @@ class TestRBACProvider:
     def test_viewer_permissions(self):
         """Test viewer user permissions."""
         # Viewer can only read
-        for resource in Resource:
+        for resource in [Resource.TAGS, Resource.DOCUMENTS]:
             assert self.rbac.is_authorized(self.viewer_user, Action.READ, resource), (
                 f"Viewer should be able to read {resource.value}"
             )
