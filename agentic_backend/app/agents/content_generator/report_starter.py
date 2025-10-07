@@ -175,7 +175,9 @@ def _build_prompt(agent: AgentFlow) -> ChatPromptTemplate:
     behavior = agent.get_tuned_text("prompts.behavior") or ""
 
     chat_context = agent.chat_context_text()
-    chat_context_block = f"\n\CHAT CONTEXT (context-only):\n{chat_context}" if chat_context else ""
+    chat_context_block = (
+        f"\n\nCHAT CONTEXT (context-only):\n{chat_context}" if chat_context else ""
+    )
 
     # Safe token rendering; unknown tokens remain literal.
     system_text = agent.render(
