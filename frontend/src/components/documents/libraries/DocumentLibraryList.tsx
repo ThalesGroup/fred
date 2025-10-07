@@ -41,7 +41,7 @@ export default function DocumentLibraryList() {
 
   /* ---------------- State ---------------- */
   const [expanded, setExpanded] = React.useState<string[]>([]);
-  const [selectedFolder, setSelectedFolder] = React.useState<string | undefined>(undefined);
+  const [selectedFolder, setSelectedFolder] = React.useState<string | null>(undefined);
   const [isCreateDrawerOpen, setIsCreateDrawerOpen] = React.useState(false);
   const [openUploadDrawer, setOpenUploadDrawer] = React.useState(false);
   const [uploadTargetTagId, setUploadTargetTagId] = React.useState<string | null>(null);

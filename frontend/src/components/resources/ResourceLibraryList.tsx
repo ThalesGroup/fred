@@ -84,7 +84,7 @@ export default function ResourceLibraryList({ kind }: Props) {
 
   /** ---------------- State ---------------- */
   const [expanded, setExpanded] = React.useState<string[]>([]);
-  const [selectedFolder, setSelectedFolder] = React.useState<string | undefined>(undefined);
+  const [selectedFolder, setSelectedFolder] = React.useState<string | null>(null);
   const [isCreateDrawerOpen, setIsCreateDrawerOpen] = React.useState(false);
   const [openCreateResource, setOpenCreateResource] = React.useState(false);
   const [uploadTargetTagId, setUploadTargetTagId] = React.useState<string | null>(null);
