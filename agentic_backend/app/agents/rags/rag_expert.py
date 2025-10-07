@@ -113,10 +113,6 @@ class RagExpert(AgentFlow):
             raise RuntimeError("RagExpert: no tuned system prompt found.")
         sys_text = self.render(sys_tpl)  # token-safe rendering (e.g. {today})
 
-        prof = self.profile_text()
-        if prof:
-            sys_text = f"{sys_text}\n\n{prof}"
-
         return sys_text
 
     # -----------------------------
@@ -151,9 +147,9 @@ class RagExpert(AgentFlow):
             )
             if not hits:
                 warn = "I couldn't find any relevant documents. Try rephrasing or expanding your query?"
-                return {
-                    "messages": [await self.model.ainvoke([HumanMessage(content=warn)])]
-                }
+                messages = self.with_profile_text([HumanMessage(content=warn)])
+
+                return {"messages": [await self.model.ainvoke(messages)]}
 
             # 3) Deterministic ordering + fill ranks
             hits = sort_hits(hits)
@@ -174,7 +170,10 @@ class RagExpert(AgentFlow):
             )
 
             # 5) Ask the model
-            answer = await self.model.ainvoke([sys_msg, human_msg])
+            messages = [sys_msg, human_msg]
+            messages = self.with_profile_text(messages)
+
+            answer = await self.model.ainvoke(messages)
 
             # 6) Attach rich sources metadata for the UI
             attach_sources_to_llm_response(answer, hits)

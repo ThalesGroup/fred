@@ -561,6 +561,7 @@ export type FrontendFlags = {
 };
 export type Properties = {
   logoName?: string;
+  siteDisplayName?: string;
 };
 export type FrontendSettings = {
   feature_flags: FrontendFlags;
@@ -570,7 +571,6 @@ export type UserSecurity = {
   enabled?: boolean;
   realm_url: string;
   client_id: string;
-  authorized_origins?: string[];
 };
 export type FrontendConfigDto = {
   frontend_settings: FrontendSettings;
