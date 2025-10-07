@@ -12,45 +12,39 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { useEffect, useState } from "react";
+import { getConfig, loadPermissions } from "../common/config";
 import { KeyCloakService } from "./KeycloakService";
 
-type Role = "admin" | "contributor" | "viewer";
-type Permission =
-  | "document:create"
-  | "document:delete"
-  | "document:toggleRetrievable"
-  | "document:view"
-  | "library:create"
-  | "library:delete"
-  | "prompt:create"
-  | "prompt:delete"
-  | "agent:run";
-
-const rolePermissions: Record<Role, Permission[]> = {
-  admin: [
-    "document:create",
-    "document:delete",
-    "document:toggleRetrievable",
-    "document:view",
-    "library:create",
-    "library:delete",
-    "prompt:create",
-    "prompt:delete",
-    "agent:run",
-  ],
-  contributor: ["document:create", "document:toggleRetrievable", "document:view", "prompt:create", "agent:run"],
-  viewer: ["document:view", "agent:run"],
-};
-
-function getCurrentRole(): Role {
+// Get the current user’s role based on Keycloak roles
+function getCurrentRole(): string {
   const roles = KeyCloakService.GetUserRoles() || [];
   if (roles.includes("admin")) return "admin";
-  if (roles.includes("editor") || roles.includes("contributor")) return "contributor";
+  if (roles.includes("editor")) return "editor";
+  if (roles.includes("service_agent")) return "service_agent";
   return "viewer";
 }
 
-export function usePermissions() {
-  const role = getCurrentRole();
-  const can = (perm: Permission) => rolePermissions[role]?.includes(perm) ?? false;
-  return { role, can };
-}
+// Hook to check permissions
+export const usePermissions = () => {
+  const [permissions, setPermissions] = useState<string[]>(getConfig().permissions);
+
+  // Loads permissions at mount time
+  useEffect(() => {
+    const fetchPermissions = async () => {
+      const perms = await loadPermissions();
+      setPermissions(perms);
+    };
+    fetchPermissions();
+  }, []);
+
+  const can = (resource: string, action: string) =>
+    permissions.some(p => p.toLowerCase() === `${resource}:${action}`.toLowerCase());
+
+  const refreshPermissions = async () => {
+    const perms = await loadPermissions();
+    setPermissions(perms);
+  };
+
+  return { permissions, can, refreshPermissions, role: getCurrentRole() };
+};

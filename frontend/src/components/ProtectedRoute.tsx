@@ -12,14 +12,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Outlet } from "react-router-dom";
+import { Navigate } from "react-router-dom";
+import { usePermissions } from "../security/usePermissions";
 
-type ProtectedRouteProps = {
-  permission: string;
-  children?: React.ReactNode;
-};
+interface ProtectedRouteProps {
+  resource: string | string[];
+  action: string;
+  anyResource?: boolean;
+  children: React.ReactNode;
+}
 
-export const ProtectedRoute = ({ permission, children }: ProtectedRouteProps) => {
-  console.debug(`⚠️ ProtectedRoute check skipped. Allowed all access for now. (Requested: ${permission})`);
-  return <>{children ?? <Outlet />}</>;
+export const ProtectedRoute = ({ children, resource, action, anyResource = false }: ProtectedRouteProps) => {
+  const { can } = usePermissions();
+
+  const allowed = Array.isArray(resource)
+    ? anyResource
+      ? resource.some(r => can(r, action))
+      : resource.every(r => can(r, action))
+    : can(resource, action);
+
+  if (!allowed) return <Navigate to="/unauthorized" replace />;
+
+  return <>{children}</>;
 };

@@ -10,25 +10,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Box, IconButton, Tooltip, Typography } from "@mui/material";
-import InsertDriveFileOutlinedIcon from "@mui/icons-material/InsertDriveFileOutlined";
 import DeleteIcon from "@mui/icons-material/Delete";
+import DownloadIcon from "@mui/icons-material/Download";
+import EventAvailableIcon from "@mui/icons-material/EventAvailable";
+import InsertDriveFileOutlinedIcon from "@mui/icons-material/InsertDriveFileOutlined";
+import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf";
 import SearchIcon from "@mui/icons-material/Search";
 import SearchOffIcon from "@mui/icons-material/SearchOff";
-import DownloadIcon from "@mui/icons-material/Download";
-import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf"; 
 import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
-import EventAvailableIcon from "@mui/icons-material/EventAvailable";
+import { Box, IconButton, Tooltip, Typography } from "@mui/material";
 import dayjs from "dayjs";
 import { useTranslation } from "react-i18next";
 
-import { getDocumentIcon } from "../common/DocumentIcon";
-import { type DocumentMetadata } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { usePermissions } from "../../../security/usePermissions";
+import { type DocumentMetadata } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { DOCUMENT_PROCESSING_STAGES } from "../../../utils/const";
+import { getDocumentIcon } from "../common/DocumentIcon";
 
-import SummaryPreview from "./SummaryPreview";
 import KeywordsPreview from "./KeywordsPreview";
+import SummaryPreview from "./SummaryPreview";
 
 export type DocumentRowCompactProps = {
   doc: DocumentMetadata;
@@ -49,7 +49,8 @@ export function DocumentRowCompact({
 }: DocumentRowCompactProps) {
   const { t } = useTranslation();
   const { can } = usePermissions();
-  const canToggle = can("document:toggleRetrievable");
+  const canToggle = can("document", "update");
+  const canDeleteDocument = can("document", "delete");
 
   const formatDate = (date?: string) => (date ? dayjs(date).format("DD/MM/YYYY") : "-");
   const isPdf = doc.identity.document_name.toLowerCase().endsWith('.pdf');
@@ -215,9 +216,16 @@ export function DocumentRowCompact({
         )}
         {onRemoveFromLibrary && (
           <Tooltip title={t("documentLibrary.removeFromLibrary")}>
-            <IconButton size="small" onClick={() => onRemoveFromLibrary(doc)}>
-              <DeleteIcon fontSize="inherit" />
-            </IconButton>
+              <IconButton
+                size="small"
+                disabled={!canDeleteDocument}
+                onClick={() => {
+                  if (!canDeleteDocument) return;
+                  onRemoveFromLibrary(doc);
+                }}
+              >
+                <DeleteIcon fontSize="inherit" />
+              </IconButton>
           </Tooltip>
         )}
       </Box>
