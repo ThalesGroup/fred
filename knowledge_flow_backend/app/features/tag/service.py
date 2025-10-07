@@ -36,8 +36,8 @@ def _tagtype_to_rk(tag_type: TagType) -> ResourceKind:
         return ResourceKind.PROMPT
     if tag_type == TagType.TEMPLATE:
         return ResourceKind.TEMPLATE
-    if tag_type == TagType.PROFILE:
-        return ResourceKind.PROFILE
+    if tag_type == TagType.CHAT_CONTEXT:
+        return ResourceKind.CHAT_CONTEXT
     raise ValueError(f"Unsupported TagType for resources: {tag_type}")
 
 
@@ -96,8 +96,8 @@ class TagService:
                 item_ids = self.resource_service.get_resource_ids_for_tag(ResourceKind.PROMPT, tag.id)
             elif tag.type == TagType.TEMPLATE:
                 item_ids = self.resource_service.get_resource_ids_for_tag(ResourceKind.TEMPLATE, tag.id)
-            elif tag.type == TagType.PROFILE:
-                item_ids = self.resource_service.get_resource_ids_for_tag(ResourceKind.PROFILE, tag.id)
+            elif tag.type == TagType.CHAT_CONTEXT:
+                item_ids = self.resource_service.get_resource_ids_for_tag(ResourceKind.CHAT_CONTEXT, tag.id)
             else:
                 raise ValueError(f"Unsupported tag type: {tag.type}")
             result.append(TagWithItemsId.from_tag(tag, item_ids))
@@ -112,8 +112,8 @@ class TagService:
             item_ids = self.resource_service.get_resource_ids_for_tag(ResourceKind.PROMPT, tag.id)
         elif tag.type == TagType.TEMPLATE:
             item_ids = self.resource_service.get_resource_ids_for_tag(ResourceKind.TEMPLATE, tag.id)
-        elif tag.type == TagType.PROFILE:
-            item_ids = self.resource_service.get_resource_ids_for_tag(ResourceKind.PROFILE, tag.id)
+        elif tag.type == TagType.CHAT_CONTEXT:
+            item_ids = self.resource_service.get_resource_ids_for_tag(ResourceKind.CHAT_CONTEXT, tag.id)
         else:
             raise ValueError(f"Unsupported tag type: {tag.type}")
         return TagWithItemsId.from_tag(tag, item_ids)
@@ -123,7 +123,7 @@ class TagService:
         # Validate referenced items first
         if tag_data.type == TagType.DOCUMENT:
             documents = self._retrieve_documents_metadata(user, tag_data.item_ids)
-        elif tag_data.type in (TagType.PROMPT, TagType.TEMPLATE, TagType.PROFILE):
+        elif tag_data.type in (TagType.PROMPT, TagType.TEMPLATE, TagType.CHAT_CONTEXT):
             documents = []  # not used here
         else:
             raise ValueError(f"Unsupported tag type: {tag_data.type}")
@@ -178,7 +178,7 @@ class TagService:
             for doc in removed_documents:
                 self.document_metadata_service.remove_tag_id_from_document(user, doc, tag.id, modified_by=user.uid)
 
-        elif tag.type in (TagType.PROMPT, TagType.TEMPLATE, TagType.PROFILE):
+        elif tag.type in (TagType.PROMPT, TagType.TEMPLATE, TagType.CHAT_CONTEXT):
             rk = _tagtype_to_rk(tag.type)
             old_item_ids = self.resource_service.get_resource_ids_for_tag(rk, tag_id)
             added, removed = self._compute_ids_diff(old_item_ids, tag_data.item_ids)
@@ -222,6 +222,8 @@ class TagService:
                 self.document_metadata_service.remove_tag_id_from_document(user, doc, tag_id, modified_by=user.uid)
         elif tag.type == TagType.PROMPT:
             self.resource_service.remove_tag_from_resources(ResourceKind.PROMPT, tag_id)
+        elif tag.type == TagType.CHAT_CONTEXT:
+            self.resource_service.remove_tag_from_resources(ResourceKind.CHAT_CONTEXT, tag_id)
         elif tag.type == TagType.TEMPLATE:
             # BUGFIX: was PROMPT before; must be TEMPLATE
             self.resource_service.remove_tag_from_resources(ResourceKind.TEMPLATE, tag_id)

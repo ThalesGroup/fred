@@ -23,12 +23,12 @@ import {
   TextField,
 } from "@mui/material";
 import yaml from "js-yaml";
-import { useTranslation } from "react-i18next";
 import { ResourceKind, useKindLabels } from "./resourceLabels";
 
 import * as React from "react";
 import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
+import { useTranslation } from "react-i18next";
 import { z } from "zod";
 import {
   buildFrontMatter,
@@ -36,12 +36,12 @@ import {
   looksLikeYamlDoc,
   splitFrontMatter,
 } from "./resourceYamlUtils";
-
 const profileSchema = z.object({
   name: z.string().min(1, "Name is required"),
   description: z.string().optional(),
   body: z.string().min(1, "Profile body is required"),
 });
+
 
 type ProfileFormData = z.infer<typeof profileSchema>;
 
@@ -52,7 +52,7 @@ type ResourceCreateLike = {
   content: string; // YAML with '---'
 };
 
-interface ProfileEditorModalProps {
+interface ChatContextEditorModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (payload: { name?: string; description?: string; labels?: string[]; content: string }) => void;
@@ -65,7 +65,7 @@ interface ProfileEditorModalProps {
  * - simple mode (name/description/body)
  * - doc mode (header YAML + body) when initial content is a full YAML doc
  */
-export const ProfileEditorModal: React.FC<ProfileEditorModalProps> = ({
+export const ChatContextEditorModal: React.FC<ChatContextEditorModalProps> = ({
   isOpen,
   onClose,
   onSave,
@@ -143,7 +143,7 @@ export const ProfileEditorModal: React.FC<ProfileEditorModalProps> = ({
       return;
     }
     // Ensure kind (UI safety; backend can still validate)
-    if (!headerObj.kind) headerObj.kind = "profile";
+    if (!headerObj.kind) headerObj.kind = "chat-context";
 
     const content = buildFrontMatter(headerObj, bodyText);
     onSave({
@@ -202,7 +202,7 @@ export const ProfileEditorModal: React.FC<ProfileEditorModalProps> = ({
           <DialogContent>
             <Stack spacing={3} mt={1}>
               <TextField
-                label="Context Name"
+                label="Chat Context Name"
                 fullWidth
                 {...register("name")}
                 error={!!errors.name}
@@ -216,7 +216,7 @@ export const ProfileEditorModal: React.FC<ProfileEditorModalProps> = ({
                 helperText={errors.description?.message}
               />
               <TextField
-                label="Context Body"
+                label="Chat Context Body"
                 fullWidth
                 multiline
                 minRows={14}

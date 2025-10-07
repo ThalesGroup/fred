@@ -17,12 +17,12 @@ import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
 import { TopBar } from "../common/TopBar";
+import DocumentLibraryList from "../components/documents/libraries/DocumentLibraryList";
 import { DocumentOperations } from "../components/documents/operations/DocumentOperations";
 import InvisibleLink from "../components/InvisibleLink";
-import DocumentLibraryList from "../components/documents/libraries/DocumentLibraryList";
 import ResourceLibraryList from "../components/resources/ResourceLibraryList";
 
-const knowledgeHubViews = ["templates", "prompts", "operations", "documents", "profiles"] as const;
+const knowledgeHubViews = ["operations", "documents", "chatContexts"] as const;
 type KnowledgeHubView = (typeof knowledgeHubViews)[number];
 
 function isKnowledgeHubView(value: string): value is KnowledgeHubView {
@@ -50,9 +50,9 @@ export const KnowledgeHub = () => {
       <TopBar title={t("knowledge.title")} description={t("knowledge.description")}>
         <Box>
           <ButtonGroup variant="outlined" color="primary" size="small">
-            <InvisibleLink to="/knowledge?view=profiles">
-              <Button variant={selectedView === "profiles" ? "contained" : "outlined"}>
-                {t("knowledge.viewSelector.profiles")}
+            <InvisibleLink to="/knowledge?view=chatContexts">
+              <Button variant={selectedView === "chatContexts" ? "contained" : "outlined"}>
+                {t("knowledge.viewSelector.chatContexts")}
               </Button>
             </InvisibleLink>
             {/* <InvisibleLink to="/knowledge?view=templates">
@@ -80,9 +80,9 @@ export const KnowledgeHub = () => {
       </TopBar>
 
       <Box sx={{ mb: 3 }}>
-        {selectedView === "profiles" && (
+        {selectedView === "chatContexts" && (
           <Container maxWidth="xl">
-            <ResourceLibraryList kind="profile"  />
+            <ResourceLibraryList kind="chat-context"  />
           </Container>
         )}
         {selectedView === "documents" && (

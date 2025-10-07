@@ -174,12 +174,14 @@ def _build_prompt(agent: AgentFlow) -> ChatPromptTemplate:
     contract = agent.get_tuned_text("prompts.contract") or ""
     behavior = agent.get_tuned_text("prompts.behavior") or ""
 
-    profile = agent.profile_text()
-    profile_block = f"\n\nUSER PROFILE (context-only):\n{profile}" if profile else ""
+    chat_context = agent.chat_context_text()
+    chat_context_block = (
+        f"\n\nCHAT CONTEXT (context-only):\n{chat_context}" if chat_context else ""
+    )
 
     # Safe token rendering; unknown tokens remain literal.
     system_text = agent.render(
-        "{persona}\n\n{contract}\n\n{behavior}\n\nToday: {today}" + profile_block,
+        "{persona}\n\n{contract}\n\n{behavior}\n\nToday: {today}" + chat_context_block,
         persona=persona,
         contract=contract,
         behavior=behavior,

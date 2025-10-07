@@ -69,15 +69,6 @@ export const routes: RouteObject[] = [
       },
     ].filter(Boolean),
   },
-
-  {
-    path: "/knowledge",
-    element: (
-      <RootLayout>
-        <KnowledgeHub />
-      </RootLayout>
-    ),
-  },
   {
     path: "*",
     element: (

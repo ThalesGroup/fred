@@ -4,7 +4,8 @@
 // You may not use this file except in compliance with the License.
 // http://www.apache.org/licenses/LICENSE-2.0
 
-import { useMemo, useState } from "react";
+import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
+import KeyboardArrowRightIcon from "@mui/icons-material/KeyboardArrowRight";
 import {
   Box,
   IconButton,
@@ -17,21 +18,20 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import KeyboardArrowRightIcon from "@mui/icons-material/KeyboardArrowRight";
-import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
+  Resource,
+  ResourceKind,
   TagType,
   TagWithItemsId,
   useListAllTagsKnowledgeFlowV1TagsGetQuery,
   useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery,
-  Resource,
-  ResourceKind,
 } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 
 export interface ResourceLibrariesSelectionCardProps {
   // add "profile" without changing backend enum usage
-  libraryType: TagType | "profile"; // "prompt" | "template" | "profile"
+  libraryType: TagType | "chat-context"; // "prompt" | "template" | "chat-context"
   selectedResourceIds: string[];
   setSelectedResourceIds: (ids: string[]) => void;
 }
@@ -54,7 +54,7 @@ export function ChatResourcesSelectionCard({
   const resourceKind: ResourceKind | undefined = (() => {
     if (libraryType === "prompt") return "prompt" as ResourceKind;
     if (libraryType === "template") return "template" as ResourceKind;
-    if (libraryType === "profile") return "profile" as ResourceKind;
+    if (libraryType === "chat-context") return "chat-context" as ResourceKind;
     return undefined;
   })();
 
@@ -122,7 +122,7 @@ export function ChatResourcesSelectionCard({
 
   const searchLabel = useMemo(() => {
     if (libraryType === "template") return t("chatbot.searchTemplateLibraries", "Search template libraries");
-    if (libraryType === "profile") return t("chatbot.searchProfileLibraries", "Search profile libraries");
+    if (libraryType === "chat-context") return t("chatbot.searchChatContextLibraries", "Search chat context libraries");
     return t("chatbot.searchPromptLibraries", "Search prompt libraries");
   }, [libraryType, t]);
 

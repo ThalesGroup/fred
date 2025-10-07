@@ -361,7 +361,7 @@ class LegacyOrchestrator(AgentFlow):
         )
 
         messages = [HumanMessage(content=prompt)]
-        messages = self.with_profile_text(messages)
+        messages = self.with_chat_context_text(messages)
 
         response = await self.model.ainvoke(messages)
         response = AIMessage(

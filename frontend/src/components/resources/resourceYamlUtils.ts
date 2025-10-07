@@ -193,7 +193,7 @@ export const buildProfileYaml = (opts: {
   const schema = buildProfileSchemaFromBody(opts.body);
   const header: Record<string, any> = {
     version,
-    kind: "profile",
+    kind: "chat-context",
     name: opts.name || undefined,
     description: opts.description || undefined,
     schema,
