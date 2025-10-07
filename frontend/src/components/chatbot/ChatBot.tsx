@@ -13,9 +13,10 @@
 // limitations under the License.
 
 import { Box, Grid2, Tooltip, Typography, useTheme } from "@mui/material";
-import { useEffect, useRef, useState, useLayoutEffect, useMemo } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { v4 as uuidv4 } from "uuid";
+import { AnyAgent } from "../../common/agent.ts";
 import { getConfig } from "../../common/config.tsx";
 import DotsLoader from "../../common/DotsLoader.tsx";
 import { KeyCloakService } from "../../security/KeycloakService.ts";
@@ -28,18 +29,17 @@ import {
   StreamEvent,
   useLazyGetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetQuery,
 } from "../../slices/agentic/agenticOpenApi.ts";
-import { getAgentBadge } from "../../utils/avatar.tsx";
-import { useToast } from "../ToastProvider.tsx";
-import { MessagesArea } from "./MessagesArea.tsx";
-import UserInput, { UserInputContent } from "./user_input/UserInput.tsx";
-import { keyOf, mergeAuthoritative, sortMessages, toWsUrl, upsertOne } from "./ChatBotUtils.tsx";
 import {
   TagType,
   useListAllTagsKnowledgeFlowV1TagsGetQuery,
   useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery,
 } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { getAgentBadge } from "../../utils/avatar.tsx";
+import { useToast } from "../ToastProvider.tsx";
+import { keyOf, mergeAuthoritative, sortMessages, toWsUrl, upsertOne } from "./ChatBotUtils.tsx";
 import ChatKnowledge from "./ChatKnowledge.tsx";
-import { AnyAgent } from "../../common/agent.ts";
+import { MessagesArea } from "./MessagesArea.tsx";
+import UserInput, { UserInputContent } from "./user_input/UserInput.tsx";
 
 export interface ChatBotError {
   session_id: string | null;
@@ -390,7 +390,7 @@ const ChatBot = ({
       runtimeContext.selected_template_ids = content.templateResourceIds;
     }
     if (content.profileResourceIds?.length) {
-      runtimeContext.selected_profile_ids = content.profileResourceIds;
+      runtimeContext.selected_chat_context_ids = content.profileResourceIds;
     }
     runtimeContext.search_policy = content.searchPolicy || "semantic";
 
