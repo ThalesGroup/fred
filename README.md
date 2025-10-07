@@ -352,7 +352,7 @@ To get full VS Code Python support (linting, IntelliSense, debugging, etc.) acr
 <details>
   <summary>1. A VS Code workspace file `fred.code-workspace` that loads all sub‑projects.</summary>
 
-  After cloning the repo, you can open Fred's VS Code workspace with `code fred.code-workspace`
+  After cloning the repo, you can open Fred's VS Code workspace with `code .vscode/fred.code-workspace`
 
   When you open Fred's VS Code workspace, VS Code will load four folders:
 
