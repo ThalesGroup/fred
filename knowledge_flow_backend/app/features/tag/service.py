@@ -18,7 +18,7 @@ from datetime import datetime
 from typing import Iterable, Optional
 from uuid import uuid4
 
-from fred_core import Action, KeycloakUser, Resource, authorize
+from fred_core import Action, KeycloakUser, RelationType, Resource, TagPermission, authorize
 
 from app.application_context import ApplicationContext
 from app.common.document_structures import DocumentMetadata
@@ -52,6 +52,7 @@ class TagService:
         self._tag_store = context.get_tag_store()
         self.document_metadata_service = MetadataService()
         self.resource_service = ResourceService()  # For templates, if needed
+        self.rebac = context.get_rebac_engine()
 
     # ---------- Public API ----------
 
@@ -70,6 +71,10 @@ class TagService:
         """
         # 1) fetch
         tags: list[Tag] = self._tag_store.list_tags_for_user(user)
+
+        # Filter by permission (todo: use rebac ids to filter at store (DB) level)
+        authorized_tags_ids = self.rebac.lookup_user_resources(user, TagPermission.READ)
+        tags = [t for t in tags if t.id in authorized_tags_ids]
 
         # 2) filter by type
         if tag_type is not None:
@@ -105,6 +110,8 @@ class TagService:
 
     @authorize(Action.READ, Resource.TAGS)
     def get_tag_for_user(self, tag_id: str, user: KeycloakUser) -> TagWithItemsId:
+        self.rebac.check_user_permission_or_raise(user, TagPermission.READ, tag_id)
+
         tag = self._tag_store.get_tag_by_id(tag_id)
         if tag.type == TagType.DOCUMENT:
             item_ids = self._retrieve_document_ids_for_tag(user, tag_id)
@@ -146,6 +153,7 @@ class TagService:
                 type=tag_data.type,
             )
         )
+        self.rebac.add_user_relation(user, RelationType.OWNER, resource_type=Resource.TAGS, resource_id=tag.id)
 
         # Link items
         if tag.type == TagType.DOCUMENT:
@@ -164,6 +172,8 @@ class TagService:
 
     @authorize(Action.UPDATE, Resource.TAGS)
     def update_tag_for_user(self, tag_id: str, tag_data: TagUpdate, user: KeycloakUser) -> TagWithItemsId:
+        self.rebac.check_user_permission_or_raise(user, TagPermission.UPDATE, tag_id)
+
         tag = self._tag_store.get_tag_by_id(tag_id)
 
         # Update memberships first
@@ -214,6 +224,8 @@ class TagService:
 
     @authorize(Action.DELETE, Resource.TAGS)
     def delete_tag_for_user(self, tag_id: str, user: KeycloakUser) -> None:
+        self.rebac.check_user_permission_or_raise(user, TagPermission.DELETE, tag_id)
+
         tag = self._tag_store.get_tag_by_id(tag_id)
 
         if tag.type == TagType.DOCUMENT:
@@ -234,6 +246,8 @@ class TagService:
 
     @authorize(Action.UPDATE, Resource.TAGS)
     def update_tag_timestamp(self, tag_id: str, user: KeycloakUser) -> None:
+        self.rebac.check_user_permission_or_raise(user, TagPermission.UPDATE, tag_id)
+
         tag = self._tag_store.get_tag_by_id(tag_id)
         tag.updated_at = datetime.now()
         self._tag_store.update_tag_by_id(tag_id, tag)
