@@ -8,8 +8,8 @@ import requests
 
 from app.core.agents.runtime_context import (
     RuntimeContext,
+    get_chat_context_libraries_ids,
     get_document_library_tags_ids,
-    get_profile_libraries_ids,
 )
 
 logger = logging.getLogger(__name__)
@@ -20,7 +20,7 @@ class Prepared:
     # RAG scoping (always a list)
     doc_tag_ids: List[str] = field(default_factory=list)
     # Concatenated profile prompt(s) body text ("" when none)
-    prompt_profile_text: str = ""
+    prompt_chat_context_text: str = ""
 
 
 def _split_front_matter(text: str) -> str:
@@ -71,10 +71,10 @@ def resolve_prepared(ctx: RuntimeContext, kf_base: str) -> Prepared:
 
     # 2) Prompts: loop each id, append body when resolvable; ignore failures
     bodies: List[str] = []
-    for pid in get_profile_libraries_ids(ctx) or []:
+    for pid in get_chat_context_libraries_ids(ctx) or []:
         body = _fetch_body(kf_base, pid)
         if body:
             bodies.append(body)
 
     prompt_profile_text = "\n\n".join(bodies) if bodies else ""
-    return Prepared(doc_tag_ids=doc_tags, prompt_profile_text=prompt_profile_text)
+    return Prepared(doc_tag_ids=doc_tags, prompt_chat_context_text=prompt_profile_text)

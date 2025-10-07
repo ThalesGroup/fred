@@ -24,7 +24,7 @@ class TagType(str, Enum):
     DOCUMENT = "document"
     PROMPT = "prompt"
     TEMPLATE = "template"
-    PROFILE = "profile"
+    CHAT_CONTEXT = "chat-context"
 
 
 def _normalize_path(p: Optional[str]) -> Optional[str]:

@@ -142,7 +142,7 @@ class SentinelExpert(AgentFlow):
 
         # 2) Ask the model with a single SystemMessage prepended
         messages = self.with_system(system_text, state["messages"])
-        messages = self.with_profile_text(messages)
+        messages = self.with_chat_context_text(messages)
 
         try:
             response = await self.model.ainvoke(messages)

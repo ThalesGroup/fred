@@ -390,7 +390,7 @@ const ChatBot = ({
       runtimeContext.selected_template_ids = content.templateResourceIds;
     }
     if (content.profileResourceIds?.length) {
-      runtimeContext.selected_profile_ids = content.profileResourceIds;
+      runtimeContext.selected_chat_context_ids = content.profileResourceIds;
     }
     runtimeContext.search_policy = content.searchPolicy || "semantic";
 

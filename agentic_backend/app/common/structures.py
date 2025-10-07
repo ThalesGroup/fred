@@ -191,6 +191,6 @@ class Configuration(BaseModel):
     storage: StorageConfig
 
 
-class ProfileMessage(SystemMessage):
+class ChatContextMessage(SystemMessage):
     def __init__(self, content: str):
         super().__init__(content=content)

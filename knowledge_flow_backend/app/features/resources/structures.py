@@ -23,7 +23,7 @@ from pydantic import BaseModel, Field
 class ResourceKind(str, Enum):
     PROMPT = "prompt"
     TEMPLATE = "template"
-    PROFILE = "profile"
+    CHAT_CONTEXT = "chat-context"
 
 
 class ResourceUpdate(BaseModel):
