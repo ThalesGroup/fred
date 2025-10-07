@@ -70,8 +70,8 @@ interface DocumentLibraryTreeProps {
   tree: TagNode;
   expanded: string[];
   setExpanded: (ids: string[]) => void;
-  selectedFolder?: string;
-  setSelectedFolder: (full: string) => void;
+  selectedFolder: string | null;
+  setSelectedFolder: (full: string | null) => void;
   getChildren: (n: TagNode) => TagNode[];
   documents: DocumentMetadata[];
   onPreview: (doc: DocumentMetadata) => void;
@@ -170,9 +170,9 @@ export function DocumentLibraryTree({
                 bgcolor: isSelected ? "action.selected" : "transparent",
               }}
               onClick={(e) => {
-                e.stopPropagation();
-                setSelectedFolder(c.full);
-              }}
+  e.stopPropagation();
+  setSelectedFolder(isSelected ? null : c.full); // toggle
+}}
             >
               {/* Left: tri-state + folder icon + name */}
               <Box sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0, flex: 1 }}>
