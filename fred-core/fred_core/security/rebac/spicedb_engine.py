@@ -20,8 +20,13 @@ from authzed.api.v1 import (
 )
 from grpcutil import bearer_token_credentials, insecure_bearer_token_credentials
 
-from fred_core.security.models import Action, Resource
-from fred_core.security.rebac.rebac_engine import RebacEngine, RebacReference, Relation
+from fred_core.security.models import Resource
+from fred_core.security.rebac.rebac_engine import (
+    RebacEngine,
+    RebacPermission,
+    RebacReference,
+    Relation,
+)
 from fred_core.security.rebac.schema import DEFAULT_SCHEMA
 from fred_core.security.structure import SpiceDbRebacConfig
 
@@ -76,7 +81,7 @@ class SpiceDbRebacEngine(RebacEngine):
         self,
         *,
         subject: RebacReference,
-        permission: Action,
+        permission: RebacPermission,
         resource_type: Resource,
         consistency_token: str | None = None,
     ) -> list[RebacReference]:
@@ -101,7 +106,7 @@ class SpiceDbRebacEngine(RebacEngine):
     def has_permission(
         self,
         subject: RebacReference,
-        permission: Action,
+        permission: RebacPermission,
         resource: RebacReference,
         *,
         consistency_token: str | None = None,

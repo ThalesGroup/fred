@@ -9,10 +9,16 @@ import uuid
 import grpc
 import pytest
 
-from fred_core.security.models import Action, Resource
-from fred_core.security.rebac.rebac_engine import RebacReference, Relation, RelationType
-from fred_core.security.rebac.spicedb_engine import SpiceDbRebacEngine
-from fred_core.security.structure import SpiceDbRebacConfig
+from fred_core import (
+    DocumentPermission,
+    RebacReference,
+    Relation,
+    RelationType,
+    Resource,
+    SpiceDbRebacConfig,
+    SpiceDbRebacEngine,
+    TagPermission,
+)
 
 SPICEDB_ENDPOINT = os.getenv("SPICEDB_TEST_ENDPOINT", "localhost:50051")
 
@@ -56,7 +62,7 @@ def spicedb_engine() -> SpiceDbRebacEngine:
             # Trigger a cheap RPC call to confirm the server is reachable.
             engine.lookup_resources(
                 subject=probe_subject,
-                permission=Action.READ,
+                permission=DocumentPermission.READ,
                 resource_type=Resource.TAGS,
             )
             return engine
@@ -82,13 +88,13 @@ def test_owner_has_full_access(spicedb_engine: SpiceDbRebacEngine) -> None:
 
     assert spicedb_engine.has_permission(
         owner,
-        Action.DELETE,
+        TagPermission.DELETE,
         tag,
         consistency_token=token,
     )
     assert not spicedb_engine.has_permission(
         stranger,
-        Action.READ,
+        TagPermission.READ,
         tag,
         consistency_token=token,
     )
@@ -109,7 +115,7 @@ def test_group_members_inherit_permissions(spicedb_engine: SpiceDbRebacEngine) -
 
     assert spicedb_engine.has_permission(
         alice,
-        Action.UPDATE,
+        TagPermission.UPDATE,
         tag,
         consistency_token=token,
     )
@@ -132,13 +138,13 @@ def test_parent_relationships_extend_permissions(
 
     assert spicedb_engine.has_permission(
         owner,
-        Action.READ,
+        DocumentPermission.READ,
         document,
         consistency_token=token,
     )
     assert spicedb_engine.has_permission(
         owner,
-        Action.DELETE,
+        DocumentPermission.DELETE,
         document,
         consistency_token=token,
     )
@@ -176,7 +182,7 @@ def test_list_documents_user_can_read(spicedb_engine: SpiceDbRebacEngine) -> Non
 
     readable_documents = spicedb_engine.lookup_resources(
         subject=user,
-        permission=Action.READ,
+        permission=DocumentPermission.READ,
         resource_type=Resource.DOCUMENTS,
         consistency_token=token,
     )
@@ -191,14 +197,14 @@ def test_list_documents_user_can_read(spicedb_engine: SpiceDbRebacEngine) -> Non
 
     assert spicedb_engine.has_permission(
         user,
-        Action.READ,
+        DocumentPermission.READ,
         document1,
         consistency_token=token,
     )
 
     assert not spicedb_engine.has_permission(
         user,
-        Action.READ,
+        DocumentPermission.READ,
         private_document,
         consistency_token=token,
     )

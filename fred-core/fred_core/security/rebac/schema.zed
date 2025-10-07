@@ -10,20 +10,40 @@ definition tag {
 	relation editor: user | group
 	relation viewer: user | group
 	relation parent: tag
+
+	// Can read tag: see its name, description, list documents...
+	// -> must be at least viewer
 	permission read = viewer + editor + owner + editor->member_recursive + viewer->member_recursive + owner->member_recursive + parent->read
-	permission write = editor + owner + editor->member_recursive + owner->member_recursive + parent->write
+
+	// Can update tag: change its name, description...
+	// -> must be at least editor
 	permission update = editor + owner + editor->member_recursive + owner->member_recursive + parent->update
+
+	// Can delete tag
+	// -> must be owner
 	permission delete = owner + owner->member_recursive + parent->delete
+
+	// Can share tag: add/remove editors/viewers
+	// -> must be owner
 	permission share = owner + owner->member_recursive + parent->share
-	permission create = editor + owner + editor->member_recursive + owner->member_recursive + parent->create
+
+	// Can manage content: add/remove documents in the tag
+	// -> must be at least editor
+	permission manage_content = editor + owner + editor->member_recursive + owner->member_recursive + parent->manage_content
 }
 
 definition document {
 	relation parent: tag
+
+	// Can read document: see its content
+	// -> must be able to read parent tag (at least viewer)
 	permission read = parent->read
-	permission write = parent->write
-	permission update = parent->update
-	permission delete = parent->delete
-	permission share = parent->share
-	permission create = parent->create
+
+	// Can update document: change its name, content...
+	// -> must be able to manage parent tag (at least editor)
+	permission update = parent->manage_content
+
+	// Can delete document
+	// -> must be able to manage parent tag (at least editor)
+	permission delete = parent->manage_content
 }

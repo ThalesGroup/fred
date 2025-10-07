@@ -83,12 +83,21 @@ from fred_core.security.keycloak import (
     split_realm_url,
 )
 from fred_core.security.outbound import BearerAuth, ClientCredentialsProvider
+from fred_core.security.rebac.rebac_engine import (
+    DocumentPermission,
+    RebacPermission,
+    RebacReference,
+    Relation,
+    RelationType,
+    TagPermission,
+)
+from fred_core.security.rebac.spicedb_engine import SpiceDbRebacEngine
 from fred_core.security.structure import (
     KeycloakUser,
     M2MSecurity,
     RebacConfiguration,
-    SpiceDbRebacConfig,
     SecurityConfiguration,
+    SpiceDbRebacConfig,
     UserSecurity,
 )
 from fred_core.store.opensearch_mapping_validator import validate_index_mapping
@@ -169,4 +178,11 @@ __all__ = [
     "SQLTableStore",
     "StoreInfo",
     "ModelProvider",
+    "RebacReference",
+    "Relation",
+    "RelationType",
+    "SpiceDbRebacEngine",
+    "TagPermission",
+    "DocumentPermission",
+    "RebacPermission",
 ]

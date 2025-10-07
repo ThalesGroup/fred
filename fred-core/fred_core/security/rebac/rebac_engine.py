@@ -5,7 +5,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Iterable
 
-from fred_core.security.models import Action, Resource
+from fred_core.security.models import AuthorizationError, Resource
+from fred_core.security.structure import KeycloakUser
 
 
 @dataclass(frozen=True)
@@ -24,6 +25,27 @@ class RelationType(str, Enum):
     VIEWER = "viewer"
     PARENT = "parent"
     MEMBER = "member"
+
+
+class TagPermission(str, Enum):
+    """Tag permissions encoded in the graph."""
+
+    READ = "read"
+    UPDATE = "update"
+    DELETE = "delete"
+    SHARE = "share"
+    MANAGE_CONTENT = "manage_content"
+
+
+class DocumentPermission(str, Enum):
+    """Document permissions encoded in the graph."""
+
+    READ = "read"
+    UPDATE = "update"
+    DELETE = "delete"
+
+
+RebacPermission = TagPermission | DocumentPermission
 
 
 @dataclass(frozen=True)
@@ -56,12 +78,28 @@ class RebacEngine(ABC):
             token = self.add_relation(relation)
         return token
 
+    def add_user_relation(
+        self,
+        user: KeycloakUser,
+        relation: RelationType,
+        resource_type: Resource,
+        resource_id: str,
+    ) -> str | None:
+        """Convenience helper to add a relation for a user."""
+        return self.add_relation(
+            Relation(
+                subject=RebacReference(Resource.USER, user.uid),
+                relation=relation,
+                resource=RebacReference(resource_type, resource_id),
+            )
+        )
+
     @abstractmethod
     def lookup_resources(
         self,
         *,
         subject: RebacReference,
-        permission: Action,
+        permission: RebacPermission,
         resource_type: Resource,
         consistency_token: str | None = None,
     ) -> list[RebacReference]:
@@ -71,9 +109,42 @@ class RebacEngine(ABC):
     def has_permission(
         self,
         subject: RebacReference,
-        permission: Action,
+        permission: RebacPermission,
         resource: RebacReference,
         *,
         consistency_token: str | None = None,
     ) -> bool:
         """Evaluate whether a subject can perform an action on a resource."""
+
+    def check_permission_or_raise(
+        self,
+        subject: RebacReference,
+        permission: RebacPermission,
+        resource: RebacReference,
+        *,
+        consistency_token: str | None = None,
+    ) -> None:
+        """Raise if the subject is not authorized to perform the action on the resource."""
+        if not self.has_permission(
+            subject, permission, resource, consistency_token=consistency_token
+        ):
+            raise AuthorizationError(
+                f"Not authorized to {permission} {resource.type} {resource.id}"
+            )
+
+    def check_user_permission_or_raise(
+        self,
+        user: KeycloakUser,
+        permission: RebacPermission,
+        resource_type: Resource,
+        resource_id: str,
+        *,
+        consistency_token: str | None = None,
+    ) -> None:
+        """Convenience helper to check permission for a user, raising if unauthorized."""
+        self.check_permission_or_raise(
+            RebacReference(Resource.USER, user.uid),
+            permission,
+            RebacReference(resource_type, resource_id),
+            consistency_token=consistency_token,
+        )
