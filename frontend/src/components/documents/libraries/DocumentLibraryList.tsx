@@ -41,7 +41,7 @@ export default function DocumentLibraryList() {
 
   /* ---------------- State ---------------- */
   const [expanded, setExpanded] = React.useState<string[]>([]);
-  const [selectedFolder, setSelectedFolder] = React.useState<string | null>(undefined);
+  const [selectedFolder, setSelectedFolder] = React.useState<string | null>(null);
   const [isCreateDrawerOpen, setIsCreateDrawerOpen] = React.useState(false);
   const [openUploadDrawer, setOpenUploadDrawer] = React.useState(false);
   const [uploadTargetTagId, setUploadTargetTagId] = React.useState<string | null>(null);
@@ -171,7 +171,16 @@ export default function DocumentLibraryList() {
     refetchTags: refetch,
     refetchDocs: () => fetchAllDocuments({ filters: {} }),
   });
-
+  const handleDeleteFolder = React.useCallback(
+    (tag: TagWithItemsId) => {
+      // Pass the state reset function as the onSuccess callback
+      confirmDeleteFolder(tag, () => {
+        // This runs only after the user confirms AND the deletion is successful
+        setSelectedFolder(null);
+      });
+    },
+    [confirmDeleteFolder, setSelectedFolder],
+  );
   return (
     <Box display="flex" flexDirection="column" gap={2}>
       {/* Top toolbar */}
@@ -271,14 +280,7 @@ export default function DocumentLibraryList() {
           }}
         >
           {/* Tree header */}
-          <Box
-            display="flex"
-            alignItems="center"
-            justifyContent="space-between"
-            px={1}
-            py={0.5}
-            flex="0 0 auto"
-          >
+          <Box display="flex" alignItems="center" justifyContent="space-between" px={1} py={0.5} flex="0 0 auto">
             <Typography variant="subtitle2" color="text.secondary">
               {t("documentLibrary.folders")}
             </Typography>
@@ -316,12 +318,11 @@ export default function DocumentLibraryList() {
               onRemoveFromLibrary={removeOneWithConfirm}
               selectedDocs={selectedDocs}
               setSelectedDocs={setSelectedDocs}
-              onDeleteFolder={confirmDeleteFolder}
+              onDeleteFolder={handleDeleteFolder}
             />
           </Box>
         </Card>
       )}
-
 
       {/* Upload drawer */}
       <DocumentUploadDrawer

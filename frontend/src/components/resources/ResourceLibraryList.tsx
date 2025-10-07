@@ -226,7 +226,16 @@ export default function ResourceLibraryList({ kind }: Props) {
     refetchTags,
     refetchDocs: refetchResources, // reuse for resources
   });
-
+  const handleDeleteFolder = React.useCallback(
+    (tag: TagWithItemsId) => {
+      // Pass the state reset function as the onSuccess callback
+      confirmDeleteFolder(tag, () => {
+        // This runs only after the user confirms AND the deletion is successful
+        setSelectedFolder(null);
+      });
+    },
+    [confirmDeleteFolder, setSelectedFolder],
+  );
   /** ---------------- Handlers ---------------- */
   const handleOpenCreate = React.useCallback(() => {
     if (!selectedFolder) return;
@@ -365,7 +374,7 @@ export default function ResourceLibraryList({ kind }: Props) {
               // NEW: selection + folder deletion
               selectedItems={selectedItems}
               setSelectedItems={setSelectedItems}
-              onDeleteFolder={confirmDeleteFolder}
+              onDeleteFolder={handleDeleteFolder}
             />
           </Box>
         </Card>
