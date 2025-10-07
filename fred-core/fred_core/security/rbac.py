@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 ALL = set(Action)
 CRUD = {Action.CREATE, Action.READ, Action.UPDATE, Action.DELETE}
 READ_ONLY = {Action.READ}
-
+CRU =  {Action.CREATE, Action.READ, Action.UPDATE}
 
 class RBACProvider(AuthorizationProvider):
     """Role-Based Access Control authorization provider."""
@@ -42,9 +42,9 @@ class RBACProvider(AuthorizationProvider):
             "editor": {
                 # Knowledge Flow
                 Resource.TAGS: CRUD,
-                Resource.DOCUMENTS: CRUD,  # Can't process Document (Action.Process)
+                Resource.DOCUMENTS: CRU,  # Can't process and delete Document (Action.PROCESS and Action.DELETE)
                 Resource.RESOURCES: CRUD,
-                Resource.DOCUMENTS_SOURCES: READ_ONLY,  # Can't rescan sources (Action.Update)
+                Resource.DOCUMENTS_SOURCES: READ_ONLY,  # Can't rescan sources (Action.UPDATE)
                 Resource.TABLES: CRUD,
                 Resource.TABLES_DATABASES: CRUD,
                 Resource.KPIS: READ_ONLY,

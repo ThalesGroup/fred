@@ -71,7 +71,7 @@ class AuthorizationError(Exception):
         self.user_id = user_id
         self.action = action
         self.resource = resource
-        default_message = f"Not authorized to {action.value} {resource.value}"
+        default_message = f"Not authorized to {action.value} a {resource.value}"
         super().__init__(message or default_message)
 
 

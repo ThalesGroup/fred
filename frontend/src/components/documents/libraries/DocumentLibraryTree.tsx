@@ -83,7 +83,8 @@ interface DocumentLibraryTreeProps {
   /** docUid -> tag to delete from (selection context) */
   selectedDocs: Record<string, TagWithItemsId>;
   setSelectedDocs: React.Dispatch<React.SetStateAction<Record<string, TagWithItemsId>>>;
-  canDelete?: boolean;
+  canDeleteDocument?: boolean;
+  canDeleteFolder?: boolean;
 }
 
 export function DocumentLibraryTree({
@@ -102,7 +103,8 @@ export function DocumentLibraryTree({
   onDeleteFolder,
   selectedDocs,
   setSelectedDocs,
-  canDelete = true,
+  canDeleteDocument = true,
+  canDeleteFolder = true,
 }: DocumentLibraryTreeProps) {
   /** Select/unselect all docs in a folder’s subtree (by that folder’s primary tag). */
   const toggleFolderSelection = React.useCallback(
@@ -201,9 +203,9 @@ export function DocumentLibraryTree({
                       size="small"
                       onClick={(e) => {
                         e.stopPropagation();
-                        if (canDelete) onDeleteFolder(folderTag);
+                        if (canDeleteFolder) onDeleteFolder(folderTag);
                       }}
-                      disabled={!canDelete}
+                      disabled={!canDeleteFolder}
                     >
                       <DeleteOutlineIcon fontSize="small" />
                     </IconButton>
@@ -251,7 +253,7 @@ export function DocumentLibraryTree({
                       onPdfPreview={onPdfPreview}
                       onDownload={onDownload}
                       onRemoveFromLibrary={(d) => {
-                        if (!canDelete || !tag) return;
+                        if (!canDeleteDocument || !tag) return;
                         onRemoveFromLibrary(d, tag);
                       }}
                       onToggleRetrievable={onToggleRetrievable}

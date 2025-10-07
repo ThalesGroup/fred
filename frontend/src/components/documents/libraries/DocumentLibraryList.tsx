@@ -55,7 +55,8 @@ export default function DocumentLibraryList() {
 
   // Permissions (RBAC)
   const { can } = usePermissions();
-  const canDeleteDocs = can("document", "delete");
+  const canDeleteDocument = can("document", "delete");
+  const canDeleteFolder = can("tag", "delete");
 
   /* ---------------- Data fetching ---------------- */
   const {
@@ -249,7 +250,7 @@ export default function DocumentLibraryList() {
             variant="contained"
             color="error"
             onClick={bulkRemoveFromLibrary}
-            disabled={!canDeleteDocs}
+            disabled={!canDeleteDocument}
           >
             {t("documentLibrary.bulkRemoveFromLibrary") || "Remove from library"}
           </Button>
@@ -329,7 +330,8 @@ export default function DocumentLibraryList() {
               selectedDocs={selectedDocs}
               setSelectedDocs={setSelectedDocs}
               onDeleteFolder={confirmDeleteFolder}
-              canDelete={canDeleteDocs}
+              canDeleteDocument={canDeleteDocument}
+              canDeleteFolder={canDeleteFolder}
             />
           </Box>
         </Card>
