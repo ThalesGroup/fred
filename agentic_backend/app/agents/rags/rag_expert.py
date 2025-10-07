@@ -100,7 +100,7 @@ class RagExpert(AgentFlow):
     # -----------------------------
     def _system_prompt(self) -> str:
         """
-        Resolve the RAG system prompt from tuning; optionally append chat_context text if enabled.
+        Resolve the RAG system prompt from tuning; optionally append chat context text if enabled.
         """
         sys_tpl = self.get_tuned_text("prompts.system")
         if not sys_tpl:
