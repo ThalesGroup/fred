@@ -456,7 +456,7 @@ export default function ResourceLibraryList({ kind }: Props) {
             }}
           />
         ) : kind === "chat-context" ? (
-          <chatContextEditorModal
+          <ChatContextEditorModal
             isOpen={!!editing}
             onClose={() => setEditing(null)}
             initial={{
