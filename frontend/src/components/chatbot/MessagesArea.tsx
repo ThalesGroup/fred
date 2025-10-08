@@ -49,13 +49,6 @@ function Area({
   const content = useMemo(() => {
     const sorted = [...messages].sort((a, b) => a.rank - b.rank);
 
-    // Find the last assistant final message across the whole list
-    const lastAssistantFinal = [...sorted].reverse().find(
-      (m) => m.role === "assistant" && m.channel === "final"
-    );
-    const isSameMsg = (a: ChatMessage, b?: ChatMessage) =>
-      !!b && a.session_id === b.session_id && a.exchange_id === b.exchange_id && a.rank === b.rank;
-
     const grouped = new Map<string, ChatMessage[]>();
     for (const msg of sorted) {
       const key = `${msg.session_id}-${msg.exchange_id}`;

@@ -92,9 +92,9 @@ class SessionOrchestrator:
         client_exchange_id: Optional[str] = None,
     ) -> Tuple[SessionSchema, List[ChatMessage]]:
         """
-        Responsibility:
+        Responsibilities:
           - ensure session exists and rebuild minimal LC history
-          - emit the user message
+          - emit the authoritative user message
           - stream the agent response
           - persist session + history
           - record KPIs
@@ -200,16 +200,11 @@ class SessionOrchestrator:
                 actor=actor,
             )
 
-        # 3.1) Set visual flags on assistant/final messages only
-        try:
-            self._attach_runtime_markers(
-                agent=agent,
-                runtime_context=runtime_context or getattr(agent, "runtime_context", None),
-                messages=agent_msgs,
-            )
-        except Exception:
-            # Do not fail the exchange if metadata enrichment crashes
-            logger.exception("Failed to attach flags to message metadata")
+        # 3.1) Attach the raw runtime context (single source of truth)
+        self._attach_runtime_context(
+            runtime_context=runtime_context,
+            messages=agent_msgs,
+        )
 
         # 4) Persist session + history
         session.updated_at = _utcnow_dt()
@@ -339,7 +334,6 @@ class SessionOrchestrator:
             return False
 
         # For now, ignore action, only owners can access their sessions
-        # action is passed for future flexibility (ex: session sharing with attached permissions)
         return session.user_id == user.uid
 
     def _get_session_temp_folder(self, session_id: str) -> Path:
@@ -418,75 +412,29 @@ class SessionOrchestrator:
         self.session_store.save(session)
         logger.info("Created new session %s for user %s", new_session_id, user_id)
         return session, True
-    
-    def _attach_runtime_markers(
+
+    # ---------------- runtime context attachment ----------------
+
+    def _attach_runtime_context(
         self,
         *,
-        agent: AgentFlow,
         runtime_context: Optional[RuntimeContext],
         messages: List[ChatMessage],
     ) -> None:
         """
-        Minimal projection of runtime_context into message.metadata.extras.plugins.
-
-        Goal:
-        - Tag ONLY the assistant/final messages produced in THIS exchange
-            (the messages passed in), with a snapshot of what was selected.
-        - Write exactly the keys the frontend expects:
-            plugins = { libraries, profiles, search_policy }
-        - No system/prompt mixing, no UI state, no merges with previous messages.
-        - Overwrite is intentional: reflect the exact snapshot of THIS message.
+        Attach the **raw RuntimeContext** to assistant/final messages.
+        This is the canonical, unmodified source of truth.
         """
-
-        rc = runtime_context or getattr(agent, "runtime_context", None)
-        if rc is None:
+        if runtime_context is None:
             return
-
-        def _ls(v) -> list[str]:
-            """Normalize any input to a clean list[str] (None/single/iterable -> list[str])."""
-            if not v:
-                return []
-            if isinstance(v, (list, tuple, set)):
-                return [str(x) for x in v if x]
-            return [str(v)]
-
-        libraries = _ls(getattr(rc, "document_library_ids", []))
-        templates = _ls(getattr(rc, "selected_template_ids", []) or getattr(rc, "template_resource_ids", []))
-        prompts   = _ls(getattr(rc, "selected_prompt_ids",   []) or getattr(rc, "prompt_resource_ids",   []))
-        profiles  = _ls(getattr(rc, "selected_profile_ids",  []) or getattr(rc, "profile_resource_ids",  []))
-        search_policy = getattr(rc, "search_policy", None)
-
-        # Build the exact payload the frontend reads
-        plugins: dict[str, list[str] | str] = {}
-
-        if libraries:
-            plugins["libraries"] = libraries
-
-        if templates:
-            plugins["templates"] = templates
-
-        if prompts:
-            plugins["prompts"] = prompts
-
-        if profiles:
-            plugins["profiles"] = profiles
-
-        if search_policy:
-            plugins["search_policy"] = str(search_policy)
-        if not plugins:
-            return
-
-        # Stamp ONLY the assistant/final messages of this exchange with the snapshot
         for m in messages:
             if m.role == Role.assistant and m.channel == Channel.final:
                 md = m.metadata or ChatMetadata()
-                ex = dict(md.extras or {})
-                ex["plugins"] = plugins  # overwrite on purpose: reflect this message's snapshot
-                md.extras = ex
+                md.runtime_context = runtime_context
                 m.metadata = md
 
 
-# ---------- pure helpers (kept local for discoverability) ----------
+# ---------- helpers ----------
 
 def _concat_text_parts(parts) -> str:
     texts: list[str] = []

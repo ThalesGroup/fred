@@ -102,19 +102,19 @@ const ChatBot = ({
 
 
   const libraryNameMap = useMemo(
-    () => Object.fromEntries((docLibs as any[]).map((x: any) => [x.id, x.name])),
+    () => Object.fromEntries((docLibs).map((x) => [x.id, x.name])),
     [docLibs],
   );
   const promptNameMap = useMemo(
-    () => Object.fromEntries((promptResources as any[]).map((x: any) => [x.id, x.name ?? x.id])),
+    () => Object.fromEntries((promptResources).map((x) => [x.id, x.name ?? x.id])),
     [promptResources],
   );
   const templateNameMap = useMemo(
-    () => Object.fromEntries((templateResources as any[]).map((x: any) => [x.id, x.name ?? x.id])),
+    () => Object.fromEntries((templateResources).map((x) => [x.id, x.name ?? x.id])),
     [templateResources],
   );
   const profileNameMap = useMemo(
-    () => Object.fromEntries((profileResources as any[]).map((x: any) => [x.id, x.name ?? x.id])),
+    () => Object.fromEntries((profileResources).map((x) => [x.id, x.name ?? x.id])),
     [profileResources],
   );
 
@@ -384,19 +384,19 @@ const ChatBot = ({
     const agentName = currentAgent.name;
 
     // Init runtime context
-    const runtimeContext: RuntimeContext = { ...baseRuntimeContext };
+    const runtimeContext: RuntimeContext = { ...(baseRuntimeContext ?? {}) };
 
-    // Add selected libraries/templates
+    // Add selected libraries / profiles (CANONIQUES — pas de doublon)
     if (content.documentLibraryIds?.length) {
-      runtimeContext.document_library_ids = content.documentLibraryIds;
       runtimeContext.selected_document_libraries_ids = content.documentLibraryIds;
     }
+
     if (content.profileResourceIds?.length) {
       runtimeContext.selected_profile_ids = content.profileResourceIds;
-      runtimeContext.profile_resource_ids = content.profileResourceIds;
     }
-    runtimeContext.search_policy = content.searchPolicy ?? "semantic";
 
+    // Policy
+    runtimeContext.search_policy = content.searchPolicy || "semantic";
     // Files upload
     if (content.files?.length) {
       for (const file of content.files) {

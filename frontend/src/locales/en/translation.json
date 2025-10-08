@@ -5,9 +5,18 @@
   },
   "resource": {
     "kind": {
-      "prompt":   { "one": "prompt",   "other": "prompts" },
-      "template": { "one": "template", "other": "templates" },
-      "profile": { "one" : "profile", "other": "profiles"}
+      "prompt": {
+        "one": "prompt",
+        "other": "prompts"
+      },
+      "template": {
+        "one": "template",
+        "other": "templates"
+      },
+      "profile": {
+        "one": "profile",
+        "other": "profiles"
+      }
     }
   },
   "validation": {
@@ -157,7 +166,7 @@
     "title": "Log Console",
     "description": "Monitor real-time logs from your AI agents and services, with advanced filtering and search options.",
     "live": "Live",
-    "file": "logger file", 
+    "file": "logger file",
     "content": "log content",
     "copyAll": "Copy All ({{count}})"
   },
@@ -187,7 +196,6 @@
     "disable": "Disable agent",
     "favorite": "Add the agent to your favorites",
     "unfavorite": "Remove the agent from your favorites"
-
   },
   "dialogs": {
     "create": {
@@ -424,5 +432,34 @@
     "openSource": "Open source",
     "openAllInPreview": "Open all in preview",
     "openAllInPdfPreview": "Open all in PDF preview"
+  },
+  "header": {
+    "librariesSingular": "Library",
+    "librariesPlural": "Libraries",
+    "profileSingular": "Profile",
+    "profilesPlural": "Profiles",
+    "librariesInline": "{{label}}: {{names}}",
+    "profilesInline": "{{label}}: {{names}}"
+  },
+  "insights": {
+    "aria": "message-insights"
+  },
+  "popover": {
+    "aria": "Message details",
+    "title": "Overview",
+    "task": "Task",
+    "node": "Node",
+    "model": "Model",
+    "tokensTotal": "Tokens used",
+    "tokensIn": "From user (prompt+context)",
+    "tokensOut": "From model (response)",
+    "latency": "Latency",
+    "search": "Search",
+    "temp": "Temp",
+    "sectionLibrarySingular": "LIBRARY",
+    "sectionLibrariesPlural": "LIBRARIES",
+    "sectionProfileSingular": "PROFILE",
+    "sectionProfilesPlural": "PROFILES",
+    "disclaimer": "AI content may be incorrect."
   }
 }
