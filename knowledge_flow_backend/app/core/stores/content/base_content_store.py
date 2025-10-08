@@ -15,9 +15,21 @@
 import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import BinaryIO
+from typing import BinaryIO, Optional
+
+from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
+
+
+class FileMetadata(BaseModel):
+    """
+    Metadata structure for a document's primary content.
+    """
+
+    size: int
+    file_name: str
+    content_type: Optional[str] = None
 
 
 class BaseContentStore(ABC):
@@ -97,5 +109,40 @@ class BaseContentStore(ABC):
 
         Raises:
             FileNotFoundError: If the content does not exist or cannot be retrieved.
+        """
+        pass
+
+    @abstractmethod
+    def get_file_metadata(self, document_uid: str) -> FileMetadata:
+        """
+        Retrieves metadata about the document's primary content.
+
+        Returns:
+            dict: A dictionary containing at least:
+                - 'size': int (Total size in bytes)
+                - 'file_name': str (The original file name)
+                - 'content_type': str (The MIME type)
+
+        Raises:
+            FileNotFoundError: If the document is not found.
+        """
+        pass
+
+    @abstractmethod
+    def get_content_range(self, document_uid: str, start: int, length: int) -> BinaryIO:
+        """
+        Retrieves a readable binary stream for a specific byte range of the
+        document's primary content. This is crucial for Range Requests (206 Partial Content).
+
+        Args:
+            document_uid: The document ID.
+            start: The starting byte index (inclusive).
+            length: The number of bytes to retrieve.
+
+        Returns:
+            BinaryIO: A file-like object streaming the requested byte range.
+
+        Raises:
+            FileNotFoundError: If the document is not found.
         """
         pass

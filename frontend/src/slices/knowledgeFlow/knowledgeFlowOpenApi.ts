@@ -107,6 +107,17 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/knowledge-flow/v1/raw_content/${queryArg.documentUid}` }),
     }),
+    streamDocumentKnowledgeFlowV1RawContentStreamDocumentUidGet: build.query<
+      StreamDocumentKnowledgeFlowV1RawContentStreamDocumentUidGetApiResponse,
+      StreamDocumentKnowledgeFlowV1RawContentStreamDocumentUidGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/raw_content/stream/${queryArg.documentUid}`,
+        headers: {
+          Range: queryArg.range,
+        },
+      }),
+    }),
     uploadDocumentsSyncKnowledgeFlowV1UploadDocumentsPost: build.mutation<
       UploadDocumentsSyncKnowledgeFlowV1UploadDocumentsPostApiResponse,
       UploadDocumentsSyncKnowledgeFlowV1UploadDocumentsPostApiArg
@@ -432,6 +443,11 @@ export type DownloadDocumentKnowledgeFlowV1RawContentDocumentUidGetApiResponse =
   /** status 200 Binary file stream */ Blob;
 export type DownloadDocumentKnowledgeFlowV1RawContentDocumentUidGetApiArg = {
   documentUid: string;
+};
+export type StreamDocumentKnowledgeFlowV1RawContentStreamDocumentUidGetApiResponse = unknown;
+export type StreamDocumentKnowledgeFlowV1RawContentStreamDocumentUidGetApiArg = {
+  documentUid: string;
+  range?: string | null;
 };
 export type UploadDocumentsSyncKnowledgeFlowV1UploadDocumentsPostApiResponse =
   /** status 200 Successful Response */ any;
@@ -1033,6 +1049,8 @@ export const {
   useLazyDownloadDocumentMediaKnowledgeFlowV1MarkdownDocumentUidMediaMediaIdGetQuery,
   useDownloadDocumentKnowledgeFlowV1RawContentDocumentUidGetQuery,
   useLazyDownloadDocumentKnowledgeFlowV1RawContentDocumentUidGetQuery,
+  useStreamDocumentKnowledgeFlowV1RawContentStreamDocumentUidGetQuery,
+  useLazyStreamDocumentKnowledgeFlowV1RawContentStreamDocumentUidGetQuery,
   useUploadDocumentsSyncKnowledgeFlowV1UploadDocumentsPostMutation,
   useProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPostMutation,
   useListTabularDatabasesQuery,

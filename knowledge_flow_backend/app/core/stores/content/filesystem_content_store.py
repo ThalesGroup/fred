@@ -19,7 +19,7 @@ from typing import BinaryIO
 
 import pandas as pd
 
-from app.core.stores.content.base_content_store import BaseContentStore
+from app.core.stores.content.base_content_store import BaseContentStore, FileMetadata
 
 logger = logging.getLogger(__name__)
 
@@ -143,3 +143,90 @@ class FileSystemContentStore(BaseContentStore):
             raise FileNotFoundError(f"No stored document for: {document_uid}")
         shutil.copytree(source_dir, destination_dir, dirs_exist_ok=True)
         return destination_dir
+
+    def _get_primary_file_path(self, document_uid: str) -> Path:
+        """Helper to find the Path object of the primary input file."""
+        input_dir = self.destination_root / document_uid / "input"
+        if not input_dir.exists():
+            raise FileNotFoundError(f"No input folder for document: {document_uid}")
+
+        files = list(input_dir.glob("*"))
+        if not files:
+            raise FileNotFoundError(f"No file found in input folder for document: {document_uid}")
+
+        return files[0]
+
+    # --------------------------------------------------------------------------
+    # NEW METHODS FOR STREAMING/RANGE REQUESTS
+    # --------------------------------------------------------------------------
+
+    def get_file_metadata(self, document_uid: str) -> FileMetadata:
+        """
+        Retrieves metadata (size, file_name, content_type) using Python's os.stat.
+        Note: Content-Type is set to None here, relying on the service layer to detect/default.
+        """
+        file_path = self._get_primary_file_path(document_uid)
+
+        # Get file size and name
+        size = file_path.stat().st_size
+        file_name = file_path.name
+
+        # Construct and return the Pydantic model
+        return FileMetadata(
+            size=size,
+            file_name=file_name,
+            content_type=None,  # File system doesn't reliably store MIME type
+        )
+
+    def get_content_range(self, document_uid: str, start: int, length: int) -> BinaryIO:
+        """
+        Retrieves a readable binary stream for a specific byte range by opening
+        the file, seeking to the start, and creating a limited stream reader.
+        """
+        file_path = self._get_primary_file_path(document_uid)
+
+        # 1. Open the file in binary read mode ('rb')
+        f = open(file_path, "rb")
+
+        # 2. Seek to the requested start position
+        f.seek(start)
+
+        # 3. Create a wrapper to limit the stream to the requested length
+        # io.BufferedReader is useful, but a simple wrapper is clearer:
+
+        # A simple lambda/inner class is often used, but returning the opened,
+        # correctly-positioned file object and relying on the FastAPI
+        # StreamingResponse to handle the length limit is common.
+
+        # For a truly robust stream limited to 'length' bytes:
+        class RangeStreamWrapper(BinaryIO):
+            def __init__(self, file_obj: BinaryIO, limit: int):
+                self.file_obj = file_obj
+                self.bytes_read = 0
+                self.limit = limit
+
+            def read(self, size: int = -1) -> bytes:
+                if self.bytes_read >= self.limit:
+                    return b""
+
+                # Determine how much to read, maxing out at 'size' or remaining limit
+                read_size = size if size != -1 else self.limit - self.bytes_read
+                bytes_to_read = min(read_size, self.limit - self.bytes_read)
+
+                data = self.file_obj.read(bytes_to_read)
+                self.bytes_read += len(data)
+
+                return data
+
+            def close(self):
+                self.file_obj.close()
+
+            # Implement other BinaryIO methods for full compliance (e.g., seek, tell, readable)
+            def seek(self, *args, **kwargs):
+                return self.file_obj.seek(*args, **kwargs)
+
+            def tell(self):
+                return self.file_obj.tell()
+
+        # Return the wrapped stream
+        return RangeStreamWrapper(f, length)

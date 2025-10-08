@@ -19,6 +19,7 @@ from typing import BinaryIO, Tuple
 from fred_core import Action, KeycloakUser, Resource, authorize
 
 from app.common.document_structures import DocumentMetadata
+from app.core.stores.content.base_content_store import FileMetadata
 
 logger = logging.getLogger(__name__)
 
@@ -96,3 +97,27 @@ class ContentService:
             return self.content_store.get_markdown(document_uid)
         except FileNotFoundError:
             raise FileNotFoundError(f"No markdown preview found for document {document_uid}")
+
+    @authorize(Action.READ, Resource.DOCUMENTS)
+    async def get_file_metadata(self, user: KeycloakUser, document_uid: str) -> FileMetadata:
+        # Access control gate (keeps semantics consistent)
+        await self.get_document_metadata(user, document_uid)
+        meta = self.content_store.get_file_metadata(document_uid)
+        if not meta.content_type:
+            import mimetypes
+
+            guessed = mimetypes.guess_type(meta.file_name)[0]
+            meta.content_type = guessed or "application/octet-stream"
+        return meta
+
+    @authorize(Action.READ, Resource.DOCUMENTS)
+    async def get_full_stream(self, user: KeycloakUser, document_uid: str) -> BinaryIO:
+        await self.get_document_metadata(user, document_uid)
+        return self.content_store.get_content(document_uid)
+
+    @authorize(Action.READ, Resource.DOCUMENTS)
+    async def get_range_stream(self, user: KeycloakUser, document_uid: str, *, start: int, length: int) -> BinaryIO:
+        await self.get_document_metadata(user, document_uid)
+        if start < 0 or length <= 0:
+            raise ValueError("Invalid byte range requested.")
+        return self.content_store.get_content_range(document_uid, start=start, length=length)
