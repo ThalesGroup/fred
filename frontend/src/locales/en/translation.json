@@ -353,7 +353,11 @@
     "nowExcluded": "Now excluded"
   },
   "documentDrawerTable": {
-    "deleteFile": "Delete file"
+    "deleteFile": "Delete file",
+    "documentAlreadyAddedToast": {
+      "summary": "File(s) already staged for upload",
+      "detail": "Some files have already been added and are ignored as a result."
+    }
   },
   "documentActions": {
     "menuLabel": "Open document actions menu",
