@@ -36,7 +36,10 @@ logger = logging.getLogger(__name__)
 # ---- Minimal text utils (robust but cheap) ----
 
 _WH_PAT = re.compile(r"(?i)^\s*(who\s+(is|are)|qui\s+(est|sont))\b")
-_QUOTED = re.compile(r'"([^"]{2,120})"|\'([^\']{2,120})\'')
+_QUOTED = re.compile(
+    r'"([^"]{2,120})"'
+    r"|(?:(?<=\s)'([^']{2,120})'(?=\s|[.,;!?]|$))"
+)
 
 _STOP = {
     # articles/conjunctions/preps (EN/FR)
