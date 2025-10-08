@@ -20,7 +20,7 @@ import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import PersonOutlinedIcon from "@mui/icons-material/PersonOutline";
 import LibraryBooksOutlinedIcon from "@mui/icons-material/LibraryBooksOutlined";
-import { useState, useMemo, type ReactNode } from "react";
+import { useState, useMemo } from "react";
 import RateReviewIcon from "@mui/icons-material/RateReview";
 import { getAgentBadge } from "../../utils/avatar.tsx";
 import { useToast } from "../ToastProvider.tsx";
@@ -33,16 +33,14 @@ import {
 import { toCopyText, toMarkdown } from "./messageParts.ts";
 import { getExtras, isToolCall, isToolResult } from "./ChatBotUtils.tsx";
 import { FeedbackDialog } from "../feedback/FeedbackDialog.tsx";
+import { AnyAgent } from "../../common/agent.ts";
 
 type PluginsUsed = {
   libraries?: string[];
-  templates?: string[];
-  prompts?: string[];
-  profiles?: string[];       // optionnel
-  search_policy?: string;    // optionnel
-  temperature?: number;      // optionnel
+  profiles?: string[];
+  search_policy?: string;
+  temperature?: number;
 };
-import { AnyAgent } from "../../common/agent.ts";
 
 export default function MessageCard({
   message,
@@ -56,7 +54,7 @@ export default function MessageCard({
   onCitationHover,
   onCitationClick,
   libraryNameById,
-  profileNameById
+  profileNameById,
 }: {
   message: ChatMessage;
   agent: AnyAgent;
@@ -126,7 +124,7 @@ export default function MessageCard({
     return toMarkdown(parts);
   }, [message.parts, suppressText]);
 
-  // --- METADATA snapshot (par message) ---
+  // --- METADATA snapshot (per message) ---
   const meta: any = (message.metadata as any) ?? {};
   const plugins: PluginsUsed = (meta?.extras?.plugins as PluginsUsed) ?? {};
 
@@ -134,7 +132,7 @@ export default function MessageCard({
   const latencyMs: number | undefined =
     meta.latency_ms ?? meta?.timings?.durationMs ?? meta?.latency?.ms ?? undefined;
 
-  // IDs réellement utilisés pour CE message (pas d’état courant UI)
+  // IDs actually used for THIS message
   const libsIds = Array.isArray(plugins.libraries) ? plugins.libraries : [];
   const prfIds = Array.isArray(plugins.profiles) ? plugins.profiles : [];
 
@@ -152,52 +150,38 @@ export default function MessageCard({
     (ids ?? []).filter(Boolean).map((id) => map?.[id] || id);
 
   const libsLabeled = labelize(libsIds, libraryNameById);
-  const prfsLabeled = labelize(prfIds, profileNameById)
+  const prfsLabeled = labelize(prfIds, profileNameById);
 
-  // --- Indicator pills (uniquement snapshot)
-  type Indicator = { key: string; label: string; enabled: boolean; icon: ReactNode };
-  const pluginIndicators: Indicator[] = [
-    {
-      key: "libraries",
-      label: "Libraries",
-      enabled: libsLabeled.length > 0,
-      icon: <LibraryBooksOutlinedIcon sx={{ fontSize: 14 }} />,
-    },
-    {
-      key: "profiles",
-      label: "Profiles",
-      enabled: prfsLabeled.length > 0,
-      icon: <PersonOutlinedIcon sx={{ fontSize: 14 }} />,
-    },
-  ];
+  // Indicators: only when something is active
+  const showLibs = libsLabeled.length > 0;
+  const showProfile = prfsLabeled.length > 0;
 
-  const SectionRow = ({ label, value }: { label: string; value?: string | number }) =>
+  // Explicit lines (names)
+  const libsTextFull = libsLabeled.join(", ");
+  const profileTextFull = prfsLabeled.join(", ");
+  const profileLabel = prfsLabeled.length > 1 ? "Profiles" : "Profile";
+  const librariesLabel = libsLabeled.length > 1 ? "Libraries" : "Library";
+
+  // Row component
+  const SectionRow = ({
+    label,
+    value,
+    fullWidth = false,
+  }: {
+    label: string;
+    value?: string | number;
+    fullWidth?: boolean;
+  }) =>
     value === undefined || value === null || value === "" ? null : (
-      <Box display="flex" justifyContent="space-between" gap={1}>
+      <Box display="flex" justifyContent="space-between" gap={1} sx={{ flex: fullWidth ? 1 : undefined }}>
         <Typography variant="caption" sx={{ opacity: 0.7 }}>
           {label}
         </Typography>
-        <Typography variant="caption" fontWeight={500}>
+        <Typography variant="caption" fontWeight={500} textAlign="right">
           {String(value)}
         </Typography>
       </Box>
     );
-
-  const PillRow = ({ items }: { items?: (string | undefined)[] }) =>
-    !items || items.filter(Boolean).length === 0 ? null : (
-      <Box display="flex" gap={0.5} flexWrap="wrap">
-        {items.filter(Boolean).map((x, i) => (
-          <Chip key={i} size="small" label={x} variant="outlined" />
-        ))}
-      </Box>
-    );
-
-  const hasPluginsInfo =
-    libsLabeled.length > 0 ||
-    modelName ||
-    latencyMs ||
-    typeof usedTemperature === "number" ||
-    searchPolicy;
 
   return (
     <>
@@ -252,8 +236,8 @@ export default function MessageCard({
                         </Typography>
                       )}
 
-                      {/* Hover indicators (assistant only) */}
-                      {isAssistant && hasPluginsInfo && (
+                      {/* Hover indicators (assistant only; show only when present) */}
+                      {isAssistant && (showLibs || showProfile) && (
                         <Box
                           sx={{
                             ml: "auto",
@@ -264,8 +248,17 @@ export default function MessageCard({
                             transition: "opacity .15s ease",
                           }}
                         >
-                          {pluginIndicators.map((ind) => (
-                            <Tooltip key={ind.key} title={`${ind.label}${ind.enabled ? " enabled" : " disabled"}`}>
+                          {showLibs && (
+                            <Tooltip
+                              title={
+                                <Box>
+                                  <Typography variant="caption" sx={{ opacity: 0.7, display: "block", mb: 0.25 }}>
+                                    {librariesLabel}
+                                  </Typography>
+                                  <Typography variant="caption">{libsTextFull}</Typography>
+                                </Box>
+                              }
+                            >
                               <Box
                                 sx={{
                                   display: "inline-flex",
@@ -275,16 +268,63 @@ export default function MessageCard({
                                   py: 0.25,
                                   borderRadius: 1,
                                   border: `1px solid ${theme.palette.divider}`,
-                                  opacity: ind.enabled ? 0.9 : 0.35,
+                                  maxWidth: 320,
                                 }}
                               >
-                                {ind.icon}
-                                <Typography variant="caption" sx={{ lineHeight: 1 }}>
-                                  {ind.label}
+                                <LibraryBooksOutlinedIcon sx={{ fontSize: 14 }} />
+                                <Typography
+                                  variant="caption"
+                                  sx={{
+                                    lineHeight: 1,
+                                    whiteSpace: "nowrap",
+                                    overflow: "hidden",
+                                    textOverflow: "ellipsis",
+                                  }}
+                                >
+                                  {`${librariesLabel}: ${libsTextFull}`}
                                 </Typography>
                               </Box>
                             </Tooltip>
-                          ))}
+                          )}
+
+                          {showProfile && (
+                            <Tooltip
+                              title={
+                                <Box>
+                                  <Typography variant="caption" sx={{ opacity: 0.7, display: "block", mb: 0.25 }}>
+                                    {profileLabel}
+                                  </Typography>
+                                  <Typography variant="caption">{profileTextFull}</Typography>
+                                </Box>
+                              }
+                            >
+                              <Box
+                                sx={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: 0.5,
+                                  px: 0.75,
+                                  py: 0.25,
+                                  borderRadius: 1,
+                                  border: `1px solid ${theme.palette.divider}`,
+                                  maxWidth: 320,
+                                }}
+                              >
+                                <PersonOutlinedIcon sx={{ fontSize: 14 }} />
+                                <Typography
+                                  variant="caption"
+                                  sx={{
+                                    lineHeight: 1,
+                                    whiteSpace: "nowrap",
+                                    overflow: "hidden",
+                                    textOverflow: "ellipsis",
+                                  }}
+                                >
+                                  {`${profileLabel}: ${profileTextFull}`}
+                                </Typography>
+                              </Box>
+                            </Tooltip>
+                          )}
 
                           {/* Info popover */}
                           <Box
@@ -331,26 +371,29 @@ export default function MessageCard({
                                     <SectionRow label="Node" value={extras?.node as any} />
                                     <SectionRow label="Model" value={modelName} />
 
-                                    {/* Tokens: total + détail clair */}
+                                    {/* Tokens */}
                                     {(() => {
-                                      const inTok = Math.max(0, Number(inTokens ?? 0));   // prompt + system + contexte récupéré
-                                      const outTok = Math.max(0, Number(outTokens ?? 0)); // réponse du modèle
+                                      const inTok = Math.max(0, Number(inTokens ?? 0));
+                                      const outTok = Math.max(0, Number(outTokens ?? 0));
                                       const totalTok = inTok + outTok;
                                       const fmt = (n: number) => n.toLocaleString();
 
                                       return (
                                         <>
                                           <SectionRow label="Tokens used" value={fmt(totalTok)} />
-                                          <Box sx={{ pl: 1.5 }}>
+                                          <Stack spacing={0.25} sx={{ pl: 1.5, mt: 0 }}>
                                             <SectionRow label="From user (prompt+context)" value={fmt(inTok)} />
                                             <SectionRow label="From model (response)" value={fmt(outTok)} />
-                                          </Box>
+                                          </Stack>
                                         </>
                                       );
                                     })()}
 
                                     <Box display="flex" gap={1}>
-                                      <SectionRow label="Latency" value={latencyMs != null ? `${latencyMs.toLocaleString()} ms` : undefined} />
+                                      <SectionRow
+                                        label="Latency"
+                                        value={latencyMs != null ? `${latencyMs.toLocaleString()} ms` : undefined}
+                                      />
                                       <SectionRow label="Search" value={searchPolicy} />
                                       <SectionRow
                                         label="Temp"
@@ -358,25 +401,27 @@ export default function MessageCard({
                                       />
                                     </Box>
 
-                                    {(libsLabeled.length || prfsLabeled.length) ? (
-                                      <Divider flexItem />
-                                    ) : null}
+                                    {(libsLabeled.length || prfsLabeled.length) ? <Divider flexItem /> : null}
 
                                     {libsLabeled.length ? (
                                       <>
                                         <Typography variant="overline" sx={{ opacity: 0.7 }}>
-                                          Libraries
+                                          {libsLabeled.length > 1 ? "LIBRARIES" : "LIBRARY"}
                                         </Typography>
-                                        <PillRow items={libsLabeled} />
+                                        <Typography variant="caption" fontWeight={500} sx={{ display: "block" }}>
+                                          {libsLabeled.join(", ")}
+                                        </Typography>
                                       </>
                                     ) : null}
 
                                     {prfsLabeled.length ? (
                                       <>
                                         <Typography variant="overline" sx={{ opacity: 0.7 }}>
-                                          Profiles
+                                          {prfsLabeled.length > 1 ? "PROFILES" : "PROFILE"}
                                         </Typography>
-                                        <PillRow items={prfsLabeled} />
+                                        <Typography variant="caption" fontWeight={500} sx={{ display: "block" }}>
+                                          {prfsLabeled.join(", ")}
+                                        </Typography>
                                       </>
                                     ) : null}
 
@@ -385,7 +430,6 @@ export default function MessageCard({
                                       AI content may be incorrect.
                                     </Typography>
                                   </Stack>
-
                                 </Paper>
                               </ClickAwayListener>
                             </Popper>
