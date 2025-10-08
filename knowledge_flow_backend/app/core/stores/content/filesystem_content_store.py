@@ -12,12 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Import the concrete IO base class
+import io
 import logging
 import shutil
 from pathlib import Path
 from typing import BinaryIO, cast
-# Import the concrete IO base class
-import io 
 
 import pandas as pd
 
