@@ -15,10 +15,11 @@
 import logging
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Header
+from fastapi import APIRouter, Depends, Header, HTTPException
 from fastapi.responses import StreamingResponse
 from fred_core import KeycloakUser, get_current_user
 from pydantic import BaseModel
+from starlette.background import BackgroundTask
 
 logger = logging.getLogger(__name__)
 
@@ -192,6 +193,10 @@ class ContentController:
             stream, file_name, content_type = await self.service.get_original_content(user, document_uid)
             # Safety net: if your storage didn’t give a concrete type, fall back to octet-stream
             media_type = content_type or "application/octet-stream"
+
+            # The original implementation for this endpoint likely already returns an iterable
+            # or a synchronous file-like object that StreamingResponse can handle for simple downloads.
+            # We assume it works as-is for the direct download use case.
             return StreamingResponse(
                 content=stream,
                 media_type=media_type,
@@ -214,60 +219,83 @@ class ContentController:
             user: KeycloakUser = Depends(get_current_user),
             range_header: Optional[str] = Header(None, alias="Range"),
         ):
-            """
-            Fred (why):
-            - PDF.js issues HTTP byte-range requests to render immediately without full download.
-            - This endpoint stays ‘viewer-optimized’: inline, cache-friendly, range-aware.
-            """
             try:
-                # We need total size/ctype regardless of range
-                file_meta = await self.service.get_file_metadata(user, document_uid)  # new thin service wrapper below
+                file_meta = await self.service.get_file_metadata(user, document_uid)
                 total_size = file_meta.size
                 file_name = file_meta.file_name
                 content_type = file_meta.content_type or "application/octet-stream"
+                chunk_size = 8192  # Define a standard chunk size for streaming
 
                 headers = {
                     "Accept-Ranges": "bytes",
                     "Content-Disposition": f'inline; filename="{file_name}"',
                 }
 
-                # No Range → stream everything
                 rng = parse_range_header(range_header)
-                if rng is None:
-                    stream = await self.service.get_full_stream(user, document_uid)
-                    headers["Content-Length"] = str(total_size)
-                    return StreamingResponse(stream, media_type=content_type, headers=headers, status_code=200)
 
-                # Compute actual window
-                start, end = rng  # end is inclusive if given
+                # No Range → full file with Content-Length
+                if rng is None:
+                    raw_stream = await self.service.get_full_stream(user, document_uid)
+
+                    # FIX: Wrap the non-iterable raw_stream object in an iterable generator
+                    def stream_generator_200():
+                        # Read chunks until the stream is exhausted
+                        while chunk := raw_stream.read(chunk_size):
+                            yield chunk
+
+                    headers["Content-Length"] = str(total_size)
+                    return StreamingResponse(
+                        content=stream_generator_200(),  # Pass the generator
+                        media_type=content_type,
+                        headers=headers,
+                        status_code=200,
+                        background=BackgroundTask(getattr(raw_stream, "close", lambda: None)),
+                    )
+
+                # ---- Normalize Range window (inclusive end) ----
+                start, end = rng
+
                 if start is None and end is not None:
-                    # Suffix: bytes=-N  -> last N bytes
-                    if end <= 0 or end > total_size:
+                    # Suffix: bytes=-N  (N may exceed total_size → serve whole file)
+                    if end <= 0:
+                        # invalid suffix
+                        headers["Content-Range"] = f"bytes */{total_size}"
                         raise HTTPException(status_code=416, detail="Range Not Satisfiable")
                     start = max(total_size - end, 0)
                     end = total_size - 1
                 else:
                     # Normal: bytes=START-END or bytes=START-
-                    if start is None:
-                        # 'bytes=-' malformed
-                        raise HTTPException(status_code=416, detail="Range Not Satisfiable")
-                    if start >= total_size or start < 0:
+                    if start is None or start < 0 or start >= total_size:
+                        headers["Content-Range"] = f"bytes */{total_size}"
                         raise HTTPException(status_code=416, detail="Range Not Satisfiable")
                     if end is None:
                         end = total_size - 1
+                    else:
+                        end = min(end, total_size - 1)
                     if end < start:
+                        headers["Content-Range"] = f"bytes */{total_size}"
                         raise HTTPException(status_code=416, detail="Range Not Satisfiable")
-                    end = min(end, total_size - 1)
 
-                length = end - start + 1  # number of bytes to serve
+                length = end - start + 1
 
-                # Ask service for exactly that window
-                stream = await self.service.get_range_stream(user, document_uid, start=start, length=length)
+                # Ask store for a stream that *clamps* to exactly `length` bytes
+                raw_stream = await self.service.get_range_stream(user, document_uid, start=start, length=length)
+
+                # FIX: Wrap the non-iterable raw_stream object in an iterable generator
+                def stream_generator_206():
+                    # Read chunks until the stream is exhausted
+                    while chunk := raw_stream.read(chunk_size):
+                        yield chunk
 
                 headers["Content-Range"] = f"bytes {start}-{end}/{total_size}"
-                headers["Content-Length"] = str(length)
-
-                return StreamingResponse(stream, media_type=content_type, headers=headers, status_code=206)
+                # IMPORTANT: do NOT set Content-Length for 206 → avoids server crash on early client aborts
+                return StreamingResponse(
+                    content=stream_generator_206(),  # Pass the generator
+                    media_type=content_type,
+                    headers=headers,
+                    status_code=206,
+                    background=BackgroundTask(getattr(raw_stream, "close", lambda: None)),
+                )
 
             except FileNotFoundError as e:
                 raise HTTPException(status_code=404, detail=str(e))

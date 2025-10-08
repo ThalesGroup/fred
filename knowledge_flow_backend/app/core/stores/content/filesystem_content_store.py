@@ -15,7 +15,9 @@
 import logging
 import shutil
 from pathlib import Path
-from typing import BinaryIO
+from typing import BinaryIO, cast
+# Import the concrete IO base class
+import io 
 
 import pandas as pd
 
@@ -192,41 +194,43 @@ class FileSystemContentStore(BaseContentStore):
         f.seek(start)
 
         # 3. Create a wrapper to limit the stream to the requested length
-        # io.BufferedReader is useful, but a simple wrapper is clearer:
-
-        # A simple lambda/inner class is often used, but returning the opened,
-        # correctly-positioned file object and relying on the FastAPI
-        # StreamingResponse to handle the length limit is common.
-
-        # For a truly robust stream limited to 'length' bytes:
-        class RangeStreamWrapper(BinaryIO):
+        class RangeStreamWrapper(io.IOBase):
             def __init__(self, file_obj: BinaryIO, limit: int):
                 self.file_obj = file_obj
                 self.bytes_read = 0
                 self.limit = limit
+                
+                # These binary attributes satisfy the static checker's BinaryIO requirement
+                self.mode = 'rb' 
+                self.encoding = None 
 
             def read(self, size: int = -1) -> bytes:
                 if self.bytes_read >= self.limit:
                     return b""
-
-                # Determine how much to read, maxing out at 'size' or remaining limit
                 read_size = size if size != -1 else self.limit - self.bytes_read
                 bytes_to_read = min(read_size, self.limit - self.bytes_read)
-
                 data = self.file_obj.read(bytes_to_read)
                 self.bytes_read += len(data)
-
                 return data
-
+                
             def close(self):
                 self.file_obj.close()
+            
+            def readable(self) -> bool:
+                return True
+            
+            def writable(self) -> bool:
+                return False
+                
+            def seekable(self) -> bool:
+                return self.file_obj.seekable()
 
-            # Implement other BinaryIO methods for full compliance (e.g., seek, tell, readable)
-            def seek(self, *args, **kwargs):
-                return self.file_obj.seek(*args, **kwargs)
+            def seek(self, offset: int, whence: int = 0) -> int:
+                return self.file_obj.seek(offset, whence)
 
-            def tell(self):
+            def tell(self) -> int:
                 return self.file_obj.tell()
 
-        # Return the wrapped stream
-        return RangeStreamWrapper(f, length)
+        # FIX: Use typing.cast to explicitly assert that this object meets the BinaryIO interface.
+        # This suppresses the Pylance/MyPy warning while maintaining runtime correctness.
+        return cast(BinaryIO, RangeStreamWrapper(f, length))
