@@ -152,8 +152,6 @@ export const DocumentUploadDrawer: React.FC<DocumentUploadDrawerProps> = ({
         sx: {
           width: { xs: "100%", sm: 450 },
           p: 3,
-          borderTopLeftRadius: 16,
-          borderBottomLeftRadius: 16,
         },
       }}}
     >
@@ -185,15 +183,22 @@ export const DocumentUploadDrawer: React.FC<DocumentUploadDrawerProps> = ({
           borderColor: "divider",
           borderRadius: "12px",
           cursor: "pointer",
-          minHeight: "180px",
-          maxHeight: "400px",
+          minHeight: "220px",
+          maxHeight: "60vh",
           overflowY: "auto",
           backgroundColor: isHighlighted ? theme.palette.action.hover : theme.palette.background.paper,
           transition: "background-color 0.3s",
           display: "flex",
           flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
+          alignItems: tempFiles.length ? "stretch" : "center",
+          justifyContent: tempFiles.length ? "flex-start" : "center",
+          "&::-webkit-scrollbar": {
+            width: "8px",
+          },
+          "&::-webkit-scrollbar-thumb": {
+            backgroundColor: theme.palette.divider,
+            borderRadius: "4px",
+          },
         }}
         onClick={handleOpenFileSelector}
         onDragOver={(event) => {
