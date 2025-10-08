@@ -380,26 +380,26 @@ export default function MessageCard({
 
                                       return (
                                         <>
-                                          <SectionRow label="Tokens used" value={fmt(totalTok)} />
-                                          <Stack spacing={0.25} sx={{ pl: 1.5, mt: 0 }}>
-                                            <SectionRow label="From user (prompt+context)" value={fmt(inTok)} />
-                                            <SectionRow label="From model (response)" value={fmt(outTok)} />
+                                          <Stack spacing={0}>
+                                            <SectionRow label="Tokens used" value={fmt(totalTok)} />
+                                            <Stack spacing={0.25} sx={{ pl: 1.5 }}>
+                                              <SectionRow label="From user (prompt+context)" value={fmt(inTok)} />
+                                              <SectionRow label="From model (response)" value={fmt(outTok)} />
+                                            </Stack>
                                           </Stack>
                                         </>
                                       );
                                     })()}
 
-                                    <Box display="flex" gap={1}>
-                                      <SectionRow
-                                        label="Latency"
-                                        value={latencyMs != null ? `${latencyMs.toLocaleString()} ms` : undefined}
-                                      />
-                                      <SectionRow label="Search" value={searchPolicy} />
-                                      <SectionRow
-                                        label="Temp"
-                                        value={typeof usedTemperature === "number" ? usedTemperature : undefined}
-                                      />
-                                    </Box>
+                                    <SectionRow
+                                      label="Latency"
+                                      value={latencyMs != null ? `${latencyMs.toLocaleString()} ms` : undefined}
+                                    />
+                                    <SectionRow label="Search" value={searchPolicy} />
+                                    <SectionRow
+                                      label="Temp"
+                                      value={typeof usedTemperature === "number" ? usedTemperature : undefined}
+                                    />
 
                                     {(libsLabeled.length || prfsLabeled.length) ? <Divider flexItem /> : null}
 
