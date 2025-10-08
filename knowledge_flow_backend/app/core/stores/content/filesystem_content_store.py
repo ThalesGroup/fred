@@ -12,14 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Import the concrete IO base class
+import io
 import logging
 import shutil
 from pathlib import Path
-from typing import BinaryIO
+from typing import BinaryIO, cast
 
 import pandas as pd
 
-from app.core.stores.content.base_content_store import BaseContentStore
+from app.core.stores.content.base_content_store import BaseContentStore, FileMetadata
 
 logger = logging.getLogger(__name__)
 
@@ -143,3 +145,92 @@ class FileSystemContentStore(BaseContentStore):
             raise FileNotFoundError(f"No stored document for: {document_uid}")
         shutil.copytree(source_dir, destination_dir, dirs_exist_ok=True)
         return destination_dir
+
+    def _get_primary_file_path(self, document_uid: str) -> Path:
+        """Helper to find the Path object of the primary input file."""
+        input_dir = self.destination_root / document_uid / "input"
+        if not input_dir.exists():
+            raise FileNotFoundError(f"No input folder for document: {document_uid}")
+
+        files = list(input_dir.glob("*"))
+        if not files:
+            raise FileNotFoundError(f"No file found in input folder for document: {document_uid}")
+
+        return files[0]
+
+    # --------------------------------------------------------------------------
+    # NEW METHODS FOR STREAMING/RANGE REQUESTS
+    # --------------------------------------------------------------------------
+
+    def get_file_metadata(self, document_uid: str) -> FileMetadata:
+        """
+        Retrieves metadata (size, file_name, content_type) using Python's os.stat.
+        Note: Content-Type is set to None here, relying on the service layer to detect/default.
+        """
+        file_path = self._get_primary_file_path(document_uid)
+
+        # Get file size and name
+        size = file_path.stat().st_size
+        file_name = file_path.name
+
+        # Construct and return the Pydantic model
+        return FileMetadata(
+            size=size,
+            file_name=file_name,
+            content_type=None,  # File system doesn't reliably store MIME type
+        )
+
+    def get_content_range(self, document_uid: str, start: int, length: int) -> BinaryIO:
+        """
+        Retrieves a readable binary stream for a specific byte range by opening
+        the file, seeking to the start, and creating a limited stream reader.
+        """
+        file_path = self._get_primary_file_path(document_uid)
+
+        # 1. Open the file in binary read mode ('rb')
+        f = open(file_path, "rb")
+
+        # 2. Seek to the requested start position
+        f.seek(start)
+
+        # 3. Create a wrapper to limit the stream to the requested length
+        class RangeStreamWrapper(io.IOBase):
+            def __init__(self, file_obj: BinaryIO, limit: int):
+                self.file_obj = file_obj
+                self.bytes_read = 0
+                self.limit = limit
+                
+                # These binary attributes satisfy the static checker's BinaryIO requirement
+                self.mode = 'rb' 
+                self.encoding = None 
+
+            def read(self, size: int = -1) -> bytes:
+                if self.bytes_read >= self.limit:
+                    return b""
+                read_size = size if size != -1 else self.limit - self.bytes_read
+                bytes_to_read = min(read_size, self.limit - self.bytes_read)
+                data = self.file_obj.read(bytes_to_read)
+                self.bytes_read += len(data)
+                return data
+                
+            def close(self):
+                self.file_obj.close()
+            
+            def readable(self) -> bool:
+                return True
+            
+            def writable(self) -> bool:
+                return False
+                
+            def seekable(self) -> bool:
+                return self.file_obj.seekable()
+
+            def seek(self, offset: int, whence: int = 0) -> int:
+                return self.file_obj.seek(offset, whence)
+
+            def tell(self) -> int:
+                return self.file_obj.tell()
+
+        # FIX: Use typing.cast to explicitly assert that this object meets the BinaryIO interface.
+        # This suppresses the Pylance/MyPy warning while maintaining runtime correctness.
+        return cast(BinaryIO, RangeStreamWrapper(f, length))
