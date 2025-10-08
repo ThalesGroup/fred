@@ -23,7 +23,7 @@ import pandas as pd
 from minio import Minio
 from minio.error import S3Error
 
-from app.core.stores.content.base_content_store import BaseContentStore
+from app.core.stores.content.base_content_store import BaseContentStore, FileMetadata
 
 logger = logging.getLogger(__name__)
 
@@ -133,25 +133,6 @@ class MinioStorageBackend(BaseContentStore):
             logger.error(f"❌ Failed to delete objects for document {document_uid}: {e}")
             raise ValueError(f"Failed to delete document content from MinIO: {e}")
 
-    def get_content(self, document_uid: str) -> BinaryIO:
-        """
-        Returns a binary stream of the first file found in the input/ folder for the document.
-        """
-        prefix = f"{document_uid}/input/"
-        try:
-            objects = list(self.client.list_objects(self.bucket_name, prefix=prefix, recursive=True))
-            if not objects:
-                raise FileNotFoundError(f"No input content found for document: {document_uid}")
-
-            obj = objects[0]
-            if obj.object_name is None:
-                raise RuntimeError(f"MinIO object has no name: {obj}")
-            response = self.client.get_object(self.bucket_name, obj.object_name)
-            return BytesIO(response.read())
-        except S3Error as e:
-            logger.error(f"Error fetching content for {document_uid}: {e}")
-            raise FileNotFoundError(f"Failed to retrieve original content: {e}")
-
     def get_markdown(self, document_uid: str) -> str:
         """
         Fetches the markdown content from 'output/output.md' in the document directory.
@@ -241,3 +222,100 @@ class MinioStorageBackend(BaseContentStore):
         except S3Error as e:
             logger.error(f"Failed to restore document {document_uid}: {e}")
             raise
+
+    def _get_primary_object_name(self, document_uid: str) -> str:
+        """Helper to find the object_name of the primary input file."""
+        prefix = f"{document_uid}/input/"
+        objects = list(self.client.list_objects(self.bucket_name, prefix=prefix, recursive=True))
+        if not objects:
+            raise FileNotFoundError(f"No input content found for document: {document_uid}")
+
+        # Assume the first object in the input folder is the primary file
+        if objects[0].object_name is None:
+            raise RuntimeError(f"MinIO object has no name: {objects[0]}")
+
+        return objects[0].object_name
+
+    def get_file_metadata(self, document_uid: str) -> FileMetadata:
+        """
+        Retrieves metadata (size, file_name, content_type) using MinIO's stat_object.
+        """
+        object_name = self._get_primary_object_name(document_uid)
+
+        try:
+            stat = self.client.stat_object(self.bucket_name, object_name)
+
+            # Extract the actual file name from the full object_name path
+            file_name = Path(object_name).name
+
+            # Ensure size is not None
+            if stat.size is None:
+                logger.error(f"File size is None for {object_name}")
+                raise ValueError(f"File size is None for {object_name}")
+
+            # Construct and return the Pydantic model
+            return FileMetadata(
+                size=stat.size,
+                file_name=file_name,
+                content_type=stat.content_type,
+            )
+        except S3Error as e:
+            logger.error(f"Error fetching metadata for {object_name}: {e}")
+            raise FileNotFoundError(f"Failed to retrieve file metadata: {e}")
+
+    def get_content_range(self, document_uid: str, start: int, length: int) -> BinaryIO:
+        """
+        Retrieves a specific byte range using MinIO's get_object with offset and length.
+        """
+        object_name = self._get_primary_object_name(document_uid)
+
+        try:
+            # MinIO's get_object supports offset and length arguments for range requests
+            response = self.client.get_object(bucket_name=self.bucket_name, object_name=object_name, offset=start, length=length)
+
+            # Important: The MinIO response object itself (ResponseStream) is a BinaryIO file-like object
+            # that streams the requested bytes. We return it directly.
+            return response  # type: ignore
+
+        except S3Error as e:
+            logger.error(f"Error fetching range for {object_name} ({start}-{start + length - 1}): {e}")
+            raise FileNotFoundError(f"Failed to retrieve content range: {e}")
+
+    def get_content(self, document_uid: str) -> BinaryIO:
+        """
+        UPDATED: Use get_content_range to fetch the full content,
+        or stick to the existing implementation, ensuring it returns the full stream.
+
+        Current MinIO implementation:
+        """
+        object_name = self._get_primary_object_name(document_uid)
+        try:
+            # Existing logic for full content
+            response = self.client.get_object(self.bucket_name, object_name)
+            return BytesIO(response.read())  # Note: Reading all into BytesIO is what makes it slow
+        except S3Error as e:
+            logger.error(f"Error fetching content for {document_uid}: {e}")
+            raise FileNotFoundError(f"Failed to retrieve original content: {e}")
+
+        # OPTIONAL: You could rewrite get_content to return the response object directly,
+        # but that requires ensuring the caller closes the stream, which BytesIO handles.
+        # For the old API (which forces immediate read), keep your existing logic.
+
+    def old_get_content(self, document_uid: str) -> BinaryIO:
+        """
+        Returns a binary stream of the first file found in the input/ folder for the document.
+        """
+        prefix = f"{document_uid}/input/"
+        try:
+            objects = list(self.client.list_objects(self.bucket_name, prefix=prefix, recursive=True))
+            if not objects:
+                raise FileNotFoundError(f"No input content found for document: {document_uid}")
+
+            obj = objects[0]
+            if obj.object_name is None:
+                raise RuntimeError(f"MinIO object has no name: {obj}")
+            response = self.client.get_object(self.bucket_name, obj.object_name)
+            return BytesIO(response.read())
+        except S3Error as e:
+            logger.error(f"Error fetching content for {document_uid}: {e}")
+            raise FileNotFoundError(f"Failed to retrieve original content: {e}")

@@ -36,7 +36,7 @@ from app.common.utils import parse_server_configuration
 from app.core.monitoring.monitoring_controller import MonitoringController
 from app.features.catalog.controller import CatalogController
 from app.features.content import report_controller
-from app.features.content.controller import ContentController
+from app.features.content.content_controller import ContentController
 from app.features.ingestion.controller import IngestionController
 from app.features.kpi import logs_controller
 from app.features.kpi.kpi_controller import KPIController
