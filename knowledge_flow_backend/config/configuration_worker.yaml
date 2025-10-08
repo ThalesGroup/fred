@@ -1,4 +1,3 @@
-
 app:
   name: "Knowledge Flow Backend"
   base_url: "/knowledge-flow/v1"
@@ -17,8 +16,8 @@ security:
     enabled: false
     client_id: "app"
     realm_url: "http://app-keycloak:8080/realms/app"
-    authorized_origins:
-      - "http://localhost:5173"
+  authorized_origins:
+    - "http://localhost:5173"
 
 scheduler:
   enabled: true
@@ -51,7 +50,6 @@ input_processors:
     class_path: app.core.processors.input.markdown_markdown_processor.markdown_markdown_processor.MarkdownMarkdownProcessor
   - prefix: ".xlsm"
     class_path: app.core.processors.input.pps_tabular_processor.pps_tabular_processor.PpsTabularProcessor
-
 
 # -----------------------------------------------------------------------------
 # OUTPUT PROCESSORS (Optional)
@@ -102,7 +100,6 @@ content_storage:
   # secure: False
   # bucket_name: app-bucket
 
-
 metadata_storage:
   # Metadata Storage Configuration
   #
@@ -149,7 +146,7 @@ catalog_storage:
   duckdb_path: "~/.fred/knowledge-flow/db.duckdb"
 
 # --- Embedding backend ---
-# type: string (e.g., openai, azureopenai, ollama, etc.)
+# type: string (e.g., openai, azure-openai, ollama, etc.)
 embedding_model:
   type:
     "openai"
@@ -158,8 +155,8 @@ embedding_model:
   # -----------------------------------------------------------------------------
   # Set the embedding backend to use:
   #   - "openai"      → Use OpenAI's public API
-  #   - "azureopenai" → Use Azure OpenAI service directly
-  #   - "azureapim"   → Use Azure OpenAI via Azure APIM Gateway (OAuth2 + subscription key)
+  #   - "azure-openai" → Use Azure OpenAI service directly
+  #   - "azure-apim"   → Use Azure OpenAI via Azure APIM Gateway (OAuth2 + subscription key)
   #   - "ollama"      → Use Ollama's API
   #
   # Required environment variables based on the selected backend:
@@ -170,23 +167,22 @@ embedding_model:
   # - OPENAI_API_BASE (optional if using default)
   # - OPENAI_API_VERSION (optional)
   #
-  # BACKEND: "azureopenai"
+  # BACKEND: "azure-openai"
   # -------------------------------------
   # - AZURE_OPENAI_API_KEY
   # - AZURE_OPENAI_ENDPOINT
-  # - AZURE_API_VERSION
+  # - AZURE_OPENAI_API_VERSION
   # - AZURE_DEPLOYMENT_EMBEDDING
   #
-  # BACKEND: "azureapim"
+  # BACKEND: "azure-apim"
   # -------------------------------------
   # - AZURE_TENANT_ID
-  # - AZURE_CLIENT_ID
-  # - AZURE_CLIENT_SECRET
-  # - AZURE_CLIENT_SCOPE
+  # - AZURE_AD_CLIENT_ID
+  # - AZURE_AD_CLIENT_SECRET
+  # - AZURE_AD_CLIENT_SCOPE
   # - AZURE_APIM_BASE_URL
-  # - AZURE_APIM_KEY
-  # - AZURE_API_VERSION
-  # - AZURE_RESOURCE_PATH_EMBEDDINGS
+  # - AZURE_APIM_SUBSCRIPTION_KEY
+  # - AZURE_OPENAI_API_VERSION
   # - AZURE_DEPLOYMENT_EMBEDDING
   #
   # BACKEND: "ollama"

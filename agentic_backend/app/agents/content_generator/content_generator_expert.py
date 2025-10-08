@@ -143,13 +143,12 @@ class ContentGeneratorExpert(AgentFlow):
         template = f"{persona}\n\n{rules}\n\n{principles}"
         sys_prompt = self.render(template)
 
-        # 3. Append the optional user profile text.
-        sys_prompt = sys_prompt + "\n\n" + self.profile_text()
+        # 3. Append the optional chat context text.
+        sys_prompt = sys_prompt + "\n\n" + self.chat_context_text()
 
         # 4. Wrap and invoke the model.
         messages = self.with_system(sys_prompt, state["messages"])
-
-        assert self.model is not None
+        messages = self.with_chat_context_text(messages)
         response = await self.model.ainvoke(messages)
         return {"messages": [response]}
 

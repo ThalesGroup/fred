@@ -22,6 +22,7 @@ from fred_core import (
     SecurityConfiguration,
     StoreConfig,
 )
+from langchain_core.messages import SystemMessage
 from pydantic import BaseModel, Field
 
 from app.core.agents.agent_spec import AgentTuning
@@ -77,6 +78,13 @@ class RecursionConfig(BaseModel):
     recursion_limit: int
 
 
+class AgentChatOptions(BaseModel):
+    search_policy_selection: bool = False
+    libraries_selection: bool = False
+    record_audio_files: bool = True
+    attach_files: bool = True
+
+
 # ---------------- Base: shared identity + UX + tuning ----------------
 class BaseAgent(BaseModel):
     """
@@ -101,6 +109,7 @@ class BaseAgent(BaseModel):
         default_factory=list,
         description="List of active MCP server configurations for this agent.",
     )
+    chat_options: AgentChatOptions = AgentChatOptions()
 
 
 # ---------------- Agent: a regular single agent ----------------
@@ -156,6 +165,7 @@ class FrontendFlags(BaseModel):
 
 class Properties(BaseModel):
     logoName: str = "fred"
+    siteDisplayName: str = "Fred"
 
 
 class FrontendSettings(BaseModel):
@@ -179,3 +189,8 @@ class Configuration(BaseModel):
     frontend_settings: FrontendSettings
     ai: AIConfig
     storage: StorageConfig
+
+
+class ChatContextMessage(SystemMessage):
+    def __init__(self, content: str):
+        super().__init__(content=content)

@@ -29,7 +29,7 @@ class RuntimeContext(BaseModel):
     selected_document_libraries_ids: list[str] | None = None
     selected_prompt_ids: list[str] | None = None
     selected_template_ids: list[str] | None = None
-    selected_profile_ids: list[str] | None = None
+    selected_chat_context_ids: list[str] | None = None
     search_policy: str | None = None
 
 
@@ -65,8 +65,8 @@ def get_template_libraries_ids(context: RuntimeContext | None) -> list[str] | No
     return context.selected_template_ids
 
 
-def get_profile_libraries_ids(context: RuntimeContext | None) -> list[str] | None:
+def get_chat_context_libraries_ids(context: RuntimeContext | None) -> list[str] | None:
     """Helper to extract profile library IDs from context."""
     if not context:
         return None
-    return context.selected_profile_ids
+    return context.selected_chat_context_ids

@@ -1,30 +1,31 @@
 // Copyright Thales 2025
 // Licensed under the Apache License, Version 2.0
 
+import AddIcon from "@mui/icons-material/Add";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import MoreHorizIcon from "@mui/icons-material/MoreHoriz";
 import {
   Box,
+  Button,
+  ClickAwayListener,
   Fade,
   IconButton,
+  InputAdornment,
   List,
   ListItem,
-  TextField,
-  Typography,
-  ClickAwayListener,
-  Button,
-  Tooltip,
   MenuItem,
+  SxProps,
+  TextField,
   Theme,
+  Tooltip,
+  Typography,
   useTheme,
-  InputAdornment,
 } from "@mui/material";
-import AddIcon from "@mui/icons-material/Add";
-import MoreHorizIcon from "@mui/icons-material/MoreHoriz";
-import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import React, { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { StyledMenu } from "../../../utils/styledMenu";
 import { SessionSchema } from "../../../slices/agentic/agenticOpenApi";
+import { StyledMenu } from "../../../utils/styledMenu";
 
 /**
  * Fred UI rationale:
@@ -39,6 +40,7 @@ export type ConversationListProps = {
   onCreateNewConversation: () => void;
   onDeleteSession: (session: SessionSchema) => void;
   isCreatingNewConversation: boolean;
+  sx?: SxProps<Theme>;
 };
 
 export const ConversationList: React.FC<ConversationListProps> = (props) => {
@@ -49,6 +51,7 @@ export const ConversationList: React.FC<ConversationListProps> = (props) => {
     onCreateNewConversation,
     onDeleteSession,
     isCreatingNewConversation,
+    sx = [],
   } = props;
 
   const theme = useTheme<Theme>();
@@ -108,7 +111,16 @@ export const ConversationList: React.FC<ConversationListProps> = (props) => {
   };
 
   return (
-    <>
+    <Box
+      sx={[
+        {
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
+        },
+        ...(Array.isArray(sx) ? sx : [sx]),
+      ]}
+    >
       {/* Header + "New conversation" */}
       <Fade in={showElements} timeout={900}>
         <Box
@@ -121,9 +133,7 @@ export const ConversationList: React.FC<ConversationListProps> = (props) => {
             mt: 1,
           }}
         >
-          <Typography variant="body2" sx={{ color: "text.secondary" }}>
-            {t("settings.conversations")}
-          </Typography>
+          <Typography variant="subtitle1">{t("settings.conversations")}</Typography>
           <Tooltip title={t("settings.newConversation")}>
             <IconButton
               onClick={onCreateNewConversation}
@@ -144,11 +154,12 @@ export const ConversationList: React.FC<ConversationListProps> = (props) => {
       <Fade in={showElements} timeout={1100}>
         <List
           sx={{
-            flexGrow: 1,
+            flex: 1,
+            minHeight: 0,
             overflowY: "auto",
             px: 1.5,
             py: 1,
-            "&::-webkit-scrollbar": { width: "3px" },
+            "&::-webkit-scrollbar": { width: "5px" },
             "&::-webkit-scrollbar-thumb": {
               backgroundColor: isDarkTheme ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)",
               borderRadius: "3px",
@@ -276,7 +287,7 @@ export const ConversationList: React.FC<ConversationListProps> = (props) => {
                       >
                         <Typography
                           variant="body2"
-                          sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" , maxWidth: "85%" }}
+                          sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "85%" }}
                         >
                           {session.title}
                         </Typography>
@@ -325,6 +336,6 @@ export const ConversationList: React.FC<ConversationListProps> = (props) => {
           <Typography variant="body2">{t("settings.delete")}</Typography>
         </MenuItem>
       </StyledMenu>
-    </>
+    </Box>
   );
 };

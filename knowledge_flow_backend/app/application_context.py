@@ -20,7 +20,9 @@ from typing import Dict, Optional, Type, Union
 
 from fred_core import (
     BaseKPIStore,
+    BaseLogStore,
     DuckdbStoreConfig,
+    InMemoryLogStorageConfig,
     KpiLogStore,
     KPIWriter,
     LogStoreConfig,
@@ -28,6 +30,8 @@ from fred_core import (
     ModelProvider,
     OpenSearchIndexConfig,
     OpenSearchKPIStore,
+    OpenSearchLogStore,
+    RamLogStore,
     SQLStorageConfig,
     SQLTableStore,
     StoreInfo,
@@ -35,7 +39,6 @@ from fred_core import (
     get_model,
     split_realm_url,
 )
-from fred_core import BaseLogStore, InMemoryLogStorageConfig, OpenSearchLogStore, RamLogStore
 from langchain_core.embeddings import Embeddings
 from opensearchpy import OpenSearch, RequestsHttpConnection
 
@@ -784,8 +787,8 @@ class ApplicationContext:
         elif provider == ModelProvider.AZURE_OPENAI.value:
             _require_env("AZURE_OPENAI_API_KEY")
         elif provider == ModelProvider.AZURE_APIM.value:
-            _require_env("AZURE_CLIENT_SECRET")
-            _require_env("AZURE_APIM_KEY")
+            _require_env("AZURE_AD_CLIENT_SECRET")
+            _require_env("AZURE_APIM_SUBSCRIPTION_KEY")
         elif provider == ModelProvider.OLLAMA.value:
             # Usually no secrets; base_url is in settings
             pass

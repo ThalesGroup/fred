@@ -46,6 +46,18 @@ from fred_core.kpi.kpi_writer_structures import (
 )
 from fred_core.kpi.log_kpi_store import KpiLogStore
 from fred_core.kpi.opensearch_kpi_store import OpenSearchKPIStore
+from fred_core.logs.base_log_store import BaseLogStore
+from fred_core.logs.log_setup import StoreEmitHandler, log_setup
+from fred_core.logs.log_structures import (
+    InMemoryLogStorageConfig,
+    LogEventDTO,
+    LogQuery,
+    LogQueryResult,
+    LogStorageConfig,
+    TailFileResponse,
+)
+from fred_core.logs.memory_log_store import RamLogStore
+from fred_core.logs.opensearch_log_store import OpenSearchLogStore
 from fred_core.model.factory import get_embeddings, get_model, get_structured_chain
 from fred_core.model.models import ModelProvider
 from fred_core.security.authorization import (
@@ -71,6 +83,7 @@ from fred_core.security.keycloak import (
     split_realm_url,
 )
 from fred_core.security.outbound import BearerAuth, ClientCredentialsProvider
+from fred_core.security.rbac import RBACProvider
 from fred_core.security.structure import (
     KeycloakUser,
     M2MSecurity,
@@ -81,19 +94,6 @@ from fred_core.store.opensearch_mapping_validator import validate_index_mapping
 from fred_core.store.sql_store import SQLTableStore
 from fred_core.store.structures import StoreInfo
 from fred_core.store.vector_search import VectorSearchHit
-
-from fred_core.logs.base_log_store import BaseLogStore
-from fred_core.logs.log_setup import StoreEmitHandler, log_setup
-from fred_core.logs.log_structures import (
-    InMemoryLogStorageConfig,
-    LogEventDTO,
-    LogQuery,
-    LogQueryResult,
-    LogStorageConfig,
-    TailFileResponse,
-)
-from fred_core.logs.memory_log_store import RamLogStore
-from fred_core.logs.opensearch_log_store import OpenSearchLogStore
 
 __all__ = [
     "BaseLogStore",
@@ -117,6 +117,7 @@ __all__ = [
     "UserSecurity",
     "TODO_PASS_REAL_USER",
     "NO_AUTHZ_CHECK_USER",
+    "RBACProvider",
     "Action",
     "Resource",
     "AuthorizationError",

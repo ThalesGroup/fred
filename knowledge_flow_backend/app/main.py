@@ -26,8 +26,7 @@ from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi_mcp import AuthConfig, FastApiMCP
-from fred_core import get_current_user, initialize_user_security, register_exception_handlers
-from fred_core import log_setup
+from fred_core import get_current_user, initialize_user_security, log_setup, register_exception_handlers
 
 from app.application_context import ApplicationContext
 from app.application_state import attach_app
@@ -106,7 +105,7 @@ def create_app() -> FastAPI:
 
     # Register exception handlers
     register_exception_handlers(app)
-    allowed_origins = list({_norm_origin(o) for o in configuration.security.user.authorized_origins})
+    allowed_origins = list({_norm_origin(o) for o in configuration.security.authorized_origins})
     logger.info("[CORS] allow_origins=%s", allowed_origins)
     app.add_middleware(
         CORSMiddleware,

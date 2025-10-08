@@ -12,35 +12,35 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import * as React from "react";
 import AddIcon from "@mui/icons-material/Add";
 import FolderOutlinedIcon from "@mui/icons-material/FolderOutlined";
-import UploadIcon from "@mui/icons-material/Upload";
-import UnfoldMoreIcon from "@mui/icons-material/UnfoldMore";
 import UnfoldLessIcon from "@mui/icons-material/UnfoldLess";
-import { Box, Breadcrumbs, Button, Card, Chip, Link, Typography, IconButton, Tooltip, TextField } from "@mui/material";
-import {
-  useListAllTagsKnowledgeFlowV1TagsGetQuery,
-  ResourceKind,
-  useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery,
-  Resource,
-  TagWithItemsId,
-} from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
-import { buildTree, TagNode, findNode } from "../tags/tagTree";
+import UnfoldMoreIcon from "@mui/icons-material/UnfoldMore";
+import UploadIcon from "@mui/icons-material/Upload";
+import { Box, Breadcrumbs, Button, Card, Chip, IconButton, Link, TextField, Tooltip, Typography } from "@mui/material";
+import * as React from "react";
 import { useTranslation } from "react-i18next";
-import { useResourceCommands } from "./useResourceCommands";
-import { ResourceLibraryTree } from "./ResourceLibraryTree";
 import { LibraryCreateDrawer } from "../../common/LibraryCreateDrawer";
-import { PromptEditorModal } from "./PromptEditorModal";
-import { TemplateEditorModal } from "./TemplateEditorModal";
-import { ResourcePreviewModal } from "./ResourcePreviewModal";
-import { ResourceImportDrawer } from "./ResourceImportDrawer";
-import { useConfirmationDialog } from "../ConfirmationDialogProvider";
 import { useTagCommands } from "../../common/useTagCommands";
-import { ProfileEditorModal } from "./ProfileEditorModal";
+import {
+  Resource,
+  ResourceKind,
+  TagWithItemsId,
+  useListAllTagsKnowledgeFlowV1TagsGetQuery,
+  useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery,
+} from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { useConfirmationDialog } from "../ConfirmationDialogProvider";
+import { buildTree, findNode, TagNode } from "../tags/tagTree";
+import { ChatContextEditorModal } from "./ChatContextEditorModal";
+import { PromptEditorModal } from "./PromptEditorModal";
+import { ResourceImportDrawer } from "./ResourceImportDrawer";
+import { ResourceLibraryTree } from "./ResourceLibraryTree";
+import { ResourcePreviewModal } from "./ResourcePreviewModal";
+import { TemplateEditorModal } from "./TemplateEditorModal";
+import { useResourceCommands } from "./useResourceCommands";
 
 /** Small i18n helper */
-export const useKindLabels = (kind: "prompt" | "template" | "profile") => {
+export const useKindLabels = (kind: "prompt" | "template" | "chat-context") => {
   const { t } = useTranslation();
   return {
     one: t(`resource.kind.${kind}.one`),
@@ -84,7 +84,7 @@ export default function ResourceLibraryList({ kind }: Props) {
 
   /** ---------------- State ---------------- */
   const [expanded, setExpanded] = React.useState<string[]>([]);
-  const [selectedFolder, setSelectedFolder] = React.useState<string | undefined>(undefined);
+  const [selectedFolder, setSelectedFolder] = React.useState<string | null>(null);
   const [isCreateDrawerOpen, setIsCreateDrawerOpen] = React.useState(false);
   const [openCreateResource, setOpenCreateResource] = React.useState(false);
   const [uploadTargetTagId, setUploadTargetTagId] = React.useState<string | null>(null);
@@ -191,10 +191,8 @@ export default function ResourceLibraryList({ kind }: Props) {
     (res: Resource, tag: TagWithItemsId) => {
       const name = res.name || String(res.id);
       showConfirmationDialog({
-        title: t("resourceLibrary.confirmRemoveTitle") || "Remove from library?",
-        message:
-          t("resourceLibrary.confirmRemoveMessage", { res: name, folder: tag.name }) ||
-          `Remove “${name}” from “${tag.name}”? This does not delete the original resource.`,
+        title: t("resourceLibrary.confirmRemoveTitle"),
+        message: t("resourceLibrary.confirmRemoveMessage", { res: name, folder: tag.name }),
         onConfirm: () => {
           void removeFromLibrary(res, tag);
         },
@@ -226,7 +224,16 @@ export default function ResourceLibraryList({ kind }: Props) {
     refetchTags,
     refetchDocs: refetchResources, // reuse for resources
   });
-
+  const handleDeleteFolder = React.useCallback(
+    (tag: TagWithItemsId) => {
+      // Pass the state reset function as the onSuccess callback
+      confirmDeleteFolder(tag, () => {
+        // This runs only after the user confirms AND the deletion is successful
+        setSelectedFolder(null);
+      });
+    },
+    [confirmDeleteFolder, setSelectedFolder],
+  );
   /** ---------------- Handlers ---------------- */
   const handleOpenCreate = React.useCallback(() => {
     if (!selectedFolder) return;
@@ -365,7 +372,7 @@ export default function ResourceLibraryList({ kind }: Props) {
               // NEW: selection + folder deletion
               selectedItems={selectedItems}
               setSelectedItems={setSelectedItems}
-              onDeleteFolder={confirmDeleteFolder}
+              onDeleteFolder={handleDeleteFolder}
             />
           </Box>
         </Card>
@@ -396,8 +403,8 @@ export default function ResourceLibraryList({ kind }: Props) {
           }}
         />
       )}
-      {kind === "profile" && (
-        <ProfileEditorModal
+      {kind === "chat-context" && (
+        <ChatContextEditorModal
           isOpen={openCreateResource}
           onClose={() => setOpenCreateResource(false)}
           onSave={async (payload) => {
@@ -455,8 +462,8 @@ export default function ResourceLibraryList({ kind }: Props) {
               await Promise.all([refetchTags(), refetchResources()]);
             }}
           />
-        ) : kind === "profile" ? (
-          <ProfileEditorModal
+        ) : kind === "chat-context" ? (
+          <ChatContextEditorModal
             isOpen={!!editing}
             onClose={() => setEditing(null)}
             initial={{

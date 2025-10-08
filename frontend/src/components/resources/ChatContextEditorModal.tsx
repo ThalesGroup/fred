@@ -1,4 +1,18 @@
-// ProfileEditorModal.tsx
+// Copyright Thales 2025
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+import { zodResolver } from "@hookform/resolvers/zod";
 import {
   Button,
   Dialog,
@@ -8,24 +22,26 @@ import {
   Stack,
   TextField,
 } from "@mui/material";
+import yaml from "js-yaml";
+import { ResourceKind, useKindLabels } from "./resourceLabels";
+
 import * as React from "react";
 import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
+import { useTranslation } from "react-i18next";
 import { z } from "zod";
-import { zodResolver } from "@hookform/resolvers/zod";
-import yaml from "js-yaml"; // <-- NEW Import
 import {
+  buildFrontMatter,
   buildProfileYaml,
   looksLikeYamlDoc,
-  splitFrontMatter, // <-- NEW Import
-  buildFrontMatter, // <-- NEW Import
+  splitFrontMatter,
 } from "./resourceYamlUtils";
-
 const profileSchema = z.object({
   name: z.string().min(1, "Name is required"),
   description: z.string().optional(),
   body: z.string().min(1, "Profile body is required"),
 });
+
 
 type ProfileFormData = z.infer<typeof profileSchema>;
 
@@ -36,28 +52,33 @@ type ResourceCreateLike = {
   content: string; // YAML with '---'
 };
 
-interface ProfileEditorModalProps {
+interface ChatContextEditorModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (payload: { name?: string; description?: string; labels?: string[]; content: string }) => void;
   initial?: Partial<{ name: string; description?: string; body?: string; yaml?: string; labels?: string[] }>;
   getSuggestion?: () => Promise<string>;
+  kind?: ResourceKind;
 }
 
 /** Modal supports two modes:
  * - simple mode (name/description/body)
  * - doc mode (header YAML + body) when initial content is a full YAML doc
  */
-export const ProfileEditorModal: React.FC<ProfileEditorModalProps> = ({
+export const ChatContextEditorModal: React.FC<ChatContextEditorModalProps> = ({
   isOpen,
   onClose,
   onSave,
   initial,
+  kind,
 }) => {
   const incomingDoc = useMemo(() => (initial as any)?.yaml ?? (initial as any)?.body ?? "", [initial]);
   const isDocMode = useMemo(() => looksLikeYamlDoc(incomingDoc), [incomingDoc]);
+  const { t } = useTranslation();
+  const { one: typeOne } = useKindLabels(kind ?? "profile");
 
   // ----- Simple mode form (create) -----
+  
   const {
     register,
     handleSubmit,
@@ -122,7 +143,7 @@ export const ProfileEditorModal: React.FC<ProfileEditorModalProps> = ({
       return;
     }
     // Ensure kind (UI safety; backend can still validate)
-    if (!headerObj.kind) headerObj.kind = "profile"; // <-- Change kind to 'profile'
+    if (!headerObj.kind) headerObj.kind = "chat-context";
 
     const content = buildFrontMatter(headerObj, bodyText);
     onSave({
@@ -137,8 +158,11 @@ export const ProfileEditorModal: React.FC<ProfileEditorModalProps> = ({
 
   return (
     <Dialog open={isOpen} onClose={onClose} fullWidth maxWidth="md">
-      <DialogTitle>{initial ? "Edit Profile" : "Create Profile"}</DialogTitle>
-
+      <DialogTitle>
+        {initial
+          ? t("resourceLibrary.editResource", { typeOne })
+          : t("resourceLibrary.createResource", { typeOne })}
+      </DialogTitle>
       {/* Render either simple or doc form */}
       {isDocMode ? (
         <>
@@ -178,7 +202,7 @@ export const ProfileEditorModal: React.FC<ProfileEditorModalProps> = ({
           <DialogContent>
             <Stack spacing={3} mt={1}>
               <TextField
-                label="Profile Name"
+                label="Chat Context Name"
                 fullWidth
                 {...register("name")}
                 error={!!errors.name}
@@ -192,7 +216,7 @@ export const ProfileEditorModal: React.FC<ProfileEditorModalProps> = ({
                 helperText={errors.description?.message}
               />
               <TextField
-                label="Profile Body"
+                label="Chat Context Body"
                 fullWidth
                 multiline
                 minRows={14}

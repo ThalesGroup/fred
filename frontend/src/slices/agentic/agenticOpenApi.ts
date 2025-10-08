@@ -31,6 +31,12 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: () => ({ url: `/agentic/v1/config/frontend_settings` }),
     }),
+    getUserPermissionsAgenticV1ConfigPermissionsGet: build.query<
+      GetUserPermissionsAgenticV1ConfigPermissionsGetApiResponse,
+      GetUserPermissionsAgenticV1ConfigPermissionsGetApiArg
+    >({
+      query: () => ({ url: `/agentic/v1/config/permissions` }),
+    }),
     getAgenticFlowsAgenticV1ChatbotAgenticflowsGet: build.query<
       GetAgenticFlowsAgenticV1ChatbotAgenticflowsGetApiResponse,
       GetAgenticFlowsAgenticV1ChatbotAgenticflowsGetApiArg
@@ -139,6 +145,8 @@ export type EchoSchemaAgenticV1SchemasEchoPostApiArg = {
 export type GetFrontendConfigAgenticV1ConfigFrontendSettingsGetApiResponse =
   /** status 200 Successful Response */ FrontendConfigDto;
 export type GetFrontendConfigAgenticV1ConfigFrontendSettingsGetApiArg = void;
+export type GetUserPermissionsAgenticV1ConfigPermissionsGetApiResponse = /** status 200 Successful Response */ string[];
+export type GetUserPermissionsAgenticV1ConfigPermissionsGetApiArg = void;
 export type GetAgenticFlowsAgenticV1ChatbotAgenticflowsGetApiResponse = /** status 200 Successful Response */ (
   | ({
       type: "agent";
@@ -292,6 +300,12 @@ export type AgentTuning = {
   fields?: FieldSpec[];
   mcp_servers?: McpServerSpec | null;
 };
+export type AgentChatOptions = {
+  search_policy_selection?: boolean;
+  libraries_selection?: boolean;
+  record_audio_files?: boolean;
+  attach_files?: boolean;
+};
 export type Agent = {
   name: string;
   enabled?: boolean;
@@ -303,6 +317,7 @@ export type Agent = {
   tuning?: AgentTuning | null;
   /** List of active MCP server configurations for this agent. */
   mcp_servers?: McpServerConfiguration[];
+  chat_options?: AgentChatOptions;
   type?: "agent";
 };
 export type Leader = {
@@ -316,6 +331,7 @@ export type Leader = {
   tuning?: AgentTuning | null;
   /** List of active MCP server configurations for this agent. */
   mcp_servers?: McpServerConfiguration[];
+  chat_options?: AgentChatOptions;
   type?: "leader";
   /** Names of agents in this leader's crew (if any). */
   crew?: string[];
@@ -470,7 +486,7 @@ export type RuntimeContext = {
   selected_document_libraries_ids?: string[] | null;
   selected_prompt_ids?: string[] | null;
   selected_template_ids?: string[] | null;
-  selected_profile_ids?: string[] | null;
+  selected_chat_context_ids?: string[] | null;
   search_policy?: string | null;
   [key: string]: any;
 };
@@ -553,6 +569,7 @@ export type FrontendFlags = {
 };
 export type Properties = {
   logoName?: string;
+  siteDisplayName?: string;
 };
 export type FrontendSettings = {
   feature_flags: FrontendFlags;
@@ -562,7 +579,6 @@ export type UserSecurity = {
   enabled?: boolean;
   realm_url: string;
   client_id: string;
-  authorized_origins?: string[];
 };
 export type FrontendConfigDto = {
   frontend_settings: FrontendSettings;
@@ -583,6 +599,7 @@ export type Agent2 = {
   tuning?: AgentTuning2 | null;
   /** List of active MCP server configurations for this agent. */
   mcp_servers?: McpServerConfiguration[];
+  chat_options?: AgentChatOptions;
   type?: "agent";
 };
 export type Leader2 = {
@@ -596,6 +613,7 @@ export type Leader2 = {
   tuning?: AgentTuning2 | null;
   /** List of active MCP server configurations for this agent. */
   mcp_servers?: McpServerConfiguration[];
+  chat_options?: AgentChatOptions;
   type?: "leader";
   /** Names of agents in this leader's crew (if any). */
   crew?: string[];
@@ -697,6 +715,8 @@ export const {
   useEchoSchemaAgenticV1SchemasEchoPostMutation,
   useGetFrontendConfigAgenticV1ConfigFrontendSettingsGetQuery,
   useLazyGetFrontendConfigAgenticV1ConfigFrontendSettingsGetQuery,
+  useGetUserPermissionsAgenticV1ConfigPermissionsGetQuery,
+  useLazyGetUserPermissionsAgenticV1ConfigPermissionsGetQuery,
   useGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery,
   useLazyGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery,
   useGetSessionsAgenticV1ChatbotSessionsGetQuery,

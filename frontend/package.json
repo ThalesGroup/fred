@@ -1,7 +1,7 @@
 {
   "private": true,
   "name": "fred-ui",
-   "overrides": {
+  "overrides": {
     "pdfjs-dist": "4.3.136"
   },
   "dependencies": {
@@ -25,13 +25,13 @@
     "http-proxy-middleware": "^3.0.2",
     "i18next": "^25.2.1",
     "i18next-browser-languagedetector": "^8.2.0",
-    "katex": "^0.16.22",
+    "katex": "^0.16.23",
     "keycloak-js": "^25.0.1",
     "leaflet": "^1.9.4",
     "lodash": "^4.17.21",
     "mammoth": "^1.9.0",
     "marked": "^16.0.0",
-    "mermaid": "^11.10.0",
+    "mermaid": "^11.12.0",
     "papaparse": "^5.4.1",
     "primeflex": "^3.3.1",
     "react": "^18.2.0",
@@ -48,11 +48,14 @@
     "react-redux": "^9.1.0",
     "react-router-dom": "^7.6.0",
     "react-rrule-generator": "^1.2.0",
+    "react-syntax-highlighter": "^15.6.6",
     "recharts": "^2.15.3",
+    "rehype-katex": "^7.0.1",
     "rehype-raw": "^7.0.0",
     "rehype-sanitize": "^6.0.0",
     "remark-directive": "^4.0.0",
     "remark-gfm": "^4.0.1",
+    "remark-math": "^6.0.0",
     "sass": "^1.70.0",
     "styled-components": "^6.1.13",
     "uuid": "^11.0.3",

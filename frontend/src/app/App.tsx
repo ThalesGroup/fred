@@ -22,12 +22,23 @@ import { ToastProvider } from "../components/ToastProvider";
 import { darkTheme, lightTheme } from "../styles/theme";
 import { ApplicationContext, ApplicationContextProvider } from "./ApplicationContextProvider";
 import { AuthProvider } from "../security/AuthContext";
+import { useGetFrontendConfigAgenticV1ConfigFrontendSettingsGetQuery } from "../slices/agentic/agenticOpenApi";
 
 function FredUi() {
   const [router, setRouter] = useState<any>(null);
+  const { data: frontendConfig } = useGetFrontendConfigAgenticV1ConfigFrontendSettingsGetQuery();
+  const siteDisplayName = frontendConfig?.frontend_settings?.properties?.siteDisplayName || "Fred";
+  const logoName = frontendConfig?.frontend_settings?.properties?.logoName || "fred";
 
   useEffect(() => {
-    // Dynamically import the router after config has loaded
+    document.title = siteDisplayName;
+    const favicon = document.getElementById("favicon") as HTMLLinkElement | null;
+    if (favicon) {
+      favicon.href = `/images/${logoName}.svg`;
+    }
+  }, [siteDisplayName, logoName]);
+
+  useEffect(() => {
     import("../common/router").then((mod) => {
       setRouter(mod.router);
     });

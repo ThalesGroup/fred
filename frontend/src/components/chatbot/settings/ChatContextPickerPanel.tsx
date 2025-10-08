@@ -4,64 +4,64 @@
 // You may not use this file except in compliance with the License.
 // http://www.apache.org/licenses/LICENSE-2.0
 
-import { useMemo, useState } from "react";
+import AddIcon from "@mui/icons-material/Add";
 import {
   Box,
   IconButton,
   List,
   ListItem,
   ListItemButton,
+  Theme,
   Tooltip,
   Typography,
   useTheme,
-  Theme,
 } from "@mui/material";
-import AddIcon from "@mui/icons-material/Add";
 import Popover from "@mui/material/Popover";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   useGetResourceKnowledgeFlowV1ResourcesResourceIdGetQuery,
 } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { ChatResourcesSelectionCard } from "../ChatResourcesSelectionCard";
 
-export type ProfilePickerPanelProps = {
-  selectedProfileIds: string[];
-  onChangeSelectedProfileIds: (ids: string[]) => void;
+export type ChatContextPickerPanelProps = {
+  selectedChatContextIds: string[];
+  onChangeSelectedChatContextIds: (ids: string[]) => void;
 };
 
-export function ProfilePickerPanel({
-  selectedProfileIds,
-  onChangeSelectedProfileIds,
-}: ProfilePickerPanelProps) {
+export function ChatContextPickerPanel({
+  selectedChatContextIds,
+  onChangeSelectedChatContextIds,
+}: ChatContextPickerPanelProps) {
   const theme = useTheme<Theme>();
   const { t } = useTranslation();
 
-  const [profilePickerAnchor, setProfilePickerAnchor] = useState<HTMLElement | null>(null);
-  const selectedProfileId = selectedProfileIds[0] ?? null;
+  const [chatContextPickerAnchor, setChatContextPickerAnchor] = useState<HTMLElement | null>(null);
+  const selectedChatContextId = selectedChatContextIds[0] ?? null;
 
-  const { data: selectedProfileResource } =
+  const { data: selectedChatContextResource } =
     useGetResourceKnowledgeFlowV1ResourcesResourceIdGetQuery(
-      { resourceId: selectedProfileId as string },
-      { skip: !selectedProfileId }
+      { resourceId: selectedChatContextId as string },
+      { skip: !selectedChatContextId }
     );
 
-  const hasSelectedProfile = !!selectedProfileId;
+  const hasSelectedChatContext = !!selectedChatContextId;
 
-  const profileBodyPreview = useMemo(() => {
-    const c = selectedProfileResource?.content ?? "";
+  const chatContextBodyPreview = useMemo(() => {
+    const c = selectedChatContextResource?.content ?? "";
     const sep = "\n---\n";
     const i = c.indexOf(sep);
     const body = (i !== -1 ? c.slice(i + sep.length) : c).replace(/\r\n/g, "\n").trim();
     if (!body) return null;
     const oneline = body.split("\n").filter(Boolean).slice(0, 2).join(" ");
     return oneline.length > 180 ? oneline.slice(0, 180) + "…" : oneline;
-  }, [selectedProfileResource]);
+  }, [selectedChatContextResource]);
 
-  const applyProfileSelection = (ids: string[]) => {
+  const applyChatContextSelection = (ids: string[]) => {
     // mono-sélection (dernier choisi gagne)
     const next = ids.length > 0 ? [ids[ids.length - 1]] : [];
-    onChangeSelectedProfileIds(next);
-    setProfilePickerAnchor(null);
+    onChangeSelectedChatContextIds(next);
+    setChatContextPickerAnchor(null);
   };
 
   return (
@@ -76,14 +76,14 @@ export function ProfilePickerPanel({
       {/* Titre + action à droite */}
       <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <Typography variant="subtitle1" sx={{ pl: 1 }}>
-          {t("settings.profile")}
+          {t("settings.chatContext")}
         </Typography>
 
-        {!hasSelectedProfile && (
-          <Tooltip title={t("settings.selectProfile", "Select a profile")}>
+        {!hasSelectedChatContext && (
+          <Tooltip title={t("settings.selectChatContext", "Select a chat context")}>
             <IconButton
               size="small"
-              onClick={(e) => setProfilePickerAnchor(e.currentTarget)}
+              onClick={(e) => setChatContextPickerAnchor(e.currentTarget)}
               sx={{ borderRadius: 1.5 }}
             >
               <AddIcon fontSize="small" />
@@ -94,28 +94,28 @@ export function ProfilePickerPanel({
 
       {/* Popover de sélection/modification */}
       <Popover
-        open={Boolean(profilePickerAnchor)}
-        anchorEl={profilePickerAnchor}
-        onClose={() => setProfilePickerAnchor(null)}
+        open={Boolean(chatContextPickerAnchor)}
+        anchorEl={chatContextPickerAnchor}
+        onClose={() => setChatContextPickerAnchor(null)}
         anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
         transformOrigin={{ vertical: "top", horizontal: "right" }}
         PaperProps={{ sx: { p: 1 } }}
       >
         <ChatResourcesSelectionCard
-          libraryType={"profile"}
-          selectedResourceIds={selectedProfileIds}
-          setSelectedResourceIds={applyProfileSelection}
+          libraryType={"chat-context"}
+          selectedResourceIds={selectedChatContextIds}
+          setSelectedResourceIds={applyChatContextSelection}
         />
       </Popover>
 
       {/* Carte compacte quand un profil est sélectionné */}
-      {hasSelectedProfile && (
+      {hasSelectedChatContext && (
         <List dense disablePadding sx={{ mt: 1 }}>
           <ListItem disableGutters sx={{ mb: 0 }}>
             <ListItemButton
               dense
               selected
-              onClick={(e) => setProfilePickerAnchor(e.currentTarget)}
+              onClick={(e) => setChatContextPickerAnchor(e.currentTarget)}
               sx={{
                 borderRadius: 1,
                 px: 1,
@@ -136,17 +136,17 @@ export function ProfilePickerPanel({
             >
               <Box sx={{ width: "100%", minWidth: 0 }}>
                 <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>
-                  {selectedProfileResource?.name}
+                  {selectedChatContextResource?.name}
                 </Typography>
 
-                {Array.isArray(selectedProfileResource?.labels) &&
-                  selectedProfileResource!.labels.length > 0 && (
+                {Array.isArray(selectedChatContextResource?.labels) &&
+                  selectedChatContextResource!.labels.length > 0 && (
                     <Typography variant="caption" color="text.secondary" sx={{ display: "block" }} noWrap>
-                      {selectedProfileResource!.labels.join(" · ")}
+                      {selectedChatContextResource!.labels.join(" · ")}
                     </Typography>
                   )}
 
-                {profileBodyPreview && (
+                {chatContextBodyPreview && (
                   <Typography
                     variant="caption"
                     color="text.secondary"
@@ -160,7 +160,7 @@ export function ProfilePickerPanel({
                       whiteSpace: "normal",
                     } as any}
                   >
-                    {profileBodyPreview}
+                    {chatContextBodyPreview}
                   </Typography>
                 )}
               </Box>

@@ -12,28 +12,30 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import * as React from "react";
 import AddIcon from "@mui/icons-material/Add";
 import FolderOutlinedIcon from "@mui/icons-material/FolderOutlined";
-import UploadIcon from "@mui/icons-material/Upload";
-import UnfoldMoreIcon from "@mui/icons-material/UnfoldMore";
 import UnfoldLessIcon from "@mui/icons-material/UnfoldLess";
-import { Box, Breadcrumbs, Button, Card, Chip, Link, Typography, IconButton, Tooltip, TextField } from "@mui/material";
-import {
-  useSearchDocumentMetadataKnowledgeFlowV1DocumentsMetadataSearchPostMutation,
-  useListAllTagsKnowledgeFlowV1TagsGetQuery,
-  TagWithItemsId,
-  DocumentMetadata,
-} from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
-import { LibraryCreateDrawer } from "../../../common/LibraryCreateDrawer";
-import { DocumentUploadDrawer } from "./DocumentUploadDrawer";
-import { DocumentLibraryTree } from "./DocumentLibraryTree";
-import { useDocumentCommands } from "../common/useDocumentCommands";
-import { buildTree, TagNode, findNode } from "../../tags/tagTree";
+import UnfoldMoreIcon from "@mui/icons-material/UnfoldMore";
+import UploadIcon from "@mui/icons-material/Upload";
+import { Box, Breadcrumbs, Button, Card, Chip, IconButton, Link, TextField, Tooltip, Typography } from "@mui/material";
+import * as React from "react";
 import { useTranslation } from "react-i18next";
-import { docHasAnyTag, matchesDocByName } from "./documentHelper";
-import { useConfirmationDialog } from "../../ConfirmationDialogProvider";
+import { LibraryCreateDrawer } from "../../../common/LibraryCreateDrawer";
 import { useTagCommands } from "../../../common/useTagCommands";
+import { usePermissions } from "../../../security/usePermissions";
+
+import {
+  DocumentMetadata,
+  TagWithItemsId,
+  useListAllTagsKnowledgeFlowV1TagsGetQuery,
+  useSearchDocumentMetadataKnowledgeFlowV1DocumentsMetadataSearchPostMutation,
+} from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { useConfirmationDialog } from "../../ConfirmationDialogProvider";
+import { buildTree, findNode, TagNode } from "../../tags/tagTree";
+import { useDocumentCommands } from "../common/useDocumentCommands";
+import { docHasAnyTag, matchesDocByName } from "./documentHelper";
+import { DocumentLibraryTree } from "./DocumentLibraryTree";
+import { DocumentUploadDrawer } from "./DocumentUploadDrawer";
 
 export default function DocumentLibraryList() {
   const { t } = useTranslation();
@@ -41,7 +43,7 @@ export default function DocumentLibraryList() {
 
   /* ---------------- State ---------------- */
   const [expanded, setExpanded] = React.useState<string[]>([]);
-  const [selectedFolder, setSelectedFolder] = React.useState<string | undefined>(undefined);
+  const [selectedFolder, setSelectedFolder] = React.useState<string | null>(null);
   const [isCreateDrawerOpen, setIsCreateDrawerOpen] = React.useState(false);
   const [openUploadDrawer, setOpenUploadDrawer] = React.useState(false);
   const [uploadTargetTagId, setUploadTargetTagId] = React.useState<string | null>(null);
@@ -50,6 +52,11 @@ export default function DocumentLibraryList() {
   const [selectedDocs, setSelectedDocs] = React.useState<Record<string, TagWithItemsId>>({});
   const selectedCount = React.useMemo(() => Object.keys(selectedDocs).length, [selectedDocs]);
   const clearSelection = React.useCallback(() => setSelectedDocs({}), []);
+
+  // Permissions (RBAC)
+  const { can } = usePermissions();
+  const canDeleteDocument = can("document", "delete");
+  const canDeleteFolder = can("tag", "delete");
 
   /* ---------------- Data fetching ---------------- */
   const {
@@ -171,7 +178,16 @@ export default function DocumentLibraryList() {
     refetchTags: refetch,
     refetchDocs: () => fetchAllDocuments({ filters: {} }),
   });
-
+  const handleDeleteFolder = React.useCallback(
+    (tag: TagWithItemsId) => {
+      // Pass the state reset function as the onSuccess callback
+      confirmDeleteFolder(tag, () => {
+        // This runs only after the user confirms AND the deletion is successful
+        setSelectedFolder(null);
+      });
+    },
+    [confirmDeleteFolder, setSelectedFolder],
+  );
   return (
     <Box display="flex" flexDirection="column" gap={2}>
       {/* Top toolbar */}
@@ -238,7 +254,13 @@ export default function DocumentLibraryList() {
           <Button size="small" variant="outlined" onClick={clearSelection}>
             {t("documentLibrary.clearSelection") || "Clear selection"}
           </Button>
-          <Button size="small" variant="contained" color="error" onClick={bulkRemoveFromLibrary}>
+          <Button
+            size="small"
+            variant="contained"
+            color="error"
+            onClick={bulkRemoveFromLibrary}
+            disabled={!canDeleteDocument}
+          >
             {t("documentLibrary.bulkRemoveFromLibrary") || "Remove from library"}
           </Button>
         </Card>
@@ -261,9 +283,17 @@ export default function DocumentLibraryList() {
 
       {/* Tree */}
       {!isLoading && !isError && tree && (
-        <Card sx={{ borderRadius: 3 }}>
+        <Card
+          sx={{
+            borderRadius: 3,
+            display: "flex",
+            flexDirection: "column",
+            height: "100%",
+            maxHeight: "70vh",
+          }}
+        >
           {/* Tree header */}
-          <Box display="flex" alignItems="center" justifyContent="space-between" px={1} py={0.5}>
+          <Box display="flex" alignItems="center" justifyContent="space-between" px={1} py={0.5} flex="0 0 auto">
             <Typography variant="subtitle2" color="text.secondary">
               {t("documentLibrary.folders")}
             </Typography>
@@ -276,8 +306,16 @@ export default function DocumentLibraryList() {
             </Tooltip>
           </Box>
 
-          {/* Recursive rendering */}
-          <Box px={1} pb={1}>
+          {/* Scrollable tree content */}
+          <Box
+            px={1}
+            pb={1}
+            sx={{
+              flex: 1,
+              minHeight: 0,
+              overflowY: "auto",
+            }}
+          >
             <DocumentLibraryTree
               tree={tree}
               expanded={expanded}
@@ -293,7 +331,9 @@ export default function DocumentLibraryList() {
               onRemoveFromLibrary={removeOneWithConfirm}
               selectedDocs={selectedDocs}
               setSelectedDocs={setSelectedDocs}
-              onDeleteFolder={confirmDeleteFolder}
+              onDeleteFolder={handleDeleteFolder}
+              canDeleteDocument={canDeleteDocument}
+              canDeleteFolder={canDeleteFolder}
             />
           </Box>
         </Card>

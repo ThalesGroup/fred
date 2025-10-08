@@ -5,18 +5,9 @@
   },
   "resource": {
     "kind": {
-      "prompt": {
-        "one": "prompt",
-        "other": "prompts"
-      },
-      "template": {
-        "one": "modèle",
-        "other": "modèles"
-      },
-      "profile": {
-        "one": "profil",
-        "other": "profils"
-      }
+      "prompt":   { "one": "prompt",   "other": "prompts" },
+      "template": { "one": "modèle", "other": "modèles" },
+      "chat-context": { "one" : "contexte de conversation", "other": "contextes de conversation"}
     }
   },
   "validation": {
@@ -42,9 +33,9 @@
     "account": "Profil",
     "tooltip": {
       "cluster": "Expliquer le cluster",
-      "facts": "Consulter les faits métier et d’usage du cluster",
+      "facts": "Consulter les faits métier et d'usage du cluster",
       "audit": "Afficher un audit complet éco-score du cluster",
-      "optimize": "Consulter les gains d’optimisation",
+      "optimize": "Consulter les gains d'optimisation",
       "chat": "Discuter avec l'assistant IA",
       "monitoring": "Superviser les appels IA backend",
       "knowledge": "Consulter le vos bibliothèque de documents et de prompts",
@@ -108,8 +99,8 @@
       "add_mcp_server": "+ Ajouter un Serveur MCP"
     },
     "errors": {
-      "creationFailedSummary": "Échec de la création de l’agent",
-      "creationFailedDetailFallback": "Une erreur inattendue s’est produite lors de la création de l’agent."
+      "creationFailedSummary": "Échec de la création de l'agent",
+      "creationFailedDetailFallback": "Une erreur inattendue s'est produite lors de la création de l'agent."
     }
   },
   "chatbot": {
@@ -129,6 +120,7 @@
     "hideAudio": "Masquer le contrôleur audio",
     "searchDocumentLibraries": "Rechercher dans les bibliothèques de documents...",
     "searchPromptLibraries": "Rechercher dans les bibliothèques de prompts...",
+    "searchChatContextLibraries": "Rechercher dans les bibliothèques de contextes de conversations...",
     "startNew": "Commencer une nouvelle conversation avec {{name}}",
     "changeAssistant": "Vous pouvez sélectionner un autre assistant dans le panneau des paramètres.",
     "tooltip": {
@@ -156,11 +148,11 @@
     "conversationSetup": "Configuration de la conversation",
     "newConversationHelp": "Commencer une nouvelle conversation (non encore enregistrée)",
     "draftNotSaved": "Brouillon • non encore enregistré",
-    "profile": "Profil"
+    "chatContext": "Contexte de conversation"
   },
   "kpis": {
     "title": "Surveillance des agents et services IA",
-    "description": "Suivez l’utilisation, la performance et les coûts de tous les agents et services IA — y compris les tokens, la latence et les tendances d’activité."
+    "description": "Suivez l'utilisation, la performance et les coûts de tous les agents et services IA — y compris les tokens, la latence et les tendances d'activité."
   },
   "logs": {
     "title": "Console de logs",
@@ -249,14 +241,15 @@
   },
   "knowledge": {
     "title": "Ressources",
-    "description": "Gérez vos documents, prompts, profils et modèles",
+    "description": "Gérez vos documents et contextes de conversation",
     "viewSelector": {
       "libraries": "Bibliothèques",
       "templates": "Modèles",
       "prompts": "Prompts",
       "documents": "Documents",
       "operations": "Opérations",
-      "profiles": "Profils"
+      "chatContexts": "Contextes de conversation"
+
     }
   },
   "documentLibrary": {
@@ -312,6 +305,7 @@
     "preview": "Aperçu",
     "createLibrary": "Créer une bibliothèque",
     "createResource": "Créer un {{typeOne}}",
+    "editResource": "Éditer un {{typeOne}}",
     "importResource": "Importer un {{typeOne}} depuis un fichier",
     "folders": "Dossiers",
     "loadingLibraries": "Chargement des bibliothèques…",
@@ -360,10 +354,14 @@
     "nowExcluded": "Désormais exclu de la recherche"
   },
   "documentDrawerTable": {
-    "deleteFile": "Supprimer le fichier"
+    "deleteFile": "Supprimer le fichier",
+    "documentAlreadyAddedToast": {
+      "summary": "Fichier(s) déjà ajouté(s)",
+      "detail": "Certains fichiers étaient déjà dans la liste et ont été ignorés."
+    }
   },
   "documentActions": {
-    "menuLabel": "Ouvrir le menu d’actions du document",
+    "menuLabel": "Ouvrir le menu d'actions du document",
     "preview": "Aperçu",
     "download": "Télécharger",
     "delete": "Supprimer",
@@ -433,6 +431,13 @@
     "openAllInPreview": "Tout ouvrir en prévisualisation",
     "openAllInPdfPreview": "Tout ouvrir en prévisualisation PDF"
   },
+  "pageError": {
+    "message": "Retour à la page d'accueil"
+  },
+  "unauthorized": {
+    "title": "Accès non autorisé",
+    "message": "Vous n'êtes pas autorisé à voir cette page."
+  },
   "header": {
     "librariesSingular": "Bibliothèque",
     "librariesPlural": "Bibliothèques",
@@ -458,8 +463,8 @@
     "temp": "Temp.",
     "sectionLibrarySingular": "BIBLIOTHÈQUE",
     "sectionLibrariesPlural": "BIBLIOTHÈQUES",
-    "sectionProfileSingular": "PROFIL",
-    "sectionProfilesPlural": "PROFILS",
+    "sectionProfileSingular": "CONTEXTE DE CONVERSATION",
+    "sectionProfilesPlural": "CONTEXTES DE CONVERSATION",
     "disclaimer": "Le contenu généré par l’IA peut être incorrect."
   }
 }

@@ -1,32 +1,35 @@
 // MessageCard.tsx
 // Copyright Thales 2025
-// Licensed under the Apache License, Version 2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
-import {
-  Box,
-  Chip,
-  Grid2,
-  IconButton,
-  Tooltip,
-  Typography,
-} from "@mui/material";
-import { useTheme } from "@mui/material/styles";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import RateReviewIcon from "@mui/icons-material/RateReview";
+import { Box, Chip, Grid2, IconButton, Tooltip, Typography } from "@mui/material";
+import { useTheme } from "@mui/material/styles";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { getAgentBadge } from "../../utils/avatar.tsx";
-import { useToast } from "../ToastProvider.tsx";
-import { extractHttpErrorMessage } from "../../utils/extractHttpErrorMessage.tsx";
-import CustomMarkdownRenderer from "../markdown/CustomMarkdownRenderer.tsx";
+import { AnyAgent } from "../../common/agent.ts";
 import {
   ChatMessage,
   usePostFeedbackAgenticV1ChatbotFeedbackPostMutation,
 } from "../../slices/agentic/agenticOpenApi.ts";
-import { toCopyText, toMarkdown } from "./messageParts.ts";
+import { getAgentBadge } from "../../utils/avatar.tsx";
+import { extractHttpErrorMessage } from "../../utils/extractHttpErrorMessage.tsx";
+import MarkdownRenderer from "../markdown/MarkdownRenderer.tsx";
+import { useToast } from "../ToastProvider.tsx";
 import { getExtras, isToolCall, isToolResult } from "./ChatBotUtils.tsx";
-import { FeedbackDialog } from "../feedback/FeedbackDialog.tsx";
-import { AnyAgent } from "../../common/agent.ts";
+import { toCopyText, toMarkdown } from "./messageParts.ts";
 import MessageRuntimeContextHeader from "./MessageRuntimeContextHeader.tsx";
 
 export default function MessageCard({
@@ -194,7 +197,7 @@ export default function MessageCard({
 
                   {/* Main content */}
                   <Box px={side === "right" ? 0 : 1} pb={0.5}>
-                    <CustomMarkdownRenderer
+                    <MarkdownRenderer
                       content={mdContent}
                       size="medium"
                       citations={{
@@ -207,7 +210,7 @@ export default function MessageCard({
                         onHover: onCitationHover,
                         onClick: onCitationClick,
                       }}
-                    />
+                    />{" "}
                   </Box>
                 </Box>
               </Grid2>

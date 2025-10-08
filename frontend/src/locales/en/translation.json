@@ -5,18 +5,9 @@
   },
   "resource": {
     "kind": {
-      "prompt": {
-        "one": "prompt",
-        "other": "prompts"
-      },
-      "template": {
-        "one": "template",
-        "other": "templates"
-      },
-      "profile": {
-        "one": "profile",
-        "other": "profiles"
-      }
+      "prompt": { "one": "prompt", "other": "prompts" },
+      "template": { "one": "template", "other": "templates" },
+      "chat-context": { "one": "chat context", "other": "chat contexts" }
     }
   },
   "validation": {
@@ -129,6 +120,7 @@
     "hideAudio": "Hide audio controller",
     "searchDocumentLibraries": "Search document libraries...",
     "searchPromptLibraries": "Search prompt libraries...",
+    "searchChatContextLibraries": "Search chat context libraries...",
     "startNew": "Start a new conversation with {{name}}",
     "changeAssistant": "You can select another assistant in the settings panel.",
     "tooltip": {
@@ -153,7 +145,7 @@
     "newConversation": "New conversation",
     "noConversation": "No conversation",
     "delete": "Delete",
-    "profile": "Profile",
+    "chatContext": "Chat context",
     "conversationSetup": "Conversation setup",
     "newConversationHelp": "Start a new conversation (not yet saved)",
     "draftNotSaved": "Draft • not yet saved"
@@ -249,14 +241,14 @@
   },
   "knowledge": {
     "title": "Resources",
-    "description": "Manage your document, prompt, profile and template libraries",
+    "description": "Manage your document and chat context libraries",
     "viewSelector": {
       "libraries": "Libraries",
       "templates": "Templates",
       "prompts": "Prompts",
       "documents": "Documents",
       "operations": "Operations",
-      "profiles": "Profiles"
+      "chatContexts": "Chat contexts"
     }
   },
   "documentLibrary": {
@@ -312,6 +304,7 @@
     "preview": "Preview",
     "createLibrary": "Create library",
     "createResource": "Add {{typeOne}} to library",
+    "editResource": "Edit a {{typeOne}}",
     "importResource": "Import {{typeOne}} from file",
     "folders": "Folders",
     "loadingLibraries": "Loading libraries…",
@@ -337,7 +330,7 @@
     "bulkRemoveFromLibrary": "Remove from library",
     "removedOneResource": "{{typeOne, capitalize}} removed from library.",
     "confirmRemoveTitle": "Remove from library?",
-    "confirmRemoveMessage": "Remove « {{doc}} » from « {{folder}} »?"
+    "confirmRemoveMessage": "Remove « {{res}} » from « {{folder}} »?"
   },
   "documentTable": {
     "selectedCount": "{{count}} selected",
@@ -360,7 +353,11 @@
     "nowExcluded": "Now excluded"
   },
   "documentDrawerTable": {
-    "deleteFile": "Delete file"
+    "deleteFile": "Delete file",
+    "documentAlreadyAddedToast": {
+      "summary": "File(s) already staged for upload",
+      "detail": "Some files have already been added and are ignored as a result."
+    }
   },
   "documentActions": {
     "menuLabel": "Open document actions menu",
@@ -433,6 +430,13 @@
     "openAllInPreview": "Open all in preview",
     "openAllInPdfPreview": "Open all in PDF preview"
   },
+  "pageError": {
+    "message": "Back to Home"
+  },
+  "unauthorized": {
+    "title": "Unauthorized",
+    "message": "You do not have the required permissions to access this page."
+  },
   "header": {
     "librariesSingular": "Library",
     "librariesPlural": "Libraries",
@@ -458,8 +462,8 @@
     "temp": "Temp",
     "sectionLibrarySingular": "LIBRARY",
     "sectionLibrariesPlural": "LIBRARIES",
-    "sectionProfileSingular": "PROFILE",
-    "sectionProfilesPlural": "PROFILES",
+    "sectionProfileSingular": "CHAT CONTEXT",
+    "sectionProfilesPlural": "CHAT CONTEXTS",
     "disclaimer": "AI content may be incorrect."
   }
 }

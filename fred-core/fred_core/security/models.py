@@ -19,7 +19,7 @@ from typing import Optional
 from fred_core.security.structure import KeycloakUser
 
 
-class Action(Enum):
+class Action(str, Enum):
     """Actions that can be performed on resources."""
 
     CREATE = "create"
@@ -31,17 +31,17 @@ class Action(Enum):
     PROCESS = "process"
 
 
-class Resource(Enum):
+class Resource(str, Enum):
     """Resources in the system that can have permissions applied."""
 
     # Knowledge Flow Backend resources
-    TAGS = "tags"
-    DOCUMENTS = "documents"
-    DOCUMENTS_SOURCES = "documents_sources"
-    RESOURCES = "resources"
-    TABLES = "tables"
-    TABLES_DATABASES = "tables_databases"
-    KPIS = "kpis"
+    TAGS = "tag"
+    DOCUMENTS = "document"
+    DOCUMENTS_SOURCES = "documents_source"
+    RESOURCES = "resource"
+    TABLES = "table"
+    TABLES_DATABASES = "tables_database"
+    KPIS = "kpi"
     OPENSEARCH = "opensearch"
     LOGS = "logs"
 
@@ -52,6 +52,10 @@ class Resource(Enum):
     AGENTS = "agents"
     SESSIONS = "sessions"
     MESSAGE_ATTACHMENTS = "message_attachments"
+
+    # Authorization subject
+    USER = "user"
+    GROUP = "group"
 
 
 class AuthorizationError(Exception):
@@ -67,7 +71,7 @@ class AuthorizationError(Exception):
         self.user_id = user_id
         self.action = action
         self.resource = resource
-        default_message = f"Not authorized to {action.value} {resource.value}"
+        default_message = f"Not authorized to {action.value} a {resource.value}"
         super().__init__(message or default_message)
 
 

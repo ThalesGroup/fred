@@ -1,14 +1,25 @@
 // MessagesArea.tsx
 // Copyright Thales 2025
-// Licensed under the Apache License, Version 2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
-import React, { memo, useMemo, useRef, useEffect } from "react";
-import MessageCard from "./MessageCard";
-import Sources from "./Sources";
+import React, { memo, useEffect, useMemo, useRef } from "react";
+import { AnyAgent } from "../../common/agent";
 import { ChatMessage } from "../../slices/agentic/agenticOpenApi";
 import { getExtras, hasNonEmptyText } from "./ChatBotUtils";
+import MessageCard from "./MessageCard";
 import ReasoningStepsAccordion from "./ReasoningStepsAccordion";
-import { AnyAgent } from "../../common/agent";
+import Sources from "./Sources";
 
 type Props = {
   messages: ChatMessage[];
@@ -205,13 +216,15 @@ function Area({
             />,
           );
         }
+        const agent = resolveAgent(msg);
+        // 2) Single MessageCard (always markdown, inline [n] handled inside)
 
         // 2) Final message card
         elements.push(
           <MessageCard
             key={`final-${msg.session_id}-${msg.exchange_id}-${msg.rank}`}
             message={msg}
-            agent={currentAgent}
+            agent={agent}
             side="left"
             enableCopy
             enableThumbs

@@ -21,7 +21,7 @@
 #   “capability contract” for the UI. The user’s overrides live in AgentSettings.tuning
 #   and are merged into the instance by AgentFlow.__init__/apply_settings.
 # - No hidden prompt composition: each node explicitly decides which tuned text to use
-#   and whether to include the (optional) user profile. This keeps behavior auditable.
+#   and whether to include the (optional) chat context. This keeps behavior auditable.
 
 import logging
 
@@ -87,8 +87,8 @@ class GeneralistExpert(AgentFlow):
         - We pull the tuned system prompt by key (no magic). If the user updated it in the UI,
           AgentFlow has already placed the latest value in this instance.
         - We render {tokens} through AgentFlow.render(...) to resolve simple placeholders.
-        - We *optionally* append the user profile text if this node decides it’s relevant.
-          (Convention: dev chooses; Fred does not inject profile automatically.)
+        - We *optionally* append the chat context text if this node decides it’s relevant.
+          (Convention: dev chooses; Fred does not inject chat context automatically.)
         - We then prepend it as a SystemMessage and call the model with the user messages.
         """
         # 1) choose the tuning field you want. In this case, the system prompt
@@ -96,9 +96,10 @@ class GeneralistExpert(AgentFlow):
         # 2) render tokens. You should always do this to resolve {placeholders}
         #    (e.g. {current_time}, {agent_name}, {user_name}, etc.)
         sys = self.render(tpl)
-        # 3) optionally add the profile text (if any). It's up to the node to decide
+        # 3) optionally add the chat context text (if any). It's up to the node to decide
         #    whether to use it or not.
-        sys = sys + "\n\n" + self.profile_text()
+
         messages = self.with_system(sys, state["messages"])
+        messages = self.with_chat_context_text(messages)
         response = await self.model.ainvoke(messages)
         return {"messages": [response]}

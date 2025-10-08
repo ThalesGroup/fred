@@ -87,7 +87,7 @@ ai:
 ```yaml
 ai:
   default_model:
-    provider: "azure"
+    provider: "azure-openai"
     name: "fred-gpt-4o"  # your Azure deployment name
     settings:
       api_version: "2024-05-01-preview"
@@ -100,7 +100,7 @@ ai:
 ```yaml
 ai:
   default_model:
-    provider: "azure"
+    provider: "azure-openai"
     name: "fred-gpt-4o"
     settings:
       api_version: "2024-05-01-preview"
@@ -125,13 +125,13 @@ AZURE_OPENAI_API_KEY=...
 Optional for Azure AD authentication:
 ```env
 AZURE_TENANT_ID=...
-AZURE_CLIENT_ID=...
-AZURE_CLIENT_SECRET=...
+AZURE_AD_CLIENT_ID=...
+AZURE_AD_CLIENT_SECRET=...
 ```
 
 #### ✅ For Azure APIM (if used):
 ```env
-AZURE_APIM_KEY=your-subscription-key
+AZURE_APIM_SUBSCRIPTION_KEY=your-subscription-key
 ```
 
 ---
