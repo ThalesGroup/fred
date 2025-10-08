@@ -355,7 +355,11 @@
     "nowExcluded": "Désormais exclu de la recherche"
   },
   "documentDrawerTable": {
-    "deleteFile": "Supprimer le fichier"
+    "deleteFile": "Supprimer le fichier",
+    "documentAlreadyAddedToast": {
+      "summary": "Fichier(s) déjà ajouté(s)",
+      "detail": "Certains fichiers étaient déjà dans la liste et ont été ignorés."
+    }
   },
   "documentActions": {
     "menuLabel": "Ouvrir le menu d'actions du document",
@@ -429,7 +433,7 @@
     "openAllInPdfPreview": "Tout ouvrir en prévisualisation PDF"
   },
   "pageError": {
-    "message": "Back to Home"
+    "message": "Retour à la page d'accueil"
   },
   "unauthorized": {
     "title": "Accès non autorisé",
