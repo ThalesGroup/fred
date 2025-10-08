@@ -1,31 +1,32 @@
 // src/pages/AgentHub.tsx
 // Copyright Thales 2025
 
+import AddIcon from "@mui/icons-material/Add";
+import FilterListIcon from "@mui/icons-material/FilterList";
+import SearchIcon from "@mui/icons-material/Search";
+import StarIcon from "@mui/icons-material/Star";
 import {
   Box,
-  Typography,
-  useTheme,
   Button,
-  Chip,
-  Fade,
-  Tabs,
-  Tab,
   Card,
   CardContent,
+  Chip,
+  Fade,
   ListItemIcon,
+  Tab,
+  Tabs,
+  Typography,
+  useTheme,
 } from "@mui/material";
-import { useState, useEffect, SyntheticEvent, useMemo, useCallback } from "react";
+import { SyntheticEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import SearchIcon from "@mui/icons-material/Search";
-import FilterListIcon from "@mui/icons-material/FilterList";
-import StarIcon from "@mui/icons-material/Star";
-import AddIcon from "@mui/icons-material/Add";
+import { usePermissions } from "../security/usePermissions";
 
 import LocalOfferIcon from "@mui/icons-material/LocalOffer";
 import Grid2 from "@mui/material/Grid2";
-import { LoadingSpinner } from "../utils/loadingSpinner";
 import { TopBar } from "../common/TopBar";
 import { AgentCard } from "../components/agentHub/AgentCard";
+import { LoadingSpinner } from "../utils/loadingSpinner";
 
 // Editor pieces
 import { AgentEditDrawer } from "../components/agentHub/AgentEditDrawer";
@@ -33,16 +34,16 @@ import { CrewEditor } from "../components/agentHub/CrewEditor";
 
 // OpenAPI
 import {
-  useLazyGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery,
-  useDeleteAgentAgenticV1AgentsNameDeleteMutation,
   Leader,
+  useDeleteAgentAgenticV1AgentsNameDeleteMutation,
+  useLazyGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery,
 } from "../slices/agentic/agenticOpenApi";
 
 // UI union facade
 import { AnyAgent, isLeader } from "../common/agent";
-import { useAgentUpdater } from "../hooks/useAgentUpdater";
 import { CreateAgentModal } from "../components/agentHub/CreateAgentModal";
 import { useConfirmationDialog } from "../components/ConfirmationDialogProvider";
+import { useAgentUpdater } from "../hooks/useAgentUpdater";
 
 type AgentCategory = { name: string; isTag?: boolean };
 
@@ -102,6 +103,12 @@ export const AgentHub = () => {
 
   const [triggerGetFlows, { isFetching }] = useLazyGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery();
   const { updateEnabled } = useAgentUpdater();
+
+  // RBAC utils
+  const { can } = usePermissions();
+  const canEditAgents = can("agents", "update");
+  const canCreateAgents = can("agents", "create");
+  const canDeleteAgents = can("agents", "delete");
 
   const fetchAgents = async () => {
     try {
@@ -311,7 +318,11 @@ export const AgentHub = () => {
                     <Box sx={{ display: "flex", gap: 1 }}>
                       <ActionButton icon={<SearchIcon />}>{t("agentHub.search")}</ActionButton>
                       <ActionButton icon={<FilterListIcon />}>{t("agentHub.filter")}</ActionButton>
-                      <ActionButton icon={<AddIcon />} onClick={handleOpenCreateAgent}>
+                      <ActionButton 
+                        icon={<AddIcon />} 
+                        onClick={canCreateAgents ? handleOpenCreateAgent : undefined}
+                        disabled={!canCreateAgents}
+                      >
                         {t("agentHub.create")}
                       </ActionButton>
                     </Box>
@@ -327,11 +338,11 @@ export const AgentHub = () => {
                               <AgentCard
                                 agent={agent}
                                 isFavorite={favoriteAgents.includes(agent.name)}
-                                onToggleFavorite={toggleFavorite}
-                                onEdit={handleEdit}
-                                onToggleEnabled={handleToggleEnabled}
-                                onManageCrew={isLeader(agent) ? handleManageCrew : undefined}
-                                onDelete={handleDeleteAgent}
+                                onToggleFavorite={canEditAgents ? toggleFavorite : undefined}
+                                onEdit={canEditAgents ? handleEdit : undefined}
+                                onToggleEnabled={canEditAgents ? handleToggleEnabled : undefined}
+                                onManageCrew={canEditAgents && isLeader(agent) ? handleManageCrew : undefined}
+                                onDelete={canDeleteAgents ? handleDeleteAgent : undefined}
                               />
                             </Box>
                           </Fade>

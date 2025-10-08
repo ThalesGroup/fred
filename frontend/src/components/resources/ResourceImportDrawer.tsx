@@ -12,14 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import React, { useRef, useState } from "react";
-import { Box, Button, Drawer, Paper, Stack, Typography, useTheme } from "@mui/material";
-import UploadIcon from "@mui/icons-material/Upload";
 import SaveIcon from "@mui/icons-material/Save";
+import UploadIcon from "@mui/icons-material/Upload";
+import { Box, Button, Drawer, Paper, Stack, Typography, useTheme } from "@mui/material";
+import React, { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ResourceKind } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
-import { useResourceCommands } from "./useResourceCommands";
 import { useToast } from "../ToastProvider";
+import { useResourceCommands } from "./useResourceCommands";
 
 type Props = {
   isOpen: boolean;
@@ -133,8 +133,6 @@ export const ResourceImportDrawer: React.FC<Props> = ({ isOpen, onClose, onImpor
         sx: {
           width: { xs: "100%", sm: 450 },
           p: 3,
-          borderTopLeftRadius: 16,
-          borderBottomLeftRadius: 16,
         },
       }}
     >
