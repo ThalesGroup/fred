@@ -14,5 +14,8 @@
 
 export interface ProcessingProgress {
   step: string;
-  status: "started" | "completed";
+  status: "in_progress" | "success" | "error" | "ignored" | "finished";
+  filename?: string;
+  error?: string;
+  document_uid?: string;
 }
