@@ -439,6 +439,14 @@ export type VectorSearchHit = {
   retrieval_session_id?: string | null;
 };
 export type FinishReason = "stop" | "length" | "content_filter" | "tool_calls" | "cancelled" | "other";
+export type RuntimeContext = {
+  selected_document_libraries_ids?: string[] | null;
+  selected_prompt_ids?: string[] | null;
+  selected_template_ids?: string[] | null;
+  selected_chat_context_ids?: string[] | null;
+  search_policy?: string | null;
+  [key: string]: any;
+};
 export type ChatMetadata = {
   model?: string | null;
   token_usage?: ChatTokenUsage | null;
@@ -446,6 +454,7 @@ export type ChatMetadata = {
   agent_name?: string | null;
   latency_ms?: number | null;
   finish_reason?: FinishReason | null;
+  runtime_context?: RuntimeContext | null;
   extras?: {
     [key: string]: any;
   };
@@ -481,14 +490,6 @@ export type ChatMessage = {
       } & ToolResultPart)
   )[];
   metadata?: ChatMetadata;
-};
-export type RuntimeContext = {
-  selected_document_libraries_ids?: string[] | null;
-  selected_prompt_ids?: string[] | null;
-  selected_template_ids?: string[] | null;
-  selected_chat_context_ids?: string[] | null;
-  search_policy?: string | null;
-  [key: string]: any;
 };
 export type ChatAskInput = {
   session_id?: string | null;
