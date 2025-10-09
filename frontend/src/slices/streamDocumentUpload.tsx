@@ -34,7 +34,9 @@ export async function streamUploadOrProcessDocument(
   }
 
   const endpoint =
-    mode === "upload" ? "/knowledge-flow/v1/upload-documents" : "/knowledge-flow/v1/upload-process-documents";
+    mode === "upload"
+      ? "/knowledge-flow/v1/upload-documents"
+      : "/knowledge-flow/v1/upload-process-documents";
 
   const response = await fetch(`${backend_url_knowledge}${endpoint}`, {
     method: "POST",
@@ -65,7 +67,9 @@ export async function streamUploadOrProcessDocument(
       if (!line.trim()) continue;
       try {
         const progress: ProcessingProgress = JSON.parse(line);
-        onProgress(progress);
+        if (progress.step !== "done") {
+          onProgress(progress);
+        }
       } catch (e) {
         console.warn("Failed to parse progress line:", line, e);
       }
