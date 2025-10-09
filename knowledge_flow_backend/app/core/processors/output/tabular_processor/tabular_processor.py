@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import hashlib
 import io
 import logging
 import re
@@ -60,6 +61,12 @@ _DATE_REGEX = re.compile(
     re.IGNORECASE | re.VERBOSE,
 )
 
+def safe_table_name(name: str, max_len: int = 63) -> str:
+    name = sanitize_sql_name(name)
+    if len(name) <= max_len:
+        return name
+    hash_suffix = hashlib.md5(name.encode()).hexdigest()[:8]
+    return name[: max_len - 9] + "_" + hash_suffix
 
 def _looks_like_date(value: str) -> bool:
     """Check if the string matches a common date format (with separators or month names)."""
@@ -149,6 +156,8 @@ class TabularProcessor(BaseOutputProcessor):
             try:
                 if self.csv_input_store is None:
                     raise RuntimeError("csv_input_store is not initialized")
+
+                table_name = safe_table_name(metadata.document_name.rsplit(".", 1)[0])
                 result = self.csv_input_store.save_table(table_name, df)
                 logger.debug(f"Document added to Tabular Store: {result}")
             except Exception as e:

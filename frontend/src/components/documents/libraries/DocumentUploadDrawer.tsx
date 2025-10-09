@@ -109,7 +109,17 @@ export const DocumentUploadDrawer: React.FC<DocumentUploadDrawerProps> = ({
               const delay = displayIndexRef.current * stepDelayMs;
               displayIndexRef.current += 1;
               window.setTimeout(() => {
-                setUploadProgressSteps((prev) => [...prev, step]);
+                setUploadProgressSteps((prev) => {
+                  const existingIndex = prev.findIndex(
+                    (s) => s.step === step.step && s.filename === step.filename
+                  );
+                  if (existingIndex !== -1) {
+                    const updated = [...prev];
+                    updated[existingIndex] = step;
+                    return updated;
+                  }
+                  return [...prev, step];
+                });
               }, delay);
             },
             metadata,
