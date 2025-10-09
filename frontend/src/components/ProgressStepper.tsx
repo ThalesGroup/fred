@@ -72,13 +72,22 @@ export const ProgressStepper = ({ steps }: ProgressStepperProps) => {
             boxShadow: "none",
             borderColor: "divider",
             backgroundColor: "background.default",
+            width: "100%",
+            maxWidth: "100%",
           }}
         >
           <Typography
             variant="subtitle1"
             fontWeight="bold"
             gutterBottom
-            sx={{ display: "flex", alignItems: "center", gap: 1 }}
+            sx={{
+              display: "block",
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              maxWidth: "100%",
+              mb: 1,
+            }}
           >
             {filename}
           </Typography>
@@ -96,7 +105,16 @@ export const ProgressStepper = ({ steps }: ProgressStepperProps) => {
                   icon={getIcon(step.status)}
                   error={step.status === "error"}
                 >
-                  <Typography variant="body1" fontWeight="medium">
+                  <Typography
+                    variant="body1"
+                    fontWeight="medium"
+                    sx={{
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      maxWidth: "calc(100% - 32px)",
+                    }}
+                  >
                     {step.step}
                   </Typography>
                 </StepLabel>
@@ -104,7 +122,7 @@ export const ProgressStepper = ({ steps }: ProgressStepperProps) => {
                   <Typography
                     variant="body2"
                     color="textSecondary"
-                    sx={{ ml: 1 }}
+                    sx={{ ml: 1, maxWidth: "100%" }}
                   >
                     {step.status}
                   </Typography>
@@ -113,6 +131,7 @@ export const ProgressStepper = ({ steps }: ProgressStepperProps) => {
             ))}
           </Stepper>
         </Paper>
+
       ))}
     </Box>
   );
