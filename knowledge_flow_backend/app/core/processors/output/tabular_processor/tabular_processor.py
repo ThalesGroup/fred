@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import hashlib
 import io
 import logging
 import re
@@ -26,7 +27,6 @@ from app.common.document_structures import DocumentMetadata, ProcessingStage
 from app.common.utils import sanitize_sql_name
 from app.core.processors.output.base_output_processor import BaseOutputProcessor, TabularProcessingError
 from app.core.processors.output.vectorization_processor.vectorization_utils import load_langchain_doc_from_metadata
-import hashlib
 
 logger = logging.getLogger(__name__)
 
