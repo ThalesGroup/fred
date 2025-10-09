@@ -440,10 +440,10 @@
   "header": {
     "librariesSingular": "Library",
     "librariesPlural": "Libraries",
-    "profileSingular": "Profile",
-    "profilesPlural": "Profiles",
+    "chatContextSingular": "Chat context",
+    "chatContextsPlural": "Chat contexts",
     "librariesInline": "{{label}}: {{names}}",
-    "profilesInline": "{{label}}: {{names}}"
+    "chatContextsInline": "{{label}}: {{names}}"
   },
   "insights": {
     "aria": "message-insights"
@@ -462,8 +462,8 @@
     "temp": "Temp",
     "sectionLibrarySingular": "LIBRARY",
     "sectionLibrariesPlural": "LIBRARIES",
-    "sectionProfileSingular": "CHAT CONTEXT",
-    "sectionProfilesPlural": "CHAT CONTEXTS",
+    "sectionChatContextSingular": "CHAT CONTEXT",
+    "sectionChatContextsPlural": "CHAT CONTEXTS",
     "disclaimer": "AI content may be incorrect."
   }
 }

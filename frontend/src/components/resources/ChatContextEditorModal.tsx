@@ -75,7 +75,7 @@ export const ChatContextEditorModal: React.FC<ChatContextEditorModalProps> = ({
   const incomingDoc = useMemo(() => (initial as any)?.yaml ?? (initial as any)?.body ?? "", [initial]);
   const isDocMode = useMemo(() => looksLikeYamlDoc(incomingDoc), [incomingDoc]);
   const { t } = useTranslation();
-  const { one: typeOne } = useKindLabels(kind ?? "profile");
+  const { one: typeOne } = useKindLabels(kind ?? "chat-context");
 
   // ----- Simple mode form (create) -----
   

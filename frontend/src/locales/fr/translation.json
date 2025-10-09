@@ -441,10 +441,10 @@
   "header": {
     "librariesSingular": "Bibliothèque",
     "librariesPlural": "Bibliothèques",
-    "profileSingular": "Profil",
-    "profilesPlural": "Profils",
+    "chatContextSingular": "Profil",
+    "chatContextsPlural": "Profils",
     "librariesInline": "{{label}} : {{names}}",
-    "profilesInline": "{{label}} : {{names}}"
+    "chatContextsInline": "{{label}} : {{names}}"
   },
   "insights": {
     "aria": "détails-du-message"
@@ -463,8 +463,8 @@
     "temp": "Temp.",
     "sectionLibrarySingular": "BIBLIOTHÈQUE",
     "sectionLibrariesPlural": "BIBLIOTHÈQUES",
-    "sectionProfileSingular": "CONTEXTE DE CONVERSATION",
-    "sectionProfilesPlural": "CONTEXTES DE CONVERSATION",
+    "sectionchatContextSingular": "CONTEXTE DE CONVERSATION",
+    "sectionchatContextsPlural": "CONTEXTES DE CONVERSATION",
     "disclaimer": "Le contenu généré par l’IA peut être incorrect."
   }
 }

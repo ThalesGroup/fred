@@ -1,5 +1,5 @@
 // MessageRuntimeContextHeader.tsx
-// Header indicators for Libraries/Profile + info icon that opens the popover.
+// Header indicators for Libraries/ChatContext + info icon that opens the popover.
 
 import { Box, Tooltip, Typography } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
@@ -16,14 +16,14 @@ type Props = {
   message: ChatMessage;
   visible: boolean; // show indicators on bubble hover
   libraryNameById?: Record<string, string>;
-  profileNameById?: Record<string, string>;
+  chatContextNameById?: Record<string, string>;
 };
 
 export default function MessageRuntimeContextHeader({
   message,
   visible,
   libraryNameById,
-  profileNameById,
+  chatContextNameById,
 }: Props) {
   const theme = useTheme();
   const { t } = useTranslation();
@@ -45,7 +45,7 @@ export default function MessageRuntimeContextHeader({
   };
 
   // ---- Extract data from message.metadata.runtime_context
-  const meta: any = (message.metadata) ?? {};
+  const meta: any = message.metadata ?? {};
   const rc: any = meta?.runtime_context ?? {};
 
   const getList = (obj: any, keys: string[]): string[] => {
@@ -69,7 +69,11 @@ export default function MessageRuntimeContextHeader({
     "selectedDocumentLibrariesIds",
     "documentLibraryIds",
   ]);
-  const prfIds = getList(rc, [
+
+  // ✅ Chat context first, legacy profiles as fallback
+  const chatCtxIds = getList(rc, [
+    "selected_chat_context_ids",
+    "chat_context_ids",
     "selected_profile_ids",
     "profile_resource_ids",
     "selectedProfileIds",
@@ -86,15 +90,15 @@ export default function MessageRuntimeContextHeader({
     (ids ?? []).filter(Boolean).map((id) => map?.[id] || id);
 
   const libsLabeled = useMemo(() => labelize(libsIds, libraryNameById), [libsIds, libraryNameById]);
-  const prfsLabeled = useMemo(() => labelize(prfIds, profileNameById), [prfIds, profileNameById]);
+  const ctxLabeled = useMemo(() => labelize(chatCtxIds, chatContextNameById), [chatCtxIds, chatContextNameById]);
 
   const libsTextFull = libsLabeled.join(", ");
-  const profileTextFull = prfsLabeled.join(", ");
+  const chatCtxTextFull = ctxLabeled.join(", ");
 
   const librariesLabel =
     libsLabeled.length > 1 ? t("header.librariesPlural") : t("header.librariesSingular");
-  const profileLabel =
-    prfsLabeled.length > 1 ? t("header.profilesPlural") : t("header.profileSingular");
+  const chatContextLabel =
+    ctxLabeled.length > 1 ? t("header.chatContextsPlural") : t("header.chatContextSingular");
 
   const extras = getExtras(message);
   const modelName: string | undefined = meta?.model ?? undefined;
@@ -104,8 +108,8 @@ export default function MessageRuntimeContextHeader({
   const outTokens = message.metadata?.token_usage?.output_tokens;
 
   const showLibs = libsLabeled.length > 0;
-  const showProfile = prfsLabeled.length > 0;
-  const showAny = showLibs || showProfile;
+  const showChatCtx = ctxLabeled.length > 0;
+  const showAny = showLibs || showChatCtx;
 
   if (!showAny && !searchPolicy && usedTemperature == null && modelName == null && latencyMs == null) {
     return null;
@@ -156,14 +160,14 @@ export default function MessageRuntimeContextHeader({
         </Tooltip>
       )}
 
-      {showProfile && (
+      {showChatCtx && (
         <Tooltip
           title={
             <Box>
               <Typography variant="caption" sx={{ opacity: 0.7, display: "block", mb: 0.25 }}>
-                {profileLabel}
+                {chatContextLabel}
               </Typography>
-              <Typography variant="caption">{profileTextFull}</Typography>
+              <Typography variant="caption">{chatCtxTextFull}</Typography>
             </Box>
           }
         >
@@ -184,7 +188,7 @@ export default function MessageRuntimeContextHeader({
               variant="caption"
               sx={{ lineHeight: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}
             >
-              {t("header.profilesInline", { label: profileLabel, names: profileTextFull })}
+              {t("header.chatContextsInline", { label: chatContextLabel, names: chatCtxTextFull })}
             </Typography>
           </Box>
         </Tooltip>
@@ -216,7 +220,7 @@ export default function MessageRuntimeContextHeader({
           searchPolicy={searchPolicy}
           temperature={typeof usedTemperature === "number" ? usedTemperature : undefined}
           libsLabeled={libsLabeled}
-          prfsLabeled={prfsLabeled}
+          ctxLabeled={ctxLabeled}
         />
       </Box>
     </Box>

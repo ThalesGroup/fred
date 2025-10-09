@@ -89,17 +89,15 @@ const ChatBot = ({
 
   const { showInfo, showError } = useToast();
   const webSocketRef = useRef<WebSocket | null>(null);
-  // const [postTranscribeAudio] = usePostTranscribeAudioMutation();
   const [webSocket, setWebSocket] = useState<WebSocket | null>(null);
   const wsTokenRef = useRef<string | null>(null);
 
-  // Noms des libs / prompts / templates
+  // Noms des libs / prompts / templates / chat-context
   const { data: docLibs = [] } = useListAllTagsKnowledgeFlowV1TagsGetQuery({ type: "document" as TagType });
   const { data: promptResources = [] } = useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery({ kind: "prompt" });
   const { data: templateResources = [] } = useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery({ kind: "template" });
-  const { data: profileResources = [] } =
-    useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery({ kind: "profile" });
-
+  const { data: chatContextResources = [] } =
+    useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery({ kind: "chat-context" });
 
   const libraryNameMap = useMemo(
     () => Object.fromEntries((docLibs).map((x) => [x.id, x.name])),
@@ -113,9 +111,9 @@ const ChatBot = ({
     () => Object.fromEntries((templateResources).map((x) => [x.id, x.name ?? x.id])),
     [templateResources],
   );
-  const profileNameMap = useMemo(
-    () => Object.fromEntries((profileResources).map((x) => [x.id, x.name ?? x.id])),
-    [profileResources],
+  const chatContextNameMap = useMemo(
+    () => Object.fromEntries(chatContextResources.map((x) => [x.id, x.name ?? x.id])),
+    [chatContextResources]
   );
 
   // Lazy messages fetcher
@@ -391,12 +389,15 @@ const ChatBot = ({
       runtimeContext.selected_document_libraries_ids = content.documentLibraryIds;
     }
 
-    if (content.profileResourceIds?.length) {
-      runtimeContext.selected_chat_context_ids = content.profileResourceIds;
+    const selectedChatCtx =
+      (content as any).chatContextResourceIds ?? (content as any).profileResourceIds;
+    if (selectedChatCtx?.length) {
+      runtimeContext.selected_chat_context_ids = selectedChatCtx;
     }
 
     // Policy
     runtimeContext.search_policy = content.searchPolicy || "semantic";
+
     // Files upload
     if (content.files?.length) {
       for (const file of content.files) {
@@ -644,7 +645,7 @@ const ChatBot = ({
                 agents={agents}
                 currentAgent={currentAgent}
                 libraryNameById={libraryNameMap}
-                profileNameById={profileNameMap}
+                chatContextNameById={chatContextNameMap} // ⬅️ passe la map chat-context
               />
               {waitResponse && (
                 <Box mt={1} sx={{ alignSelf: "flex-start" }}>

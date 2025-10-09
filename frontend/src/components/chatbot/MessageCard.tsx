@@ -31,6 +31,7 @@ import { useToast } from "../ToastProvider.tsx";
 import { getExtras, isToolCall, isToolResult } from "./ChatBotUtils.tsx";
 import { toCopyText, toMarkdown } from "./messageParts.ts";
 import MessageRuntimeContextHeader from "./MessageRuntimeContextHeader.tsx";
+import { FeedbackDialog } from "../feedback/FeedbackDialog.tsx";
 
 export default function MessageCard({
   message,
@@ -44,7 +45,7 @@ export default function MessageCard({
   onCitationHover,
   onCitationClick,
   libraryNameById,
-  profileNameById,
+  chatContextNameById,
 }: {
   message: ChatMessage;
   agent: AnyAgent;
@@ -58,7 +59,7 @@ export default function MessageCard({
   onCitationClick?: (uid: string | null) => void;
 
   libraryNameById?: Record<string, string>;
-  profileNameById?: Record<string, string>;
+  chatContextNameById?: Record<string, string>;
 }) {
   const theme = useTheme();
   const { t } = useTranslation();
@@ -176,7 +177,7 @@ export default function MessageCard({
                           message={message}
                           visible={bubbleHover}
                           libraryNameById={libraryNameById}
-                          profileNameById={profileNameById}
+                          chatContextNameById={chatContextNameById}
                         />
                       )}
                     </Box>
@@ -210,7 +211,7 @@ export default function MessageCard({
                         onHover: onCitationHover,
                         onClick: onCitationClick,
                       }}
-                    />{" "}
+                    />
                   </Box>
                 </Box>
               </Grid2>

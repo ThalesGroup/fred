@@ -28,7 +28,7 @@ type Props = {
 
   // id -> label maps
   libraryNameById?: Record<string, string>;
-  profileNameById?: Record<string, string>;
+  chatContextNameById?: Record<string, string>;
 };
 
 function Area({
@@ -37,7 +37,7 @@ function Area({
   currentAgent,
 
   libraryNameById,
-  profileNameById,
+  chatContextNameById,
 }: Props) {
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -134,7 +134,7 @@ function Area({
             enableThumbs
             suppressText={false}
             libraryNameById={libraryNameById}
-            profileNameById={profileNameById}
+            chatContextNameById={chatContextNameById}
             onCitationHover={(uid) => setHighlightUid(uid)}
             onCitationClick={(uid) => setHighlightUid(uid)}
           />,
@@ -190,11 +190,10 @@ function Area({
               enableThumbs
               suppressText={false}
               libraryNameById={libraryNameById}
-              profileNameById={profileNameById}
+              chatContextNameById={chatContextNameById}
               onCitationHover={(uid) => setHighlightUid(uid)}
               onCitationClick={(uid) => setHighlightUid(uid)}
             />
-
           </React.Fragment>,
         );
       }
@@ -230,11 +229,10 @@ function Area({
             enableThumbs
             suppressText={false}
             libraryNameById={libraryNameById}
-            profileNameById={profileNameById}
+            chatContextNameById={chatContextNameById}
             onCitationHover={(uid) => setHighlightUid(uid)}
             onCitationClick={(uid) => setHighlightUid(uid)}
-          />
-
+          />,
         );
       }
     }
@@ -246,7 +244,7 @@ function Area({
     currentAgent,
     highlightUid,
     libraryNameById,
-    profileNameById
+    chatContextNameById,
   ]);
 
   useEffect(() => {

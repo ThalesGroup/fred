@@ -1,5 +1,5 @@
 // MessageRuntimeContextPopover.tsx
-// Popover content (Overview + Tokens + Latency/Search/Temp + Libraries/Profile)
+// Popover content (Overview + Tokens + Latency/Search/Temp + Libraries/Chat Contexts)
 
 import { Popper, Paper, Stack, Typography, Divider, Box } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
@@ -21,7 +21,7 @@ type Props = {
   temperature?: number;
 
   libsLabeled: string[];
-  prfsLabeled: string[];
+  ctxLabeled: string[];
 };
 
 export default function MessageRuntimeContextPopover({
@@ -36,7 +36,7 @@ export default function MessageRuntimeContextPopover({
   searchPolicy,
   temperature,
   libsLabeled,
-  prfsLabeled,
+  ctxLabeled,
 }: Props) {
   const theme = useTheme();
   const { t } = useTranslation();
@@ -108,7 +108,7 @@ export default function MessageRuntimeContextPopover({
           <SectionRow label={t("popover.search")} value={searchPolicy} />
           <SectionRow label={t("popover.temp")} value={typeof temperature === "number" ? temperature : undefined} />
 
-          {(libsLabeled.length || prfsLabeled.length) ? <Divider flexItem /> : null}
+          {(libsLabeled.length || ctxLabeled.length) ? <Divider flexItem /> : null}
 
           {libsLabeled.length ? (
             <>
@@ -123,15 +123,15 @@ export default function MessageRuntimeContextPopover({
             </>
           ) : null}
 
-          {prfsLabeled.length ? (
+          {ctxLabeled.length ? (
             <>
               <Typography variant="overline" sx={{ opacity: 0.7 }}>
-                {prfsLabeled.length > 1
-                  ? t("popover.sectionProfilesPlural")
-                  : t("popover.sectionProfileSingular")}
+                {ctxLabeled.length > 1
+                  ? t("popover.sectionChatContextsPlural")
+                  : t("popover.sectionChatContextSingular")}
               </Typography>
               <Typography variant="caption" fontWeight={500} sx={{ display: "block" }}>
-                {prfsLabeled.join(", ")}
+                {ctxLabeled.join(", ")}
               </Typography>
             </>
           ) : null}
