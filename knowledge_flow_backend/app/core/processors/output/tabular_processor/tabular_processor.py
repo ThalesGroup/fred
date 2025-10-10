@@ -61,12 +61,14 @@ _DATE_REGEX = re.compile(
     re.IGNORECASE | re.VERBOSE,
 )
 
+
 def safe_table_name(name: str, max_len: int = 63) -> str:
     name = sanitize_sql_name(name)
     if len(name) <= max_len:
         return name
-    hash_suffix = hashlib.md5(name.encode()).hexdigest()[:8]
+    hash_suffix = hashlib.md5(name.encode(), usedforsecurity=False).hexdigest()[:8]
     return name[: max_len - 9] + "_" + hash_suffix
+
 
 def _looks_like_date(value: str) -> bool:
     """Check if the string matches a common date format (with separators or month names)."""
