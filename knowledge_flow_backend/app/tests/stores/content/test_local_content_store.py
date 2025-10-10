@@ -40,7 +40,7 @@ from app.core.stores.content.filesystem_content_store import FileSystemContentSt
 @pytest.fixture
 def tmp_store(tmp_path):
     """Provide a temporary local storage backend."""
-    return FileSystemContentStore(destination_root=tmp_path)
+    return FileSystemContentStore(document_root=tmp_path / "documents", object_root=tmp_path / "objects")
 
 
 # ----------------------------
