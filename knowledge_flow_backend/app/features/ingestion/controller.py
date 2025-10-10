@@ -118,21 +118,21 @@ class IngestionController:
                     current_step = "metadata extraction"
                     try:
                         output_temp_dir = input_temp_file.parent.parent
-                        yield ProcessingProgress(step=current_step, status=Status.IN_PROGRESS, filename=filename ).model_dump_json() + "\n"
+                        yield ProcessingProgress(step=current_step, status=Status.IN_PROGRESS, filename=filename).model_dump_json() + "\n"
                         metadata = self.service.extract_metadata(user, file_path=input_temp_file, tags=tags, source_tag=source_tag)
                         yield ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n"
 
                         current_step = "raw content saving"
-                        yield ProcessingProgress(step=current_step, status=Status.IN_PROGRESS, filename=filename ).model_dump_json() + "\n"
+                        yield ProcessingProgress(step=current_step, status=Status.IN_PROGRESS, filename=filename).model_dump_json() + "\n"
                         self.service.save_input(user, metadata=metadata, input_dir=output_temp_dir / "input")
                         yield ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n"
 
                         current_step = "metadata saving"
-                        yield ProcessingProgress(step=current_step, status=Status.IN_PROGRESS, filename=filename ).model_dump_json() + "\n"
+                        yield ProcessingProgress(step=current_step, status=Status.IN_PROGRESS, filename=filename).model_dump_json() + "\n"
                         self.service.save_metadata(user, metadata=metadata)
                         yield ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n"
                         yield ProcessingProgress(step="Finished", filename=filename, status=Status.FINISHED, document_uid=metadata.document_uid).model_dump_json() + "\n"
-                        
+
                         success += 1
 
                     except Exception as e:
@@ -181,22 +181,22 @@ class IngestionController:
                             output_temp_dir = input_temp_file.parent.parent
 
                             current_step = "metadata extraction"
-                            yield ProcessingProgress(step=current_step, status=Status.IN_PROGRESS, filename=filename ).model_dump_json() + "\n"
+                            yield ProcessingProgress(step=current_step, status=Status.IN_PROGRESS, filename=filename).model_dump_json() + "\n"
                             metadata = self.service.extract_metadata(user, file_path=input_temp_file, tags=tags, source_tag=source_tag)
                             yield ProcessingProgress(step=current_step, status=Status.SUCCESS, filename=filename).model_dump_json() + "\n"
 
                             current_step = "input content saving"
-                            yield ProcessingProgress(step=current_step, status=Status.IN_PROGRESS, filename=filename ).model_dump_json() + "\n"
+                            yield ProcessingProgress(step=current_step, status=Status.IN_PROGRESS, filename=filename).model_dump_json() + "\n"
                             self.service.save_input(user, metadata=metadata, input_dir=output_temp_dir / "input")
                             yield ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n"
 
                             current_step = "input processing"
-                            yield ProcessingProgress(step=current_step, status=Status.IN_PROGRESS, filename=filename ).model_dump_json() + "\n"
+                            yield ProcessingProgress(step=current_step, status=Status.IN_PROGRESS, filename=filename).model_dump_json() + "\n"
                             metadata = input_process(user=user, input_file=input_temp_file, metadata=metadata)
                             yield ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n"
 
                             current_step = "output processing"
-                            file_to_process = FileToProcess( document_uid=metadata.document_uid, external_path=None, source_tag=source_tag, tags=tags, processed_by=user)
+                            file_to_process = FileToProcess(document_uid=metadata.document_uid, external_path=None, source_tag=source_tag, tags=tags, processed_by=user)
                             yield ProcessingProgress(step=current_step, status=Status.IN_PROGRESS, filename=filename).model_dump_json() + "\n"
                             metadata = output_process(file=file_to_process, metadata=metadata, accept_memory_storage=True)
                             yield ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n"
