@@ -100,3 +100,30 @@ async def setup_agent(agent_name: str = "Rico Senior", doc_lib_ids: list = None)
         )
 
     return agent.get_compiled_graph()
+
+
+def print_results(results):
+    """
+    Print evaluation results in a formatted and visual way.
+    Displays scores for each metric with a progress bar representation.
+    """
+    print("\n" + "=" * 70)
+    print("📈 RAGAS EVALUATION RESULTS")
+    print("=" * 70)
+
+    scores = results.scores[0]
+    metrics = [
+        "faithfulness",
+        "answer_relevancy",
+        "context_precision",
+        "context_recall",
+        "answer_similarity",
+    ]
+
+    for metric in metrics:
+        if metric in scores:
+            score = scores[metric]
+            bar = "█" * int(score * 20) + "░" * (20 - int(score * 20))
+            print(f"  {metric:20s} : {bar} {score:.3f}")
+
+    print("=" * 70 + "\n")
