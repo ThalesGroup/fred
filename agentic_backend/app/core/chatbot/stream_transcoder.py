@@ -8,7 +8,7 @@ import inspect
 import json
 import logging
 from datetime import datetime, timezone
-from typing import Awaitable, Callable, List
+from typing import Awaitable, Callable, List, Optional
 
 from langchain_core.messages import BaseMessage
 from langchain_core.runnables import RunnableConfig
@@ -41,6 +41,46 @@ CallbackType = Callable[[dict], None] | Callable[[dict], Awaitable[None]]
 def _utcnow_dt():
     """UTC timestamp (seconds precision) for ISO-8601 serialization."""
     return datetime.now(timezone.utc).replace(microsecond=0)
+
+
+def _infer_tool_ok_flag(raw_md: dict, content: str) -> Optional[bool]:
+    """
+    Best-effort determination of tool_result.ok.
+    - Honour explicit metadata provided by the tool (ok / success / status).
+    - Detect common error markers when metadata is missing so the UI does not
+      show a green “ok” badge for a textual error payload.
+    """
+    if isinstance(raw_md, dict):
+        explicit_ok = raw_md.get("ok")
+        if isinstance(explicit_ok, bool):
+            return explicit_ok
+
+        success = raw_md.get("success")
+        if isinstance(success, bool):
+            return success
+
+        status = raw_md.get("status")
+        if isinstance(status, str):
+            status_lc = status.lower()
+            if status_lc in ("ok", "success", "succeeded", "completed"):
+                return True
+            if status_lc in ("error", "failed", "fail", "exception"):
+                return False
+
+        if raw_md.get("error") or raw_md.get("is_error") is True:
+            return False
+        if raw_md.get("failed") is True:
+            return False
+
+    if isinstance(content, str):
+        stripped = content.strip()
+        lowered = stripped.lower()
+        if lowered.startswith("error") or lowered.startswith("exception"):
+            return False
+        if "toolexception" in lowered or "traceback" in lowered:
+            return False
+
+    return None
 
 
 class StreamTranscoder:
@@ -152,6 +192,7 @@ class StreamTranscoder:
                     content_str = getattr(msg, "content", "")
                     if not isinstance(content_str, str):
                         content_str = json.dumps(content_str)
+                    ok_flag = _infer_tool_ok_flag(raw_md, content_str)
                     tr_msg = ChatMessage(
                         session_id=session_id,
                         exchange_id=exchange_id,
@@ -162,7 +203,7 @@ class StreamTranscoder:
                         parts=[
                             ToolResultPart(
                                 call_id=call_id,
-                                ok=True,
+                                ok=ok_flag,
                                 latency_ms=raw_md.get("latency_ms"),
                                 content=content_str,
                             )
