@@ -1,15 +1,30 @@
 import logging
 import sys
 from pathlib import Path
+import json
+from datasets import Dataset
 
 from app.common.utils import parse_server_configuration
-from app.application_context import ApplicationContext, get_configuration
+from app.application_context import (
+    ApplicationContext,
+    get_configuration,
+    get_default_model,
+)
 from app.agents.rags.advanced_rag_expert import AdvancedRagExpert
 from app.core.agents.runtime_context import RuntimeContext
 
 from fred_core import ModelConfiguration, get_embeddings
 
 from ragas.embeddings import LangchainEmbeddingsWrapper
+from ragas.llms import LangchainLLMWrapper
+from ragas.metrics import (
+    answer_relevancy,
+    answer_similarity,
+    context_precision,
+    context_recall,
+    faithfulness,
+)
+from ragas import RunConfig, evaluate
 
 
 def setup_colored_logging():
@@ -127,3 +142,79 @@ def print_results(results):
             print(f"  {metric:20s} : {bar} {score:.3f}")
 
     print("=" * 70 + "\n")
+
+
+async def run_evaluation(
+    test_file: Path,
+    chat_model: str,
+    embedding_model: str,
+    agent_name: str = "Rico Senior",
+    doc_lib_ids: list = None,
+):
+    """
+    Run evaluation of an agent using RAGAS metrics.
+
+    This function loads test data, evaluates the agent's responses, and prints
+    formatted results including various RAGAS metrics.
+    """
+    logger = logging.getLogger(__name__)
+
+    if not test_file.is_file():
+        raise FileNotFoundError(f"Test file not found: {test_file}")
+    config = load_config()
+
+    llm_as_judge = get_default_model()
+    llm_as_judge.model = chat_model
+    llm = LangchainLLMWrapper(llm_as_judge)
+    embeddings = setup_embedding_model(embedding_model, config)
+
+    logger.info(
+        f"🔧 Configuration : chat_model={chat_model}, embedding_model={embedding_model}"
+    )
+
+    with open(test_file, "r", encoding="utf-8") as f:
+        test_data = json.load(f)
+    logger.info(f"📝 {len(test_data)} questions loaded from {test_file.name}")
+
+    agent = await setup_agent(agent_name, doc_lib_ids)
+    logger.info(f"🤖 Agent '{agent_name}' ready")
+
+    evaluation_data = {"question": [], "answer": [], "contexts": [], "ground_truth": []}
+
+    logger.info("🔄 Evaluation in progress...")
+    for i, item in enumerate(test_data, 1):
+        result = await agent.ainvoke(
+            {"question": item["question"], "retry_count": 0},
+            config={"configurable": {"thread_id": f"eval_{i}"}},
+        )
+
+        messages = result.get("messages", [])
+        documents = result.get("documents", [])
+
+        evaluation_data["question"].append(item["question"])
+        evaluation_data["answer"].append(messages[-1].content if messages else "")
+        evaluation_data["ground_truth"].append(item["expected_answer"])
+        evaluation_data["contexts"].append([doc.content for doc in documents])
+
+        logger.info(f"✓ Question {i}/{len(test_data)}")
+
+    logger.info("📊 Calculation of RAGAS metrics...")
+    dataset = Dataset.from_dict(evaluation_data)
+
+    results = evaluate(
+        dataset=dataset,
+        metrics=[
+            faithfulness,
+            answer_relevancy,
+            context_precision,
+            context_recall,
+            answer_similarity,
+        ],
+        llm=llm,
+        embeddings=embeddings,
+        run_config=RunConfig(timeout=3600),
+    )
+
+    print_results(results)
+
+    return results
