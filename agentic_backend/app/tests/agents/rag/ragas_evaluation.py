@@ -3,6 +3,7 @@ import sys
 from pathlib import Path
 import json
 from datasets import Dataset
+import argparse
 
 from app.common.utils import parse_server_configuration
 from app.application_context import (
@@ -218,3 +219,31 @@ async def run_evaluation(
     print_results(results)
 
     return results
+
+
+def parse_args():
+    """
+    Parse command-line arguments for the RAGAS evaluation script.
+
+    Returns:
+        argparse.Namespace: Parsed arguments including chat_model, embedding_model,
+                            dataset_path, and doc_libs.
+    """
+    parser = argparse.ArgumentParser(description="RAGAS evaluation for RAG agents")
+
+    parser.add_argument("--chat_model", required=True, help="Name of chat model")
+    parser.add_argument(
+        "--embedding_model", required=True, help="Name of the embedding model"
+    )
+    parser.add_argument(
+        "--dataset_path",
+        required=True,
+        type=Path,
+        help="Path to the JSON test file",
+    )
+    parser.add_argument(
+        "--doc_libs",
+        help="Document library IDs (separated by commas)",
+    )
+
+    return parser.parse_args()
