@@ -4,6 +4,7 @@ from pathlib import Path
 import json
 from datasets import Dataset
 import argparse
+import asyncio
 
 from app.common.utils import parse_server_configuration
 from app.application_context import (
@@ -278,3 +279,8 @@ async def main():
     except Exception as e:
         logger.error(f"❌ Error: {e}")
         return 1
+
+
+if __name__ == "__main__":
+    exit_code = asyncio.run(main())
+    sys.exit(exit_code)
