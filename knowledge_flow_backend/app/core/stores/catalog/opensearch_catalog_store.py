@@ -95,6 +95,86 @@ class OpenSearchCatalogStore:
             logger.error(f"[CATALOG] Failed to save entries for '{source_tag}': {e}")
             raise
 
+    def add_entries(self, source_tag: str, entries: List[PullFileEntry]):
+        try:
+            # Récupération des entrées existantes pour le source_tag
+            existing_docs = self.client.search(
+                index=self.index_name,
+                body={"query": {"term": {"source_tag": source_tag}}, "_source": ["path", "hash"]},
+                params={"size": 10000},
+            )["hits"]["hits"]
+
+            existing = {doc["_source"]["path"]: doc["_source"]["hash"] for doc in existing_docs}
+
+            from opensearchpy.helpers import bulk
+
+            actions = []
+
+            for entry in entries:
+                doc_id = f"{source_tag}:{entry.path}"
+                if entry.path in existing:
+                    if existing[entry.path] != entry.hash:
+                        # Met à jour le document si le hash a changé
+                        actions.append(
+                            {
+                                "_op_type": "update",
+                                "_index": self.index_name,
+                                "_id": doc_id,
+                                "doc": {
+                                    "size": entry.size,
+                                    "modified_time": entry.modified_time,
+                                    "hash": entry.hash,
+                                },
+                            }
+                        )
+                else:
+                    # Nouveau document
+                    actions.append(
+                        {
+                            "_op_type": "index",
+                            "_index": self.index_name,
+                            "_id": doc_id,
+                            "_source": {
+                                "source_tag": source_tag,
+                                "path": entry.path,
+                                "size": entry.size,
+                                "modified_time": entry.modified_time,
+                                "hash": entry.hash,
+                            },
+                        }
+                    )
+
+            if actions:
+                success, _ = bulk(self.client, actions, refresh=True)
+                logger.info(f"[CATALOG] add_entries: {success} entries added/updated for '{source_tag}'")
+            else:
+                logger.info(f"[CATALOG] add_entries: No changes for '{source_tag}'")
+        except Exception as e:
+            logger.error(f"[CATALOG] Failed to add entries for '{source_tag}': {e}")
+            raise
+
+    def delete_entries(self, source_tag: str, entries: List[PullFileEntry]):
+        if not entries:
+            return
+
+        try:
+            from opensearchpy.helpers import bulk
+
+            actions = [
+                {
+                    "_op_type": "delete",
+                    "_index": self.index_name,
+                    "_id": f"{source_tag}:{entry.path}",
+                }
+                for entry in entries
+            ]
+
+            success, _ = bulk(self.client, actions, refresh=True)
+            logger.info(f"[CATALOG] delete_entries: {success} entries deleted for '{source_tag}'")
+        except Exception as e:
+            logger.error(f"[CATALOG] Failed to delete entries for '{source_tag}': {e}")
+            raise
+
     def list_entries(self, source_tag: str) -> List[PullFileEntry]:
         try:
             results = self.client.search(
