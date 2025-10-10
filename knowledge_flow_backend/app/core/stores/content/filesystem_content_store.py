@@ -199,10 +199,10 @@ class FileSystemContentStore(BaseContentStore):
                 self.file_obj = file_obj
                 self.bytes_read = 0
                 self.limit = limit
-                
+
                 # These binary attributes satisfy the static checker's BinaryIO requirement
-                self.mode = 'rb' 
-                self.encoding = None 
+                self.mode = "rb"
+                self.encoding = None
 
             def read(self, size: int = -1) -> bytes:
                 if self.bytes_read >= self.limit:
@@ -212,16 +212,16 @@ class FileSystemContentStore(BaseContentStore):
                 data = self.file_obj.read(bytes_to_read)
                 self.bytes_read += len(data)
                 return data
-                
+
             def close(self):
                 self.file_obj.close()
-            
+
             def readable(self) -> bool:
                 return True
-            
+
             def writable(self) -> bool:
                 return False
-                
+
             def seekable(self) -> bool:
                 return self.file_obj.seekable()
 
