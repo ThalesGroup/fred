@@ -1,6 +1,9 @@
-
 import logging
 import sys
+from pathlib import Path
+
+from app.common.utils import parse_server_configuration
+from app.application_context import ApplicationContext
 
 def setup_colored_logging():
     """
@@ -27,3 +30,19 @@ def setup_colored_logging():
     )
 
     logging.basicConfig(level=logging.INFO, handlers=[handler], force=True)
+
+
+def load_config():
+    """
+    Load and configure the application settings for a specified model.
+
+    Args:
+        model_name (str): The name of the model to be used for chat operations.
+
+    Returns:
+        The updated configuration object.
+    """
+    config_path = Path(__file__).parents[4] / "config" / "configuration.yaml"
+    config = parse_server_configuration(str(config_path))
+    ApplicationContext(config)
+    return config
