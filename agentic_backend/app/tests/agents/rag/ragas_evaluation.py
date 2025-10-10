@@ -247,3 +247,34 @@ def parse_args():
     )
 
     return parser.parse_args()
+
+
+async def main():
+    """
+    Main function to run the RAGAS evaluation.
+
+    Parses command-line arguments, sets up logging, and executes the evaluation
+    process using the specified models and dataset.
+    """
+    args = parse_args()
+    setup_colored_logging()
+    logger = logging.getLogger(__name__)
+
+    try:
+        doc_lib_ids = None
+        if args.doc_libs:
+            doc_lib_ids = [id.strip() for id in args.doc_libs.split(",")]
+            logger.info(f"📚 Document libraries: {doc_lib_ids}")
+
+        await run_evaluation(
+            test_file=args.dataset_path,
+            chat_model=args.chat_model,
+            embedding_model=args.embedding_model,
+            doc_lib_ids=doc_lib_ids,
+        )
+
+        return 0
+
+    except Exception as e:
+        logger.error(f"❌ Error: {e}")
+        return 1
