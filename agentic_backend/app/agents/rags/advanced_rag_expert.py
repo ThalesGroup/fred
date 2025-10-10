@@ -488,7 +488,6 @@ class AdvancedRagExpert(AgentFlow):
         return {
             "messages": [generation],  # type:"ai", subtype:"final" set downstream
             "question": "",
-            "documents": [],
             "top_k": self.TOP_K,
             "sources": [],
             "retry_count": 0,
@@ -511,7 +510,6 @@ class AdvancedRagExpert(AgentFlow):
         return {
             "messages": [msg],
             "question": "",
-            "documents": [],
             "top_k": self.TOP_K,
             "sources": [],
             "retry_count": 0,
