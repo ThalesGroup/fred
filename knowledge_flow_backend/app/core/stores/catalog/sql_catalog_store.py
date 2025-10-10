@@ -12,13 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import re
 from pathlib import Path
 from typing import List
-import re
 
-from sqlalchemy import Column, String, BigInteger, Float
-from sqlalchemy import MetaData, Table, select, insert, update, delete
 from fred_core.store.sql_store import SQLTableStore
+from sqlalchemy import BigInteger, Column, Float, MetaData, String, Table, delete, insert, select, update
 
 from app.core.stores.catalog.base_catalog_store import PullFileEntry
 

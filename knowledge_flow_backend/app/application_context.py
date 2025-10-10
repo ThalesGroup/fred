@@ -58,8 +58,8 @@ from app.core.processors.output.base_output_processor import BaseOutputProcessor
 from app.core.processors.output.vectorization_processor.semantic_splitter import SemanticSplitter
 from app.core.stores.catalog.base_catalog_store import BaseCatalogStore
 from app.core.stores.catalog.duckdb_catalog_store import DuckdbCatalogStore
-from app.core.stores.catalog.sql_catalog_store import SQLCatalogStore
 from app.core.stores.catalog.opensearch_catalog_store import OpenSearchCatalogStore
+from app.core.stores.catalog.sql_catalog_store import SQLCatalogStore
 from app.core.stores.content.base_content_loader import BaseContentLoader
 from app.core.stores.content.base_content_store import BaseContentStore
 from app.core.stores.content.filesystem_content_loader import FileSystemContentLoader
