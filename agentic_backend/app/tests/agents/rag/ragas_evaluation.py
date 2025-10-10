@@ -5,6 +5,10 @@ from pathlib import Path
 from app.common.utils import parse_server_configuration
 from app.application_context import ApplicationContext
 
+from fred_core import ModelConfiguration, get_embeddings
+
+from ragas.embeddings import LangchainEmbeddingsWrapper
+
 def setup_colored_logging():
     """
     Set up colored logging for console output.
@@ -46,3 +50,20 @@ def load_config():
     config = parse_server_configuration(str(config_path))
     ApplicationContext(config)
     return config
+
+def setup_embedding_model(embedding_name: str, config):
+    """
+    Set up and configure an embedding model for use with Ragas.
+
+    Args:
+        embedding_name (str): The name of the embedding model to be used.
+        config: The application configuration object containing model settings.
+
+    Returns:
+        LangchainEmbeddingsWrapper: A wrapped embedding model instance ready for use.
+    """
+    default_config = config.ai.default_chat_model.model_dump(exclude_unset=True)
+    embedding_config = ModelConfiguration(**default_config)
+    embedding = get_embeddings(embedding_config)
+    embedding.model = embedding_name
+    return LangchainEmbeddingsWrapper(embedding)
