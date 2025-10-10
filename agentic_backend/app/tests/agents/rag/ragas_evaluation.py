@@ -3,11 +3,14 @@ import sys
 from pathlib import Path
 
 from app.common.utils import parse_server_configuration
-from app.application_context import ApplicationContext
+from app.application_context import ApplicationContext, get_configuration
+from app.agents.rags.advanced_rag_expert import AdvancedRagExpert
+from app.core.agents.runtime_context import RuntimeContext
 
 from fred_core import ModelConfiguration, get_embeddings
 
 from ragas.embeddings import LangchainEmbeddingsWrapper
+
 
 def setup_colored_logging():
     """
@@ -51,6 +54,7 @@ def load_config():
     ApplicationContext(config)
     return config
 
+
 def setup_embedding_model(embedding_name: str, config):
     """
     Set up and configure an embedding model for use with Ragas.
@@ -67,3 +71,32 @@ def setup_embedding_model(embedding_name: str, config):
     embedding = get_embeddings(embedding_config)
     embedding.model = embedding_name
     return LangchainEmbeddingsWrapper(embedding)
+
+
+async def setup_agent(agent_name: str = "Rico Senior", doc_lib_ids: list = None):
+    """
+    Initialize and configure an agent by name, optionally setting document libraries.
+
+    Args:
+        agent_name (str): The name of the agent to initialize. Defaults to "Rico Senior".
+        doc_lib_ids (list): Optional list of document library IDs to set in runtime context.
+
+    Returns:
+        The compiled graph of the initialized agent.
+    """
+    agents = get_configuration().ai.agents
+    settings = next((a for a in agents if a.name == agent_name), None)
+
+    if not settings:
+        available = [a.name for a in agents]
+        raise ValueError(f"Agent '{agent_name}' not found. Available: {available}")
+
+    agent = AdvancedRagExpert(settings)
+    await agent.async_init()
+
+    if doc_lib_ids:
+        agent.set_runtime_context(
+            RuntimeContext(selected_document_libraries_ids=doc_lib_ids)
+        )
+
+    return agent.get_compiled_graph()
