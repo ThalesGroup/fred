@@ -103,6 +103,7 @@ def _build_where(search_filter: Optional[SearchFilter]) -> Optional[Dict]:
 
     return where or None
 
+
 def _cosine_similarity_from_distance(distance: float) -> float:
     # Chroma returns cosine distance; convert to [0,1] similarity for UI
     sim = 1.0 - float(distance)

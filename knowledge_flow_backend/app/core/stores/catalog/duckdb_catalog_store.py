@@ -49,7 +49,7 @@ class DuckdbCatalogStore:
     def save_entries(self, source_tag: str, entries: List[PullFileEntry]):
         full_table = self.store._prefixed(self.table_name)
         with self.store._connect() as conn:
-            conn.execute(f'DELETE FROM "{full_table}" WHERE source_tag = ?', [source_tag])
+            conn.execute('DELETE FROM "catalog_pull_file" WHERE source_tag = ?', [source_tag])
             for entry in entries:
                 conn.execute(
                     f"""
@@ -59,13 +59,58 @@ class DuckdbCatalogStore:
                     [source_tag, entry.path, entry.size, entry.modified_time, entry.hash],
                 )
 
-    def list_entries(self, source_tag: str) -> List[PullFileEntry]:
+    def add_entries(self, source_tag: str, entries: List[PullFileEntry]):
+        # full_table = self.store._prefixed(self.table_name)
+        with self.store._connect() as conn:
+            query = 'SELECT path, hash, modified_time, size FROM "catalog_pull_file" WHERE source_tag = ?'
+            rows = conn.execute(query, [source_tag]).fetchall()
+            existing = {row[0]: row[1] for row in rows}
+            for entry in entries:
+                if entry.path in existing:
+                    if existing[entry.path] != entry.hash:
+                        conn.execute(
+                            """
+                            UPDATE "catalog_pull_file"
+                            SET size = ?, modified_time = ?, hash = ?
+                            WHERE source_tag = ? AND path = ?
+                            """,
+                            [entry.size, entry.modified_time, entry.hash, source_tag, entry.path],
+                        )
+                else:
+                    conn.execute(
+                        """
+                        INSERT INTO "catalog_pull_file" (source_tag, path, size, modified_time, hash)
+                        VALUES (?, ?, ?, ?, ?)
+                        """,
+                        [source_tag, entry.path, entry.size, entry.modified_time, entry.hash],
+                    )
+
+    def delete_entries(self, source_tag: str, entries: List[PullFileEntry]):
+        if not entries:
+            return
+        paths = [entry.path for entry in entries]
+
         full_table = self.store._prefixed(self.table_name)
+        placeholders = ", ".join("?" for _ in paths)
+        params = [source_tag] + paths
+
+        with self.store._connect() as conn:
+            conn.execute(
+                f"""
+                DELETE FROM "{full_table}"
+                WHERE source_tag = ?
+                AND path IN ({placeholders})
+                """,
+                params,
+            )
+
+    def list_entries(self, source_tag: str) -> List[PullFileEntry]:
+        # full_table = self.store._prefixed(self.table_name)
         with self.store._connect() as conn:
             result = conn.execute(
-                f"""
+                """
                 SELECT path, size, modified_time, hash
-                FROM "{full_table}"
+                FROM "catalog_pull_file"
                 WHERE source_tag = ?
                 """,
                 [source_tag],
