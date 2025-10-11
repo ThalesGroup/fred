@@ -1,10 +1,16 @@
 // Copyright Thales 2025
 //
-// CreateAgentModal.tsx
-// Why this exists in Fred:
-// - UI creates a *minimal* dynamic agent that can reach MCP servers.
-// - Backend owns runtime shape (Agent); UI sends CreateMcpAgentRequest only.
-// - Inline rationale helps devs grasp architecture from the hover context.
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import AddIcon from "@mui/icons-material/Add";
@@ -21,7 +27,7 @@ import {
   IconButton,
   MenuItem,
   TextField,
-  Typography
+  Typography,
 } from "@mui/material";
 import Grid2 from "@mui/material/Grid2";
 import React, { useState } from "react";
@@ -116,7 +122,6 @@ export const CreateAgentModal: React.FC<CreateAgentModalProps> = ({ open, onClos
         detail: t("agentHub.messages.creationSuccessDetail", "The MCP agent was created successfully."),
       });
     } catch (e: any) {
-      
       showError({
         title: t("agentHub.errors.creationFailed", "MCP Agent Creation failed"),
         summary: t("agentHub.errors.creationFailedDetail", "Failed to create MCP Agent. See console."),
@@ -183,7 +188,12 @@ export const CreateAgentModal: React.FC<CreateAgentModalProps> = ({ open, onClos
                     key={tag}
                     label={tag}
                     size="small"
-                    onDelete={() => setValue("tags", tags.filter((t) => t !== tag))}
+                    onDelete={() =>
+                      setValue(
+                        "tags",
+                        tags.filter((t) => t !== tag),
+                      )
+                    }
                   />
                 ))}
               </Box>
@@ -319,9 +329,7 @@ export const CreateAgentModal: React.FC<CreateAgentModalProps> = ({ open, onClos
                       <Grid2 size={{ xs: 5, md: 1 }} display="flex" justifyContent="flex-end" alignItems="center">
                         <IconButton
                           size="small"
-                          onClick={() =>
-                            setOpenAdvanced((s) => ({ ...s, [advKey]: !s[advKey] }))
-                          }
+                          onClick={() => setOpenAdvanced((s) => ({ ...s, [advKey]: !s[advKey] }))}
                           title={t("agentHub.actions.advanced", "Advanced") as string}
                         >
                           <ExpandMoreIcon
@@ -331,7 +339,11 @@ export const CreateAgentModal: React.FC<CreateAgentModalProps> = ({ open, onClos
                             }}
                           />
                         </IconButton>
-                        <IconButton size="small" onClick={() => remove(index)} title={t("common.delete", "Delete") as string}>
+                        <IconButton
+                          size="small"
+                          onClick={() => remove(index)}
+                          title={t("common.delete", "Delete") as string}
+                        >
                           <DeleteIcon />
                         </IconButton>
                       </Grid2>
@@ -344,9 +356,7 @@ export const CreateAgentModal: React.FC<CreateAgentModalProps> = ({ open, onClos
                 variant="outlined"
                 size="small"
                 startIcon={<AddIcon />}
-                onClick={() =>
-                  append({ name: "", transport: "streamable_http", url: "", sse_read_timeout: 600 })
-                }
+                onClick={() => append({ name: "", transport: "streamable_http", url: "", sse_read_timeout: 600 })}
               >
                 {t("agentHub.actions.add_mcp_server", "+ Add MCP Server")}
               </Button>

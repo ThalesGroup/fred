@@ -12,11 +12,11 @@ import mimetypes
 import re
 from typing import BinaryIO, List, Optional
 
-from pydantic import BaseModel, Field
 from fred_core import Action, KeycloakUser, Resource, authorize
+from pydantic import BaseModel, Field
 
-from app.core.stores.content.base_content_store import StoredObjectInfo
 from app.application_context import ApplicationContext  # to obtain BaseContentStore
+from app.core.stores.content.base_content_store import StoredObjectInfo
 
 # ----- Public response models (hover-over friendly) ---------------------------------
 
@@ -66,9 +66,9 @@ class AgentAssetService:
     # ---- path rules ---------------------------------------------------------------
 
     @staticmethod
-    def _prefix(agent: str, user: KeycloakUser) -> str:
+    def _prefix(agent: str) -> str:
         # Clear tenancy boundary for lifecycle + authorization:
-        return f"agents/{agent}/{user.uid}/"
+        return f"agents/{agent}/"
 
     @staticmethod
     def _normalize_key(key: str) -> str:
@@ -114,7 +114,7 @@ class AgentAssetService:
         - Backends (S3/MinIO) benefit from explicit content-type; we still guess if missing.
         """
         norm = self._normalize_key(key)
-        storage_key = self._prefix(agent, user) + norm
+        storage_key = self._prefix(agent) + norm
         ct = content_type or (mimetypes.guess_type(file_name or norm)[0]) or "application/octet-stream"
 
         info = self.store.put_object(storage_key, stream, content_type=ct)
@@ -126,7 +126,7 @@ class AgentAssetService:
 
     @authorize(Action.READ, Resource.DOCUMENTS)
     async def list_assets(self, user: KeycloakUser, agent: str) -> AgentAssetListResponse:
-        prefix = self._prefix(agent, user)
+        prefix = self._prefix(agent)
         infos = self.store.list_objects(prefix)
 
         items: List[AgentAssetMeta] = []
@@ -142,7 +142,7 @@ class AgentAssetService:
     @authorize(Action.READ, Resource.DOCUMENTS)
     async def stat_asset(self, user: KeycloakUser, agent: str, key: str) -> AgentAssetMeta:
         norm = self._normalize_key(key)
-        storage_key = self._prefix(agent, user) + norm
+        storage_key = self._prefix(agent) + norm
         info = self.store.stat_object(storage_key)
         return self._to_meta(agent, user, norm, info)
 
@@ -161,11 +161,11 @@ class AgentAssetService:
         If start/length provided → partial content, suitable for Range requests.
         """
         norm = self._normalize_key(key)
-        storage_key = self._prefix(agent, user) + norm
+        storage_key = self._prefix(agent) + norm
         return self.store.get_object_stream(storage_key, start=start, length=length)
 
     @authorize(Action.UPDATE, Resource.DOCUMENTS)
     async def delete_asset(self, user: KeycloakUser, agent: str, key: str) -> None:
         norm = self._normalize_key(key)
-        storage_key = self._prefix(agent, user) + norm
+        storage_key = self._prefix(agent) + norm
         self.store.delete_object(storage_key)

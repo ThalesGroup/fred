@@ -15,7 +15,6 @@
 import logging
 import math
 import sys
-from abc import abstractmethod
 from datetime import datetime
 from importlib.resources import files
 from typing import ClassVar, List, Optional, Sequence, cast
@@ -27,7 +26,6 @@ from langgraph.graph import MessagesState
 from langgraph.graph.state import CompiledStateGraph
 
 from app.application_context import (
-    ApplicationContext,
     get_app_context,
     get_knowledge_flow_base_url,
 )
