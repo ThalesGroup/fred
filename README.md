@@ -21,6 +21,7 @@ Contents:
     - [Local (Native) Mode](#local-native-mode)
     - [Dev-Container mode](#dev-container-mode)
     - [Production mode](#production-mode)
+  - [Agent Coding Academy] (#agent-coding-academy)
   - [Advanced configuration](#advanced-configuration)
   - [Core Architecture and Licensing Clarity](#core-architecture-and-licensing-clarity)
   - [Documentation](#documentation)
@@ -404,6 +405,10 @@ cd frontend && make run
 ### Production mode
 
 For production mode, please reach out to your DevOps team so that they tune Fred configuration to match your needs. See [this section](#advanced-configuration) on advanced configuration.
+
+## Agent coding academy
+
+Refer to the [academy](./agentic_backend/app/academy/ACADEMY.md) 
 
 ## Advanced configuration
 
