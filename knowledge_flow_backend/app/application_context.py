@@ -59,6 +59,7 @@ from app.core.processors.output.vectorization_processor.semantic_splitter import
 from app.core.stores.catalog.base_catalog_store import BaseCatalogStore
 from app.core.stores.catalog.duckdb_catalog_store import DuckdbCatalogStore
 from app.core.stores.catalog.opensearch_catalog_store import OpenSearchCatalogStore
+from app.core.stores.catalog.sql_catalog_store import SQLCatalogStore
 from app.core.stores.content.base_content_loader import BaseContentLoader
 from app.core.stores.content.base_content_store import BaseContentStore
 from app.core.stores.content.filesystem_content_loader import FileSystemContentLoader
@@ -687,6 +688,9 @@ class ApplicationContext:
         if isinstance(store_config, DuckdbStoreConfig):
             db_path = Path(store_config.duckdb_path).expanduser()
             self._catalog_store_instance = DuckdbCatalogStore(db_path)
+        elif isinstance(store_config, SQLStorageConfig):
+            db_path = Path(store_config.path or "").expanduser()
+            self._catalog_store_instance = SQLCatalogStore(driver=store_config.driver, db_path=db_path)
         elif isinstance(store_config, OpenSearchIndexConfig):
             opensearch_config = get_configuration().storage.opensearch
             password = opensearch_config.password

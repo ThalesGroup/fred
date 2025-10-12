@@ -4,7 +4,7 @@
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+#       http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -21,7 +21,7 @@ import os
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import BinaryIO, List, Optional
+from typing import BinaryIO, List, Optional, cast  # Added 'cast' here
 
 import pandas as pd
 
@@ -41,7 +41,7 @@ class FileSystemContentStore(BaseContentStore):
     def clear(self) -> None:
         """
         Delete every document that was previously saved in this local
-        store.  Meant for unit-tests; no-op if the folder does not exist.
+        store. Meant for unit-tests; no-op if the folder does not exist.
         """
         if self.document_root.exists():
             shutil.rmtree(self.document_root)
@@ -190,47 +190,46 @@ class FileSystemContentStore(BaseContentStore):
     def get_content_range(self, document_uid: str, start: int, length: int) -> BinaryIO:
         """
         Streaming range reader for the primary input file (no RAM buffering).
-        Returns a BufferedReader over a RawIOBase that limits reads to `length`.
+        Returns a BinaryIO stream that limits reads to `length`.
         """
         file_path = self._get_primary_file_path(document_uid)
         f = open(file_path, "rb")
         f.seek(start)
 
-        class _RangeRaw(io.RawIOBase):
-            def __init__(self, base, limit: int):
-                self._base = base
-                self._remaining = limit
-                self._closed = False
+        # Create a wrapper to limit the stream to the requested length (main's version)
+        class RangeStreamWrapper(io.IOBase):
+            def __init__(self, file_obj: BinaryIO, limit: int):
+                self.file_obj = file_obj
+                self.bytes_read = 0
+                self.limit = limit
+
+                # These binary attributes satisfy the static checker's BinaryIO requirement
+                self.mode = "rb"
+                self.encoding = None
+
+            def read(self, size: int = -1) -> bytes:
+                if self.bytes_read >= self.limit:
+                    return b""
+                read_size = size if size != -1 else self.limit - self.bytes_read
+                bytes_to_read = min(read_size, self.limit - self.bytes_read)
+                data = self.file_obj.read(bytes_to_read)
+                self.bytes_read += len(data)
+                return data
+
+            def close(self):
+                self.file_obj.close()
 
             def readable(self) -> bool:
                 return True
 
-            def readinto(self, b) -> int:
-                if self._closed or self._remaining <= 0:
-                    return 0
-                mv = memoryview(b).cast("B")
-                n = min(len(mv), self._remaining)
-                chunk = self._base.read(n)
-                if not chunk:
-                    return 0
-                r = len(chunk)
-                mv[:r] = chunk
-                self._remaining -= r
-                return r
+            def writable(self) -> bool:
+                return False
 
-            def close(self) -> None:
-                if not self._closed:
-                    try:
-                        self._base.close()
-                    finally:
-                        self._closed = True
-                super().close()
+            def seekable(self) -> bool:
+                return self.file_obj.seekable()
 
-            @property
-            def closed(self) -> bool:
-                return self._closed
-
-        return io.BufferedReader(_RangeRaw(f, length))
+        # FIX: Use typing.cast to explicitly assert that this object meets the BinaryIO interface.
+        return cast(BinaryIO, RangeStreamWrapper(f, length))
 
     # ---------- Generic Object API (typed) ----------
 
@@ -299,6 +298,8 @@ class FileSystemContentStore(BaseContentStore):
         # ranged stream
         f.seek(start or 0)
 
+        # NOTE: Using the RawIOBase/BufferedReader pattern here for the Generic Object API (similar to HEAD)
+        # as it was part of the set of new methods.
         class _RangeRaw(io.RawIOBase):
             def __init__(self, base, limit: Optional[int]):
                 self._base = base

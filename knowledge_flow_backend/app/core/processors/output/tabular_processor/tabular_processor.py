@@ -66,13 +66,11 @@ def safe_table_name(name: str, max_len: int = 63) -> str:
     name = sanitize_sql_name(name)
     if len(name) <= max_len:
         return name
-
     # 🚀 FIX B324: Use MD5 for non-security purposes (name hashing)
     try:
         hash_suffix = hashlib.md5(name.encode(), usedforsecurity=False).hexdigest()[:8]
     except TypeError:
         raise RuntimeError("Python 3.9+ is required for secure MD5 hashing in this context")
-
     return name[: max_len - 9] + "_" + hash_suffix
 
 
