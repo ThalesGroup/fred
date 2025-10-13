@@ -161,7 +161,7 @@ export const normalizeProfileHeader = (
   const header = { ...(rawHeader || {}) };
 
   // Enforce kind
-  header.kind = "profile";
+  header.kind = "chat-context";
 
   // Version policy (par défaut v1)
   if (!keepVersion || !header.version) {

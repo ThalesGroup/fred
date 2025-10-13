@@ -60,15 +60,8 @@ def _utcnow_dt() -> datetime:
 
 class SessionOrchestrator:
     """
-    Why this class exists (architecture note):
-      Keep the controller thin. This orchestrator is the ONLY entry point used by
-      the WebSocket/API layer to run a chat exchange. It owns:
-        - session lifecycle (get/create, title)
-        - emitting the user message
-        - KPI timing and counters
-        - persistence of session + history
-      It delegates ALL streaming/transcoding of LangGraph events to StreamTranscoder.
-      Result: Single Responsibility, easy to unit test, and the WS layer remains simple.
+    Keep the controller thin. This orchestrator is the ONLY entry point used by
+    the WebSocket/API layer to run a chat exchange.
     """
 
     def __init__(self, session_store: BaseSessionStore, agent_manager: AgentManager):
@@ -99,13 +92,12 @@ class SessionOrchestrator:
         client_exchange_id: Optional[str] = None,
     ) -> Tuple[SessionSchema, List[ChatMessage]]:
         """
-        Entry point called by the WebSocket controller for a user question.
-        Responsibility:
+        Responsibilities:
           - ensure session exists and rebuild minimal LC history
-          - emit the user message
-          - time + run the agent via StreamTranscoder
+          - emit the authoritative user message
+          - stream the agent response
           - persist session + history
-          - record KPIs (success/error)
+          - record KPIs
         """
         # Check if user is authorized to talk in this session
         if session_id is not None:
@@ -162,6 +154,7 @@ class SessionOrchestrator:
 
         # 3) Stream agent responses via the transcoder
         saw_final_assistant = False
+        agent_msgs: List[ChatMessage] = []
         try:
             # Timer covers the entire exchange; status defaults to "error" if exception bubbles.
             with self.kpi.timer(
@@ -184,8 +177,7 @@ class SessionOrchestrator:
                     start_seq=1,  # user message already consumed rank=base_rank
                     callback=callback,
                 )
-                all_msgs.extend(agent_msgs)
-                # Success signal: exactly one assistant/final per exchange (enforced by transcoder)
+                # Mark final presence
                 saw_final_assistant = any(
                     (m.role == Role.assistant and m.channel == Channel.final)
                     for m in agent_msgs
@@ -208,13 +200,19 @@ class SessionOrchestrator:
                 actor=actor,
             )
 
+        # 3.1) Attach the raw runtime context (single source of truth)
+        self._attach_runtime_context(
+            runtime_context=runtime_context,
+            messages=agent_msgs,
+        )
+
         # 4) Persist session + history
         session.updated_at = _utcnow_dt()
         self.session_store.save(session)
         assert session.user_id == user.uid, "Session/user mismatch"
-        self.history_store.save(session.id, prior + all_msgs, user.uid)
+        self.history_store.save(session.id, prior + all_msgs + agent_msgs, user.uid)
 
-        return session, all_msgs
+        return session, all_msgs + agent_msgs
 
     # ---------------- Session/History helpers (intentionally here) ----------------
 
@@ -261,9 +259,7 @@ class SessionOrchestrator:
         self, user: KeycloakUser, session_id: str, agent_name: str, file: UploadFile
     ) -> dict:
         """
-        Purpose:
-          Keep simple "drop a file into this session's temp area" behavior unchanged,
-          so the UI doesn't need to move right now. Can be split later to a dedicated service.
+        Simple "drop a file into this session's temp area" behavior unchanged.
         """
         self._authorize_user_action_on_session(session_id, user, Action.UPDATE)
         try:
@@ -338,7 +334,6 @@ class SessionOrchestrator:
             return False
 
         # For now, ignore action, only owners can access their sessions
-        # action is passed for future flexibility (ex: session sharing with attached permissions)
         return session.user_id == user.uid
 
     def _get_session_temp_folder(self, session_id: str) -> Path:
@@ -349,9 +344,7 @@ class SessionOrchestrator:
 
     async def _emit(self, callback: CallbackType, message: ChatMessage) -> None:
         """
-        Purpose:
-          Uniformly support sync OR async callbacks from the WS layer without
-          duplicating code at call sites.
+        Uniformly support sync OR async callbacks from the WS layer.
         """
         result = callback(message.model_dump())
         if asyncio.iscoroutine(result):
@@ -367,11 +360,7 @@ class SessionOrchestrator:
         runtime_context: RuntimeContext | None = None,
     ) -> tuple[SessionSchema, list[BaseMessage], AgentFlow, bool]:
         """
-        Why here:
-          Session creation, title generation and *minimal* LC history reconstruction
-          are orchestration concerns. We keep the LangChain history intentionally
-          lean (user/assistant/system only) to avoid leaking UI-specific messages
-          (tools, thought traces) into the prompt.
+        Session creation, title generation and *minimal* LC history reconstruction.
         """
         session, is_new_session = self._get_or_create_session(
             user_id=user.uid, query=message, session_id=session_id
@@ -424,9 +413,28 @@ class SessionOrchestrator:
         logger.info("Created new session %s for user %s", new_session_id, user_id)
         return session, True
 
+    # ---------------- runtime context attachment ----------------
 
-# ---------- pure helpers (kept local for discoverability) ----------
+    def _attach_runtime_context(
+        self,
+        *,
+        runtime_context: Optional[RuntimeContext],
+        messages: List[ChatMessage],
+    ) -> None:
+        """
+        Attach the **raw RuntimeContext** to assistant/final messages.
+        This is the canonical, unmodified source of truth.
+        """
+        if runtime_context is None:
+            return
+        for m in messages:
+            if m.role == Role.assistant and m.channel == Channel.final:
+                md = m.metadata or ChatMetadata()
+                md.runtime_context = runtime_context
+                m.metadata = md
 
+
+# ---------- helpers ----------
 
 def _concat_text_parts(parts) -> str:
     texts: list[str] = []

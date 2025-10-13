@@ -1,3 +1,4 @@
+// MessagesArea.tsx
 // Copyright Thales 2025
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -24,9 +25,20 @@ type Props = {
   messages: ChatMessage[];
   agents: AnyAgent[];
   currentAgent: AnyAgent;
+
+  // id -> label maps
+  libraryNameById?: Record<string, string>;
+  chatContextNameById?: Record<string, string>;
 };
 
-function Area({ messages, agents, currentAgent }: Props) {
+function Area({
+  messages,
+  agents,
+  currentAgent,
+
+  libraryNameById,
+  chatContextNameById,
+}: Props) {
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   // Hover highlight in Sources (syncs with [n] markers inside MessageCard)
@@ -80,7 +92,6 @@ function Area({ messages, agents, currentAgent }: Props) {
         }
 
         const extras = getExtras(msg);
-        // If your pipeline keeps the graded set, prefer that for this exchange
         if (
           extras?.node === "grade_documents" &&
           Array.isArray(msg.metadata?.sources) &&
@@ -112,7 +123,6 @@ function Area({ messages, agents, currentAgent }: Props) {
         others.push(msg);
       }
 
-      // User bubble (unchanged)
       if (userMessage) {
         elements.push(
           <MessageCard
@@ -122,12 +132,15 @@ function Area({ messages, agents, currentAgent }: Props) {
             side="right"
             enableCopy
             enableThumbs
-            // enableAudio
+            suppressText={false}
+            libraryNameById={libraryNameById}
+            chatContextNameById={chatContextNameById}
+            onCitationHover={(uid) => setHighlightUid(uid)}
+            onCitationClick={(uid) => setHighlightUid(uid)}
           />,
         );
       }
 
-      // Reasoning accordion (unchanged)
       if (reasoningSteps.length) {
         elements.push(
           <ReasoningStepsAccordion
@@ -169,13 +182,15 @@ function Area({ messages, agents, currentAgent }: Props) {
             )}
 
             <MessageCard
+              key={`final-${msg.session_id}-${msg.exchange_id}-${msg.rank}`}
               message={msg}
               agent={currentAgent}
               side={msg.role === "user" ? "right" : "left"}
               enableCopy
               enableThumbs
-              //  enableAudio
-              // Hook up hover/click from inline [n] markers to highlight Sources
+              suppressText={false}
+              libraryNameById={libraryNameById}
+              chatContextNameById={chatContextNameById}
               onCitationHover={(uid) => setHighlightUid(uid)}
               onCitationClick={(uid) => setHighlightUid(uid)}
             />
@@ -202,6 +217,8 @@ function Area({ messages, agents, currentAgent }: Props) {
         }
         const agent = resolveAgent(msg);
         // 2) Single MessageCard (always markdown, inline [n] handled inside)
+
+        // 2) Final message card
         elements.push(
           <MessageCard
             key={`final-${msg.session_id}-${msg.exchange_id}-${msg.rank}`}
@@ -210,9 +227,9 @@ function Area({ messages, agents, currentAgent }: Props) {
             side="left"
             enableCopy
             enableThumbs
-            // enableAudio
-            // Keep text; MessageCard → CustomMarkdownRenderer renders it robustly
             suppressText={false}
+            libraryNameById={libraryNameById}
+            chatContextNameById={chatContextNameById}
             onCitationHover={(uid) => setHighlightUid(uid)}
             onCitationClick={(uid) => setHighlightUid(uid)}
           />,
@@ -221,7 +238,14 @@ function Area({ messages, agents, currentAgent }: Props) {
     }
 
     return elements;
-  }, [messages, agents, currentAgent, highlightUid]);
+  }, [
+    messages,
+    agents,
+    currentAgent,
+    highlightUid,
+    libraryNameById,
+    chatContextNameById,
+  ]);
 
   useEffect(() => {
     scrollToBottom();
