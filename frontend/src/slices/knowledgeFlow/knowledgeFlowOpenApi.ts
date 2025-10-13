@@ -118,6 +118,42 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    uploadAssetKnowledgeFlowV1AgentAssetsAgentUploadPost: build.mutation<
+      UploadAssetKnowledgeFlowV1AgentAssetsAgentUploadPostApiResponse,
+      UploadAssetKnowledgeFlowV1AgentAssetsAgentUploadPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/agent-assets/${queryArg.agent}/upload`,
+        method: "POST",
+        body: queryArg.bodyUploadAssetKnowledgeFlowV1AgentAssetsAgentUploadPost,
+      }),
+    }),
+    listAssetsKnowledgeFlowV1AgentAssetsAgentGet: build.query<
+      ListAssetsKnowledgeFlowV1AgentAssetsAgentGetApiResponse,
+      ListAssetsKnowledgeFlowV1AgentAssetsAgentGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/agent-assets/${queryArg.agent}` }),
+    }),
+    getAssetKnowledgeFlowV1AgentAssetsAgentKeyGet: build.query<
+      GetAssetKnowledgeFlowV1AgentAssetsAgentKeyGetApiResponse,
+      GetAssetKnowledgeFlowV1AgentAssetsAgentKeyGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/agent-assets/${queryArg.agent}/${queryArg.key}`,
+        headers: {
+          Range: queryArg.range,
+        },
+      }),
+    }),
+    deleteAssetKnowledgeFlowV1AgentAssetsAgentKeyDelete: build.mutation<
+      DeleteAssetKnowledgeFlowV1AgentAssetsAgentKeyDeleteApiResponse,
+      DeleteAssetKnowledgeFlowV1AgentAssetsAgentKeyDeleteApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/agent-assets/${queryArg.agent}/${queryArg.key}`,
+        method: "DELETE",
+      }),
+    }),
     uploadDocumentsSyncKnowledgeFlowV1UploadDocumentsPost: build.mutation<
       UploadDocumentsSyncKnowledgeFlowV1UploadDocumentsPostApiResponse,
       UploadDocumentsSyncKnowledgeFlowV1UploadDocumentsPostApiArg
@@ -449,6 +485,30 @@ export type StreamDocumentKnowledgeFlowV1RawContentStreamDocumentUidGetApiArg = 
   documentUid: string;
   range?: string | null;
 };
+export type UploadAssetKnowledgeFlowV1AgentAssetsAgentUploadPostApiResponse =
+  /** status 200 Successful Response */ AgentAssetMeta;
+export type UploadAssetKnowledgeFlowV1AgentAssetsAgentUploadPostApiArg = {
+  agent: string;
+  bodyUploadAssetKnowledgeFlowV1AgentAssetsAgentUploadPost: BodyUploadAssetKnowledgeFlowV1AgentAssetsAgentUploadPost;
+};
+export type ListAssetsKnowledgeFlowV1AgentAssetsAgentGetApiResponse =
+  /** status 200 Successful Response */ AgentAssetListResponse;
+export type ListAssetsKnowledgeFlowV1AgentAssetsAgentGetApiArg = {
+  agent: string;
+};
+export type GetAssetKnowledgeFlowV1AgentAssetsAgentKeyGetApiResponse = unknown;
+export type GetAssetKnowledgeFlowV1AgentAssetsAgentKeyGetApiArg = {
+  agent: string;
+  key: string;
+  range?: string | null;
+};
+export type DeleteAssetKnowledgeFlowV1AgentAssetsAgentKeyDeleteApiResponse = /** status 200 Successful Response */ {
+  [key: string]: any;
+};
+export type DeleteAssetKnowledgeFlowV1AgentAssetsAgentKeyDeleteApiArg = {
+  agent: string;
+  key: string;
+};
 export type UploadDocumentsSyncKnowledgeFlowV1UploadDocumentsPostApiResponse =
   /** status 200 Successful Response */ any;
 export type UploadDocumentsSyncKnowledgeFlowV1UploadDocumentsPostApiArg = {
@@ -753,6 +813,30 @@ export type DocumentSourceInfo = {
 export type MarkdownContentResponse = {
   content: string;
 };
+export type AgentAssetMeta = {
+  agent: string;
+  owner_user_id: string;
+  key: string;
+  file_name: string;
+  content_type: string;
+  size: number;
+  etag?: string | null;
+  modified?: string | null;
+  extra?: {
+    [key: string]: any;
+  };
+};
+export type BodyUploadAssetKnowledgeFlowV1AgentAssetsAgentUploadPost = {
+  /** Binary payload (e.g., .pptx) */
+  file: Blob;
+  /** Logical asset key (defaults to uploaded filename) */
+  key?: string | null;
+  /** Force a content-type if needed */
+  content_type_override?: string | null;
+};
+export type AgentAssetListResponse = {
+  items: AgentAssetMeta[];
+};
 export type BodyUploadDocumentsSyncKnowledgeFlowV1UploadDocumentsPost = {
   files: Blob[];
   metadata_json: string;
@@ -1051,6 +1135,12 @@ export const {
   useLazyDownloadDocumentKnowledgeFlowV1RawContentDocumentUidGetQuery,
   useStreamDocumentKnowledgeFlowV1RawContentStreamDocumentUidGetQuery,
   useLazyStreamDocumentKnowledgeFlowV1RawContentStreamDocumentUidGetQuery,
+  useUploadAssetKnowledgeFlowV1AgentAssetsAgentUploadPostMutation,
+  useListAssetsKnowledgeFlowV1AgentAssetsAgentGetQuery,
+  useLazyListAssetsKnowledgeFlowV1AgentAssetsAgentGetQuery,
+  useGetAssetKnowledgeFlowV1AgentAssetsAgentKeyGetQuery,
+  useLazyGetAssetKnowledgeFlowV1AgentAssetsAgentKeyGetQuery,
+  useDeleteAssetKnowledgeFlowV1AgentAssetsAgentKeyDeleteMutation,
   useUploadDocumentsSyncKnowledgeFlowV1UploadDocumentsPostMutation,
   useProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPostMutation,
   useListTabularDatabasesQuery,

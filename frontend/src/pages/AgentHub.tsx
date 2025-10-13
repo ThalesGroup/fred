@@ -41,6 +41,7 @@ import {
 
 // UI union facade
 import { AnyAgent, isLeader } from "../common/agent";
+import { AgentAssetManagerDrawer } from "../components/agentHub/AgentAssetManagerDrawer";
 import { CreateAgentModal } from "../components/agentHub/CreateAgentModal";
 import { useConfirmationDialog } from "../components/ConfirmationDialogProvider";
 import { useAgentUpdater } from "../hooks/useAgentUpdater";
@@ -100,6 +101,9 @@ export const AgentHub = () => {
 
   const handleOpenCreateAgent = () => setIsCreateModalOpen(true);
   const handleCloseCreateAgent = () => setIsCreateModalOpen(false);
+
+  const [assetManagerOpen, setAssetManagerOpen] = useState(false);
+  const [agentForAssetManagement, setAgentForAssetManagement] = useState<AnyAgent | null>(null);
 
   const [triggerGetFlows, { isFetching }] = useLazyGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery();
   const { updateEnabled } = useAgentUpdater();
@@ -188,6 +192,17 @@ export const AgentHub = () => {
     [showConfirmationDialog, triggerDeleteAgent, fetchAgents, t],
   );
 
+  const handleManageAssets = (agent: AnyAgent) => {
+    setAgentForAssetManagement(agent);
+    setAssetManagerOpen(true);
+  };
+
+  const handleCloseAssetManager = () => {
+    setAssetManagerOpen(false);
+    setAgentForAssetManagement(null);
+    // Optional: If asset deletion/upload should refresh the main agent list (e.g., if metadata changes), uncomment the line below.
+    // fetchAgents();
+  };
   // ------------------------------------------------------------------------
 
   const sectionTitle = useMemo(() => {
@@ -318,8 +333,8 @@ export const AgentHub = () => {
                     <Box sx={{ display: "flex", gap: 1 }}>
                       <ActionButton icon={<SearchIcon />}>{t("agentHub.search")}</ActionButton>
                       <ActionButton icon={<FilterListIcon />}>{t("agentHub.filter")}</ActionButton>
-                      <ActionButton 
-                        icon={<AddIcon />} 
+                      <ActionButton
+                        icon={<AddIcon />}
                         onClick={canCreateAgents ? handleOpenCreateAgent : undefined}
                         disabled={!canCreateAgents}
                       >
@@ -343,6 +358,7 @@ export const AgentHub = () => {
                                 onToggleEnabled={canEditAgents ? handleToggleEnabled : undefined}
                                 onManageCrew={canEditAgents && isLeader(agent) ? handleManageCrew : undefined}
                                 onDelete={canDeleteAgents ? handleDeleteAgent : undefined}
+                                onManageAssets={canEditAgents ? handleManageAssets : undefined}
                               />
                             </Box>
                           </Fade>
@@ -405,6 +421,14 @@ export const AgentHub = () => {
           onClose={() => setCrewOpen(false)}
           onSaved={fetchAgents}
         />
+
+        {agentForAssetManagement && (
+          <AgentAssetManagerDrawer
+            isOpen={assetManagerOpen}
+            onClose={handleCloseAssetManager}
+            agentId={agentForAssetManagement.name}
+          />
+        )}
       </Box>
     </>
   );
