@@ -3,7 +3,7 @@
 #
 # Purpose (Fred):
 # - Small, typed façade over BaseContentStore for *agent-scoped* assets.
-# - Encodes the storage convention: agents/{agent}/{user_id}/{key}
+# - Encodes the storage convention:
 # - Keeps controllers slim (HTTP only) and isolates storage concerns here.
 
 from __future__ import annotations
