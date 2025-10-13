@@ -140,6 +140,8 @@
       "count": "{{count}} joints"
     },
     "recordAudio": "Enregistrer de l'audio",
+    "sendMessage": "Envoyer le message",
+    "stopResponse": "Arrêter la réponse",
     "stopRecording": "Arrêter l'enregistrement",
     "audioChip": "Enregistrement audio",
     "hideAudio": "Masquer le contrôleur audio",
