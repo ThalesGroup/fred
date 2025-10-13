@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import os
+import re
 
-import grpc
 from authzed.api.v1 import (
     CheckPermissionRequest,
     CheckPermissionResponse,
@@ -45,7 +45,7 @@ class SpiceDbRebacEngine(RebacEngine):
         token: str | None = None,
         read_consistency: Consistency | None = None,
         write_operation: RelationshipUpdate._Operation.ValueType = RelationshipUpdate.Operation.OPERATION_TOUCH,
-        schema: str | None = DEFAULT_SCHEMA,
+        schema: str = DEFAULT_SCHEMA,
     ) -> None:
         if not config.endpoint:
             raise ValueError("SpiceDB endpoint must be provided in configuration")
@@ -65,6 +65,7 @@ class SpiceDbRebacEngine(RebacEngine):
 
         self._read_consistency = read_consistency
         self._write_operation = write_operation
+        self._defined_resources = self._resources_for_schema(schema)
 
         if schema and config.sync_schema_on_init:
             self.sync_schema(schema)
@@ -96,6 +97,9 @@ class SpiceDbRebacEngine(RebacEngine):
         return response.written_at.token
 
     def delete_reference_relations(self, reference: RebacReference) -> str | None:
+        if reference.type not in self._defined_resources:
+            return None
+
         last_token: str | None = None
 
         # Delete all relationships where the reference is the resource
@@ -113,7 +117,7 @@ class SpiceDbRebacEngine(RebacEngine):
             subject_type=reference.type.value,
             optional_subject_id=reference.id,
         )
-        for resource in Resource:
+        for resource in self._defined_resources:
             token = self._delete_with_filter(
                 RelationshipFilter(
                     resource_type=resource.value,
@@ -207,17 +211,17 @@ class SpiceDbRebacEngine(RebacEngine):
     ) -> str | None:
         """Delete relationships matching the provided filter."""
         request = DeleteRelationshipsRequest(relationship_filter=relationship_filter)
-        try:
-            response = self._client.DeleteRelationships(request)
-        except grpc.RpcError as exc:  # pragma: no cover - depends on schema
-            if exc.code() in {
-                grpc.StatusCode.INVALID_ARGUMENT,
-                grpc.StatusCode.FAILED_PRECONDITION,
-                grpc.StatusCode.NOT_FOUND,
-            }:
-                return None
-            raise
+        response = self._client.DeleteRelationships(request)
 
         if response.deleted_at and response.deleted_at.token:
             return response.deleted_at.token
         return None
+
+    def _resources_for_schema(self, schema: str) -> list[Resource]:
+        object_types = self._extract_object_types(schema)
+        return [resource for resource in Resource if resource.value in object_types]
+
+    @staticmethod
+    def _extract_object_types(schema: str) -> set[str]:
+        pattern = re.compile(r"^\s*definition\s+([A-Za-z0-9_]+)\s*{", re.MULTILINE)
+        return {match.group(1) for match in pattern.finditer(schema)}
