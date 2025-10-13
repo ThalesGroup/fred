@@ -78,6 +78,19 @@ class SpiceDbRebacEngine(RebacEngine):
         response = self._client.WriteRelationships(request)
         return response.written_at.token
 
+    def delete_relation(self, relation: Relation) -> str | None:
+        relationship = self._relationship_from_dataclass(relation)
+        request = WriteRelationshipsRequest(
+            updates=[
+                RelationshipUpdate(
+                    operation=RelationshipUpdate.Operation.OPERATION_DELETE,
+                    relationship=relationship,
+                )
+            ]
+        )
+        response = self._client.WriteRelationships(request)
+        return response.written_at.token
+
     def lookup_resources(
         self,
         subject: RebacReference,

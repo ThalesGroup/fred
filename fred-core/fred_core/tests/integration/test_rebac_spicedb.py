@@ -101,6 +101,34 @@ def test_owner_has_full_access(spicedb_engine: SpiceDbRebacEngine) -> None:
 
 
 @pytest.mark.integration
+def test_deleting_relation_revokes_access(spicedb_engine: SpiceDbRebacEngine) -> None:
+    owner = _make_reference(Resource.USER, prefix="owner")
+    tag = _make_reference(Resource.TAGS)
+
+    consistency_token = spicedb_engine.add_relation(
+        Relation(subject=owner, relation=RelationType.OWNER, resource=tag)
+    )
+
+    assert spicedb_engine.has_permission(
+        owner,
+        TagPermission.DELETE,
+        tag,
+        consistency_token=consistency_token,
+    )
+
+    deletion_token = spicedb_engine.delete_relation(
+        Relation(subject=owner, relation=RelationType.OWNER, resource=tag)
+    )
+
+    assert not spicedb_engine.has_permission(
+        owner,
+        TagPermission.DELETE,
+        tag,
+        consistency_token=deletion_token,
+    )
+
+
+@pytest.mark.integration
 def test_group_members_inherit_permissions(spicedb_engine: SpiceDbRebacEngine) -> None:
     alice = _make_reference(Resource.USER, prefix="alice")
     team = _make_reference(Resource.GROUP, prefix="team")

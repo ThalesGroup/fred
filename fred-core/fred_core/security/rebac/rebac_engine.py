@@ -74,6 +74,13 @@ class RebacEngine(ABC):
         Returns a backend-specific consistency token when available.
         """
 
+    @abstractmethod
+    def delete_relation(self, relation: Relation) -> str | None:
+        """Remove a relationship edge from the underlying store.
+
+        Returns a backend-specific consistency token when available.
+        """
+
     def add_relations(self, relations: Iterable[Relation]) -> str | None:
         """Convenience helper to persist multiple relationships.
 
@@ -94,6 +101,33 @@ class RebacEngine(ABC):
     ) -> str | None:
         """Convenience helper to add a relation for a user."""
         return self.add_relation(
+            Relation(
+                subject=RebacReference(Resource.USER, user.uid),
+                relation=relation,
+                resource=RebacReference(resource_type, resource_id),
+            )
+        )
+
+    def delete_relations(self, relations: Iterable[Relation]) -> str | None:
+        """Convenience helper to delete multiple relationships.
+
+        Returns the last non-null consistency token produced.
+        """
+
+        token: str | None = None
+        for relation in relations:
+            token = self.delete_relation(relation)
+        return token
+
+    def delete_user_relation(
+        self,
+        user: KeycloakUser,
+        relation: RelationType,
+        resource_type: Resource,
+        resource_id: str,
+    ) -> str | None:
+        """Convenience helper to delete a relation for a user."""
+        return self.delete_relation(
             Relation(
                 subject=RebacReference(Resource.USER, user.uid),
                 relation=relation,
