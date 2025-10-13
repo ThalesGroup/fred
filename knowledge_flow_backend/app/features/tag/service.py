@@ -73,7 +73,7 @@ class TagService:
         tags: list[Tag] = self._tag_store.list_tags_for_user(user)
 
         # Filter by permission (todo: use rebac ids to filter at store (DB) level)
-        authorized_tags_ids = self.rebac.lookup_user_resources(user, TagPermission.READ)
+        authorized_tags_ids = [t.id for t in self.rebac.lookup_user_resources(user, TagPermission.READ)]
         tags = [t for t in tags if t.id in authorized_tags_ids]
 
         # 2) filter by type
