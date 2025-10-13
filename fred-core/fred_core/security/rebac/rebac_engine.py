@@ -34,7 +34,6 @@ class TagPermission(str, Enum):
     UPDATE = "update"
     DELETE = "delete"
     SHARE = "share"
-    MANAGE_CONTENT = "manage_content"
 
 
 class DocumentPermission(str, Enum):

@@ -153,12 +153,17 @@ class TagService:
                 type=tag_data.type,
             )
         )
-        self.rebac.add_user_relation(user, RelationType.OWNER, resource_type=Resource.TAGS, resource_id=tag.id)
+        consistency_token = self.rebac.add_user_relation(user, RelationType.OWNER, resource_type=Resource.TAGS, resource_id=tag.id)
 
         # Link items
         if tag.type == TagType.DOCUMENT:
             for doc in documents:
-                self.document_metadata_service.add_tag_id_to_document(user, metadata=doc, new_tag_id=tag.id, modified_by=user.uid)
+                self.document_metadata_service.add_tag_id_to_document(
+                    user,
+                    metadata=doc,
+                    new_tag_id=tag.id,
+                    consistency_token=consistency_token,
+                )
         elif tag.type in (TagType.PROMPT, TagType.TEMPLATE):
             # rk = _tagtype_to_rk(tag.type)
             for rid in tag_data.item_ids:
@@ -184,9 +189,9 @@ class TagService:
             added_documents = self._retrieve_documents_metadata(user, added)
             removed_documents = self._retrieve_documents_metadata(user, removed)
             for doc in added_documents:
-                self.document_metadata_service.add_tag_id_to_document(user, doc, tag.id, modified_by=user.uid)
+                self.document_metadata_service.add_tag_id_to_document(user, doc, tag.id)
             for doc in removed_documents:
-                self.document_metadata_service.remove_tag_id_from_document(user, doc, tag.id, modified_by=user.uid)
+                self.document_metadata_service.remove_tag_id_from_document(user, doc, tag.id)
 
         elif tag.type in (TagType.PROMPT, TagType.TEMPLATE, TagType.CHAT_CONTEXT):
             rk = _tagtype_to_rk(tag.type)
@@ -231,7 +236,7 @@ class TagService:
         if tag.type == TagType.DOCUMENT:
             documents = self._retrieve_documents_for_tag(user, tag_id)
             for doc in documents:
-                self.document_metadata_service.remove_tag_id_from_document(user, doc, tag_id, modified_by=user.uid)
+                self.document_metadata_service.remove_tag_id_from_document(user, doc, tag_id)
         elif tag.type == TagType.PROMPT:
             self.resource_service.remove_tag_from_resources(ResourceKind.PROMPT, tag_id)
         elif tag.type == TagType.CHAT_CONTEXT:
@@ -243,6 +248,7 @@ class TagService:
             raise ValueError(f"Unsupported tag type: {tag.type}")
 
         self._tag_store.delete_tag_by_id(tag_id)
+        # TODO: remove relation in ReBAC
 
     @authorize(Action.UPDATE, Resource.TAGS)
     def update_tag_timestamp(self, tag_id: str, user: KeycloakUser) -> None:
