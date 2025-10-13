@@ -168,7 +168,7 @@ class MetadataService:
                 self.metadata_store.save_metadata(metadata)
                 logger.info(f"[METADATA] Removed tag '{tag_id_to_remove}' from document '{metadata.document_name}' by '{user.uid}'")
 
-            # TODO: remove relation in ReBAC
+            self._remove_tag_as_parent_in_rebac(tag_id_to_remove, metadata.document_uid)
 
         except Exception as e:
             logger.error(f"Failed to remove tag '{tag_id_to_remove}' from document '{metadata.document_name}': {e}")
@@ -267,4 +267,13 @@ class MetadataService:
         """
         Add a relation in the ReBAC engine between a tag and a document.
         """
-        self.rebac.add_relation(Relation(subject=RebacReference(Resource.TAGS, tag_id), relation=RelationType.PARENT, resource=RebacReference(Resource.DOCUMENTS, document_uid)))
+        self.rebac.add_relation(self._get_tag_as_parent_relation(tag_id, document_uid))
+
+    def _remove_tag_as_parent_in_rebac(self, tag_id: str, document_uid: str) -> None:
+        """
+        Remove a relation in the ReBAC engine between a tag and a document.
+        """
+        self.rebac.delete_relation(self._get_tag_as_parent_relation(tag_id, document_uid))
+
+    def _get_tag_as_parent_relation(self, tag_id: str, document_uid: str) -> Relation:
+        return Relation(subject=RebacReference(Resource.TAGS, tag_id), relation=RelationType.PARENT, resource=RebacReference(Resource.DOCUMENTS, document_uid))
