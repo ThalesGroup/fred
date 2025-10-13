@@ -4,14 +4,18 @@ from __future__ import annotations
 
 import os
 
+import grpc
 from authzed.api.v1 import (
     CheckPermissionRequest,
     CheckPermissionResponse,
     Consistency,
+    DeleteRelationshipsRequest,
     LookupResourcesRequest,
     ObjectReference,
     Relationship,
+    RelationshipFilter,
     RelationshipUpdate,
+    SubjectFilter,
     SubjectReference,
     SyncClient,
     WriteRelationshipsRequest,
@@ -91,6 +95,36 @@ class SpiceDbRebacEngine(RebacEngine):
         response = self._client.WriteRelationships(request)
         return response.written_at.token
 
+    def delete_reference_relations(self, reference: RebacReference) -> str | None:
+        last_token: str | None = None
+
+        # Delete all relationships where the reference is the resource
+        token = self._delete_with_filter(
+            RelationshipFilter(
+                resource_type=reference.type.value,
+                optional_resource_id=reference.id,
+            )
+        )
+        if token:
+            last_token = token
+
+        # Delete all relationships where the reference is the subject
+        subject_filter = SubjectFilter(
+            subject_type=reference.type.value,
+            optional_subject_id=reference.id,
+        )
+        for resource in Resource:
+            token = self._delete_with_filter(
+                RelationshipFilter(
+                    resource_type=resource.value,
+                    optional_subject_filter=subject_filter,
+                )
+            )
+            if token:
+                last_token = token
+
+        return last_token
+
     def lookup_resources(
         self,
         subject: RebacReference,
@@ -167,3 +201,23 @@ class SpiceDbRebacEngine(RebacEngine):
                 object=self._object_reference(relation.subject),
             ),
         )
+
+    def _delete_with_filter(
+        self, relationship_filter: RelationshipFilter
+    ) -> str | None:
+        """Delete relationships matching the provided filter."""
+        request = DeleteRelationshipsRequest(relationship_filter=relationship_filter)
+        try:
+            response = self._client.DeleteRelationships(request)
+        except grpc.RpcError as exc:  # pragma: no cover - depends on schema
+            if exc.code() in {
+                grpc.StatusCode.INVALID_ARGUMENT,
+                grpc.StatusCode.FAILED_PRECONDITION,
+                grpc.StatusCode.NOT_FOUND,
+            }:
+                return None
+            raise
+
+        if response.deleted_at and response.deleted_at.token:
+            return response.deleted_at.token
+        return None

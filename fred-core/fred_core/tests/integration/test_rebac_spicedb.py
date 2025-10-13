@@ -127,6 +127,62 @@ def test_deleting_relation_revokes_access(spicedb_engine: SpiceDbRebacEngine) ->
         consistency_token=deletion_token,
     )
 
+    assert deletion_token is not None
+
+
+@pytest.mark.integration
+def test_delete_reference_relations_removes_incoming_and_outgoing_edges(
+    spicedb_engine: SpiceDbRebacEngine,
+) -> None:
+    owner = _make_reference(Resource.USER, prefix="owner")
+    tag = _make_reference(Resource.TAGS, prefix="tag")
+    document = _make_reference(Resource.DOCUMENTS, prefix="document")
+
+    token = spicedb_engine.add_relations(
+        [
+            Relation(subject=owner, relation=RelationType.OWNER, resource=tag),
+            Relation(subject=tag, relation=RelationType.PARENT, resource=document),
+        ]
+    )
+
+    assert spicedb_engine.has_permission(
+        owner,
+        TagPermission.DELETE,
+        tag,
+        consistency_token=token,
+    )
+    assert spicedb_engine.has_permission(
+        owner,
+        DocumentPermission.READ,
+        document,
+        consistency_token=token,
+    )
+
+    deletion_token = spicedb_engine.delete_reference_relations(tag)
+    assert deletion_token is not None
+
+    assert not spicedb_engine.has_permission(
+        owner,
+        TagPermission.DELETE,
+        tag,
+        consistency_token=deletion_token,
+    )
+    assert not spicedb_engine.has_permission(
+        owner,
+        DocumentPermission.READ,
+        document,
+        consistency_token=deletion_token,
+    )
+    assert (
+        spicedb_engine.lookup_resources(
+            subject=owner,
+            permission=DocumentPermission.READ,
+            resource_type=Resource.DOCUMENTS,
+            consistency_token=deletion_token,
+        )
+        == []
+    )
+
 
 @pytest.mark.integration
 def test_group_members_inherit_permissions(spicedb_engine: SpiceDbRebacEngine) -> None:

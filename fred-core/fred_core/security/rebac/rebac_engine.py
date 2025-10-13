@@ -81,6 +81,10 @@ class RebacEngine(ABC):
         Returns a backend-specific consistency token when available.
         """
 
+    @abstractmethod
+    def delete_reference_relations(self, reference: RebacReference) -> str | None:
+        """Remove all relationships where the reference participates as subject or resource."""
+
     def add_relations(self, relations: Iterable[Relation]) -> str | None:
         """Convenience helper to persist multiple relationships.
 
@@ -133,6 +137,12 @@ class RebacEngine(ABC):
                 relation=relation,
                 resource=RebacReference(resource_type, resource_id),
             )
+        )
+
+    def delete_user_relations(self, user: KeycloakUser) -> str | None:
+        """Convenience helper to delete all relationships for a user."""
+        return self.delete_reference_relations(
+            RebacReference(Resource.USER, user.uid)
         )
 
     @abstractmethod
