@@ -408,11 +408,15 @@ class ApplicationContext:
         backend_type = config.type
 
         if isinstance(config, MinioStorageConfig):
-            bucket = f"{config.bucket_name}-documents"
-            return MinioStorageBackend(endpoint=config.endpoint, access_key=config.access_key, secret_key=config.secret_key, bucket_name=bucket, secure=config.secure)
+            document_bucket = f"{config.bucket_name}-documents"
+            object_bucket = f"{config.bucket_name}-objects"
+            return MinioStorageBackend(
+                endpoint=config.endpoint, access_key=config.access_key, secret_key=config.secret_key, document_bucket=document_bucket, object_bucket=object_bucket, secure=config.secure
+            )
         elif isinstance(config, LocalContentStorageConfig):
-            root = Path(config.root_path).expanduser() / "documents"
-            return FileSystemContentStore(Path(root).expanduser())
+            document_root = Path(config.root_path).expanduser() / "documents"
+            object_root = Path(config.root_path).expanduser() / "objects"
+            return FileSystemContentStore(document_root=document_root, object_root=object_root)
         else:
             raise ValueError(f"Unsupported storage backend: {backend_type}")
 

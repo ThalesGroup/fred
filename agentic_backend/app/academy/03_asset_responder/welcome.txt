@@ -1,0 +1,4 @@
+# welcome.txt (Bundled Default Asset Content)
+This content was successfully loaded from the 'welcome.txt' file bundled with the agent module. 
+
+This confirms the local resource reading logic is working correctly, which is the second-tier fallback after checking the remote asset service.

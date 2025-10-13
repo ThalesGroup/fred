@@ -14,8 +14,9 @@
 
 import logging
 from abc import ABC, abstractmethod
+from datetime import datetime
 from pathlib import Path
-from typing import BinaryIO, Optional
+from typing import BinaryIO, List, Optional
 
 from pydantic import BaseModel
 
@@ -30,6 +31,19 @@ class FileMetadata(BaseModel):
     size: int
     file_name: str
     content_type: Optional[str] = None
+
+
+class StoredObjectInfo(BaseModel):
+    """
+    Metadata for *generic objects* (agent assets, etc.), addressed by a storage key.
+    """
+
+    key: str
+    size: int
+    file_name: str
+    content_type: Optional[str] = None
+    modified: Optional[datetime] = None
+    etag: Optional[str] = None
 
 
 class BaseContentStore(ABC):
@@ -144,5 +158,42 @@ class BaseContentStore(ABC):
 
         Raises:
             FileNotFoundError: If the document is not found.
+        """
+        pass
+
+    @abstractmethod
+    def put_object(self, key: str, stream: BinaryIO, *, content_type: str) -> StoredObjectInfo:
+        """
+        Store/replace a binary object at 'key'.
+        Returns StoredObjectInfo of the final stored object.
+        """
+        pass
+
+    @abstractmethod
+    def get_object_stream(self, key: str, *, start: Optional[int] = None, length: Optional[int] = None) -> BinaryIO:
+        """
+        Return a streaming file-like handle for 'key'.
+        Supports partial reads via (start, length).
+        """
+        pass
+
+    @abstractmethod
+    def stat_object(self, key: str) -> StoredObjectInfo:
+        """
+        Return metadata for object 'key'; raise FileNotFoundError if absent.
+        """
+        pass
+
+    @abstractmethod
+    def list_objects(self, prefix: str) -> List[StoredObjectInfo]:
+        """
+        Return a *flat* list of objects under 'prefix' (recursive).
+        """
+        pass
+
+    @abstractmethod
+    def delete_object(self, key: str) -> None:
+        """
+        Delete object 'key'; raise FileNotFoundError if absent.
         """
         pass
