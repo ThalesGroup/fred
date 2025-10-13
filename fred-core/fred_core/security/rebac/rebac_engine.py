@@ -141,9 +141,7 @@ class RebacEngine(ABC):
 
     def delete_user_relations(self, user: KeycloakUser) -> str | None:
         """Convenience helper to delete all relationships for a user."""
-        return self.delete_reference_relations(
-            RebacReference(Resource.USER, user.uid)
-        )
+        return self.delete_reference_relations(RebacReference(Resource.USER, user.uid))
 
     @abstractmethod
     def lookup_resources(

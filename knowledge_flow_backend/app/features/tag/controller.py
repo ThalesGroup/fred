@@ -24,7 +24,7 @@ from fred_core import KeycloakUser, get_current_user
 from app.core.stores.tags.base_tag_store import TagAlreadyExistsError, TagNotFoundError
 from app.features.metadata.service import MetadataNotFound
 from app.features.tag.service import TagService
-from app.features.tag.structure import TagCreate, TagType, TagUpdate, TagWithItemsId
+from app.features.tag.structure import TagCreate, TagShareRequest, TagType, TagUpdate, TagWithItemsId
 
 logger = logging.getLogger(__name__)
 
@@ -120,3 +120,12 @@ class TagController:
         )
         async def delete_tag(tag_id: str, user: KeycloakUser = Depends(get_current_user)):
             self.service.delete_tag_for_user(tag_id, user)
+
+        @router.post(
+            "/tags/{tag_id}/share",
+            status_code=status.HTTP_204_NO_CONTENT,
+            tags=["Tags"],
+            summary="Share a tag with another user",
+        )
+        async def share_tag(tag_id: str, share_request: TagShareRequest, user: KeycloakUser = Depends(get_current_user)):
+            self.service.share_tag_with_user(user, tag_id, share_request.target_user_id, share_request.relation)

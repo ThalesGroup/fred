@@ -97,9 +97,6 @@ class SpiceDbRebacEngine(RebacEngine):
         return response.written_at.token
 
     def delete_reference_relations(self, reference: RebacReference) -> str | None:
-        if reference.type not in self._defined_resources:
-            return None
-
         last_token: str | None = None
 
         # Delete all relationships where the reference is the resource

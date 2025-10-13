@@ -161,6 +161,7 @@ class MetadataService:
                         logger.warning(f"Could not delete SQL table '{table_name}': {e}")
 
                 self.metadata_store.delete_metadata(metadata.document_uid)
+                # TODO: remove all rebac relations for this document
 
             else:
                 metadata.identity.modified = datetime.now(timezone.utc)

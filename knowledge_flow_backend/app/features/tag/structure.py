@@ -16,7 +16,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional
 
-from fred_core import BaseModelWithId
+from fred_core import BaseModelWithId, RelationType
 from pydantic import BaseModel, field_validator
 
 
@@ -107,3 +107,18 @@ class TagWithItemsId(Tag):
     @classmethod
     def from_tag(cls, tag: Tag, item_ids: list[str]) -> "TagWithItemsId":
         return cls(**tag.model_dump(), item_ids=item_ids)
+
+
+# Subset of RelationType for user-tag relations
+class UserTagRelation(str, Enum):
+    OWNER = RelationType.OWNER.value
+    EDITOR = RelationType.EDITOR.value
+    VIEWER = RelationType.VIEWER.value
+
+    def to_relation(self) -> RelationType:
+        return RelationType(self.value)
+
+
+class TagShareRequest(BaseModel):
+    target_user_id: str
+    relation: UserTagRelation

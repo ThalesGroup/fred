@@ -18,7 +18,7 @@ from datetime import datetime
 from typing import Iterable, Optional
 from uuid import uuid4
 
-from fred_core import Action, KeycloakUser, RelationType, Resource, TagPermission, authorize
+from fred_core import Action, KeycloakUser, RebacReference, Relation, RelationType, Resource, TagPermission, authorize
 
 from app.application_context import ApplicationContext
 from app.common.document_structures import DocumentMetadata
@@ -26,7 +26,7 @@ from app.core.stores.tags.base_tag_store import TagAlreadyExistsError
 from app.features.metadata.service import MetadataService
 from app.features.resources.service import ResourceService
 from app.features.resources.structures import ResourceKind
-from app.features.tag.structure import Tag, TagCreate, TagType, TagUpdate, TagWithItemsId
+from app.features.tag.structure import Tag, TagCreate, TagType, TagUpdate, TagWithItemsId, UserTagRelation
 
 logger = logging.getLogger(__name__)
 
@@ -249,6 +249,19 @@ class TagService:
 
         self._tag_store.delete_tag_by_id(tag_id)
         # TODO: remove relation in ReBAC
+
+    def share_tag_with_user(self, user: KeycloakUser, tag_id: str, target_user_id: str, relation: UserTagRelation) -> None:
+        """
+        Share a tag with another user by adding a relation in the ReBAC engine.
+        """
+        self.rebac.check_user_permission_or_raise(user, TagPermission.SHARE, tag_id)
+        self.rebac.add_relation(
+            Relation(
+                subject=RebacReference(type=Resource.USER, id=target_user_id),
+                relation=relation.to_relation(),
+                resource=RebacReference(type=Resource.TAGS, id=tag_id),
+            )
+        )
 
     @authorize(Action.UPDATE, Resource.TAGS)
     def update_tag_timestamp(self, tag_id: str, user: KeycloakUser) -> None:
