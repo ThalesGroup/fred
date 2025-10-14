@@ -48,7 +48,7 @@ detect-secret: ## Run a secret detection tool
 .PHONY: type-check
 type-check: ## Run type checker (basedpyright)
 	@echo "************ Executing Basedpyright type checker ************"
-	$(UV) run basedpyright --baseline-file ${BASEDPYRIGHT_BASELINE_FILE}
+	$(UV) run basedpyright --baselinefile ${BASEDPYRIGHT_BASELINE_FILE}
 
 .PHONY: code-quality
 code-quality: lint format sast detect-secret type-check ## Run all code quality checks
