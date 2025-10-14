@@ -235,6 +235,35 @@ def test_parent_relationships_extend_permissions(
 
 
 @pytest.mark.integration
+def test_lookup_subjects_returns_users_by_relation(
+    spicedb_engine: SpiceDbRebacEngine,
+) -> None:
+    tag = _make_reference(Resource.TAGS)
+    owner = _make_reference(Resource.USER, prefix="owner")
+    editor = _make_reference(Resource.USER, prefix="editor")
+    viewer = _make_reference(Resource.USER, prefix="viewer")
+    unrelated = _make_reference(Resource.USER, prefix="stranger")
+
+    spicedb_engine.add_relations(
+        [
+            Relation(subject=owner, relation=RelationType.OWNER, resource=tag),
+            Relation(subject=editor, relation=RelationType.EDITOR, resource=tag),
+            Relation(subject=viewer, relation=RelationType.VIEWER, resource=tag),
+        ]
+    )
+
+    owners = spicedb_engine.lookup_subjects(tag, RelationType.OWNER, Resource.USER)
+    editors = spicedb_engine.lookup_subjects(tag, RelationType.EDITOR, Resource.USER)
+    viewers = spicedb_engine.lookup_subjects(tag, RelationType.VIEWER, Resource.USER)
+
+    assert {ref.id for ref in owners} == {owner.id}
+    assert {ref.id for ref in editors} == {editor.id}
+    assert {ref.id for ref in viewers} == {viewer.id}
+
+    assert unrelated.id not in {ref.id for ref in owners + editors + viewers}
+
+
+@pytest.mark.integration
 def test_list_documents_user_can_read(spicedb_engine: SpiceDbRebacEngine) -> None:
     user = _make_reference(Resource.USER, prefix="reader")
     team = _make_reference(Resource.GROUP, prefix="team")

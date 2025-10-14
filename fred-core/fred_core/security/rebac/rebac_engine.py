@@ -154,6 +154,17 @@ class RebacEngine(ABC):
     ) -> list[RebacReference]:
         """Return resource identifiers the subject can access for a permission."""
 
+    @abstractmethod
+    def lookup_subjects(
+        self,
+        resource: RebacReference,
+        relation: RelationType,
+        subject_type: Resource,
+        *,
+        consistency_token: str | None = None,
+    ) -> list[RebacReference]:
+        """Return subjects related to the resource by a given relation."""
+
     def lookup_user_resources(
         self,
         user: KeycloakUser,

@@ -26,7 +26,7 @@ from app.core.stores.tags.base_tag_store import TagAlreadyExistsError
 from app.features.metadata.service import MetadataService
 from app.features.resources.service import ResourceService
 from app.features.resources.structures import ResourceKind
-from app.features.tag.structure import Tag, TagCreate, TagType, TagUpdate, TagWithItemsId, UserTagRelation
+from app.features.tag.structure import Tag, TagCreate, TagMember, TagType, TagUpdate, TagWithItemsId, UserTagRelation
 
 logger = logging.getLogger(__name__)
 
@@ -288,6 +288,30 @@ class TagService:
         tag_reference = RebacReference(type=Resource.TAGS, id=tag_id)
         user_reference = RebacReference(type=Resource.USER, id=user.uid)
         return [permission for permission in TagPermission if self.rebac.has_permission(user_reference, permission, tag_reference)]
+
+    @authorize(Action.READ, Resource.TAGS)
+    def list_tag_members(self, tag_id: str, user: KeycloakUser) -> list[TagMember]:
+        """
+        List users who have access to the tag along with their relation level.
+        """
+        self.rebac.check_user_permission_or_raise(user, TagPermission.READ, tag_id)
+
+        tag_reference = RebacReference(type=Resource.TAGS, id=tag_id)
+        relation_priority = {
+            UserTagRelation.OWNER: 0,
+            UserTagRelation.EDITOR: 1,
+            UserTagRelation.VIEWER: 2,
+        }
+        members: dict[str, UserTagRelation] = {}
+
+        for relation in (UserTagRelation.OWNER, UserTagRelation.EDITOR, UserTagRelation.VIEWER):
+            subjects = self.rebac.lookup_subjects(tag_reference, relation.to_relation(), Resource.USER)
+            for subject in subjects:
+                current = members.get(subject.id)
+                if current is None or relation_priority[relation] < relation_priority[current]:
+                    members[subject.id] = relation
+
+        return [TagMember(user_id=user_id, relation=relation) for user_id, relation in sorted(members.items(), key=lambda item: (relation_priority[item[1]], item[0]))]
 
     @authorize(Action.UPDATE, Resource.TAGS)
     def update_tag_timestamp(self, tag_id: str, user: KeycloakUser) -> None:

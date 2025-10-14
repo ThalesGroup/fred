@@ -24,7 +24,7 @@ from fred_core import KeycloakUser, get_current_user
 from app.core.stores.tags.base_tag_store import TagAlreadyExistsError, TagNotFoundError
 from app.features.metadata.service import MetadataNotFound
 from app.features.tag.service import TagService
-from app.features.tag.structure import TagCreate, TagPermissionsResponse, TagShareRequest, TagType, TagUpdate, TagWithItemsId
+from app.features.tag.structure import TagCreate, TagMembersResponse, TagPermissionsResponse, TagShareRequest, TagType, TagUpdate, TagWithItemsId
 
 logger = logging.getLogger(__name__)
 
@@ -98,6 +98,16 @@ class TagController:
         async def get_tag_permissions(tag_id: str, user: KeycloakUser = Depends(get_current_user)):
             permissions = self.service.get_tag_permissions_for_user(tag_id, user)
             return TagPermissionsResponse(permissions=permissions)
+
+        @router.get(
+            "/tags/{tag_id}/members",
+            response_model=TagMembersResponse,
+            tags=["Tags"],
+            summary="List users who can access a tag",
+        )
+        async def list_tag_members(tag_id: str, user: KeycloakUser = Depends(get_current_user)):
+            members = self.service.list_tag_members(tag_id, user)
+            return TagMembersResponse(members=members)
 
         @router.post(
             "/tags",

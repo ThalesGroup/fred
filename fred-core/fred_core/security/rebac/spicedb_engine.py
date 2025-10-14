@@ -11,6 +11,7 @@ from authzed.api.v1 import (
     Consistency,
     DeleteRelationshipsRequest,
     LookupResourcesRequest,
+    LookupSubjectsRequest,
     ObjectReference,
     Relationship,
     RelationshipFilter,
@@ -30,6 +31,7 @@ from fred_core.security.rebac.rebac_engine import (
     RebacPermission,
     RebacReference,
     Relation,
+    RelationType,
 )
 from fred_core.security.rebac.schema import DEFAULT_SCHEMA
 from fred_core.security.structure import SpiceDbRebacConfig
@@ -151,6 +153,39 @@ class SpiceDbRebacEngine(RebacEngine):
             RebacReference(type=resource_type, id=response.resource_object_id)
             for response in self._client.LookupResources(request)
         ]
+
+    def lookup_subjects(
+        self,
+        resource: RebacReference,
+        relation: RelationType,
+        subject_type: Resource,
+        *,
+        consistency_token: str | None = None,
+    ) -> list[RebacReference]:
+        request_kwargs = {
+            "resource": self._object_reference(resource),
+            "permission": relation.value,
+            "subject_object_type": subject_type.value,
+        }
+        if consistency_token:
+            request_kwargs["consistency"] = Consistency(
+                at_least_as_fresh=ZedToken(token=consistency_token)
+            )
+        elif self._read_consistency is not None:
+            request_kwargs["consistency"] = self._read_consistency
+
+        request = LookupSubjectsRequest(**request_kwargs)
+        subjects: list[RebacReference] = []
+        for response in self._client.LookupSubjects(request):
+            resolved = response.subject
+            subject_id = None
+            if resolved and resolved.subject_object_id:
+                subject_id = resolved.subject_object_id
+            elif response.subject_object_id:
+                subject_id = response.subject_object_id
+            if subject_id and subject_id != "*":
+                subjects.append(RebacReference(type=subject_type, id=subject_id))
+        return subjects
 
     def has_permission(
         self,

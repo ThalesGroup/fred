@@ -109,10 +109,6 @@ class TagWithItemsId(Tag):
         return cls(**tag.model_dump(), item_ids=item_ids)
 
 
-class TagPermissionsResponse(BaseModel):
-    permissions: list[TagPermission]
-
-
 # Subset of RelationType for user-tag relations
 class UserTagRelation(str, Enum):
     OWNER = RelationType.OWNER.value
@@ -126,3 +122,16 @@ class UserTagRelation(str, Enum):
 class TagShareRequest(BaseModel):
     target_user_id: str
     relation: UserTagRelation
+
+
+class TagPermissionsResponse(BaseModel):
+    permissions: list[TagPermission]
+
+
+class TagMember(BaseModel):
+    user_id: str
+    relation: UserTagRelation
+
+
+class TagMembersResponse(BaseModel):
+    members: list[TagMember]
