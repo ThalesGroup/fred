@@ -34,30 +34,31 @@ Agents that use external tools (e.g., via MCP or LangChain integrations) should 
 
 ### ✅ Requirements for tool-using agents:
 
-1. **Load the tools in `async_init()`** — typically from an external service like MCP.
-2. **Bind the tools to the model** using:
-   
-       self.model = self.model.bind_tools(self.toolkit.get_tools())
+1.  **Load the tools in `async_init()`** — typically from an external service like MCP.
+2.  **Bind the tools to the model** using:
 
-   This ensures the model can generate tool calls correctly during reasoning.
+        self.model = self.model.bind_tools(self.toolkit.get_tools())
 
-3. **Add a `ToolNode`** to the LangGraph using:
+    This ensures the model can generate tool calls correctly during reasoning.
 
-       builder.add_node("tools", ToolNode(self.toolkit.get_tools()))
+3.  **Add a `ToolNode`** to the LangGraph using:
 
-4. **Route via `tools_condition`** in your graph to allow conditional tool invocation:
+    builder.add_node("tools", ToolNode(self.toolkit.get_tools()))
 
-       builder.add_conditional_edges("reasoner", tools_condition)
+4.  **Route via `tools_condition`** in your graph to allow conditional tool invocation:
+
+    builder.add_conditional_edges("reasoner", tools_condition)
 
 ### 🔥 Common Pitfall
 
 If you **forget to bind the tools** to the model (`bind_tools(...)`), the agent will:
+
 - Receive the correct prompt and think it can use tools,
 - But **never actually call them** — leading to incomplete or incorrect answers.
 
 Always remember: **tool binding is not automatic**. It must be done explicitly in your agent’s `async_init()`.
 
-### Example (excerpt from `TabularExpert`):
+### Example (excerpt from `Tessa`):
 
 ```python
 async def async_init(self):
@@ -71,22 +72,22 @@ async def async_init(self):
 
 ---
 
-## ✅ Example: `GeneralistExpert`
+## ✅ Example: `Georges`
 
 This is the simplest kind of agent: no tools, just a reasoning loop.
 
 ```python
-class GeneralistExpert(AgentFlow):
+class Georges(AgentFlow):
     """
     Generalist Expert provides guidance on a wide range of topics
     without deep specialization.
     """
 
     # Class-level metadata
-    name: str | None = "GeneralistExpert"
+    name: str | None = "Georges"
     nickname: str | None = "Georges"
     role: str | None = "Fallback Generalist Expert"
-    description: str | None = """Provides broad, high-level guidance when no specific expert is better suited. 
+    description: str | None = """Provides broad, high-level guidance when no specific expert is better suited.
         Acts as a default agent to assist with general questions across all domains."""
     icon: str = "generalist_agent"
     categories: List[str] = ["General"]
@@ -137,7 +138,5 @@ class GeneralistExpert(AgentFlow):
 
 ## 🪜 Next Steps
 
-- See `TabularExpert` for an example agent that loads tools asynchronously and uses LangGraph `ToolNode`.
+- See `Tessa` for an example agent that loads tools asynchronously and uses LangGraph `ToolNode`.
 - In the future, shared utilities for common node types, graph patterns, and memory behaviors will further reduce duplication.
-
-

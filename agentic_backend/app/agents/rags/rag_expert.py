@@ -17,6 +17,7 @@ from app.common.rags_utils import (
 )
 from app.common.structures import AgentChatOptions
 from app.common.vector_search_client import VectorSearchClient
+from app.core.agents.agent_controller import expose_runtime_source
 from app.core.agents.agent_flow import AgentFlow
 from app.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
 from app.core.agents.runtime_context import (
@@ -71,7 +72,8 @@ RAG_TUNING = AgentTuning(
 )
 
 
-class RagExpert(AgentFlow):
+@expose_runtime_source("agent.Rico")
+class Rico(AgentFlow):
     """
     Retrieval-Augmented Generation expert.
 
@@ -109,8 +111,8 @@ class RagExpert(AgentFlow):
         """
         sys_tpl = self.get_tuned_text("prompts.system")
         if not sys_tpl:
-            logger.warning("RagExpert: no tuned system prompt found, using fallback.")
-            raise RuntimeError("RagExpert: no tuned system prompt found.")
+            logger.warning("Rico: no tuned system prompt found, using fallback.")
+            raise RuntimeError("Rico: no tuned system prompt found.")
         sys_text = self.render(sys_tpl)  # token-safe rendering (e.g. {today})
 
         return sys_text
@@ -181,7 +183,7 @@ class RagExpert(AgentFlow):
             return {"messages": [answer]}
 
         except Exception:
-            logger.exception("RagExpert: error in reasoning step.")
+            logger.exception("Rico: error in reasoning step.")
             fallback = await self.model.ainvoke(
                 [
                     HumanMessage(

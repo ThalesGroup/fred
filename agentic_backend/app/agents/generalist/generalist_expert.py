@@ -17,7 +17,7 @@
 #   Why: LangGraph nodes call bound methods (they require `self`) and often depend on
 #   per-instance state (model bindings, user tuning, runtime context). Building at class
 #   import time would capture unbound functions and the wrong lifecycle.
-# - Tuning is declared at CLASS LEVEL (GeneralistExpert.tuning) because it is a static
+# - Tuning is declared at CLASS LEVEL (Georges.tuning) because it is a static
 #   “capability contract” for the UI. The user’s overrides live in AgentSettings.tuning
 #   and are merged into the instance by AgentFlow.__init__/apply_settings.
 # - No hidden prompt composition: each node explicitly decides which tuned text to use
@@ -28,6 +28,7 @@ import logging
 from fred_core import get_model
 from langgraph.graph import END, START, MessagesState, StateGraph
 
+from app.core.agents.agent_controller import expose_runtime_source
 from app.core.agents.agent_flow import AgentFlow
 from app.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
 
@@ -57,7 +58,8 @@ TUNING = AgentTuning(
 )
 
 
-class GeneralistExpert(AgentFlow):
+@expose_runtime_source("agent.Georges")
+class Georges(AgentFlow):
     tuning = TUNING
 
     async def async_init(self):
